@@ -1,11 +1,50 @@
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useState } from "react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface Processo {
+  numero: string;
+  dataDistribuicao: string;
+  status: string;
+  tipo: string;
+  cliente: { nome: string; cpf: string; papel: string };
+  advogadoResponsavel: string;
+  classeJudicial: string;
+  assunto: string;
+  jurisdicao: string;
+  orgaoJulgador: string;
+  movimentacoes: { data: string; descricao: string }[];
+}
 
 export default function Processos() {
-  const processos = [
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [tipoFilter, setTipoFilter] = useState("");
+
+  const processos: Processo[] = [
     {
       numero: "5152182-10.2019.8.13.0024",
       dataDistribuicao: "16/10/2019",
-      cliente: { nome: "Diego Leonardo da Silva Armond", papel: "Autor" },
+      status: "Arquivado",
+      tipo: "Cível",
+      cliente: {
+        nome: "Diego Leonardo da Silva Armond",
+        papel: "Autor",
+        cpf: "123.456.789-00",
+      },
+      advogadoResponsavel: "Sergio Aguilar Silva",
       classeJudicial:
         "[CÍVEL] CUMPRIMENTO DE SENTENÇA CONTRA A FAZENDA PÚBLICA (12078)",
       assunto:
@@ -41,6 +80,19 @@ export default function Processos() {
     },
   ];
 
+  const filteredProcessos = processos.filter((processo) => {
+    const matchesStatus = !statusFilter || processo.status === statusFilter;
+    const matchesTipo = !tipoFilter || processo.tipo === tipoFilter;
+    const search = searchTerm.toLowerCase();
+    const matchesSearch =
+      processo.numero.toLowerCase().includes(search) ||
+      processo.cliente.nome.toLowerCase().includes(search) ||
+      processo.cliente.cpf.includes(search) ||
+      processo.advogadoResponsavel.toLowerCase().includes(search);
+
+    return matchesStatus && matchesTipo && matchesSearch;
+  });
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -50,8 +102,37 @@ export default function Processos() {
         </p>
       </div>
 
+      <div className="flex flex-col md:flex-row gap-4">
+        <Input
+          placeholder="Pesquisar por número, cliente, CPF ou advogado"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="md:w-1/3"
+        />
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Todos os Status</SelectItem>
+            <SelectItem value="Em andamento">Em andamento</SelectItem>
+            <SelectItem value="Arquivado">Arquivado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={tipoFilter} onValueChange={setTipoFilter}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Todos os Tipos</SelectItem>
+            <SelectItem value="Cível">Cível</SelectItem>
+            <SelectItem value="Trabalhista">Trabalhista</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <Accordion type="single" collapsible className="w-full">
-        {processos.map((processo) => (
+        {filteredProcessos.map((processo) => (
           <AccordionItem key={processo.numero} value={processo.numero}>
             <AccordionTrigger>
               <div className="text-left">
