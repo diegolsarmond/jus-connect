@@ -29,9 +29,14 @@ export default function VisualizarCliente() {
 
   return (
     <div className="p-6 space-y-6">
-      <Button variant="outline" onClick={() => navigate(-1)}>
-        Voltar
-      </Button>
+      <div className="flex items-center justify-between">
+        <Button variant="outline" onClick={() => navigate(-1)}>
+          Voltar
+        </Button>
+        <Button onClick={() => navigate(`/clientes/${id}/novo-processo`)}>
+          Novo Processo
+        </Button>
+      </div>
 
       <Card>
         <CardHeader>
