@@ -1,13 +1,13 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Target, 
-  Calendar, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Users,
+  Target,
+  Calendar,
+  FileText,
   BarChart3,
   Scale,
-  Settings
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,12 @@ const navigation = [
   { name: "Agenda", href: "/agenda", icon: Calendar },
   { name: "Documentos", href: "/documentos", icon: FileText },
   { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
-  { name: "Configurações", href: "/configuracoes", icon: Settings },
+  {
+    name: "Configurações",
+    href: "/configuracoes",
+    icon: Settings,
+    children: [{ name: "Parâmetros", href: "/configuracoes/parametros" }],
+  },
 ];
 
 export function Sidebar() {
@@ -42,21 +47,47 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
         {navigation.map((item) => {
-          const isActive = location.pathname === item.href;
+          const isActive =
+            location.pathname === item.href ||
+            item.children?.some((child) =>
+              location.pathname.startsWith(child.href),
+            );
           return (
-            <NavLink
-              key={item.name}
-              to={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            <div key={item.name} className="space-y-1">
+              <NavLink
+                to={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.name}
+              </NavLink>
+              {item.children && (
+                <div className="ml-6 space-y-1">
+                  {item.children.map((child) => {
+                    const childActive = location.pathname === child.href;
+                    return (
+                      <NavLink
+                        key={child.name}
+                        to={child.href}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200",
+                          childActive
+                            ? "bg-primary text-primary-foreground shadow-md"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                        )}
+                      >
+                        {child.name}
+                      </NavLink>
+                    );
+                  })}
+                </div>
               )}
-            >
-              <item.icon className="h-5 w-5" />
-              {item.name}
-            </NavLink>
+            </div>
           );
         })}
       </nav>
