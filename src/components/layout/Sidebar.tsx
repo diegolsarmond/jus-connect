@@ -4,6 +4,7 @@ import {
   Users,
   Target,
   Calendar,
+  Gavel,
   FileText,
   BarChart3,
   Scale,
@@ -16,6 +17,7 @@ const navigation = [
   { name: "Clientes", href: "/clientes", icon: Users },
   { name: "Pipeline", href: "/pipeline", icon: Target },
   { name: "Agenda", href: "/agenda", icon: Calendar },
+  { name: "Processos", href: "/processos", icon: Gavel },
   { name: "Documentos", href: "/documentos", icon: FileText },
   { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
   {
