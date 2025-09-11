@@ -9,10 +9,18 @@ import {
   BarChart3,
   Scale,
   Settings,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const navigation = [
+interface NavItem {
+  name: string;
+  href?: string;
+  icon?: LucideIcon;
+  children?: NavItem[];
+}
+
+const navigation: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Clientes", href: "/clientes", icon: Users },
   { name: "Pipeline", href: "/pipeline", icon: Target },
@@ -24,12 +32,71 @@ const navigation = [
     name: "Configurações",
     href: "/configuracoes",
     icon: Settings,
-    children: [{ name: "Parâmetros", href: "/configuracoes/parametros" }],
+    children: [
+      {
+        name: "Parâmetros",
+        children: [
+          {
+            name: "Área de Atuação",
+            href: "/configuracoes/parametros/area-de-atuacao",
+          },
+          {
+            name: "Situação do Processo",
+            href: "/configuracoes/parametros/situacao-processo",
+          },
+          {
+            name: "Tipo de Evento",
+            href: "/configuracoes/parametros/tipo-evento",
+          },
+          {
+            name: "Situação do Cliente",
+            href: "/configuracoes/parametros/situacao-cliente",
+          },
+        ],
+      },
+    ],
   },
 ];
 
 export function Sidebar() {
   const location = useLocation();
+
+  const isItemActive = (item: NavItem): boolean => {
+    if (item.href && location.pathname === item.href) return true;
+    return item.children ? item.children.some(isItemActive) : false;
+  };
+
+  const renderNavItems = (items: NavItem[]) =>
+    items.map((item) => {
+      const active = isItemActive(item);
+      const classes = cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+        active
+          ? "bg-primary text-primary-foreground shadow-md"
+          : "text-muted-foreground hover:text-foreground hover:bg-accent",
+      );
+
+      const content = item.href ? (
+        <NavLink to={item.href} className={classes}>
+          {item.icon && <item.icon className="h-5 w-5" />}
+          {item.name}
+        </NavLink>
+      ) : (
+        <div className={classes}>
+          {item.icon && <item.icon className="h-5 w-5" />}
+          {item.name}
+        </div>
+      );
+
+      return (
+        <div key={item.name} className="space-y-1">
+          {content}
+          {item.children && (
+            <div className="ml-6 space-y-1">{renderNavItems(item.children)}</div>
+          )}
+        </div>
+      );
+    });
 
   return (
     <div className="w-64 bg-card border-r border-border flex flex-col">
@@ -47,52 +114,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
-        {navigation.map((item) => {
-          const isActive =
-            location.pathname === item.href ||
-            item.children?.some((child) =>
-              location.pathname.startsWith(child.href),
-            );
-          return (
-            <div key={item.name} className="space-y-1">
-              <NavLink
-                to={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.name}
-              </NavLink>
-              {item.children && (
-                <div className="ml-6 space-y-1">
-                  {item.children.map((child) => {
-                    const childActive = location.pathname === child.href;
-                    return (
-                      <NavLink
-                        key={child.name}
-                        to={child.href}
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200",
-                          childActive
-                            ? "bg-primary text-primary-foreground shadow-md"
-                            : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                        )}
-                      >
-                        {child.name}
-                      </NavLink>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </nav>
+      <nav className="flex-1 p-4 space-y-2">{renderNavItems(navigation)}</nav>
 
       {/* Footer */}
       <div className="p-4 border-t border-border">
