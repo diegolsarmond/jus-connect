@@ -91,10 +91,14 @@ export default function VisualizarCliente() {
               >
                 <CardContent className="flex justify-between items-center py-4">
                   <div>
-                    <p className="font-medium">{processo.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Processo {processo.number}
+                    <p className="font-medium">
+                      {processo.number ? `Processo ${processo.number}` : "Processo"}
                     </p>
+                    {processo.tipo && (
+                      <p className="text-sm text-muted-foreground">
+                        {processo.tipo}
+                      </p>
+                    )}
                   </div>
                   <Badge>{processo.status}</Badge>
                 </CardContent>

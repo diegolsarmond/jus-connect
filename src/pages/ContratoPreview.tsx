@@ -16,7 +16,7 @@ export default function ContratoPreview() {
 
   const handleEmail = () => {
     const subject = "Minuta de Contrato de Prestação de Serviços";
-    const body = `Prezado(a) ${client?.name}, segue a minuta do contrato referente ao processo ${processo?.title}.`;
+    const body = `Prezado(a) ${client?.name}, segue a minuta do contrato referente ao processo ${processo?.number ?? ""}.`;
     window.location.href = `mailto:${client?.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
@@ -48,7 +48,7 @@ export default function ContratoPreview() {
             Contratante: <strong>{client.name}</strong> ({client.document})
           </p>
           <p>
-            Processo: <strong>{processo.title}</strong> ({processo.number})
+            Processo: <strong>{processo.number || "N/A"}</strong>
           </p>
           <p>
             Pelo presente instrumento particular, as partes acima identificadas

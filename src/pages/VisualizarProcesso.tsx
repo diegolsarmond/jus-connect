@@ -40,10 +40,12 @@ export default function VisualizarProcesso() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{processo.title}</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Processo {processo.number}
-          </p>
+          <CardTitle>
+            {processo.number ? `Processo ${processo.number}` : "Processo"}
+          </CardTitle>
+          {processo.tipo && (
+            <p className="text-sm text-muted-foreground">{processo.tipo}</p>
+          )}
         </CardHeader>
         <CardContent>
           <Badge>{processo.status}</Badge>
