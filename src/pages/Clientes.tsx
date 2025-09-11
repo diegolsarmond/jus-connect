@@ -13,76 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { clients } from "@/lib/clients";
 
 export default function Clientes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("todos");
   const navigate = useNavigate();
 
-  const clients = [
-    {
-      id: 1,
-      name: "João Silva",
-      email: "joao.silva@email.com",
-      phone: "(11) 99999-9999",
-      type: "Pessoa Física",
-      area: "Direito Trabalhista",
-      status: "Ativo",
-      lastContact: "2024-01-15",
-      cases: 3
-    },
-    {
-      id: 2,
-      name: "Tech Solutions Ltda",
-      email: "contato@techsolutions.com.br",
-      phone: "(11) 88888-8888",
-      type: "Pessoa Jurídica",
-      area: "Direito Empresarial",
-      status: "Proposta",
-      lastContact: "2024-01-14",
-      cases: 1
-    },
-    {
-      id: 3,
-      name: "Maria Santos",
-      email: "maria.santos@email.com",
-      phone: "(11) 77777-7777",
-      type: "Pessoa Física",
-      area: "Direito de Família",
-      status: "Ativo",
-      lastContact: "2024-01-13",
-      cases: 2
-    },
-    {
-      id: 4,
-      name: "Construtora ABC Ltda",
-      email: "juridico@construtorabc.com.br",
-      phone: "(11) 66666-6666",
-      type: "Pessoa Jurídica",
-      area: "Direito Tributário",
-      status: "Negociação",
-      lastContact: "2024-01-12",
-      cases: 5
-    },
-    {
-      id: 5,
-      name: "Carlos Oliveira",
-      email: "carlos.oliveira@email.com",
-      phone: "(11) 55555-5555",
-      type: "Pessoa Física",
-      area: "Direito Civil",
-      status: "Inativo",
-      lastContact: "2024-01-10",
-      cases: 1
-    },
-  ];
-
   const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         client.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterType === "todos" || 
-                         (filterType === "pf" && client.type === "Pessoa Física") ||
-                         (filterType === "pj" && client.type === "Pessoa Jurídica");
+      client.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter =
+      filterType === "todos" ||
+      (filterType === "pf" && client.type === "Pessoa Física") ||
+      (filterType === "pj" && client.type === "Pessoa Jurídica");
     return matchesSearch && matchesFilter;
   });
 
@@ -140,7 +84,11 @@ export default function Clientes() {
       {/* Clients Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredClients.map((client) => (
-          <Card key={client.id} className="hover:shadow-lg transition-all duration-200 cursor-pointer">
+          <Card
+            key={client.id}
+            className="hover:shadow-lg transition-all duration-200 cursor-pointer"
+            onClick={() => navigate(`/clientes/${client.id}`)}
+          >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -181,10 +129,10 @@ export default function Clientes() {
                 <p className="text-sm font-medium text-foreground">{client.area}</p>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-xs text-muted-foreground">
-                    {client.cases} {client.cases === 1 ? "caso" : "casos"}
+                    {client.processes.length} {client.processes.length === 1 ? "caso" : "casos"}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    Último contato: {new Date(client.lastContact).toLocaleDateString('pt-BR')}
+                    Último contato: {new Date(client.lastContact).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
               </div>
