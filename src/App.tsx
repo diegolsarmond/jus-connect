@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CRMLayout } from "@/components/layout/CRMLayout";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
+import NovoCliente from "./pages/NovoCliente";
 import Pipeline from "./pages/Pipeline";
 import NotFound from "./pages/NotFound";
 
@@ -21,6 +22,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clientes" element={<Clientes />} />
+            <Route path="/clientes/novo" element={<NovoCliente />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/agenda" element={<div className="p-6"><h1 className="text-3xl font-bold">Agenda</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
             <Route path="/documentos" element={<div className="p-6"><h1 className="text-3xl font-bold">Documentos</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
