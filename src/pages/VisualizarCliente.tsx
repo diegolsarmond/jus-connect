@@ -82,7 +82,13 @@ export default function VisualizarCliente() {
           <div key={status} className="space-y-2">
             <h2 className="text-xl font-semibold">{status}</h2>
             {processos.map((processo) => (
-              <Card key={processo.id}>
+              <Card
+                key={processo.id}
+                className="cursor-pointer"
+                onClick={() =>
+                  navigate(`/clientes/${id}/processos/${processo.id}`)
+                }
+              >
                 <CardContent className="flex justify-between items-center py-4">
                   <div>
                     <p className="font-medium">{processo.title}</p>
