@@ -16,19 +16,16 @@ export const clients: Client[] = [
       {
         id: 101,
         number: "1001-00.2024.1.00.0001",
-        title: "Reclamação trabalhista",
         status: "Em andamento",
       },
       {
         id: 102,
         number: "1002-00.2024.1.00.0001",
-        title: "Ação de cobrança",
         status: "Em andamento",
       },
       {
         id: 103,
         number: "1003-00.2023.1.00.0001",
-        title: "Ação civil",
         status: "Encerrado",
       },
     ],
@@ -48,7 +45,6 @@ export const clients: Client[] = [
       {
         id: 201,
         number: "2001-00.2024.1.00.0001",
-        title: "Revisão contratual",
         status: "Em andamento",
       },
     ],
@@ -68,13 +64,11 @@ export const clients: Client[] = [
       {
         id: 301,
         number: "3001-00.2024.1.00.0001",
-        title: "Divórcio",
         status: "Em andamento",
       },
       {
         id: 302,
         number: "3002-00.2023.1.00.0001",
-        title: "Guarda",
         status: "Encerrado",
       },
     ],
@@ -94,31 +88,26 @@ export const clients: Client[] = [
       {
         id: 401,
         number: "4001-00.2024.1.00.0001",
-        title: "Ação tributária",
         status: "Em andamento",
       },
       {
         id: 402,
         number: "4002-00.2024.1.00.0001",
-        title: "Ação trabalhista",
         status: "Em andamento",
       },
       {
         id: 403,
         number: "4003-00.2024.1.00.0001",
-        title: "Execução fiscal",
         status: "Em andamento",
       },
       {
         id: 404,
         number: "4004-00.2023.1.00.0001",
-        title: "Ação civil",
         status: "Encerrado",
       },
       {
         id: 405,
         number: "4005-00.2024.1.00.0001",
-        title: "Recurso administrativo",
         status: "Em andamento",
       },
     ],
@@ -138,7 +127,6 @@ export const clients: Client[] = [
       {
         id: 501,
         number: "5001-00.2023.1.00.0001",
-        title: "Ação de indenização",
         status: "Encerrado",
       },
     ],
