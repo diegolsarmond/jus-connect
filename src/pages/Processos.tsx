@@ -30,8 +30,8 @@ interface Processo {
 
 export default function Processos() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [tipoFilter, setTipoFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("todos");
+  const [tipoFilter, setTipoFilter] = useState("todos");
 
   const processos: Processo[] = [
     {
@@ -81,8 +81,9 @@ export default function Processos() {
   ];
 
   const filteredProcessos = processos.filter((processo) => {
-    const matchesStatus = !statusFilter || processo.status === statusFilter;
-    const matchesTipo = !tipoFilter || processo.tipo === tipoFilter;
+    const matchesStatus =
+      statusFilter === "todos" || processo.status === statusFilter;
+    const matchesTipo = tipoFilter === "todos" || processo.tipo === tipoFilter;
     const search = searchTerm.toLowerCase();
     const matchesSearch =
       processo.numero?.toLowerCase().includes(search) ||
@@ -114,7 +115,7 @@ export default function Processos() {
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos os Status</SelectItem>
+            <SelectItem value="todos">Todos os Status</SelectItem>
             <SelectItem value="Em andamento">Em andamento</SelectItem>
             <SelectItem value="Arquivado">Arquivado</SelectItem>
           </SelectContent>
@@ -124,7 +125,7 @@ export default function Processos() {
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos os Tipos</SelectItem>
+            <SelectItem value="todos">Todos os Tipos</SelectItem>
             <SelectItem value="Cível">Cível</SelectItem>
             <SelectItem value="Trabalhista">Trabalhista</SelectItem>
           </SelectContent>
