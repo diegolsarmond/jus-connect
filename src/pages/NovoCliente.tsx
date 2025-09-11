@@ -13,6 +13,8 @@ const formSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("Email inválido"),
   phone: z.string().min(1, "Telefone é obrigatório"),
+  cpf: z.string().min(1, "CPF é obrigatório"),
+  address: z.string().min(1, "Endereço é obrigatório"),
   type: z.enum(["pf", "pj"]),
   area: z.string().min(1, "Área é obrigatória"),
 });
@@ -25,6 +27,8 @@ export default function NovoCliente() {
       name: "",
       email: "",
       phone: "",
+      cpf: "",
+      address: "",
       type: "pf",
       area: "",
     },
@@ -88,6 +92,34 @@ export default function NovoCliente() {
                     <FormLabel>Telefone</FormLabel>
                     <FormControl>
                       <Input placeholder="(11) 99999-9999" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="cpf"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CPF</FormLabel>
+                    <FormControl>
+                      <Input placeholder="000.000.000-00" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Endereço</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Rua Exemplo, 123" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
