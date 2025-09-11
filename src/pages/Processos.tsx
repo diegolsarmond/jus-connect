@@ -85,10 +85,10 @@ export default function Processos() {
     const matchesTipo = !tipoFilter || processo.tipo === tipoFilter;
     const search = searchTerm.toLowerCase();
     const matchesSearch =
-      processo.numero.toLowerCase().includes(search) ||
-      processo.cliente.nome.toLowerCase().includes(search) ||
-      processo.cliente.cpf.includes(search) ||
-      processo.advogadoResponsavel.toLowerCase().includes(search);
+      processo.numero?.toLowerCase().includes(search) ||
+      processo.cliente?.nome?.toLowerCase().includes(search) ||
+      processo.cliente?.cpf?.includes(search) ||
+      processo.advogadoResponsavel?.toLowerCase().includes(search);
 
     return matchesStatus && matchesTipo && matchesSearch;
   });
@@ -131,65 +131,71 @@ export default function Processos() {
         </Select>
       </div>
 
-      <Accordion type="single" collapsible className="w-full">
-        {filteredProcessos.map((processo) => (
-          <AccordionItem key={processo.numero} value={processo.numero}>
-            <AccordionTrigger>
-              <div className="text-left">
-                <p className="font-medium">Processo {processo.numero}</p>
-                <p className="text-sm text-muted-foreground">
-                  Distribuído em {processo.dataDistribuicao}
-                </p>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium">Cliente:</span> {processo.cliente.nome} ({processo.cliente.papel})
-                  </div>
-                  <div>
-                    <span className="font-medium">Classe Judicial:</span> {processo.classeJudicial}
-                  </div>
-                  <div className="md:col-span-2">
-                    <span className="font-medium">Assunto:</span> {processo.assunto}
-                  </div>
-                  <div>
-                    <span className="font-medium">Jurisdição:</span> {processo.jurisdicao}
-                  </div>
-                  <div>
-                    <span className="font-medium">Órgão Julgador:</span> {processo.orgaoJulgador}
-                  </div>
+      {filteredProcessos.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Nenhum processo encontrado.
+        </p>
+      ) : (
+        <Accordion type="single" collapsible className="w-full">
+          {filteredProcessos.map((processo) => (
+            <AccordionItem key={processo.numero} value={processo.numero}>
+              <AccordionTrigger>
+                <div className="text-left">
+                  <p className="font-medium">Processo {processo.numero}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Distribuído em {processo.dataDistribuicao}
+                  </p>
                 </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Cliente:</span> {processo.cliente.nome} ({processo.cliente.papel})
+                    </div>
+                    <div>
+                      <span className="font-medium">Classe Judicial:</span> {processo.classeJudicial}
+                    </div>
+                    <div className="md:col-span-2">
+                      <span className="font-medium">Assunto:</span> {processo.assunto}
+                    </div>
+                    <div>
+                      <span className="font-medium">Jurisdição:</span> {processo.jurisdicao}
+                    </div>
+                    <div>
+                      <span className="font-medium">Órgão Julgador:</span> {processo.orgaoJulgador}
+                    </div>
+                  </div>
 
-                <div>
-                  <h4 className="font-medium mb-2">Últimas Movimentações</h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left">
-                          <th className="py-1">Movimento</th>
-                          <th className="py-1">Documento</th>
-                        </tr>
-                      </thead>
-                      <tbody className="[&>tr:not(:last-child)]:border-b">
-                        {processo.movimentacoes.map((mov, index) => (
-                          <tr key={index}>
-                            <td className="py-1">
-                              {mov.data} - {mov.descricao}
-                            </td>
-                            <td className="py-1"></td>
+                  <div>
+                    <h4 className="font-medium mb-2">Últimas Movimentações</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left">
+                            <th className="py-1">Movimento</th>
+                            <th className="py-1">Documento</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="[&>tr:not(:last-child)]:border-b">
+                          {processo.movimentacoes.map((mov, index) => (
+                            <tr key={index}>
+                              <td className="py-1">
+                                {mov.data} - {mov.descricao}
+                              </td>
+                              <td className="py-1"></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
     </div>
   );
 }
