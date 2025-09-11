@@ -10,7 +10,10 @@ import NovoCliente from "./pages/NovoCliente";
 import Pipeline from "./pages/Pipeline";
 import Agenda from "./pages/Agenda";
 import Processos from "./pages/Processos";
-import Parametros from "./pages/configuracoes/Parametros";
+import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
+import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
+import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
+import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,8 +34,11 @@ const App = () => (
             <Route path="/processos" element={<Processos />} />
             <Route path="/documentos" element={<div className="p-6"><h1 className="text-3xl font-bold">Documentos</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
             <Route path="/relatorios" element={<div className="p-6"><h1 className="text-3xl font-bold">Relatórios</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
-            <Route path="/configuracoes" element={<div className="p-6"><h1 className="text-3xl font-bold">Configurações</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
-            <Route path="/configuracoes/parametros" element={<Parametros />} />
+              <Route path="/configuracoes" element={<div className="p-6"><h1 className="text-3xl font-bold">Configurações</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
+              <Route path="/configuracoes/parametros/area-de-atuacao" element={<AreaAtuacao />} />
+              <Route path="/configuracoes/parametros/situacao-processo" element={<SituacaoProcesso />} />
+              <Route path="/configuracoes/parametros/tipo-evento" element={<TipoEvento />} />
+              <Route path="/configuracoes/parametros/situacao-cliente" element={<SituacaoCliente />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
