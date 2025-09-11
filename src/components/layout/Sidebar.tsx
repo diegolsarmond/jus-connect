@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -9,6 +10,7 @@ import {
   BarChart3,
   Scale,
   Settings,
+  ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -66,37 +68,65 @@ export function Sidebar() {
     return item.children ? item.children.some(isItemActive) : false;
   };
 
-  const renderNavItems = (items: NavItem[]) =>
-    items.map((item) => {
-      const active = isItemActive(item);
-      const classes = cn(
-        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-        active
-          ? "bg-primary text-primary-foreground shadow-md"
-          : "text-muted-foreground hover:text-foreground hover:bg-accent",
-      );
+  const NavItemComponent = ({ item }: { item: NavItem }) => {
+    const active = isItemActive(item);
+    const [open, setOpen] = useState(active);
+    const hasChildren = item.children && item.children.length > 0;
+    useEffect(() => {
+      if (active) setOpen(true);
+    }, [active]);
+    const classes = cn(
+      "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+      active
+        ? "bg-primary text-primary-foreground shadow-md"
+        : "text-muted-foreground hover:text-foreground hover:bg-accent",
+    );
 
-      const content = item.href ? (
-        <NavLink to={item.href} className={classes}>
+    const handleClick = () => {
+      if (hasChildren) {
+        setOpen((prev) => !prev);
+      }
+    };
+
+    const content = !hasChildren && item.href ? (
+      <NavLink to={item.href} className={classes}>
+        {item.icon && <item.icon className="h-5 w-5" />}
+        {item.name}
+      </NavLink>
+    ) : (
+      <button
+        type="button"
+        onClick={handleClick}
+        className={cn(classes, "w-full justify-between")}
+      >
+        <span className="flex items-center gap-3">
           {item.icon && <item.icon className="h-5 w-5" />}
           {item.name}
-        </NavLink>
-      ) : (
-        <div className={classes}>
-          {item.icon && <item.icon className="h-5 w-5" />}
-          {item.name}
-        </div>
-      );
+        </span>
+        {hasChildren && (
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        )}
+      </button>
+    );
 
-      return (
-        <div key={item.name} className="space-y-1">
-          {content}
-          {item.children && (
-            <div className="ml-6 space-y-1">{renderNavItems(item.children)}</div>
-          )}
-        </div>
-      );
-    });
+    return (
+      <div className="space-y-1">
+        {content}
+        {hasChildren && open && (
+          <div className="ml-6 space-y-1">
+            {item.children!.map((child) => (
+              <NavItemComponent key={child.name} item={child} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="w-64 bg-card border-r border-border flex flex-col">
@@ -114,7 +144,11 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">{renderNavItems(navigation)}</nav>
+      <nav className="flex-1 p-4 space-y-2">
+        {navigation.map((item) => (
+          <NavItemComponent key={item.name} item={item} />
+        ))}
+      </nav>
 
       {/* Footer */}
       <div className="p-4 border-t border-border">
