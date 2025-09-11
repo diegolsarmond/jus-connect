@@ -10,6 +10,7 @@ import NovoCliente from "./pages/NovoCliente";
 import VisualizarCliente from "./pages/VisualizarCliente";
 import NovoProcesso from "./pages/NovoProcesso";
 import VisualizarProcesso from "./pages/VisualizarProcesso";
+import ContratoPreview from "./pages/ContratoPreview";
 import Pipeline from "./pages/Pipeline";
 import Agenda from "./pages/Agenda";
 import Processos from "./pages/Processos";
@@ -36,6 +37,10 @@ const App = () => (
             <Route
               path="/clientes/:id/processos/:processoId"
               element={<VisualizarProcesso />}
+            />
+            <Route
+              path="/clientes/:id/processos/:processoId/contrato"
+              element={<ContratoPreview />}
             />
             <Route path="/clientes/:id" element={<VisualizarCliente />} />
             <Route path="/pipeline" element={<Pipeline />} />

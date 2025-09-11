@@ -26,7 +26,13 @@ export default function VisualizarProcesso() {
           Voltar
         </Button>
         <div className="flex gap-2">
-          <Button>Gerar contrato</Button>
+          <Button
+            onClick={() =>
+              navigate(`/clientes/${id}/processos/${processoId}/contrato`)
+            }
+          >
+            Gerar contrato
+          </Button>
           <Button>Gerar termo de hipossuficiência</Button>
           <Button>Anexar documentos</Button>
         </div>
