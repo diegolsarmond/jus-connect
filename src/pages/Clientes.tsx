@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, Search, Filter, User, Building2, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ import {
 export default function Clientes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("todos");
+  const navigate = useNavigate();
 
   const clients = [
     {
@@ -102,7 +104,10 @@ export default function Clientes() {
           <h1 className="text-3xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground">Gerencie todos os seus clientes</p>
         </div>
-        <Button className="bg-primary hover:bg-primary-hover">
+        <Button
+          className="bg-primary hover:bg-primary-hover"
+          onClick={() => navigate("/clientes/novo")}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Novo Cliente
         </Button>
