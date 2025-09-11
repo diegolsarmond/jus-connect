@@ -1,8 +1,20 @@
 export interface Process {
   id: number;
-  number: string;
-  title: string;
+  number?: string;
   status: string;
+  tipo?: string;
+  participacao?: string;
+  areaAtuacao?: string;
+  nomeReu?: string;
+  documentoReu?: string;
+  enderecoReu?: string;
+  numeroReu?: string;
+  bairro?: string;
+  cidade?: string;
+  cep?: string;
+  valorCausa?: string;
+  descricaoFatos?: string;
+  pedidos?: string;
 }
 
 export interface Client {
