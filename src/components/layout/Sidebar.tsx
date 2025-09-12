@@ -47,6 +47,10 @@ const navigation: NavItem[] = [
             href: "/configuracoes/parametros/perfis",
           },
           {
+            name: "Escritórios",
+            href: "/configuracoes/parametros/escritorios",
+          },
+          {
             name: "Área de Atuação",
             href: "/configuracoes/parametros/area-de-atuacao",
           },
