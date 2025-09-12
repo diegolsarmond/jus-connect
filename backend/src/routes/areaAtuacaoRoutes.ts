@@ -10,9 +10,12 @@ const router = Router();
 
 /**
  * @swagger
+ * tags:
+ *   - name: AreaAtuacao
+ *     description: Endpoints para gerenciamento de áreas de atuação
  * components:
  *   schemas:
- *     Area:
+ *     AreaAtuacao:
  *       type: object
  *       properties:
  *         id:
@@ -31,7 +34,7 @@ const router = Router();
  * /api/areas:
  *   get:
  *     summary: Lista todas as áreas de atuação
- *     tags: [Areas]
+ *     tags: [AreaAtuacao]
  *     responses:
  *       200:
  *         description: Lista de áreas
@@ -40,7 +43,7 @@ const router = Router();
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/Area'
+ *                 $ref: '#/components/schemas/AreaAtuacao'
  */
 router.get('/areas', listAreas);
 
@@ -49,7 +52,7 @@ router.get('/areas', listAreas);
  * /api/areas:
  *   post:
  *     summary: Cria uma nova área de atuação
- *     tags: [Areas]
+ *     tags: [AreaAtuacao]
  *     requestBody:
  *       required: true
  *       content:
@@ -67,7 +70,7 @@ router.get('/areas', listAreas);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Area'
+ *               $ref: '#/components/schemas/AreaAtuacao'
  */
 router.post('/areas', createArea);
 
@@ -76,7 +79,7 @@ router.post('/areas', createArea);
  * /api/areas/{id}:
  *   put:
  *     summary: Atualiza uma área de atuação existente
- *     tags: [Areas]
+ *     tags: [AreaAtuacao]
  *     parameters:
  *       - in: path
  *         name: id
@@ -100,7 +103,7 @@ router.post('/areas', createArea);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Area'
+ *               $ref: '#/components/schemas/AreaAtuacao'
  *       404:
  *         description: Área não encontrada
  */
@@ -111,7 +114,7 @@ router.put('/areas/:id', updateArea);
  * /api/areas/{id}:
  *   delete:
  *     summary: Remove uma área de atuação
- *     tags: [Areas]
+ *     tags: [AreaAtuacao]
  *     parameters:
  *       - in: path
  *         name: id
