@@ -27,6 +27,38 @@ import { Label } from "@/components/ui/label";
 import { Upload } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
+const roleToPerfil = (role: string): number => {
+  switch (role) {
+    case "administrador":
+      return 1;
+    case "advogado":
+      return 2;
+    case "secretario":
+      return 4;
+    default:
+      return 2;
+  }
+};
+
+const officeToEscritorio = (office: string): number => {
+  switch (office) {
+    case "principal":
+      return 1;
+    case "filial":
+      return 2;
+    default:
+      return 1;
+  }
+};
+
 const existingEmails = [
   "joao.silva@escritorio.com.br",
   "maria.santos@escritorio.com.br",
@@ -89,19 +121,50 @@ export default function NovoUsuario() {
     }
   };
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
     let password = data.password;
     if (!password) {
       password = Math.random().toString(36).slice(-8);
-      toast({
-        title: "Usuário criado",
-        description: `Senha temporária enviada para ${data.email}`,
-      });
-    } else {
-      toast({ title: "Usuário criado" });
     }
-    console.log({ ...data, password, avatar: avatarPreview || undefined });
-    navigate("/configuracoes/usuarios");
+
+    const payload = {
+      nome_completo: data.name,
+      cpf: "",
+      email: data.email,
+      perfil: roleToPerfil(data.role),
+      empresa: 1,
+      escritorio: officeToEscritorio(data.office),
+      oab: data.oab || null,
+      status: data.status === "ativo",
+      senha: password,
+      telefone: data.phone || null,
+      ultimo_login: null,
+      observacoes: data.notes || null,
+    };
+
+    try {
+      const url = joinUrl(apiUrl, "/api/usuarios");
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error("Erro ao criar usuário");
+      }
+      if (!data.password) {
+        toast({
+          title: "Usuário criado",
+          description: `Senha temporária enviada para ${data.email}`,
+        });
+      } else {
+        toast({ title: "Usuário criado" });
+      }
+      navigate("/configuracoes/usuarios");
+    } catch (error) {
+      console.error("Erro ao criar usuário:", error);
+      toast({ title: "Erro ao criar usuário", variant: "destructive" });
+    }
   };
 
   const initials = form
