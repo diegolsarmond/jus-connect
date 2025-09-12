@@ -13,6 +13,9 @@ export interface Appointment {
   endTime?: string;
   clientId?: string;
   clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  notifyClient?: boolean;
   location?: string;
   reminders: boolean;
   createdAt: Date;
