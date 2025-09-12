@@ -4,8 +4,7 @@ import pool from '../services/db';
 export const listUsuarios = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao FROM public.usuarios'
-    );
+      'SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"'    );
     res.json(result.rows);
   } catch (error) {
     console.error(error);

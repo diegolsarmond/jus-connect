@@ -27,11 +27,11 @@ const router = Router();
  *         email:
  *           type: string
  *         perfil:
- *           type: integer
+ *           type: string
  *         empresa:
- *           type: integer
+ *           type: string
  *         escritorio:
- *           type: integer
+ *           type: string
  *         oab:
  *           type: string
  *         status:

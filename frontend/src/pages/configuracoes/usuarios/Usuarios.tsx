@@ -67,7 +67,7 @@ const mapApiUserToUser = (u: ApiUsuario): User => ({
   name: u.nome_completo,
   email: u.email,
   phone: u.telefone ?? "",
-  role: perfilToRole(u.perfil),
+  perfil: u.perfil,
   escritorio: u.escritorio?.toString() ?? "",
   oab: u.oab ? { numero: u.oab, uf: "" } : undefined,
   especialidades: [],
@@ -260,7 +260,7 @@ export default function Usuarios() {
                   />
                 </TableHead>
                 <TableHead>Usuário</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Perfil</TableHead>
                 <TableHead>Escritório</TableHead>
                 <TableHead>OAB</TableHead>
                 <TableHead>Status</TableHead>
@@ -292,8 +292,8 @@ export default function Usuarios() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={roleVariants[user.role]}>
-                      {roleLabels[user.role]}
+                    <Badge >
+                      {[user.perfil]}
                     </Badge>
                   </TableCell>
                   <TableCell>{user.escritorio}</TableCell>
@@ -301,7 +301,7 @@ export default function Usuarios() {
                     {user.oab ? `${user.oab.numero}/${user.oab.uf}` : "-"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={user.ativo ? "default" : "secondary"}>
+                    <Badge variant={user.status ? "true" : "false"}>
                       {user.ativo ? "Ativo" : "Inativo"}
                     </Badge>
                   </TableCell>
