@@ -1,6 +1,7 @@
 import express from 'express';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
+import situacaoClienteRoutes from './routes/situacaoClienteRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -29,6 +30,7 @@ app.use((req, res, next) => {
 
 app.use('/api', areaAtuacaoRoutes);
 app.use('/api', tipoEventoRoutes);
+app.use('/api', situacaoClienteRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
