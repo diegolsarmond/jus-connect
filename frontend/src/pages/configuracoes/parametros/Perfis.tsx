@@ -7,6 +7,7 @@ export default function Perfis() {
       description="Gerencie os perfis do sistema"
       placeholder="Novo perfil"
       emptyMessage="Nenhum perfil cadastrado"
+      endpoint="/api/perfis"
     />
   );
 }

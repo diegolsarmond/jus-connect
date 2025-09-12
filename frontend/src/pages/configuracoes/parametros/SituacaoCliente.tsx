@@ -7,6 +7,7 @@ export default function SituacaoCliente() {
       description="Gerencie as situações do cliente"
       placeholder="Nova situação do cliente"
       emptyMessage="Nenhuma situação cadastrada"
+      endpoint="/api/situacao-clientes"
     />
   );
 }

@@ -7,6 +7,7 @@ export default function Escritorios() {
       description="Gerencie os escritórios"
       placeholder="Novo escritório"
       emptyMessage="Nenhum escritório cadastrado"
+      endpoint="/api/escritorios"
     />
   );
 }

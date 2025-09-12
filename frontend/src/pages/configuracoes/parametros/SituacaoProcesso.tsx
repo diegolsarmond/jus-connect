@@ -7,6 +7,8 @@ export default function SituacaoProcesso() {
       description="Gerencie as situações de processo"
       placeholder="Nova situação de processo"
       emptyMessage="Nenhuma situação cadastrada"
+      endpoint="/api/situacoes-processo"
+
     />
   );
 }
