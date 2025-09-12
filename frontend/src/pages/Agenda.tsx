@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Calendar, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -7,61 +7,90 @@ import { useToast } from '@/hooks/use-toast';
 import { AgendaCalendar } from '@/components/agenda/AgendaCalendar';
 import { AppointmentForm } from '@/components/agenda/AppointmentForm';
 import { AppointmentList } from '@/components/agenda/AppointmentList';
-import { Appointment } from '@/types/agenda';
+import { Appointment, AppointmentType } from '@/types/agenda';
 
-// Mock data for demonstration
-const mockAppointments: Appointment[] = [
-  {
-    id: '1',
-    title: 'Reunião com Cliente Silva',
-    description: 'Discussão sobre processo trabalhista',
-    type: 'reuniao',
-    status: 'agendado',
-    date: new Date(2024, 11, 20),
-    startTime: '14:00',
-    endTime: '15:00',
-    clientName: 'João Silva',
-    location: 'Escritório',
-    reminders: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: '2',
-    title: 'Audiência TRT',
-    description: 'Audiência trabalhista - Processo 123456',
-    type: 'audiencia',
-    status: 'agendado',
-    date: new Date(2024, 11, 22),
-    startTime: '09:30',
-    endTime: '11:00',
-    clientName: 'Maria Santos',
-    location: 'TRT - 5ª Vara',
-    reminders: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: '3',
-    title: 'Lançar Petição Inicial',
-    description: 'Petição inicial - Ação de Cobrança',
-    type: 'peticao',
-    status: 'em_andamento',
-    date: new Date(2024, 11, 21),
-    startTime: '10:00',
-    clientName: 'Empresa XYZ Ltda',
-    reminders: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
+const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
+
+function joinUrl(base: string, path = '') {
+  const b = base.replace(/\/+$/, '');
+  const p = path ? (path.startsWith('/') ? path : `/${path}`) : '';
+  return `${b}${p}`;
+}
 
 export default function Agenda() {
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formInitialDate, setFormInitialDate] = useState<Date>();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      try {
+        const url = joinUrl(apiUrl, '/api/agendas');
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) {
+          throw new Error('Failed to load agendas');
+        }
+        const json = await response.json();
+        const rows = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+
+        interface AgendaResponse {
+          id: number;
+          titulo: string;
+          tipo: number;
+          descricao?: string;
+          data: string;
+          hora_inicio: string;
+          hora_fim?: string;
+          cliente?: number;
+          local?: string;
+          lembrete: boolean;
+          status: number;
+          datacadastro?: string;
+        }
+
+        const typeMap = new Map<number, AppointmentType>();
+        try {
+          const tiposRes = await fetch(joinUrl(apiUrl, '/api/tipo-eventos'), { headers: { Accept: 'application/json' } });
+          if (tiposRes.ok) {
+            const tipoJson = await tiposRes.json();
+            const tipoRows = Array.isArray(tipoJson)
+              ? tipoJson
+              : Array.isArray(tipoJson?.data)
+                ? tipoJson.data
+                : [];
+            tipoRows.forEach((t: { id: number; nome: string }) =>
+              typeMap.set(t.id, t.nome as AppointmentType)
+            );
+          }
+        } catch (error) {
+          console.error('Erro ao carregar tipos de evento:', error);
+        }
+
+        const data: Appointment[] = (rows as AgendaResponse[]).map((r) => ({
+          id: String(r.id),
+          title: r.titulo,
+          description: r.descricao ?? undefined,
+          type: typeMap.get(r.tipo) || 'outro',
+          status: 'agendado',
+          date: new Date(r.data),
+          startTime: r.hora_inicio,
+          endTime: r.hora_fim ?? undefined,
+          clientId: r.cliente ? String(r.cliente) : undefined,
+          location: r.local ?? undefined,
+          reminders: Boolean(r.lembrete),
+          createdAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
+          updatedAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
+        }));
+        setAppointments(data);
+      } catch (error) {
+        console.error('Erro ao carregar agendas:', error);
+      }
+    };
+
+    fetchAppointments();
+  }, []);
 
   const handleCreateAppointment = (date?: Date) => {
     setFormInitialDate(date);
