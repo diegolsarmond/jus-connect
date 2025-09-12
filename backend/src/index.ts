@@ -14,6 +14,15 @@ app.use('/api', tipoEventoRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Verifica o status do backend
+ *     responses:
+ *       200:
+ *         description: Backend up and running
+ */
 app.get('/', (_req, res) => {
   res.send('Backend up and running');
 });

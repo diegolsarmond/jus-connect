@@ -8,7 +8,7 @@ const swaggerOptions: SwaggerOptions = {
       version: '1.0.0',
     },
   },
-  apis: ['./src/routes/*.ts'],
+  apis: ['./src/routes/*.ts', './src/index.ts'],
 };
 
 export default swaggerOptions;
