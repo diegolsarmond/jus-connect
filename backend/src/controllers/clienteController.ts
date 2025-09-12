@@ -13,6 +13,20 @@ export const listClientes = async (_req: Request, res: Response) => {
   }
 };
 
+export const countClientesAtivos = async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      'SELECT COUNT(*) AS total_clientes_ativos FROM public.clientes WHERE ativo = TRUE'
+    );
+    res.json({
+      total_clientes_ativos: parseInt(result.rows[0].total_clientes_ativos, 10),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createCliente = async (req: Request, res: Response) => {
   const {
     nome,

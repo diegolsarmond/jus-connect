@@ -4,6 +4,7 @@ import {
   createCliente,
   updateCliente,
   deleteCliente,
+  countClientesAtivos,
 } from '../controllers/clienteController';
 
 const router = Router();
@@ -70,6 +71,25 @@ const router = Router();
  *                 $ref: '#/components/schemas/Cliente'
  */
 router.get('/clientes', listClientes);
+
+/**
+ * @swagger
+ * /api/clientes/ativos/total:
+ *   get:
+ *     summary: Retorna o total de clientes ativos
+ *     tags: [Clientes]
+ *     responses:
+ *       200:
+ *         description: Total de clientes ativos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_clientes_ativos:
+ *                   type: integer
+ */
+router.get('/clientes/ativos/total', countClientesAtivos);
 
 /**
  * @swagger
