@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { listAreas } from '../controllers/areaAtuacaoController';
+import {
+  listAreas,
+  createArea,
+  updateArea,
+  deleteArea,
+} from '../controllers/areaAtuacaoController';
 
 const router = Router();
 
@@ -38,6 +43,88 @@ const router = Router();
  *                 $ref: '#/components/schemas/Area'
  */
 router.get('/areas', listAreas);
+
+/**
+ * @swagger
+ * /api/areas:
+ *   post:
+ *     summary: Cria uma nova área de atuação
+ *     tags: [Areas]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nome:
+ *                 type: string
+ *               ativo:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Área criada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Area'
+ */
+router.post('/areas', createArea);
+
+/**
+ * @swagger
+ * /api/areas/{id}:
+ *   put:
+ *     summary: Atualiza uma área de atuação existente
+ *     tags: [Areas]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nome:
+ *                 type: string
+ *               ativo:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Área atualizada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Area'
+ *       404:
+ *         description: Área não encontrada
+ */
+router.put('/areas/:id', updateArea);
+
+/**
+ * @swagger
+ * /api/areas/{id}:
+ *   delete:
+ *     summary: Remove uma área de atuação
+ *     tags: [Areas]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       204:
+ *         description: Área removida
+ *       404:
+ *         description: Área não encontrada
+ */
+router.delete('/areas/:id', deleteArea);
 
 export default router;
 
