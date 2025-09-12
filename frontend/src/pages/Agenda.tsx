@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AgendaCalendar } from '@/components/agenda/AgendaCalendar';
 import { AppointmentForm } from '@/components/agenda/AppointmentForm';
 import { AppointmentList } from '@/components/agenda/AppointmentList';
+import { statusDotClass } from '@/components/agenda/status';
 import { Appointment, AppointmentType } from '@/types/agenda';
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
@@ -89,7 +90,7 @@ export default function Agenda() {
               id: String(r.id),
               title: r.titulo,
               description: r.descricao ?? undefined,
-              type: typeMap.get(r.id_evento) || 'outro', // aqui corrigi para usar id_evento
+              type: typeMap.get(r.id_evento ?? (r as { tipo?: number }).tipo) || 'outro',
               status: mapStatus(r.status), // agora status vem certo
               date: new Date(r.data),
               startTime: r.hora_inicio,
@@ -199,7 +200,7 @@ export default function Agenda() {
             
             <div className="bg-card border border-border rounded-lg p-4">
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-warning" />
+                  <Calendar className="h-4 w-4 text-amber-500" />
                 <span className="text-sm font-medium">Pendentes</span>
               </div>
               <p className="text-2xl font-bold text-foreground mt-1">
@@ -217,8 +218,8 @@ export default function Agenda() {
                 .sort((a, b) => a.date.getTime() - b.date.getTime())
                 .slice(0, 3)
                 .map((appointment) => (
-                  <div key={appointment.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-accent transition-colors">
-                    <div className="w-2 h-2 rounded-full bg-primary mt-2" />
+                    <div key={appointment.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-accent transition-colors">
+                      <div className={`w-2 h-2 rounded-full ${statusDotClass[appointment.status]} mt-2`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{appointment.title}</p>
                       <p className="text-xs text-muted-foreground">

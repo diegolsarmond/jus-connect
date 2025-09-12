@@ -8,23 +8,24 @@ export type AppointmentType =
   | 'outro';
 
 export interface Appointment {
-  id: int;
+  id: string;
   title: string;
-  id_evento: int;
-  tipo_evento: string;
   description?: string;
   type: AppointmentType;
-  status: AppointmentStatus; // <- garante o novo status
+  status: AppointmentStatus;
   date: Date;
   startTime: string;
   endTime?: string;
   clientId?: string;
+  clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
   location?: string;
   reminders: boolean;
+  notifyClient?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
-
 
 export interface AppointmentFilter {
   type?: AppointmentType;
@@ -38,16 +39,8 @@ export interface AppointmentFilter {
 
 export const appointmentTypes: Record<AppointmentType, { label: string; color: string }> = {
   reuniao: { label: 'Reunião', color: 'bg-primary' },
-  audiencia: { label: 'Audiência', color: 'bg-warning' },
-  peticao: { label: 'Lançar Petição', color: 'bg-success' },
-  tarefa: { label: 'Tarefa', color: 'bg-accent' },
+  visita: { label: 'Visita', color: 'bg-secondary' },
+  ligacao: { label: 'Ligação', color: 'bg-success' },
   prazo: { label: 'Prazo', color: 'bg-destructive' },
   outro: { label: 'Outro', color: 'bg-muted' },
-};
-
-export const appointmentStatuses: Record<AppointmentStatus, { label: string; color: string }> = {
-  agendado: { label: 'Agendado', color: 'text-primary' },
-  em_andamento: { label: 'Em Andamento', color: 'text-warning' },
-  concluido: { label: 'Concluído', color: 'text-success' },
-  cancelado: { label: 'Cancelado', color: 'text-muted-foreground' },
 };
