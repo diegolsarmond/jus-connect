@@ -40,6 +40,10 @@ const navigation: NavItem[] = [
         href: "/configuracoes/usuarios",
       },
       {
+        name: "Empresas",
+        href: "/configuracoes/empresas",
+      },
+      {
         name: "Parâmetros",
         children: [
           {

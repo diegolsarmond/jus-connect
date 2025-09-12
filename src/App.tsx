@@ -20,6 +20,7 @@ import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
 import Perfis from "./pages/configuracoes/parametros/Perfis";
 import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import Escritorios from "./pages/configuracoes/parametros/Escritorios";
+import Empresas from "./pages/configuracoes/Empresas";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
 import NovoUsuario from "./pages/configuracoes/usuarios/NovoUsuario";
 import PerfilUsuario from "./pages/configuracoes/usuarios/PerfilUsuario";
@@ -61,6 +62,7 @@ const App = () => (
             <Route path="/relatorios" element={<div className="p-6"><h1 className="text-3xl font-bold">Relatórios</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
               <Route path="/configuracoes" element={<div className="p-6"><h1 className="text-3xl font-bold">Configurações</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
               <Route path="/configuracoes/usuarios" element={<Usuarios />} />
+              <Route path="/configuracoes/empresas" element={<Empresas />} />
               <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
               <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
               <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />
