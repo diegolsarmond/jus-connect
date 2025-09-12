@@ -7,6 +7,7 @@ export default function AreaAtuacao() {
       description="Gerencie as áreas de atuação"
       placeholder="Nova área de atuação"
       emptyMessage="Nenhuma área cadastrada"
+      endpoint="/api/areas"
     />
   );
 }

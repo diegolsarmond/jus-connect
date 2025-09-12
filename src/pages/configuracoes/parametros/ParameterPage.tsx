@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,11 @@ interface ParameterPageProps {
   description: string;
   placeholder: string;
   emptyMessage: string;
+  /**
+   * Optional API endpoint. When provided the component will
+   * persist items using the backend instead of local state only.
+   */
+  endpoint?: string;
 }
 
 export default function ParameterPage({
@@ -28,15 +33,41 @@ export default function ParameterPage({
   description,
   placeholder,
   emptyMessage,
+  endpoint,
 }: ParameterPageProps) {
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
   const [items, setItems] = useState<Item[]>([]);
   const [newItem, setNewItem] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
 
-  const addItem = () => {
+  // Load existing items when an endpoint is provided
+  useEffect(() => {
+    if (!endpoint) return;
+    fetch(`${apiUrl}${endpoint}`)
+      .then((res) => res.json())
+      .then((data) => setItems(data))
+      .catch((err) => console.error(err));
+  }, [apiUrl, endpoint]);
+
+  const addItem = async () => {
     if (!newItem.trim()) return;
-    setItems([...items, { id: Date.now(), nome: newItem.trim() }]);
+    const nome = newItem.trim();
+    if (endpoint) {
+      try {
+        const res = await fetch(`${apiUrl}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nome, ativo: true }),
+        });
+        const created = await res.json();
+        setItems([...items, created]);
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      setItems([...items, { id: Date.now(), nome }]);
+    }
     setNewItem("");
   };
 
@@ -45,9 +76,24 @@ export default function ParameterPage({
     setEditingName(nome);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (editingId === null) return;
-    setItems(items.map((i) => (i.id === editingId ? { ...i, nome: editingName } : i)));
+    const nome = editingName;
+    if (endpoint) {
+      try {
+        const res = await fetch(`${apiUrl}${endpoint}/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nome, ativo: true }),
+        });
+        const updated = await res.json();
+        setItems(items.map((i) => (i.id === editingId ? updated : i)));
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      setItems(items.map((i) => (i.id === editingId ? { ...i, nome } : i)));
+    }
     setEditingId(null);
     setEditingName("");
   };
@@ -57,7 +103,15 @@ export default function ParameterPage({
     setEditingName("");
   };
 
-  const deleteItem = (id: number) => {
+  const deleteItem = async (id: number) => {
+    if (endpoint) {
+      try {
+        await fetch(`${apiUrl}${endpoint}/${id}`, { method: "DELETE" });
+      } catch (err) {
+        console.error(err);
+        return;
+      }
+    }
     setItems(items.filter((i) => i.id !== id));
   };
 
