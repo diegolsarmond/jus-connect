@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { appointmentTypes, AppointmentType, Appointment } from '@/types/agenda';
@@ -33,9 +34,13 @@ const appointmentSchema = z.object({
   date: z.date({ required_error: 'Data é obrigatória' }),
   startTime: z.string().min(1, 'Horário de início é obrigatório'),
   endTime: z.string().optional(),
+  clientId: z.string().optional(),
   clientName: z.string().optional(),
+  clientPhone: z.string().optional(),
+  clientEmail: z.string().optional(),
   location: z.string().optional(),
   reminders: z.boolean().default(true),
+  notifyClient: z.boolean().default(false),
 });
 
 type AppointmentFormData = z.infer<typeof appointmentSchema>;
@@ -53,10 +58,41 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
       type: 'reuniao',
       date: initialDate || new Date(),
       reminders: true,
+      notifyClient: false,
+      clientId: '',
+      clientName: '',
+      clientPhone: '',
+      clientEmail: '',
     },
   });
 
   const [tiposEvento, setTiposEvento] = useState<AppointmentType[]>([]);
+  const [clientes, setClientes] = useState<
+    { id: number; nome: string; telefone?: string; email?: string }[]
+  >([]);
+
+  useEffect(() => {
+    const fetchClientes = async () => {
+      try {
+        const url = joinUrl(apiUrl, '/api/clientes');
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) {
+          throw new Error('Failed to load clientes');
+        }
+        const json = await response.json();
+        const rows: { id: number; nome: string; telefone?: string; email?: string }[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.data)
+            ? json.data
+            : [];
+        setClientes(rows);
+      } catch (error) {
+        console.error('Erro ao carregar clientes:', error);
+      }
+    };
+
+    fetchClientes();
+  }, []);
 
   useEffect(() => {
     const fetchTiposEvento = async () => {
@@ -94,12 +130,23 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
       date: data.date,
       startTime: data.startTime,
       endTime: data.endTime,
-      clientId: data.clientName ? `client-${Date.now()}` : undefined,
+      clientId: data.clientId || undefined,
       clientName: data.clientName,
+      clientPhone: data.clientPhone,
+      clientEmail: data.clientEmail,
       location: data.location,
       reminders: data.reminders,
+      notifyClient: data.notifyClient,
     });
   };
+
+  const clientName = form.watch('clientName') || '';
+  const filteredClientes =
+    clientName.length >= 3
+      ? clientes.filter((c) =>
+          c.nome.toLowerCase().includes(clientName.toLowerCase())
+        )
+      : [];
 
   return (
     <Card className="w-full max-w-2xl">
@@ -220,8 +267,39 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
               <Input
                 id="clientName"
                 {...form.register('clientName')}
+                value={clientName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  form.setValue('clientName', value);
+                  const cliente = clientes.find((c) => c.nome === value);
+                  if (cliente) {
+                    form.setValue('clientId', String(cliente.id));
+                    form.setValue('clientPhone', cliente.telefone || '');
+                    form.setValue('clientEmail', cliente.email || '');
+                  } else {
+                    form.setValue('clientId', '');
+                    form.setValue('clientPhone', '');
+                    form.setValue('clientEmail', '');
+                  }
+                }}
                 placeholder="Nome do cliente (opcional)"
+                list="client-suggestions"
               />
+              <datalist id="client-suggestions">
+                {filteredClientes.map((c) => (
+                  <option key={c.id} value={c.nome} />
+                ))}
+              </datalist>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clientPhone">Telefone</Label>
+              <Input id="clientPhone" readOnly {...form.register('clientPhone')} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clientEmail">E-mail</Label>
+              <Input id="clientEmail" readOnly {...form.register('clientEmail')} />
             </div>
 
             <div className="space-y-2">
@@ -236,6 +314,19 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
                 />
               </div>
             </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="notifyClient"
+              checked={form.watch('notifyClient')}
+              onCheckedChange={(checked) =>
+                form.setValue('notifyClient', checked === true)
+              }
+            />
+            <Label htmlFor="notifyClient" className="text-sm font-medium">
+              Notificar o cliente
+            </Label>
           </div>
 
           <div className="flex items-center justify-between p-4 bg-accent rounded-lg">
