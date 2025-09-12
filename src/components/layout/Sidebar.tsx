@@ -36,6 +36,10 @@ const navigation: NavItem[] = [
     icon: Settings,
     children: [
       {
+        name: "Usuários",
+        href: "/configuracoes/usuarios",
+      },
+      {
         name: "Parâmetros",
         children: [
           {

@@ -18,6 +18,9 @@ import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
 import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
 import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
+import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
+import NovoUsuario from "./pages/configuracoes/usuarios/NovoUsuario";
+import PerfilUsuario from "./pages/configuracoes/usuarios/PerfilUsuario";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,6 +52,9 @@ const App = () => (
             <Route path="/documentos" element={<div className="p-6"><h1 className="text-3xl font-bold">Documentos</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
             <Route path="/relatorios" element={<div className="p-6"><h1 className="text-3xl font-bold">Relatórios</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
               <Route path="/configuracoes" element={<div className="p-6"><h1 className="text-3xl font-bold">Configurações</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
+              <Route path="/configuracoes/usuarios" element={<Usuarios />} />
+              <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
+              <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
               <Route path="/configuracoes/parametros/area-de-atuacao" element={<AreaAtuacao />} />
               <Route path="/configuracoes/parametros/situacao-processo" element={<SituacaoProcesso />} />
               <Route path="/configuracoes/parametros/tipo-evento" element={<TipoEvento />} />
