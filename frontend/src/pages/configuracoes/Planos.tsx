@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,11 +17,60 @@ interface Plano {
   valor: string;
 }
 
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
 export default function Planos() {
+  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [newPlano, setNewPlano] = useState({ nome: "", valor: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingPlano, setEditingPlano] = useState({ nome: "", valor: "" });
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPlanos = async () => {
+      const url = joinUrl(apiUrl, "/api/planos");
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        const parsed: unknown[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.rows)
+            ? data.rows
+            : Array.isArray(data?.data?.rows)
+              ? data.data.rows
+              : Array.isArray(data?.data)
+                ? data.data
+                : [];
+        setPlanos(
+          parsed.map((p) => {
+            const item = p as { id: number | string; nome?: string; valor?: string | number };
+            return {
+              id: Number(item.id),
+              nome: item.nome ?? "",
+              valor: String(item.valor ?? ""),
+            };
+          })
+        );
+      } catch (e) {
+        console.error(e);
+        setErrorMsg(e instanceof Error ? e.message : "Erro ao buscar dados");
+        setPlanos([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPlanos();
+  }, [apiUrl]);
 
   const addPlano = () => {
     if (!newPlano.nome.trim() || !newPlano.valor.trim()) return;
@@ -75,6 +124,9 @@ export default function Planos() {
           Adicionar
         </Button>
       </div>
+
+      {loading && <p className="text-muted-foreground">Carregando…</p>}
+      {errorMsg && <p className="text-red-600">{errorMsg}</p>}
 
       <Table>
         <TableHeader>
