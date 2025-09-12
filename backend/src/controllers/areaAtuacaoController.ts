@@ -49,7 +49,7 @@ export const deleteArea = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'DELETE FROM public.area_atuacao WHERE id = $1',
+      'UPDATE public.area_atuacao SET ativo = FALSE WHERE id = $1',
       [id]
     );
     if (result.rowCount === 0) {
