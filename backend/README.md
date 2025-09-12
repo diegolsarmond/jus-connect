@@ -17,3 +17,6 @@ Instale as dependências e rode o servidor em modo desenvolvimento:
 npm install
 npm run dev
 ```
+
+## Documentação
+Após iniciar o servidor, acesse [http://localhost:3000/api-docs](http://localhost:3000/api-docs) para visualizar a documentação Swagger.
