@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Filter, User, Building2, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,12 +13,81 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { clients } from "@/lib/clients";
+import { Client } from "@/types/client";
+
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
+interface ApiClient {
+  id: number;
+  nome: string;
+  tipo: string;
+  documento: string;
+  email: string;
+  telefone: string;
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+  ativo: boolean;
+  foto: string | null;
+  datacadastro: string;
+}
+
+const mapApiClientToClient = (c: ApiClient): Client => ({
+  id: c.id,
+  name: c.nome,
+  email: c.email,
+  phone: c.telefone,
+  type: c.tipo === "J" || c.tipo === "PJ" ? "Pessoa Jurídica" : "Pessoa Física",
+  document: c.documento,
+  address: `${c.rua}, ${c.numero} - ${c.bairro}, ${c.cidade} - ${c.uf}`,
+  area: "",
+  status: c.ativo ? "Ativo" : "Inativo",
+  lastContact: c.datacadastro,
+  processes: [],
+});
 
 export default function Clientes() {
+  const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("todos");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const url = joinUrl(apiUrl, "/api/clientes");
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!response.ok) {
+          throw new Error("Failed to fetch clients");
+        }
+        const json = await response.json();
+        const data: ApiClient[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.rows)
+            ? json.rows
+            : Array.isArray(json?.data?.rows)
+              ? json.data.rows
+              : Array.isArray(json?.data)
+                ? json.data
+                : [];
+        setClients(data.map(mapApiClientToClient));
+      } catch (error) {
+        console.error("Erro ao buscar clientes:", error);
+      }
+    };
+
+    fetchClients();
+  }, []);
 
   const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
