@@ -24,6 +24,14 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { User } from "@/types/user";
 
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
 interface ApiUsuario {
   id: number;
   nome_completo: string;
@@ -98,11 +106,21 @@ export default function Usuarios() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await fetch("/api/usuarios");
+        const url = joinUrl(apiUrl, "/api/usuarios");
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
         if (!response.ok) {
           throw new Error("Failed to fetch users");
         }
-        const data: ApiUsuario[] = await response.json();
+        const json = await response.json();
+        const data: ApiUsuario[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.rows)
+            ? json.rows
+            : Array.isArray(json?.data?.rows)
+              ? json.data.rows
+              : Array.isArray(json?.data)
+                ? json.data
+                : [];
         setUsers(data.map(mapApiUserToUser));
       } catch (error) {
         console.error("Erro ao buscar usuários:", error);

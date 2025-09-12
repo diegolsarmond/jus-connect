@@ -43,18 +43,21 @@ export default function ParameterPage({
                 const res = await fetch(url, { headers: { Accept: "application/json" } });
                 if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
                 const data = await res.json();
-                const parsed =
+                const parsed: unknown[] =
                     Array.isArray(data) ? data :
                         Array.isArray(data?.rows) ? data.rows :
                             Array.isArray(data?.data?.rows) ? data.data.rows :
                                 Array.isArray(data?.data) ? data.data : [];
-                setItems(parsed.map((r: any) => ({
-                    id: Number(r.id),
-                    nome: r.nome ?? r.descricao ?? r.name ?? "",
-                })));
-            } catch (e: any) {
+                setItems(parsed.map((r) => {
+                    const item = r as { id: number | string; nome?: string; descricao?: string; name?: string };
+                    return {
+                        id: Number(item.id),
+                        nome: item.nome ?? item.descricao ?? item.name ?? "",
+                    };
+                }));
+            } catch (e: unknown) {
                 console.error(e);
-                setErrorMsg(e?.message ?? "Erro ao buscar dados");
+                setErrorMsg(e instanceof Error ? e.message : "Erro ao buscar dados");
                 setItems([]);
             } finally {
                 setLoading(false);
