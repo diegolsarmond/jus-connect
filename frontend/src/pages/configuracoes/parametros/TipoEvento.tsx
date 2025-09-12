@@ -7,6 +7,8 @@ export default function TipoEvento() {
       description="Gerencie os tipos de evento"
       placeholder="Novo tipo de evento"
       emptyMessage="Nenhum tipo cadastrado"
+      endpoint="/api/tipo-eventos"
+
     />
   );
 }
