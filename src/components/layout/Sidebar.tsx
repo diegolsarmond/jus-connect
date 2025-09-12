@@ -43,6 +43,10 @@ const navigation: NavItem[] = [
         name: "Parâmetros",
         children: [
           {
+            name: "Perfis",
+            href: "/configuracoes/parametros/perfis",
+          },
+          {
             name: "Área de Atuação",
             href: "/configuracoes/parametros/area-de-atuacao",
           },
