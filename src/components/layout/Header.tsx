@@ -45,8 +45,8 @@ export function Header() {
                 </AvatarFallback>
               </Avatar>
               <div className="text-left">
-                <p className="text-sm font-medium">Dr. Ana Beatriz</p>
-                <p className="text-xs text-muted-foreground">Advogada Sênior</p>
+                <p className="text-sm font-medium">Dr. Diego Armond</p>
+                <p className="text-xs text-muted-foreground">Advogado Sênior</p>
               </div>
             </Button>
           </DropdownMenuTrigger>
