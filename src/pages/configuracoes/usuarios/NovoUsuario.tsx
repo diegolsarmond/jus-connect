@@ -1,25 +1,19 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Upload, X } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -27,64 +21,65 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserFormData } from "@/types/user";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Label } from "@/components/ui/label";
+import { Upload } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
 
-const userSchema = z.object({
-  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
-  email: z.string().email("Email inválido"),
-  phone: z.string().min(10, "Telefone deve ter pelo menos 10 dígitos"),
-  role: z.enum(["admin", "advogado", "estagiario", "secretario"]),
-  escritorio: z.string().min(1, "Escritório é obrigatório"),
-  oabNumero: z.string().optional(),
-  oabUf: z.string().optional(),
-  especialidades: z.array(z.string()),
-  tarifaPorHora: z.number().optional(),
-  timezone: z.string().default("America/Sao_Paulo"),
-  idioma: z.string().default("pt-BR"),
-  avatar: z.string().optional(),
-  lgpdConsent: z.boolean().refine(val => val === true, "Consentimento LGPD é obrigatório")
-}).refine((data) => {
-  if (data.role === "advogado") {
-    return data.oabNumero && data.oabUf;
-  }
-  return true;
-}, {
-  message: "OAB é obrigatório para advogados",
-  path: ["oabNumero"]
+const existingEmails = [
+  "joao.silva@escritorio.com.br",
+  "maria.santos@escritorio.com.br",
+];
+
+const formSchema = z.object({
+  name: z.string().min(1, "Nome completo é obrigatório"),
+  email: z
+    .string()
+    .email("Email inválido")
+    .refine((email) => !existingEmails.includes(email), "Email já cadastrado"),
+  role: z.enum(["advogado", "secretario", "administrador"], {
+    required_error: "Papel é obrigatório",
+  }),
+  office: z.string().min(1, "Escritório é obrigatório"),
+  oab: z
+    .string()
+    .optional()
+    .refine(
+      (value) => !value || /^\d+\/[A-Za-z]{2}$/.test(value),
+      {
+        message: "Formato válido: 123456/SP",
+      }
+    ),
+  status: z.enum(["ativo", "inativo"]),
+  password: z.string().min(6, "Mínimo de 6 caracteres").optional(),
+  phone: z.string().optional(),
+  notes: z.string().optional(),
 });
 
-export default function NovoUsuario() {
-  const [avatarPreview, setAvatarPreview] = useState<string>("");
-  const [especialidadesInput, setEspecialidadesInput] = useState("");
-  const [especialidades, setEspecialidades] = useState<string[]>([]);
+type FormValues = z.infer<typeof formSchema>;
 
-  const form = useForm<UserFormData>({
-    resolver: zodResolver(userSchema),
+export default function NovoUsuario() {
+  const navigate = useNavigate();
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       email: "",
-      phone: "",
       role: "secretario",
-      escritorio: "",
-      oabNumero: "",
-      oabUf: "",
-      especialidades: [],
-      timezone: "America/Sao_Paulo",
-      idioma: "pt-BR",
-      lgpdConsent: false,
+      office: "",
+      oab: "",
+      status: "ativo",
+      password: "",
+      phone: "",
+      notes: "",
     },
   });
 
-  const watchRole = form.watch("role");
-  const isAdvogado = watchRole === "advogado";
-
-  const onSubmit = (data: UserFormData) => {
-    console.log({ ...data, especialidades });
-    // Aqui seria feita a integração com o backend
-  };
-
-  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -94,372 +89,236 @@ export default function NovoUsuario() {
     }
   };
 
-  const addEspecialidade = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && especialidadesInput.trim()) {
-      e.preventDefault();
-      if (!especialidades.includes(especialidadesInput.trim())) {
-        setEspecialidades([...especialidades, especialidadesInput.trim()]);
-        form.setValue("especialidades", [...especialidades, especialidadesInput.trim()]);
-      }
-      setEspecialidadesInput("");
+  const onSubmit = (data: FormValues) => {
+    let password = data.password;
+    if (!password) {
+      password = Math.random().toString(36).slice(-8);
+      toast({
+        title: "Usuário criado",
+        description: `Senha temporária enviada para ${data.email}`,
+      });
+    } else {
+      toast({ title: "Usuário criado" });
     }
+    console.log({ ...data, password, avatar: avatarPreview || undefined });
+    navigate("/configuracoes/usuarios");
   };
 
-  const removeEspecialidade = (especialidade: string) => {
-    const newEspecialidades = especialidades.filter(e => e !== especialidade);
-    setEspecialidades(newEspecialidades);
-    form.setValue("especialidades", newEspecialidades);
-  };
+  const initials = form
+    .watch("name")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
-        </Button>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Novo Usuário</h1>
-          <p className="text-muted-foreground">Cadastre um novo usuário no sistema</p>
+          <h1 className="text-3xl font-bold text-foreground">Novo Usuário</h1>
+          <p className="text-muted-foreground">Cadastre um novo usuário</p>
         </div>
       </div>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Coluna Principal */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Dados Básicos */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Dados Básicos</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nome Completo</FormLabel>
-                          <FormControl>
-                            <Input placeholder="João Silva" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+      <Card>
+        <CardHeader>
+          <CardTitle>Informações</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome completo</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Nome completo" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="email" 
-                              placeholder="joao@escritorio.com.br" 
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Email será usado para login no sistema
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="email@exemplo.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Telefone</FormLabel>
-                          <FormControl>
-                            <Input placeholder="(11) 99999-9999" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+              {/* Avatar */}
+              <div className="flex flex-col items-center gap-4 py-4">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={avatarPreview} />
+                  <AvatarFallback>{initials || "U"}</AvatarFallback>
+                </Avatar>
+                <Label
+                  htmlFor="avatar-upload"
+                  className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-muted rounded-md hover:bg-muted/80"
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload
+                </Label>
+                <Input
+                  id="avatar-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
+              </div>
 
-                    <FormField
-                      control={form.control}
-                      name="role"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Role</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione o role" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="admin">Administrador</SelectItem>
-                              <SelectItem value="advogado">Advogado</SelectItem>
-                              <SelectItem value="estagiario">Estagiário</SelectItem>
-                              <SelectItem value="secretario">Secretário</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Papel</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o papel" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="advogado">Advogado</SelectItem>
+                        <SelectItem value="secretario">Secretário</SelectItem>
+                        <SelectItem value="administrador">Administrador</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                  <FormField
-                    control={form.control}
-                    name="escritorio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Escritório</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione o escritório" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="principal">Escritório Principal</SelectItem>
-                            <SelectItem value="filial-sp">Filial São Paulo</SelectItem>
-                            <SelectItem value="filial-rj">Filial Rio de Janeiro</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
+              <FormField
+                control={form.control}
+                name="office"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Escritório</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o escritório" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="principal">Escritório Principal</SelectItem>
+                        <SelectItem value="filial">Filial X</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              {/* Dados OAB - Só aparece para advogados */}
-              {isAdvogado && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Dados OAB</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="oabNumero"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Número OAB</FormLabel>
-                            <FormControl>
-                              <Input placeholder="123456" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+              <FormField
+                control={form.control}
+                name="oab"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>OAB</FormLabel>
+                    <FormControl>
+                      <Input placeholder="123456/SP" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                      <FormField
-                        control={form.control}
-                        name="oabUf"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>UF</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="UF" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="SP">SP</SelectItem>
-                                <SelectItem value="RJ">RJ</SelectItem>
-                                <SelectItem value="MG">MG</SelectItem>
-                                <SelectItem value="RS">RS</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="ativo">Ativo</SelectItem>
+                        <SelectItem value="inativo">Inativo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                    <div>
-                      <Label>Especialidades</Label>
-                      <Input
-                        placeholder="Digite e pressione Enter para adicionar"
-                        value={especialidadesInput}
-                        onChange={(e) => setEspecialidadesInput(e.target.value)}
-                        onKeyDown={addEspecialidade}
-                      />
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {especialidades.map((especialidade) => (
-                          <Badge key={especialidade} variant="secondary">
-                            {especialidade}
-                            <X
-                              className="h-3 w-3 ml-1 cursor-pointer"
-                              onClick={() => removeEspecialidade(especialidade)}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Senha inicial</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Opcional" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                    <FormField
-                      control={form.control}
-                      name="tarifaPorHora"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Tarifa por Hora (R$)</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              placeholder="350.00" 
-                              {...field}
-                              onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </CardContent>
-                </Card>
-              )}
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Telefone</FormLabel>
+                    <FormControl>
+                      <Input type="tel" placeholder="(11) 99999-9999" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              {/* LGPD */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Consentimento LGPD</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <FormField
-                    control={form.control}
-                    name="lgpdConsent"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>
-                            Concordo com o tratamento dos meus dados pessoais
-                          </FormLabel>
-                          <FormDescription>
-                            O usuário autoriza o tratamento de seus dados pessoais 
-                            conforme nossa Política de Privacidade.
-                          </FormDescription>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-            </div>
+              <div>
+                <Label>Último login</Label>
+                <Input value="-" readOnly />
+              </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Avatar Upload */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Avatar</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-col items-center space-y-4">
-                    <Avatar className="h-24 w-24">
-                      <AvatarImage src={avatarPreview} />
-                      <AvatarFallback>
-                        {form.watch("name")?.split(' ').map(n => n[0]).join('').toUpperCase() || "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <Label htmlFor="avatar-upload" className="cursor-pointer">
-                      <div className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80">
-                        <Upload className="h-4 w-4" />
-                        Upload Imagem
-                      </div>
-                      <Input
-                        id="avatar-upload"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleAvatarChange}
-                        className="hidden"
-                      />
-                    </Label>
-                  </div>
-                </CardContent>
-              </Card>
+              <FormField
+                control={form.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observações</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Observações" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-              {/* Configurações */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Configurações</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="timezone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Timezone</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="America/Sao_Paulo">Brasília (GMT-3)</SelectItem>
-                            <SelectItem value="America/Manaus">Manaus (GMT-4)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="idioma"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Idioma</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="pt-BR">Português (Brasil)</SelectItem>
-                            <SelectItem value="en-US">English (US)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-4 pt-6 border-t">
-            <Button type="submit">Criar Usuário</Button>
-            <Button type="button" variant="outline">
-              Criar e Convidar
-            </Button>
-            <Button type="button" variant="ghost">
-              Cancelar
-            </Button>
-          </div>
-        </form>
-      </Form>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate(-1)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit">Salvar</Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
