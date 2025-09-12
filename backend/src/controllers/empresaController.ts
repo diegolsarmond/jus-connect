@@ -4,7 +4,7 @@ import pool from '../services/db';
 export const listEmpresas = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro FROM public.empresas'
+      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro 	FROM public."vw.empresas";'
     );
     res.json(result.rows);
   } catch (error) {

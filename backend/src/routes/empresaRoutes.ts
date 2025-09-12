@@ -79,9 +79,9 @@ router.get('/empresas', listEmpresas);
  *               email:
  *                 type: string
  *               plano:
- *                 type: integer
+ *                 type: string
  *               responsavel:
- *                 type: integer
+ *                 type: string
  *               ativo:
  *                 type: boolean
  *     responses:
