@@ -42,10 +42,13 @@ export default function EditarPerfil() {
 
   const isAdvogado = formData.role === "advogado";
 
-  const handleInputChange = (field: keyof UserFormData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const handleInputChange = <K extends keyof UserFormData>(
+    field: K,
+    value: UserFormData[K],
+  ) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
     setIsDirty(true);
-    
+
     // Simulate email verification requirement
     if (field === "email" && value !== mockUserData.email) {
       setEmailVerificationPending(true);

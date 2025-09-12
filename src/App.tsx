@@ -17,6 +17,7 @@ import Processos from "./pages/Processos";
 import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
 import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
+import Perfis from "./pages/configuracoes/parametros/Perfis";
 import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
 import NovoUsuario from "./pages/configuracoes/usuarios/NovoUsuario";
@@ -70,6 +71,7 @@ const App = () => (
               <Route path="/configuracoes/parametros/area-de-atuacao" element={<AreaAtuacao />} />
               <Route path="/configuracoes/parametros/situacao-processo" element={<SituacaoProcesso />} />
               <Route path="/configuracoes/parametros/tipo-evento" element={<TipoEvento />} />
+              <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
               <Route path="/configuracoes/parametros/situacao-cliente" element={<SituacaoCliente />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
