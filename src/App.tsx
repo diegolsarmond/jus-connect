@@ -21,6 +21,12 @@ import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
 import NovoUsuario from "./pages/configuracoes/usuarios/NovoUsuario";
 import PerfilUsuario from "./pages/configuracoes/usuarios/PerfilUsuario";
+import EditarPerfil from "./pages/configuracoes/usuarios/EditarPerfil";
+import AlterarSenha from "./pages/configuracoes/usuarios/AlterarSenha";
+import ConfiguracaoSeguranca from "./pages/configuracoes/usuarios/ConfiguracaoSeguranca";
+import SessaoDispositivos from "./pages/configuracoes/usuarios/SessaoDispositivos";
+import PrivacidadeLGPD from "./pages/configuracoes/usuarios/PrivacidadeLGPD";
+import NotificacoesPreferencias from "./pages/configuracoes/usuarios/NotificacoesPreferencias";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +61,12 @@ const App = () => (
               <Route path="/configuracoes/usuarios" element={<Usuarios />} />
               <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
               <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
+              <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />
+              <Route path="/configuracoes/usuarios/:id/senha" element={<AlterarSenha />} />
+              <Route path="/configuracoes/usuarios/:id/seguranca" element={<ConfiguracaoSeguranca />} />
+              <Route path="/configuracoes/usuarios/:id/sessoes" element={<SessaoDispositivos />} />
+              <Route path="/configuracoes/usuarios/:id/privacidade" element={<PrivacidadeLGPD />} />
+              <Route path="/configuracoes/usuarios/:id/notificacoes" element={<NotificacoesPreferencias />} />
               <Route path="/configuracoes/parametros/area-de-atuacao" element={<AreaAtuacao />} />
               <Route path="/configuracoes/parametros/situacao-processo" element={<SituacaoProcesso />} />
               <Route path="/configuracoes/parametros/tipo-evento" element={<TipoEvento />} />
