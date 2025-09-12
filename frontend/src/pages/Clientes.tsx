@@ -151,13 +151,13 @@ export default function Clientes() {
       </div>
 
       {/* Clients Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredClients.map((client) => (
-          <Card
-            key={client.id}
-            className="hover:shadow-lg transition-all duration-200 cursor-pointer"
-            onClick={() => navigate(`/clientes/${client.id}`)}
-          >
+          <li key={client.id}>
+            <Card
+              className="hover:shadow-lg transition-all duration-200 cursor-pointer"
+              onClick={() => navigate(`/clientes/${client.id}`)}
+            >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -206,9 +206,10 @@ export default function Clientes() {
                 </div>
               </div>
             </CardContent>
-          </Card>
+            </Card>
+          </li>
         ))}
-      </div>
+      </ul>
 
       {filteredClients.length === 0 && (
         <div className="text-center py-12">
