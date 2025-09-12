@@ -8,6 +8,7 @@ import situacaoClienteRoutes from './routes/situacaoClienteRoutes';
 import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
 import usuarioRoutes from './routes/usuarioRoutes';
 import empresaRoutes from './routes/empresaRoutes';
+import clienteRoutes from './routes/clienteRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -43,6 +44,7 @@ app.use('/api', situacaoProcessoRoutes);
 app.use('/api', situacaoClienteRoutes);
 app.use('/api', empresaRoutes);
 app.use('/api', usuarioRoutes);
+app.use('/api', clienteRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
