@@ -10,6 +10,9 @@ const router = Router();
 
 /**
  * @swagger
+ * tags:
+ *   - name: TiposEvento
+ *     description: Endpoints para gerenciamento de tipos de evento
  * components:
  *   schemas:
  *     TipoEvento:
