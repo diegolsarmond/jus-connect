@@ -1,12 +1,26 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { toast } from "@/components/ui/use-toast";
 
 const formSchema = z.object({
@@ -14,13 +28,29 @@ const formSchema = z.object({
   email: z.string().email("Email inválido"),
   phone: z.string().min(1, "Telefone é obrigatório"),
   cpf: z.string().min(1, "CPF é obrigatório"),
-  address: z.string().min(1, "Endereço é obrigatório"),
+  cep: z.string().min(1, "CEP é obrigatório"),
+  street: z.string().min(1, "Rua é obrigatória"),
+  number: z.string().min(1, "Número é obrigatório"),
+  complement: z.string().optional(),
+  neighborhood: z.string().min(1, "Bairro é obrigatório"),
+  city: z.string().min(1, "Cidade é obrigatória"),
+  state: z.string().min(1, "UF é obrigatória"),
   type: z.enum(["pf", "pj"]),
   area: z.string().min(1, "Área é obrigatória"),
 });
 
 export default function NovoCliente() {
   const navigate = useNavigate();
+  const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
+
+  useEffect(() => {
+    fetch(
+      "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
+    )
+      .then((res) => res.json())
+      .then((data) => setUfs(data));
+  }, []);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -28,7 +58,13 @@ export default function NovoCliente() {
       email: "",
       phone: "",
       cpf: "",
-      address: "",
+      cep: "",
+      street: "",
+      number: "",
+      complement: "",
+      neighborhood: "",
+      city: "",
+      state: "",
       type: "pf",
       area: "",
     },
@@ -114,13 +150,128 @@ export default function NovoCliente() {
 
               <FormField
                 control={form.control}
-                name="address"
+                name="cep"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Endereço</FormLabel>
+                    <FormLabel>CEP</FormLabel>
                     <FormControl>
-                      <Input placeholder="Rua Exemplo, 123" {...field} />
+                      <Input
+                        placeholder="00000-000"
+                        {...field}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\D/g, "");
+                          const masked = raw
+                            .replace(/(\d{5})(\d)/, "$1-$2")
+                            .slice(0, 9);
+                          field.onChange(masked);
+                          if (raw.length === 8) {
+                            fetch(`https://viacep.com.br/ws/${raw}/json/`)
+                              .then((res) => res.json())
+                              .then((data) => {
+                                form.setValue("street", data.logradouro || "");
+                                form.setValue("neighborhood", data.bairro || "");
+                                form.setValue("city", data.localidade || "");
+                                form.setValue("state", data.uf || "");
+                              });
+                          }
+                        }}
+                      />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="street"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rua</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Rua" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Número</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Número" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="complement"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Complemento</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Apartamento, bloco, etc." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="neighborhood"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bairro</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Bairro" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="city"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cidade</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Cidade" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="state"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>UF</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a UF" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {ufs.map((uf) => (
+                          <SelectItem key={uf.sigla} value={uf.sigla}>
+                            {uf.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
