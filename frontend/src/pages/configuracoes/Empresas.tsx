@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
+interface ApiEmpresa {
+  id: number;
+  nome_empresa: string;
+  cnpj: string;
+  telefone: string;
+  email: string;
+  plano: number | string;
+  responsavel: number | string;
+}
+
 interface Empresa {
   id: number;
   nome: string;
@@ -19,6 +37,15 @@ interface Empresa {
   telefone: string;
   plano: string;
 }
+
+const mapApiEmpresaToEmpresa = (e: ApiEmpresa): Empresa => ({
+  id: e.id,
+  nome: e.nome_empresa,
+  cnpj: e.cnpj,
+  responsavel: e.responsavel?.toString() ?? "",
+  telefone: e.telefone,
+  plano: e.plano?.toString() ?? "",
+});
 
 export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -37,6 +64,33 @@ export default function Empresas() {
     telefone: "",
     plano: "",
   });
+
+  useEffect(() => {
+    const fetchEmpresas = async () => {
+      try {
+        const url = joinUrl(apiUrl, "/api/empresas");
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!response.ok) {
+          throw new Error("Failed to fetch empresas");
+        }
+        const json = await response.json();
+        const data: ApiEmpresa[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.rows)
+            ? json.rows
+            : Array.isArray(json?.data?.rows)
+              ? json.data.rows
+              : Array.isArray(json?.data)
+                ? json.data
+                : [];
+        setEmpresas(data.map(mapApiEmpresaToEmpresa));
+      } catch (error) {
+        console.error("Erro ao buscar empresas:", error);
+      }
+    };
+
+    fetchEmpresas();
+  }, []);
 
   const addEmpresa = () => {
     if (
