@@ -38,7 +38,8 @@ export default function Agenda() {
         interface AgendaResponse {
           id: number;
           titulo: string;
-          tipo: number;
+          id_evento: number;
+          tipo_evento: string;
           descricao?: string;
           data: string;
           hora_inicio: string;
@@ -68,21 +69,38 @@ export default function Agenda() {
           console.error('Erro ao carregar tipos de evento:', error);
         }
 
-        const data: Appointment[] = (rows as AgendaResponse[]).map((r) => ({
-          id: String(r.id),
-          title: r.titulo,
-          description: r.descricao ?? undefined,
-          type: typeMap.get(r.tipo) || 'outro',
-          status: 'agendado',
-          date: new Date(r.data),
-          startTime: r.hora_inicio,
-          endTime: r.hora_fim ?? undefined,
-          clientId: r.cliente ? String(r.cliente) : undefined,
-          location: r.local ?? undefined,
-          reminders: Boolean(r.lembrete),
-          createdAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
-          updatedAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
-        }));
+              // Função de mapeamento do status
+        const mapStatus = (statusAgenda: number) => {
+          switch (statusAgenda) {
+            case 0:
+              return 'cancelado';
+            case 1:
+              return 'agendado';
+            case 2:
+              return 'em_curso';
+            case 3:
+              return 'concluido';
+            default:
+              return 'agendado';
+          }
+        };
+
+            const data: Appointment[] = (rows as AgendaResponse[]).map((r) => ({
+              id: String(r.id),
+              title: r.titulo,
+              description: r.descricao ?? undefined,
+              type: typeMap.get(r.id_evento) || 'outro', // aqui corrigi para usar id_evento
+              status: mapStatus(r.status), // agora status vem certo
+              date: new Date(r.data),
+              startTime: r.hora_inicio,
+              endTime: r.hora_fim ?? undefined,
+              clientId: r.cliente ? String(r.cliente) : undefined,
+              location: r.local ?? undefined,
+              reminders: Boolean(r.lembrete),
+              createdAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
+              updatedAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
+            }));
+
         setAppointments(data);
       } catch (error) {
         console.error('Erro ao carregar agendas:', error);

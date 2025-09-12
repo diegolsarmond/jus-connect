@@ -1,26 +1,30 @@
-export type AppointmentType = 'reuniao' | 'audiencia' | 'peticao' | 'tarefa' | 'prazo' | 'outro';
+export type AppointmentStatus = 'agendado' | 'em_curso' | 'concluido' | 'cancelado';
 
-export type AppointmentStatus = 'agendado' | 'em_andamento' | 'concluido' | 'cancelado';
+export type AppointmentType =
+  | 'reuniao'
+  | 'visita'
+  | 'ligacao'
+  | 'prazo'
+  | 'outro';
 
 export interface Appointment {
-  id: string;
+  id: int;
   title: string;
+  id_evento: int;
+  tipo_evento: string;
   description?: string;
   type: AppointmentType;
-  status: AppointmentStatus;
+  status: AppointmentStatus; // <- garante o novo status
   date: Date;
   startTime: string;
   endTime?: string;
   clientId?: string;
-  clientName?: string;
-  clientPhone?: string;
-  clientEmail?: string;
-  notifyClient?: boolean;
   location?: string;
   reminders: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
+
 
 export interface AppointmentFilter {
   type?: AppointmentType;

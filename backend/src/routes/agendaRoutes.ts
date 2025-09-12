@@ -81,11 +81,15 @@ router.get('/agendas', listAgendas);
  *           schema:
  *             type: object
  *             properties:
+ *               id:
+ *                 type: integer
  *               titulo:
  *                 type: string
- *               tipo:
+ *               id_evento:
  *                 type: integer
- *               descricao:
+ *              tipo_evento:
+ *                type: string
+  *             descricao:
  *                 type: string
  *               data:
  *                 type: string

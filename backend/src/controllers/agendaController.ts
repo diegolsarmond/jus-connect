@@ -4,7 +4,7 @@ import pool from '../services/db';
 export const listAgendas = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, titulo, tipo, descricao, data, hora_inicio, hora_fim, cliente, tipo_local, local, lembrete, status, datacadastro FROM public.agenda'
+      'SELECT id, titulo, id_evento, tipo_evento, descricao, data, hora_inicio, hora_fim, cliente, cliente_email, cliente_telefone, tipo_local, local, lembrete, status, datacadastro FROM public."vw.agenda"'
     );
     res.json(result.rows);
   } catch (error) {
@@ -15,8 +15,10 @@ export const listAgendas = async (_req: Request, res: Response) => {
 
 export const createAgenda = async (req: Request, res: Response) => {
   const {
+    id,
     titulo,
-    tipo,
+    id_evento,
+    tipo_evento,
     descricao,
     data,
     hora_inicio,
