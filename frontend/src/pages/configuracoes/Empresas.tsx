@@ -15,35 +15,63 @@ interface Empresa {
   id: number;
   nome: string;
   cnpj: string;
+  responsavel: string;
+  telefone: string;
+  plano: string;
 }
 
 export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
-  const [newEmpresa, setNewEmpresa] = useState({ nome: "", cnpj: "" });
+  const [newEmpresa, setNewEmpresa] = useState({
+    nome: "",
+    cnpj: "",
+    responsavel: "",
+    telefone: "",
+    plano: "",
+  });
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingEmpresa, setEditingEmpresa] = useState({ nome: "", cnpj: "" });
+  const [editingEmpresa, setEditingEmpresa] = useState({
+    nome: "",
+    cnpj: "",
+    responsavel: "",
+    telefone: "",
+    plano: "",
+  });
 
   const addEmpresa = () => {
-    if (!newEmpresa.nome.trim() || !newEmpresa.cnpj.trim()) return;
+    if (
+      !newEmpresa.nome.trim() ||
+      !newEmpresa.cnpj.trim() ||
+      !newEmpresa.responsavel.trim() ||
+      !newEmpresa.telefone.trim() ||
+      !newEmpresa.plano.trim()
+    )
+      return;
     setEmpresas([...empresas, { id: Date.now(), ...newEmpresa }]);
-    setNewEmpresa({ nome: "", cnpj: "" });
+    setNewEmpresa({ nome: "", cnpj: "", responsavel: "", telefone: "", plano: "" });
   };
 
   const startEdit = (empresa: Empresa) => {
     setEditingId(empresa.id);
-    setEditingEmpresa({ nome: empresa.nome, cnpj: empresa.cnpj });
+    setEditingEmpresa({
+      nome: empresa.nome,
+      cnpj: empresa.cnpj,
+      responsavel: empresa.responsavel,
+      telefone: empresa.telefone,
+      plano: empresa.plano,
+    });
   };
 
   const saveEdit = () => {
     if (editingId === null) return;
     setEmpresas(empresas.map(e => (e.id === editingId ? { id: editingId, ...editingEmpresa } : e)));
     setEditingId(null);
-    setEditingEmpresa({ nome: "", cnpj: "" });
+    setEditingEmpresa({ nome: "", cnpj: "", responsavel: "", telefone: "", plano: "" });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditingEmpresa({ nome: "", cnpj: "" });
+    setEditingEmpresa({ nome: "", cnpj: "", responsavel: "", telefone: "", plano: "" });
   };
 
   const deleteEmpresa = (id: number) => {
@@ -70,6 +98,24 @@ export default function Empresas() {
           onChange={(e) => setNewEmpresa({ ...newEmpresa, cnpj: e.target.value })}
           className="max-w-sm"
         />
+        <Input
+          placeholder="Responsável"
+          value={newEmpresa.responsavel}
+          onChange={(e) => setNewEmpresa({ ...newEmpresa, responsavel: e.target.value })}
+          className="max-w-sm"
+        />
+        <Input
+          placeholder="Telefone"
+          value={newEmpresa.telefone}
+          onChange={(e) => setNewEmpresa({ ...newEmpresa, telefone: e.target.value })}
+          className="max-w-sm"
+        />
+        <Input
+          placeholder="Plano"
+          value={newEmpresa.plano}
+          onChange={(e) => setNewEmpresa({ ...newEmpresa, plano: e.target.value })}
+          className="max-w-sm"
+        />
         <Button onClick={addEmpresa}>
           <Plus className="mr-2 h-4 w-4" />
           Adicionar
@@ -81,6 +127,9 @@ export default function Empresas() {
           <TableRow>
             <TableHead>Nome</TableHead>
             <TableHead>CNPJ</TableHead>
+            <TableHead>Responsável</TableHead>
+            <TableHead>Telefone</TableHead>
+            <TableHead>Plano</TableHead>
             <TableHead className="w-32">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -109,6 +158,42 @@ export default function Empresas() {
                   />
                 ) : (
                   empresa.cnpj
+                )}
+              </TableCell>
+              <TableCell>
+                {editingId === empresa.id ? (
+                  <Input
+                    value={editingEmpresa.responsavel}
+                    onChange={(e) =>
+                      setEditingEmpresa((prev) => ({ ...prev, responsavel: e.target.value }))
+                    }
+                  />
+                ) : (
+                  empresa.responsavel
+                )}
+              </TableCell>
+              <TableCell>
+                {editingId === empresa.id ? (
+                  <Input
+                    value={editingEmpresa.telefone}
+                    onChange={(e) =>
+                      setEditingEmpresa((prev) => ({ ...prev, telefone: e.target.value }))
+                    }
+                  />
+                ) : (
+                  empresa.telefone
+                )}
+              </TableCell>
+              <TableCell>
+                {editingId === empresa.id ? (
+                  <Input
+                    value={editingEmpresa.plano}
+                    onChange={(e) =>
+                      setEditingEmpresa((prev) => ({ ...prev, plano: e.target.value }))
+                    }
+                  />
+                ) : (
+                  empresa.plano
                 )}
               </TableCell>
               <TableCell className="flex gap-2">
@@ -144,7 +229,7 @@ export default function Empresas() {
           ))}
           {empresas.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} className="text-center text-muted-foreground">
+              <TableCell colSpan={6} className="text-center text-muted-foreground">
                 Nenhuma empresa cadastrada
               </TableCell>
             </TableRow>
