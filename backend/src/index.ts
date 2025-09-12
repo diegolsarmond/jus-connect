@@ -9,6 +9,24 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// Basic CORS handling so the frontend can access the API from a different origin
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PUT, DELETE, OPTIONS'
+  );
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+  );
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use('/api', areaAtuacaoRoutes);
 app.use('/api', tipoEventoRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
