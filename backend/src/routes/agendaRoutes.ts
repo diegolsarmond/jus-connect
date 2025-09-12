@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listAgendas,
+  getTotalCompromissosHoje,
   createAgenda,
   updateAgenda,
   deleteAgenda,
@@ -67,6 +68,25 @@ const router = Router();
  *                 $ref: '#/components/schemas/Agenda'
  */
 router.get('/agendas', listAgendas);
+
+/**
+ * @swagger
+ * /api/agendas/total-hoje:
+ *   get:
+ *     summary: Retorna o total de compromissos de hoje
+ *     tags: [Agenda]
+ *     responses:
+ *       200:
+ *         description: Total de compromissos de hoje
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_compromissos_hoje:
+ *                   type: integer
+ */
+router.get('/agendas/total-hoje', getTotalCompromissosHoje);
 
 /**
  * @swagger

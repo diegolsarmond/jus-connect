@@ -13,6 +13,18 @@ export const listAgendas = async (_req: Request, res: Response) => {
   }
 };
 
+export const getTotalCompromissosHoje = async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      'SELECT COUNT(*) AS total_compromissos_hoje FROM public.agenda WHERE "data" = CURRENT_DATE AND status <> 0'
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createAgenda = async (req: Request, res: Response) => {
   const {
     id,
