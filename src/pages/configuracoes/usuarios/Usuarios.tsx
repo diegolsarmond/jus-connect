@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, Filter, Plus, Download, MoreHorizontal, Edit, UserX, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,7 @@ export default function Usuarios() {
   const [roleFilter, setRoleFilter] = useState<string>("todos");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -131,7 +133,7 @@ export default function Usuarios() {
             <Download className="h-4 w-4 mr-2" />
             Exportar
           </Button>
-          <Button size="sm">
+          <Button size="sm" onClick={() => navigate("/configuracoes/usuarios/novo")}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Usuário
           </Button>
