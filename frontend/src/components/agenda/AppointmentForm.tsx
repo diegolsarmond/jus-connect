@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,10 +18,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { appointmentTypes, AppointmentType, Appointment } from '@/types/agenda';
 
+const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
+
+function joinUrl(base: string, path = '') {
+  const b = base.replace(/\/+$/, '');
+  const p = path ? (path.startsWith('/') ? path : `/${path}`) : '';
+  return `${b}${p}`;
+}
+
 const appointmentSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório'),
   description: z.string().optional(),
-  type: z.enum(['reuniao', 'audiencia', 'peticao', 'tarefa', 'prazo', 'outro'] as const),
+  type: z.string().min(1, 'Tipo é obrigatório'),
   date: z.date({ required_error: 'Data é obrigatória' }),
   startTime: z.string().min(1, 'Horário de início é obrigatório'),
   endTime: z.string().optional(),
@@ -48,11 +56,41 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
     },
   });
 
+  const [tiposEvento, setTiposEvento] = useState<AppointmentType[]>([]);
+
+  useEffect(() => {
+    const fetchTiposEvento = async () => {
+      try {
+        const url = joinUrl(apiUrl, '/api/tipo-eventos');
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) {
+          throw new Error('Failed to load tipo-eventos');
+        }
+        const json = await response.json();
+        interface TipoEvento { id: number; nome: string }
+        const rows: TipoEvento[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.data)
+            ? json.data
+            : [];
+        const data: AppointmentType[] = rows.map((t) => t.nome as AppointmentType);
+        setTiposEvento(data);
+        if (data.length > 0 && !data.includes(form.getValues('type') as AppointmentType)) {
+          form.setValue('type', data[0]);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar tipos de evento:', error);
+      }
+    };
+
+    fetchTiposEvento();
+  }, [form]);
+
   const handleSubmit = (data: AppointmentFormData) => {
     onSubmit({
       title: data.title,
       description: data.description,
-      type: data.type,
+      type: data.type as AppointmentType,
       date: data.date,
       startTime: data.startTime,
       endTime: data.endTime,
@@ -96,9 +134,9 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(appointmentTypes).map(([key, { label }]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
+                  {tiposEvento.map((tipo) => (
+                    <SelectItem key={tipo} value={tipo}>
+                      {appointmentTypes[tipo]?.label ?? tipo}
                     </SelectItem>
                   ))}
                 </SelectContent>
