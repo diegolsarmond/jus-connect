@@ -1,8 +1,9 @@
 import express from 'express';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
-
-
+import escritorioRoutes from './routes/escritorioRoutes';
+import perfilRoutes from './routes/perfilRoutes';
+import situacaoClienteRoutes from './routes/situacaoClienteRoutes';
 import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
@@ -32,8 +33,8 @@ app.use((req, res, next) => {
 
 app.use('/api', areaAtuacaoRoutes);
 app.use('/api', tipoEventoRoutes);
-
-
+app.use('/api', escritorioRoutes);
+app.use('/api', perfilRoutes);
 app.use('/api', situacaoProcessoRoutes);
 app.use('/api', situacaoClienteRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
