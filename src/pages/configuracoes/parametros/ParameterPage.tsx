@@ -46,7 +46,12 @@ export default function ParameterPage({
     if (!endpoint) return;
     fetch(`${apiUrl}${endpoint}`)
       .then((res) => res.json())
-      .then((data) => setItems(data))
+      .then((data) => {
+        const parsed = (Array.isArray(data)
+          ? data
+          : data?.rows || data?.data || []) as Item[];
+        setItems(parsed.map(({ id, nome }) => ({ id, nome })));
+      })
       .catch((err) => console.error(err));
   }, [apiUrl, endpoint]);
 
