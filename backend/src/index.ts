@@ -9,6 +9,7 @@ import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
 import usuarioRoutes from './routes/usuarioRoutes';
 import empresaRoutes from './routes/empresaRoutes';
 import clienteRoutes from './routes/clienteRoutes';
+import agendaRoutes from './routes/agendaRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -45,6 +46,7 @@ app.use('/api', situacaoClienteRoutes);
 app.use('/api', empresaRoutes);
 app.use('/api', usuarioRoutes);
 app.use('/api', clienteRoutes);
+app.use('/api', agendaRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
