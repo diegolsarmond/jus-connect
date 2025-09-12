@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Filter, Plus, Download, MoreHorizontal, Edit, UserX, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,41 +24,54 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { User } from "@/types/user";
 
-// Mock data
-const mockUsers: User[] = [
-  {
-    id: "1",
-    name: "Dr. João Silva",
-    email: "joao.silva@escritorio.com.br",
-    phone: "(11) 99999-9999",
-    role: "advogado",
-    escritorio: "Escritório Principal",
-    oab: { numero: "123456", uf: "SP" },
-    especialidades: ["Direito Civil", "Direito Empresarial"],
-    tarifaPorHora: 350,
-    timezone: "America/Sao_Paulo",
-    idioma: "pt-BR",
-    ativo: true,
-    ultimoLogin: new Date("2024-01-15T10:30:00"),
-    createdAt: new Date("2024-01-01"),
-    updatedAt: new Date("2024-01-15"),
-  },
-  {
-    id: "2",
-    name: "Maria Santos",
-    email: "maria.santos@escritorio.com.br",
-    phone: "(11) 88888-8888",
-    role: "secretario",
-    escritorio: "Escritório Principal",
-    especialidades: [],
-    timezone: "America/Sao_Paulo",
-    idioma: "pt-BR",
-    ativo: true,
-    ultimoLogin: new Date("2024-01-15T14:20:00"),
-    createdAt: new Date("2024-01-02"),
-    updatedAt: new Date("2024-01-15"),
-  },
-];
+interface ApiUsuario {
+  id: number;
+  nome_completo: string;
+  email: string;
+  perfil: number;
+  empresa: number;
+  escritorio: number;
+  oab: string | null;
+  status: boolean;
+  telefone: string | null;
+  ultimo_login: string | null;
+  observacoes: string | null;
+  datacriacao: string;
+}
+
+const perfilToRole = (perfil: number): User["role"] => {
+  switch (perfil) {
+    case 1:
+      return "admin";
+    case 2:
+      return "advogado";
+    case 3:
+      return "estagiario";
+    case 4:
+      return "secretario";
+    default:
+      return "advogado";
+  }
+};
+
+const mapApiUserToUser = (u: ApiUsuario): User => ({
+  id: u.id.toString(),
+  name: u.nome_completo,
+  email: u.email,
+  phone: u.telefone ?? "",
+  role: perfilToRole(u.perfil),
+  escritorio: u.escritorio?.toString() ?? "",
+  oab: u.oab ? { numero: u.oab, uf: "" } : undefined,
+  especialidades: [],
+  tarifaPorHora: undefined,
+  timezone: "America/Sao_Paulo",
+  idioma: "pt-BR",
+  ativo: u.status,
+  ultimoLogin: u.ultimo_login ? new Date(u.ultimo_login) : undefined,
+  createdAt: new Date(u.datacriacao),
+  updatedAt: new Date(u.datacriacao),
+  avatar: undefined,
+});
 
 const roleLabels = {
   admin: "Administrador",
@@ -75,12 +88,29 @@ const roleVariants = {
 } as const;
 
 export default function Usuarios() {
-  const [users] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("todos");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch("/api/usuarios");
+        if (!response.ok) {
+          throw new Error("Failed to fetch users");
+        }
+        const data: ApiUsuario[] = await response.json();
+        setUsers(data.map(mapApiUserToUser));
+      } catch (error) {
+        console.error("Erro ao buscar usuários:", error);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
