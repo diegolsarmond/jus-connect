@@ -47,10 +47,21 @@ export default function ParameterPage({
     fetch(`${apiUrl}${endpoint}`)
       .then((res) => res.json())
       .then((data) => {
-        const parsed = (Array.isArray(data)
+        const parsed = Array.isArray(data)
           ? data
-          : data?.rows || data?.data || []) as Item[];
-        setItems(parsed.map(({ id, nome }) => ({ id, nome })));
+          : Array.isArray(data?.rows)
+          ? data.rows
+          : Array.isArray(data?.data?.rows)
+          ? data.data.rows
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        setItems(
+          parsed.map(({ id, nome, descricao }) => ({
+            id,
+            nome: nome ?? descricao ?? "",
+          }))
+        );
       })
       .catch((err) => console.error(err));
   }, [apiUrl, endpoint]);
@@ -66,7 +77,10 @@ export default function ParameterPage({
           body: JSON.stringify({ nome, ativo: true }),
         });
         const created = await res.json();
-        setItems([...items, created]);
+        setItems([
+          ...items,
+          { id: created.id, nome: created.nome ?? created.descricao ?? nome },
+        ]);
       } catch (err) {
         console.error(err);
       }
@@ -92,7 +106,13 @@ export default function ParameterPage({
           body: JSON.stringify({ nome, ativo: true }),
         });
         const updated = await res.json();
-        setItems(items.map((i) => (i.id === editingId ? updated : i)));
+        setItems(
+          items.map((i) =>
+            i.id === editingId
+              ? { id: updated.id, nome: updated.nome ?? updated.descricao ?? nome }
+              : i
+          )
+        );
       } catch (err) {
         console.error(err);
       }
