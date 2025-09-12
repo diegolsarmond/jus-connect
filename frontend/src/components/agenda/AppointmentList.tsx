@@ -22,14 +22,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { 
-  Appointment, 
-  AppointmentFilter, 
-  AppointmentType, 
+import {
+  Appointment,
+  AppointmentFilter,
+  AppointmentType,
   AppointmentStatus,
-  appointmentTypes,
-  appointmentStatuses 
+  appointmentTypes
 } from '@/types/agenda';
+import { statusLabel } from '@/components/agenda/status';
 
 interface AppointmentListProps {
   appointments: Appointment[];
@@ -55,13 +55,13 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
   });
 
   const getStatusBadgeVariant = (status: AppointmentStatus) => {
-    switch (status) {
-      case 'agendado': return 'outline';
-      case 'em_andamento': return 'secondary';
-      case 'concluido': return 'default';
-      case 'cancelado': return 'destructive';
-      default: return 'outline';
-    }
+      switch (status) {
+        case 'agendado': return 'outline';
+        case 'em_curso': return 'secondary';
+        case 'concluido': return 'default';
+        case 'cancelado': return 'destructive';
+        default: return 'outline';
+      }
   };
 
   return (
@@ -105,11 +105,11 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
-              {Object.entries(appointmentStatuses).map(([key, { label }]) => (
-                <SelectItem key={key} value={key}>
-                  {label}
-                </SelectItem>
-              ))}
+                {Object.entries(statusLabel).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {label}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>
@@ -193,9 +193,9 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
                     </TableCell>
                     
                     <TableCell>
-                      <Badge variant={getStatusBadgeVariant(appointment.status)}>
-                        {appointmentStatuses[appointment.status].label}
-                      </Badge>
+                        <Badge variant={getStatusBadgeVariant(appointment.status)}>
+                          {statusLabel[appointment.status]}
+                        </Badge>
                     </TableCell>
                     
                     <TableCell>
