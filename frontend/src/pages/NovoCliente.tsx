@@ -23,6 +23,14 @@ import {
 } from "@/components/ui/form";
 import { toast } from "@/components/ui/use-toast";
 
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
 const formSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("Email inválido"),
@@ -70,10 +78,38 @@ export default function NovoCliente() {
     },
   });
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    console.log(values);
-    toast({ title: "Cliente cadastrado com sucesso" });
-    navigate("/clientes");
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      const url = joinUrl(apiUrl, "/api/clientes");
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: values.name,
+          tipo: values.type === "pj" ? "PJ" : "PF",
+          documento: values.cpf,
+          email: values.email,
+          telefone: values.phone,
+          cep: values.cep,
+          rua: values.street,
+          numero: values.number,
+          complemento: values.complement,
+          bairro: values.neighborhood,
+          cidade: values.city,
+          uf: values.state,
+          ativo: true,
+          foto: null,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to create client");
+      }
+      toast({ title: "Cliente cadastrado com sucesso" });
+      navigate("/clientes");
+    } catch (error) {
+      console.error("Erro ao criar cliente:", error);
+      toast({ title: "Erro ao criar cliente", variant: "destructive" });
+    }
   };
 
   return (
