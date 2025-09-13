@@ -113,7 +113,10 @@ export default function Pipeline() {
     fetchName();
   }, [apiUrl, fluxoId]);
 
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(() => {
+    const stored = localStorage.getItem("opportunities");
+    if (stored) return JSON.parse(stored);
+    return [
     {
       id: 1,
       title: "Consultoria Tributária - Tech Solutions",
@@ -169,7 +172,12 @@ export default function Pipeline() {
       area: "Civil",
       responsible: "Dr. Ana Beatriz"
     },
-  ]);
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("opportunities", JSON.stringify(opportunities));
+  }, [opportunities]);
 
   const getOpportunitiesByStage = (stageId: string) => {
     return opportunities.filter(opp => opp.stage === stageId);
@@ -296,6 +304,7 @@ export default function Pipeline() {
                     className="cursor-pointer hover:shadow-md transition-all duration-200"
                     draggable
                     onDragStart={(e) => handleDragStart(e, opportunity.id)}
+                    onClick={() => navigate(`/pipeline/oportunidade/${opportunity.id}`)}
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">

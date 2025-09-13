@@ -15,6 +15,7 @@ import ContratoPreview from "./pages/ContratoPreview";
 import Pipeline from "./pages/Pipeline";
 import PipelineMenu from "./pages/PipelineMenu";
 import NovaOportunidade from "./pages/NovaOportunidade";
+import VisualizarOportunidade from "./pages/VisualizarOportunidade";
 import Agenda from "./pages/Agenda";
 import Tarefas from "./pages/Tarefas";
 import Processos from "./pages/Processos";
@@ -74,6 +75,7 @@ const App = () => (
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/pipeline/:fluxoId" element={<PipelineMenu />} />
             <Route path="/pipeline/nova-oportunidade" element={<NovaOportunidade />} />
+            <Route path="/pipeline/oportunidade/:id" element={<VisualizarOportunidade />} />
             <Route path="/agenda" element={<Agenda />} />
             <Route path="/tarefas" element={<Tarefas />} />
             <Route path="/processos" element={<Processos />} />
