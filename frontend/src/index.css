@@ -83,53 +83,54 @@
   }
 
   .dark {
-    --background: 217 33% 10%;
-    --foreground: 210 20% 98%;
+    --background: 217 25% 13%;
+    --foreground: 210 20% 96%;
 
-    --card: 217 33% 10%;
-    --card-foreground: 210 20% 98%;
+    --card: 217 25% 16%;
+    --card-foreground: 210 20% 96%;
 
-    --popover: 217 33% 10%;
-    --popover-foreground: 210 20% 98%;
+    --popover: 217 25% 16%;
+    --popover-foreground: 210 20% 96%;
 
-    --primary: 217 91% 35%;
+    --primary: 217 85% 55%;
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 217 91% 30%;
-    --primary-light: 217 91% 15%;
+    --primary-hover: 217 85% 48%;
+    --primary-light: 217 85% 25%;
 
-    --secondary: 217 33% 15%;
-    --secondary-foreground: 210 20% 98%;
-    
+    --secondary: 217 15% 22%;
+    --secondary-foreground: 210 20% 96%;
+
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
-    --success-light: 142 71% 15%;
+    --success-light: 142 45% 25%;
 
-    --warning: 38 92% 50%;
+    --warning: 38 92% 55%;
     --warning-foreground: 0 0% 100%;
-    --warning-light: 38 92% 15%;
+    --warning-light: 38 60% 25%;
 
-    --muted: 217 33% 15%;
-    --muted-foreground: 217 10% 65%;
+    --muted: 217 15% 22%;
+    --muted-foreground: 217 10% 70%;
 
-    --accent: 217 33% 15%;
-    --accent-foreground: 210 20% 98%;
+    --accent: 217 15% 26%;
+    --accent-foreground: 210 20% 96%;
 
-    --destructive: 0 62% 45%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 210 20% 96%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 15%;
-    --ring: 217 91% 35%;
+    --border: 217 15% 28%;
+    --input: 217 15% 22%;
+    --ring: 217 85% 55%;
 
-    --sidebar-background: 217 33% 8%;
-    --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 217 91% 35%;
+    --sidebar-background: 217 25% 11%;
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 217 85% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 12%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 217 33% 20%;
-    --sidebar-ring: 217 91% 35%;
+    --sidebar-accent: 217 15% 20%;
+    --sidebar-accent-foreground: 210 20% 96%;
+    --sidebar-border: 217 15% 28%;
+    --sidebar-ring: 217 85% 55%;
   }
+
 }
 
 @layer base {
