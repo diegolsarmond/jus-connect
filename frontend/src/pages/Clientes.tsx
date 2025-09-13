@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Filter, User, Building2, Phone, Mail } from "lucide-react";
+import { Plus, Search, Filter, Edit, Eye, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -13,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Client } from "@/types/client";
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
@@ -99,6 +106,20 @@ export default function Clientes() {
     return matchesSearch && matchesFilter;
   });
 
+  const handleDelete = async (id: number) => {
+    if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
+    try {
+      const url = joinUrl(apiUrl, `/api/clientes/${id}`);
+      const response = await fetch(url, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("Failed to delete client");
+      }
+      setClients((prev) => prev.filter((c) => c.id !== id));
+    } catch (error) {
+      console.error("Erro ao excluir cliente:", error);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Ativo": return "bg-success text-success-foreground";
@@ -150,76 +171,69 @@ export default function Clientes() {
         </Select>
       </div>
 
-      {/* Clients Grid */}
-      <ul className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {filteredClients.map((client) => (
-          <li key={client.id}>
-            <Card
-              className="hover:shadow-lg transition-all duration-200 cursor-pointer"
-              onClick={() => navigate(`/clientes/${client.id}`)}
-            >
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-primary/10 text-primary">
-                      {client.type === "Pessoa Física" ? (
-                        <User className="h-6 w-6" />
-                      ) : (
-                        <Building2 className="h-6 w-6" />
-                      )}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <CardTitle className="text-lg">{client.name}</CardTitle>
-                    <Badge variant="outline" className="text-xs mt-1">
-                      {client.type}
-                    </Badge>
-                  </div>
-                </div>
-                <Badge className={getStatusColor(client.status)}>
-                  {client.status}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Mail className="h-4 w-4" />
-                  {client.email}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Phone className="h-4 w-4" />
-                  {client.phone}
-                </div>
-              </div>
-              
-              <div className="pt-2 border-t border-border">
-                <p className="text-sm font-medium text-foreground">{client.area}</p>
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-xs text-muted-foreground">
-                    {client.processes.length} {client.processes.length === 1 ? "caso" : "casos"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Último contato: {new Date(client.lastContact).toLocaleDateString("pt-BR")}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-            </Card>
-          </li>
-        ))}
-      </ul>
+      <Card>
+        <CardHeader>
+          <CardTitle>Lista de Clientes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredClients.map((client) => (
+                <TableRow key={client.id}>
+                  <TableCell className="font-medium">{client.name}</TableCell>
+                  <TableCell>{client.email}</TableCell>
+                  <TableCell>{client.phone}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{client.type}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={getStatusColor(client.status)}>{client.status}</Badge>
+                  </TableCell>
+                  <TableCell className="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate(`/clientes/${client.id}`)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate(`/clientes/${client.id}/editar`)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(client.id)}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
 
-      {filteredClients.length === 0 && (
-        <div className="text-center py-12">
-          <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-foreground mb-2">Nenhum cliente encontrado</h3>
-          <p className="text-muted-foreground">
-            {searchTerm ? "Tente ajustar os filtros de busca" : "Adicione seu primeiro cliente para começar"}
-          </p>
-        </div>
-      )}
+          {filteredClients.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              Nenhum cliente encontrado
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
