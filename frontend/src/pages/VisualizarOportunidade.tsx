@@ -404,8 +404,7 @@ export default function VisualizarOportunidade() {
   }, [snack.open]);
 
   const onEdit = () => {
-    setSnack({ open: true, message: "Ação editar (stub)" });
-    console.log("Editar", opportunity?.id);
+    navigate(`/pipeline/editar-oportunidade/${id}`);
   };
   // REMOVIDO onDuplicate conforme solicitado
   const onDelete = () => {
