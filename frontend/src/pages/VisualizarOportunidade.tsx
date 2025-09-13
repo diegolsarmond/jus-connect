@@ -234,7 +234,7 @@ export default function VisualizarOportunidade() {
     valor_honorarios: "Valor dos Honorários",
     percentual_honorarios: "% Honorários",
     forma_pagamento: "Forma de Pagamento",
-    parcelas: "Número de Parcelas",
+    qtde_parcelas: "Número de Parcelas",
     contingenciamento: "Contingenciamento",
     detalhes: "Detalhes",
     documentos_anexados: "Documentos Anexados",
@@ -360,7 +360,7 @@ export default function VisualizarOportunidade() {
     {
       key: "honorarios",
       label: "Honorários",
-      fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "parcelas", "contingenciamento"],
+        fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "qtde_parcelas", "contingenciamento"],
     },
     {
       key: "metadados",

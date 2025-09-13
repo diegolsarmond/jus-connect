@@ -66,7 +66,7 @@ const formSchema = z.object({
   valor_honorarios: z.string().optional(),
   percentual_honorarios: z.string().optional(),
   forma_pagamento: z.string().optional(),
-  parcelas: z.string().optional(),
+  qtde_parcelas: z.string().optional(),
   contingenciamento: z.string().optional(),
   detalhes: z.string().optional(),
   documentos_anexados: z.any().optional(),
@@ -129,7 +129,7 @@ export default function EditarOportunidade() {
       valor_honorarios: "",
       percentual_honorarios: "",
       forma_pagamento: "",
-      parcelas: "",
+        qtde_parcelas: "",
       contingenciamento: "",
       detalhes: "",
       documentos_anexados: undefined,
@@ -272,7 +272,7 @@ export default function EditarOportunidade() {
             ? String(data.percentual_honorarios)
             : "",
           forma_pagamento: data.forma_pagamento || "",
-          parcelas: data.parcelas ? String(data.parcelas) : "",
+            qtde_parcelas: data.qtde_parcelas ? String(data.qtde_parcelas) : "",
           contingenciamento: data.contingenciamento || "",
           detalhes: data.detalhes || "",
           documentos_anexados: undefined,
@@ -377,7 +377,7 @@ export default function EditarOportunidade() {
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
         forma_pagamento: values.forma_pagamento || null,
-        parcelas: values.parcelas ? Number(values.parcelas) : null,
+        qtde_parcelas: values.qtde_parcelas ? Number(values.qtde_parcelas) : null,
         contingenciamento: values.contingenciamento || null,
         detalhes: values.detalhes || null,
         documentos_anexados: null,
@@ -1019,7 +1019,7 @@ export default function EditarOportunidade() {
                       {formaPagamento === "Parcelado" && (
                         <FormField
                           control={form.control}
-                          name="parcelas"
+                          name="qtde_parcelas"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Número de Parcelas</FormLabel>

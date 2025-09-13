@@ -6,7 +6,7 @@ export const listOportunidades = async (_req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-              valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, parcelas, contingenciamento,
+              valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
        FROM public.oportunidades`
     );
@@ -23,7 +23,7 @@ export const listOportunidadesByFase = async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-              valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, parcelas, contingenciamento,
+              valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
        FROM public.oportunidades WHERE fase_id = $1`,
       [faseId]
@@ -41,7 +41,7 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
     const oportunidadeResult = await pool.query(
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-              valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, parcelas, contingenciamento,
+              valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
        FROM public.oportunidades WHERE id = $1`,
       [id]
@@ -107,7 +107,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
     valor_honorarios,
     percentual_honorarios,
     forma_pagamento,
-    parcelas,
+    qtde_parcelas,
     contingenciamento,
     detalhes,
     documentos_anexados,
@@ -120,12 +120,12 @@ export const createOportunidade = async (req: Request, res: Response) => {
       `INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-        valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, parcelas, contingenciamento,
+        valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
         detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),NOW())
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, parcelas, contingenciamento,
+                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
                  detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao`,
       [
         tipo_processo_id,
@@ -140,12 +140,12 @@ export const createOportunidade = async (req: Request, res: Response) => {
         prazo_proximo,
         status_id,
         solicitante_id,
-        valor_causa,
-        valor_honorarios,
-        percentual_honorarios,
-        forma_pagamento,
-        parcelas,
-        contingenciamento,
+          valor_causa,
+          valor_honorarios,
+          percentual_honorarios,
+          forma_pagamento,
+          qtde_parcelas,
+          contingenciamento,
         detalhes,
         documentos_anexados,
         criado_por,
@@ -196,7 +196,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
     valor_honorarios,
     percentual_honorarios,
     forma_pagamento,
-    parcelas,
+    qtde_parcelas,
     contingenciamento,
     detalhes,
     documentos_anexados,
@@ -223,7 +223,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
          valor_honorarios = $14,
          percentual_honorarios = $15,
          forma_pagamento = $16,
-         parcelas = $17,
+         qtde_parcelas = $17,
          contingenciamento = $18,
          detalhes = $19,
          documentos_anexados = $20,
@@ -232,7 +232,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
        WHERE id = $22
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, parcelas, contingenciamento,
+                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
                  detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao`,
       [
         tipo_processo_id,
@@ -251,7 +251,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
         valor_honorarios,
         percentual_honorarios,
         forma_pagamento,
-        parcelas,
+        qtde_parcelas,
         contingenciamento,
         detalhes,
         documentos_anexados,
