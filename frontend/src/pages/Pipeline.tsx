@@ -35,17 +35,15 @@ export default function Pipeline() {
   const navigate = useNavigate();
   const { fluxoId } = useParams<{ fluxoId?: string }>();
 
+  const [pipelineName, setPipelineName] = useState<string>("Vendas");
   const [stages, setStages] = useState<Stage[]>([]);
 
   useEffect(() => {
     const fetchStages = async () => {
       try {
-        const res = await fetch(
-          `${apiUrl}/api/etiquetas${fluxoId ? `?fluxoId=${fluxoId}` : ""}`,
-          {
-            headers: { Accept: "application/json" },
-          }
-        );
+        const res = await fetch(`${apiUrl}/api/etiquetas`, {
+          headers: { Accept: "application/json" },
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         const parsed: unknown[] = Array.isArray(data)
@@ -57,6 +55,11 @@ export default function Pipeline() {
           : Array.isArray(data?.data)
           ? data.data
           : [];
+        const filtered = fluxoId
+          ? parsed.filter(
+              (r) => String((r as { id_fluxo_trabalho?: number | string }).id_fluxo_trabalho) === fluxoId
+            )
+          : parsed;
         const colors = [
           "bg-blue-100 text-blue-800",
           "bg-yellow-100 text-yellow-800",
@@ -66,7 +69,7 @@ export default function Pipeline() {
           "bg-pink-100 text-pink-800",
         ];
         setStages(
-          parsed.map((r, idx) => {
+          filtered.map((r, idx) => {
             const item = r as { id: number | string; nome?: string };
             return {
               id: String(item.id),
@@ -80,6 +83,34 @@ export default function Pipeline() {
       }
     };
     fetchStages();
+  }, [apiUrl, fluxoId]);
+
+  useEffect(() => {
+    if (!fluxoId) return;
+    const fetchName = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        type MenuApiItem = { id: number | string; nome?: string };
+        const parsed: MenuApiItem[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.rows)
+          ? data.rows
+          : Array.isArray(data?.data?.rows)
+          ? data.data.rows
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        const current = parsed.find((m) => String(m.id) === fluxoId);
+        if (current?.nome) setPipelineName(current.nome);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchName();
   }, [apiUrl, fluxoId]);
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([
@@ -178,7 +209,7 @@ export default function Pipeline() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Pipeline de Vendas</h1>
+          <h1 className="text-3xl font-bold text-foreground">Pipeline de {pipelineName}</h1>
           <p className="text-muted-foreground">Acompanhe suas oportunidades</p>
         </div>
         <Button
