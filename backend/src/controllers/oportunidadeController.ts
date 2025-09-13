@@ -70,6 +70,25 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
   }
 };
 
+export const listEnvolvidosByOportunidade = async (
+  req: Request,
+  res: Response,
+) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT id, oportunidade_id, nome, documento, telefone, endereco, relacao
+       FROM public.oportunidade_envolvidos
+       WHERE oportunidade_id = $1`,
+      [id],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createOportunidade = async (req: Request, res: Response) => {
   const {
     tipo_processo_id,
