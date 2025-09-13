@@ -242,6 +242,14 @@ export default function VisualizarOportunidade() {
     ultima_atualizacao: "Última Atualização",
   };
 
+  const participantLabels: Record<string, string> = {
+    nome: "Nome",
+    documento: "CPF/CNPJ",
+    telefone: "Telefone",
+    endereco: "Endereço",
+    relacao: "Relação",
+  };
+
   const formatLabel = (key: string) =>
     fieldLabels[key] ||
     key
@@ -569,6 +577,48 @@ export default function VisualizarOportunidade() {
                   </section>
                 );
               })}
+
+              {participants.length > 0 && (
+                <section
+                  aria-labelledby="heading-envolvidos"
+                  className="p-4 bg-transparent rounded border border-transparent md:border-0"
+                >
+                  <h2
+                    id="heading-envolvidos"
+                    className="text-lg font-semibold mb-3"
+                  >
+                    Dados dos Envolvidos
+                  </h2>
+                  <div className="space-y-4">
+                    {participants.map((p, idx) => (
+                      <div
+                        key={p.id ?? idx}
+                        className="border p-4 rounded-md"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                          {Object.entries(p).map(([k, v]) => {
+                            if (!participantLabels[k]) return null;
+                            return (
+                              <div key={k} className="p-2">
+                                <dl>
+                                  <dt className="text-sm font-medium text-muted-foreground">
+                                    {participantLabels[k]}
+                                  </dt>
+                                  <dd className="mt-1">
+                                    {v ?? (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </dd>
+                                </dl>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* Metadados extras: campos que não estão nas seções acima */}
               <section aria-labelledby="heading-extras" className="p-4">
