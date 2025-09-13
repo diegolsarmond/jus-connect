@@ -17,6 +17,7 @@ import tagRoutes from './routes/tagRoutes';
 import documentRoutes from './routes/documentRoutes';
 import financialRoutes from './routes/financialRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import fluxoTrabalhoRoutes from './routes/fluxoTrabalhoRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -61,6 +62,7 @@ app.use('/api', tagRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', financialRoutes);
 app.use('/api', uploadRoutes);
+app.use('/api', fluxoTrabalhoRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 

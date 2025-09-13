@@ -27,6 +27,7 @@ import Perfis from "./pages/configuracoes/parametros/Perfis";
 import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import Escritorios from "./pages/configuracoes/parametros/Escritorios";
 import Etiquetas from "./pages/configuracoes/parametros/Etiquetas";
+import FluxoTrabalho from "./pages/configuracoes/parametros/FluxoTrabalho";
 import Empresas from "./pages/configuracoes/Empresas";
 import Planos from "./pages/configuracoes/Planos";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
@@ -142,6 +143,10 @@ const App = () => (
               element={<SituacaoCliente />}
             />
             <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
+            <Route
+              path="/configuracoes/parametros/fluxo-de-trabalho"
+              element={<FluxoTrabalho />}
+            />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Route>
