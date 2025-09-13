@@ -46,6 +46,7 @@ const formSchema = z.object({
   etapa: z.string().optional(),
   prazo_proximo: z.string().optional(),
   status: z.string().optional(),
+  solicitante_id: z.string().optional(),
   solicitante_nome: z.string().optional(),
   solicitante_cpf_cnpj: z.string().optional(),
   solicitante_email: z.string().optional(),
@@ -117,6 +118,7 @@ export default function EditarOportunidade() {
       etapa: "",
       prazo_proximo: "",
       status: "",
+      solicitante_id: "",
       solicitante_nome: "",
       solicitante_cpf_cnpj: "",
       solicitante_email: "",
@@ -251,6 +253,7 @@ export default function EditarOportunidade() {
           etapa: data.etapa_id ? String(data.etapa_id) : "",
           prazo_proximo: data.prazo_proximo ? data.prazo_proximo.substring(0, 10) : "",
           status: data.status_id ? String(data.status_id) : "",
+          solicitante_id: data.solicitante_id ? String(data.solicitante_id) : "",
           solicitante_nome: data.solicitante_nome || "",
           solicitante_cpf_cnpj: data.solicitante_cpf_cnpj || "",
           solicitante_email: data.solicitante_email || "",
@@ -266,8 +269,20 @@ export default function EditarOportunidade() {
                   relacao: env.relacao || "",
                 }))
               : [{ nome: "", cpf_cnpj: "", telefone: "", endereco: "", relacao: "" }],
-          valor_causa: data.valor_causa ? String(data.valor_causa) : "",
-          valor_honorarios: data.valor_honorarios ? String(data.valor_honorarios) : "",
+          valor_causa:
+            data.valor_causa !== null && data.valor_causa !== undefined
+              ? new Intl.NumberFormat("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                }).format(Number(data.valor_causa))
+              : "",
+          valor_honorarios:
+            data.valor_honorarios !== null && data.valor_honorarios !== undefined
+              ? new Intl.NumberFormat("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                }).format(Number(data.valor_honorarios))
+              : "",
           percentual_honorarios: data.percentual_honorarios
             ? String(data.percentual_honorarios)
             : "",
@@ -290,6 +305,7 @@ export default function EditarOportunidade() {
             );
             if (resCliente.ok) {
               const cliente = await resCliente.json();
+              form.setValue("solicitante_id", String(data.solicitante_id));
               form.setValue("solicitante_nome", cliente.nome || "");
               form.setValue("solicitante_cpf_cnpj", cliente.documento || "");
               form.setValue("solicitante_email", cliente.email || "");
@@ -372,7 +388,9 @@ export default function EditarOportunidade() {
         etapa_id: values.etapa ? Number(values.etapa) : null,
         prazo_proximo: values.prazo_proximo || null,
         status_id: values.status ? Number(values.status) : null,
-        solicitante_id: null,
+        solicitante_id: values.solicitante_id
+          ? Number(values.solicitante_id)
+          : null,
         valor_causa: parseCurrency(values.valor_causa || ""),
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
@@ -408,6 +426,7 @@ export default function EditarOportunidade() {
   const handleSelectClient = (name: string) => {
     const client = clients.find((c) => c.name === name);
     if (client) {
+      form.setValue("solicitante_id", client.id);
       form.setValue("solicitante_cpf_cnpj", client.cpf_cnpj || "");
       form.setValue("solicitante_email", client.email || "");
       form.setValue("solicitante_telefone", client.telefone || "");
@@ -717,6 +736,7 @@ export default function EditarOportunidade() {
                           </FormItem>
                         )}
                       />
+                      <input type="hidden" {...form.register("solicitante_id")} />
 
                       <FormField
                         control={form.control}
