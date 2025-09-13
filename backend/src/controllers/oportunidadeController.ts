@@ -17,6 +17,24 @@ export const listOportunidades = async (_req: Request, res: Response) => {
   }
 };
 
+export const listOportunidadesByFase = async (req: Request, res: Response) => {
+  const { faseId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+              vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
+              valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, contingenciamento,
+              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
+       FROM public.oportunidades WHERE fase_id = $1`,
+      [faseId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const getOportunidadeById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
