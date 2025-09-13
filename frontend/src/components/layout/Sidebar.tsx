@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ interface NavItem {
 
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [pipelineMenus, setPipelineMenus] = useState<NavItem[]>([]);
 
@@ -213,6 +215,10 @@ export function Sidebar() {
     );
   };
 
+  const handleLogout = () => {
+    navigate("/login");
+  };
+
   return (
     <div
       className={cn(
@@ -259,7 +265,24 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
+      <div
+        className={cn(
+          "border-t border-border space-y-2",
+          collapsed ? "p-2" : "p-4",
+        )}
+      >
+        <button
+          type="button"
+          onClick={handleLogout}
+          className={cn(
+            "flex items-center w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+            collapsed ? "justify-center" : "gap-3",
+            "text-muted-foreground hover:text-foreground hover:bg-accent",
+          )}
+        >
+          <LogOut className="h-5 w-5" />
+          {!collapsed && "Sair"}
+        </button>
         {!collapsed && (
           <div className="text-xs text-muted-foreground text-center">
             © 2024 CRM Jurídico
