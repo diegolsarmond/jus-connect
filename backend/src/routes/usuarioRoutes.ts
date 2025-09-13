@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listUsuarios,
+  getUsuarioById,
   createUsuario,
   updateUsuario,
   deleteUsuario,
@@ -67,6 +68,30 @@ const router = Router();
  *                 $ref: '#/components/schemas/Usuario'
  */
 router.get('/usuarios', listUsuarios);
+
+/**
+ * @swagger
+ * /api/usuarios/{id}:
+ *   get:
+ *     summary: Obtém um usuário pelo ID
+ *     tags: [Usuarios]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Dados do usuário
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Usuario'
+ *       404:
+ *         description: Usuário não encontrado
+ */
+router.get('/usuarios/:id', getUsuarioById);
 
 /**
  * @swagger
