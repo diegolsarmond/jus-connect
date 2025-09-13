@@ -434,14 +434,21 @@ export default function Pipeline() {
                         </CardTitle>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <MoreHorizontal className="h-3 w-3" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem>Editar</DropdownMenuItem>
                             <DropdownMenuItem
-                              onSelect={() => {
+                              onSelect={(e) => {
+                                e.stopPropagation();
+
                                 setSelectedFlow("");
                                 setSelectedStage("");
                                 setMoveStages([]);
