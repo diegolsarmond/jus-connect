@@ -419,6 +419,14 @@ export default function VisualizarOportunidade() {
   };
   const onPrint = () => window.print();
 
+  const onCreateTask = () => {
+    navigate(`/tarefas?oportunidade=${id}`);
+  };
+
+  const onCreateDocument = () => {
+    navigate(`/documentos?oportunidade=${id}`);
+  };
+
   const renderFormatted = (key: string, value: unknown) => {
     if (value === null || value === undefined || value === "") {
       return <span className="text-muted-foreground">—</span>;
@@ -518,6 +526,12 @@ export default function VisualizarOportunidade() {
           </Button>
           <Button variant="destructive" onClick={onDelete} aria-label="Excluir oportunidade">
             Excluir
+          </Button>
+          <Button onClick={onCreateTask} aria-label="Criar tarefa">
+            Criar Tarefa
+          </Button>
+          <Button onClick={onCreateDocument} aria-label="Criar documento">
+            Criar Documento
           </Button>
           <Button variant="ghost" onClick={onPrint} aria-label="Imprimir">
             Imprimir
