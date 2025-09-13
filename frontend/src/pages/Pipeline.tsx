@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { refreshGoogleToken } from "@/lib/googleAuth";
 
 interface Opportunity {
   id: number;
@@ -261,6 +262,15 @@ export default function Pipeline() {
     const id = Number(event.dataTransfer.getData("text/plain"));
 
     try {
+      const storedRefresh = localStorage.getItem('google_refresh_token');
+      if (storedRefresh) {
+        try {
+          await refreshGoogleToken(storedRefresh);
+        } catch (err) {
+          console.error('Erro ao renovar token do Google', err);
+        }
+      }
+
       const res = await fetch(`${apiUrl}/api/oportunidades/${id}/etapa`, {
         method: "PATCH",
         headers: {
