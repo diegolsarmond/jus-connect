@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Search,
@@ -6,7 +6,6 @@ import {
   ArrowUpDown,
   Download,
   Star,
-  StarOff,
   CheckCircle2,
   Clock,
   AlertTriangle,
@@ -33,7 +32,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Calendar } from '@/components/ui/calendar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -52,10 +50,9 @@ interface Task {
   process: string;
   participants: string[];
   date: Date;
-  deadline: Date;
   responsibles: string[];
   status: 'pendente' | 'atrasada' | 'resolvida';
-  priority: boolean;
+  priority: number;
 }
 
 const COLORS = ['#fbbf24', '#ef4444', '#22c55e'];
@@ -63,37 +60,47 @@ const COLORS = ['#fbbf24', '#ef4444', '#22c55e'];
 const formSchema = z
   .object({
     process: z.string().min(1, 'Processo ou caso é obrigatório'),
-    responsibles: z.string().min(1, 'Adicionar responsáveis'),
+    responsibles: z.array(z.string()).min(1, 'Adicionar responsáveis'),
     title: z.string().min(1, 'Tarefa é obrigatória'),
     date: z.string().min(1, 'Data é obrigatória'),
-    time: z.string().min(1, 'Hora é obrigatória'),
-    deadline: z.string().min(1, 'Prazo fatal é obrigatório'),
+    time: z.string().optional(),
     showOnAgenda: z.boolean().optional(),
-    informEnd: z.boolean().optional(),
     allDay: z.boolean().optional(),
     location: z.string().optional(),
     description: z.string().optional(),
     attachments: z.any().optional(),
-    important: z.boolean().optional(),
-    urgent: z.boolean().optional(),
-    future: z.boolean().optional(),
     recurring: z.boolean().optional(),
     private: z.boolean().optional(),
-    retroactive: z.boolean().optional(),
+    recurrenceValue: z.string().optional(),
+    recurrenceUnit: z.string().optional(),
+    priority: z.number().min(1).max(5),
+  })
+  .refine((data) => data.allDay || data.time, {
+    path: ['time'],
+    message: 'Hora é obrigatória',
   })
   .refine(
-    (data) => {
-      const start = new Date(`${data.date}T${data.time}`);
-      const deadline = new Date(data.deadline);
-      return deadline >= start;
-    },
+    (data) => !data.recurring || (data.recurrenceValue && data.recurrenceUnit),
     {
-      path: ['deadline'],
-      message: 'Prazo fatal não pode ser anterior à data',
+      path: ['recurrenceValue'],
+      message: 'Informe a recorrência',
     },
   );
 
 type FormValues = z.infer<typeof formSchema>;
+
+interface ApiUsuario {
+  id: number;
+  nome_completo: string;
+}
+
+const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
+
+function joinUrl(base: string, path = '') {
+  const b = base.replace(/\/+$/, '');
+  const p = path ? (path.startsWith('/') ? path : `/${path}`) : '';
+  return `${b}${p}`;
+}
 
 export default function Tarefas() {
   const [tasks, setTasks] = useState<Task[]>([
@@ -103,40 +110,58 @@ export default function Tarefas() {
       process: 'Processo 123',
       participants: ['Cliente X'],
       date: new Date(),
-      deadline: new Date(new Date().getTime() + 86400000),
       responsibles: ['Maria'],
       status: 'pendente',
-      priority: true,
+      priority: 3,
     },
   ]);
   const [open, setOpen] = useState(false);
+  const [users, setUsers] = useState<ApiUsuario[]>([]);
 
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors },
+    watch,
+    setValue,
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       showOnAgenda: true,
-      informEnd: true,
       allDay: false,
-      important: false,
-      urgent: false,
-      future: false,
       recurring: false,
       private: false,
-      retroactive: false,
+      responsibles: [],
+      priority: 1,
     },
   });
 
-  const onSubmit = (data: FormValues) => {
-    const responsaveis = data.responsibles
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const url = joinUrl(apiUrl, '/api/usuarios');
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('Failed to fetch users');
+        const json = await response.json();
+        const data: ApiUsuario[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.rows)
+          ? json.rows
+          : Array.isArray(json?.data?.rows)
+          ? json.data.rows
+          : Array.isArray(json?.data)
+          ? json.data
+          : [];
+        setUsers(data);
+      } catch (err) {
+        console.error('Erro ao buscar usuários:', err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
+  const onSubmit = (data: FormValues) => {
     const files: File[] = Array.from(data.attachments?.[0] ? data.attachments : []);
     for (const file of files) {
       if (file.size > 5 * 1024 * 1024) {
@@ -155,11 +180,10 @@ export default function Tarefas() {
       title: data.title,
       process: data.process,
       participants: [],
-      date: new Date(`${data.date}T${data.time}`),
-      deadline: new Date(data.deadline),
-      responsibles: responsaveis,
+      date: data.allDay ? new Date(data.date) : new Date(`${data.date}T${data.time}`),
+      responsibles: data.responsibles,
       status: 'pendente',
-      priority: data.important || false,
+      priority: data.priority,
     };
     setTasks((prev) => [...prev, newTask]);
     reset();
@@ -176,17 +200,17 @@ export default function Tarefas() {
     { name: 'Resolvidas', value: done },
   ];
 
-  const taskDates = tasks.map((t) => t.date);
-
   const markDone = (id: number) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: 'resolvida' } : t)),
-    );
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'resolvida' } : t)));
   };
 
   const deleteTask = (id: number) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
+
+  const allDay = watch('allDay');
+  const recurring = watch('recurring');
+  const priority = watch('priority');
 
   return (
     <div className="p-6 space-y-6">
@@ -240,7 +264,6 @@ export default function Tarefas() {
             </ResponsiveContainer>
           </div>
         </div>
-
       </div>
 
       <div className="bg-card border border-border rounded-lg">
@@ -250,12 +273,11 @@ export default function Tarefas() {
               <TableHead className="w-10">
                 <Checkbox aria-label="Selecionar todas" />
               </TableHead>
-              <TableHead className="w-10">Prioridade</TableHead>
+              <TableHead className="w-20">Prioridade</TableHead>
               <TableHead className="w-20">Status</TableHead>
               <TableHead>Título</TableHead>
               <TableHead>Partes</TableHead>
               <TableHead>Compromisso</TableHead>
-              <TableHead>Prazo fatal</TableHead>
               <TableHead>Responsáveis</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -267,11 +289,14 @@ export default function Tarefas() {
                   <Checkbox aria-label="Selecionar tarefa" />
                 </TableCell>
                 <TableCell>
-                  {task.priority ? (
-                    <Star className="h-4 w-4 text-amber-500" />
-                  ) : (
-                    <StarOff className="h-4 w-4 text-muted-foreground" />
-                  )}
+                  <div className="flex">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Star
+                        key={i}
+                        className={`h-4 w-4 ${i <= task.priority ? 'text-amber-500' : 'text-muted-foreground'}`}
+                      />
+                    ))}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {task.status === 'pendente' && (
@@ -287,7 +312,6 @@ export default function Tarefas() {
                 <TableCell className="font-medium">{task.title}</TableCell>
                 <TableCell>{task.participants.join(', ')}</TableCell>
                 <TableCell>{task.date.toLocaleDateString()}</TableCell>
-                <TableCell>{task.deadline.toLocaleDateString()}</TableCell>
                 <TableCell>
                   <div className="flex -space-x-2">
                     {task.responsibles.map((r, idx) => (
@@ -327,24 +351,36 @@ export default function Tarefas() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="process">Processo ou caso</Label>
-                <Input id="process" {...register('process')} />
+                <select
+                  id="process"
+                  className="w-full border rounded-md h-9 px-2"
+                  {...register('process')}
+                >
+                  <option value="">Selecione</option>
+                  <option value="Processo 123">Processo 123</option>
+                  <option value="Processo 456">Processo 456</option>
+                  <option value="Caso ABC">Caso ABC</option>
+                </select>
                 {errors.process && (
-                  <p className="text-sm text-destructive">
-                    {errors.process.message}
-                  </p>
+                  <p className="text-sm text-destructive">{errors.process.message}</p>
                 )}
               </div>
               <div>
                 <Label htmlFor="responsibles">Adicionar responsáveis</Label>
-                <Input
+                <select
                   id="responsibles"
-                  placeholder="Nomes separados por vírgula"
+                  multiple
+                  className="w-full border rounded-md h-32 px-2"
                   {...register('responsibles')}
-                />
+                >
+                  {users.map((u) => (
+                    <option key={u.id} value={u.nome_completo}>
+                      {u.nome_completo}
+                    </option>
+                  ))}
+                </select>
                 {errors.responsibles && (
-                  <p className="text-sm text-destructive">
-                    {errors.responsibles.message}
-                  </p>
+                  <p className="text-sm text-destructive">{errors.responsibles.message}</p>
                 )}
               </div>
             </div>
@@ -355,7 +391,7 @@ export default function Tarefas() {
                 <p className="text-sm text-destructive">{errors.title.message}</p>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="date">Data</Label>
                 <Input type="date" id="date" {...register('date')} />
@@ -363,31 +399,20 @@ export default function Tarefas() {
                   <p className="text-sm text-destructive">{errors.date.message}</p>
                 )}
               </div>
-              <div>
-                <Label htmlFor="time">Hora</Label>
-                <Input type="time" id="time" {...register('time')} />
-                {errors.time && (
-                  <p className="text-sm text-destructive">{errors.time.message}</p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="deadline">Prazo fatal</Label>
-                <Input type="date" id="deadline" {...register('deadline')} />
-                {errors.deadline && (
-                  <p className="text-sm text-destructive">
-                    {errors.deadline.message}
-                  </p>
-                )}
-              </div>
+              {!allDay && (
+                <div>
+                  <Label htmlFor="time">Hora</Label>
+                  <Input type="time" id="time" {...register('time')} />
+                  {errors.time && (
+                    <p className="text-sm text-destructive">{errors.time.message}</p>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-center space-x-2">
                 <Checkbox id="showOnAgenda" {...register('showOnAgenda')} />
                 <Label htmlFor="showOnAgenda">Mostrar na agenda</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="informEnd" {...register('informEnd')} />
-                <Label htmlFor="informEnd">Informar término</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="allDay" {...register('allDay')} />
@@ -410,19 +435,23 @@ export default function Tarefas() {
               <Label htmlFor="attachments">Anexos</Label>
               <Input type="file" id="attachments" multiple {...register('attachments')} />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox id="important" {...register('important')} />
-                <Label htmlFor="important">Importante</Label>
+            <div>
+              <Label>Prioridade</Label>
+              <input type="hidden" {...register('priority', { valueAsNumber: true })} />
+              <div className="flex space-x-1">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <button type="button" key={i} onClick={() => setValue('priority', i)}>
+                    <Star
+                      className={`h-5 w-5 ${i <= priority ? 'text-amber-500' : 'text-muted-foreground'}`}
+                    />
+                  </button>
+                ))}
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="urgent" {...register('urgent')} />
-                <Label htmlFor="urgent">Urgente</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="future" {...register('future')} />
-                <Label htmlFor="future">Futura</Label>
-              </div>
+              {errors.priority && (
+                <p className="text-sm text-destructive">{errors.priority.message}</p>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className="flex items-center space-x-2">
                 <Checkbox id="recurring" {...register('recurring')} />
                 <Label htmlFor="recurring">Recorrente</Label>
@@ -431,11 +460,35 @@ export default function Tarefas() {
                 <Checkbox id="private" {...register('private')} />
                 <Label htmlFor="private">Privada</Label>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="retroactive" {...register('retroactive')} />
-                <Label htmlFor="retroactive">Retroativa</Label>
-              </div>
             </div>
+            {recurring && (
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label htmlFor="recurrenceValue">Recorrência</Label>
+                  <Input id="recurrenceValue" {...register('recurrenceValue')} />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="recurrenceUnit">Período</Label>
+                  <select
+                    id="recurrenceUnit"
+                    className="w-full border rounded-md h-9 px-2"
+                    {...register('recurrenceUnit')}
+                  >
+                    <option value="minutos">Minutos</option>
+                    <option value="horas">Horas</option>
+                    <option value="dias">Dias</option>
+                    <option value="semanas">Semanas</option>
+                    <option value="meses">Meses</option>
+                    <option value="anos">Anos</option>
+                  </select>
+                </div>
+                {errors.recurrenceValue && (
+                  <p className="text-sm text-destructive col-span-3">
+                    {errors.recurrenceValue.message}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex justify-end space-x-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancelar
@@ -448,4 +501,3 @@ export default function Tarefas() {
     </div>
   );
 }
-
