@@ -66,6 +66,7 @@ const formSchema = z.object({
   valor_honorarios: z.string().optional(),
   percentual_honorarios: z.string().optional(),
   forma_pagamento: z.string().optional(),
+  qtde_parcelas: z.string().optional(),
   contingenciamento: z.string().optional(),
   detalhes: z.string().optional(),
   documentos_anexados: z.any().optional(),
@@ -127,6 +128,7 @@ export default function NovaOportunidade() {
       valor_honorarios: "",
       percentual_honorarios: "",
       forma_pagamento: "",
+      qtde_parcelas: "",
       contingenciamento: "",
       detalhes: "",
       documentos_anexados: undefined,
@@ -227,6 +229,7 @@ export default function NovaOportunidade() {
   }, [apiUrl]);
 
   const faseValue = form.watch("fase");
+  const formaPagamento = form.watch("forma_pagamento");
   useEffect(() => {
     if (!faseValue) return;
     const loadEtapas = async () => {
@@ -255,6 +258,17 @@ export default function NovaOportunidade() {
     return digits ? Number(digits) : null;
   };
 
+  const valorCausaWatch = form.watch("valor_causa");
+  const valorHonorariosWatch = form.watch("valor_honorarios");
+  useEffect(() => {
+    const vc = parseCurrency(valorCausaWatch || "");
+    const vh = parseCurrency(valorHonorariosWatch || "");
+    if (vc && vc > 0 && vh !== null) {
+      const percent = Math.round((vh / vc) * 100);
+      form.setValue("percentual_honorarios", `${percent}%`);
+    }
+  }, [valorCausaWatch, valorHonorariosWatch, form]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       const payload = {
@@ -276,6 +290,7 @@ export default function NovaOportunidade() {
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
         forma_pagamento: values.forma_pagamento || null,
+          qtde_parcelas: values.qtde_parcelas ? Number(values.qtde_parcelas) : null,
         contingenciamento: values.contingenciamento || null,
         detalhes: values.detalhes || null,
         documentos_anexados: null,
@@ -907,6 +922,33 @@ export default function NovaOportunidade() {
                           </FormItem>
                         )}
                       />
+
+                      {formaPagamento === "Parcelado" && (
+                        <FormField
+                          control={form.control}
+                            name="qtde_parcelas"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Número de Parcelas</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {[...Array(12)].map((_, i) => (
+                                    <SelectItem key={i + 1} value={String(i + 1)}>
+                                      {i + 1}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
                       <FormField
                         control={form.control}

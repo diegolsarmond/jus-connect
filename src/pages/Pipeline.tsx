@@ -448,6 +448,7 @@ export default function Pipeline() {
                             <DropdownMenuItem
                               onSelect={(e) => {
                                 e.stopPropagation();
+
                                 setSelectedFlow("");
                                 setSelectedStage("");
                                 setMoveStages([]);

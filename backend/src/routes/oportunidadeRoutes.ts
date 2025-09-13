@@ -74,6 +74,8 @@ const router = Router();
  *           type: number
  *         forma_pagamento:
  *           type: string
+ *         qtde_parcelas:
+ *           type: integer
  *         contingenciamento:
  *           type: string
  *         detalhes:
@@ -226,12 +228,14 @@ router.get('/oportunidades/:id/envolvidos', listEnvolvidosByOportunidade);
  *                 type: number
  *               valor_honorarios:
  *                 type: number
- *               percentual_honorarios:
- *                 type: number
- *               forma_pagamento:
- *                 type: string
- *               contingenciamento:
- *                 type: string
+*               percentual_honorarios:
+*                 type: number
+*               forma_pagamento:
+*                 type: string
+ *               qtde_parcelas:
+ *                 type: integer
+*               contingenciamento:
+*                 type: string
  *               detalhes:
  *                 type: string
  *               documentos_anexados:
@@ -311,12 +315,14 @@ router.post('/oportunidades', createOportunidade);
  *                 type: number
  *               valor_honorarios:
  *                 type: number
- *               percentual_honorarios:
- *                 type: number
- *               forma_pagamento:
- *                 type: string
- *               contingenciamento:
- *                 type: string
+*               percentual_honorarios:
+*                 type: number
+*               forma_pagamento:
+*                 type: string
+ *               qtde_parcelas:
+ *                 type: integer
+*               contingenciamento:
+*                 type: string
  *               detalhes:
  *                 type: string
  *               documentos_anexados:

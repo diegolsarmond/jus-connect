@@ -18,6 +18,7 @@ export interface Oportunidade {
   valor_honorarios: number | null;
   percentual_honorarios: number | null;
   forma_pagamento: string | null;
+  qtde_parcelas: number | null;
   contingenciamento: string | null;
   detalhes: string | null;
   documentos_anexados: number | null;

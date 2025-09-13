@@ -234,12 +234,21 @@ export default function VisualizarOportunidade() {
     valor_honorarios: "Valor dos Honorários",
     percentual_honorarios: "% Honorários",
     forma_pagamento: "Forma de Pagamento",
+    qtde_parcelas: "Número de Parcelas",
     contingenciamento: "Contingenciamento",
     detalhes: "Detalhes",
     documentos_anexados: "Documentos Anexados",
     criado_por: "Criado por",
     data_criacao: "Data de Criação",
     ultima_atualizacao: "Última Atualização",
+  };
+
+  const participantLabels: Record<string, string> = {
+    nome: "Nome",
+    documento: "CPF/CNPJ",
+    telefone: "Telefone",
+    endereco: "Endereço",
+    relacao: "Relação",
   };
 
   const formatLabel = (key: string) =>
@@ -351,7 +360,7 @@ export default function VisualizarOportunidade() {
     {
       key: "honorarios",
       label: "Honorários",
-      fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "contingenciamento"],
+        fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "qtde_parcelas", "contingenciamento"],
     },
     {
       key: "metadados",
@@ -410,6 +419,14 @@ export default function VisualizarOportunidade() {
   };
   const onPrint = () => window.print();
 
+  const onCreateTask = () => {
+    navigate(`/tarefas?oportunidade=${id}`);
+  };
+
+  const onCreateDocument = () => {
+    navigate(`/documentos?oportunidade=${id}`);
+  };
+
   const renderFormatted = (key: string, value: unknown) => {
     if (value === null || value === undefined || value === "") {
       return <span className="text-muted-foreground">—</span>;
@@ -421,6 +438,20 @@ export default function VisualizarOportunidade() {
 
     if (/valor|honorarios|valor_causa|valor_honorarios|valor_total/i.test(key)) {
       return <span>{formatCurrency(value)}</span>;
+    }
+
+    if (key === "percentual_honorarios") {
+      let percent = value;
+      if (
+        (percent === null || percent === undefined || percent === "") &&
+        entriesMap.get("valor_causa") &&
+        entriesMap.get("valor_honorarios")
+      ) {
+        const vc = Number(entriesMap.get("valor_causa"));
+        const vh = Number(entriesMap.get("valor_honorarios"));
+        if (vc) percent = (vh / vc) * 100;
+      }
+      return <span>{formatPercent(percent)}</span>;
     }
 
     if (/percentual|%|percent/i.test(key)) {
@@ -496,6 +527,12 @@ export default function VisualizarOportunidade() {
           <Button variant="destructive" onClick={onDelete} aria-label="Excluir oportunidade">
             Excluir
           </Button>
+          <Button onClick={onCreateTask} aria-label="Criar tarefa">
+            Criar Tarefa
+          </Button>
+          <Button onClick={onCreateDocument} aria-label="Criar documento">
+            Criar Documento
+          </Button>
           <Button variant="ghost" onClick={onPrint} aria-label="Imprimir">
             Imprimir
           </Button>
@@ -569,6 +606,48 @@ export default function VisualizarOportunidade() {
                   </section>
                 );
               })}
+
+              {participants.length > 0 && (
+                <section
+                  aria-labelledby="heading-envolvidos"
+                  className="p-4 bg-transparent rounded border border-transparent md:border-0"
+                >
+                  <h2
+                    id="heading-envolvidos"
+                    className="text-lg font-semibold mb-3"
+                  >
+                    Dados dos Envolvidos
+                  </h2>
+                  <div className="space-y-4">
+                    {participants.map((p, idx) => (
+                      <div
+                        key={p.id ?? idx}
+                        className="border p-4 rounded-md"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                          {Object.entries(p).map(([k, v]) => {
+                            if (!participantLabels[k]) return null;
+                            return (
+                              <div key={k} className="p-2">
+                                <dl>
+                                  <dt className="text-sm font-medium text-muted-foreground">
+                                    {participantLabels[k]}
+                                  </dt>
+                                  <dd className="mt-1">
+                                    {v ?? (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </dd>
+                                </dl>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* Metadados extras: campos que não estão nas seções acima */}
               <section aria-labelledby="heading-extras" className="p-4">
