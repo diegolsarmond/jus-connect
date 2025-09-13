@@ -279,6 +279,31 @@ export default function EditarOportunidade() {
             ? data.ultima_atualizacao.substring(0, 10)
             : "",
         });
+
+        if (data.solicitante_id) {
+          try {
+            const resCliente = await fetch(
+              `${apiUrl}/api/clientes/${data.solicitante_id}`
+            );
+            if (resCliente.ok) {
+              const cliente = await resCliente.json();
+              form.setValue("solicitante_nome", cliente.nome || "");
+              form.setValue("solicitante_cpf_cnpj", cliente.documento || "");
+              form.setValue("solicitante_email", cliente.email || "");
+              form.setValue("solicitante_telefone", cliente.telefone || "");
+              form.setValue(
+                "cliente_tipo",
+                cliente.tipo === 1 || cliente.tipo === "1"
+                  ? "Pessoa Física"
+                  : cliente.tipo === 2 || cliente.tipo === "2"
+                  ? "Pessoa Jurídica"
+                  : ""
+              );
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        }
       } catch (e) {
         console.error(e);
         toast({ title: "Erro ao carregar oportunidade", variant: "destructive" });
