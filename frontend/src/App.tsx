@@ -7,6 +7,7 @@ import { CRMLayout } from "@/components/layout/CRMLayout";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import NovoCliente from "./pages/NovoCliente";
+import EditarCliente from "./pages/EditarCliente";
 import VisualizarCliente from "./pages/VisualizarCliente";
 import NovoProcesso from "./pages/NovoProcesso";
 import VisualizarProcesso from "./pages/VisualizarProcesso";
@@ -59,6 +60,7 @@ const App = () => (
             <Route path="/" element={<Dashboard />} />
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/clientes/novo" element={<NovoCliente />} />
+            <Route path="/clientes/:id/editar" element={<EditarCliente />} />
             <Route path="/clientes/:id/novo-processo" element={<NovoProcesso />} />
             <Route
               path="/clientes/:id/processos/:processoId"
