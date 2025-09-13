@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { format as dfFormat, parseISO } from "date-fns";
 
 interface Envolvido {
@@ -357,7 +358,17 @@ export default function VisualizarOportunidade() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{opportunity.title ?? `Oportunidade ${opportunity.id}`}</CardTitle>
+          <div className="flex flex-col gap-2">
+            <CardTitle>{opportunity.title ?? `Oportunidade ${opportunity.id}`}</CardTitle>
+            <div className="flex flex-wrap gap-2">
+              {typeof opportunity.fase === "string" && (
+                <Badge variant="outline">{opportunity.fase}</Badge>
+              )}
+              {typeof opportunity.etapa_nome === "string" && (
+                <Badge>{opportunity.etapa_nome}</Badge>
+              )}
+            </div>
+          </div>
         </CardHeader>
 
         <CardContent>
