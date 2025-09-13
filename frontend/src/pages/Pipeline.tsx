@@ -379,6 +379,7 @@ export default function Pipeline() {
                     draggable
                     onDragStart={(e) => handleDragStart(e, opportunity.id)}
                     onDragEnd={handleDragEnd}
+                    onDragOver={handleDragOver}
                     onClick={() => {
                       if (isDragging.current) return;
                       navigate(`/pipeline/oportunidade/${opportunity.id}`);
