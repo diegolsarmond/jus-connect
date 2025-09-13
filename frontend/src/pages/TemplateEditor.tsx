@@ -51,9 +51,9 @@ export default function TemplateEditor() {
     sel.addRange(range);
   }
 
-  function exec(cmd: string) {
+  function exec(cmd: string, value?: string) {
     editorRef.current?.focus();
-    document.execCommand(cmd);
+    document.execCommand(cmd, false, value);
     setContent(editorRef.current?.innerHTML || '');
   }
 
@@ -105,8 +105,17 @@ export default function TemplateEditor() {
             <Button variant="outline" size="sm" onClick={() => exec('bold')}><b>B</b></Button>
             <Button variant="outline" size="sm" onClick={() => exec('italic')}><i>I</i></Button>
             <Button variant="outline" size="sm" onClick={() => exec('underline')}><u>U</u></Button>
+            <Button variant="outline" size="sm" onClick={() => exec('strikeThrough')}><s>S</s></Button>
             <Button variant="outline" size="sm" onClick={() => exec('insertOrderedList')}>OL</Button>
             <Button variant="outline" size="sm" onClick={() => exec('insertUnorderedList')}>UL</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('justifyLeft')}>Left</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('justifyCenter')}>Center</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('justifyRight')}>Right</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('justifyFull')}>Justify</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('undo')}>Undo</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('redo')}>Redo</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('formatBlock', 'H1')}>H1</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('formatBlock', 'H2')}>H2</Button>
           </div>
           <div
             className="border rounded p-4 bg-white mx-auto shadow"
