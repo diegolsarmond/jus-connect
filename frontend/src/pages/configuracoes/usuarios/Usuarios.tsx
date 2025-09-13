@@ -169,11 +169,11 @@ export default function Usuarios() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Usuários</h1>
+          <h1 className="text-3xl font-bold text-foreground">Usuários</h1>
           <p className="text-muted-foreground">Gerencie usuários, roles e permissões</p>
         </div>
         <div className="flex gap-2">
