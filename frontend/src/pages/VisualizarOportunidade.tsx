@@ -342,11 +342,7 @@ export default function VisualizarOportunidade() {
       label: "Dados do Solicitante",
       fields: ["solicitante_nome", "solicitante_cpf_cnpj", "solicitante_email", "solicitante_telefone", "cliente_tipo"],
     },
-    {
-      key: "envolvidos",
-      label: "Dados dos Envolvidos",
-      fields: ["autor", "reu", "terceiro_interessado", "responsible", "area"],
-    },
+
     {
       key: "detalhes",
       label: "Detalhes",
