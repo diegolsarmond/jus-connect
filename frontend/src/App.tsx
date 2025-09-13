@@ -35,6 +35,7 @@ import Empresas from "./pages/configuracoes/Empresas";
 import Planos from "./pages/configuracoes/Planos";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
 import NovoUsuario from "./pages/configuracoes/usuarios/NovoUsuario";
+import NovaEmpresa from "./pages/configuracoes/NovaEmpresa";
 import PerfilUsuario from "./pages/configuracoes/usuarios/PerfilUsuario";
 import EditarPerfil from "./pages/configuracoes/usuarios/EditarPerfil";
 import AlterarSenha from "./pages/configuracoes/usuarios/AlterarSenha";
@@ -102,6 +103,7 @@ const App = () => (
             />
             <Route path="/configuracoes/usuarios" element={<Usuarios />} />
             <Route path="/configuracoes/empresas" element={<Empresas />} />
+            <Route path="/configuracoes/empresas/nova" element={<NovaEmpresa />} />
             <Route path="/configuracoes/planos" element={<Planos />} />
             <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
             <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />

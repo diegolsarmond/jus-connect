@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Link } from "react-router-dom";
 import {
   Table,
   TableBody,
@@ -49,13 +50,6 @@ const mapApiEmpresaToEmpresa = (e: ApiEmpresa): Empresa => ({
 
 export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
-  const [newEmpresa, setNewEmpresa] = useState({
-    nome: "",
-    cnpj: "",
-    responsavel: "",
-    telefone: "",
-    plano: "",
-  });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingEmpresa, setEditingEmpresa] = useState({
     nome: "",
@@ -92,19 +86,6 @@ export default function Empresas() {
     fetchEmpresas();
   }, []);
 
-  const addEmpresa = () => {
-    if (
-      !newEmpresa.nome.trim() ||
-      !newEmpresa.cnpj.trim() ||
-      !newEmpresa.responsavel.trim() ||
-      !newEmpresa.telefone.trim() ||
-      !newEmpresa.plano.trim()
-    )
-      return;
-    setEmpresas([...empresas, { id: Date.now(), ...newEmpresa }]);
-    setNewEmpresa({ nome: "", cnpj: "", responsavel: "", telefone: "", plano: "" });
-  };
-
   const startEdit = (empresa: Empresa) => {
     setEditingId(empresa.id);
     setEditingEmpresa({
@@ -134,45 +115,15 @@ export default function Empresas() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Empresas</h1>
-        <p className="text-muted-foreground">Gerencie as empresas do sistema</p>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-2">
-        <Input
-          placeholder="Nome da empresa"
-          value={newEmpresa.nome}
-          onChange={(e) => setNewEmpresa({ ...newEmpresa, nome: e.target.value })}
-          className="max-w-sm"
-        />
-        <Input
-          placeholder="CNPJ"
-          value={newEmpresa.cnpj}
-          onChange={(e) => setNewEmpresa({ ...newEmpresa, cnpj: e.target.value })}
-          className="max-w-sm"
-        />
-        <Input
-          placeholder="Responsável"
-          value={newEmpresa.responsavel}
-          onChange={(e) => setNewEmpresa({ ...newEmpresa, responsavel: e.target.value })}
-          className="max-w-sm"
-        />
-        <Input
-          placeholder="Telefone"
-          value={newEmpresa.telefone}
-          onChange={(e) => setNewEmpresa({ ...newEmpresa, telefone: e.target.value })}
-          className="max-w-sm"
-        />
-        <Input
-          placeholder="Plano"
-          value={newEmpresa.plano}
-          onChange={(e) => setNewEmpresa({ ...newEmpresa, plano: e.target.value })}
-          className="max-w-sm"
-        />
-        <Button onClick={addEmpresa}>
-          <Plus className="mr-2 h-4 w-4" />
-          Adicionar
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Empresas</h1>
+          <p className="text-muted-foreground">Gerencie as empresas do sistema</p>
+        </div>
+        <Button asChild>
+          <Link to="/configuracoes/empresas/nova">
+            <Plus className="mr-2 h-4 w-4" /> Nova Empresa
+          </Link>
         </Button>
       </div>
 
