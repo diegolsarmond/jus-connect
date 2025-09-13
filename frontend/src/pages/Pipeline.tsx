@@ -121,10 +121,21 @@ export default function Pipeline() {
         const url = fluxoId
           ? `${apiUrl}/api/oportunidades/fase/${fluxoId}`
           : `${apiUrl}/api/oportunidades`;
-        const res = await fetch(url, { headers: { Accept: "application/json" } });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-        const data = await res.json();
-        const parsed: unknown[] = Array.isArray(data)
+
+        const [oppRes, areasRes] = await Promise.all([
+          fetch(url, { headers: { Accept: "application/json" } }),
+          fetch(`${apiUrl}/api/areas`, { headers: { Accept: "application/json" } }),
+        ]);
+
+        if (!oppRes.ok)
+          throw new Error(`HTTP ${oppRes.status}: ${await oppRes.text()}`);
+        if (!areasRes.ok)
+          throw new Error(`HTTP ${areasRes.status}: ${await areasRes.text()}`);
+
+        const data = await oppRes.json();
+        const areasData = await areasRes.json();
+
+        const parsedOpps: unknown[] = Array.isArray(data)
           ? data
           : Array.isArray(data?.rows)
           ? data.rows
@@ -133,8 +144,25 @@ export default function Pipeline() {
           : Array.isArray(data?.data)
           ? data.data
           : [];
+
+        const parsedAreas: unknown[] = Array.isArray(areasData)
+          ? areasData
+          : Array.isArray(areasData?.rows)
+          ? areasData.rows
+          : Array.isArray(areasData?.data?.rows)
+          ? areasData.data.rows
+          : Array.isArray(areasData?.data)
+          ? areasData.data
+          : [];
+
+        const areaMap: Record<string, string> = {};
+        parsedAreas.forEach((a) => {
+          const item = a as { id?: number | string; nome?: string };
+          if (item.id) areaMap[String(item.id)] = item.nome ?? "";
+        });
+
         setOpportunities(
-          parsed.map((o) => {
+          parsedOpps.map((o) => {
             const item = o as Record<string, unknown>;
             return {
               id: Number(item.id),
@@ -149,7 +177,9 @@ export default function Pipeline() {
                 : 0,
               stage: item.etapa_id ? String(item.etapa_id) : "",
               dueDate: (item.prazo_proximo as string) || "",
-              area: item.area_atuacao_id ? String(item.area_atuacao_id) : "",
+              area: item.area_atuacao_id
+                ? areaMap[String(item.area_atuacao_id)] || ""
+                : "",
               responsible: item.responsavel_id ? String(item.responsavel_id) : "",
             };
           })
