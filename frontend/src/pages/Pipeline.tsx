@@ -190,6 +190,44 @@ export default function Pipeline() {
         </Button>
       </div>
 
+
+       {/* Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumo do Pipeline</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-foreground">{opportunities.length}</p>
+              <p className="text-sm text-muted-foreground">Total Oportunidades</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-success">
+                R$ {opportunities.reduce((total, opp) => 
+                  total + parseFloat(opp.value.replace('R$ ', '').replace('.', '')), 0
+                ).toLocaleString('pt-BR')}
+              </p>
+              <p className="text-sm text-muted-foreground">Valor Total</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-primary">
+                {Math.round(opportunities.reduce((total, opp) => total + opp.probability, 0) / opportunities.length)}%
+              </p>
+              <p className="text-sm text-muted-foreground">Probabilidade Média</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-warning">
+                R$ {Math.round(opportunities.reduce((total, opp) => 
+                  total + (parseFloat(opp.value.replace('R$ ', '').replace('.', '')) * opp.probability / 100), 0
+                )).toLocaleString('pt-BR')}
+              </p>
+              <p className="text-sm text-muted-foreground">Receita Prevista</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Pipeline Kanban */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {stages.map((stage) => {
@@ -212,6 +250,8 @@ export default function Pipeline() {
                   R$ {totalValue.toLocaleString('pt-BR')}
                 </p>
               </div>
+
+
 
               {/* Opportunities */}
               <div
@@ -298,42 +338,7 @@ export default function Pipeline() {
         })}
       </div>
 
-      {/* Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Resumo do Pipeline</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-foreground">{opportunities.length}</p>
-              <p className="text-sm text-muted-foreground">Total Oportunidades</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-success">
-                R$ {opportunities.reduce((total, opp) => 
-                  total + parseFloat(opp.value.replace('R$ ', '').replace('.', '')), 0
-                ).toLocaleString('pt-BR')}
-              </p>
-              <p className="text-sm text-muted-foreground">Valor Total</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">
-                {Math.round(opportunities.reduce((total, opp) => total + opp.probability, 0) / opportunities.length)}%
-              </p>
-              <p className="text-sm text-muted-foreground">Probabilidade Média</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-warning">
-                R$ {Math.round(opportunities.reduce((total, opp) => 
-                  total + (parseFloat(opp.value.replace('R$ ', '').replace('.', '')) * opp.probability / 100), 0
-                )).toLocaleString('pt-BR')}
-              </p>
-              <p className="text-sm text-muted-foreground">Receita Prevista</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+     
     </div>
   );
 }
