@@ -26,81 +26,121 @@ interface NavItem {
   children?: NavItem[];
 }
 
-const navigation: NavItem[] = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Clientes", href: "/clientes", icon: Users },
-  { name: "Pipeline", href: "/pipeline", icon: Target },
-  { name: "Agenda", href: "/agenda", icon: Calendar },
-  { name: "Tarefas", href: "/tarefas", icon: CheckSquare },
-  { name: "Processos", href: "/processos", icon: Gavel },
-  { name: "Documentos", href: "/documentos", icon: FileText },
-  { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign },
-  { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
-  {
-    name: "Configurações",
-    href: "/configuracoes",
-    icon: Settings,
-    children: [
-      {
-        name: "Usuários",
-        href: "/configuracoes/usuarios",
-      },
-      {
-        name: "Empresas",
-        href: "/configuracoes/empresas",
-      },
-      {
-        name: "Planos",
-        href: "/configuracoes/planos",
-      },
-      {
-        name: "Parâmetros",
-        children: [
-          {
-            name: "Perfis",
-            href: "/configuracoes/parametros/perfis",
-          },
-          {
-            name: "Escritórios",
-            href: "/configuracoes/parametros/escritorios",
-          },
-          {
-            name: "Área de Atuação",
-            href: "/configuracoes/parametros/area-de-atuacao",
-          },
-          {
-            name: "Situação do Processo",
-            href: "/configuracoes/parametros/situacao-processo",
-          },
-          {
-            name: "Tipo de Processo",
-            href: "/configuracoes/parametros/tipo-processo",
-          },
-          {
-            name: "Tipo de Evento",
-            href: "/configuracoes/parametros/tipo-evento",
-          },
-          {
-            name: "Situação do Cliente",
-            href: "/configuracoes/parametros/situacao-cliente",
-          },
-          {
-            name: "Etiquetas",
-            href: "/configuracoes/parametros/etiquetas",
-          },
-          {
-            name: "Fluxo de Trabalho",
-            href: "/configuracoes/parametros/fluxo-de-trabalho",
-          },
-        ],
-      },
-    ],
-  },
-];
-
 export function Sidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [pipelineMenus, setPipelineMenus] = useState<NavItem[]>([]);
+
+  useEffect(() => {
+    const fetchMenus = async () => {
+      try {
+        const apiUrl =
+          (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+        const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        type MenuApiItem = { id: number | string; nome?: string; ordem?: number };
+        const parseData = (d: unknown): MenuApiItem[] => {
+          if (Array.isArray(d)) return d as MenuApiItem[];
+          if (d && typeof d === "object") {
+            const obj = d as Record<string, unknown>;
+            if (Array.isArray(obj.rows)) return obj.rows as MenuApiItem[];
+            if (obj.data && typeof obj.data === "object") {
+              const inner = obj.data as Record<string, unknown>;
+              if (Array.isArray(inner.rows)) return inner.rows as MenuApiItem[];
+            }
+            if (Array.isArray(obj.data)) return obj.data as MenuApiItem[];
+          }
+          return [];
+        };
+        const parsed = parseData(data);
+        const menus = parsed
+          .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+          .map((item) => ({
+            name: item.nome ?? "",
+            href: `/pipeline/${item.id}`,
+          }));
+        setPipelineMenus(menus);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchMenus();
+  }, []);
+
+  const navigation: NavItem[] = [
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Clientes", href: "/clientes", icon: Users },
+    { name: "Pipeline", href: "/pipeline", icon: Target, children: pipelineMenus },
+    { name: "Agenda", href: "/agenda", icon: Calendar },
+    { name: "Tarefas", href: "/tarefas", icon: CheckSquare },
+    { name: "Processos", href: "/processos", icon: Gavel },
+    { name: "Documentos", href: "/documentos", icon: FileText },
+    { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign },
+    { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
+    {
+      name: "Configurações",
+      href: "/configuracoes",
+      icon: Settings,
+      children: [
+        {
+          name: "Usuários",
+          href: "/configuracoes/usuarios",
+        },
+        {
+          name: "Empresas",
+          href: "/configuracoes/empresas",
+        },
+        {
+          name: "Planos",
+          href: "/configuracoes/planos",
+        },
+        {
+          name: "Parâmetros",
+          children: [
+            {
+              name: "Perfis",
+              href: "/configuracoes/parametros/perfis",
+            },
+            {
+              name: "Escritórios",
+              href: "/configuracoes/parametros/escritorios",
+            },
+            {
+              name: "Área de Atuação",
+              href: "/configuracoes/parametros/area-de-atuacao",
+            },
+            {
+              name: "Situação do Processo",
+              href: "/configuracoes/parametros/situacao-processo",
+            },
+            {
+              name: "Tipo de Processo",
+              href: "/configuracoes/parametros/tipo-processo",
+            },
+            {
+              name: "Tipo de Evento",
+              href: "/configuracoes/parametros/tipo-evento",
+            },
+            {
+              name: "Situação do Cliente",
+              href: "/configuracoes/parametros/situacao-cliente",
+            },
+            {
+              name: "Etiquetas",
+              href: "/configuracoes/parametros/etiquetas",
+            },
+            {
+              name: "Fluxo de Trabalho",
+              href: "/configuracoes/parametros/fluxo-de-trabalho",
+            },
+          ],
+        },
+      ],
+    },
+  ];
 
   const isItemActive = (item: NavItem): boolean => {
     if (item.href && location.pathname === item.href) return true;

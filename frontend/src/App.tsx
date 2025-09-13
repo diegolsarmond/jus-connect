@@ -69,6 +69,7 @@ const App = () => (
             />
             <Route path="/clientes/:id" element={<VisualizarCliente />} />
             <Route path="/pipeline" element={<Pipeline />} />
+            <Route path="/pipeline/:fluxoId" element={<Pipeline />} />
             <Route path="/pipeline/nova-oportunidade" element={<NovaOportunidade />} />
             <Route path="/agenda" element={<Agenda />} />
             <Route path="/tarefas" element={<Tarefas />} />
