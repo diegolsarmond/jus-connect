@@ -36,6 +36,8 @@ import ConfiguracaoSeguranca from "./pages/configuracoes/usuarios/ConfiguracaoSe
 import SessaoDispositivos from "./pages/configuracoes/usuarios/SessaoDispositivos";
 import PrivacidadeLGPD from "./pages/configuracoes/usuarios/PrivacidadeLGPD";
 import NotificacoesPreferencias from "./pages/configuracoes/usuarios/NotificacoesPreferencias";
+import Login from "./pages/Login";
+import RecuperarSenha from "./pages/RecuperarSenha";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,8 +48,10 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <CRMLayout>
-          <Routes>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/recuperar-senha" element={<RecuperarSenha />} />
+          <Route element={<CRMLayout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/clientes/novo" element={<NovoCliente />} />
@@ -67,31 +71,77 @@ const App = () => (
             <Route path="/processos" element={<Processos />} />
             <Route path="/documentos" element={<DocumentTemplates />} />
             <Route path="/documentos/:id" element={<TemplateEditor />} />
-            <Route path="/relatorios" element={<div className="p-6"><h1 className="text-3xl font-bold">Relatórios</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
-              <Route path="/configuracoes" element={<div className="p-6"><h1 className="text-3xl font-bold">Configurações</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
-              <Route path="/configuracoes/usuarios" element={<Usuarios />} />
-              <Route path="/configuracoes/empresas" element={<Empresas />} />
-              <Route path="/configuracoes/planos" element={<Planos />} />
-              <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
-              <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
-              <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />
-              <Route path="/configuracoes/usuarios/:id/senha" element={<AlterarSenha />} />
-              <Route path="/configuracoes/usuarios/:id/seguranca" element={<ConfiguracaoSeguranca />} />
-              <Route path="/configuracoes/usuarios/:id/sessoes" element={<SessaoDispositivos />} />
-              <Route path="/configuracoes/usuarios/:id/privacidade" element={<PrivacidadeLGPD />} />
-              <Route path="/configuracoes/usuarios/:id/notificacoes" element={<NotificacoesPreferencias />} />
-              <Route path="/configuracoes/parametros/area-de-atuacao" element={<AreaAtuacao />} />
-              <Route path="/configuracoes/parametros/situacao-processo" element={<SituacaoProcesso />} />
-              <Route path="/configuracoes/parametros/tipo-processo" element={<TipoProcesso />} />
-              <Route path="/configuracoes/parametros/tipo-evento" element={<TipoEvento />} />
-              <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
-              <Route path="/configuracoes/parametros/escritorios" element={<Escritorios />} />
-              <Route path="/configuracoes/parametros/situacao-cliente" element={<SituacaoCliente />} />
-              <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
+            <Route
+              path="/relatorios"
+              element={
+                <div className="p-6">
+                  <h1 className="text-3xl font-bold">Relatórios</h1>
+                  <p className="text-muted-foreground">Em desenvolvimento</p>
+                </div>
+              }
+            />
+            <Route
+              path="/configuracoes"
+              element={
+                <div className="p-6">
+                  <h1 className="text-3xl font-bold">Configurações</h1>
+                  <p className="text-muted-foreground">Em desenvolvimento</p>
+                </div>
+              }
+            />
+            <Route path="/configuracoes/usuarios" element={<Usuarios />} />
+            <Route path="/configuracoes/empresas" element={<Empresas />} />
+            <Route path="/configuracoes/planos" element={<Planos />} />
+            <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
+            <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
+            <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />
+            <Route path="/configuracoes/usuarios/:id/senha" element={<AlterarSenha />} />
+            <Route
+              path="/configuracoes/usuarios/:id/seguranca"
+              element={<ConfiguracaoSeguranca />}
+            />
+            <Route
+              path="/configuracoes/usuarios/:id/sessoes"
+              element={<SessaoDispositivos />}
+            />
+            <Route
+              path="/configuracoes/usuarios/:id/privacidade"
+              element={<PrivacidadeLGPD />}
+            />
+            <Route
+              path="/configuracoes/usuarios/:id/notificacoes"
+              element={<NotificacoesPreferencias />}
+            />
+            <Route
+              path="/configuracoes/parametros/area-de-atuacao"
+              element={<AreaAtuacao />}
+            />
+            <Route
+              path="/configuracoes/parametros/situacao-processo"
+              element={<SituacaoProcesso />}
+            />
+            <Route
+              path="/configuracoes/parametros/tipo-processo"
+              element={<TipoProcesso />}
+            />
+            <Route
+              path="/configuracoes/parametros/tipo-evento"
+              element={<TipoEvento />}
+            />
+            <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
+            <Route
+              path="/configuracoes/parametros/escritorios"
+              element={<Escritorios />}
+            />
+            <Route
+              path="/configuracoes/parametros/situacao-cliente"
+              element={<SituacaoCliente />}
+            />
+            <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </CRMLayout>
+          </Route>
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
