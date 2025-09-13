@@ -5,9 +5,19 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format as dfFormat, parseISO } from "date-fns";
 
+interface Envolvido {
+  nome?: string;
+  cpf_cnpj?: string;
+  telefone?: string;
+  endereco?: string;
+  relacao?: string;
+  [key: string]: unknown;
+}
+
 interface OpportunityData {
   id: number;
   title?: string;
+  envolvidos?: Envolvido[];
   [key: string]: unknown;
 }
 
@@ -44,7 +54,10 @@ export default function VisualizarOportunidade() {
   const fieldLabels: Record<string, string> = {
     solicitante_nome: "Cliente",
     tipo_processo_nome: "Tipo de Processo",
+    tipo_processo_id: "Tipo de Processo ID",
+    area_atuacao_id: "Área de Atuação ID",
     area: "Área de Atuação",
+    responsavel_id: "Responsável ID",
     responsible: "Responsável",
     numero_processo_cnj: "Número do Processo",
     numero_protocolo: "Número do Protocolo",
@@ -54,9 +67,13 @@ export default function VisualizarOportunidade() {
     reu: "Réu",
     terceiro_interessado: "Terceiro Interessado",
     fase: "Fase",
+    fase_id: "Fase ID",
     etapa_nome: "Etapa",
+    etapa_id: "Etapa ID",
     prazo_proximo: "Prazo Próximo",
     status: "Status",
+    status_id: "Status ID",
+    solicitante_id: "Solicitante ID",
     solicitante_cpf_cnpj: "CPF/CNPJ",
     solicitante_email: "Email",
     solicitante_telefone: "Telefone",
@@ -67,6 +84,7 @@ export default function VisualizarOportunidade() {
     forma_pagamento: "Forma de Pagamento",
     contingenciamento: "Contingenciamento",
     detalhes: "Detalhes",
+    documentos_anexados: "Documentos Anexados",
     criado_por: "Criado por",
     data_criacao: "Data de Criação",
     ultima_atualizacao: "Última Atualização",
@@ -422,6 +440,40 @@ export default function VisualizarOportunidade() {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {Array.isArray(opportunity.envolvidos) &&
+        opportunity.envolvidos.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Envolvidos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {opportunity.envolvidos.map((env, idx) => (
+                  <div key={idx} className="p-2 border rounded">
+                    <div className="font-medium">
+                      {env.relacao
+                        ? formatLabel(String(env.relacao))
+                        : `Envolvido ${idx + 1}`}
+                    </div>
+                    <div className="mt-2 space-y-1 text-sm">
+                      {env.nome && <div>Nome: {String(env.nome)}</div>}
+                      {env.cpf_cnpj && (
+                        <div>CPF/CNPJ: {String(env.cpf_cnpj)}</div>
+                      )}
+                      {env.telefone && (
+                        <div>Telefone: {String(env.telefone)}</div>
+                      )}
+                      {env.endereco && (
+                        <div>Endereço: {String(env.endereco)}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       {/* snackbar / feedback simples com auto-close */}
       {snack.open && (
