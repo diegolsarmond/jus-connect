@@ -8,7 +8,7 @@ export type AppointmentType =
   | 'outro';
 
 export interface Appointment {
-  id: string;
+  id: number;
   title: string;
   description?: string;
   type: AppointmentType;

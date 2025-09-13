@@ -23,6 +23,10 @@ const router = Router();
  *           type: integer
  *         titulo:
  *           type: string
+ *      id_evento:
+ *          type: integer
+ *      tipo_evento:
+ *          type: string
  *         tipo:
  *           type: integer
  *         descricao:
@@ -175,7 +179,7 @@ router.post('/agendas', createAgenda);
  *                 type: string
  *                 format: time
  *               cliente:
- *                 type: integer
+ *                 type: string
  *               tipo_local:
  *                 type: string
  *               local:
