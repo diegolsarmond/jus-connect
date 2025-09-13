@@ -604,39 +604,7 @@ export default function VisualizarOportunidade() {
       </Card>
 
 
-      {Array.isArray(opportunity.envolvidos) &&
-        opportunity.envolvidos.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Envolvidos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {opportunity.envolvidos.map((env, idx) => (
-                  <div key={idx} className="p-2 border rounded">
-                    <div className="font-medium">
-                      {env.relacao
-                        ? formatLabel(String(env.relacao))
-                        : `Envolvido ${idx + 1}`}
-                    </div>
-                    <div className="mt-2 space-y-1 text-sm">
-                      {env.nome && <div>Nome: {String(env.nome)}</div>}
-                      {env.cpf_cnpj && (
-                        <div>CPF/CNPJ: {String(env.cpf_cnpj)}</div>
-                      )}
-                      {env.telefone && (
-                        <div>Telefone: {String(env.telefone)}</div>
-                      )}
-                      {env.endereco && (
-                        <div>Endereço: {String(env.endereco)}</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      
 
       {/* snackbar / feedback simples com auto-close */}
       {snack.open && (
