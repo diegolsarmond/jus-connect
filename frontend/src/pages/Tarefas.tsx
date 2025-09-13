@@ -23,6 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { z } from 'zod';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   PieChart,
@@ -125,6 +126,7 @@ export default function Tarefas() {
     formState: { errors },
     watch,
     setValue,
+    control,
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -452,10 +454,26 @@ export default function Tarefas() {
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox id="recurring" {...register('recurring')} />
-                <Label htmlFor="recurring">Recorrente</Label>
-              </div>
+              <Controller
+                name="recurring"
+                control={control}
+                render={({ field }) => (
+                  <RadioGroup
+                    className="flex items-center space-x-4"
+                    onValueChange={(value) => field.onChange(value === 'true')}
+                    value={field.value ? 'true' : 'false'}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="false" id="not-recurring" />
+                      <Label htmlFor="not-recurring">Única</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="true" id="recurring" />
+                      <Label htmlFor="recurring">Recorrente</Label>
+                    </div>
+                  </RadioGroup>
+                )}
+              />
               <div className="flex items-center space-x-2">
                 <Checkbox id="private" {...register('private')} />
                 <Label htmlFor="private">Privada</Label>
