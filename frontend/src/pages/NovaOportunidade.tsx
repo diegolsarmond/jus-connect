@@ -190,7 +190,7 @@ export default function NovaOportunidade() {
           })
         );
 
-        const areasData = await fetchJson(`${apiUrl}/api/areas-atuacao`);
+        const areasData = await fetchJson(`${apiUrl}/api/areas`);
         setAreas(
           areasData.map((a) => {
             const item = a as any;
@@ -225,7 +225,7 @@ export default function NovaOportunidade() {
     if (!faseValue) return;
     const loadEtapas = async () => {
       try {
-        const data = await fetchJson(`${apiUrl}/api/etiquetas?fluxo=${faseValue}`);
+        const data = await fetchJson(`${apiUrl}/api/etiquetas/fluxos-trabalho/${faseValue}`);
         setEtapas(
           data.map((e) => {
             const item = e as any;
