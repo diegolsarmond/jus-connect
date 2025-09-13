@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "test": "tsx --test tests/templateService.test.ts"
   },
   "dependencies": {
     "express": "^4.19.2",

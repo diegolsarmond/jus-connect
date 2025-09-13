@@ -15,6 +15,8 @@ import Pipeline from "./pages/Pipeline";
 import Agenda from "./pages/Agenda";
 import Tarefas from "./pages/Tarefas";
 import Processos from "./pages/Processos";
+import DocumentTemplates from "./pages/DocumentTemplates";
+import TemplateEditor from "./pages/TemplateEditor";
 import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
 import TipoProcesso from "./pages/configuracoes/parametros/TipoProcesso";
@@ -63,7 +65,8 @@ const App = () => (
             <Route path="/agenda" element={<Agenda />} />
             <Route path="/tarefas" element={<Tarefas />} />
             <Route path="/processos" element={<Processos />} />
-            <Route path="/documentos" element={<div className="p-6"><h1 className="text-3xl font-bold">Documentos</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
+            <Route path="/documentos" element={<DocumentTemplates />} />
+            <Route path="/documentos/:id" element={<TemplateEditor />} />
             <Route path="/relatorios" element={<div className="p-6"><h1 className="text-3xl font-bold">Relatórios</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
               <Route path="/configuracoes" element={<div className="p-6"><h1 className="text-3xl font-bold">Configurações</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
               <Route path="/configuracoes/usuarios" element={<Usuarios />} />
