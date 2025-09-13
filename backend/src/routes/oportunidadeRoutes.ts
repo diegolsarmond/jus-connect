@@ -5,6 +5,7 @@ import {
   getOportunidadeById,
   createOportunidade,
   updateOportunidade,
+  updateOportunidadeEtapa,
   deleteOportunidade,
 } from '../controllers/oportunidadeController';
 
@@ -317,6 +318,39 @@ router.post('/oportunidades', createOportunidade);
  *         description: Oportunidade não encontrada
  */
 router.put('/oportunidades/:id', updateOportunidade);
+
+/**
+ * @swagger
+ * /api/oportunidades/{id}/etapa:
+ *   patch:
+ *     summary: Atualiza a etapa de uma oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               etapa_id:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Etapa atualizada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Oportunidade'
+ *       404:
+ *         description: Oportunidade não encontrada
+ */
+router.patch('/oportunidades/:id/etapa', updateOportunidadeEtapa);
 
 /**
  * @swagger

@@ -253,6 +253,28 @@ export const updateOportunidade = async (req: Request, res: Response) => {
   }
 };
 
+export const updateOportunidadeEtapa = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { etapa_id } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE public.oportunidades
+       SET etapa_id = $1,
+           ultima_atualizacao = NOW()
+       WHERE id = $2
+       RETURNING id, etapa_id, ultima_atualizacao`,
+      [etapa_id, id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Oportunidade não encontrada' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const deleteOportunidade = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
