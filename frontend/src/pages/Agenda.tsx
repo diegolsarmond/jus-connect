@@ -8,7 +8,7 @@ import { AgendaCalendar } from '@/components/agenda/AgendaCalendar';
 import { AppointmentForm } from '@/components/agenda/AppointmentForm';
 import { AppointmentList } from '@/components/agenda/AppointmentList';
 import { statusDotClass } from '@/components/agenda/status';
-import { Appointment, AppointmentType } from '@/types/agenda';
+import { Appointment, AppointmentType, AppointmentStatus } from '@/types/agenda';
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
 
