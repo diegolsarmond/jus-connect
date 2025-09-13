@@ -28,30 +28,39 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Basic CORS handling so the frontend can access the API from a different origin
+/**
+ * Middleware de CORS
+ */
 app.use((req, res, next) => {
-  const allowedOrigins = ['http://localhost:5173'];
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+  ];
   const origin = req.headers.origin as string | undefined;
 
   if (origin && allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin'); // boa prática p/ caches
   }
 
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header(
     'Access-Control-Allow-Methods',
-    'GET, POST, PUT, DELETE, OPTIONS'
+    'GET, POST, PUT, PATCH, DELETE, OPTIONS'
   );
   res.header(
     'Access-Control-Allow-Headers',
     'Origin, X-Requested-With, Content-Type, Accept, Authorization, access-token, x-authorization-id, x-client-id, id-account'
   );
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
   }
   next();
 });
 
+// Rotas
 app.use('/api', areaAtuacaoRoutes);
 app.use('/api', tipoEventoRoutes);
 app.use('/api', tipoProcessoRoutes);
@@ -72,6 +81,8 @@ app.use('/api', financialRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', oportunidadeRoutes);
 app.use('/api', fluxoTrabalhoRoutes);
+
+// Swagger
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
@@ -88,6 +99,7 @@ app.get('/', (_req, res) => {
   res.send('Backend up and running');
 });
 
+// Start
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
 });
