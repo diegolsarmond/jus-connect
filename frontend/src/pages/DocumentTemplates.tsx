@@ -1,6 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchTemplates, deleteTemplate, createTemplate, Template } from '@/lib/templates';
 import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useNavigate } from 'react-router-dom';
 
 export default function DocumentTemplates() {
@@ -22,18 +30,32 @@ export default function DocumentTemplates() {
         <h1 className="text-3xl font-bold">Templates</h1>
         <Button onClick={() => navigate('/documentos/novo')}>Novo Template</Button>
       </div>
-      <ul className="space-y-2">
-        {templates?.map(t => (
-          <li key={t.id} className="border rounded p-4 flex justify-between items-center">
-            <span>{t.title}</span>
-            <div className="space-x-2">
-              <Button variant="outline" size="sm" onClick={() => navigate(`/documentos/${t.id}`)}>Editar</Button>
-              <Button variant="outline" size="sm" onClick={() => duplicateMut.mutate(t)}>Duplicar</Button>
-              <Button variant="destructive" size="sm" onClick={() => deleteMut.mutate(t.id)}>Excluir</Button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[60px]">ID</TableHead>
+            <TableHead>Título</TableHead>
+            <TableHead className="hidden md:table-cell">Prévia</TableHead>
+            <TableHead className="text-right">Ações</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {templates?.map(t => (
+            <TableRow key={t.id}>
+              <TableCell className="font-medium">{t.id}</TableCell>
+              <TableCell>{t.title}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground">
+                {t.content.slice(0, 60)}{t.content.length > 60 ? '...' : ''}
+              </TableCell>
+              <TableCell className="text-right space-x-2">
+                <Button variant="outline" size="sm" onClick={() => navigate(`/documentos/${t.id}`)}>Editar</Button>
+                <Button variant="outline" size="sm" onClick={() => duplicateMut.mutate(t)}>Duplicar</Button>
+                <Button variant="destructive" size="sm" onClick={() => deleteMut.mutate(t.id)}>Excluir</Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
