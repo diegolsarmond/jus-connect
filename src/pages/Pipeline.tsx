@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, MoreHorizontal, DollarSign, Calendar, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -174,7 +174,7 @@ export default function Pipeline() {
     },
     ];
   });
-
+  const isDragging = useRef(false);
   useEffect(() => {
     localStorage.setItem("opportunities", JSON.stringify(opportunities));
   }, [opportunities]);
@@ -194,8 +194,18 @@ export default function Pipeline() {
     return "text-muted-foreground";
   };
 
-  const handleDragStart = (event: React.DragEvent<HTMLDivElement>, opportunityId: number) => {
+  const handleDragStart = (
+    event: React.DragEvent<HTMLDivElement>,
+    opportunityId: number,
+  ) => {
+    isDragging.current = true;
     event.dataTransfer.setData("text/plain", opportunityId.toString());
+  };
+
+  const handleDragEnd = () => {
+    setTimeout(() => {
+      isDragging.current = false;
+    }, 0);
   };
 
   const handleDrop = async (
@@ -323,7 +333,11 @@ export default function Pipeline() {
                     className="cursor-pointer hover:shadow-md transition-all duration-200"
                     draggable
                     onDragStart={(e) => handleDragStart(e, opportunity.id)}
-                    onClick={() => navigate(`/pipeline/oportunidade/${opportunity.id}`)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => {
+                      if (isDragging.current) return;
+                      navigate(`/pipeline/oportunidade/${opportunity.id}`);
+                    }}
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
