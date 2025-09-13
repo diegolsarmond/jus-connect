@@ -539,16 +539,9 @@ export default function Pipeline() {
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          <CardTitle className="text-sm font-medium leading-tight">
-                            {opportunity.title}
-                          </CardTitle>
-                          {opportunity.processType && (
-                            <span className="text-xs text-muted-foreground">
-                              {opportunity.processType}
-                            </span>
-                          )}
-                        </div>
+                        <CardTitle className="text-sm font-medium leading-tight">
+                          {opportunity.processType}
+                        </CardTitle>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
