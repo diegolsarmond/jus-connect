@@ -17,6 +17,24 @@ export default function VisualizarOportunidade() {
   const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
   const [opportunity, setOpportunity] = useState<OpportunityData | null>(null);
 
+  const fetchList = async (url: string): Promise<unknown[]> => {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data: unknown = await res.json();
+    if (Array.isArray(data)) return data;
+    if (Array.isArray((data as { rows?: unknown[] }).rows))
+      return (data as { rows: unknown[] }).rows;
+    if (
+      Array.isArray(
+        (data as { data?: { rows?: unknown[] } }).data?.rows
+      )
+    )
+      return (data as { data: { rows: unknown[] } }).data.rows;
+    if (Array.isArray((data as { data?: unknown[] }).data))
+      return (data as { data: unknown[] }).data;
+    return [];
+  };
+
   useEffect(() => {
     if (!id) return;
     const fetchOpportunity = async () => {
@@ -31,6 +49,108 @@ export default function VisualizarOportunidade() {
     };
     fetchOpportunity();
   }, [id, apiUrl]);
+
+  useEffect(() => {
+    if (!opportunity || (opportunity as { _namesLoaded?: boolean })._namesLoaded)
+      return;
+    const loadNames = async () => {
+      try {
+        const updated: OpportunityData = { ...opportunity };
+
+        if (opportunity.solicitante_id) {
+          const res = await fetch(
+            `${apiUrl}/api/clientes/${opportunity.solicitante_id}`
+          );
+          if (res.ok) {
+            const c = await res.json();
+            updated.solicitante_nome = c.nome;
+            updated.solicitante_cpf_cnpj = c.documento;
+            updated.solicitante_email = c.email;
+            updated.solicitante_telefone = c.telefone;
+            updated.cliente_tipo =
+              c.tipo === 1 || c.tipo === "1"
+                ? "Pessoa Física"
+                : c.tipo === 2 || c.tipo === "2"
+                ? "Pessoa Jurídica"
+                : undefined;
+          }
+        }
+
+        if (opportunity.responsavel_id) {
+          const res = await fetch(
+            `${apiUrl}/api/usuarios/${opportunity.responsavel_id}`
+          );
+          if (res.ok) {
+            const r = await res.json();
+            updated.responsible = r.nome_completo ?? r.nome;
+          }
+        }
+
+        if (opportunity.tipo_processo_id) {
+          const tipos = (await fetchList(
+            `${apiUrl}/api/tipo-processos`
+          )) as Array<{ id: unknown; nome?: string }>;
+          const tipo = tipos.find(
+            (t) => Number(t.id) === Number(opportunity.tipo_processo_id)
+          );
+          if (tipo) updated.tipo_processo_nome = tipo.nome;
+        }
+
+        if (opportunity.area_atuacao_id) {
+          const res = await fetch(
+            `${apiUrl}/api/areas/${opportunity.area_atuacao_id}`
+          );
+          if (res.ok) {
+            const a = await res.json();
+            updated.area = a.nome;
+          }
+        }
+
+        if (opportunity.fase_id) {
+          const fases = (await fetchList(
+            `${apiUrl}/api/fluxos-trabalho`
+          )) as Array<{ id: unknown; nome?: string }>;
+          const fase = fases.find(
+            (f) => Number(f.id) === Number(opportunity.fase_id)
+          );
+          if (fase) updated.fase = fase.nome;
+
+          if (opportunity.etapa_id) {
+            try {
+              const etapas = (await fetchList(
+                `${apiUrl}/api/etiquetas/fluxos-trabalho/${opportunity.fase_id}`
+              )) as Array<{ id: unknown; nome?: string }>;
+              const etapa = etapas.find(
+                (e) => Number(e.id) === Number(opportunity.etapa_id)
+              );
+              if (etapa) updated.etapa_nome = etapa.nome;
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        }
+
+        if (opportunity.status_id) {
+          const situacoes = (await fetchList(
+            `${apiUrl}/api/situacoes-processo`
+          )) as Array<{ id: unknown; nome?: string }>;
+          const situacao = situacoes.find(
+            (s) => Number(s.id) === Number(opportunity.status_id)
+          );
+          if (situacao) updated.status = situacao.nome;
+        }
+
+        Object.defineProperty(updated, "_namesLoaded", {
+          value: true,
+          enumerable: false,
+        });
+        setOpportunity(updated);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadNames();
+  }, [opportunity, apiUrl]);
 
   const fieldLabels: Record<string, string> = {
     solicitante_nome: "Cliente",
@@ -122,7 +242,9 @@ export default function VisualizarOportunidade() {
             <Table>
               <TableBody>
                 {Object.entries(opportunity)
-                  .filter(([key]) => key !== "envolvidos")
+                  .filter(
+                    ([key]) => key !== "envolvidos" && !key.endsWith("_id")
+                  )
                   .map(([key, value]) => (
                     <TableRow key={key}>
                       <TableCell className="font-medium w-[40%]">
