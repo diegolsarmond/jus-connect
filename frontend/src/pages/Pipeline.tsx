@@ -11,6 +11,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+interface Opportunity {
+  id: number;
+  title: string;
+  client: string;
+  value: string;
+  probability: number;
+  stage: string;
+  dueDate: string;
+  area: string;
+  responsible: string;
+}
+
 export default function Pipeline() {
   const stages = [
     { id: "contato", name: "Contato Inicial", color: "bg-blue-100 text-blue-800" },
@@ -19,7 +31,7 @@ export default function Pipeline() {
     { id: "contrato", name: "Contrato", color: "bg-green-100 text-green-800" },
   ];
 
-  const opportunities = [
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([
     {
       id: 1,
       title: "Consultoria Tributária - Tech Solutions",
@@ -75,7 +87,7 @@ export default function Pipeline() {
       area: "Civil",
       responsible: "Dr. Ana Beatriz"
     },
-  ];
+  ]);
 
   const getOpportunitiesByStage = (stageId: string) => {
     return opportunities.filter(opp => opp.stage === stageId);
@@ -90,6 +102,24 @@ export default function Pipeline() {
     if (probability >= 80) return "text-success";
     if (probability >= 60) return "text-warning";
     return "text-muted-foreground";
+  };
+
+  const handleDragStart = (event: React.DragEvent<HTMLDivElement>, opportunityId: number) => {
+    event.dataTransfer.setData("text/plain", opportunityId.toString());
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>, stageId: string) => {
+    event.preventDefault();
+    const id = Number(event.dataTransfer.getData("text/plain"));
+    setOpportunities(prev =>
+      prev.map(opp =>
+        opp.id === id ? { ...opp, stage: stageId } : opp
+      )
+    );
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
   };
 
   return (
@@ -111,7 +141,7 @@ export default function Pipeline() {
         {stages.map((stage) => {
           const stageOpportunities = getOpportunitiesByStage(stage.id);
           const totalValue = getTotalValueByStage(stage.id);
-          
+
           return (
             <div key={stage.id} className="space-y-4">
               {/* Stage Header */}
@@ -130,9 +160,18 @@ export default function Pipeline() {
               </div>
 
               {/* Opportunities */}
-              <div className="space-y-3 min-h-[400px]">
+              <div
+                className="space-y-3 min-h-[400px]"
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, stage.id)}
+              >
                 {stageOpportunities.map((opportunity) => (
-                  <Card key={opportunity.id} className="cursor-pointer hover:shadow-md transition-all duration-200">
+                  <Card
+                    key={opportunity.id}
+                    className="cursor-pointer hover:shadow-md transition-all duration-200"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, opportunity.id)}
+                  >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
                         <CardTitle className="text-sm font-medium leading-tight">
@@ -193,7 +232,7 @@ export default function Pipeline() {
                     </CardContent>
                   </Card>
                 ))}
-                
+
                 {stageOpportunities.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
                     <p className="text-sm">Nenhuma oportunidade</p>
