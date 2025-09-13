@@ -17,6 +17,7 @@ interface Opportunity {
   id: number;
   title: string;
   client: string;
+  processType: string;
   value: number;
   probability: number;
   stage: string;
@@ -124,10 +125,22 @@ export default function Pipeline() {
           ? `${apiUrl}/api/oportunidades/fase/${fluxoId}`
           : `${apiUrl}/api/oportunidades`;
 
-        const [oppRes, areasRes, usersRes] = await Promise.all([
+        const [
+          oppRes,
+          areasRes,
+          usersRes,
+          clientsRes,
+          typesRes,
+        ] = await Promise.all([
           fetch(url, { headers: { Accept: "application/json" } }),
           fetch(`${apiUrl}/api/areas`, { headers: { Accept: "application/json" } }),
           fetch(`${apiUrl}/api/usuarios`, {
+            headers: { Accept: "application/json" },
+          }),
+          fetch(`${apiUrl}/api/clientes`, {
+            headers: { Accept: "application/json" },
+          }),
+          fetch(`${apiUrl}/api/tipo-processos`, {
             headers: { Accept: "application/json" },
           }),
         ]);
@@ -138,10 +151,16 @@ export default function Pipeline() {
           throw new Error(`HTTP ${areasRes.status}: ${await areasRes.text()}`);
         if (!usersRes.ok)
           throw new Error(`HTTP ${usersRes.status}: ${await usersRes.text()}`);
+        if (!clientsRes.ok)
+          throw new Error(`HTTP ${clientsRes.status}: ${await clientsRes.text()}`);
+        if (!typesRes.ok)
+          throw new Error(`HTTP ${typesRes.status}: ${await typesRes.text()}`);
 
         const data = await oppRes.json();
         const areasData = await areasRes.json();
         const usersData = await usersRes.json();
+        const clientsData = await clientsRes.json();
+        const typesData = await typesRes.json();
 
         const parsedOpps: unknown[] = Array.isArray(data)
           ? data
@@ -173,6 +192,26 @@ export default function Pipeline() {
           ? usersData.data
           : [];
 
+        const parsedClients: unknown[] = Array.isArray(clientsData)
+          ? clientsData
+          : Array.isArray(clientsData?.rows)
+          ? clientsData.rows
+          : Array.isArray(clientsData?.data?.rows)
+          ? clientsData.data.rows
+          : Array.isArray(clientsData?.data)
+          ? clientsData.data
+          : [];
+
+        const parsedTypes: unknown[] = Array.isArray(typesData)
+          ? typesData
+          : Array.isArray(typesData?.rows)
+          ? typesData.rows
+          : Array.isArray(typesData?.data?.rows)
+          ? typesData.data.rows
+          : Array.isArray(typesData?.data)
+          ? typesData.data
+          : [];
+
         const areaMap: Record<string, string> = {};
         parsedAreas.forEach((a) => {
           const item = a as { id?: number | string; nome?: string };
@@ -190,19 +229,35 @@ export default function Pipeline() {
             userMap[String(item.id)] = item.nome_completo ?? item.nome ?? "";
         });
 
+        const clientMap: Record<string, string> = {};
+        parsedClients.forEach((c) => {
+          const item = c as { id?: number | string; nome?: string };
+          if (item.id) clientMap[String(item.id)] = item.nome ?? "";
+        });
+
+        const typeMap: Record<string, string> = {};
+        parsedTypes.forEach((t) => {
+          const item = t as { id?: number | string; nome?: string };
+          if (item.id) typeMap[String(item.id)] = item.nome ?? "";
+        });
+
         setOpportunities(
           parsedOpps.map((o) => {
             const item = o as Record<string, unknown>;
             const responsibleId = item.responsavel_id
               ? String(item.responsavel_id)
               : "";
+            const clientId = item.solicitante_id ? String(item.solicitante_id) : "";
             return {
               id: Number(item.id),
               title:
                 (item.detalhes as string) ||
                 (item.numero_processo_cnj as string) ||
                 `Oportunidade ${item.id}`,
-              client: item.solicitante_id ? String(item.solicitante_id) : "",
+              client: clientId ? clientMap[clientId] || clientId : "",
+              processType: item.tipo_processo_id
+                ? typeMap[String(item.tipo_processo_id)] || ""
+                : "",
               value: item.valor_honorarios ? Number(item.valor_honorarios) : 0,
               probability: item.percentual_honorarios
                 ? Number(item.percentual_honorarios)
@@ -397,9 +452,16 @@ export default function Pipeline() {
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
-                        <CardTitle className="text-sm font-medium leading-tight">
-                          {opportunity.title}
-                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-sm font-medium leading-tight">
+                            {opportunity.title}
+                          </CardTitle>
+                          {opportunity.processType && (
+                            <span className="text-xs text-muted-foreground">
+                              {opportunity.processType}
+                            </span>
+                          )}
+                        </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6">
