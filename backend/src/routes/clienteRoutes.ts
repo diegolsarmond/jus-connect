@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listClientes,
+  getClienteById,
   createCliente,
   updateCliente,
   deleteCliente,
@@ -90,6 +91,30 @@ router.get('/clientes', listClientes);
  *                   type: integer
  */
 router.get('/clientes/ativos/total', countClientesAtivos);
+
+/**
+ * @swagger
+ * /api/clientes/{id}:
+ *   get:
+ *     summary: Obtém um cliente pelo ID
+ *     tags: [Clientes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Dados do cliente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Cliente'
+ *       404:
+ *         description: Cliente não encontrado
+ */
+router.get('/clientes/:id', getClienteById);
 
 /**
  * @swagger
