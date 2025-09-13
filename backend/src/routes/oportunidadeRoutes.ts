@@ -3,6 +3,7 @@ import {
   listOportunidades,
   listOportunidadesByFase,
   getOportunidadeById,
+  listEnvolvidosByOportunidade,
   createOportunidade,
   updateOportunidade,
   updateOportunidadeEtapa,
@@ -18,6 +19,23 @@ const router = Router();
  *     description: Endpoints para gerenciamento de oportunidades
  * components:
  *   schemas:
+ *     OportunidadeEnvolvido:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         oportunidade_id:
+ *           type: integer
+ *         nome:
+ *           type: string
+ *         documento:
+ *           type: string
+ *         telefone:
+ *           type: string
+ *         endereco:
+ *           type: string
+ *         relacao:
+ *           type: string
  *     Oportunidade:
  *       type: object
  *       properties:
@@ -73,18 +91,7 @@ const router = Router();
  *         envolvidos:
  *           type: array
  *           items:
- *             type: object
- *             properties:
- *               nome:
- *                 type: string
- *               cpf_cnpj:
- *                 type: string
- *               telefone:
- *                 type: string
- *               endereco:
- *                 type: string
- *               relacao:
- *                 type: string
+ *             $ref: '#/components/schemas/OportunidadeEnvolvido'
  */
 
 /**
@@ -152,6 +159,30 @@ router.get('/oportunidades/fase/:faseId', listOportunidadesByFase);
  *         description: Oportunidade não encontrada
  */
 router.get('/oportunidades/:id', getOportunidadeById);
+
+/**
+ * @swagger
+ * /api/oportunidades/{id}/envolvidos:
+ *   get:
+ *     summary: Lista os envolvidos de uma oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Lista de envolvidos da oportunidade
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/OportunidadeEnvolvido'
+ */
+router.get('/oportunidades/:id/envolvidos', listEnvolvidosByOportunidade);
 
 /**
  * @swagger
