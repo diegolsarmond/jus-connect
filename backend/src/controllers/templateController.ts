@@ -27,7 +27,7 @@ export const createTemplate = async (req: Request, res: Response) => {
   const { title, content } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO templates (title, content, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id, title, content',
+      'INSERT INTO templates (title, content) VALUES ($1, $2) RETURNING id, title, content',
       [title, content]
     );
     res.status(201).json(result.rows[0]);
@@ -42,7 +42,7 @@ export const updateTemplate = async (req: Request, res: Response) => {
   const { title, content } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE templates SET title = $1, content = $2, updated_at = NOW() WHERE id = $3 RETURNING id, title, content',
+      'UPDATE templates SET title = $1, content = $2 WHERE id = $3 RETURNING id, title, content',
       [title, content, id]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Template not found' });
