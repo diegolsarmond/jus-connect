@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface OpportunityData {
   id: number;
@@ -30,6 +32,57 @@ export default function VisualizarOportunidade() {
     fetchOpportunity();
   }, [id, apiUrl]);
 
+  const fieldLabels: Record<string, string> = {
+    solicitante_nome: "Cliente",
+    tipo_processo_nome: "Tipo de Processo",
+    area: "Área de Atuação",
+    responsible: "Responsável",
+    numero_processo_cnj: "Número do Processo",
+    numero_protocolo: "Número do Protocolo",
+    vara_ou_orgao: "Vara/Órgão",
+    comarca: "Comarca",
+    autor: "Autor",
+    reu: "Réu",
+    terceiro_interessado: "Terceiro Interessado",
+    fase: "Fase",
+    etapa_nome: "Etapa",
+    prazo_proximo: "Prazo Próximo",
+    status: "Status",
+    solicitante_cpf_cnpj: "CPF/CNPJ",
+    solicitante_email: "Email",
+    solicitante_telefone: "Telefone",
+    cliente_tipo: "Tipo de Cliente",
+    valor_causa: "Valor da Causa",
+    valor_honorarios: "Valor dos Honorários",
+    percentual_honorarios: "% Honorários",
+    forma_pagamento: "Forma de Pagamento",
+    contingenciamento: "Contingenciamento",
+    detalhes: "Detalhes",
+    criado_por: "Criado por",
+    data_criacao: "Data de Criação",
+    ultima_atualizacao: "Última Atualização",
+  };
+
+  const formatLabel = (key: string) =>
+    fieldLabels[key] ||
+    key
+      .replace(/_/g, " ")
+      .replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1));
+
+  const renderValue = (value: unknown) => {
+    if (value === null || value === undefined || value === "") {
+      return <span className="text-muted-foreground">—</span>;
+    }
+    if (typeof value === "object") {
+      return (
+        <pre className="whitespace-pre-wrap text-sm">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      );
+    }
+    return String(value);
+  };
+
   if (!opportunity) {
     return (
       <div className="p-6 space-y-4">
@@ -44,41 +97,15 @@ export default function VisualizarOportunidade() {
     );
   }
 
-  const fields: { label: string; key: string }[] = [
-    { label: "Cliente", key: "solicitante_nome" },
-    { label: "Tipo de Processo", key: "tipo_processo_nome" },
-    { label: "Área de Atuação", key: "area" },
-    { label: "Responsável", key: "responsible" },
-    { label: "Número do Processo", key: "numero_processo_cnj" },
-    { label: "Número do Protocolo", key: "numero_protocolo" },
-    { label: "Vara/Órgão", key: "vara_ou_orgao" },
-    { label: "Comarca", key: "comarca" },
-    { label: "Autor", key: "autor" },
-    { label: "Réu", key: "reu" },
-    { label: "Terceiro Interessado", key: "terceiro_interessado" },
-    { label: "Fase", key: "fase" },
-    { label: "Etapa", key: "etapa_nome" },
-    { label: "Prazo Próximo", key: "prazo_proximo" },
-    { label: "Status", key: "status" },
-    { label: "CPF/CNPJ", key: "solicitante_cpf_cnpj" },
-    { label: "Email", key: "solicitante_email" },
-    { label: "Telefone", key: "solicitante_telefone" },
-    { label: "Tipo de Cliente", key: "cliente_tipo" },
-    { label: "Valor da Causa", key: "valor_causa" },
-    { label: "Valor dos Honorários", key: "valor_honorarios" },
-    { label: "% Honorários", key: "percentual_honorarios" },
-    { label: "Forma de Pagamento", key: "forma_pagamento" },
-    { label: "Contingenciamento", key: "contingenciamento" },
-    { label: "Detalhes", key: "detalhes" },
-    { label: "Criado por", key: "criado_por" },
-    { label: "Data de Criação", key: "data_criacao" },
-    { label: "Última Atualização", key: "ultima_atualizacao" },
-  ];
-
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Visualizar Oportunidade</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Visualizar Oportunidade</h1>
+          <p className="text-muted-foreground">
+            Detalhes completos da oportunidade
+          </p>
+        </div>
         <Button variant="outline" onClick={() => navigate(-1)}>
           Voltar
         </Button>
@@ -86,19 +113,25 @@ export default function VisualizarOportunidade() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{opportunity.title || `Oportunidade ${opportunity.id}`}</CardTitle>
+          <CardTitle>
+            {opportunity.title || `Oportunidade ${opportunity.id}`}
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {fields.map((f) => {
-            const value = opportunity[f.key];
-            if (!value) return null;
-            return (
-              <div key={f.key} className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <span className="font-medium">{f.label}:</span>
-                <span>{value}</span>
-              </div>
-            );
-          })}
+        <CardContent>
+          <ScrollArea className="max-h-[70vh]">
+            <Table>
+              <TableBody>
+                {Object.entries(opportunity).map(([key, value]) => (
+                  <TableRow key={key}>
+                    <TableCell className="font-medium w-[40%]">
+                      {formatLabel(key)}
+                    </TableCell>
+                    <TableCell>{renderValue(value)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
         </CardContent>
       </Card>
     </div>
