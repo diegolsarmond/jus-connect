@@ -112,7 +112,7 @@ export default function NovoProcesso() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">Novo Processo</h1>
+        <h1 className="text-3xl font-bold text-foreground">Nova Oportunidade</h1>
         <p className="text-muted-foreground">Cliente: {client.name}</p>
       </div>
 

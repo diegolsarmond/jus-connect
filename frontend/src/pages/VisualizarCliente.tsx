@@ -107,7 +107,7 @@ export default function VisualizarCliente() {
           Voltar
         </Button>
         <Button onClick={() => navigate(`/clientes/${id}/novo-processo`)}>
-          Novo Processo
+          Nova Oportunidade
         </Button>
       </div>
 
