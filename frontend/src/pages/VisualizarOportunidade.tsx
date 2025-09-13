@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { format as dfFormat, parseISO } from "date-fns";
 
 interface OpportunityData {
@@ -41,7 +40,7 @@ export default function VisualizarOportunidade() {
     };
   }, [id, apiUrl]);
 
-  // rótulos conhecidos
+  // mapeamento de rótulos
   const fieldLabels: Record<string, string> = {
     solicitante_nome: "Cliente",
     tipo_processo_nome: "Tipo de Processo",
@@ -83,10 +82,8 @@ export default function VisualizarOportunidade() {
     if (!value) return "—";
     try {
       const d = typeof value === "string" ? parseISO(value) : new Date(String(value));
-      // se inválido, lança e cai no catch
       return dfFormat(d, "dd/MM/yyyy HH:mm");
     } catch {
-      // fallback para locale
       try {
         return new Date(String(value)).toLocaleString();
       } catch {
@@ -113,21 +110,17 @@ export default function VisualizarOportunidade() {
     return `${Math.round(number)}%`;
   };
 
+  // lista de chaves que podem ser copiadas (removi valor_causa e valor_honorarios conforme pedido)
   const shouldShowCopy = (key: string) =>
     [
       "numero_processo_cnj",
       "numero_processo",
       "numero_processo_cn",
-      "numero_processo_cnj",
-      "numero_processo_cn",
-      "numero_processo", // possíveis variações
-      "numero_processo_cnj",
       "numero_protocolo",
-      "valor_causa",
-      "valor_honorarios",
+      // outras chaves curtas que fazem sentido copiar podem ser adicionadas aqui
     ].includes(key);
 
-  // ordem preferencial de exibição — os demais aparecem depois
+  // ordem preferencial (mantive para apresentação)
   const preferredOrder = [
     "numero_processo_cnj",
     "numero_protocolo",
@@ -162,9 +155,53 @@ export default function VisualizarOportunidade() {
     return ordered;
   }, [opportunity]);
 
+  // seções conforme print fornecido
+  const sectionsDef: { key: string; label: string; fields: string[] }[] = [
+    {
+      key: "processo",
+      label: "Dados do Processo",
+      fields: ["numero_processo_cnj", "numero_protocolo", "tipo_processo_nome", "vara_ou_orgao", "comarca"],
+    },
+    {
+      key: "fluxo",
+      label: "Fluxo do Processo",
+      fields: ["fase", "etapa_nome", "prazo_proximo", "status"],
+    },
+    {
+      key: "solicitante",
+      label: "Dados do Solicitante",
+      fields: ["solicitante_nome", "solicitante_cpf_cnpj", "solicitante_email", "solicitante_telefone", "cliente_tipo"],
+    },
+    {
+      key: "envolvidos",
+      label: "Dados dos Envolvidos",
+      fields: ["autor", "reu", "terceiro_interessado", "responsible", "area"],
+    },
+    {
+      key: "detalhes",
+      label: "Detalhes",
+      fields: ["detalhes"],
+    },
+    {
+      key: "honorarios",
+      label: "Honorários",
+      fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "contingenciamento"],
+    },
+    {
+      key: "metadados",
+      label: "Metadados",
+      fields: ["data_criacao", "ultima_atualizacao", "criado_por", "id", "title"],
+    },
+  ];
+
+  // cria um mapa das entradas por chave para fácil consulta
+  const entriesMap = useMemo(() => {
+    if (!opportunity) return new Map<string, unknown>();
+    return new Map(Object.entries(opportunity));
+  }, [opportunity]);
+
   const copyToClipboard = async (text: string) => {
     if (!navigator.clipboard) {
-      // fallback
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed";
@@ -189,15 +226,18 @@ export default function VisualizarOportunidade() {
     }
   };
 
+  // auto-close do snackbar para não ficar cortando o rodapé
+  useEffect(() => {
+    if (!snack.open) return;
+    const t = setTimeout(() => setSnack({ open: false }), 1800); // fecha automaticamente após 1.8s
+    return () => clearTimeout(t);
+  }, [snack.open]);
+
   const onEdit = () => {
-    // stub - redirecionar para rota de edição se existir
     setSnack({ open: true, message: "Ação editar (stub)" });
     console.log("Editar", opportunity?.id);
   };
-  const onDuplicate = () => {
-    setSnack({ open: true, message: "Ação duplicar (stub)" });
-    console.log("Duplicar", opportunity?.id);
-  };
+  // REMOVIDO onDuplicate conforme solicitado
   const onDelete = () => {
     if (!window.confirm("Confirma exclusão desta oportunidade?")) return;
     setSnack({ open: true, message: "Excluído (stub)" });
@@ -210,22 +250,18 @@ export default function VisualizarOportunidade() {
       return <span className="text-muted-foreground">—</span>;
     }
 
-    // datas
     if (/data|prazo|data_criacao|ultima_atualizacao|prazo_proximo/i.test(key)) {
       return <span>{formatDate(value)}</span>;
     }
 
-    // currency
     if (/valor|honorarios|valor_causa|valor_honorarios|valor_total/i.test(key)) {
       return <span>{formatCurrency(value)}</span>;
     }
 
-    // percent
     if (/percentual|%|percent/i.test(key)) {
       return <span>{formatPercent(value)}</span>;
     }
 
-    // detalhes (texto longo)
     if (key === "detalhes" && typeof value === "string") {
       const text = value;
       const preview = text.length > 240 ? text.slice(0, 240) + "…" : text;
@@ -247,7 +283,6 @@ export default function VisualizarOportunidade() {
       );
     }
 
-    // arrays / objects
     if (Array.isArray(value) || typeof value === "object") {
       return (
         <pre className="whitespace-pre-wrap text-sm bg-muted px-2 py-1 rounded">
@@ -256,7 +291,6 @@ export default function VisualizarOportunidade() {
       );
     }
 
-    // boolean
     if (typeof value === "boolean") {
       return <span>{value ? "Sim" : "Não"}</span>;
     }
@@ -280,7 +314,7 @@ export default function VisualizarOportunidade() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header / ações */}
+      {/* Header / ações (REMOVIDO Duplicar) */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Visualizar Oportunidade</h1>
@@ -293,9 +327,6 @@ export default function VisualizarOportunidade() {
           </Button>
           <Button onClick={onEdit} aria-label="Editar oportunidade">
             Editar
-          </Button>
-          <Button variant="outline" onClick={onDuplicate} aria-label="Duplicar oportunidade">
-            Duplicar
           </Button>
           <Button variant="destructive" onClick={onDelete} aria-label="Excluir oportunidade">
             Excluir
@@ -313,71 +344,97 @@ export default function VisualizarOportunidade() {
 
         <CardContent>
           <ScrollArea className="max-h-[70vh]">
-            {/* layout responsivo: em md duas colunas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {orderedEntries.map(([key, value]) => {
-                // esconder campos internos óbvios (id/title) se desejar
-                if (key === "id" || key === "title") return null;
-
-                const label = formatLabel(key);
-                const formatted = renderFormatted(key, value);
-
-                // valor em string para copiar
-                let copyText = "";
-                if (shouldShowCopy(key)) {
-                  // preferências por tipo
-                  if (/valor/i.test(key)) copyText = typeof value === "number" ? String(value) : String(value ?? "");
-                  else copyText = String(value ?? "");
-                }
-
+            <div className="space-y-6">
+              {/* percorre as seções definidas e exibe apenas campos que existam */}
+              {sectionsDef.map((section) => {
+                // filtra campos da seção que existam no objeto
+                const fields = section.fields.filter((f) => entriesMap.has(f));
+                if (fields.length === 0) return null;
                 return (
-                  <section key={key} aria-labelledby={`label-${key}`} className="p-3 bg-transparent rounded">
-                    <dl>
-                      <dt id={`label-${key}`} className="text-sm font-medium text-muted-foreground">
-                        <span title={label}>{label}</span>
-                      </dt>
-                      <dd className="mt-1 flex items-start gap-2">
-                        <div className="flex-1 min-w-0">{formatted}</div>
+                  <section key={section.key} aria-labelledby={`heading-${section.key}`} className="p-4 bg-transparent rounded border border-transparent md:border-0">
+                    <h2 id={`heading-${section.key}`} className="text-lg font-semibold mb-3">
+                      {section.label}
+                    </h2>
 
-                        {shouldShowCopy(key) && value !== null && value !== undefined && value !== "" && (
-                          <button
-                            onClick={() => copyToClipboard(copyText)}
-                            title={`Copiar ${label}`}
-                            aria-label={`Copiar ${label}`}
-                            className="ml-2 inline-flex items-center justify-center rounded px-2 py-1 border text-sm hover:bg-surface"
-                          >
-                            {/* small copy icon (inline SVG) */}
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                          </button>
-                        )}
-                      </dd>
-                    </dl>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                      {fields.map((key) => {
+                        const value = entriesMap.get(key);
+                        const label = formatLabel(key);
+                        const formatted = renderFormatted(key, value);
+
+                        // valor para copiar apenas se chave permitida
+                        const copyText = shouldShowCopy(key) && value !== undefined && value !== null ? String(value) : "";
+
+                        return (
+                          <div key={key} className="p-2">
+                            <dl>
+                              <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
+                              <dd className="mt-1 flex items-start gap-2">
+                                <div className="flex-1 min-w-0">{formatted}</div>
+
+                                {shouldShowCopy(key) && copyText && (
+                                  <button
+                                    onClick={() => copyToClipboard(copyText)}
+                                    title={`Copiar ${label}`}
+                                    aria-label={`Copiar ${label}`}
+                                    className="ml-2 inline-flex items-center justify-center rounded px-2 py-1 border text-sm hover:bg-surface"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                  </button>
+                                )}
+                              </dd>
+                            </dl>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </section>
                 );
               })}
+
+              {/* Metadados extras: campos que não estão nas seções acima */}
+              <section aria-labelledby="heading-extras" className="p-4">
+                <h2 id="heading-extras" className="text-lg font-semibold mb-3">
+                  Metadados
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                  {orderedEntries
+                    .filter(([k]) => {
+                      // já apresentados nas seções? se não, mostrará aqui (e exclui id/title já mostrados se preferir)
+                      const inAnySection = sectionsDef.some((s) => s.fields.includes(k));
+                      return !inAnySection && k !== "id" && k !== "title";
+                    })
+                    .map(([k, v]) => (
+                      <div key={k} className="p-2">
+                        <dl>
+                          <dt className="text-sm font-medium text-muted-foreground">{formatLabel(k)}</dt>
+                          <dd className="mt-1">{renderFormatted(k, v)}</dd>
+                        </dl>
+                      </div>
+                    ))}
+                </div>
+              </section>
             </div>
           </ScrollArea>
         </CardContent>
       </Card>
 
-      {/* snackbar / feedback simples */}
+      {/* snackbar / feedback simples com auto-close */}
       {snack.open && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed left-1/2 -translate-x-1/2 bottom-6 z-50"
-          onAnimationEnd={() => {
-            // auto-hide after a pequena animação; simples timeout melhor
-          }}
+          className="fixed left-1/2 -translate-x-1/2 bottom-6 z-50 transition-opacity"
         >
-          <div className="bg-black/90 text-white px-4 py-2 rounded shadow">
-            {snack.message ?? "Feito"}
+          <div className="bg-black/90 text-white px-4 py-2 rounded shadow flex items-center gap-4">
+            <span>{snack.message ?? "Feito"}</span>
             <button
               onClick={() => setSnack({ open: false })}
-              className="ml-3 underline text-xs"
+              className="underline text-xs"
               aria-label="Fechar notificação"
             >
               Fechar
