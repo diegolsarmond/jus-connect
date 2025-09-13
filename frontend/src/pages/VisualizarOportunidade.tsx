@@ -234,6 +234,7 @@ export default function VisualizarOportunidade() {
     valor_honorarios: "Valor dos Honorários",
     percentual_honorarios: "% Honorários",
     forma_pagamento: "Forma de Pagamento",
+    parcelas: "Número de Parcelas",
     contingenciamento: "Contingenciamento",
     detalhes: "Detalhes",
     documentos_anexados: "Documentos Anexados",
@@ -359,7 +360,7 @@ export default function VisualizarOportunidade() {
     {
       key: "honorarios",
       label: "Honorários",
-      fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "contingenciamento"],
+      fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "parcelas", "contingenciamento"],
     },
     {
       key: "metadados",
@@ -429,6 +430,20 @@ export default function VisualizarOportunidade() {
 
     if (/valor|honorarios|valor_causa|valor_honorarios|valor_total/i.test(key)) {
       return <span>{formatCurrency(value)}</span>;
+    }
+
+    if (key === "percentual_honorarios") {
+      let percent = value;
+      if (
+        (percent === null || percent === undefined || percent === "") &&
+        entriesMap.get("valor_causa") &&
+        entriesMap.get("valor_honorarios")
+      ) {
+        const vc = Number(entriesMap.get("valor_causa"));
+        const vh = Number(entriesMap.get("valor_honorarios"));
+        if (vc) percent = (vh / vc) * 100;
+      }
+      return <span>{formatPercent(percent)}</span>;
     }
 
     if (/percentual|%|percent/i.test(key)) {

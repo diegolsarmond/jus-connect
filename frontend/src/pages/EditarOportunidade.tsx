@@ -66,6 +66,7 @@ const formSchema = z.object({
   valor_honorarios: z.string().optional(),
   percentual_honorarios: z.string().optional(),
   forma_pagamento: z.string().optional(),
+  parcelas: z.string().optional(),
   contingenciamento: z.string().optional(),
   detalhes: z.string().optional(),
   documentos_anexados: z.any().optional(),
@@ -128,6 +129,7 @@ export default function EditarOportunidade() {
       valor_honorarios: "",
       percentual_honorarios: "",
       forma_pagamento: "",
+      parcelas: "",
       contingenciamento: "",
       detalhes: "",
       documentos_anexados: undefined,
@@ -270,6 +272,7 @@ export default function EditarOportunidade() {
             ? String(data.percentual_honorarios)
             : "",
           forma_pagamento: data.forma_pagamento || "",
+          parcelas: data.parcelas ? String(data.parcelas) : "",
           contingenciamento: data.contingenciamento || "",
           detalhes: data.detalhes || "",
           documentos_anexados: undefined,
@@ -313,6 +316,7 @@ export default function EditarOportunidade() {
   }, [id, apiUrl, form]);
 
   const faseValue = form.watch("fase");
+  const formaPagamento = form.watch("forma_pagamento");
   useEffect(() => {
     if (!faseValue) return;
     const loadEtapas = async () => {
@@ -341,6 +345,17 @@ export default function EditarOportunidade() {
     return digits ? Number(digits) : null;
   };
 
+  const valorCausaWatch = form.watch("valor_causa");
+  const valorHonorariosWatch = form.watch("valor_honorarios");
+  useEffect(() => {
+    const vc = parseCurrency(valorCausaWatch || "");
+    const vh = parseCurrency(valorHonorariosWatch || "");
+    if (vc && vc > 0 && vh !== null) {
+      const percent = Math.round((vh / vc) * 100);
+      form.setValue("percentual_honorarios", `${percent}%`);
+    }
+  }, [valorCausaWatch, valorHonorariosWatch, form]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       const payload = {
@@ -362,6 +377,7 @@ export default function EditarOportunidade() {
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
         forma_pagamento: values.forma_pagamento || null,
+        parcelas: values.parcelas ? Number(values.parcelas) : null,
         contingenciamento: values.contingenciamento || null,
         detalhes: values.detalhes || null,
         documentos_anexados: null,
@@ -999,6 +1015,33 @@ export default function EditarOportunidade() {
                           </FormItem>
                         )}
                       />
+
+                      {formaPagamento === "Parcelado" && (
+                        <FormField
+                          control={form.control}
+                          name="parcelas"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Número de Parcelas</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {[...Array(12)].map((_, i) => (
+                                    <SelectItem key={i + 1} value={String(i + 1)}>
+                                      {i + 1}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
                       <FormField
                         control={form.control}
