@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, MoreHorizontal, DollarSign, Calendar, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +32,7 @@ interface Stage {
 
 export default function Pipeline() {
   const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+  const navigate = useNavigate();
 
   const [stages, setStages] = useState<Stage[]>([]);
 
@@ -175,7 +177,10 @@ export default function Pipeline() {
           <h1 className="text-3xl font-bold text-foreground">Pipeline de Vendas</h1>
           <p className="text-muted-foreground">Acompanhe suas oportunidades</p>
         </div>
-        <Button className="bg-primary hover:bg-primary-hover">
+        <Button
+          className="bg-primary hover:bg-primary-hover"
+          onClick={() => navigate("/pipeline/nova-oportunidade")}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Nova Oportunidade
         </Button>
