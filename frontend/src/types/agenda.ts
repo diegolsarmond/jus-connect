@@ -12,6 +12,7 @@ export interface Appointment {
   title: string;
   description?: string;
   type: AppointmentType;
+  typeName?: string;
   status: AppointmentStatus;
   date: Date;
   startTime: string;

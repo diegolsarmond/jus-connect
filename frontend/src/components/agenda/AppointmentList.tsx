@@ -162,7 +162,7 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
                           appointmentTypes[appointment.type].color
                         )} />
                         <span className="text-sm font-medium">
-                          {appointmentTypes[appointment.type].label}
+                          {appointment.typeName ?? appointmentTypes[appointment.type].label}
                         </span>
                       </div>
                     </TableCell>

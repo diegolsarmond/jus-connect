@@ -128,6 +128,7 @@ export default function Agenda() {
             title: r.titulo ?? '(sem título)',
             description: r.descricao ?? undefined,
             type: typeById || typeByName || 'outro',
+            typeName: r.tipo_evento ?? undefined,
             status: mapStatus(r.status),
             date: toDateOnly(r.data),
             startTime: r.hora_inicio,
