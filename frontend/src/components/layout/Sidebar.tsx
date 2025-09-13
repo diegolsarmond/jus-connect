@@ -74,6 +74,10 @@ const navigation: NavItem[] = [
             name: "Situação do Cliente",
             href: "/configuracoes/parametros/situacao-cliente",
           },
+          {
+            name: "Etiquetas",
+            href: "/configuracoes/parametros/etiquetas",
+          },
         ],
       },
     ],
