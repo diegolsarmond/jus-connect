@@ -258,7 +258,7 @@ export default function EditarOportunidade() {
             data.envolvidos && data.envolvidos.length > 0
               ? data.envolvidos.map((env: any) => ({
                   nome: env.nome || "",
-                  cpf_cnpj: env.documento || "",
+                  cpf_cnpj: env.cpf_cnpj || env.documento || "",
                   telefone: env.telefone || "",
                   endereco: env.endereco || "",
                   relacao: env.relacao || "",
