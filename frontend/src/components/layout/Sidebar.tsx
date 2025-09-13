@@ -67,6 +67,10 @@ const navigation: NavItem[] = [
             href: "/configuracoes/parametros/situacao-processo",
           },
           {
+            name: "Tipo de Processo",
+            href: "/configuracoes/parametros/tipo-processo",
+          },
+          {
             name: "Tipo de Evento",
             href: "/configuracoes/parametros/tipo-evento",
           },
