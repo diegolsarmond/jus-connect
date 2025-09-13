@@ -48,7 +48,7 @@ export default function Agenda() {
         const json = await response.json();
 
         // aceita array direto ou objetos { data: [...] } / { rows: [...] } / { agendas: [...] }
-        const rows: any[] =
+        const rows: unknown[] =
           Array.isArray(json) ? json :
           Array.isArray(json?.data) ? json.data :
           Array.isArray(json?.rows) ? json.rows :
@@ -132,7 +132,7 @@ export default function Agenda() {
             date: toDateOnly(r.data),
             startTime: r.hora_inicio,
             endTime: r.hora_fim ?? undefined,
-            cliente: r.cliente ,
+            clientName: r.cliente ?? undefined,
             location: r.local ?? undefined,
             reminders: String(r.lembrete) === 'true' || Number(r.lembrete) === 1,
             createdAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
