@@ -316,11 +316,11 @@ export default function Usuarios() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => navigate(`/configuracoes/usuarios/${user.id}/editar`)}>
                           <Edit className="h-4 w-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => navigate(`/configuracoes/usuarios/${user.id}`)}>
                           Ver Perfil
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
