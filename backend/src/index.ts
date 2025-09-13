@@ -37,7 +37,7 @@ app.use((req, res, next) => {
   );
   res.header(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, access-token, x-authorization-id, x-client-id, id-account'
   );
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
