@@ -1,6 +1,7 @@
 import express from 'express';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
+import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
 import escritorioRoutes from './routes/escritorioRoutes';
 import perfilRoutes from './routes/perfilRoutes';
 import planoRoutes from './routes/planoRoutes';
@@ -39,6 +40,7 @@ app.use((req, res, next) => {
 
 app.use('/api', areaAtuacaoRoutes);
 app.use('/api', tipoEventoRoutes);
+app.use('/api', tipoProcessoRoutes);
 app.use('/api', escritorioRoutes);
 app.use('/api', perfilRoutes);
 app.use('/api', planoRoutes);
