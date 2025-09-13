@@ -12,6 +12,23 @@ export const listUsuarios = async (_req: Request, res: Response) => {
   }
 };
 
+export const getUsuarioById = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao  FROM public."vw.usuarios" WHERE id = $1',
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createUsuario = async (req: Request, res: Response) => {
   const {
     nome_completo,
