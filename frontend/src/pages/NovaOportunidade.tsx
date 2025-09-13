@@ -50,7 +50,6 @@ const formSchema = z.object({
   solicitante_cpf_cnpj: z.string().optional(),
   solicitante_email: z.string().optional(),
   solicitante_telefone: z.string().optional(),
-  solicitante_endereco: z.string().optional(),
   cliente_tipo: z.string().optional(),
   promovido_nome: z.string().optional(),
   promovido_cpf_cnpj: z.string().optional(),
@@ -80,7 +79,6 @@ interface ClientOption extends Option {
   cpf_cnpj?: string;
   email?: string;
   telefone?: string;
-  endereco?: string;
   tipo?: string;
 }
 
@@ -117,7 +115,6 @@ export default function NovaOportunidade() {
       solicitante_cpf_cnpj: "",
       solicitante_email: "",
       solicitante_telefone: "",
-      solicitante_endereco: "",
       cliente_tipo: "",
       promovido_nome: "",
       promovido_cpf_cnpj: "",
@@ -164,11 +161,15 @@ export default function NovaOportunidade() {
             return {
               id: String(item.id),
               name: item.nome,
-              cpf_cnpj: item.cpf_cnpj,
+              cpf_cnpj: item.documento,
               email: item.email,
               telefone: item.telefone,
-              endereco: item.endereco,
-              tipo: item.tipo,
+              tipo:
+                item.tipo === 1 || item.tipo === "1"
+                  ? "Pessoa Física"
+                  : item.tipo === 2 || item.tipo === "2"
+                  ? "Pessoa Jurídica"
+                  : undefined,
             } as ClientOption;
           })
         );
@@ -250,7 +251,6 @@ export default function NovaOportunidade() {
       form.setValue("solicitante_cpf_cnpj", client.cpf_cnpj || "");
       form.setValue("solicitante_email", client.email || "");
       form.setValue("solicitante_telefone", client.telefone || "");
-      form.setValue("solicitante_endereco", client.endereco || "");
       form.setValue("cliente_tipo", client.tipo || "");
     }
   };
@@ -619,20 +619,6 @@ export default function NovaOportunidade() {
                             <FormLabel>Telefone</FormLabel>
                             <FormControl>
                               <Input disabled {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="solicitante_endereco"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Endereço</FormLabel>
-                            <FormControl>
-                              <Textarea disabled {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
