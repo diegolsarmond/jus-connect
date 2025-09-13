@@ -13,6 +13,7 @@ import VisualizarProcesso from "./pages/VisualizarProcesso";
 import ContratoPreview from "./pages/ContratoPreview";
 import Pipeline from "./pages/Pipeline";
 import Agenda from "./pages/Agenda";
+import Tarefas from "./pages/Tarefas";
 import Processos from "./pages/Processos";
 import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/clientes/:id" element={<VisualizarCliente />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/agenda" element={<Agenda />} />
+            <Route path="/tarefas" element={<Tarefas />} />
             <Route path="/processos" element={<Processos />} />
             <Route path="/documentos" element={<div className="p-6"><h1 className="text-3xl font-bold">Documentos</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
             <Route path="/relatorios" element={<div className="p-6"><h1 className="text-3xl font-bold">Relatórios</h1><p className="text-muted-foreground">Em desenvolvimento</p></div>} />
