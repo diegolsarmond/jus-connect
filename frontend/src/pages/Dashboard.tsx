@@ -82,7 +82,7 @@ export default function Dashboard() {
             .map((r) => ({
               title: r.titulo ?? "(sem título)",
               time: r.hora_inicio,
-              date: r.data,
+              date: new Date(r.data).toLocaleDateString("pt-BR"),
               type: r.tipo_evento || "Compromisso",
             }))
             .slice(0, 3);
