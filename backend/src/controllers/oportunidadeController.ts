@@ -60,6 +60,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
     detalhes,
     documentos_anexados,
     criado_por,
+    envolvidos,
   } = req.body;
 
   try {
@@ -97,7 +98,26 @@ export const createOportunidade = async (req: Request, res: Response) => {
         criado_por,
       ]
     );
-    res.status(201).json(result.rows[0]);
+    const oportunidade = result.rows[0];
+    if (Array.isArray(envolvidos) && envolvidos.length > 0) {
+      const queries = envolvidos.map((env: any) =>
+        pool.query(
+          `INSERT INTO public.oportunidade_envolvidos
+           (oportunidade_id, nome, documento, telefone, endereco, relacao)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            oportunidade.id,
+            env.nome || null,
+            env.cpf_cnpj || null,
+            env.telefone || null,
+            env.endereco || null,
+            env.relacao || null,
+          ]
+        )
+      );
+      await Promise.all(queries);
+    }
+    res.status(201).json(oportunidade);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -127,6 +147,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
     detalhes,
     documentos_anexados,
     criado_por,
+    envolvidos,
   } = req.body;
 
   try {
@@ -184,6 +205,28 @@ export const updateOportunidade = async (req: Request, res: Response) => {
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Oportunidade não encontrada' });
+    }
+    if (Array.isArray(envolvidos)) {
+      await pool.query(
+        'DELETE FROM public.oportunidade_envolvidos WHERE oportunidade_id = $1',
+        [id]
+      );
+      const queries = envolvidos.map((env: any) =>
+        pool.query(
+          `INSERT INTO public.oportunidade_envolvidos
+           (oportunidade_id, nome, documento, telefone, endereco, relacao)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            id,
+            env.nome || null,
+            env.cpf_cnpj || null,
+            env.telefone || null,
+            env.endereco || null,
+            env.relacao || null,
+          ]
+        )
+      );
+      await Promise.all(queries);
     }
     res.json(result.rows[0]);
   } catch (error) {

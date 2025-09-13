@@ -68,6 +68,21 @@ const router = Router();
  *         ultima_atualizacao:
  *           type: string
  *           format: date-time
+ *         envolvidos:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               nome:
+ *                 type: string
+ *               cpf_cnpj:
+ *                 type: string
+ *               telefone:
+ *                 type: string
+ *               endereco:
+ *                 type: string
+ *               relacao:
+ *                 type: string
  */
 
 /**
@@ -166,6 +181,21 @@ router.get('/oportunidades/:id', getOportunidadeById);
  *                 type: integer
  *               criado_por:
  *                 type: integer
+ *               envolvidos:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     nome:
+ *                       type: string
+ *                     cpf_cnpj:
+ *                       type: string
+ *                     telefone:
+ *                       type: string
+ *                     endereco:
+ *                       type: string
+ *                     relacao:
+ *                       type: string
  *     responses:
  *       201:
  *         description: Oportunidade criada
@@ -236,6 +266,21 @@ router.post('/oportunidades', createOportunidade);
  *                 type: integer
  *               criado_por:
  *                 type: integer
+ *               envolvidos:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     nome:
+ *                       type: string
+ *                     cpf_cnpj:
+ *                       type: string
+ *                     telefone:
+ *                       type: string
+ *                     endereco:
+ *                       type: string
+ *                     relacao:
+ *                       type: string
  *     responses:
  *       200:
  *         description: Oportunidade atualizada
