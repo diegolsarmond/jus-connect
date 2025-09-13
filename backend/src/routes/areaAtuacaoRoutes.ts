@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listAreas,
+  getAreaById,
   createArea,
   updateArea,
   deleteArea,
@@ -46,6 +47,30 @@ const router = Router();
  *                 $ref: '#/components/schemas/AreaAtuacao'
  */
 router.get('/areas', listAreas);
+
+/**
+ * @swagger
+ * /api/areas/{id}:
+ *   get:
+ *     summary: Obtém uma área de atuação pelo ID
+ *     tags: [AreaAtuacao]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Área encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AreaAtuacao'
+ *       404:
+ *         description: Área não encontrada
+ */
+router.get('/areas/:id', getAreaById);
 
 /**
  * @swagger
