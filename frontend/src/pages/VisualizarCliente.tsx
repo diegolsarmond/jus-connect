@@ -106,9 +106,17 @@ export default function VisualizarCliente() {
         <Button variant="outline" onClick={() => navigate(-1)}>
           Voltar
         </Button>
-        <Button onClick={() => navigate(`/clientes/${id}/novo-processo`)}>
-          Nova Oportunidade
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/clientes/${id}/editar`)}
+          >
+            Editar
+          </Button>
+          <Button onClick={() => navigate(`/clientes/${id}/novo-processo`)}>
+            Nova Oportunidade
+          </Button>
+        </div>
       </div>
 
       <Card>
