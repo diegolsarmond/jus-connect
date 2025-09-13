@@ -32,6 +32,8 @@ const router = Router();
  *           default: true
  *         ordem:
  *           type: integer
+ *         id_fluxo_trabalho:
+ *           type: integer
  *         datacriacao:
  *           type: string
  *           format: date-time
@@ -77,6 +79,8 @@ router.get('/etiquetas', listEtiquetas);
  *                 default: true
  *               ordem:
  *                 type: integer
+ *               id_fluxo_trabalho:
+ *                 type: integer
  *     responses:
  *       201:
  *         description: Etiqueta criada
@@ -114,6 +118,8 @@ router.post('/etiquetas', createEtiqueta);
  *                 type: boolean
  *                 default: true
  *               ordem:
+ *                 type: integer
+ *               id_fluxo_trabalho:
  *                 type: integer
  *     responses:
  *       200:
