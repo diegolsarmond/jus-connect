@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -51,20 +51,24 @@ const formSchema = z.object({
   solicitante_email: z.string().optional(),
   solicitante_telefone: z.string().optional(),
   cliente_tipo: z.string().optional(),
-  promovido_nome: z.string().optional(),
-  promovido_cpf_cnpj: z.string().optional(),
-  promovido_telefone: z.string().optional(),
-  promovido_endereco: z.string().optional(),
-  promovido_relacao: z.string().optional(),
+  envolvidos: z
+    .array(
+      z.object({
+        nome: z.string().optional(),
+        cpf_cnpj: z.string().optional(),
+        telefone: z.string().optional(),
+        endereco: z.string().optional(),
+        relacao: z.string().optional(),
+      }),
+    )
+    .optional(),
   valor_causa: z.string().optional(),
   valor_honorarios: z.string().optional(),
   percentual_honorarios: z.string().optional(),
   forma_pagamento: z.string().optional(),
   contingenciamento: z.string().optional(),
-  anotacoes_gerais: z.string().optional(),
-  fatos_fundamentos: z.string().optional(),
+  detalhes: z.string().optional(),
   documentos_anexados: z.any().optional(),
-  observacoes_internas: z.string().optional(),
   criado_por: z.string().optional(),
   data_criacao: z.string().optional(),
   ultima_atualizacao: z.string().optional(),
@@ -116,25 +120,27 @@ export default function NovaOportunidade() {
       solicitante_email: "",
       solicitante_telefone: "",
       cliente_tipo: "",
-      promovido_nome: "",
-      promovido_cpf_cnpj: "",
-      promovido_telefone: "",
-      promovido_endereco: "",
-      promovido_relacao: "",
+      envolvidos: [
+        { nome: "", cpf_cnpj: "", telefone: "", endereco: "", relacao: "" },
+      ],
       valor_causa: "",
       valor_honorarios: "",
       percentual_honorarios: "",
       forma_pagamento: "",
       contingenciamento: "",
-      anotacoes_gerais: "",
-      fatos_fundamentos: "",
+      detalhes: "",
       documentos_anexados: undefined,
-      observacoes_internas: "",
       criado_por: "Sistema",
       data_criacao: new Date().toISOString().split("T")[0],
       ultima_atualizacao: new Date().toISOString().split("T")[0],
     },
   });
+
+  const {
+    fields: envolvidosFields,
+    append: addEnvolvido,
+    remove: removeEnvolvido,
+  } = useFieldArray({ control: form.control, name: "envolvidos" });
 
   const fetchJson = async (url: string): Promise<unknown[]> => {
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -245,14 +251,28 @@ export default function NovaOportunidade() {
     navigate("/pipeline");
   };
 
-  const handleSelectClient = (id: string) => {
-    const client = clients.find((c) => c.id === id);
+  const handleSelectClient = (name: string) => {
+    const client = clients.find((c) => c.name === name);
     if (client) {
       form.setValue("solicitante_cpf_cnpj", client.cpf_cnpj || "");
       form.setValue("solicitante_email", client.email || "");
       form.setValue("solicitante_telefone", client.telefone || "");
       form.setValue("cliente_tipo", client.tipo || "");
     }
+  };
+
+  const formatCurrency = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    const number = Number(digits) / 100;
+    return number.toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    });
+  };
+
+  const formatPercent = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits ? `${digits}%` : "";
   };
 
   return (
@@ -262,6 +282,7 @@ export default function NovaOportunidade() {
           <h1 className="text-3xl font-bold text-foreground">Nova Oportunidade</h1>
           <p className="text-muted-foreground">Crie uma nova oportunidade</p>
         </div>
+        <Button variant="outline" type="button" onClick={() => navigate("/pipeline")}>Cancelar</Button>
       </div>
 
       <Card>
@@ -517,26 +538,21 @@ export default function NovaOportunidade() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Nome</FormLabel>
-                            <Select
-                              onValueChange={(value) => {
-                                field.onChange(value);
-                                handleSelectClient(value);
-                              }}
-                              value={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {clients.map((c) => (
-                                  <SelectItem key={c.id} value={c.id}>
-                                    {c.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <FormControl>
+                              <Input
+                                list="solicitante-options"
+                                {...field}
+                                onChange={(e) => {
+                                  field.onChange(e.target.value);
+                                  handleSelectClient(e.target.value);
+                                }}
+                              />
+                            </FormControl>
+                            <datalist id="solicitante-options">
+                              {clients.map((c) => (
+                                <option key={c.id} value={c.name} />
+                              ))}
+                            </datalist>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -604,87 +620,116 @@ export default function NovaOportunidade() {
                 <AccordionItem value="dados-promovido">
                   <AccordionTrigger>Dados dos Envolvidos</AccordionTrigger>
                   <AccordionContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="promovido_nome"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nome</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="promovido_cpf_cnpj"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>CPF/CNPJ</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="promovido_telefone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Telefone</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="promovido_endereco"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Endereço</FormLabel>
-                            <FormControl>
-                              <Textarea {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="promovido_relacao"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Relação com o processo</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
+                    {envolvidosFields.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="grid grid-cols-1 md:grid-cols-2 gap-4 border p-4 mb-4 rounded-md"
+                      >
+                        <FormField
+                          control={form.control}
+                          name={`envolvidos.${index}.nome`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nome</FormLabel>
                               <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
+                                <Input {...field} />
                               </FormControl>
-                              <SelectContent>
-                                <SelectItem value="Réu">Réu</SelectItem>
-                                <SelectItem value="Reclamante">Reclamante</SelectItem>
-                                <SelectItem value="Exequente">Exequente</SelectItem>
-                                <SelectItem value="Outro">Outro</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`envolvidos.${index}.cpf_cnpj`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>CPF/CNPJ</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`envolvidos.${index}.telefone`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Telefone</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`envolvidos.${index}.endereco`}
+                          render={({ field }) => (
+                            <FormItem className="md:col-span-2">
+                              <FormLabel>Endereço</FormLabel>
+                              <FormControl>
+                                <Textarea {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`envolvidos.${index}.relacao`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Relação com o processo</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Réu">Réu</SelectItem>
+                                  <SelectItem value="Reclamante">Reclamante</SelectItem>
+                                  <SelectItem value="Exequente">Exequente</SelectItem>
+                                  <SelectItem value="Outro">Outro</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="flex md:col-span-2 justify-end">
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => removeEnvolvido(index)}
+                          >
+                            Remover
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        addEnvolvido({
+                          nome: "",
+                          cpf_cnpj: "",
+                          telefone: "",
+                          endereco: "",
+                          relacao: "",
+                        })
+                      }
+                    >
+                      Adicionar Envolvido
+                    </Button>
                   </AccordionContent>
                 </AccordionItem>
 
@@ -696,24 +741,10 @@ export default function NovaOportunidade() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
-                        name="anotacoes_gerais"
+                        name="detalhes"
                         render={({ field }) => (
                           <FormItem className="md:col-span-2">
-                            <FormLabel>Anotações Gerais</FormLabel>
-                            <FormControl>
-                              <Textarea {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="fatos_fundamentos"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Fatos e Fundamentos</FormLabel>
+                            <FormLabel>Detalhes</FormLabel>
                             <FormControl>
                               <Textarea {...field} />
                             </FormControl>
@@ -739,20 +770,6 @@ export default function NovaOportunidade() {
                           </FormItem>
                         )}
                       />
-
-                      <FormField
-                        control={form.control}
-                        name="observacoes_internas"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Observações Internas</FormLabel>
-                            <FormControl>
-                              <Textarea {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
                     </div>
                   </AccordionContent>
                 </AccordionItem>
@@ -768,7 +785,11 @@ export default function NovaOportunidade() {
                           <FormItem>
                             <FormLabel>Expectativa / Valor da Causa</FormLabel>
                             <FormControl>
-                              <Input type="number" {...field} />
+                              <Input
+                                {...field}
+                                value={field.value}
+                                onChange={(e) => field.onChange(formatCurrency(e.target.value))}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -782,7 +803,11 @@ export default function NovaOportunidade() {
                           <FormItem>
                             <FormLabel>Valor dos Honorários</FormLabel>
                             <FormControl>
-                              <Input type="number" {...field} />
+                              <Input
+                                {...field}
+                                value={field.value}
+                                onChange={(e) => field.onChange(formatCurrency(e.target.value))}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -796,7 +821,12 @@ export default function NovaOportunidade() {
                           <FormItem>
                             <FormLabel>Percentual de Honorários</FormLabel>
                             <FormControl>
-                              <Input type="number" {...field} />
+                              <Input
+                                {...field}
+                                className="w-24"
+                                value={field.value}
+                                onChange={(e) => field.onChange(formatPercent(e.target.value))}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
