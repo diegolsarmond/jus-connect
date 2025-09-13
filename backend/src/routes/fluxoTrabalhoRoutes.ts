@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listFluxosTrabalho,
+  listFluxoTrabalhoMenus,
   createFluxoTrabalho,
   updateFluxoTrabalho,
   deleteFluxoTrabalho,
@@ -46,6 +47,31 @@ const router = Router();
  *                 $ref: '#/components/schemas/FluxoTrabalho'
  */
 router.get('/fluxos-trabalho', listFluxosTrabalho);
+
+/**
+ * @swagger
+ * /api/fluxos-trabalho/menus:
+ *   get:
+ *     summary: Lista menus dos fluxos de trabalho
+ *     tags: [FluxosTrabalho]
+ *     responses:
+ *       200:
+ *         description: Lista de menus dos fluxos de trabalho
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   nome:
+ *                     type: string
+ *                   ordem:
+ *                     type: integer
+ */
+router.get('/fluxos-trabalho/menus', listFluxoTrabalhoMenus);
 
 /**
  * @swagger

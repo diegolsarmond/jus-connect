@@ -13,6 +13,21 @@ export const listFluxosTrabalho = async (_req: Request, res: Response) => {
   }
 };
 
+export const listFluxoTrabalhoMenus = async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, nome, ordem
+       FROM public.fluxo_trabalho
+       WHERE ativo IS TRUE AND exibe_menu IS TRUE
+       ORDER BY ordem ASC`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createFluxoTrabalho = async (req: Request, res: Response) => {
   const { nome, ativo } = req.body;
   try {
