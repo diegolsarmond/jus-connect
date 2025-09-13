@@ -38,7 +38,7 @@ export const listOportunidadesByFase = async (req: Request, res: Response) => {
 export const getOportunidadeById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const result = await pool.query(
+    const oportunidadeResult = await pool.query(
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, contingenciamento,
@@ -46,10 +46,24 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
        FROM public.oportunidades WHERE id = $1`,
       [id]
     );
-    if (result.rowCount === 0) {
+    if (oportunidadeResult.rowCount === 0) {
       return res.status(404).json({ error: 'Oportunidade não encontrada' });
     }
-    res.json(result.rows[0]);
+    const envolvidosResult = await pool.query(
+      `SELECT nome, documento, telefone, endereco, relacao
+       FROM public.oportunidade_envolvidos
+       WHERE oportunidade_id = $1`,
+      [id]
+    );
+    const oportunidade = oportunidadeResult.rows[0];
+    oportunidade.envolvidos = envolvidosResult.rows.map((env) => ({
+      nome: env.nome,
+      cpf_cnpj: env.documento,
+      telefone: env.telefone,
+      endereco: env.endereco,
+      relacao: env.relacao,
+    }));
+    res.json(oportunidade);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

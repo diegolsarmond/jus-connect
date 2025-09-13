@@ -121,19 +121,56 @@ export default function VisualizarOportunidade() {
           <ScrollArea className="max-h-[70vh]">
             <Table>
               <TableBody>
-                {Object.entries(opportunity).map(([key, value]) => (
-                  <TableRow key={key}>
-                    <TableCell className="font-medium w-[40%]">
-                      {formatLabel(key)}
-                    </TableCell>
-                    <TableCell>{renderValue(value)}</TableCell>
-                  </TableRow>
-                ))}
+                {Object.entries(opportunity)
+                  .filter(([key]) => key !== "envolvidos")
+                  .map(([key, value]) => (
+                    <TableRow key={key}>
+                      <TableCell className="font-medium w-[40%]">
+                        {formatLabel(key)}
+                      </TableCell>
+                      <TableCell>{renderValue(value)}</TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {Array.isArray(opportunity.envolvidos) && opportunity.envolvidos.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Envolvidos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableBody>
+                {opportunity.envolvidos.map((env, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell className="font-medium w-[40%]">
+                      {formatLabel(env.relacao as string)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1 text-sm">
+                        {env.nome && <div>Nome: {env.nome as string}</div>}
+                        {env.cpf_cnpj && (
+                          <div>CPF/CNPJ: {env.cpf_cnpj as string}</div>
+                        )}
+                        {env.telefone && (
+                          <div>Telefone: {env.telefone as string}</div>
+                        )}
+                        {env.endereco && (
+                          <div>Endereço: {env.endereco as string}</div>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

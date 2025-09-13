@@ -173,11 +173,6 @@ export default function VisualizarOportunidade() {
       fields: ["solicitante_nome", "solicitante_cpf_cnpj", "solicitante_email", "solicitante_telefone", "cliente_tipo"],
     },
     {
-      key: "envolvidos",
-      label: "Dados dos Envolvidos",
-      fields: ["autor", "reu", "terceiro_interessado", "responsible", "area"],
-    },
-    {
       key: "detalhes",
       label: "Detalhes",
       fields: ["detalhes"],
@@ -394,6 +389,41 @@ export default function VisualizarOportunidade() {
                   </section>
                 );
               })}
+
+              {Array.isArray(opportunity.envolvidos) && opportunity.envolvidos.length > 0 && (
+                <section
+                  key="envolvidos"
+                  aria-labelledby="heading-envolvidos"
+                  className="p-4"
+                >
+                  <h2 id="heading-envolvidos" className="text-lg font-semibold mb-3">
+                    Envolvidos
+                  </h2>
+                  <div className="space-y-4">
+                    {opportunity.envolvidos.map((env, idx) => (
+                      <div key={idx} className="border rounded p-4">
+                        {env.relacao && (
+                          <p className="font-medium mb-2">
+                            {String(env.relacao)}
+                          </p>
+                        )}
+                        <ul className="text-sm space-y-1">
+                          {env.nome && <li>Nome: {String(env.nome)}</li>}
+                          {env.cpf_cnpj && (
+                            <li>CPF/CNPJ: {String(env.cpf_cnpj)}</li>
+                          )}
+                          {env.telefone && (
+                            <li>Telefone: {String(env.telefone)}</li>
+                          )}
+                          {env.endereco && (
+                            <li>Endereço: {String(env.endereco)}</li>
+                          )}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* Metadados extras: campos que não estão nas seções acima */}
               <section aria-labelledby="heading-extras" className="p-4">
