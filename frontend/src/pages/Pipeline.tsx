@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Plus, MoreHorizontal, DollarSign, Calendar, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,15 +33,19 @@ interface Stage {
 export default function Pipeline() {
   const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
   const navigate = useNavigate();
+  const { fluxoId } = useParams<{ fluxoId?: string }>();
 
   const [stages, setStages] = useState<Stage[]>([]);
 
   useEffect(() => {
     const fetchStages = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/etiquetas`, {
-          headers: { Accept: "application/json" },
-        });
+        const res = await fetch(
+          `${apiUrl}/api/etiquetas${fluxoId ? `?fluxoId=${fluxoId}` : ""}`,
+          {
+            headers: { Accept: "application/json" },
+          }
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         const parsed: unknown[] = Array.isArray(data)
@@ -76,7 +80,7 @@ export default function Pipeline() {
       }
     };
     fetchStages();
-  }, [apiUrl]);
+  }, [apiUrl, fluxoId]);
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([
     {
