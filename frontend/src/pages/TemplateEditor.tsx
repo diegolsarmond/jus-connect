@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTemplate, createTemplate, updateTemplate, fetchTags, generateWithAI, generateDocument } from '@/lib/templates';
 import { Button } from '@/components/ui/button';
 import { useState, useRef, useEffect } from 'react';
+import FontSelector from '@/components/FontSelector';
 
 export default function TemplateEditor() {
   const { id } = useParams();
@@ -86,7 +87,7 @@ export default function TemplateEditor() {
   return (
     <div className="p-6 space-y-4">
       <input className="border p-2 w-full" placeholder="Título" value={title} onChange={e => setTitle(e.target.value)} />
-      <div className="flex gap-4">
+      <div className="flex gap-4 justify-center">
         <div className="w-64 border rounded p-2 space-y-2" onDragOver={e => e.preventDefault()}>
           <h2 className="font-bold">Tags</h2>
           {tags?.map(tag => (
@@ -101,7 +102,8 @@ export default function TemplateEditor() {
           ))}
         </div>
         <div className="flex-1 space-y-2">
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap justify-center">
+            <FontSelector onChange={f => exec('fontName', f)} />
             <Button variant="outline" size="sm" onClick={() => exec('bold')}><b>B</b></Button>
             <Button variant="outline" size="sm" onClick={() => exec('italic')}><i>I</i></Button>
             <Button variant="outline" size="sm" onClick={() => exec('underline')}><u>U</u></Button>
@@ -118,7 +120,7 @@ export default function TemplateEditor() {
             <Button variant="outline" size="sm" onClick={() => exec('formatBlock', 'H2')}>H2</Button>
           </div>
           <div
-            className="border rounded p-4 bg-white mx-auto shadow"
+            className="border rounded bg-white mx-auto shadow"
             style={{ width: '210mm', minHeight: '297mm', direction: 'ltr' }}
             contentEditable
             ref={editorRef}
@@ -127,7 +129,7 @@ export default function TemplateEditor() {
           />
         </div>
       </div>
-      <div className="space-x-2">
+      <div className="space-x-2 flex justify-center">
         <Button onClick={() => saveMut.mutate()}>Salvar template</Button>
         <Button variant="outline" onClick={handleGenerateAI}>Gerar texto com IA</Button>
         <Button variant="outline" onClick={handlePreview}>Preview / Preencher</Button>
