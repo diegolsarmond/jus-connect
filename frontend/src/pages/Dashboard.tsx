@@ -1,10 +1,30 @@
-import { Users, Target, Calendar, DollarSign, TrendingUp, Clock, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Users, Target, Calendar, DollarSign, Clock, AlertTriangle } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
 export default function Dashboard() {
+  const [totalClientes, setTotalClientes] = useState(0);
+  const [compromissosHoje, setCompromissosHoje] = useState(0);
+  const [upcomingEvents, setUpcomingEvents] = useState<{
+    title: string;
+    time: string;
+    date: string;
+    type: string;
+  }[]>([]);
+  const navigate = useNavigate();
+
   const recentClients = [
     { name: "João Silva", type: "Pessoa Física", area: "Trabalhista", status: "Ativo" },
     { name: "Tech Solutions Ltda", type: "Pessoa Jurídica", area: "Empresarial", status: "Proposta" },
@@ -12,11 +32,70 @@ export default function Dashboard() {
     { name: "Construtora ABC", type: "Pessoa Jurídica", area: "Tributário", status: "Negociação" },
   ];
 
-  const upcomingEvents = [
-    { title: "Audiência João Silva", time: "14:00", date: "Hoje", type: "Audiência" },
-    { title: "Reunião Tech Solutions", time: "10:30", date: "Amanhã", type: "Reunião" },
-    { title: "Prazo Petição Maria Santos", time: "17:00", date: "Sexta", type: "Prazo" },
-  ];
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const clientesRes = await fetch(joinUrl(apiUrl, "/api/clientes/ativos/total"), {
+          headers: { Accept: "application/json" },
+        });
+        if (clientesRes.ok) {
+          const json = await clientesRes.json();
+          setTotalClientes(Number(json.total_clientes_ativos) || 0);
+        }
+
+        const compromissosRes = await fetch(joinUrl(apiUrl, "/api/agendas/total-hoje"), {
+          headers: { Accept: "application/json" },
+        });
+        if (compromissosRes.ok) {
+          const json = await compromissosRes.json();
+          setCompromissosHoje(Number(json.total_compromissos_hoje) || 0);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar métricas:", error);
+      }
+    };
+
+    const fetchUpcomingEvents = async () => {
+      try {
+        const res = await fetch(joinUrl(apiUrl, "/api/agendas"), {
+          headers: { Accept: "application/json" },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const rows: unknown[] =
+            Array.isArray(json)
+              ? json
+              : Array.isArray(json?.data)
+                ? json.data
+                : Array.isArray(json?.rows)
+                  ? json.rows
+                  : Array.isArray(json?.agendas)
+                    ? json.agendas
+                    : [];
+          interface AgendaItem {
+            titulo?: string;
+            hora_inicio: string;
+            data: string;
+            tipo_evento?: string;
+          }
+          const events = (rows as AgendaItem[])
+            .map((r) => ({
+              title: r.titulo ?? "(sem título)",
+              time: r.hora_inicio,
+              date: r.data,
+              type: r.tipo_evento || "Compromisso",
+            }))
+            .slice(0, 3);
+          setUpcomingEvents(events);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar compromissos:", error);
+      }
+    };
+
+    fetchMetrics();
+    fetchUpcomingEvents();
+  }, []);
 
   return (
     <div className="p-6 space-y-6">
@@ -35,9 +114,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard
           title="Total de Clientes"
-          value="142"
-          change="+12% este mês"
-          changeType="positive"
+          value={totalClientes}
           icon={Users}
         />
         <MetricCard
@@ -49,9 +126,7 @@ export default function Dashboard() {
         />
         <MetricCard
           title="Compromissos Hoje"
-          value="8"
-          change="3 audiências"
-          changeType="neutral"
+          value={compromissosHoje}
           icon={Calendar}
         />
         <MetricCard
@@ -103,7 +178,13 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg font-semibold">Próximos Compromissos</CardTitle>
-            <Button variant="ghost" size="sm">Ver Agenda</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/agenda")}
+            >
+              Ver Agenda
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             {upcomingEvents.map((event, index) => (
