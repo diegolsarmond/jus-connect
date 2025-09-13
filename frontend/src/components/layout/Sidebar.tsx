@@ -88,6 +88,10 @@ const navigation: NavItem[] = [
             name: "Etiquetas",
             href: "/configuracoes/parametros/etiquetas",
           },
+          {
+            name: "Fluxo de Trabalho",
+            href: "/configuracoes/parametros/fluxo-de-trabalho",
+          },
         ],
       },
     ],
