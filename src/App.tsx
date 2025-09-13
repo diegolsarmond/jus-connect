@@ -72,8 +72,8 @@ const App = () => (
               element={<ContratoPreview />}
             />
             <Route path="/clientes/:id" element={<VisualizarCliente />} />
-            <Route path="/pipeline" element={<Pipeline />} />
-            <Route path="/pipeline/:fluxoId" element={<PipelineMenu />} />
+            <Route path="/pipeline" element={<PipelineMenu />} />
+            <Route path="/pipeline/:fluxoId" element={<Pipeline />} />
             <Route path="/pipeline/nova-oportunidade" element={<NovaOportunidade />} />
             <Route path="/pipeline/oportunidade/:id" element={<VisualizarOportunidade />} />
             <Route path="/agenda" element={<Agenda />} />
