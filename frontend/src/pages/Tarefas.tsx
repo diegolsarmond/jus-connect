@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Calendar } from '@/components/ui/calendar'; // <-- import do Calendário (shadcn)
 import { z } from 'zod';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -101,6 +102,11 @@ function joinUrl(base: string, path = '') {
   const b = base.replace(/\/+$/, '');
   const p = path ? (path.startsWith('/') ? path : `/${path}`) : '';
   return `${b}${p}`;
+}
+
+// normaliza a data para 00:00:00, para o DayPicker bater corretamente o dia
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 export default function Tarefas() {
@@ -214,6 +220,12 @@ export default function Tarefas() {
   const recurring = watch('recurring');
   const priority = watch('priority');
 
+  // gera os dias com tarefas para o calendário
+  const taskDates = useMemo(
+    () => tasks.map((t) => startOfDay(t.date)),
+    [tasks]
+  );
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -251,6 +263,7 @@ export default function Tarefas() {
           <p className="text-2xl font-bold">{pending}</p>
           <p className="text-sm text-muted-foreground">Tarefas pendentes</p>
         </div>
+
         <div className="bg-card border border-border rounded-lg p-4 lg:col-span-1">
           <h3 className="font-semibold mb-2">Status</h3>
           <div className="h-48">
@@ -265,6 +278,17 @@ export default function Tarefas() {
               </PieChart>
             </ResponsiveContainer>
           </div>
+        </div>
+
+        {/* Card do Calendário */}
+        <div className="bg-card border border-border rounded-lg p-4">
+          <h3 className="font-semibold mb-2">Calendário</h3>
+          <Calendar
+            modifiers={{ taskDay: taskDates }}
+            modifiersClassNames={{
+              taskDay: 'bg-primary text-primary-foreground rounded-full',
+            }}
+          />
         </div>
       </div>
 
