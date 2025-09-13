@@ -12,16 +12,23 @@ interface OpportunityData {
 export default function VisualizarOportunidade() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
   const [opportunity, setOpportunity] = useState<OpportunityData | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("opportunities");
-    if (stored) {
-      const list: OpportunityData[] = JSON.parse(stored);
-      const found = list.find((o) => String(o.id) === id);
-      if (found) setOpportunity(found);
-    }
-  }, [id]);
+    if (!id) return;
+    const fetchOpportunity = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/oportunidades/${id}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setOpportunity(data);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchOpportunity();
+  }, [id, apiUrl]);
 
   if (!opportunity) {
     return (
@@ -79,7 +86,7 @@ export default function VisualizarOportunidade() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{opportunity.title}</CardTitle>
+          <CardTitle>{opportunity.title || `Oportunidade ${opportunity.id}`}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {fields.map((f) => {
