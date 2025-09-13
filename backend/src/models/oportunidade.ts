@@ -1,3 +1,5 @@
+import { OportunidadeEnvolvido } from './oportunidadeEnvolvido';
+
 export interface Oportunidade {
   id: number;
   tipo_processo_id: number;
@@ -22,4 +24,5 @@ export interface Oportunidade {
   criado_por: number | null;
   data_criacao: string;
   ultima_atualizacao: string;
+  envolvidos?: OportunidadeEnvolvido[];
 }
