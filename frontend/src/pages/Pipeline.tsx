@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, MoreHorizontal, DollarSign, Calendar, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,13 +23,58 @@ interface Opportunity {
   responsible: string;
 }
 
+interface Stage {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export default function Pipeline() {
-  const stages = [
-    { id: "contato", name: "Contato Inicial", color: "bg-blue-100 text-blue-800" },
-    { id: "proposta", name: "Proposta", color: "bg-yellow-100 text-yellow-800" },
-    { id: "negociacao", name: "Negociação", color: "bg-orange-100 text-orange-800" },
-    { id: "contrato", name: "Contrato", color: "bg-green-100 text-green-800" },
-  ];
+  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+  const [stages, setStages] = useState<Stage[]>([]);
+
+  useEffect(() => {
+    const fetchStages = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/etiquetas`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        const parsed: unknown[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.rows)
+          ? data.rows
+          : Array.isArray(data?.data?.rows)
+          ? data.data.rows
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        const colors = [
+          "bg-blue-100 text-blue-800",
+          "bg-yellow-100 text-yellow-800",
+          "bg-orange-100 text-orange-800",
+          "bg-green-100 text-green-800",
+          "bg-purple-100 text-purple-800",
+          "bg-pink-100 text-pink-800",
+        ];
+        setStages(
+          parsed.map((r, idx) => {
+            const item = r as { id: number | string; nome?: string };
+            return {
+              id: String(item.id),
+              name: item.nome ?? "",
+              color: colors[idx % colors.length],
+            };
+          })
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchStages();
+  }, [apiUrl]);
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([
     {
@@ -38,7 +83,7 @@ export default function Pipeline() {
       client: "Tech Solutions Ltda",
       value: "R$ 15.000",
       probability: 80,
-      stage: "negociacao",
+      stage: "3",
       dueDate: "2024-01-20",
       area: "Tributário",
       responsible: "Dr. Ana Beatriz"
@@ -49,7 +94,7 @@ export default function Pipeline() {
       client: "João Silva",
       value: "R$ 8.500",
       probability: 90,
-      stage: "contrato",
+      stage: "4",
       dueDate: "2024-01-18",
       area: "Trabalhista",
       responsible: "Dr. Carlos Mendes"
@@ -60,7 +105,7 @@ export default function Pipeline() {
       client: "Maria Santos",
       value: "R$ 3.200",
       probability: 60,
-      stage: "proposta",
+      stage: "2",
       dueDate: "2024-01-25",
       area: "Família",
       responsible: "Dra. Lucia Ferreira"
@@ -71,7 +116,7 @@ export default function Pipeline() {
       client: "Construtora ABC Ltda",
       value: "R$ 25.000",
       probability: 40,
-      stage: "contato",
+      stage: "1",
       dueDate: "2024-01-30",
       area: "Empresarial",
       responsible: "Dr. Roberto Silva"
@@ -82,7 +127,7 @@ export default function Pipeline() {
       client: "XYZ Corporation",
       value: "R$ 12.000",
       probability: 70,
-      stage: "negociacao",
+      stage: "3",
       dueDate: "2024-01-22",
       area: "Civil",
       responsible: "Dr. Ana Beatriz"
