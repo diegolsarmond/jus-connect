@@ -4,7 +4,7 @@ import pool from '../services/db';
 export const listEtiquetas = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, ativo, datacriacao, exibe_pipeline, ordem FROM public.etiquetas'
+      'SELECT id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho FROM public.etiquetas'
     );
     res.json(result.rows);
   } catch (error) {
@@ -14,11 +14,11 @@ export const listEtiquetas = async (_req: Request, res: Response) => {
 };
 
 export const createEtiqueta = async (req: Request, res: Response) => {
-  const { nome, ativo, exibe_pipeline = true, ordem } = req.body;
+  const { nome, ativo, exibe_pipeline = true, ordem, id_fluxo_trabalho } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO public.etiquetas (nome, ativo, datacriacao, exibe_pipeline, ordem) VALUES ($1, $2, NOW(), $3, $4) RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem',
-      [nome, ativo, exibe_pipeline, ordem]
+      'INSERT INTO public.etiquetas (nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho) VALUES ($1, $2, NOW(), $3, $4, $5) RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho',
+      [nome, ativo, exibe_pipeline, ordem, id_fluxo_trabalho]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -29,11 +29,11 @@ export const createEtiqueta = async (req: Request, res: Response) => {
 
 export const updateEtiqueta = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { nome, ativo, exibe_pipeline = true, ordem } = req.body;
+  const { nome, ativo, exibe_pipeline = true, ordem, id_fluxo_trabalho } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE public.etiquetas SET nome = $1, ativo = $2, exibe_pipeline = $3, ordem = $4 WHERE id = $5 RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem',
-      [nome, ativo, exibe_pipeline, ordem, id]
+      'UPDATE public.etiquetas SET nome = $1, ativo = $2, exibe_pipeline = $3, ordem = $4, id_fluxo_trabalho = $5 WHERE id = $6 RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho',
+      [nome, ativo, exibe_pipeline, ordem, id_fluxo_trabalho, id]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Etiqueta não encontrada' });
