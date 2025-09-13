@@ -1,15 +1,88 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { clients } from "@/lib/clients";
+import { Client } from "@/types/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Mail, Phone, User, Building2 } from "lucide-react";
 
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+
+function joinUrl(base: string, path = "") {
+  const b = base.replace(/\/+$/, "");
+  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${b}${p}`;
+}
+
+interface ApiClient {
+  id: number;
+  nome: string;
+  tipo: string;
+  documento: string;
+  email: string;
+  telefone: string;
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+  ativo: boolean;
+  foto: string | null;
+  datacadastro: string;
+}
+
+const mapApiClientToClient = (c: ApiClient): Client => ({
+  id: c.id,
+  name: c.nome,
+  email: c.email,
+  phone: c.telefone,
+  type: c.tipo === "J" || c.tipo === "PJ" ? "Pessoa Jurídica" : "Pessoa Física",
+  document: c.documento,
+  address: `${c.rua}, ${c.numero} - ${c.bairro}, ${c.cidade} - ${c.uf}`,
+  area: "",
+  status: c.ativo ? "Ativo" : "Inativo",
+  lastContact: c.datacadastro,
+  processes: [],
+});
+
 export default function VisualizarCliente() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const client = clients.find((c) => c.id === Number(id));
+  const [client, setClient] = useState<Client | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchClient = async () => {
+      try {
+        const url = joinUrl(apiUrl, `/api/clientes/${id}`);
+        const response = await fetch(url, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          throw new Error("Failed to fetch client");
+        }
+        const json: ApiClient = await response.json();
+        setClient(mapApiClientToClient(json));
+      } catch (error) {
+        console.error("Erro ao buscar cliente:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClient();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">Carregando…</p>
+      </div>
+    );
+  }
 
   if (!client) {
     return (
