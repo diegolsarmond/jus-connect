@@ -1,10 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Filter, Edit, Eye, Trash } from "lucide-react";
+import { Plus, Search, Filter, Edit, Eye, UserCheck, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -67,6 +77,7 @@ export default function Clientes() {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("todos");
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -106,17 +117,25 @@ export default function Clientes() {
     return matchesSearch && matchesFilter;
   });
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
+  const toggleClientStatus = async () => {
+    if (!selectedClient) return;
     try {
-      const url = joinUrl(apiUrl, `/api/clientes/${id}`);
+      const url = joinUrl(apiUrl, `/api/clientes/${selectedClient.id}`);
       const response = await fetch(url, { method: "DELETE" });
       if (!response.ok) {
-        throw new Error("Failed to delete client");
+        throw new Error("Failed to update client status");
       }
-      setClients((prev) => prev.filter((c) => c.id !== id));
+      setClients((prev) =>
+        prev.map((c) =>
+          c.id === selectedClient.id
+            ? { ...c, status: c.status === "Ativo" ? "Inativo" : "Ativo" }
+            : c
+        )
+      );
     } catch (error) {
-      console.error("Erro ao excluir cliente:", error);
+      console.error("Erro ao atualizar status do cliente:", error);
+    } finally {
+      setSelectedClient(null);
     }
   };
 
@@ -217,9 +236,13 @@ export default function Clientes() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(client.id)}
+                      onClick={() => setSelectedClient(client)}
                     >
-                      <Trash className="h-4 w-4" />
+                      {client.status === "Ativo" ? (
+                        <UserX className="h-4 w-4" />
+                      ) : (
+                        <UserCheck className="h-4 w-4" />
+                      )}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -234,6 +257,31 @@ export default function Clientes() {
           )}
         </CardContent>
       </Card>
+      <AlertDialog
+        open={!!selectedClient}
+        onOpenChange={(open) => !open && setSelectedClient(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {selectedClient?.status === "Ativo"
+                ? "Inativar cliente"
+                : "Ativar cliente"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedClient?.status === "Ativo"
+                ? "Tem certeza que deseja inativar este cliente?"
+                : "Tem certeza que deseja ativar este cliente?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={toggleClientStatus}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
