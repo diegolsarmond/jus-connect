@@ -71,8 +71,11 @@ export default function Agenda() {
         }
 
               // Função de mapeamento do status
-        const mapStatus = (statusAgenda: number) => {
-          switch (statusAgenda) {
+        const mapStatus = (statusAgenda: unknown): AppointmentStatus => {
+          // Converte strings numéricas em número
+          const statusNumber = typeof statusAgenda === 'string' ? Number(statusAgenda) : statusAgenda;
+
+          switch (statusNumber) {
             case 0:
               return 'cancelado';
             case 1:
@@ -81,9 +84,20 @@ export default function Agenda() {
               return 'em_curso';
             case 3:
               return 'concluido';
-            default:
-              return 'agendado';
           }
+
+          // Se já vier como string válida do backend, retorna direto
+          if (
+            statusAgenda === 'agendado' ||
+            statusAgenda === 'em_curso' ||
+            statusAgenda === 'concluido' ||
+            statusAgenda === 'cancelado'
+          ) {
+            return statusAgenda;
+          }
+
+          // Qualquer valor inesperado é tratado como 'agendado'
+          return 'agendado';
         };
 
             const data: Appointment[] = (rows as AgendaResponse[]).map((r) => ({
