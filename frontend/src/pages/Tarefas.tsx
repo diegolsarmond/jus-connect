@@ -240,15 +240,7 @@ export default function Tarefas() {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="font-semibold mb-2">Calendário</h3>
-          <Calendar
-            modifiers={{ taskDay: taskDates }}
-            modifiersClassNames={{
-              taskDay: 'bg-primary text-primary-foreground rounded-full',
-            }}
-          />
-        </div>
+
       </div>
 
       <div className="bg-card border border-border rounded-lg">
