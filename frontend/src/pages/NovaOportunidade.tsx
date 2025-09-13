@@ -407,48 +407,7 @@ export default function NovaOportunidade() {
                         )}
                       />
 
-                      <FormField
-                        control={form.control}
-                        name="autor"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Autor</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="reu"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Réu</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="terceiro_interessado"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Terceiro Interessado</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                </div>
                   </AccordionContent>
                 </AccordionItem>
 
