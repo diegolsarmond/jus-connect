@@ -8,6 +8,7 @@ import {
   CheckSquare,
   Gavel,
   FileText,
+  DollarSign,
   BarChart3,
   Scale,
   Settings,
@@ -33,6 +34,7 @@ const navigation: NavItem[] = [
   { name: "Tarefas", href: "/tarefas", icon: CheckSquare },
   { name: "Processos", href: "/processos", icon: Gavel },
   { name: "Documentos", href: "/documentos", icon: FileText },
+  { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign },
   { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
   {
     name: "Configurações",

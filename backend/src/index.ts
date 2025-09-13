@@ -15,6 +15,8 @@ import agendaRoutes from './routes/agendaRoutes';
 import templateRoutes from './routes/templateRoutes';
 import tagRoutes from './routes/tagRoutes';
 import documentRoutes from './routes/documentRoutes';
+import financialRoutes from './routes/financialRoutes';
+import uploadRoutes from './routes/uploadRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -57,6 +59,8 @@ app.use('/api', agendaRoutes);
 app.use('/api', templateRoutes);
 app.use('/api', tagRoutes);
 app.use('/api', documentRoutes);
+app.use('/api', financialRoutes);
+app.use('/api', uploadRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
