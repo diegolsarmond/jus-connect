@@ -127,8 +127,8 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Título</TableHead>
-                  <TableHead>Tipo</TableHead>
+                  <TableHead className="pr-2">Título</TableHead>
+                  <TableHead className="pl-2">Tipo</TableHead>
                   <TableHead>Data/Hora</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Status</TableHead>
@@ -138,7 +138,7 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
               <TableBody>
                 {filteredAppointments.map((appointment) => (
                   <TableRow key={appointment.id} className="group">
-                    <TableCell>
+                    <TableCell className="pr-2">
                       <div className="space-y-1">
                         <p className="font-medium">{appointment.title}</p>
                         {appointment.description && (
@@ -154,8 +154,8 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
                         )}
                       </div>
                     </TableCell>
-                    
-                    <TableCell>
+
+                    <TableCell className="pl-2">
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           "w-3 h-3 rounded-full",

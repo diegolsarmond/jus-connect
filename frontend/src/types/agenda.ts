@@ -38,9 +38,9 @@ export interface AppointmentFilter {
 }
 
 export const appointmentTypes: Record<AppointmentType, { label: string; color: string }> = {
-  reuniao: { label: 'Reunião', color: 'bg-primary' },
-  visita: { label: 'Visita', color: 'bg-secondary' },
-  ligacao: { label: 'Ligação', color: 'bg-success' },
-  prazo: { label: 'Prazo', color: 'bg-destructive' },
-  outro: { label: 'Outro', color: 'bg-muted' },
+  reuniao: { label: 'Reunião', color: 'bg-blue-500' },
+  visita: { label: 'Visita', color: 'bg-blue-400' },
+  ligacao: { label: 'Ligação', color: 'bg-blue-300' },
+  prazo: { label: 'Prazo', color: 'bg-blue-600' },
+  outro: { label: 'Outro', color: 'bg-blue-200' },
 };
