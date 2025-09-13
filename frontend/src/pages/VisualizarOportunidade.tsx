@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Badge } from "@/components/ui/badge";
+
 import { format as dfFormat, parseISO } from "date-fns";
 
 interface Envolvido {
@@ -22,6 +24,15 @@ interface OpportunityData {
   [key: string]: unknown;
 }
 
+interface ParticipantData {
+  id?: number;
+  nome?: string;
+  documento?: string;
+  telefone?: string;
+  endereco?: string;
+  relacao?: string;
+}
+
 export default function VisualizarOportunidade() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -30,6 +41,7 @@ export default function VisualizarOportunidade() {
   const [opportunity, setOpportunity] = useState<OpportunityData | null>(null);
   const [snack, setSnack] = useState<{ open: boolean; message?: string }>({ open: false });
   const [expandedDetails, setExpandedDetails] = useState(false);
+  const [participants, setParticipants] = useState<ParticipantData[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -46,6 +58,25 @@ export default function VisualizarOportunidade() {
       }
     };
     fetchOpportunity();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, apiUrl]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    const fetchParticipants = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/oportunidades/${id}/envolvidos`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!cancelled) setParticipants(data);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchParticipants();
     return () => {
       cancelled = true;
     };
@@ -451,6 +482,7 @@ export default function VisualizarOportunidade() {
           </ScrollArea>
         </CardContent>
       </Card>
+
 
       {Array.isArray(opportunity.envolvidos) &&
         opportunity.envolvidos.length > 0 && (
