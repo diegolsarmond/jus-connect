@@ -20,6 +20,7 @@ import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
 import Perfis from "./pages/configuracoes/parametros/Perfis";
 import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import Escritorios from "./pages/configuracoes/parametros/Escritorios";
+import Etiquetas from "./pages/configuracoes/parametros/Etiquetas";
 import Empresas from "./pages/configuracoes/Empresas";
 import Planos from "./pages/configuracoes/Planos";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
@@ -79,6 +80,7 @@ const App = () => (
               <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
               <Route path="/configuracoes/parametros/escritorios" element={<Escritorios />} />
               <Route path="/configuracoes/parametros/situacao-cliente" element={<SituacaoCliente />} />
+              <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
