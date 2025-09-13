@@ -23,10 +23,10 @@ const router = Router();
  *           type: integer
  *         titulo:
  *           type: string
- *      id_evento:
- *          type: integer
- *      tipo_evento:
- *          type: string
+ *         id_evento:
+ *           type: integer
+ *         tipo_evento:
+ *           type: string
  *         tipo:
  *           type: integer
  *         descricao:
@@ -111,9 +111,9 @@ router.get('/agendas/total-hoje', getTotalCompromissosHoje);
  *                 type: string
  *               id_evento:
  *                 type: integer
- *              tipo_evento:
- *                type: string
-  *             descricao:
+ *               tipo_evento:
+ *                 type: string
+ *               descricao:
  *                 type: string
  *               data:
  *                 type: string
