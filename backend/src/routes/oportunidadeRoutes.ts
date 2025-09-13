@@ -74,7 +74,7 @@ const router = Router();
  *           type: number
  *         forma_pagamento:
  *           type: string
- *         parcelas:
+ *         qtde_parcelas:
  *           type: integer
  *         contingenciamento:
  *           type: string
@@ -232,7 +232,7 @@ router.get('/oportunidades/:id/envolvidos', listEnvolvidosByOportunidade);
 *                 type: number
 *               forma_pagamento:
 *                 type: string
- *               parcelas:
+ *               qtde_parcelas:
  *                 type: integer
 *               contingenciamento:
 *                 type: string
@@ -319,7 +319,7 @@ router.post('/oportunidades', createOportunidade);
 *                 type: number
 *               forma_pagamento:
 *                 type: string
- *               parcelas:
+ *               qtde_parcelas:
  *                 type: integer
 *               contingenciamento:
 *                 type: string
