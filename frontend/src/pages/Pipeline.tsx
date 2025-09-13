@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, MoreHorizontal, DollarSign, Calendar, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -114,6 +114,7 @@ export default function Pipeline() {
   }, [apiUrl, fluxoId]);
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     const fetchOpportunities = async () => {
@@ -122,18 +123,24 @@ export default function Pipeline() {
           ? `${apiUrl}/api/oportunidades/fase/${fluxoId}`
           : `${apiUrl}/api/oportunidades`;
 
-        const [oppRes, areasRes] = await Promise.all([
+        const [oppRes, areasRes, usersRes] = await Promise.all([
           fetch(url, { headers: { Accept: "application/json" } }),
           fetch(`${apiUrl}/api/areas`, { headers: { Accept: "application/json" } }),
+          fetch(`${apiUrl}/api/usuarios`, {
+            headers: { Accept: "application/json" },
+          }),
         ]);
 
         if (!oppRes.ok)
           throw new Error(`HTTP ${oppRes.status}: ${await oppRes.text()}`);
         if (!areasRes.ok)
           throw new Error(`HTTP ${areasRes.status}: ${await areasRes.text()}`);
+        if (!usersRes.ok)
+          throw new Error(`HTTP ${usersRes.status}: ${await usersRes.text()}`);
 
         const data = await oppRes.json();
         const areasData = await areasRes.json();
+        const usersData = await usersRes.json();
 
         const parsedOpps: unknown[] = Array.isArray(data)
           ? data
@@ -155,15 +162,39 @@ export default function Pipeline() {
           ? areasData.data
           : [];
 
+        const parsedUsers: unknown[] = Array.isArray(usersData)
+          ? usersData
+          : Array.isArray(usersData?.rows)
+          ? usersData.rows
+          : Array.isArray(usersData?.data?.rows)
+          ? usersData.data.rows
+          : Array.isArray(usersData?.data)
+          ? usersData.data
+          : [];
+
         const areaMap: Record<string, string> = {};
         parsedAreas.forEach((a) => {
           const item = a as { id?: number | string; nome?: string };
           if (item.id) areaMap[String(item.id)] = item.nome ?? "";
         });
 
+        const userMap: Record<string, string> = {};
+        parsedUsers.forEach((u) => {
+          const item = u as {
+            id?: number | string;
+            nome_completo?: string;
+            nome?: string;
+          };
+          if (item.id)
+            userMap[String(item.id)] = item.nome_completo ?? item.nome ?? "";
+        });
+
         setOpportunities(
           parsedOpps.map((o) => {
             const item = o as Record<string, unknown>;
+            const responsibleId = item.responsavel_id
+              ? String(item.responsavel_id)
+              : "";
             return {
               id: Number(item.id),
               title:
@@ -180,7 +211,9 @@ export default function Pipeline() {
               area: item.area_atuacao_id
                 ? areaMap[String(item.area_atuacao_id)] || ""
                 : "",
-              responsible: item.responsavel_id ? String(item.responsavel_id) : "",
+              responsible: responsibleId
+                ? userMap[responsibleId] || responsibleId
+                : "",
             };
           })
         );
@@ -206,8 +239,18 @@ export default function Pipeline() {
     return "text-muted-foreground";
   };
 
-  const handleDragStart = (event: React.DragEvent<HTMLDivElement>, opportunityId: number) => {
+  const handleDragStart = (
+    event: React.DragEvent<HTMLDivElement>,
+    opportunityId: number,
+  ) => {
+    isDragging.current = true;
     event.dataTransfer.setData("text/plain", opportunityId.toString());
+  };
+
+  const handleDragEnd = () => {
+    setTimeout(() => {
+      isDragging.current = false;
+    }, 0);
   };
 
   const handleDrop = async (
@@ -335,7 +378,11 @@ export default function Pipeline() {
                     className="cursor-pointer hover:shadow-md transition-all duration-200"
                     draggable
                     onDragStart={(e) => handleDragStart(e, opportunity.id)}
-                    onClick={() => navigate(`/pipeline/oportunidade/${opportunity.id}`)}
+                    onDragEnd={handleDragEnd}
+                    onClick={() => {
+                      if (isDragging.current) return;
+                      navigate(`/pipeline/oportunidade/${opportunity.id}`);
+                    }}
                   >
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
