@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getTemplate, createTemplate, updateTemplate, fetchTags, generateWithAI, generateDocument } from '@/lib/templates';
 import { Button } from '@/components/ui/button';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function TemplateEditor() {
   const { id } = useParams();
@@ -51,6 +51,18 @@ export default function TemplateEditor() {
     sel.addRange(range);
   }
 
+  function exec(cmd: string) {
+    editorRef.current?.focus();
+    document.execCommand(cmd);
+    setContent(editorRef.current?.innerHTML || '');
+  }
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== content) {
+      editorRef.current.innerHTML = content;
+    }
+  }, [content]);
+
   function handleGenerateAI() {
     if (isNew) return;
     generateWithAI(Number(id)).then(t => setContent(t));
@@ -88,14 +100,23 @@ export default function TemplateEditor() {
             </div>
           ))}
         </div>
-        <div
-          className="flex-1 border rounded p-2 min-h-[300px]"
-          contentEditable
-          ref={editorRef}
-          onDrop={handleDrop}
-          onInput={e => setContent((e.target as HTMLDivElement).innerHTML)}
-          dangerouslySetInnerHTML={{ __html: content }}
-        />
+        <div className="flex-1 space-y-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => exec('bold')}><b>B</b></Button>
+            <Button variant="outline" size="sm" onClick={() => exec('italic')}><i>I</i></Button>
+            <Button variant="outline" size="sm" onClick={() => exec('underline')}><u>U</u></Button>
+            <Button variant="outline" size="sm" onClick={() => exec('insertOrderedList')}>OL</Button>
+            <Button variant="outline" size="sm" onClick={() => exec('insertUnorderedList')}>UL</Button>
+          </div>
+          <div
+            className="border rounded p-4 bg-white mx-auto shadow"
+            style={{ width: '210mm', minHeight: '297mm', direction: 'ltr' }}
+            contentEditable
+            ref={editorRef}
+            onDrop={handleDrop}
+            onInput={e => setContent((e.target as HTMLDivElement).innerHTML)}
+          />
+        </div>
       </div>
       <div className="space-x-2">
         <Button onClick={() => saveMut.mutate()}>Salvar template</Button>
