@@ -143,7 +143,7 @@ export const deleteCliente = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'DELETE FROM public.clientes WHERE id = $1',
+      'UPDATE public.clientes SET ativo = FALSE WHERE id = $1',
       [id]
     );
     if (result.rowCount === 0) {
