@@ -12,6 +12,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { refreshGoogleToken } from "@/lib/googleAuth";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 interface Opportunity {
   id: number;
@@ -32,6 +47,11 @@ interface Stage {
   color: string;
 }
 
+interface Flow {
+  id: string;
+  name: string;
+}
+
 export default function Pipeline() {
   const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
   const navigate = useNavigate();
@@ -39,6 +59,11 @@ export default function Pipeline() {
 
   const [pipelineName, setPipelineName] = useState<string>("Vendas");
   const [stages, setStages] = useState<Stage[]>([]);
+  const [flows, setFlows] = useState<Flow[]>([]);
+  const [selectedFlow, setSelectedFlow] = useState<string>("");
+  const [moveStages, setMoveStages] = useState<Stage[]>([]);
+  const [selectedStage, setSelectedStage] = useState<string>("");
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchStages = async () => {
@@ -114,6 +139,68 @@ export default function Pipeline() {
     };
     fetchName();
   }, [apiUrl, fluxoId]);
+
+  useEffect(() => {
+    const fetchFlows = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        type MenuApiItem = { id: number | string; nome?: string };
+        const parsed: MenuApiItem[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.rows)
+          ? data.rows
+          : Array.isArray(data?.data?.rows)
+          ? data.data.rows
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        setFlows(parsed.map((m) => ({ id: String(m.id), name: m.nome ?? "" })));
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchFlows();
+  }, [apiUrl]);
+
+  useEffect(() => {
+    if (!selectedFlow) return;
+    const fetchStagesForFlow = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/etiquetas`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        const parsed: unknown[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.rows)
+          ? data.rows
+          : Array.isArray(data?.data?.rows)
+          ? data.data.rows
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        const filtered = parsed.filter(
+          (r) =>
+            String((r as { id_fluxo_trabalho?: number | string }).id_fluxo_trabalho) ===
+            selectedFlow,
+        );
+        setMoveStages(
+          filtered.map((r) => {
+            const item = r as { id: number | string; nome?: string };
+            return { id: String(item.id), name: item.nome ?? "", color: "" };
+          }),
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchStagesForFlow();
+  }, [selectedFlow, apiUrl]);
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const isDragging = useRef(false);
@@ -464,13 +551,28 @@ export default function Pipeline() {
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <MoreHorizontal className="h-3 w-3" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem>Editar</DropdownMenuItem>
-                            <DropdownMenuItem>Mover para...</DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={(e) => {
+                                e.stopPropagation();
+                                setSelectedFlow("");
+                                setSelectedStage("");
+                                setMoveStages([]);
+                                setMoveModalOpen(true);
+                              }}
+                            >
+                              Mover para...
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -529,7 +631,58 @@ export default function Pipeline() {
         })}
       </div>
 
-     
+      <Dialog open={moveModalOpen} onOpenChange={setMoveModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mover oportunidade</DialogTitle>
+            <DialogDescription>
+              Selecione o fluxo e a etapa de destino
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select
+              value={selectedFlow}
+              onValueChange={(value) => {
+                setSelectedFlow(value);
+                setSelectedStage("");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um fluxo" />
+              </SelectTrigger>
+              <SelectContent>
+                {flows.map((flow) => (
+                  <SelectItem key={flow.id} value={flow.id}>
+                    {flow.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={selectedStage}
+              onValueChange={setSelectedStage}
+              disabled={!moveStages.length}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma etapa" />
+              </SelectTrigger>
+              <SelectContent>
+                {moveStages.map((stage) => (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => setMoveModalOpen(false)}>Mover</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
