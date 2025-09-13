@@ -11,6 +11,8 @@ import {
   Scale,
   Settings,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -90,6 +92,7 @@ const navigation: NavItem[] = [
 
 export function Sidebar() {
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
 
   const isItemActive = (item: NavItem): boolean => {
     if (item.href && location.pathname === item.href) return true;
@@ -104,7 +107,8 @@ export function Sidebar() {
       if (active) setOpen(true);
     }, [active]);
     const classes = cn(
-      "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+      "flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+      collapsed ? "justify-center" : "gap-3",
       active
         ? "bg-primary text-primary-foreground shadow-md"
         : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -119,19 +123,24 @@ export function Sidebar() {
     const content = !hasChildren && item.href ? (
       <NavLink to={item.href} className={classes}>
         {item.icon && <item.icon className="h-5 w-5" />}
-        {item.name}
+        {!collapsed && item.name}
       </NavLink>
     ) : (
       <button
         type="button"
         onClick={handleClick}
-        className={cn(classes, "w-full justify-between")}
+        className={cn(classes, !collapsed && "w-full justify-between")}
       >
-        <span className="flex items-center gap-3">
+        <span
+          className={cn(
+            "flex items-center",
+            collapsed ? "justify-center" : "gap-3",
+          )}
+        >
           {item.icon && <item.icon className="h-5 w-5" />}
-          {item.name}
+          {!collapsed && item.name}
         </span>
-        {hasChildren && (
+        {!collapsed && hasChildren && (
           <ChevronDown
             className={cn(
               "h-4 w-4 transition-transform",
@@ -145,7 +154,7 @@ export function Sidebar() {
     return (
       <div className="space-y-1">
         {content}
-        {hasChildren && open && (
+        {hasChildren && open && !collapsed && (
           <div className="ml-6 space-y-1">
             {item.children!.map((child) => (
               <NavItemComponent key={child.name} item={child} />
@@ -157,32 +166,57 @@ export function Sidebar() {
   };
 
   return (
-    <div className="w-64 bg-card border-r border-border flex flex-col">
+    <div
+      className={cn(
+        "bg-card border-r border-border flex flex-col transition-all duration-300",
+        collapsed ? "w-16" : "w-64",
+      )}
+    >
       {/* Logo */}
-      <div className="p-6 border-b border-border">
+      <div
+        className={cn(
+          "border-b border-border flex items-center",
+          collapsed ? "p-2 justify-center" : "p-6 justify-between",
+        )}
+      >
         <div className="flex items-center gap-2">
           <div className="p-2 bg-primary rounded-lg">
             <Scale className="h-6 w-6 text-primary-foreground" />
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-foreground">CRM Jurídico</h1>
-            <p className="text-xs text-muted-foreground">Gestão Advocacia</p>
-          </div>
+          {!collapsed && (
+            <div>
+              <h1 className="text-lg font-bold text-foreground">CRM Jurídico</h1>
+              <p className="text-xs text-muted-foreground">Gestão Advocacia</p>
+            </div>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((prev) => !prev)}
+          className="p-2 rounded-md hover:bg-accent"
+        >
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className={cn("flex-1 space-y-2", collapsed ? "p-2" : "p-4")}>
         {navigation.map((item) => (
           <NavItemComponent key={item.name} item={item} />
         ))}
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
-        <div className="text-xs text-muted-foreground text-center">
-          © 2024 CRM Jurídico
-        </div>
+      <div className={cn("border-t border-border", collapsed ? "p-2" : "p-4")}>
+        {!collapsed && (
+          <div className="text-xs text-muted-foreground text-center">
+            © 2024 CRM Jurídico
+          </div>
+        )}
       </div>
     </div>
   );
