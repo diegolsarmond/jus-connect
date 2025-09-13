@@ -246,7 +246,32 @@ export default function NovaOportunidade() {
   }, [faseValue, apiUrl]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    console.log(values);
+    const tipoNome = tipos.find((t) => t.id === values.tipo_processo)?.name || "";
+    const areaNome = areas.find((a) => a.id === values.area_atuacao)?.name || "";
+    const responsavelNome = users.find((u) => u.id === values.responsavel_interno)?.name || "";
+    const etapaNome = etapas.find((e) => e.id === values.etapa)?.name || "";
+    const probability = parseInt((values.percentual_honorarios || "").replace(/\D/g, "")) || 0;
+
+    const newOpportunity = {
+      id: Date.now(),
+      title: [tipoNome, values.solicitante_nome].filter(Boolean).join(" - "),
+      client: values.solicitante_nome || "",
+      value: values.valor_honorarios || "",
+      probability,
+      stage: values.etapa || "",
+      etapa_nome: etapaNome,
+      dueDate: values.prazo_proximo || "",
+      area: areaNome,
+      responsible: responsavelNome,
+      tipo_processo_nome: tipoNome,
+      ...values,
+    };
+
+    const stored = localStorage.getItem("opportunities");
+    const list = stored ? JSON.parse(stored) : [];
+    list.push(newOpportunity);
+    localStorage.setItem("opportunities", JSON.stringify(list));
+
     toast({ title: "Oportunidade criada com sucesso" });
     navigate("/pipeline");
   };
