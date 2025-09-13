@@ -203,6 +203,14 @@ export default function VisualizarOportunidade() {
     return String(value);
   };
 
+  const onCreateTask = () => {
+    navigate(`/tarefas?oportunidade=${id}`);
+  };
+
+  const onCreateDocument = () => {
+    navigate(`/documentos?oportunidade=${id}`);
+  };
+
   if (!opportunity) {
     return (
       <div className="p-6 space-y-4">
@@ -226,9 +234,13 @@ export default function VisualizarOportunidade() {
             Detalhes completos da oportunidade
           </p>
         </div>
-        <Button variant="outline" onClick={() => navigate(-1)}>
-          Voltar
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            Voltar
+          </Button>
+          <Button onClick={onCreateTask}>Criar Tarefa</Button>
+          <Button onClick={onCreateDocument}>Criar Documento</Button>
+        </div>
       </div>
 
       <Card>
