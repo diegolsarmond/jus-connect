@@ -238,7 +238,7 @@ export default function VisualizarOportunidade() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="max-h-[70vh]">
+          <ScrollArea className="max-h-[90vh]">
             <Table>
               <TableBody>
                 {Object.entries(opportunity)
