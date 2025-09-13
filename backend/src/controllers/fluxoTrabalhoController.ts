@@ -4,7 +4,7 @@ import pool from '../services/db';
 export const listFluxosTrabalho = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, ativo, datacriacao FROM public.fluxo_trabalho'
+      'SELECT id, nome, ativo, datacriacao, exibe_menu, ordem FROM public.fluxo_trabalho'
     );
     res.json(result.rows);
   } catch (error) {
@@ -29,11 +29,11 @@ export const listFluxoTrabalhoMenus = async (_req: Request, res: Response) => {
 };
 
 export const createFluxoTrabalho = async (req: Request, res: Response) => {
-  const { nome, ativo } = req.body;
+  const { nome, ativo, exibe_menu = true, ordem } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO public.fluxo_trabalho (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao',
-      [nome, ativo]
+      'INSERT INTO public.fluxo_trabalho (nome, ativo, exibe_menu, ordem, datacriacao) VALUES ($1, $2, $3, $4, NOW()) RETURNING id, nome, ativo, exibe_menu, ordem, datacriacao',
+      [nome, ativo, exibe_menu, ordem]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -44,11 +44,11 @@ export const createFluxoTrabalho = async (req: Request, res: Response) => {
 
 export const updateFluxoTrabalho = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { nome, ativo } = req.body;
+  const { nome, ativo, exibe_menu = true, ordem } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE public.fluxo_trabalho SET nome = $1, ativo = $2 WHERE id = $3 RETURNING id, nome, ativo, datacriacao',
-      [nome, ativo, id]
+      'UPDATE public.fluxo_trabalho SET nome = $1, ativo = $2, exibe_menu = $3, ordem = $4 WHERE id = $5 RETURNING id, nome, ativo, exibe_menu, ordem, datacriacao',
+      [nome, ativo, exibe_menu, ordem, id]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Fluxo de trabalho não encontrado' });

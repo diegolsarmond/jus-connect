@@ -28,6 +28,11 @@ const router = Router();
  *         datacriacao:
  *           type: string
  *           format: date-time
+ *         exibe_menu:
+ *           type: boolean
+ *         ordem:
+ *           type: integer
+ *           nullable: true
  */
 
 /**
@@ -90,6 +95,11 @@ router.get('/fluxos-trabalho/menus', listFluxoTrabalhoMenus);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               exibe_menu:
+ *                 type: boolean
+ *               ordem:
+ *                 type: integer
+ *                 nullable: true
  *     responses:
  *       201:
  *         description: Fluxo de trabalho criado
@@ -123,6 +133,11 @@ router.post('/fluxos-trabalho', createFluxoTrabalho);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               exibe_menu:
+ *                 type: boolean
+ *               ordem:
+ *                 type: integer
+ *                 nullable: true
  *     responses:
  *       200:
  *         description: Fluxo de trabalho atualizado
