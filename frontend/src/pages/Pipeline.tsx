@@ -16,7 +16,7 @@ interface Opportunity {
   id: number;
   title: string;
   client: string;
-  value: string;
+  value: number;
   probability: number;
   stage: string;
   dueDate: string;
@@ -113,71 +113,53 @@ export default function Pipeline() {
     fetchName();
   }, [apiUrl, fluxoId]);
 
-  const [opportunities, setOpportunities] = useState<Opportunity[]>(() => {
-    const stored = localStorage.getItem("opportunities");
-    if (stored) return JSON.parse(stored);
-    return [
-    {
-      id: 1,
-      title: "Consultoria Tributária - Tech Solutions",
-      client: "Tech Solutions Ltda",
-      value: "R$ 15.000",
-      probability: 80,
-      stage: "3",
-      dueDate: "2024-01-20",
-      area: "Tributário",
-      responsible: "Dr. Ana Beatriz"
-    },
-    {
-      id: 2,
-      title: "Ação Trabalhista - João Silva",
-      client: "João Silva",
-      value: "R$ 8.500",
-      probability: 90,
-      stage: "4",
-      dueDate: "2024-01-18",
-      area: "Trabalhista",
-      responsible: "Dr. Carlos Mendes"
-    },
-    {
-      id: 3,
-      title: "Divórcio Consensual - Maria Santos",
-      client: "Maria Santos",
-      value: "R$ 3.200",
-      probability: 60,
-      stage: "2",
-      dueDate: "2024-01-25",
-      area: "Família",
-      responsible: "Dra. Lucia Ferreira"
-    },
-    {
-      id: 4,
-      title: "Regularização Empresarial - ABC Ltda",
-      client: "Construtora ABC Ltda",
-      value: "R$ 25.000",
-      probability: 40,
-      stage: "1",
-      dueDate: "2024-01-30",
-      area: "Empresarial",
-      responsible: "Dr. Roberto Silva"
-    },
-    {
-      id: 5,
-      title: "Recuperação de Crédito - XYZ Corp",
-      client: "XYZ Corporation",
-      value: "R$ 12.000",
-      probability: 70,
-      stage: "3",
-      dueDate: "2024-01-22",
-      area: "Civil",
-      responsible: "Dr. Ana Beatriz"
-    },
-    ];
-  });
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
 
   useEffect(() => {
-    localStorage.setItem("opportunities", JSON.stringify(opportunities));
-  }, [opportunities]);
+    const fetchOpportunities = async () => {
+      try {
+        const url = fluxoId
+          ? `${apiUrl}/api/oportunidades/fase/${fluxoId}`
+          : `${apiUrl}/api/oportunidades`;
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        const parsed: unknown[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.rows)
+          ? data.rows
+          : Array.isArray(data?.data?.rows)
+          ? data.data.rows
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
+        setOpportunities(
+          parsed.map((o) => {
+            const item = o as Record<string, unknown>;
+            return {
+              id: Number(item.id),
+              title:
+                (item.detalhes as string) ||
+                (item.numero_processo_cnj as string) ||
+                `Oportunidade ${item.id}`,
+              client: item.solicitante_id ? String(item.solicitante_id) : "",
+              value: item.valor_honorarios ? Number(item.valor_honorarios) : 0,
+              probability: item.percentual_honorarios
+                ? Number(item.percentual_honorarios)
+                : 0,
+              stage: item.etapa_id ? String(item.etapa_id) : "",
+              dueDate: (item.prazo_proximo as string) || "",
+              area: item.area_atuacao_id ? String(item.area_atuacao_id) : "",
+              responsible: item.responsavel_id ? String(item.responsavel_id) : "",
+            };
+          })
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchOpportunities();
+  }, [apiUrl, fluxoId]);
 
   const getOpportunitiesByStage = (stageId: string) => {
     return opportunities.filter(opp => opp.stage === stageId);
@@ -185,7 +167,7 @@ export default function Pipeline() {
 
   const getTotalValueByStage = (stageId: string) => {
     return getOpportunitiesByStage(stageId)
-      .reduce((total, opp) => total + parseFloat(opp.value.replace('R$ ', '').replace('.', '')), 0);
+      .reduce((total, opp) => total + opp.value, 0);
   };
 
   const getProbabilityColor = (probability: number) => {
@@ -243,8 +225,8 @@ export default function Pipeline() {
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-success">
-                R$ {opportunities.reduce((total, opp) => 
-                  total + parseFloat(opp.value.replace('R$ ', '').replace('.', '')), 0
+                R$ {opportunities.reduce((total, opp) =>
+                  total + opp.value, 0
                 ).toLocaleString('pt-BR')}
               </p>
               <p className="text-sm text-muted-foreground">Valor Total</p>
@@ -257,8 +239,8 @@ export default function Pipeline() {
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-warning">
-                R$ {Math.round(opportunities.reduce((total, opp) => 
-                  total + (parseFloat(opp.value.replace('R$ ', '').replace('.', '')) * opp.probability / 100), 0
+                R$ {Math.round(opportunities.reduce((total, opp) =>
+                  total + (opp.value * opp.probability / 100), 0
                 )).toLocaleString('pt-BR')}
               </p>
               <p className="text-sm text-muted-foreground">Receita Prevista</p>
@@ -341,7 +323,7 @@ export default function Pipeline() {
                         <div className="flex items-center gap-1">
                           <DollarSign className="h-3 w-3 text-success" />
                           <span className="text-sm font-medium text-success">
-                            {opportunity.value}
+                            R$ {opportunity.value.toLocaleString('pt-BR')}
                           </span>
                         </div>
                         <span className={`text-xs font-medium ${getProbabilityColor(opportunity.probability)}`}>

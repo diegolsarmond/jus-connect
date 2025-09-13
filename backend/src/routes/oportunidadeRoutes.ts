@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listOportunidades,
+  listOportunidadesByFase,
   getOportunidadeById,
   createOportunidade,
   updateOportunidade,
@@ -102,6 +103,30 @@ const router = Router();
  *                 $ref: '#/components/schemas/Oportunidade'
  */
 router.get('/oportunidades', listOportunidades);
+
+/**
+ * @swagger
+ * /api/oportunidades/fase/{faseId}:
+ *   get:
+ *     summary: Lista oportunidades por fluxo de trabalho
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: faseId
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Lista de oportunidades filtradas por fase
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Oportunidade'
+ */
+router.get('/oportunidades/fase/:faseId', listOportunidadesByFase);
 
 /**
  * @swagger
