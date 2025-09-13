@@ -430,7 +430,7 @@ export default function Pipeline() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between">
                         <CardTitle className="text-sm font-medium leading-tight">
-                          {opportunity.title}
+                          {opportunity.area}
                         </CardTitle>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
