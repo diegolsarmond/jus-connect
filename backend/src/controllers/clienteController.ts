@@ -143,13 +143,13 @@ export const deleteCliente = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'UPDATE public.clientes SET ativo = FALSE WHERE id = $1',
+      'UPDATE public.clientes SET ativo = NOT ativo WHERE id = $1 RETURNING ativo',
       [id]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
-    res.status(204).send();
+    res.json({ ativo: result.rows[0].ativo });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
