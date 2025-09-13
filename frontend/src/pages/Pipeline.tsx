@@ -210,14 +210,33 @@ export default function Pipeline() {
     event.dataTransfer.setData("text/plain", opportunityId.toString());
   };
 
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>, stageId: string) => {
+  const handleDrop = async (
+    event: React.DragEvent<HTMLDivElement>,
+    stageId: string
+  ) => {
     event.preventDefault();
     const id = Number(event.dataTransfer.getData("text/plain"));
-    setOpportunities(prev =>
-      prev.map(opp =>
-        opp.id === id ? { ...opp, stage: stageId } : opp
-      )
-    );
+
+    try {
+      const res = await fetch(`${apiUrl}/api/oportunidades/${id}/etapa`, {
+        method: "PATCH",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ etapa_id: Number(stageId) }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      }
+
+      setOpportunities((prev) =>
+        prev.map((opp) => (opp.id === id ? { ...opp, stage: stageId } : opp))
+      );
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
