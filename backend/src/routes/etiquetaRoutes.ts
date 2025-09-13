@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listEtiquetas,
+  listEtiquetasByFluxoTrabalho,
   createEtiqueta,
   updateEtiqueta,
   deleteEtiqueta,
@@ -56,6 +57,30 @@ const router = Router();
  *                 $ref: '#/components/schemas/Etiqueta'
  */
 router.get('/etiquetas', listEtiquetas);
+
+/**
+ * @swagger
+ * /api/etiquetas/fluxos-trabalho/{id}:
+ *   get:
+ *     summary: Lista etiquetas por fluxo de trabalho
+ *     tags: [Etiquetas]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Lista de etiquetas do fluxo de trabalho
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Etiqueta'
+ */
+router.get('/etiquetas/fluxos-trabalho/:id', listEtiquetasByFluxoTrabalho);
 
 /**
  * @swagger

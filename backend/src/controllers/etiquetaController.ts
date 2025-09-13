@@ -13,6 +13,20 @@ export const listEtiquetas = async (_req: Request, res: Response) => {
   }
 };
 
+export const listEtiquetasByFluxoTrabalho = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT id, nome FROM public.etiquetas WHERE id_fluxo_trabalho = $1',
+      [id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createEtiqueta = async (req: Request, res: Response) => {
   const { nome, ativo, exibe_pipeline = true, ordem, id_fluxo_trabalho } = req.body;
   try {
