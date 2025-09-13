@@ -17,6 +17,9 @@ const router = Router();
  *   schemas:
  *     Etiqueta:
  *       type: object
+ *       required:
+ *         - nome
+ *         - ativo
  *       properties:
  *         id:
  *           type: integer
