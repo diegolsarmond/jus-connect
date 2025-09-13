@@ -245,35 +245,62 @@ export default function NovaOportunidade() {
     loadEtapas();
   }, [faseValue, apiUrl]);
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
-    const tipoNome = tipos.find((t) => t.id === values.tipo_processo)?.name || "";
-    const areaNome = areas.find((a) => a.id === values.area_atuacao)?.name || "";
-    const responsavelNome = users.find((u) => u.id === values.responsavel_interno)?.name || "";
-    const etapaNome = etapas.find((e) => e.id === values.etapa)?.name || "";
-    const probability = parseInt((values.percentual_honorarios || "").replace(/\D/g, "")) || 0;
+  const parseCurrency = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits ? Number(digits) / 100 : null;
+  };
 
-    const newOpportunity = {
-      id: Date.now(),
-      title: [tipoNome, values.solicitante_nome].filter(Boolean).join(" - "),
-      client: values.solicitante_nome || "",
-      value: values.valor_honorarios || "",
-      probability,
-      stage: values.etapa || "",
-      etapa_nome: etapaNome,
-      dueDate: values.prazo_proximo || "",
-      area: areaNome,
-      responsible: responsavelNome,
-      tipo_processo_nome: tipoNome,
-      ...values,
-    };
+  const parsePercent = (value: string) => {
+    const digits = value.replace(/\D/g, "");
+    return digits ? Number(digits) : null;
+  };
 
-    const stored = localStorage.getItem("opportunities");
-    const list = stored ? JSON.parse(stored) : [];
-    list.push(newOpportunity);
-    localStorage.setItem("opportunities", JSON.stringify(list));
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      const payload = {
+        tipo_processo_id: Number(values.tipo_processo),
+        area_atuacao_id: values.area_atuacao ? Number(values.area_atuacao) : null,
+        responsavel_id: values.responsavel_interno
+          ? Number(values.responsavel_interno)
+          : null,
+        numero_processo_cnj: values.numero_processo_cnj || null,
+        numero_protocolo: values.numero_protocolo || null,
+        vara_ou_orgao: values.vara_ou_orgao || null,
+        comarca: values.comarca || null,
+        fase_id: values.fase ? Number(values.fase) : null,
+        etapa_id: values.etapa ? Number(values.etapa) : null,
+        prazo_proximo: values.prazo_proximo || null,
+        status_id: values.status ? Number(values.status) : null,
+        solicitante_id: null,
+        valor_causa: parseCurrency(values.valor_causa || ""),
+        valor_honorarios: parseCurrency(values.valor_honorarios || ""),
+        percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
+        forma_pagamento: values.forma_pagamento || null,
+        contingenciamento: values.contingenciamento || null,
+        detalhes: values.detalhes || null,
+        documentos_anexados: null,
+        criado_por: null,
+        envolvidos:
+          values.envolvidos?.filter(
+            (e) =>
+              e.nome || e.cpf_cnpj || e.telefone || e.endereco || e.relacao
+          ) || [],
+      };
 
-    toast({ title: "Oportunidade criada com sucesso" });
-    navigate("/pipeline");
+      const res = await fetch(`${apiUrl}/api/oportunidades`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      toast({ title: "Oportunidade criada com sucesso" });
+      navigate("/pipeline");
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Erro ao criar oportunidade", variant: "destructive" });
+    }
   };
 
   const handleSelectClient = (name: string) => {
