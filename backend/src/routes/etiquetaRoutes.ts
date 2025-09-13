@@ -27,6 +27,11 @@ const router = Router();
  *           type: string
  *         ativo:
  *           type: boolean
+ *         exibe_pipeline:
+ *           type: boolean
+ *           default: true
+ *         ordem:
+ *           type: integer
  *         datacriacao:
  *           type: string
  *           format: date-time
@@ -67,6 +72,11 @@ router.get('/etiquetas', listEtiquetas);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               exibe_pipeline:
+ *                 type: boolean
+ *                 default: true
+ *               ordem:
+ *                 type: integer
  *     responses:
  *       201:
  *         description: Etiqueta criada
@@ -100,6 +110,11 @@ router.post('/etiquetas', createEtiqueta);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               exibe_pipeline:
+ *                 type: boolean
+ *                 default: true
+ *               ordem:
+ *                 type: integer
  *     responses:
  *       200:
  *         description: Etiqueta atualizada
