@@ -1,3 +1,9 @@
+export interface TarefaResponsavel {
+  id_tarefa: number;
+  id_usuario: number;
+  nome_responsavel: string;
+}
+
 export interface Tarefa {
   id: number;
   id_oportunidades: number;
@@ -16,4 +22,5 @@ export interface Tarefa {
   criado_em: string;
   atualizado_em: string;
   concluido: boolean;
+  responsaveis?: TarefaResponsavel[];
 }
