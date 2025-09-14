@@ -23,6 +23,7 @@ import Processos from "./pages/Processos";
 import DocumentTemplates from "./pages/DocumentTemplates";
 import TemplateEditor from "./pages/TemplateEditor";
 import FinancialFlows from "./pages/FinancialFlows";
+import Relatorios from "./pages/Relatorios";
 import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
 import TipoProcesso from "./pages/configuracoes/parametros/TipoProcesso";
@@ -86,15 +87,7 @@ const App = () => (
             <Route path="/documentos" element={<DocumentTemplates />} />
             <Route path="/documentos/:id" element={<TemplateEditor />} />
             <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
-            <Route
-              path="/relatorios"
-              element={
-                <div className="p-6">
-                  <h1 className="text-3xl font-bold">Relatórios</h1>
-                  <p className="text-muted-foreground">Em desenvolvimento</p>
-                </div>
-              }
-            />
+            <Route path="/relatorios" element={<Relatorios />} />
             <Route
               path="/configuracoes"
               element={
