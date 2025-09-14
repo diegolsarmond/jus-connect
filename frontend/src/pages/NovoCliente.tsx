@@ -44,7 +44,6 @@ const formSchema = z.object({
   city: z.string().min(1, "Cidade é obrigatória"),
   state: z.string().min(1, "UF é obrigatória"),
   type: z.enum(["pf", "pj"]),
-  area: z.string().min(1, "Área é obrigatória"),
 });
 
 export default function NovoCliente() {
@@ -74,7 +73,6 @@ export default function NovoCliente() {
       city: "",
       state: "",
       type: "pf",
-      area: "",
     },
   });
 
@@ -127,8 +125,8 @@ export default function NovoCliente() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-
-               <FormField
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
                 control={form.control}
                 name="type"
                 render={({ field }) => (
@@ -149,8 +147,6 @@ export default function NovoCliente() {
                   </FormItem>
                 )}
               />
-
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="name"
