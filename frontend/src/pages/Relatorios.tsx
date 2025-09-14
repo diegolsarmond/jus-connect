@@ -1,5 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockAnalytics, mockMonthlyData } from "@/data/mockData";
+import {
+  mockAnalytics,
+  mockMonthlyData,
+  mockCohortData,
+  mockRevenueByPlan,
+  mockConversionFunnel,
+} from "@/data/mockData";
 import { TrendingUp, DollarSign, Users, Target, AlertCircle } from "lucide-react";
 import {
   LineChart,
@@ -19,29 +25,6 @@ import {
 } from "recharts";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))"];
-
-const cohortData = [
-  { month: "Jan", retained: 100, churned: 0 },
-  { month: "Feb", retained: 85, churned: 15 },
-  { month: "Mar", retained: 72, churned: 28 },
-  { month: "Apr", retained: 65, churned: 35 },
-  { month: "May", retained: 60, churned: 40 },
-  { month: "Jun", retained: 58, churned: 42 },
-];
-
-const revenueByPlan = [
-  { name: "Básico", revenue: 990, customers: 10 },
-  { name: "Profissional", revenue: 1592, customers: 8 },
-  { name: "Enterprise", revenue: 2793, customers: 7 },
-];
-
-const conversionFunnel = [
-  { stage: "Visitantes", count: 1000, conversion: 100 },
-  { stage: "Sign-ups", count: 250, conversion: 25 },
-  { stage: "Trials", count: 200, conversion: 20 },
-  { stage: "Pagantes", count: 157, conversion: 15.7 },
-  { stage: "Ativos 3m+", count: 142, conversion: 14.2 },
-];
 
 export default function Relatorios() {
   const {
@@ -146,7 +129,7 @@ export default function Relatorios() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={revenueByPlan}
+                  data={mockRevenueByPlan}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -155,7 +138,7 @@ export default function Relatorios() {
                   fill="#8884d8"
                   dataKey="revenue"
                 >
-                  {revenueByPlan.map((entry, index) => (
+                  {mockRevenueByPlan.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -174,7 +157,7 @@ export default function Relatorios() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={cohortData}>
+              <LineChart data={mockCohortData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -205,7 +188,7 @@ export default function Relatorios() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={conversionFunnel} layout="horizontal">
+              <BarChart data={mockConversionFunnel} layout="horizontal">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis dataKey="stage" type="category" width={100} />
