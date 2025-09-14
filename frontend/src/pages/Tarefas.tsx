@@ -124,7 +124,7 @@ interface ApiTask {
   hora?: string | null;
   dia_inteiro?: boolean;
   prioridade?: number;
-  ativa?: boolean;
+  concluido?: boolean;
 }
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
@@ -240,7 +240,7 @@ export default function Tarefas() {
           data.map(async (t) => {
             const dateStr = t.dia_inteiro ? t.data : `${t.data}${t.hora ? `T${t.hora}` : ''}`;
             const date = new Date(dateStr);
-            const status: Task['status'] = !t.ativa
+            const status: Task['status'] = !t.concluido
               ? 'resolvida'
               : date < new Date()
               ? 'atrasada'
@@ -330,7 +330,7 @@ export default function Tarefas() {
       repetir_cada_unidade: data.recurring ? data.recurrenceUnit : null,
       repetir_intervalo: 1,
 
-      ativa: true,
+      concluido: true,
     };
 
     try {
@@ -359,7 +359,7 @@ export default function Tarefas() {
         ? created.data
         : `${created.data}${created.hora ? `T${created.hora}` : ''}`;
       const date = new Date(dateStr);
-      const status: Task['status'] = !created.ativa
+      const status: Task['status'] = !created.concluido
         ? 'resolvida'
         : date < new Date()
         ? 'atrasada'

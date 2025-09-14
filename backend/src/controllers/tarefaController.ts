@@ -4,7 +4,7 @@ import pool from '../services/db';
 export const listTarefas = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, ativa FROM public.tarefas'
+      'SELECT id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido FROM public.tarefas'
     );
     res.json(result.rows);
   } catch (error) {
@@ -17,7 +17,7 @@ export const getTarefaById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'SELECT id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, ativa FROM public.tarefas WHERE id = $1',
+      'SELECT id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido FROM public.tarefas WHERE id = $1',
       [id]
     );
     if (result.rowCount === 0) {
@@ -45,14 +45,14 @@ export const createTarefa = async (req: Request, res: Response) => {
     repetir_quantas_vezes = 1,
     repetir_cada_unidade,
     repetir_intervalo = 1,
-    ativa = true,
+    concluido = true,
   } = req.body;
 
   try {
     const result = await pool.query(
-      `INSERT INTO public.tarefas (id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, ativa)
+      `INSERT INTO public.tarefas (id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), $14)
-       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, ativa`,
+       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido`,
       [
         id_oportunidades,
         titulo,
@@ -67,7 +67,7 @@ export const createTarefa = async (req: Request, res: Response) => {
         repetir_quantas_vezes,
         repetir_cada_unidade,
         repetir_intervalo,
-        ativa,
+        concluido,
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -93,13 +93,13 @@ export const updateTarefa = async (req: Request, res: Response) => {
     repetir_quantas_vezes = 1,
     repetir_cada_unidade,
     repetir_intervalo = 1,
-    ativa = true,
+    concluido = true,
   } = req.body;
 
   try {
     const result = await pool.query(
-      `UPDATE public.tarefas SET id_oportunidades = $1, titulo = $2, descricao = $3, data = $4, hora = $5, dia_inteiro = $6, prioridade = $7, mostrar_na_agenda = $8, privada = $9, recorrente = $10, repetir_quantas_vezes = $11, repetir_cada_unidade = $12, repetir_intervalo = $13, ativa = $14, atualizado_em = NOW() WHERE id = $15
-       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, ativa`,
+      `UPDATE public.tarefas SET id_oportunidades = $1, titulo = $2, descricao = $3, data = $4, hora = $5, dia_inteiro = $6, prioridade = $7, mostrar_na_agenda = $8, privada = $9, recorrente = $10, repetir_quantas_vezes = $11, repetir_cada_unidade = $12, repetir_intervalo = $13, concluido = $14, atualizado_em = NOW() WHERE id = $15
+       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido`,
       [
         id_oportunidades,
         titulo,
@@ -114,7 +114,7 @@ export const updateTarefa = async (req: Request, res: Response) => {
         repetir_quantas_vezes,
         repetir_cada_unidade,
         repetir_intervalo,
-        ativa,
+        concluido,
         id,
       ]
     );

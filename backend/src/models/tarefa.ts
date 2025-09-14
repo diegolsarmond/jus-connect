@@ -15,5 +15,5 @@ export interface Tarefa {
   repetir_intervalo: number;
   criado_em: string;
   atualizado_em: string;
-  ativa: boolean;
+  concluido: boolean;
 }

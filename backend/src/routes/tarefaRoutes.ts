@@ -55,7 +55,7 @@ const router = Router();
  *         atualizado_em:
  *           type: string
  *           format: date-time
- *         ativa:
+ *         concluido:
  *           type: boolean
  */
 
