@@ -610,13 +610,11 @@ export default function Tarefas() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        {task.status === 'pendente' && (
+                        {task.status === 'pendente' ? (
                           <Clock className="h-4 w-4 text-amber-500" />
-                        )}
-                        {task.status === 'atrasada' && (
+                        ) : task.status === 'atrasada' ? (
                           <AlertTriangle className="h-4 w-4 text-destructive" />
-                        )}
-                        {task.status === 'resolvida' && (
+                        ) : (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                         )}
                       </TooltipTrigger>
