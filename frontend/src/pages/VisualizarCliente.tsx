@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Phone, User, Building2 } from "lucide-react";
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
@@ -34,7 +35,12 @@ interface ApiClient {
   datacadastro: string;
 }
 
-const mapApiClientToClient = (c: ApiClient): Client => ({
+type LocalClient = Client & {
+  history?: Array<{ id: number; date: string; action: string; note?: string }>;
+  cep?: string;
+};
+
+const mapApiClientToClient = (c: ApiClient): LocalClient => ({
   id: c.id,
   name: c.nome,
   email: c.email,
@@ -46,12 +52,14 @@ const mapApiClientToClient = (c: ApiClient): Client => ({
   status: c.ativo ? "Ativo" : "Inativo",
   lastContact: c.datacadastro,
   processes: [],
+  history: [],
+  cep: c.cep,
 });
 
 export default function VisualizarCliente() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [client, setClient] = useState<Client | null>(null);
+  const [client, setClient] = useState<LocalClient | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,6 +83,9 @@ export default function VisualizarCliente() {
 
     fetchClient();
   }, [id]);
+
+  const formatDate = (iso?: string) =>
+    iso ? new Date(iso).toLocaleDateString("pt-BR") : "";
 
   if (loading) {
     return (
@@ -153,41 +164,121 @@ export default function VisualizarCliente() {
           <div className="text-sm text-muted-foreground">Área: {client.area}</div>
           <div className="text-sm text-muted-foreground">Status: {client.status}</div>
           <div className="text-sm text-muted-foreground">
-            Último contato: {new Date(client.lastContact).toLocaleDateString("pt-BR")}
+            Último contato: {formatDate(client.lastContact)}
           </div>
         </CardContent>
       </Card>
 
-      <div className="space-y-6">
-        {Object.entries(processosPorStatus).map(([status, processos]) => (
-          <div key={status} className="space-y-2">
-            <h2 className="text-xl font-semibold">{status}</h2>
-            {processos.map((processo) => (
-              <Card
-                key={processo.id}
-                className="cursor-pointer"
-                onClick={() =>
-                  navigate(`/clientes/${id}/processos/${processo.id}`)
-                }
-              >
-                <CardContent className="flex justify-between items-center py-4">
-                  <div>
-                    <p className="font-medium">
-                      {processo.number ? `Processo ${processo.number}` : "Processo"}
-                    </p>
-                    {processo.tipo && (
-                      <p className="text-sm text-muted-foreground">
-                        {processo.tipo}
-                      </p>
-                    )}
-                  </div>
-                  <Badge>{processo.status}</Badge>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ))}
-      </div>
+      <Tabs defaultValue="dados" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="dados">Dados do Cliente</TabsTrigger>
+          <TabsTrigger value="processos">Processos</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="dados" className="mt-4">
+          <Card>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-sm font-medium">Contato</h3>
+                <p className="text-sm text-muted-foreground">{client.email}</p>
+                <p className="text-sm text-muted-foreground">{client.phone}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium">Endereço</h3>
+                <p className="text-sm text-muted-foreground">{client.address}</p>
+                <p className="text-sm text-muted-foreground">CEP: {client.cep ?? "-"}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium">Status</h3>
+                <p className="text-sm text-muted-foreground">{client.status}</p>
+                <p className="text-sm text-muted-foreground">
+                  Último contato: {formatDate(client.lastContact)}
+                </p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium">Outros</h3>
+                <p className="text-sm text-muted-foreground">Área: {client.area || "-"}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="processos" className="mt-4">
+          {Object.keys(processosPorStatus).length === 0 ? (
+            <Card>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Nenhum processo encontrado para este cliente.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(processosPorStatus).map(([status, processos]) => (
+                <div key={status} className="space-y-2">
+                  <h2 className="text-xl font-semibold">{status}</h2>
+                  {processos.map((processo) => (
+                    <Card
+                      key={processo.id}
+                      className="cursor-pointer"
+                      onClick={() =>
+                        navigate(`/clientes/${id}/processos/${processo.id}`)
+                      }
+                    >
+                      <CardContent className="flex justify-between items-center py-4">
+                        <div>
+                          <p className="font-medium">
+                            {processo.number
+                              ? `Processo ${processo.number}`
+                              : "Processo"}
+                          </p>
+                          {processo.tipo && (
+                            <p className="text-sm text-muted-foreground">
+                              {processo.tipo}
+                            </p>
+                          )}
+                        </div>
+                        <Badge>{processo.status}</Badge>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="historico" className="mt-4">
+          {client.history && client.history.length > 0 ? (
+            <div className="space-y-3">
+              {client.history.map((h) => (
+                <Card key={h.id}>
+                  <CardContent className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium">{h.action}</p>
+                      {h.note && (
+                        <p className="text-sm text-muted-foreground">{h.note}</p>
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDate(h.date)}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Sem histórico por enquanto.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
