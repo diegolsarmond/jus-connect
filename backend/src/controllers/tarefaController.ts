@@ -128,6 +128,23 @@ export const updateTarefa = async (req: Request, res: Response) => {
   }
 };
 
+export const concluirTarefa = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `UPDATE public.tarefas SET concluido = true, atualizado_em = NOW() WHERE id = $1 RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido`,
+      [id],
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const deleteTarefa = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {

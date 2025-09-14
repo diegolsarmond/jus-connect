@@ -4,6 +4,7 @@ import {
   getTarefaById,
   createTarefa,
   updateTarefa,
+  concluirTarefa,
   deleteTarefa,
 } from '../controllers/tarefaController';
 
@@ -152,6 +153,30 @@ router.post('/tarefas', createTarefa);
  *         description: Tarefa não encontrada
  */
 router.put('/tarefas/:id', updateTarefa);
+
+/**
+ * @swagger
+ * /api/tarefas/{id}/concluir:
+ *   patch:
+ *     summary: Marca tarefa como concluída
+ *     tags: [Tarefas]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Tarefa concluída
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Tarefa'
+ *       404:
+ *         description: Tarefa não encontrada
+ */
+router.patch('/tarefas/:id/concluir', concluirTarefa);
 
 /**
  * @swagger

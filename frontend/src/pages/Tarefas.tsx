@@ -394,8 +394,15 @@ export default function Tarefas() {
     { name: 'Resolvidas', value: done },
   ];
 
-  const markDone = (id: number) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'resolvida' } : t)));
+  const markDone = async (id: number) => {
+    try {
+      const url = joinUrl(apiUrl, `/api/tarefas/${id}/concluir`);
+      const res = await fetch(url, { method: 'PATCH', headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('Failed to conclude task');
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'resolvida' } : t)));
+    } catch (e) {
+      console.error('Erro ao concluir tarefa:', e);
+    }
   };
 
   const deleteTask = (id: number) => {
