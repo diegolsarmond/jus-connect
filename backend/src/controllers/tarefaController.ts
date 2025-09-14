@@ -16,7 +16,8 @@ export const listTarefas = async (_req: Request, res: Response) => {
        FROM public.tarefas t
        LEFT JOIN public.tarefas_responsaveis tr ON tr.id_tarefa = t.id
        LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
-       GROUP BY t.id`
+       GROUP BY t.id
+ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`
     );
     res.json(result.rows);
   } catch (error) {
