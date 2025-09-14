@@ -376,7 +376,7 @@ export default function Tarefas() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="process">Processo ou caso</Label>
+                <Label htmlFor="process">Proposta:</Label>
                 <select
                   id="process"
                   className="w-full border rounded-md h-9 px-2"
@@ -411,7 +411,7 @@ export default function Tarefas() {
               </div>
             </div>
             <div>
-              <Label htmlFor="title">Tarefa</Label>
+              <Label htmlFor="title">Título da Tarefa</Label>
               <Input id="title" {...register('title')} />
               {errors.title && (
                 <p className="text-sm text-destructive">{errors.title.message}</p>
@@ -419,7 +419,7 @@ export default function Tarefas() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="date">Data</Label>
+                <Label htmlFor="date">Data:</Label>
                 <Input type="date" id="date" {...register('date')} />
                 {errors.date && (
                   <p className="text-sm text-destructive">{errors.date.message}</p>
@@ -427,7 +427,7 @@ export default function Tarefas() {
               </div>
               {!allDay && (
                 <div>
-                  <Label htmlFor="time">Hora</Label>
+                  <Label htmlFor="time">Hora:</Label>
                   <Input type="time" id="time" {...register('time')} />
                   {errors.time && (
                     <p className="text-sm text-destructive">{errors.time.message}</p>
@@ -436,24 +436,18 @@ export default function Tarefas() {
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox id="showOnAgenda" {...register('showOnAgenda')} />
-                <Label htmlFor="showOnAgenda">Mostrar na agenda</Label>
-              </div>
+
               <div className="flex items-center space-x-2">
                 <Checkbox id="allDay" {...register('allDay')} />
                 <Label htmlFor="allDay">Dia inteiro</Label>
               </div>
             </div>
-            <div>
-              <Label htmlFor="location">Local</Label>
-              <Input id="location" {...register('location')} />
-            </div>
+        
             <div>
               <Label htmlFor="description">Descrição</Label>
               <Textarea
                 id="description"
-                placeholder="Use @ para mencionar"
+                placeholder="Descreva sua tarefa"
                 {...register('description')}
               />
             </div>
@@ -478,7 +472,11 @@ export default function Tarefas() {
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <Controller
+                                        <div className="flex items-center space-x-2">
+                <Checkbox id="showOnAgenda" {...register('showOnAgenda')} />
+                <Label htmlFor="showOnAgenda">Mostrar na agenda</Label>
+              </div> 
+            <Controller
                 name="recurring"
                 control={control}
                 render={({ field }) => (
@@ -502,15 +500,16 @@ export default function Tarefas() {
                 <Checkbox id="private" {...register('private')} />
                 <Label htmlFor="private">Privada</Label>
               </div>
+
             </div>
             {recurring && (
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <Label htmlFor="recurrenceValue">Recorrência</Label>
+                  <Label htmlFor="recurrenceValue">Repetir quantas vezes:</Label>
                   <Input id="recurrenceValue" {...register('recurrenceValue')} />
                 </div>
                 <div className="col-span-2">
-                  <Label htmlFor="recurrenceUnit">Período</Label>
+                  <Label htmlFor="recurrenceUnit">A cada:</Label>
                   <select
                     id="recurrenceUnit"
                     className="w-full border rounded-md h-9 px-2"
