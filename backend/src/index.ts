@@ -19,6 +19,7 @@ import financialRoutes from './routes/financialRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import oportunidadeRoutes from './routes/oportunidadeRoutes';
 import fluxoTrabalhoRoutes from './routes/fluxoTrabalhoRoutes';
+import tarefaRoutes from './routes/tarefaRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -41,7 +42,7 @@ app.use((req, res, next) => {
 
   if (origin && allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
-    res.header('Vary', 'Origin'); // boa pr·tica p/ caches
+    res.header('Vary', 'Origin'); // boa pr√°tica p/ caches
   }
 
   res.header('Access-Control-Allow-Credentials', 'true');
@@ -81,6 +82,7 @@ app.use('/api', financialRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', oportunidadeRoutes);
 app.use('/api', fluxoTrabalhoRoutes);
+app.use('/api', tarefaRoutes);
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);
