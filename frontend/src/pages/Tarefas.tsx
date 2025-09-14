@@ -110,7 +110,6 @@ interface ApiOpportunity {
   id: number;
   data_criacao?: string;
   solicitante_nome?: string;
-}
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
 
@@ -232,7 +231,7 @@ export default function Tarefas() {
       ? `Proposta #${selectedOpportunity.id}/${new Date(
           selectedOpportunity.data_criacao || '',
         ).getFullYear()} - ${selectedOpportunity.solicitante_nome ?? ''}`
-      : data.process;
+
 
     const newTask: Task = {
       id: tasks.length + 1,
@@ -278,6 +277,7 @@ export default function Tarefas() {
     `Proposta #${o.id}/${new Date(o.data_criacao || '').getFullYear()}${
       o.solicitante_nome ? ` - ${o.solicitante_nome}` : ''
     }`;
+
 
   // gera os dias com tarefas para o calendário
   const taskDates = useMemo(
@@ -531,6 +531,7 @@ export default function Tarefas() {
                       />
                       <Label htmlFor="all-day">Dia inteiro</Label>
                     </div>
+
                   )}
                 />
               </div>
