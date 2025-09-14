@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listTarefas,
   getTarefaById,
+  getResponsavelByTarefa,
   createTarefa,
   updateTarefa,
   concluirTarefa,
@@ -110,6 +111,39 @@ router.get('/tarefas', listTarefas);
  *         description: Tarefa não encontrada
  */
 router.get('/tarefas/:id', getTarefaById);
+
+/**
+ * @swagger
+ * /api/tarefas/{id}/responsavel:
+ *   get:
+ *     summary: Recupera o nome do responsável pela tarefa
+ *     tags: [Tarefas]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Responsáveis encontrados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id_tarefa:
+ *                     type: integer
+ *                   id_usuario:
+ *                     type: integer
+ *                   nome_responsavel:
+ *                     type: string
+ *       404:
+ *         description: Responsável não encontrado
+ */
+router.get('/tarefas/:id/responsavel', getResponsavelByTarefa);
 
 /**
  * @swagger

@@ -55,6 +55,28 @@ export const getTarefaById = async (req: Request, res: Response) => {
   }
 };
 
+export const getResponsavelByTarefa = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT tr.id_tarefa, tr.id_usuario, u.nome_completo AS nome_responsavel
+       FROM public.tarefas_responsaveis tr
+       JOIN public.usuarios u ON tr.id_usuario = u.id
+       WHERE tr.id_tarefa = $1`,
+      [id],
+    );
+    if (result.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ error: 'Responsável não encontrado para esta tarefa' });
+    }
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createTarefa = async (req: Request, res: Response) => {
   const {
     id_oportunidades,
