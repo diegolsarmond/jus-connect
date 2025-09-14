@@ -217,7 +217,6 @@ router.put(['/usuarios/:id', '/users/:id'], updateUsuario);
  */
 router.delete(['/usuarios/:id', '/users/:id'], deleteUsuario);
 
-// Alias em inglês para compatibilidade com consumidores da API
 router.get('/users', listUsuarios);
 router.get('/users/:id', getUsuarioById);
 router.post('/users', createUsuario);
