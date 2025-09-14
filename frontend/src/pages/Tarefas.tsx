@@ -112,6 +112,18 @@ interface ApiOpportunity {
   solicitante_nome?: string;
 }
 
+interface ApiTask {
+  id: number;
+  id_oportunidades?: number | null;
+  titulo: string;
+  descricao?: string;
+  data: string;
+  hora?: string | null;
+  dia_inteiro?: boolean;
+  prioridade?: number;
+  ativa?: boolean;
+}
+
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
 
 function joinUrl(base: string, path = '') {
@@ -126,18 +138,7 @@ function startOfDay(d: Date) {
 }
 
 export default function Tarefas() {
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: 1,
-      title: 'Enviar documentação',
-      process: 'Processo 123',
-      participants: ['Cliente X'],
-      date: new Date(),
-      responsibles: ['Maria'],
-      status: 'pendente',
-      priority: 3,
-    },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState<ApiUsuario[]>([]);
   const [opportunities, setOpportunities] = useState<ApiOpportunity[]>([]);
@@ -211,7 +212,50 @@ export default function Tarefas() {
     fetchOpportunities();
   }, []);
 
-  const onSubmit = (data: FormValues) => {
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const url = joinUrl(apiUrl, '/api/tarefas');
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('Failed to fetch tasks');
+        const json = await response.json();
+        const data: ApiTask[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.rows)
+          ? json.rows
+          : Array.isArray(json?.data?.rows)
+          ? json.data.rows
+          : Array.isArray(json?.data)
+          ? json.data
+          : [];
+        const tasksMapped: Task[] = data.map((t) => {
+          const dateStr = t.dia_inteiro ? t.data : `${t.data}${t.hora ? `T${t.hora}` : ''}`;
+          const date = new Date(dateStr);
+          const status: Task['status'] = !t.ativa
+            ? 'resolvida'
+            : date < new Date()
+            ? 'atrasada'
+            : 'pendente';
+          return {
+            id: t.id,
+            title: t.titulo,
+            process: t.id_oportunidades ? String(t.id_oportunidades) : '',
+            participants: [],
+            date,
+            responsibles: [],
+            status,
+            priority: t.prioridade ?? 1,
+          };
+        });
+        setTasks(tasksMapped);
+      } catch (err) {
+        console.error('Erro ao buscar tarefas:', err);
+      }
+    };
+    fetchTasks();
+  }, []);
+
+  const onSubmit = async (data: FormValues) => {
     const files: File[] = Array.from(data.attachments?.[0] ? data.attachments : []);
     for (const file of files) {
       if (file.size > 5 * 1024 * 1024) {
@@ -240,19 +284,57 @@ export default function Tarefas() {
         }`
       : data.process;
 
-    const newTask: Task = {
-      id: tasks.length + 1,
-      title: data.title,
-      process: processText,
-      participants: [],
-      date: data.allDay ? new Date(data.date) : new Date(`${data.date}T${data.time}`),
-      responsibles: data.responsibles,
-      status: 'pendente',
-      priority: data.priority,
+    const payload = {
+      id_oportunidades: data.process ? Number(data.process) : null,
+      titulo: data.title,
+      descricao: data.description || '',
+      data: data.date,
+      hora: data.allDay ? null : data.time,
+      dia_inteiro: data.allDay,
+      prioridade: data.priority,
+      mostrar_na_agenda: data.showOnAgenda,
+      privada: data.private,
+      recorrente: data.recurring,
+      repetir_quantas_vezes: data.recurrenceValue ? Number(data.recurrenceValue) : 1,
+      repetir_cada_unidade: data.recurrenceUnit || null,
+      repetir_intervalo: data.recurrenceValue ? Number(data.recurrenceValue) : 1,
+      ativa: true,
     };
-    setTasks((prev) => [...prev, newTask]);
-    reset();
-    setOpen(false);
+
+    try {
+      const url = joinUrl(apiUrl, '/api/tarefas');
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error('Failed to create task');
+      const created: ApiTask = await response.json();
+      const dateStr = created.dia_inteiro
+        ? created.data
+        : `${created.data}${created.hora ? `T${created.hora}` : ''}`;
+      const date = new Date(dateStr);
+      const status: Task['status'] = !created.ativa
+        ? 'resolvida'
+        : date < new Date()
+        ? 'atrasada'
+        : 'pendente';
+      const newTask: Task = {
+        id: created.id,
+        title: created.titulo,
+        process: created.id_oportunidades ? String(created.id_oportunidades) : processText,
+        participants: [],
+        date,
+        responsibles: data.responsibles,
+        status,
+        priority: created.prioridade ?? data.priority,
+      };
+      setTasks((prev) => [...prev, newTask]);
+      reset();
+      setOpen(false);
+    } catch (err) {
+      console.error('Erro ao criar tarefa:', err);
+    }
   };
 
   const pending = tasks.filter((t) => t.status === 'pendente').length;
