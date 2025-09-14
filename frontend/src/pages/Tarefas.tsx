@@ -246,8 +246,12 @@ export default function Tarefas() {
           : [];
         const tasksMapped: Task[] = await Promise.all(
           data.map(async (t) => {
-            const dateStr = t.dia_inteiro ? t.data : `${t.data}${t.hora ? `T${t.hora}` : ''}`;
-            const date = new Date(dateStr);
+            const datePart = t.data.split(/[T\s]/)[0];
+            const date = new Date(`${datePart}T00:00:00`);
+            if (!t.dia_inteiro && t.hora) {
+              const [h, m] = t.hora.split(':');
+              date.setHours(Number(h), Number(m));
+            }
             const status: Task['status'] = t.concluido
               ? 'resolvida'
               : date < new Date()
@@ -285,7 +289,7 @@ export default function Tarefas() {
               processId: t.id_oportunidades ?? null,
               process: processText,
               date,
-              time: t.hora || null,
+              time: t.hora ? t.hora.slice(0, 5) : null,
               description: t.descricao || '',
               responsibles,
               responsibleIds,
@@ -373,10 +377,12 @@ export default function Tarefas() {
             console.error('Erro ao adicionar responsáveis:', e);
           }
         }
-        const dateStr = created.dia_inteiro
-          ? created.data
-          : `${created.data}${created.hora ? `T${created.hora}` : ''}`;
-        const date = new Date(dateStr);
+        const createdDatePart = created.data.split(/[T\s]/)[0];
+        const date = new Date(`${createdDatePart}T00:00:00`);
+        if (!created.dia_inteiro && created.hora) {
+          const [h, m] = created.hora.split(':');
+          date.setHours(Number(h), Number(m));
+        }
         const status: Task['status'] = created.concluido
           ? 'resolvida'
           : date < new Date()
@@ -390,7 +396,7 @@ export default function Tarefas() {
           processId: created.id_oportunidades ?? null,
           process: procText,
           date,
-          time: created.hora || null,
+          time: created.hora ? created.hora.slice(0, 5) : null,
           description: created.descricao || '',
           responsibles: data.responsibles.map((id) => {
             const u = users.find((usr) => String(usr.id) === id);
@@ -410,10 +416,12 @@ export default function Tarefas() {
         });
         if (!response.ok) throw new Error('Failed to update task');
         const updated: ApiTask = await response.json();
-        const dateStr = updated.dia_inteiro
-          ? updated.data
-          : `${updated.data}${updated.hora ? `T${updated.hora}` : ''}`;
-        const date = new Date(dateStr);
+        const updatedDatePart = updated.data.split(/[T\s]/)[0];
+        const date = new Date(`${updatedDatePart}T00:00:00`);
+        if (!updated.dia_inteiro && updated.hora) {
+          const [h, m] = updated.hora.split(':');
+          date.setHours(Number(h), Number(m));
+        }
         const status: Task['status'] = updated.concluido
           ? 'resolvida'
           : date < new Date()
@@ -430,7 +438,7 @@ export default function Tarefas() {
                   processId: updated.id_oportunidades ?? null,
                   process: procText,
                   date,
-                  time: updated.hora || null,
+                  time: updated.hora ? updated.hora.slice(0, 5) : null,
                   description: updated.descricao || '',
                   status,
                   priority: updated.prioridade ?? data.priority,
