@@ -452,16 +452,11 @@ export default function EditarOportunidade() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Editar Oportunidade</h1>
-          <p className="text-muted-foreground">Atualize os dados da oportunidade</p>
+          <h1 className="text-3xl font-bold text-foreground">Editar Proposta</h1>
+
+          <p className="text-muted-foreground">Atualize os dados da proposta</p>
         </div>
-        <Button
-          variant="outline"
-          type="button"
-          onClick={() => navigate(`/pipeline/oportunidade/${id}`)}
-        >
-          Cancelar
-        </Button>
+      
       </div>
 
       <Card>
@@ -1146,9 +1141,16 @@ export default function EditarOportunidade() {
               </Accordion>
 
               <div className="pt-4">
+                <Button
+                      variant="outline"
+                      type="button"
+                      onClick={() => navigate(`/pipeline/oportunidade/${id}`)}                    >
+                      Cancelar
+                    </Button>
                 <Button type="submit" className="bg-primary hover:bg-primary-hover">
-                  Criar novo processo
+                  Salvar proposta
                 </Button>
+                
               </div>
             </form>
           </Form>

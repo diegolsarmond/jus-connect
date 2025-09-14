@@ -513,8 +513,8 @@ export default function VisualizarOportunidade() {
       {/* Header / ações (REMOVIDO Duplicar) */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Visualizar Oportunidade</h1>
-          <p className="text-muted-foreground">Detalhes completos da oportunidade</p>
+          <h1 className="text-3xl font-bold">Visualizar Proposta</h1>
+          <p className="text-muted-foreground">Detalhes completos da proposta</p>
         </div>
 
         <div className="flex gap-2 items-center">
@@ -542,7 +542,7 @@ export default function VisualizarOportunidade() {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-2">
-            <CardTitle>{opportunity.title ?? `Oportunidade ${opportunity.id}`}</CardTitle>
+            <CardTitle>{opportunity.title ?? `Proposta #${opportunity.id}`}/{new Date().getFullYear()}</CardTitle>
             <div className="flex flex-wrap gap-2">
               {typeof opportunity.fase === "string" && (
                 <Badge variant="outline">{opportunity.fase}</Badge>
