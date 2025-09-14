@@ -217,5 +217,12 @@ router.put('/usuarios/:id', updateUsuario);
  */
 router.delete('/usuarios/:id', deleteUsuario);
 
+// Alias em inglês para compatibilidade com consumidores da API
+router.get('/users', listUsuarios);
+router.get('/users/:id', getUsuarioById);
+router.post('/users', createUsuario);
+router.put('/users/:id', updateUsuario);
+router.delete('/users/:id', deleteUsuario);
+
 export default router;
 

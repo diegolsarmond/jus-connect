@@ -40,6 +40,7 @@ app.use((req, res, next) => {
     'http://localhost:5173',
     'http://localhost:8080',
     'http://127.0.0.1:8080',
+    'http://localhost:4200',
   ];
   const origin = req.headers.origin as string | undefined;
 
@@ -77,6 +78,7 @@ app.use('/api', situacaoClienteRoutes);
 app.use('/api', etiquetaRoutes);
 app.use('/api', empresaRoutes);
 app.use('/api', usuarioRoutes);
+app.use('/api/v1', usuarioRoutes);
 app.use('/api', clienteRoutes);
 app.use('/api', agendaRoutes);
 app.use('/api', templateRoutes);
