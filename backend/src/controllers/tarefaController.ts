@@ -16,6 +16,7 @@ export const listTarefas = async (_req: Request, res: Response) => {
        FROM public.tarefas t
        LEFT JOIN public.tarefas_responsaveis tr ON tr.id_tarefa = t.id
        LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
+       WHERE t.ativo IS TRUE
        GROUP BY t.id
 ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`
     );
