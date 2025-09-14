@@ -217,5 +217,11 @@ router.put(['/usuarios/:id', '/users/:id'], updateUsuario);
  */
 router.delete(['/usuarios/:id', '/users/:id'], deleteUsuario);
 
+router.get('/users', listUsuarios);
+router.get('/users/:id', getUsuarioById);
+router.post('/users', createUsuario);
+router.put('/users/:id', updateUsuario);
+router.delete('/users/:id', deleteUsuario);
+
 export default router;
 
