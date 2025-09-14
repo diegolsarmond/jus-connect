@@ -237,7 +237,7 @@ export const concluirTarefa = async (req: Request, res: Response) => {
 export const deleteTarefa = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM public.tarefas WHERE id = $1', [id]);
+    const result = await pool.query('UPDATE public.tarefas SET ativo = FALSE WHERE id = $1', [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
     }
