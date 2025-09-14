@@ -35,7 +35,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Calendar } from '@/components/ui/calendar'; // <-- import do Calendário (shadcn)
+import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Command,
@@ -110,6 +110,7 @@ interface ApiOpportunity {
   id: number;
   data_criacao?: string;
   solicitante_nome?: string;
+}
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
 
@@ -227,11 +228,17 @@ export default function Tarefas() {
     const selectedOpportunity = opportunities.find(
       (o) => String(o.id) === data.process,
     );
-    const processText = selectedOpportunity
-      ? `Proposta #${selectedOpportunity.id}/${new Date(
-          selectedOpportunity.data_criacao || '',
-        ).getFullYear()} - ${selectedOpportunity.solicitante_nome ?? ''}`
 
+    const year =
+      (selectedOpportunity?.data_criacao &&
+        new Date(selectedOpportunity.data_criacao).getFullYear()) ||
+      new Date().getFullYear();
+
+    const processText = selectedOpportunity
+      ? `Proposta #${selectedOpportunity.id}/${year}${
+          selectedOpportunity.solicitante_nome ? ` - ${selectedOpportunity.solicitante_nome}` : ''
+        }`
+      : data.process;
 
     const newTask: Task = {
       id: tasks.length + 1,
@@ -278,12 +285,8 @@ export default function Tarefas() {
       o.solicitante_nome ? ` - ${o.solicitante_nome}` : ''
     }`;
 
-
   // gera os dias com tarefas para o calendário
-  const taskDates = useMemo(
-    () => tasks.map((t) => startOfDay(t.date)),
-    [tasks]
-  );
+  const taskDates = useMemo(() => tasks.map((t) => startOfDay(t.date)), [tasks]);
 
   return (
     <div className="p-6 space-y-6">
@@ -531,7 +534,6 @@ export default function Tarefas() {
                       />
                       <Label htmlFor="all-day">Dia inteiro</Label>
                     </div>
-
                   )}
                 />
               </div>
@@ -545,7 +547,7 @@ export default function Tarefas() {
                 </div>
               )}
             </div>
-        
+
             <div>
               <Label htmlFor="description">Descrição</Label>
               <Textarea
