@@ -471,7 +471,6 @@ export default function VisualizarCliente() {
             </div>
           )}
         </DialogContent>
-      </Dialog>
-    </div>
+      </Dialog>    </div>
   );
 }
