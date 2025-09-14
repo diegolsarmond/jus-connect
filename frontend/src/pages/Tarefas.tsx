@@ -230,7 +230,6 @@ export default function Tarefas() {
 
   useEffect(() => {
     const fetchTasks = async () => {
-      if (!users.length) return;
       try {
         const url = joinUrl(apiUrl, '/api/tarefas');
         const response = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -301,7 +300,7 @@ export default function Tarefas() {
       }
     };
     fetchTasks();
-  }, [users, opportunities]);
+  }, [opportunities]);
 
 
   const onSubmit = async (data: FormValues) => {
