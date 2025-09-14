@@ -67,7 +67,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Usuario'
  */
-router.get('/usuarios', listUsuarios);
+router.get(['/usuarios', '/users'], listUsuarios);
 
 /**
  * @swagger
@@ -91,7 +91,7 @@ router.get('/usuarios', listUsuarios);
  *       404:
  *         description: Usuário não encontrado
  */
-router.get('/usuarios/:id', getUsuarioById);
+router.get(['/usuarios/:id', '/users/:id'], getUsuarioById);
 
 /**
  * @swagger
@@ -139,7 +139,7 @@ router.get('/usuarios/:id', getUsuarioById);
  *             schema:
  *               $ref: '#/components/schemas/Usuario'
  */
-router.post('/usuarios', createUsuario);
+router.post(['/usuarios', '/users'], createUsuario);
 
 /**
  * @swagger
@@ -195,7 +195,7 @@ router.post('/usuarios', createUsuario);
  *       404:
  *         description: Usuário não encontrado
  */
-router.put('/usuarios/:id', updateUsuario);
+router.put(['/usuarios/:id', '/users/:id'], updateUsuario);
 
 /**
  * @swagger
@@ -215,7 +215,7 @@ router.put('/usuarios/:id', updateUsuario);
  *       404:
  *         description: Usuário não encontrado
  */
-router.delete('/usuarios/:id', deleteUsuario);
+router.delete(['/usuarios/:id', '/users/:id'], deleteUsuario);
 
 // Alias em inglês para compatibilidade com consumidores da API
 router.get('/users', listUsuarios);
