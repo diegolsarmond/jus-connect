@@ -6,7 +6,10 @@ export const listResponsaveis = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'SELECT id_usuario FROM public.tarefas_responsaveis WHERE id_tarefa = $1',
+      `SELECT tr.id_tarefa, tr.id_usuario, u.nome_completo AS nome_responsavel
+       FROM public.tarefas_responsaveis tr
+       JOIN public.usuarios u ON tr.id_usuario = u.id
+       WHERE tr.id_tarefa = $1`,
       [id],
     );
     res.json(result.rows);

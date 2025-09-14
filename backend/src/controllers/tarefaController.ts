@@ -4,7 +4,19 @@ import pool from '../services/db';
 export const listTarefas = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido FROM public.tarefas'
+      `SELECT t.id, t.id_oportunidades, t.titulo, t.descricao, t.data, t.hora,
+              t.dia_inteiro, t.prioridade, t.mostrar_na_agenda, t.privada,
+              t.recorrente, t.repetir_quantas_vezes, t.repetir_cada_unidade,
+              t.repetir_intervalo, t.criado_em, t.atualizado_em, t.concluido,
+              COALESCE(
+                json_agg(json_build_object('id_usuario', tr.id_usuario, 'nome_responsavel', u.nome_completo))
+                FILTER (WHERE tr.id_usuario IS NOT NULL),
+                '[]'
+              ) AS responsaveis
+       FROM public.tarefas t
+       LEFT JOIN public.tarefas_responsaveis tr ON tr.id_tarefa = t.id
+       LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
+       GROUP BY t.id`
     );
     res.json(result.rows);
   } catch (error) {
@@ -17,8 +29,21 @@ export const getTarefaById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'SELECT id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido FROM public.tarefas WHERE id = $1',
-      [id]
+      `SELECT t.id, t.id_oportunidades, t.titulo, t.descricao, t.data, t.hora,
+              t.dia_inteiro, t.prioridade, t.mostrar_na_agenda, t.privada,
+              t.recorrente, t.repetir_quantas_vezes, t.repetir_cada_unidade,
+              t.repetir_intervalo, t.criado_em, t.atualizado_em, t.concluido,
+              COALESCE(
+                json_agg(json_build_object('id_usuario', tr.id_usuario, 'nome_responsavel', u.nome_completo))
+                FILTER (WHERE tr.id_usuario IS NOT NULL),
+                '[]'
+              ) AS responsaveis
+       FROM public.tarefas t
+       LEFT JOIN public.tarefas_responsaveis tr ON tr.id_tarefa = t.id
+       LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
+       WHERE t.id = $1
+       GROUP BY t.id`,
+      [id],
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
@@ -46,10 +71,13 @@ export const createTarefa = async (req: Request, res: Response) => {
     repetir_cada_unidade,
     repetir_intervalo = 1,
     concluido = true,
+    responsaveis,
   } = req.body;
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const result = await client.query(
       `INSERT INTO public.tarefas (id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), $14)
        RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido`,
@@ -70,10 +98,40 @@ export const createTarefa = async (req: Request, res: Response) => {
         concluido,
       ]
     );
-    res.status(201).json(result.rows[0]);
+
+    const tarefa = result.rows[0];
+
+    if (Array.isArray(responsaveis) && responsaveis.length > 0) {
+      const values = responsaveis
+        .map((_r: number, idx: number) => `($1, $${idx + 2})`)
+        .join(', ');
+      await client.query(
+        `INSERT INTO public.tarefas_responsaveis (id_tarefa, id_usuario) VALUES ${values}`,
+        [tarefa.id, ...responsaveis],
+      );
+    }
+
+    await client.query('COMMIT');
+
+    let resp = [] as any[];
+    if (Array.isArray(responsaveis) && responsaveis.length > 0) {
+      const respResult = await client.query(
+        `SELECT tr.id_tarefa, tr.id_usuario, u.nome_completo AS nome_responsavel
+         FROM public.tarefas_responsaveis tr
+         JOIN public.usuarios u ON tr.id_usuario = u.id
+         WHERE tr.id_tarefa = $1`,
+        [tarefa.id],
+      );
+      resp = respResult.rows;
+    }
+
+    res.status(201).json({ ...tarefa, responsaveis: resp });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 };
 

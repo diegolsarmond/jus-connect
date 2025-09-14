@@ -58,6 +58,15 @@ const router = Router();
  *           format: date-time
  *         concluido:
  *           type: boolean
+ *         responsaveis:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               id_usuario:
+ *                 type: integer
+ *               nome_responsavel:
+ *                 type: string
  */
 
 /**
