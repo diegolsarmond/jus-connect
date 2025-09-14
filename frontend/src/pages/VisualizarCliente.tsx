@@ -158,43 +158,29 @@ export default function VisualizarCliente() {
   };
 
   useEffect(() => {
-    const fetchClient = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const url = joinUrl(apiUrl, `/api/clientes/${id}`);
-        const response = await fetch(url, {
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) {
-          throw new Error("Failed to fetch client");
-        }
-        const json: ApiClient = await response.json();
-        setClient(mapApiClientToClient(json));
-      } catch (error) {
-        console.error("Erro ao buscar cliente:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+        const [clientRes, typesRes, docsRes] = await Promise.all([
+          fetch(joinUrl(apiUrl, `/api/clientes/${id}`), {
+            headers: { Accept: "application/json" },
+          }),
+          fetch(joinUrl(apiUrl, `/api/tipo-documentos`)),
+          fetch(joinUrl(apiUrl, `/api/clientes/${id}/documentos`)),
+        ]);
 
-    const fetchDocumentTypes = async () => {
-      try {
-        const url = joinUrl(apiUrl, `/api/tipo-documentos`);
-        const res = await fetch(url);
-        if (res.ok) {
-          const types = await res.json();
+        if (clientRes.ok) {
+          const json: ApiClient = await clientRes.json();
+          setClient(mapApiClientToClient(json));
+        }
+
+        if (typesRes.ok) {
+          const types = await typesRes.json();
           setDocumentTypes(types);
         }
-      } catch (error) {
-        console.error("Erro ao buscar tipos de documento:", error);
-      }
-    };
 
-    const fetchDocuments = async () => {
-      try {
-        const url = joinUrl(apiUrl, `/api/clientes/${id}/documentos`);
-        const res = await fetch(url);
-        if (res.ok) {
-          const docs: ApiDocumento[] = await res.json();
+        if (docsRes.ok) {
+          const docs: ApiDocumento[] = await docsRes.json();
           setDocuments(
             docs.map((d) => ({
               id: d.id,
@@ -205,13 +191,13 @@ export default function VisualizarCliente() {
           );
         }
       } catch (error) {
-        console.error("Erro ao buscar documentos:", error);
+        console.error("Erro ao buscar dados do cliente:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchClient();
-    fetchDocumentTypes();
-    fetchDocuments();
+    fetchData();
   }, [id]);
 
   const formatDate = (iso?: string) =>
@@ -445,32 +431,15 @@ export default function VisualizarCliente() {
         </TabsContent>
       </Tabs>
       <Dialog open={!!previewDoc} onOpenChange={(o) => !o && setPreviewDoc(null)}>
-        <DialogContent className="max-w-3xl w-[90vw] h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>{previewDoc?.filename}</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-3xl w-[90vw] h-[90vh] p-0">
           {previewDoc && (
             <iframe
               src={`data:application/pdf;base64,${previewDoc.base64}`}
               className="w-full h-full"
             />
           )}
-          {previewDoc && (
-            <div className="flex justify-end">
-              <Button
-                onClick={() =>
-                  downloadBase64(
-                    previewDoc.filename,
-                    previewDoc.base64,
-                    'application/pdf'
-                  )
-                }
-              >
-                Baixar
-              </Button>
-            </div>
-          )}
         </DialogContent>
-      </Dialog>    </div>
+      </Dialog>
+    </div>
   );
 }
