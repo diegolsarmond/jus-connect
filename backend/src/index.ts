@@ -21,6 +21,7 @@ import uploadRoutes from './routes/uploadRoutes';
 import oportunidadeRoutes from './routes/oportunidadeRoutes';
 import tarefaRoutes from './routes/tarefaRoutes';
 import tarefaResponsavelRoutes from './routes/tarefaResponsavelRoutes';
+import tipoDocumentoRoutes from './routes/tipoDocumentoRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -66,6 +67,7 @@ app.use((req, res, next) => {
 app.use('/api', areaAtuacaoRoutes);
 app.use('/api', tipoEventoRoutes);
 app.use('/api', tipoProcessoRoutes);
+app.use('/api', tipoDocumentoRoutes);
 app.use('/api', escritorioRoutes);
 app.use('/api', perfilRoutes);
 app.use('/api', planoRoutes);
