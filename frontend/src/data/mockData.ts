@@ -38,4 +38,5 @@ export const mockConversionFunnel = [
   { stage: "Trials", count: 200, conversion: 20 },
   { stage: "Pagantes", count: 157, conversion: 15.7 },
   { stage: "Ativos 3m+", count: 142, conversion: 14.2 },
+
 ];

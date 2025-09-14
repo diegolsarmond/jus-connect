@@ -1,225 +1,199 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Users, Target, Calendar, DollarSign, Clock, AlertTriangle } from "lucide-react";
-import { MetricCard } from "@/components/dashboard/MetricCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { mockAnalytics, mockMonthlyData, mockPlanDistribution } from "@/data/mockData";
+import { TrendingUp, TrendingDown, CreditCard, Building2, DollarSign } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
-
-function joinUrl(base: string, path = "") {
-  const b = base.replace(/\/+$/, "");
-  const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
-  return `${b}${p}`;
-}
+const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))'];
 
 export default function Dashboard() {
-  const [totalClientes, setTotalClientes] = useState(0);
-  const [compromissosHoje, setCompromissosHoje] = useState(0);
-  const [upcomingEvents, setUpcomingEvents] = useState<{
-    title: string;
-    time: string;
-    date: string;
-    type: string;
-  }[]>([]);
-  const navigate = useNavigate();
-
-  const recentClients = [
-    { name: "João Silva", type: "Pessoa Física", area: "Trabalhista", status: "Ativo" },
-    { name: "Tech Solutions Ltda", type: "Pessoa Jurídica", area: "Empresarial", status: "Proposta" },
-    { name: "Maria Santos", type: "Pessoa Física", area: "Família", status: "Ativo" },
-    { name: "Construtora ABC", type: "Pessoa Jurídica", area: "Tributário", status: "Negociação" },
-  ];
-
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      try {
-        const clientesRes = await fetch(joinUrl(apiUrl, "/api/clientes/ativos/total"), {
-          headers: { Accept: "application/json" },
-        });
-        if (clientesRes.ok) {
-          const json = await clientesRes.json();
-          setTotalClientes(Number(json.total_clientes_ativos) || 0);
-        }
-
-        const compromissosRes = await fetch(joinUrl(apiUrl, "/api/agendas/total-hoje"), {
-          headers: { Accept: "application/json" },
-        });
-        if (compromissosRes.ok) {
-          const json = await compromissosRes.json();
-          setCompromissosHoje(Number(json.total_compromissos_hoje) || 0);
-        }
-      } catch (error) {
-        console.error("Erro ao buscar métricas:", error);
-      }
-    };
-
-    const fetchUpcomingEvents = async () => {
-      try {
-        const res = await fetch(joinUrl(apiUrl, "/api/agendas"), {
-          headers: { Accept: "application/json" },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          const rows: unknown[] =
-            Array.isArray(json)
-              ? json
-              : Array.isArray(json?.data)
-                ? json.data
-                : Array.isArray(json?.rows)
-                  ? json.rows
-                  : Array.isArray(json?.agendas)
-                    ? json.agendas
-                    : [];
-          interface AgendaItem {
-            titulo?: string;
-            hora_inicio: string;
-            data: string;
-            tipo_evento?: string;
-          }
-          const events = (rows as AgendaItem[])
-            .map((r) => ({
-              title: r.titulo ?? "(sem título)",
-              time: r.hora_inicio,
-              date: new Date(r.data).toLocaleDateString("pt-BR"),
-              type: r.tipo_evento || "Compromisso",
-            }))
-            .slice(0, 3);
-          setUpcomingEvents(events);
-        }
-      } catch (error) {
-        console.error("Erro ao buscar compromissos:", error);
-      }
-    };
-
-    fetchMetrics();
-    fetchUpcomingEvents();
-  }, []);
+  const { mrr, arr, churnRate, conversionRate, activeSubscriptions, trialSubscriptions, totalCompanies, monthlyGrowth } = mockAnalytics;
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">Visão geral do escritório</p>
-        </div>
-        <Button className="bg-primary hover:bg-primary-hover">
-          Novo Cliente
-        </Button>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <p className="text-muted-foreground">Visão geral do seu CRM SaaS</p>
       </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard
-          title="Total de Clientes"
-          value={totalClientes}
-          icon={Users}
-        />
-        <MetricCard
-          title="Oportunidades Ativas"
-          value="23"
-          change="+5 esta semana"
-          changeType="positive"
-          icon={Target}
-        />
-        <MetricCard
-          title="Compromissos Hoje"
-          value={compromissosHoje}
-          icon={Calendar}
-        />
-        <MetricCard
-          title="Receita Este Mês"
-          value="R$ 47.500"
-          change="+18% vs mês anterior"
-          changeType="positive"
-          icon={DollarSign}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Clients */}
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-semibold">Clientes Recentes</CardTitle>
-            <Button variant="ghost" size="sm">Ver Todos</Button>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">MRR</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent className="space-y-4">
-            {recentClients.map((client, index) => (
-              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div className="space-y-1">
-                  <p className="font-medium text-foreground">{client.name}</p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {client.type}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">{client.area}</span>
-                  </div>
-                </div>
-                <Badge 
-                  variant={
-                    client.status === "Ativo" ? "default" : 
-                    client.status === "Proposta" ? "secondary" : 
-                    "outline"
-                  }
-                  className={
-                    client.status === "Ativo" ? "bg-success text-success-foreground" : ""
-                  }
+          <CardContent>
+            <div className="text-2xl font-bold">R$ {mrr.toLocaleString()}</div>
+            <div className="flex items-center text-xs text-muted-foreground">
+              <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
+              +{monthlyGrowth}% mês anterior
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">ARR</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">R$ {arr.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Receita anual recorrente</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Taxa de Churn</CardTitle>
+            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{churnRate}%</div>
+            <p className="text-xs text-muted-foreground">Cancelamentos mensais</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Empresas Ativas</CardTitle>
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalCompanies}</div>
+            <div className="flex gap-2 text-xs">
+              <Badge variant="secondary">{activeSubscriptions} ativas</Badge>
+              <Badge variant="outline">{trialSubscriptions} trial</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <Card className="col-span-4">
+          <CardHeader>
+            <CardTitle>Crescimento MRR</CardTitle>
+            <CardDescription>Evolução da receita mensal recorrente</CardDescription>
+          </CardHeader>
+          <CardContent className="pl-2">
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={mockMonthlyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(value) => [`R$ ${value}`, 'MRR']} />
+                <Line 
+                  type="monotone" 
+                  dataKey="mrr" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={2} 
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-3">
+          <CardHeader>
+            <CardTitle>Distribuição por Plano</CardTitle>
+            <CardDescription>Número de clientes por plano</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={mockPlanDistribution}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, value }) => `${name}: ${value}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
                 >
-                  {client.status}
-                </Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Upcoming Events */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-semibold">Próximos Compromissos</CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/agenda")}
-            >
-              Ver Agenda
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {upcomingEvents.map((event, index) => (
-              <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-                <div className={`p-2 rounded-full ${
-                  event.type === "Audiência" ? "bg-primary/10" :
-                  event.type === "Reunião" ? "bg-success/10" :
-                  "bg-warning/10"
-                }`}>
-                  {event.type === "Audiência" ? (
-                    <AlertTriangle className={`h-4 w-4 ${
-                      event.type === "Audiência" ? "text-primary" :
-                      event.type === "Reunião" ? "text-success" :
-                      "text-warning"
-                    }`} />
-                  ) : event.type === "Reunião" ? (
-                    <Users className="h-4 w-4 text-success" />
-                  ) : (
-                    <Clock className="h-4 w-4 text-warning" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground">{event.title}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {event.date} às {event.time}
-                  </p>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {event.type}
-                </Badge>
-              </div>
-            ))}
+                  {mockPlanDistribution.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
+
+      {/* Churn and Customer Growth */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Taxa de Churn Mensal</CardTitle>
+            <CardDescription>Percentual de cancelamentos por mês</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={mockMonthlyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(value) => [`${value}%`, 'Churn']} />
+                <Bar dataKey="churn" fill="hsl(var(--destructive))" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Crescimento de Clientes</CardTitle>
+            <CardDescription>Número total de clientes ao longo do tempo</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={mockMonthlyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(value) => [value, 'Clientes']} />
+                <Line 
+                  type="monotone" 
+                  dataKey="customers" 
+                  stroke="hsl(var(--secondary))" 
+                  strokeWidth={2} 
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Métricas Rápidas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">{conversionRate}%</div>
+              <p className="text-sm text-muted-foreground">Taxa de Conversão</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">R$ {(mrr / activeSubscriptions).toFixed(0)}</div>
+              <p className="text-sm text-muted-foreground">ARPU (Average Revenue Per User)</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">{(arr / 12 / activeSubscriptions * 12).toFixed(1)} meses</div>
+              <p className="text-sm text-muted-foreground">Customer Lifetime (estimado)</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-primary">R$ {(arr * 0.85).toLocaleString()}</div>
+              <p className="text-sm text-muted-foreground">LTV (Customer Lifetime Value)</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+
