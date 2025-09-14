@@ -4,17 +4,18 @@ export const mockAnalytics = {
   churnRate: 4.5,
   conversionRate: 15.7,
   activeSubscriptions: 250,
+  trialSubscriptions: 35,
   totalCompanies: 25,
   monthlyGrowth: 5.2,
 };
 
 export const mockMonthlyData = [
-  { month: "Jan", mrr: 35000 },
-  { month: "Feb", mrr: 37000 },
-  { month: "Mar", mrr: 39000 },
-  { month: "Apr", mrr: 41000 },
-  { month: "May", mrr: 43000 },
-  { month: "Jun", mrr: 45000 },
+  { month: "Jan", mrr: 35000, churn: 4, customers: 200 },
+  { month: "Feb", mrr: 37000, churn: 5, customers: 210 },
+  { month: "Mar", mrr: 39000, churn: 3, customers: 220 },
+  { month: "Apr", mrr: 41000, churn: 4, customers: 230 },
+  { month: "May", mrr: 43000, churn: 2, customers: 240 },
+  { month: "Jun", mrr: 45000, churn: 3, customers: 250 },
 ];
 
 export const mockCohortData = [
@@ -30,6 +31,12 @@ export const mockRevenueByPlan = [
   { name: "Básico", revenue: 990, customers: 10 },
   { name: "Profissional", revenue: 1592, customers: 8 },
   { name: "Enterprise", revenue: 2793, customers: 7 },
+];
+
+export const mockPlanDistribution = [
+  { name: "Básico", value: 40 },
+  { name: "Profissional", value: 32 },
+  { name: "Enterprise", value: 28 },
 ];
 
 export const mockConversionFunnel = [
