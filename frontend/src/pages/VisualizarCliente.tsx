@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Mail, Phone, User, Building2, Trash } from "lucide-react";
 
+
 const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
 
 function joinUrl(base: string, path = "") {
@@ -205,6 +206,7 @@ export default function VisualizarCliente() {
       <Tabs defaultValue="documentos" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="documentos">Documentos</TabsTrigger>
+
           <TabsTrigger value="processos">Processos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
@@ -262,6 +264,7 @@ export default function VisualizarCliente() {
                   ))}
                 </div>
               )}
+
             </CardContent>
           </Card>
         </TabsContent>
