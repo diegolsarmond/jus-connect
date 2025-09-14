@@ -79,6 +79,8 @@ app.use('/api', templateRoutes);
 app.use('/api', tagRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', financialRoutes);
+app.use('/api', uploadRoutes);
+app.use('/api', oportunidadeRoutes);
 app.use('/api', tarefaRoutes);
 app.use('/api', tarefaResponsavelRoutes);
 
