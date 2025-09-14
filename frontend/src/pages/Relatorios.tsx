@@ -3,10 +3,10 @@ import {
   mockAnalytics,
   mockMonthlyData,
   mockCohortData,
-  mockRevenueByPlan,
+  mockAreaDistribution,
   mockConversionFunnel,
 } from "@/data/mockData";
-import { TrendingUp, DollarSign, Users, Target, AlertCircle } from "lucide-react";
+import { TrendingUp, Users, CheckCircle, Gavel } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -28,69 +28,68 @@ const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accen
 
 export default function Relatorios() {
   const {
-    mrr,
-    arr,
-    churnRate,
-    conversionRate,
-    activeSubscriptions,
-    monthlyGrowth,
+    processosAtivos,
+    processosConcluidos,
+    indiceEncerramento,
+    clientesAtivos,
+    clientesProspecto,
+    totalClientes,
+    taxaConversao,
+    crescimentoMensal,
   } = mockAnalytics;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Relatórios e Analytics</h1>
-        <p className="text-muted-foreground">Análise completa de performance e métricas de negócio</p>
+        <h1 className="text-3xl font-bold">Relatórios Jurídicos</h1>
+        <p className="text-muted-foreground">Análise de performance do seu CRM jurídico</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">MRR</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Processos Ativos</CardTitle>
+            <Gavel className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ {mrr.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{processosAtivos}</div>
             <div className="flex items-center text-xs text-muted-foreground">
               <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-              +{monthlyGrowth}% vs mês anterior
+              +{crescimentoMensal}% vs mês anterior
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Customer LTV</CardTitle>
+            <CardTitle className="text-sm font-medium">Clientes Ativos</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ {(arr * 0.85).toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Lifetime Value médio</p>
+            <div className="text-2xl font-bold">{clientesAtivos}</div>
+            <p className="text-xs text-muted-foreground">Total de clientes ativos</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">CAC Payback</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Índice de Encerramento</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8.5 meses</div>
-            <p className="text-xs text-muted-foreground">Tempo para recuperar CAC</p>
+            <div className="text-2xl font-bold">{indiceEncerramento}%</div>
+            <p className="text-xs text-muted-foreground">Casos concluídos</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Revenue Retention</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">112%</div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-              Expansão &gt; Churn
-            </div>
+            <div className="text-2xl font-bold">{taxaConversao}%</div>
+            <p className="text-xs text-muted-foreground">De prospects para clientes</p>
           </CardContent>
         </Card>
       </div>
@@ -98,8 +97,8 @@ export default function Relatorios() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>Evolução MRR e ARR</CardTitle>
-            <CardDescription>Crescimento da receita recorrente ao longo do tempo</CardDescription>
+            <CardTitle>Evolução de Processos</CardTitle>
+            <CardDescription>Crescimento de processos ao longo do tempo</CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
             <ResponsiveContainer width="100%" height={300}>
@@ -107,13 +106,22 @@ export default function Relatorios() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip formatter={(value) => [`R$ ${value}`, "MRR"]} />
+                <Tooltip />
                 <Area
                   type="monotone"
-                  dataKey="mrr"
+                  dataKey="processos"
                   stroke="hsl(var(--primary))"
                   fill="hsl(var(--primary))"
                   fillOpacity={0.3}
+                  name="Novos"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="encerrados"
+                  stroke="hsl(var(--secondary))"
+                  fill="hsl(var(--secondary))"
+                  fillOpacity={0.3}
+                  name="Encerrados"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -122,27 +130,27 @@ export default function Relatorios() {
 
         <Card className="col-span-3">
           <CardHeader>
-            <CardTitle>Receita por Plano</CardTitle>
-            <CardDescription>Contribuição de cada plano para o MRR</CardDescription>
+            <CardTitle>Distribuição por Área</CardTitle>
+            <CardDescription>Processos por área de atuação</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={mockRevenueByPlan}
+                  data={mockAreaDistribution}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, revenue }) => `${name}: R$ ${revenue}`}
+                  label={({ name, value }) => `${name}: ${value}%`}
                   outerRadius={80}
                   fill="#8884d8"
-                  dataKey="revenue"
+                  dataKey="value"
                 >
-                  {mockRevenueByPlan.map((entry, index) => (
+                  {mockAreaDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => [`R$ ${value}`, "Receita"]} />
+                <Tooltip formatter={(value) => [`${value}%`, "Percentual"]} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -152,8 +160,8 @@ export default function Relatorios() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Análise de Cohort - Retenção</CardTitle>
-            <CardDescription>% de clientes retidos ao longo do tempo</CardDescription>
+            <CardTitle>Retenção de Clientes</CardTitle>
+            <CardDescription>Percentual de clientes retidos</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -184,7 +192,7 @@ export default function Relatorios() {
         <Card>
           <CardHeader>
             <CardTitle>Funil de Conversão</CardTitle>
-            <CardDescription>Da aquisição até cliente ativo</CardDescription>
+            <CardDescription>Da aquisição até clientes ativos</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -205,94 +213,53 @@ export default function Relatorios() {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>SaaS Metrics</CardTitle>
-            <CardDescription>Principais indicadores SaaS</CardDescription>
+            <CardTitle>Métricas de Processos</CardTitle>
+            <CardDescription>Visão geral dos processos jurídicos</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm">Monthly Churn Rate</span>
-              <span className="font-medium text-destructive">{churnRate}%</span>
+              <span className="text-sm">Processos Ativos</span>
+              <span className="font-medium">{processosAtivos}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm">Annual Churn Rate</span>
-              <span className="font-medium">{(churnRate * 12).toFixed(1)}%</span>
+              <span className="text-sm">Processos Concluídos</span>
+              <span className="font-medium">{processosConcluidos}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm">Gross Revenue Retention</span>
-              <span className="font-medium">94.8%</span>
+              <span className="text-sm">Índice de Encerramento</span>
+              <span className="font-medium text-green-600">{indiceEncerramento}%</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm">Net Revenue Retention</span>
-              <span className="font-medium text-green-600">112%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm">Logo Retention</span>
-              <span className="font-medium">96.2%</span>
+              <span className="text-sm">Crescimento Mensal</span>
+              <span className="font-medium text-green-600">+{crescimentoMensal}%</span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Revenue Metrics</CardTitle>
-            <CardDescription>Métricas de receita detalhadas</CardDescription>
+            <CardTitle>Métricas de Clientes</CardTitle>
+            <CardDescription>Visão geral da base de clientes</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm">ARPU (Atual)</span>
-              <span className="font-medium">R$ {(mrr / activeSubscriptions).toFixed(0)}</span>
+              <span className="text-sm">Clientes Ativos</span>
+              <span className="font-medium">{clientesAtivos}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm">ARPU (6m atrás)</span>
-              <span className="font-medium">R$ 180</span>
+              <span className="text-sm">Clientes Prospectos</span>
+              <span className="font-medium">{clientesProspecto}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm">Revenue Growth Rate</span>
-              <span className="font-medium text-green-600">+{monthlyGrowth}%</span>
+              <span className="text-sm">Total de Clientes</span>
+              <span className="font-medium">{totalClientes}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm">Expansion Revenue</span>
-              <span className="font-medium">R$ 89</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm">Contraction Revenue</span>
-              <span className="font-medium text-destructive">R$ 23</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Customer Metrics</CardTitle>
-            <CardDescription>Métricas de aquisição e retenção</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm">CAC (Customer Acquisition Cost)</span>
-              <span className="font-medium">R$ 150</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm">LTV (Lifetime Value)</span>
-              <span className="font-medium">
-                R$ {(arr * 0.85 / activeSubscriptions).toFixed(0)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm">LTV:CAC Ratio</span>
-              <span className="font-medium text-green-600">
-                {((arr * 0.85 / activeSubscriptions) / 150).toFixed(1)}:1
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm">Payback Period</span>
-              <span className="font-medium">8.5 meses</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm">Trial to Paid Conversion</span>
-              <span className="font-medium">{conversionRate}%</span>
+              <span className="text-sm">Taxa de Conversão</span>
+              <span className="font-medium text-green-600">{taxaConversao}%</span>
             </div>
           </CardContent>
         </Card>
@@ -300,3 +267,4 @@ export default function Relatorios() {
     </div>
   );
 }
+
