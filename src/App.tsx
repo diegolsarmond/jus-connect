@@ -26,6 +26,7 @@ import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
 import TipoProcesso from "./pages/configuracoes/parametros/TipoProcesso";
 import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
+import TipoDocumento from "./pages/configuracoes/parametros/TipoDocumento";
 import Perfis from "./pages/configuracoes/parametros/Perfis";
 import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import Escritorios from "./pages/configuracoes/parametros/Escritorios";
@@ -140,6 +141,10 @@ const App = () => (
             <Route
               path="/configuracoes/parametros/tipo-evento"
               element={<TipoEvento />}
+            />
+            <Route
+              path="/configuracoes/parametros/tipo-documento"
+              element={<TipoDocumento />}
             />
             <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
             <Route

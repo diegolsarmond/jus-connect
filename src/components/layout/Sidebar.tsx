@@ -135,6 +135,10 @@ export function Sidebar() {
               href: "/configuracoes/parametros/etiquetas",
             },
             {
+              name: "Tipos de Documento",
+              href: "/configuracoes/parametros/tipo-documento",
+            },
+            {
               name: "Fluxo de Trabalho",
               href: "/configuracoes/parametros/fluxo-de-trabalho",
             },
