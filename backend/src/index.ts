@@ -18,8 +18,8 @@ import documentRoutes from './routes/documentRoutes';
 import financialRoutes from './routes/financialRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import oportunidadeRoutes from './routes/oportunidadeRoutes';
-import fluxoTrabalhoRoutes from './routes/fluxoTrabalhoRoutes';
 import tarefaRoutes from './routes/tarefaRoutes';
+import tarefaResponsavelRoutes from './routes/tarefaResponsavelRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -79,10 +79,8 @@ app.use('/api', templateRoutes);
 app.use('/api', tagRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', financialRoutes);
-app.use('/api', uploadRoutes);
-app.use('/api', oportunidadeRoutes);
-app.use('/api', fluxoTrabalhoRoutes);
 app.use('/api', tarefaRoutes);
+app.use('/api', tarefaResponsavelRoutes);
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);
