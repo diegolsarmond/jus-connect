@@ -24,6 +24,10 @@ const router = Router();
  *           type: string
  *         ativo:
  *           type: boolean
+ *         exibe_agenda:
+ *           type: boolean
+ *         exibe_tarefa:
+ *           type: boolean
  *         datacriacao:
  *           type: string
  *           format: date-time
@@ -64,6 +68,10 @@ router.get('/tipo-eventos', listTiposEvento);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               exibe_agenda:
+ *                 type: boolean
+ *               exibe_tarefa:
+ *                 type: boolean
  *     responses:
  *       201:
  *         description: Tipo de evento criado
@@ -96,6 +104,10 @@ router.post('/tipo-eventos', createTipoEvento);
  *               nome:
  *                 type: string
  *               ativo:
+ *                 type: boolean
+ *               exibe_agenda:
+ *                 type: boolean
+ *               exibe_tarefa:
  *                 type: boolean
  *     responses:
  *       200:
