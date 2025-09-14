@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-interface Item { id: number; nome: string; }
+interface Item { id: number; nome: string; [key: string]: string | number | boolean }
+
+interface BooleanField { key: string; label: string; default?: boolean }
 
 interface ParameterPageProps {
     title: string;
@@ -12,6 +15,7 @@ interface ParameterPageProps {
     placeholder: string;
     emptyMessage: string;
     endpoint?: string; // ex.: "/api/areas"
+    booleanFields?: BooleanField[];
 }
 
 // junta base + path sem barras duplicadas/faltando
@@ -22,14 +26,16 @@ function joinUrl(base: string, path = "") {
 }
 
 export default function ParameterPage({
-    title, description, placeholder, emptyMessage, endpoint,
+    title, description, placeholder, emptyMessage, endpoint, booleanFields,
 }: ParameterPageProps) {
     const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
 
     const [items, setItems] = useState<Item[]>([]);
     const [newItem, setNewItem] = useState("");
+    const [newBooleans, setNewBooleans] = useState<Record<string, boolean>>({});
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editingName, setEditingName] = useState("");
+    const [editingBooleans, setEditingBooleans] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -49,10 +55,15 @@ export default function ParameterPage({
                             Array.isArray(data?.data?.rows) ? data.data.rows :
                                 Array.isArray(data?.data) ? data.data : [];
                 setItems(parsed.map((r) => {
-                    const item = r as { id: number | string; nome?: string; descricao?: string; name?: string };
+                    const item = r as { id: number | string; nome?: string; descricao?: string; name?: string; [key: string]: unknown };
+                    const extra: Record<string, boolean> = {};
+                    booleanFields?.forEach(f => {
+                        extra[f.key] = typeof item[f.key] === 'boolean' ? (item[f.key] as boolean) : f.default ?? false;
+                    });
                     return {
                         id: Number(item.id),
                         nome: item.nome ?? item.descricao ?? item.name ?? "",
+                        ...extra,
                     };
                 }));
             } catch (e: unknown) {
@@ -63,68 +74,94 @@ export default function ParameterPage({
                 setLoading(false);
             }
         })();
-    }, [apiUrl, endpoint]);
+    }, [apiUrl, endpoint, booleanFields]);
 
     const addItem = async () => {
         const nome = newItem.trim();
         if (!nome) return;
+        const payload: Record<string, unknown> = { nome, ativo: true };
+        booleanFields?.forEach(f => {
+            payload[f.key] = newBooleans[f.key] ?? f.default ?? false;
+        });
         if (endpoint) {
             try {
                 const res = await fetch(joinUrl(apiUrl, endpoint), {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Accept: "application/json" },
-                    body: JSON.stringify({ nome, ativo: true }),
+                    body: JSON.stringify(payload),
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
                 const created = await res.json();
-                setItems((prev) => [
-                    ...prev,
-                    { id: Number(created?.id ?? created?.data?.id ?? Date.now()), nome: created?.nome ?? created?.data?.nome ?? nome },
-                ]);
+                const added: Item = {
+                    id: Number(created?.id ?? created?.data?.id ?? Date.now()),
+                    nome: created?.nome ?? created?.data?.nome ?? nome,
+                };
+                booleanFields?.forEach(f => {
+                    added[f.key] = (created?.[f.key] ?? created?.data?.[f.key] ?? payload[f.key]) as boolean;
+                });
+                setItems((prev) => [...prev, added]);
             } catch (e) {
                 console.error(e);
                 setErrorMsg("Não foi possível criar o item.");
             }
         } else {
-            setItems((prev) => [...prev, { id: Date.now(), nome }]);
+            setItems((prev) => [...prev, { id: Date.now(), nome, ...payload }]);
         }
         setNewItem("");
+        setNewBooleans({});
     };
 
-    const startEdit = (id: number, nome: string) => { setEditingId(id); setEditingName(nome); };
+    const startEdit = (item: Item) => {
+        setEditingId(item.id);
+        setEditingName(item.nome);
+        const extras: Record<string, boolean> = {};
+        booleanFields?.forEach(f => { extras[f.key] = item[f.key]; });
+        setEditingBooleans(extras);
+    };
 
     const saveEdit = async () => {
         if (editingId == null) return;
         const nome = editingName.trim();
         if (!nome) return;
+        const payload: Record<string, unknown> = { nome, ativo: true };
+        booleanFields?.forEach(f => {
+            payload[f.key] = editingBooleans[f.key];
+        });
         if (endpoint) {
             try {
                 const res = await fetch(joinUrl(apiUrl, `${endpoint}/${editingId}`), {
                     method: "PUT", // ou PATCH no seu backend
                     headers: { "Content-Type": "application/json", Accept: "application/json" },
-                    body: JSON.stringify({ nome, ativo: true }),
+                    body: JSON.stringify(payload),
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
                 const updated = await res.json();
                 setItems((prev) =>
-                    prev.map((i) =>
-                        i.id === editingId
-                            ? { id: Number(updated?.id ?? editingId), nome: updated?.nome ?? updated?.descricao ?? nome }
-                            : i
-                    )
+                    prev.map((i) => {
+                        if (i.id !== editingId) return i;
+                        const newItem: Item = {
+                            id: Number(updated?.id ?? editingId),
+                            nome: updated?.nome ?? updated?.descricao ?? nome,
+                        };
+                        booleanFields?.forEach(f => {
+                            newItem[f.key] = (updated?.[f.key] ?? payload[f.key]) as boolean;
+                        });
+                        return newItem;
+                    })
                 );
             } catch (e) {
                 console.error(e);
                 setErrorMsg("Não foi possível salvar a edição.");
             }
         } else {
-            setItems((prev) => prev.map((i) => (i.id === editingId ? { ...i, nome } : i)));
+            setItems((prev) => prev.map((i) => (i.id === editingId ? { ...i, nome, ...payload } : i)));
         }
         setEditingId(null);
         setEditingName("");
+        setEditingBooleans({});
     };
 
-    const cancelEdit = () => { setEditingId(null); setEditingName(""); };
+    const cancelEdit = () => { setEditingId(null); setEditingName(""); setEditingBooleans({}); };
 
     const deleteItem = async (id: number) => {
         if (endpoint) {
@@ -147,13 +184,23 @@ export default function ParameterPage({
                 <p className="text-muted-foreground">{description}</p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                 <Input
                     placeholder={placeholder}
                     value={newItem}
                     onChange={(e) => setNewItem(e.target.value)}
                     className="max-w-sm"
                 />
+                {booleanFields?.map(f => (
+                    <div key={f.key} className="flex items-center gap-2">
+                        <Checkbox
+                            id={`new-${f.key}`}
+                            checked={newBooleans[f.key] ?? f.default ?? false}
+                            onCheckedChange={(v) => setNewBooleans(prev => ({ ...prev, [f.key]: !!v }))}
+                        />
+                        <label htmlFor={`new-${f.key}`}>{f.label}</label>
+                    </div>
+                ))}
                 <Button onClick={addItem}>
                     <Plus className="mr-2 h-4 w-4" />
                     Adicionar
@@ -167,6 +214,9 @@ export default function ParameterPage({
                 <TableHeader>
                     <TableRow>
                         <TableHead>Nome</TableHead>
+                        {booleanFields?.map(f => (
+                            <TableHead key={f.key} className="w-32">{f.label}</TableHead>
+                        ))}
                         <TableHead className="w-32">Ações</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -180,6 +230,20 @@ export default function ParameterPage({
                                     item.nome
                                 )}
                             </TableCell>
+                            {booleanFields?.map(f => (
+                                <TableCell key={f.key}>
+                                    {editingId === item.id ? (
+                                        <Checkbox
+                                            checked={editingBooleans[f.key] ?? false}
+                                            onCheckedChange={(v) => setEditingBooleans(prev => ({ ...prev, [f.key]: !!v }))}
+                                        />
+                                    ) : item[f.key] ? (
+                                        "Sim"
+                                    ) : (
+                                        "Não"
+                                    )}
+                                </TableCell>
+                            ))}
                             <TableCell className="flex gap-2">
                                 {editingId === item.id ? (
                                     <>
@@ -188,7 +252,7 @@ export default function ParameterPage({
                                     </>
                                 ) : (
                                     <>
-                                        <Button size="icon" variant="ghost" onClick={() => startEdit(item.id, item.nome)}>
+                                        <Button size="icon" variant="ghost" onClick={() => startEdit(item)}>
                                             <Pencil className="h-4 w-4" />
                                         </Button>
                                         <Button size="icon" variant="ghost" onClick={() => deleteItem(item.id)}>
