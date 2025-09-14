@@ -221,6 +221,7 @@ export default function Tarefas() {
 
   useEffect(() => {
     const fetchTasks = async () => {
+      if (!users.length) return;
       try {
         const url = joinUrl(apiUrl, '/api/tarefas');
         const response = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -235,32 +236,53 @@ export default function Tarefas() {
           : Array.isArray(json?.data)
           ? json.data
           : [];
-        const tasksMapped: Task[] = data.map((t) => {
-          const dateStr = t.dia_inteiro ? t.data : `${t.data}${t.hora ? `T${t.hora}` : ''}`;
-          const date = new Date(dateStr);
-          const status: Task['status'] = !t.ativa
-            ? 'resolvida'
-            : date < new Date()
-            ? 'atrasada'
-            : 'pendente';
-          return {
-            id: t.id,
-            title: t.titulo,
-            process: t.id_oportunidades ? String(t.id_oportunidades) : '',
-            participants: [],
-            date,
-            responsibles: [],
-            status,
-            priority: t.prioridade ?? 1,
-          };
-        });
+        const tasksMapped: Task[] = await Promise.all(
+          data.map(async (t) => {
+            const dateStr = t.dia_inteiro ? t.data : `${t.data}${t.hora ? `T${t.hora}` : ''}`;
+            const date = new Date(dateStr);
+            const status: Task['status'] = !t.ativa
+              ? 'resolvida'
+              : date < new Date()
+              ? 'atrasada'
+              : 'pendente';
+            let responsibles: string[] = [];
+            try {
+              const rUrl = joinUrl(apiUrl, `/api/tarefas/${t.id}/responsaveis`);
+              const rRes = await fetch(rUrl, { headers: { Accept: 'application/json' } });
+              if (rRes.ok) {
+                const rJson = await rRes.json();
+                const ids: number[] = Array.isArray(rJson)
+                  ? rJson.map((r: { id_usuario: number }) => r.id_usuario)
+                  : Array.isArray(rJson?.rows)
+                  ? rJson.rows.map((r: { id_usuario: number }) => r.id_usuario)
+                  : [];
+                responsibles = ids.map((id) => {
+                  const u = users.find((usr) => usr.id === id);
+                  return u ? u.nome_completo : String(id);
+                });
+              }
+            } catch (e) {
+              console.error('Erro ao buscar responsáveis:', e);
+            }
+            return {
+              id: t.id,
+              title: t.titulo,
+              process: t.id_oportunidades ? String(t.id_oportunidades) : '',
+              participants: [],
+              date,
+              responsibles,
+              status,
+              priority: t.prioridade ?? 1,
+            };
+          }),
+        );
         setTasks(tasksMapped);
       } catch (err) {
         console.error('Erro ao buscar tarefas:', err);
       }
     };
     fetchTasks();
-  }, []);
+  }, [users]);
 
 
   const onSubmit = async (data: FormValues) => {
@@ -321,6 +343,18 @@ export default function Tarefas() {
       });
       if (!response.ok) throw new Error('Failed to create task');
       const created: ApiTask = await response.json();
+        if (data.responsibles.length) {
+          try {
+            const rUrl = joinUrl(apiUrl, `/api/tarefas/${created.id}/responsaveis`);
+            await fetch(rUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ responsaveis: data.responsibles.map((r) => Number(r)) }),
+            });
+          } catch (e) {
+            console.error('Erro ao adicionar responsáveis:', e);
+          }
+        }
       const dateStr = created.dia_inteiro
         ? created.data
         : `${created.data}${created.hora ? `T${created.hora}` : ''}`;
@@ -336,7 +370,7 @@ export default function Tarefas() {
         process: created.id_oportunidades ? String(created.id_oportunidades) : processText,
         participants: [],
         date,
-        responsibles: data.responsibles,
+        responsibles: data.responsibles.map((id) => { const u = users.find((usr) => String(usr.id) === id); return u ? u.nome_completo : id; }),
         status,
         priority: created.prioridade ?? data.priority,
       };
@@ -591,7 +625,7 @@ export default function Tarefas() {
                   {...register('responsibles')}
                 >
                   {users.map((u) => (
-                    <option key={u.id} value={u.nome_completo}>
+                    <option key={u.id} value={u.id}>
                       {u.nome_completo}
                     </option>
                   ))}
