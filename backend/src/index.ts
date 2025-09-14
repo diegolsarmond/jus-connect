@@ -22,6 +22,7 @@ import oportunidadeRoutes from './routes/oportunidadeRoutes';
 import tarefaRoutes from './routes/tarefaRoutes';
 import tarefaResponsavelRoutes from './routes/tarefaResponsavelRoutes';
 import tipoDocumentoRoutes from './routes/tipoDocumentoRoutes';
+import clienteDocumentoRoutes from './routes/clienteDocumentoRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -87,6 +88,7 @@ app.use('/api', uploadRoutes);
 app.use('/api', oportunidadeRoutes);
 app.use('/api', tarefaRoutes);
 app.use('/api', tarefaResponsavelRoutes);
+app.use('/api', clienteDocumentoRoutes);
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);

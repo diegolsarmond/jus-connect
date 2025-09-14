@@ -44,6 +44,12 @@ interface ApiClient {
   datacadastro: string;
 }
 
+interface ApiDocumento {
+  id: number;
+  nome_arquivo: string;
+  tipo_nome: string;
+}
+
 type LocalClient = Client & {
   history?: Array<{ id: number; date: string; action: string; note?: string }>;
   cep?: string;
@@ -71,29 +77,55 @@ export default function VisualizarCliente() {
   const [client, setClient] = useState<LocalClient | null>(null);
   const [loading, setLoading] = useState(true);
   const [documents, setDocuments] = useState<
-    Array<{ file: File; type: string }>
+    Array<{ id: number; filename: string; type: string }>
   >([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedType, setSelectedType] = useState("");
+  const [documentTypes, setDocumentTypes] = useState<
+    Array<{ id: number; nome: string }>
+  >([]);
 
-  const documentTypes = [
-    "RG",
-    "CPF",
-    "Comprovante de Endereço",
-    "Contrato",
-    "Outro",
-  ];
-
-  const handleAddDocument = () => {
+  const handleAddDocument = async () => {
     if (selectedFile && selectedType) {
-      setDocuments((prev) => [...prev, { file: selectedFile, type: selectedType }]);
-      setSelectedFile(null);
-      setSelectedType("");
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        try {
+          const url = joinUrl(apiUrl, `/api/clientes/${id}/documentos`);
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tipo_documento_id: Number(selectedType),
+              nome_arquivo: selectedFile.name,
+              arquivo_base64: base64,
+            }),
+          });
+          if (res.ok) {
+            const doc = await res.json();
+            setDocuments((prev) => [
+              ...prev,
+              { id: doc.id, filename: doc.nome_arquivo, type: doc.tipo_nome },
+            ]);
+            setSelectedFile(null);
+            setSelectedType('');
+          }
+        } catch (error) {
+          console.error('Erro ao enviar documento:', error);
+        }
+      };
+      reader.readAsDataURL(selectedFile);
     }
   };
 
-  const handleRemoveDocument = (index: number) => {
-    setDocuments((prev) => prev.filter((_, i) => i !== index));
+  const handleRemoveDocument = async (docId: number) => {
+    try {
+      const url = joinUrl(apiUrl, `/api/clientes/${id}/documentos/${docId}`);
+      await fetch(url, { method: 'DELETE' });
+      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+    } catch (error) {
+      console.error('Erro ao remover documento:', error);
+    }
   };
 
   useEffect(() => {
@@ -115,7 +147,41 @@ export default function VisualizarCliente() {
       }
     };
 
+    const fetchDocumentTypes = async () => {
+      try {
+        const url = joinUrl(apiUrl, `/api/tipo-documentos`);
+        const res = await fetch(url);
+        if (res.ok) {
+          const types = await res.json();
+          setDocumentTypes(types);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar tipos de documento:", error);
+      }
+    };
+
+    const fetchDocuments = async () => {
+      try {
+        const url = joinUrl(apiUrl, `/api/clientes/${id}/documentos`);
+        const res = await fetch(url);
+        if (res.ok) {
+          const docs: ApiDocumento[] = await res.json();
+          setDocuments(
+            docs.map((d) => ({
+              id: d.id,
+              filename: d.nome_arquivo,
+              type: d.tipo_nome,
+            }))
+          );
+        }
+      } catch (error) {
+        console.error("Erro ao buscar documentos:", error);
+      }
+    };
+
     fetchClient();
+    fetchDocumentTypes();
+    fetchDocuments();
   }, [id]);
 
   const formatDate = (iso?: string) =>
@@ -214,7 +280,19 @@ export default function VisualizarCliente() {
         <TabsContent value="documentos" className="mt-4">
           <Card>
             <CardContent className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
+                <Select value={selectedType} onValueChange={setSelectedType}>
+                  <SelectTrigger className="sm:w-1/4">
+                    <SelectValue placeholder="Tipo de documento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {documentTypes.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Input
                   type="file"
                   onChange={(e) =>
@@ -222,21 +300,6 @@ export default function VisualizarCliente() {
                   }
                   className="sm:w-1/2"
                 />
-                <Select
-                  value={selectedType}
-                  onValueChange={setSelectedType}
-                >
-                  <SelectTrigger className="sm:w-1/4">
-                    <SelectValue placeholder="Tipo de documento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {documentTypes.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Button
                   onClick={handleAddDocument}
                   disabled={!selectedFile || !selectedType}
@@ -246,16 +309,16 @@ export default function VisualizarCliente() {
               </div>
               {documents.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {documents.map((doc, index) => (
-                    <Card key={index} className="relative">
+                  {documents.map((doc) => (
+                    <Card key={doc.id} className="relative">
                       <CardContent className="p-4 space-y-2">
-                        <p className="text-sm font-medium">{doc.file.name}</p>
+                        <p className="text-sm font-medium">{doc.filename}</p>
                         <p className="text-sm text-muted-foreground">{doc.type}</p>
                         <Button
                           variant="destructive"
                           size="icon"
                           className="absolute top-2 right-2"
-                          onClick={() => handleRemoveDocument(index)}
+                          onClick={() => handleRemoveDocument(doc.id)}
                         >
                           <Trash className="h-4 w-4" />
                         </Button>
