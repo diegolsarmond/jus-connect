@@ -70,7 +70,14 @@ interface ApiDocumento {
 }
 
 type LocalClient = Client & {
-  history?: Array<{ id: number; date: string; action: string; note?: string }>;
+  history?: Array<{
+    id: number;
+    date: string;
+    interactionType: string;
+    subject: string;
+    responsible: string;
+    status: string;
+  }>;
   cep?: string;
 };
 
@@ -109,6 +116,8 @@ export default function VisualizarCliente() {
   } | null>(null);
   const [processSearch, setProcessSearch] = useState("");
   const [processSort, setProcessSort] = useState<"asc" | "desc">("asc");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historySort, setHistorySort] = useState<"asc" | "desc">("desc");
 
   const handleAddDocument = async () => {
     if (selectedFile && selectedType) {
@@ -242,6 +251,22 @@ export default function VisualizarCliente() {
         return processSort === "asc" ? comp : -comp;
       });
   }, [client?.processes, processSearch, processSort]);
+
+  const filteredHistory = useMemo(() => {
+    const base = client?.history ?? [];
+    return base
+      .filter((h) =>
+        [h.interactionType, h.subject, h.responsible, h.status]
+          .some((field) =>
+            field.toLowerCase().includes(historySearch.toLowerCase()),
+          ),
+      )
+      .sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return historySort === "asc" ? dateA - dateB : dateB - dateA;
+      });
+  }, [client?.history, historySearch, historySort]);
 
   const formatDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString("pt-BR") : "";
@@ -479,35 +504,63 @@ export default function VisualizarCliente() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="historico" className="mt-4">
-          {client.history && client.history.length > 0 ? (
-            <div className="space-y-3">
-              {client.history.map((h) => (
-                <Card key={h.id}>
-                  <CardContent className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-medium">{h.action}</p>
-                      {h.note && (
-                        <p className="text-sm text-muted-foreground">{h.note}</p>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {formatDate(h.date)}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+          <TabsContent value="historico" className="mt-4 space-y-4">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                placeholder="Pesquisar histórico..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                className="sm:w-64"
+              />
+              <Select
+                value={historySort}
+                onValueChange={(v) => setHistorySort(v as "asc" | "desc")}
+              >
+                <SelectTrigger className="sm:w-40">
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Data mais recente</SelectItem>
+                  <SelectItem value="asc">Data mais antiga</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          ) : (
+
             <Card>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Sem histórico por enquanto.
-                </p>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tipo de Interação</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Assunto</TableHead>
+                      <TableHead>Responsável</TableHead>
+                      <TableHead>Situação</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredHistory.length > 0 ? (
+                      filteredHistory.map((h) => (
+                        <TableRow key={h.id}>
+                          <TableCell>{h.interactionType}</TableCell>
+                          <TableCell>{formatDate(h.date)}</TableCell>
+                          <TableCell>{h.subject}</TableCell>
+                          <TableCell>{h.responsible}</TableCell>
+                          <TableCell>{h.status}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center">
+                          Sem histórico por enquanto.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
+          </TabsContent>
       </Tabs>
       <Dialog open={!!previewDoc} onOpenChange={(o) => !o && setPreviewDoc(null)}>
         <DialogContent className="max-w-3xl w-[90vw] h-[90vh] p-0">
