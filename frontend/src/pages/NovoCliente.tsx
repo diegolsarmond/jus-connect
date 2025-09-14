@@ -33,18 +33,17 @@ function joinUrl(base: string, path = "") {
 
 const formSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
-  email: z.string().email("Email inválido"),
-  phone: z.string().min(1, "Telefone é obrigatório"),
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  phone: z.string().optional(),
   cpf: z.string().min(1, "CPF é obrigatório"),
-  cep: z.string().min(1, "CEP é obrigatório"),
-  street: z.string().min(1, "Rua é obrigatória"),
-  number: z.string().min(1, "Número é obrigatório"),
+  cep: z.string().optional(),
+  street: z.string().optional(),
+  number: z.string().optional(),
   complement: z.string().optional(),
-  neighborhood: z.string().min(1, "Bairro é obrigatório"),
-  city: z.string().min(1, "Cidade é obrigatória"),
-  state: z.string().min(1, "UF é obrigatória"),
+  neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
   type: z.enum(["pf", "pj"]),
-  area: z.string().min(1, "Área é obrigatória"),
 });
 
 export default function NovoCliente() {
@@ -74,7 +73,6 @@ export default function NovoCliente() {
       city: "",
       state: "",
       type: "pf",
-      area: "",
     },
   });
 
@@ -88,15 +86,15 @@ export default function NovoCliente() {
           nome: values.name,
           tipo: values.type === "pj" ? "PJ" : "PF",
           documento: values.cpf,
-          email: values.email,
-          telefone: values.phone,
-          cep: values.cep,
-          rua: values.street,
-          numero: values.number,
-          complemento: values.complement,
-          bairro: values.neighborhood,
-          cidade: values.city,
-          uf: values.state,
+          email: values.email || null,
+          telefone: values.phone || null,
+          cep: values.cep || null,
+          rua: values.street || null,
+          numero: values.number || null,
+          complemento: values.complement || null,
+          bairro: values.neighborhood || null,
+          cidade: values.city || null,
+          uf: values.state || null,
           ativo: true,
           foto: null,
         }),
@@ -127,8 +125,8 @@ export default function NovoCliente() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-
-               <FormField
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
                 control={form.control}
                 name="type"
                 render={({ field }) => (
@@ -149,8 +147,6 @@ export default function NovoCliente() {
                   </FormItem>
                 )}
               />
-
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="name"
