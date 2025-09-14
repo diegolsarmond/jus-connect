@@ -36,15 +36,15 @@ interface ApiClient {
   nome: string;
   tipo: string;
   documento: string;
-  email: string;
-  telefone: string;
-  cep: string;
-  rua: string;
-  numero: string;
-  complemento: string;
-  bairro: string;
-  cidade: string;
-  uf: string;
+  email: string | null;
+  telefone: string | null;
+  cep: string | null;
+  rua: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
   ativo: boolean;
   foto: string | null;
   datacadastro: string;
@@ -52,18 +52,17 @@ interface ApiClient {
 
 const formSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
-  email: z.string().email("Email inválido"),
-  phone: z.string().min(1, "Telefone é obrigatório"),
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  phone: z.string().optional(),
   cpf: z.string().min(1, "CPF é obrigatório"),
-  cep: z.string().min(1, "CEP é obrigatório"),
-  street: z.string().min(1, "Rua é obrigatória"),
-  number: z.string().min(1, "Número é obrigatório"),
+  cep: z.string().optional(),
+  street: z.string().optional(),
+  number: z.string().optional(),
   complement: z.string().optional(),
-  neighborhood: z.string().min(1, "Bairro é obrigatório"),
-  city: z.string().min(1, "Cidade é obrigatória"),
-  state: z.string().min(1, "UF é obrigatória"),
+  neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
   type: z.enum(["pf", "pj"]),
-  area: z.string().min(1, "Área é obrigatória"),
 });
 
 export default function EditarCliente() {
@@ -87,7 +86,6 @@ export default function EditarCliente() {
       city: "",
       state: "",
       type: "pf",
-      area: "",
     },
   });
 
@@ -110,18 +108,17 @@ export default function EditarCliente() {
         const json: ApiClient = await response.json();
         form.reset({
           name: json.nome,
-          email: json.email,
-          phone: json.telefone,
+          email: json.email ?? "",
+          phone: json.telefone ?? "",
           cpf: json.documento,
-          cep: json.cep,
-          street: json.rua,
-          number: json.numero,
-          complement: json.complemento || "",
-          neighborhood: json.bairro,
-          city: json.cidade,
-          state: json.uf,
+          cep: json.cep ?? "",
+          street: json.rua ?? "",
+          number: json.numero ?? "",
+          complement: json.complemento ?? "",
+          neighborhood: json.bairro ?? "",
+          city: json.cidade ?? "",
+          state: json.uf ?? "",
           type: ["J", "PJ"].includes(json.tipo.toUpperCase()) ? "pj" : "pf",
-          area: "",
         });
       } catch (error) {
         console.error("Erro ao buscar cliente:", error);
@@ -143,15 +140,15 @@ export default function EditarCliente() {
           nome: values.name,
           tipo: values.type === "pj" ? "PJ" : "PF",
           documento: values.cpf,
-          email: values.email,
-          telefone: values.phone,
-          cep: values.cep,
-          rua: values.street,
-          numero: values.number,
-          complemento: values.complement,
-          bairro: values.neighborhood,
-          cidade: values.city,
-          uf: values.state,
+          email: values.email || null,
+          telefone: values.phone || null,
+          cep: values.cep || null,
+          rua: values.street || null,
+          numero: values.number || null,
+          complemento: values.complement || null,
+          bairro: values.neighborhood || null,
+          cidade: values.city || null,
+          uf: values.state || null,
           ativo: true,
           foto: null,
         }),
