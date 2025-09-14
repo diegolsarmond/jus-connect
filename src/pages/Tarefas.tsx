@@ -260,8 +260,16 @@ export default function Tarefas() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="font-semibold mb-2">Produtividade</h3>
-          <p className="text-2xl font-bold">{pending}</p>
-          <p className="text-sm text-muted-foreground">Tarefas pendentes</p>
+          <div className="space-y-2">
+            <div>
+              <p className="text-2xl font-bold">{pending}</p>
+              <p className="text-sm text-muted-foreground">Tarefas pendentes</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{late}</p>
+              <p className="text-sm text-muted-foreground">Tarefas atrasadas</p>
+            </div>
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4 lg:col-span-1">
