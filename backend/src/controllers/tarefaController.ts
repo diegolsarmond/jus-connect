@@ -96,6 +96,10 @@ export const createTarefa = async (req: Request, res: Response) => {
     responsaveis,
   } = req.body;
 
+  const unidadeFormatada = repetir_cada_unidade
+    ? repetir_cada_unidade.charAt(0).toUpperCase() + repetir_cada_unidade.slice(1).toLowerCase()
+    : null;
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -115,7 +119,7 @@ export const createTarefa = async (req: Request, res: Response) => {
         privada,
         recorrente,
         repetir_quantas_vezes,
-        repetir_cada_unidade,
+        unidadeFormatada,
         repetir_intervalo,
         concluido,
       ]
@@ -176,6 +180,10 @@ export const updateTarefa = async (req: Request, res: Response) => {
     concluido = false,
   } = req.body;
 
+  const unidadeFormatada = repetir_cada_unidade
+    ? repetir_cada_unidade.charAt(0).toUpperCase() + repetir_cada_unidade.slice(1).toLowerCase()
+    : null;
+
   try {
     const result = await pool.query(
       `UPDATE public.tarefas SET id_oportunidades = $1, titulo = $2, descricao = $3, data = $4, hora = $5, dia_inteiro = $6, prioridade = $7, mostrar_na_agenda = $8, privada = $9, recorrente = $10, repetir_quantas_vezes = $11, repetir_cada_unidade = $12, repetir_intervalo = $13, concluido = $14, atualizado_em = NOW() WHERE id = $15
@@ -192,7 +200,7 @@ export const updateTarefa = async (req: Request, res: Response) => {
         privada,
         recorrente,
         repetir_quantas_vezes,
-        repetir_cada_unidade,
+        unidadeFormatada,
         repetir_intervalo,
         concluido,
         id,
