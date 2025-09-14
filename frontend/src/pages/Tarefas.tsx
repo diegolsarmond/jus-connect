@@ -240,7 +240,7 @@ export default function Tarefas() {
           data.map(async (t) => {
             const dateStr = t.dia_inteiro ? t.data : `${t.data}${t.hora ? `T${t.hora}` : ''}`;
             const date = new Date(dateStr);
-            const status: Task['status'] = !t.concluido
+            const status: Task['status'] = t.concluido
               ? 'resolvida'
               : date < new Date()
               ? 'atrasada'
@@ -330,7 +330,7 @@ export default function Tarefas() {
       repetir_cada_unidade: data.recurring ? data.recurrenceUnit : null,
       repetir_intervalo: 1,
 
-      concluido: true,
+      concluido: false,
     };
 
     try {
@@ -359,7 +359,7 @@ export default function Tarefas() {
         ? created.data
         : `${created.data}${created.hora ? `T${created.hora}` : ''}`;
       const date = new Date(dateStr);
-      const status: Task['status'] = !created.concluido
+      const status: Task['status'] = created.concluido
         ? 'resolvida'
         : date < new Date()
         ? 'atrasada'
