@@ -43,7 +43,7 @@ const formSchema = z.object({
   neighborhood: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
-  type: z.enum(["pf", "pj"]),
+  type: z.enum(["1", "2"]),
 });
 
 export default function NovoCliente() {
@@ -72,7 +72,7 @@ export default function NovoCliente() {
       neighborhood: "",
       city: "",
       state: "",
-      type: "pf",
+      type: "1",
     },
   });
 
@@ -84,7 +84,7 @@ export default function NovoCliente() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nome: values.name,
-          tipo: values.type === "pj" ? "PJ" : "PF",
+          tipo: values.type === "PF" ? "1" : "2",
           documento: values.cpf,
           email: values.email || null,
           telefone: values.phone || null,
@@ -139,8 +139,8 @@ export default function NovoCliente() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="pf">Pessoa Física</SelectItem>
-                        <SelectItem value="pj">Pessoa Jurídica</SelectItem>
+                        <SelectItem value="PF">Pessoa Física</SelectItem>
+                        <SelectItem value="PJ">Pessoa Jurídica</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

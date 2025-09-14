@@ -25,7 +25,7 @@ const router = Router();
  *         nome:
  *           type: string
  *         tipo:
- *           type: string
+ *           type: integer
  *         documento:
  *           type: string
  *         email:
@@ -132,7 +132,7 @@ router.get('/clientes/:id', getClienteById);
  *               nome:
  *                 type: string
  *               tipo:
- *                 type: string
+ *                 type: integer
  *               documento:
  *                 type: string
  *               email:
@@ -189,7 +189,7 @@ router.post('/clientes', createCliente);
  *               nome:
  *                 type: string
  *               tipo:
- *                 type: string
+ *                 type: integer
  *               documento:
  *                 type: string
  *               email:
