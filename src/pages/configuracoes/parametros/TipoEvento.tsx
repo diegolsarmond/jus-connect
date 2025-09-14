@@ -9,8 +9,8 @@ export default function TipoEvento() {
       emptyMessage="Nenhum tipo cadastrado"
       endpoint="/api/tipo-eventos"
       booleanFields={[
-        { key: "exibe_agenda", label: "Exibe na agenda", default: true },
-        { key: "exibe_tarefa", label: "Exibe na tarefa", default: true },
+        { key: "agenda", label: "Exibe na agenda", default: true },
+        { key: "tarefa", label: "Exibe na tarefa", default: true },
       ]}
     />
   );

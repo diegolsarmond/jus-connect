@@ -103,13 +103,15 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
           throw new Error('Failed to load tipo-eventos');
         }
         const json = await response.json();
-        interface TipoEvento { id: number; nome: string }
+        interface TipoEvento { id: number; nome: string; agenda?: boolean }
         const rows: TipoEvento[] = Array.isArray(json)
           ? json
           : Array.isArray(json?.data)
             ? json.data
             : [];
-        const data: AppointmentType[] = rows.map((t) => t.nome as AppointmentType);
+        const data: AppointmentType[] = rows
+          .filter((t) => t.agenda !== false)
+          .map((t) => t.nome as AppointmentType);
         setTiposEvento(data);
         if (data.length > 0 && !data.includes(form.getValues('type') as AppointmentType)) {
           form.setValue('type', data[0]);
