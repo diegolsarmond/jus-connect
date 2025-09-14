@@ -262,6 +262,7 @@ export default function Tarefas() {
     fetchTasks();
   }, []);
 
+
   const onSubmit = async (data: FormValues) => {
     const files: File[] = Array.from(data.attachments?.[0] ? data.attachments : []);
     for (const file of files) {
@@ -292,9 +293,10 @@ export default function Tarefas() {
       : data.process;
 
     const payload = {
-      id_oportunidades: data.process ? Number(data.process) : null,
+      id_oportunidades: Number(data.process),
       titulo: data.title,
-      descricao: data.description || '',
+      descricao: data.description,
+
       data: data.date,
       hora: data.allDay ? null : data.time,
       dia_inteiro: data.allDay,
@@ -302,9 +304,10 @@ export default function Tarefas() {
       mostrar_na_agenda: data.showOnAgenda,
       privada: data.private,
       recorrente: data.recurring,
-      repetir_quantas_vezes: data.recurrenceValue ? Number(data.recurrenceValue) : 1,
-      repetir_cada_unidade: data.recurrenceUnit || null,
-      repetir_intervalo: data.recurrenceValue ? Number(data.recurrenceValue) : 1,
+      repetir_quantas_vezes: data.recurring ? Number(data.recurrenceValue) || 1 : 1,
+      repetir_cada_unidade: data.recurring ? data.recurrenceUnit : null,
+      repetir_intervalo: 1,
+
       ativa: true,
     };
 
@@ -312,6 +315,7 @@ export default function Tarefas() {
       const url = joinUrl(apiUrl, '/api/tarefas');
       const response = await fetch(url, {
         method: 'POST',
+
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -341,6 +345,8 @@ export default function Tarefas() {
       setOpen(false);
     } catch (err) {
       console.error('Erro ao criar tarefa:', err);
+      alert('Erro ao criar tarefa');
+
     }
   };
 
