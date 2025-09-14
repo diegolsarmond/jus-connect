@@ -70,7 +70,7 @@ export const createTarefa = async (req: Request, res: Response) => {
     repetir_quantas_vezes = 1,
     repetir_cada_unidade,
     repetir_intervalo = 1,
-    concluido = true,
+    concluido = false,
     responsaveis,
   } = req.body;
 
@@ -151,7 +151,7 @@ export const updateTarefa = async (req: Request, res: Response) => {
     repetir_quantas_vezes = 1,
     repetir_cada_unidade,
     repetir_intervalo = 1,
-    concluido = true,
+    concluido = false,
   } = req.body;
 
   try {
