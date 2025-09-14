@@ -34,7 +34,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -53,16 +52,25 @@ import {
   Pie,
   Cell,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as RechartsTooltip,
 } from 'recharts';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
 
 interface Task {
   id: number;
   title: string;
+  processId: number | null;
   process: string;
-  participants: string[];
   date: Date;
+  time: string | null;
+  description: string;
   responsibles: string[];
+  responsibleIds: string[];
   status: 'pendente' | 'atrasada' | 'resolvida';
   priority: number;
 }
@@ -146,6 +154,7 @@ export default function Tarefas() {
   const [users, setUsers] = useState<ApiUsuario[]>([]);
   const [opportunities, setOpportunities] = useState<ApiOpportunity[]>([]);
   const [openProposal, setOpenProposal] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
 
   const {
     register,
@@ -246,35 +255,45 @@ export default function Tarefas() {
               ? 'atrasada'
               : 'pendente';
             let responsibles: string[] = [];
+            let responsibleIds: string[] = [];
             try {
-              const rUrl = joinUrl(apiUrl, `/api/tarefas/${t.id}/responsaveis`);
+              const rUrl = joinUrl(apiUrl, `/api/tarefas/${t.id}/responsavel`);
               const rRes = await fetch(rUrl, { headers: { Accept: 'application/json' } });
               if (rRes.ok) {
                 const rJson = await rRes.json();
-                const ids: number[] = Array.isArray(rJson)
-                  ? rJson.map((r: { id_usuario: number }) => r.id_usuario)
-                  : Array.isArray(rJson?.rows)
-                  ? rJson.rows.map((r: { id_usuario: number }) => r.id_usuario)
-                  : [];
-                responsibles = ids.map((id) => {
-                  const u = users.find((usr) => usr.id === id);
-                  return u ? u.nome_completo : String(id);
-                });
+                if (Array.isArray(rJson)) {
+                  responsibles = rJson.map((r: { nome_responsavel: string }) => r.nome_responsavel);
+                  responsibleIds = rJson.map((r: { id_usuario: number }) => String(r.id_usuario));
+                } else if (Array.isArray(rJson?.rows)) {
+                  responsibles = rJson.rows.map((r: { nome_responsavel: string }) => r.nome_responsavel);
+                  responsibleIds = rJson.rows.map((r: { id_usuario: number }) => String(r.id_usuario));
+                }
               }
             } catch (e) {
               console.error('Erro ao buscar responsáveis:', e);
             }
+            const opp = opportunities.find((o) => o.id === t.id_oportunidades);
+            const processText = opp
+              ? `Proposta #${opp.id}/${new Date(opp.data_criacao || '').getFullYear()}${
+                  opp.solicitante_nome ? ` - ${opp.solicitante_nome}` : ''
+                }`
+              : t.id_oportunidades
+              ? `Proposta #${t.id_oportunidades}`
+              : '';
             return {
               id: t.id,
               title: t.titulo,
-              process: t.id_oportunidades ? String(t.id_oportunidades) : '',
-              participants: [],
+              processId: t.id_oportunidades ?? null,
+              process: processText,
               date,
+              time: t.hora || null,
+              description: t.descricao || '',
               responsibles,
+              responsibleIds,
               status,
               priority: t.prioridade ?? 1,
             };
-          }),
+          })
         );
         setTasks(tasksMapped);
       } catch (err) {
@@ -282,7 +301,7 @@ export default function Tarefas() {
       }
     };
     fetchTasks();
-  }, [users]);
+  }, [users, opportunities]);
 
 
   const onSubmit = async (data: FormValues) => {
@@ -334,15 +353,15 @@ export default function Tarefas() {
     };
 
     try {
-      const url = joinUrl(apiUrl, '/api/tarefas');
-      const response = await fetch(url, {
-        method: 'POST',
-
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error('Failed to create task');
-      const created: ApiTask = await response.json();
+      if (editingTaskId === null) {
+        const url = joinUrl(apiUrl, '/api/tarefas');
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error('Failed to create task');
+        const created: ApiTask = await response.json();
         if (data.responsibles.length) {
           try {
             const rUrl = joinUrl(apiUrl, `/api/tarefas/${created.id}/responsaveis`);
@@ -355,32 +374,78 @@ export default function Tarefas() {
             console.error('Erro ao adicionar responsáveis:', e);
           }
         }
-      const dateStr = created.dia_inteiro
-        ? created.data
-        : `${created.data}${created.hora ? `T${created.hora}` : ''}`;
-      const date = new Date(dateStr);
-      const status: Task['status'] = created.concluido
-        ? 'resolvida'
-        : date < new Date()
-        ? 'atrasada'
-        : 'pendente';
-      const newTask: Task = {
-        id: created.id,
-        title: created.titulo,
-        process: created.id_oportunidades ? String(created.id_oportunidades) : processText,
-        participants: [],
-        date,
-        responsibles: data.responsibles.map((id) => { const u = users.find((usr) => String(usr.id) === id); return u ? u.nome_completo : id; }),
-        status,
-        priority: created.prioridade ?? data.priority,
-      };
-      setTasks((prev) => [...prev, newTask]);
+        const dateStr = created.dia_inteiro
+          ? created.data
+          : `${created.data}${created.hora ? `T${created.hora}` : ''}`;
+        const date = new Date(dateStr);
+        const status: Task['status'] = created.concluido
+          ? 'resolvida'
+          : date < new Date()
+          ? 'atrasada'
+          : 'pendente';
+        const opp = opportunities.find((o) => o.id === created.id_oportunidades);
+        const procText = opp ? formatProposal(opp) : processText;
+        const newTask: Task = {
+          id: created.id,
+          title: created.titulo,
+          processId: created.id_oportunidades ?? null,
+          process: procText,
+          date,
+          time: created.hora || null,
+          description: created.descricao || '',
+          responsibles: data.responsibles.map((id) => {
+            const u = users.find((usr) => String(usr.id) === id);
+            return u ? u.nome_completo : id;
+          }),
+          responsibleIds: data.responsibles,
+          status,
+          priority: created.prioridade ?? data.priority,
+        };
+        setTasks((prev) => [...prev, newTask]);
+      } else {
+        const url = joinUrl(apiUrl, `/api/tarefas/${editingTaskId}`);
+        const response = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error('Failed to update task');
+        const updated: ApiTask = await response.json();
+        const dateStr = updated.dia_inteiro
+          ? updated.data
+          : `${updated.data}${updated.hora ? `T${updated.hora}` : ''}`;
+        const date = new Date(dateStr);
+        const status: Task['status'] = updated.concluido
+          ? 'resolvida'
+          : date < new Date()
+          ? 'atrasada'
+          : 'pendente';
+        const opp = opportunities.find((o) => o.id === updated.id_oportunidades);
+        const procText = opp ? formatProposal(opp) : processText;
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === editingTaskId
+              ? {
+                  ...t,
+                  title: updated.titulo,
+                  processId: updated.id_oportunidades ?? null,
+                  process: procText,
+                  date,
+                  time: updated.hora || null,
+                  description: updated.descricao || '',
+                  status,
+                  priority: updated.prioridade ?? data.priority,
+                }
+              : t,
+          ),
+        );
+      }
       reset();
       setOpen(false);
+      setEditingTaskId(null);
     } catch (err) {
-      console.error('Erro ao criar tarefa:', err);
-      alert('Erro ao criar tarefa');
-
+      console.error('Erro ao salvar tarefa:', err);
+      alert('Erro ao salvar tarefa');
     }
   };
 
@@ -404,9 +469,28 @@ export default function Tarefas() {
       console.error('Erro ao concluir tarefa:', e);
     }
   };
+  const handleEdit = (task: Task) => {
+    setEditingTaskId(task.id);
+    setOpen(true);
+    setValue('process', task.processId ? String(task.processId) : '');
+    setValue('title', task.title);
+    setValue('date', task.date.toISOString().slice(0, 10));
+    setValue('time', task.time || '');
+    setValue('description', task.description);
+    setValue('allDay', !task.time);
+    setValue('priority', task.priority);
+    setValue('responsibles', task.responsibleIds);
+  };
 
-  const deleteTask = (id: number) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+  const deleteTask = async (id: number) => {
+    try {
+      const url = joinUrl(apiUrl, `/api/tarefas/${id}`);
+      const res = await fetch(url, { method: 'DELETE', headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('Failed to delete task');
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    } catch (e) {
+      console.error('Erro ao deletar tarefa:', e);
+    }
   };
 
   const allDay = watch('allDay');
@@ -472,7 +556,7 @@ export default function Tarefas() {
                     <Cell key={`cell-${index}`} fill={COLORS[index]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <RechartsTooltip />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -499,8 +583,9 @@ export default function Tarefas() {
               </TableHead>
               <TableHead className="w-20">Prioridade</TableHead>
               <TableHead className="w-20">Status</TableHead>
+              <TableHead className="w-32">Data/Hora</TableHead>
               <TableHead>Título</TableHead>
-              <TableHead>Partes</TableHead>
+              <TableHead>Proposta</TableHead>
               <TableHead>Compromisso</TableHead>
               <TableHead>Responsáveis</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -523,33 +608,43 @@ export default function Tarefas() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  {task.status === 'pendente' && (
-                    <Clock className="h-4 w-4 text-amber-500" />
-                  )}
-                  {task.status === 'atrasada' && (
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                  )}
-                  {task.status === 'resolvida' && (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  )}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        {task.status === 'pendente' && (
+                          <Clock className="h-4 w-4 text-amber-500" />
+                        )}
+                        {task.status === 'atrasada' && (
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
+                        )}
+                        {task.status === 'resolvida' && (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        )}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {task.status === 'pendente'
+                          ? 'Pendente'
+                          : task.status === 'atrasada'
+                          ? 'Atrasada'
+                          : 'Resolvida'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableCell>
+                <TableCell>
+                  {task.time
+                    ? `${task.date.toLocaleDateString()} ${task.time}`
+                    : task.date.toLocaleDateString()}
                 </TableCell>
                 <TableCell className="font-medium">{task.title}</TableCell>
-                <TableCell>{task.participants.join(', ')}</TableCell>
-                <TableCell>{task.date.toLocaleDateString()}</TableCell>
-                <TableCell>
-                  <div className="flex -space-x-2">
-                    {task.responsibles.map((r, idx) => (
-                      <Avatar key={idx} className="h-6 w-6 border-2 border-background">
-                        <AvatarFallback>{r.charAt(0).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                    ))}
-                  </div>
-                </TableCell>
+                <TableCell>{task.process}</TableCell>
+                <TableCell>{task.description}</TableCell>
+                <TableCell>{task.responsibles.join(', ')}</TableCell>
                 <TableCell className="text-right space-x-2">
                   <Button variant="ghost" size="icon" onClick={() => markDone(task.id)}>
                     <Check className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(task)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <Button
@@ -566,10 +661,10 @@ export default function Tarefas() {
         </Table>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setEditingTaskId(null); reset(); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Criar nova tarefa</DialogTitle>
+            <DialogTitle>{editingTaskId ? 'Editar tarefa' : 'Criar nova tarefa'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -771,10 +866,20 @@ export default function Tarefas() {
               </div>
             )}
             <div className="flex justify-end space-x-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setOpen(false);
+                  setEditingTaskId(null);
+                  reset();
+                }}
+              >
                 Cancelar
               </Button>
-              <Button type="submit">Criar nova tarefa</Button>
+              <Button type="submit">
+                {editingTaskId ? 'Salvar alterações' : 'Criar nova tarefa'}
+              </Button>
             </div>
           </form>
         </DialogContent>
