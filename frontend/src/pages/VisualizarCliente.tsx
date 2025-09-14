@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Mail, Phone, User, Building2, Trash } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
@@ -77,13 +78,17 @@ export default function VisualizarCliente() {
   const [client, setClient] = useState<LocalClient | null>(null);
   const [loading, setLoading] = useState(true);
   const [documents, setDocuments] = useState<
-    Array<{ id: number; filename: string; type: string }>
+    Array<{ id: number; filename: string; type: string; base64: string }>
   >([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedType, setSelectedType] = useState("");
   const [documentTypes, setDocumentTypes] = useState<
     Array<{ id: number; nome: string }>
   >([]);
+  const [previewDoc, setPreviewDoc] = useState<{
+    filename: string;
+    base64: string;
+  } | null>(null);
 
   const handleAddDocument = async () => {
     if (selectedFile && selectedType) {
@@ -105,7 +110,12 @@ export default function VisualizarCliente() {
             const doc = await res.json();
             setDocuments((prev) => [
               ...prev,
-              { id: doc.id, filename: doc.nome_arquivo, type: doc.tipo_nome },
+              {
+                id: doc.id,
+                filename: doc.nome_arquivo,
+                type: doc.tipo_nome,
+                base64,
+              },
             ]);
             setSelectedFile(null);
             setSelectedType('');
@@ -125,6 +135,25 @@ export default function VisualizarCliente() {
       setDocuments((prev) => prev.filter((d) => d.id !== docId));
     } catch (error) {
       console.error('Erro ao remover documento:', error);
+    }
+  };
+
+  const downloadBase64 = (
+    filename: string,
+    base64: string,
+    mime = 'application/octet-stream'
+  ) => {
+    const link = document.createElement('a');
+    link.href = `data:${mime};base64,${base64}`;
+    link.download = filename;
+    link.click();
+  };
+
+  const handleViewDocument = (doc: { filename: string; base64: string }) => {
+    if (doc.filename.toLowerCase().endsWith('.pdf')) {
+      setPreviewDoc(doc);
+    } else {
+      downloadBase64(doc.filename, doc.base64);
     }
   };
 
@@ -171,6 +200,7 @@ export default function VisualizarCliente() {
               id: d.id,
               filename: d.nome_arquivo,
               type: d.tipo_nome,
+              base64: d.arquivo_base64,
             }))
           );
         }
@@ -315,6 +345,13 @@ export default function VisualizarCliente() {
                         <p className="text-sm font-medium">{doc.filename}</p>
                         <p className="text-sm text-muted-foreground">{doc.type}</p>
                         <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewDocument(doc)}
+                        >
+                          Visualizar
+                        </Button>
+                        <Button
                           variant="destructive"
                           size="icon"
                           className="absolute top-2 right-2"
@@ -407,6 +444,34 @@ export default function VisualizarCliente() {
           )}
         </TabsContent>
       </Tabs>
+      <Dialog open={!!previewDoc} onOpenChange={(o) => !o && setPreviewDoc(null)}>
+        <DialogContent className="max-w-3xl w-[90vw] h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>{previewDoc?.filename}</DialogTitle>
+          </DialogHeader>
+          {previewDoc && (
+            <iframe
+              src={`data:application/pdf;base64,${previewDoc.base64}`}
+              className="w-full h-full"
+            />
+          )}
+          {previewDoc && (
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  downloadBase64(
+                    previewDoc.filename,
+                    previewDoc.base64,
+                    'application/pdf'
+                  )
+                }
+              >
+                Baixar
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
