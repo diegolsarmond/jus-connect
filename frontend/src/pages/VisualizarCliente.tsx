@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Client } from "@/types/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Mail, Phone, User, Building2, Trash } from "lucide-react";
+import {
+  Mail,
+  Phone,
+  User,
+  Building2,
+  Trash,
+  Eye,
+  ListTodo,
+  Bell,
+  CalendarPlus,
+} from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 
@@ -89,6 +107,8 @@ export default function VisualizarCliente() {
     filename: string;
     base64: string;
   } | null>(null);
+  const [processSearch, setProcessSearch] = useState("");
+  const [processSort, setProcessSort] = useState<"asc" | "desc">("asc");
 
   const handleAddDocument = async () => {
     if (selectedFile && selectedType) {
@@ -200,6 +220,29 @@ export default function VisualizarCliente() {
     fetchData();
   }, [id]);
 
+  const filteredProcesses = useMemo(() => {
+    const base = (client?.processes ?? []).map((p) => ({
+      id: p.id,
+      numero: p.number || "",
+      dataDistribuicao: "",
+      assunto: "",
+      advogado: "",
+      ultimaMovimentacao: "",
+      situacao: p.status || "",
+    }));
+
+    return base
+      .filter((p) =>
+        [p.numero, p.assunto, p.advogado].some((field) =>
+          field.toLowerCase().includes(processSearch.toLowerCase()),
+        ),
+      )
+      .sort((a, b) => {
+        const comp = a.numero.localeCompare(b.numero);
+        return processSort === "asc" ? comp : -comp;
+      });
+  }, [client?.processes, processSearch, processSort]);
+
   const formatDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString("pt-BR") : "";
 
@@ -219,13 +262,6 @@ export default function VisualizarCliente() {
     );
   }
 
-  const processosPorStatus = client.processes.reduce<Record<string, typeof client.processes>>(
-    (acc, processo) => {
-      (acc[processo.status] = acc[processo.status] || []).push(processo);
-      return acc;
-    },
-    {}
-  );
 
   return (
     <div className="p-6 space-y-6">
@@ -353,54 +389,97 @@ export default function VisualizarCliente() {
 
             </CardContent>
           </Card>
-        </TabsContent>
+          </TabsContent>
 
-        <TabsContent value="processos" className="mt-4">
-          {Object.keys(processosPorStatus).length === 0 ? (
+          <TabsContent value="processos" className="mt-4 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder="Pesquisar processo..."
+                  value={processSearch}
+                  onChange={(e) => setProcessSearch(e.target.value)}
+                  className="sm:w-64"
+                />
+                <Select
+                  value={processSort}
+                  onValueChange={(v) => setProcessSort(v as "asc" | "desc")}
+                >
+                  <SelectTrigger className="sm:w-40">
+                    <SelectValue placeholder="Ordenar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">Número crescente</SelectItem>
+                    <SelectItem value="desc">Número decrescente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={() => navigate(`/clientes/${id}/novo-processo`)}>
+                Vincular Processo
+              </Button>
+            </div>
+
             <Card>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Nenhum processo encontrado para este cliente.
-                </p>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Número do Processo</TableHead>
+                      <TableHead>Data Distribuição</TableHead>
+                      <TableHead>Assunto</TableHead>
+                      <TableHead>Advogado Responsável</TableHead>
+                      <TableHead>Data Última Movimentação</TableHead>
+                      <TableHead>Situação</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredProcesses.length > 0 ? (
+                      filteredProcesses.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell>{p.numero}</TableCell>
+                          <TableCell>{p.dataDistribuicao || "-"}</TableCell>
+                          <TableCell>{p.assunto || "-"}</TableCell>
+                          <TableCell>{p.advogado || "-"}</TableCell>
+                          <TableCell>{p.ultimaMovimentacao || "-"}</TableCell>
+                          <TableCell>{p.situacao || "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  navigate(`/clientes/${id}/processos/${p.id}`)
+                                }
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon">
+                                <ListTodo className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon">
+                                <Bell className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon">
+                                <CalendarPlus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          Nenhum processo vinculado
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-6">
-              {Object.entries(processosPorStatus).map(([status, processos]) => (
-                <div key={status} className="space-y-2">
-                  <h2 className="text-xl font-semibold">{status}</h2>
-                  {processos.map((processo) => (
-                    <Card
-                      key={processo.id}
-                      className="cursor-pointer"
-                      onClick={() =>
-                        navigate(`/clientes/${id}/processos/${processo.id}`)
-                      }
-                    >
-                      <CardContent className="flex justify-between items-center py-4">
-                        <div>
-                          <p className="font-medium">
-                            {processo.number
-                              ? `Processo ${processo.number}`
-                              : "Processo"}
-                          </p>
-                          {processo.tipo && (
-                            <p className="text-sm text-muted-foreground">
-                              {processo.tipo}
-                            </p>
-                          )}
-                        </div>
-                        <Badge>{processo.status}</Badge>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
+          </TabsContent>
 
-        <TabsContent value="historico" className="mt-4">
+          <TabsContent value="historico" className="mt-4">
           {client.history && client.history.length > 0 ? (
             <div className="space-y-3">
               {client.history.map((h) => (
