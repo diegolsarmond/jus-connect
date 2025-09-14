@@ -6,7 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Mail, Phone, User, Building2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Mail, Phone, User, Building2, Trash } from "lucide-react";
+
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
 
@@ -61,6 +70,31 @@ export default function VisualizarCliente() {
   const navigate = useNavigate();
   const [client, setClient] = useState<LocalClient | null>(null);
   const [loading, setLoading] = useState(true);
+  const [documents, setDocuments] = useState<
+    Array<{ file: File; type: string }>
+  >([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedType, setSelectedType] = useState("");
+
+  const documentTypes = [
+    "RG",
+    "CPF",
+    "Comprovante de Endereço",
+    "Contrato",
+    "Outro",
+  ];
+
+  const handleAddDocument = () => {
+    if (selectedFile && selectedType) {
+      setDocuments((prev) => [...prev, { file: selectedFile, type: selectedType }]);
+      setSelectedFile(null);
+      setSelectedType("");
+    }
+  };
+
+  const handleRemoveDocument = (index: number) => {
+    setDocuments((prev) => prev.filter((_, i) => i !== index));
+  };
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -169,37 +203,68 @@ export default function VisualizarCliente() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="dados" className="space-y-6">
+      <Tabs defaultValue="documentos" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="dados">Dados do Cliente</TabsTrigger>
+          <TabsTrigger value="documentos">Documentos</TabsTrigger>
+
           <TabsTrigger value="processos">Processos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="dados" className="mt-4">
+        <TabsContent value="documentos" className="mt-4">
           <Card>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-medium">Contato</h3>
-                <p className="text-sm text-muted-foreground">{client.email}</p>
-                <p className="text-sm text-muted-foreground">{client.phone}</p>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Input
+                  type="file"
+                  onChange={(e) =>
+                    setSelectedFile(e.target.files?.[0] ?? null)
+                  }
+                  className="sm:w-1/2"
+                />
+                <Select
+                  value={selectedType}
+                  onValueChange={setSelectedType}
+                >
+                  <SelectTrigger className="sm:w-1/4">
+                    <SelectValue placeholder="Tipo de documento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {documentTypes.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleAddDocument}
+                  disabled={!selectedFile || !selectedType}
+                >
+                  Adicionar
+                </Button>
               </div>
-              <div>
-                <h3 className="text-sm font-medium">Endereço</h3>
-                <p className="text-sm text-muted-foreground">{client.address}</p>
-                <p className="text-sm text-muted-foreground">CEP: {client.cep ?? "-"}</p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium">Status</h3>
-                <p className="text-sm text-muted-foreground">{client.status}</p>
-                <p className="text-sm text-muted-foreground">
-                  Último contato: {formatDate(client.lastContact)}
-                </p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium">Outros</h3>
-                <p className="text-sm text-muted-foreground">Área: {client.area || "-"}</p>
-              </div>
+              {documents.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {documents.map((doc, index) => (
+                    <Card key={index} className="relative">
+                      <CardContent className="p-4 space-y-2">
+                        <p className="text-sm font-medium">{doc.file.name}</p>
+                        <p className="text-sm text-muted-foreground">{doc.type}</p>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2"
+                          onClick={() => handleRemoveDocument(index)}
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
             </CardContent>
           </Card>
         </TabsContent>
