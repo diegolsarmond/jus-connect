@@ -218,7 +218,7 @@ export default function Tarefas() {
     fetchOpportunities();
   }, []);
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
     const files: File[] = Array.from(data.attachments?.[0] ? data.attachments : []);
     for (const file of files) {
       if (file.size > 5 * 1024 * 1024) {
@@ -247,19 +247,52 @@ export default function Tarefas() {
         }`
       : data.process;
 
-    const newTask: Task = {
-      id: tasks.length + 1,
-      title: data.title,
-      process: processText,
-      participants: [],
-      date: data.allDay ? new Date(data.date) : new Date(`${data.date}T${data.time}`),
-      responsibles: data.responsibles,
-      status: 'pendente',
-      priority: data.priority,
+    const payload = {
+      id_oportunidades: Number(data.process),
+      titulo: data.title,
+      descricao: data.description,
+      data: data.date,
+      hora: data.allDay ? null : data.time,
+      dia_inteiro: data.allDay,
+      prioridade: data.priority,
+      mostrar_na_agenda: data.showOnAgenda,
+      privada: data.private,
+      recorrente: data.recurring,
+      repetir_quantas_vezes: data.recurring ? Number(data.recurrenceValue) || 1 : 1,
+      repetir_cada_unidade: data.recurring ? data.recurrenceUnit : null,
+      repetir_intervalo: 1,
+      ativa: true,
     };
-    setTasks((prev) => [...prev, newTask]);
-    reset();
-    setOpen(false);
+
+    try {
+      const url = joinUrl(apiUrl, '/api/tarefas');
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error('Falha ao criar tarefa');
+      const created = await response.json();
+      const newTask: Task = {
+        id: created.id,
+        title: created.titulo,
+        process: processText,
+        participants: [],
+        date: new Date(created.data),
+        responsibles: data.responsibles,
+        status: 'pendente',
+        priority: created.prioridade,
+      };
+      setTasks((prev) => [...prev, newTask]);
+      reset();
+      setOpen(false);
+    } catch (err) {
+      console.error('Erro ao criar tarefa:', err);
+      alert('Erro ao criar tarefa');
+    }
   };
 
   const pending = tasks.filter((t) => t.status === 'pendente').length;
