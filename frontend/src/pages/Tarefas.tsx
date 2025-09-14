@@ -110,6 +110,9 @@ interface ApiOpportunity {
   id: number;
   data_criacao?: string;
   solicitante_nome?: string;
+  solicitante?: {
+    nome?: string;
+  };
 }
 
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
@@ -203,7 +206,11 @@ export default function Tarefas() {
           : Array.isArray(json?.data)
           ? json.data
           : [];
-        setOpportunities(data);
+        const extended = data.map((o) => ({
+          ...o,
+          solicitante_nome: o.solicitante_nome || o.solicitante?.nome,
+        }));
+        setOpportunities(extended);
       } catch (err) {
         console.error('Erro ao buscar propostas:', err);
       }
