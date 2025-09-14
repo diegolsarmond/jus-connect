@@ -12,6 +12,7 @@ import {
   Pencil,
   Trash2,
   Check,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,6 +36,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Calendar } from '@/components/ui/calendar'; // <-- import do Calendário (shadcn)
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { z } from 'zod';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -96,6 +106,11 @@ interface ApiUsuario {
   nome_completo: string;
 }
 
+interface ApiOpportunity {
+  id: number;
+  data_criacao?: string;
+}
+
 const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
 
 function joinUrl(base: string, path = '') {
@@ -124,6 +139,8 @@ export default function Tarefas() {
   ]);
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState<ApiUsuario[]>([]);
+  const [opportunities, setOpportunities] = useState<ApiOpportunity[]>([]);
+  const [openProposal, setOpenProposal] = useState(false);
 
   const {
     register,
@@ -169,6 +186,30 @@ export default function Tarefas() {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    const fetchOpportunities = async () => {
+      try {
+        const url = joinUrl(apiUrl, '/api/oportunidades');
+        const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('Failed to fetch opportunities');
+        const json = await response.json();
+        const data: ApiOpportunity[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.rows)
+          ? json.rows
+          : Array.isArray(json?.data?.rows)
+          ? json.data.rows
+          : Array.isArray(json?.data)
+          ? json.data
+          : [];
+        setOpportunities(data);
+      } catch (err) {
+        console.error('Erro ao buscar propostas:', err);
+      }
+    };
+    fetchOpportunities();
+  }, []);
+
   const onSubmit = (data: FormValues) => {
     const files: File[] = Array.from(data.attachments?.[0] ? data.attachments : []);
     for (const file of files) {
@@ -183,10 +224,19 @@ export default function Tarefas() {
       }
     }
 
+    const selectedOpportunity = opportunities.find(
+      (o) => String(o.id) === data.process,
+    );
+    const processText = selectedOpportunity
+      ? `Proposta #${selectedOpportunity.id}/${new Date(
+          selectedOpportunity.data_criacao || '',
+        ).getFullYear()}`
+      : data.process;
+
     const newTask: Task = {
       id: tasks.length + 1,
       title: data.title,
-      process: data.process,
+      process: processText,
       participants: [],
       date: data.allDay ? new Date(data.date) : new Date(`${data.date}T${data.time}`),
       responsibles: data.responsibles,
@@ -219,6 +269,12 @@ export default function Tarefas() {
   const allDay = watch('allDay');
   const recurring = watch('recurring');
   const priority = watch('priority');
+  const selectedProposalId = watch('process');
+  const selectedProposal = opportunities.find(
+    (o) => String(o.id) === selectedProposalId,
+  );
+  const formatProposal = (o: ApiOpportunity) =>
+    `Proposta #${o.id}/${new Date(o.data_criacao || '').getFullYear()}`;
 
   // gera os dias com tarefas para o calendário
   const taskDates = useMemo(
@@ -377,16 +433,50 @@ export default function Tarefas() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="process">Proposta:</Label>
-                <select
-                  id="process"
-                  className="w-full border rounded-md h-9 px-2"
-                  {...register('process')}
-                >
-                  <option value="">Selecione</option>
-                  <option value="Processo 123">Processo 123</option>
-                  <option value="Processo 456">Processo 456</option>
-                  <option value="Caso ABC">Caso ABC</option>
-                </select>
+                <input type="hidden" id="process" {...register('process')} />
+                <Popover open={openProposal} onOpenChange={setOpenProposal}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openProposal}
+                      className="w-full justify-between"
+                    >
+                      {selectedProposal
+                        ? formatProposal(selectedProposal)
+                        : 'Selecione'}
+                      <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar proposta..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhuma proposta encontrada.</CommandEmpty>
+                        <CommandGroup>
+                          {opportunities.map((o) => {
+                            const label = formatProposal(o);
+                            return (
+                              <CommandItem
+                                key={o.id}
+                                value={label}
+                                onSelect={() => {
+                                  setValue('process', String(o.id));
+                                  setOpenProposal(false);
+                                }}
+                              >
+                                {label}
+                                {selectedProposalId === String(o.id) && (
+                                  <Check className="ml-auto h-4 w-4" />
+                                )}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {errors.process && (
                   <p className="text-sm text-destructive">{errors.process.message}</p>
                 )}
@@ -417,13 +507,29 @@ export default function Tarefas() {
                 <p className="text-sm text-destructive">{errors.title.message}</p>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
                 <Label htmlFor="date">Data:</Label>
                 <Input type="date" id="date" {...register('date')} />
                 {errors.date && (
                   <p className="text-sm text-destructive">{errors.date.message}</p>
                 )}
+              </div>
+              <div className="pt-6">
+                <Controller
+                  name="allDay"
+                  control={control}
+                  render={({ field }) => (
+                    <RadioGroup
+                      onValueChange={(value) => field.onChange(value === 'true')}
+                      value={field.value ? 'true' : 'false'}
+                      className="flex items-center space-x-2"
+                    >
+                      <RadioGroupItem value="true" id="all-day" />
+                      <Label htmlFor="all-day">Dia inteiro</Label>
+                    </RadioGroup>
+                  )}
+                />
               </div>
               {!allDay && (
                 <div>
@@ -434,13 +540,6 @@ export default function Tarefas() {
                   )}
                 </div>
               )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-              <div className="flex items-center space-x-2">
-                <Checkbox id="allDay" {...register('allDay')} />
-                <Label htmlFor="allDay">Dia inteiro</Label>
-              </div>
             </div>
         
             <div>
@@ -471,37 +570,36 @@ export default function Tarefas() {
                 <p className="text-sm text-destructive">{errors.priority.message}</p>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center space-x-2">
                 <Checkbox id="showOnAgenda" {...register('showOnAgenda')} />
                 <Label htmlFor="showOnAgenda">Mostrar na agenda</Label>
-              </div> 
-            <Controller
-                name="recurring"
-                control={control}
-                render={({ field }) => (
-                  <RadioGroup
-                    className="flex items-center space-x-4"
-                    onValueChange={(value) => field.onChange(value === 'true')}
-                    value={field.value ? 'true' : 'false'}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="false" id="not-recurring" />
-                      <Label htmlFor="not-recurring">Única</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="true" id="recurring" />
-                      <Label htmlFor="recurring">Recorrente</Label>
-                    </div>
-                  </RadioGroup>
-                )}
-              />
+              </div>
               <div className="flex items-center space-x-2">
                 <Checkbox id="private" {...register('private')} />
                 <Label htmlFor="private">Privada</Label>
               </div>
-
             </div>
+            <Controller
+              name="recurring"
+              control={control}
+              render={({ field }) => (
+                <RadioGroup
+                  className="flex items-center gap-4"
+                  onValueChange={(value) => field.onChange(value === 'true')}
+                  value={field.value ? 'true' : 'false'}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="false" id="not-recurring" />
+                    <Label htmlFor="not-recurring">Única</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="true" id="recurring" />
+                    <Label htmlFor="recurring">Recorrente</Label>
+                  </div>
+                </RadioGroup>
+              )}
+            />
             {recurring && (
               <div className="grid grid-cols-3 gap-2">
                 <div>
