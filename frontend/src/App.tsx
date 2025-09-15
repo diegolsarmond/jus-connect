@@ -24,6 +24,7 @@ import DocumentTemplates from "./pages/DocumentTemplates";
 import TemplateEditor from "./pages/TemplateEditor";
 import FinancialFlows from "./pages/FinancialFlows";
 import Relatorios from "./pages/Relatorios";
+import MeuPerfil from "./pages/MeuPerfil";
 import MeuPlano from "./pages/MeuPlano";
 import Suporte from "./pages/Suporte";
 import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
@@ -90,6 +91,7 @@ const App = () => (
             <Route path="/documentos/:id" element={<TemplateEditor />} />
             <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
             <Route path="/relatorios" element={<Relatorios />} />
+            <Route path="/meu-perfil" element={<MeuPerfil />} />
             <Route path="/meu-plano" element={<MeuPlano />} />
             <Route path="/suporte" element={<Suporte />} />
             <Route

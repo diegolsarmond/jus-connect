@@ -1,4 +1,5 @@
 import { Bell, Search, User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModeToggle } from "@/components/ui/mode-toggle";
@@ -13,6 +14,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export function Header() {
+  const navigate = useNavigate();
+
   return (
     <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between">
       {/* Search */}
@@ -55,11 +58,23 @@ export function Header() {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                navigate("/meu-perfil");
+              }}
+            >
               <User className="mr-2 h-4 w-4" />
               Perfil
             </DropdownMenuItem>
-            <DropdownMenuItem>Configurações</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                navigate("/configuracoes");
+              }}
+            >
+              Configurações
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Sair</DropdownMenuItem>
           </DropdownMenuContent>
