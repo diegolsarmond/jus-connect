@@ -94,14 +94,6 @@ export function Sidebar() {
           href: "/configuracoes/usuarios",
         },
         {
-          name: "Empresas",
-          href: "/configuracoes/empresas",
-        },
-        {
-          name: "Planos",
-          href: "/configuracoes/planos",
-        },
-        {
           name: "Parâmetros",
           children: [
             {
