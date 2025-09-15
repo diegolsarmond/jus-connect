@@ -2,12 +2,12 @@
   "name": "backend",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc",
-    "start": "node --experimental-specifier-resolution=node dist/index.js",
-    "test": "tsx --test tests/templateService.test.ts"
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "test": "node --test dist/tests/templateService.test.js"
   },
   "dependencies": {
     "express": "^4.19.2",

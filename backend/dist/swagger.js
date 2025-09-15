@@ -1,7 +1,9 @@
-import path from 'path';
-import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const path_1 = __importDefault(require("path"));
 const swaggerOptions = {
     definition: {
         openapi: '3.0.0',
@@ -11,8 +13,8 @@ const swaggerOptions = {
         },
     },
     apis: [
-        path.join(__dirname, 'routes/*.{ts,js}'),
-        path.join(__dirname, 'index.{ts,js}')
+        path_1.default.join(__dirname, 'routes/*.{ts,js}'),
+        path_1.default.join(__dirname, 'index.{ts,js}')
     ],
 };
-export default swaggerOptions;
+exports.default = swaggerOptions;
