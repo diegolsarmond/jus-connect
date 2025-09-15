@@ -22,3 +22,21 @@ npm run dev
 ```
 
 Após iniciar, acesse o frontend em `http://localhost:5173` e utilize o menu **Documentos** para gerenciar templates.
+
+## Produção
+
+### Backend
+
+```bash
+cd backend
+npm run build
+DATABASE_URL="postgres://user:pass@host:port/db" npm start
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run build
+# sirva os arquivos da pasta dist com seu servidor HTTP preferido
+```
