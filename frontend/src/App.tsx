@@ -39,6 +39,7 @@ import Etiquetas from "./pages/configuracoes/parametros/Etiquetas";
 import FluxoTrabalho from "./pages/configuracoes/parametros/FluxoTrabalho";
 import Empresas from "./pages/configuracoes/Empresas";
 import Planos from "./pages/configuracoes/Planos";
+import Integracoes from "./pages/configuracoes/Integracoes";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
 import NovoUsuario from "./pages/configuracoes/usuarios/NovoUsuario";
 import NovaEmpresa from "./pages/configuracoes/NovaEmpresa";
@@ -107,6 +108,7 @@ const App = () => (
             <Route path="/configuracoes/empresas" element={<Empresas />} />
             <Route path="/configuracoes/empresas/nova" element={<NovaEmpresa />} />
             <Route path="/configuracoes/planos" element={<Planos />} />
+            <Route path="/configuracoes/integracoes" element={<Integracoes />} />
             <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
             <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
             <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />

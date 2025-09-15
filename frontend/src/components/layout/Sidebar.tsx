@@ -98,6 +98,10 @@ export function Sidebar() {
           href: "/configuracoes/usuarios",
         },
         {
+          name: "Integrações",
+          href: "/configuracoes/integracoes",
+        },
+        {
           name: "Parâmetros",
           children: [
             {
