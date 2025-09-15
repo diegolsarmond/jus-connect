@@ -230,7 +230,7 @@ export default function Pipeline() {
   }, [selectedFlow, apiUrl]);
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const isDragging = useRef(false);
+  const dragStartedSincePointerDown = useRef(false);
 
   useEffect(() => {
     const fetchOpportunities = async () => {
@@ -413,14 +413,8 @@ export default function Pipeline() {
     event: React.DragEvent<HTMLDivElement>,
     opportunityId: number,
   ) => {
-    isDragging.current = true;
+    dragStartedSincePointerDown.current = true;
     event.dataTransfer.setData("text/plain", opportunityId.toString());
-  };
-
-  const handleDragEnd = () => {
-    setTimeout(() => {
-      isDragging.current = false;
-    }, 0);
   };
 
   const handleDrop = async (
@@ -613,10 +607,18 @@ export default function Pipeline() {
                     key={opportunity.id}
                     className="cursor-pointer hover:shadow-md transition-all duration-200"
                     draggable
+                    onPointerDown={() => {
+                      dragStartedSincePointerDown.current = false;
+                    }}
                     onDragStart={(e) => handleDragStart(e, opportunity.id)}
-                    onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver}
                     onClick={() => {
+                      const dragged = dragStartedSincePointerDown.current;
+                      dragStartedSincePointerDown.current = false;
+
+                      if (!dragged) {
+                        navigate(`/pipeline/oportunidade/${opportunity.id}`);
+                      }
                       const targetId = opportunity.id;
                       setTimeout(() => {
                         if (!isDragging.current) {
