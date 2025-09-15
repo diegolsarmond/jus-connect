@@ -1,6 +1,36 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 
+const parseOptionalId = (value: unknown): number | null | 'invalid' => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+      return 'invalid';
+    }
+
+    return parsed;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+      return 'invalid';
+    }
+
+    return value;
+  }
+
+  return 'invalid';
+};
+
 export const listUsuarios = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
@@ -46,6 +76,40 @@ export const createUsuario = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
+    const empresaIdResult = parseOptionalId(empresa);
+    if (empresaIdResult === 'invalid') {
+      return res.status(400).json({ error: 'ID de empresa inválido' });
+    }
+    const empresaId = empresaIdResult;
+
+    if (empresaId !== null) {
+      const empresaExists = await pool.query(
+        'SELECT 1 FROM public.empresas WHERE id = $1',
+        [empresaId]
+      );
+      if (empresaExists.rowCount === 0) {
+        return res.status(400).json({ error: 'Empresa informada não existe' });
+      }
+    }
+
+    const escritorioIdResult = parseOptionalId(escritorio);
+    if (escritorioIdResult === 'invalid') {
+      return res.status(400).json({ error: 'ID de escritório inválido' });
+    }
+    const escritorioId = escritorioIdResult;
+
+    if (escritorioId !== null) {
+      const escritorioExists = await pool.query(
+        'SELECT 1 FROM public.escritorios WHERE id = $1',
+        [escritorioId]
+      );
+      if (escritorioExists.rowCount === 0) {
+        return res
+          .status(400)
+          .json({ error: 'Escritório informado não existe' });
+      }
+    }
+
     const result = await pool.query(
       'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
       [
@@ -53,8 +117,8 @@ export const createUsuario = async (req: Request, res: Response) => {
         cpf,
         email,
         perfil,
-        empresa,
-        escritorio,
+        empresaId,
+        escritorioId,
         oab,
         status,
         senha,
@@ -88,6 +152,40 @@ export const updateUsuario = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
+    const empresaIdResult = parseOptionalId(empresa);
+    if (empresaIdResult === 'invalid') {
+      return res.status(400).json({ error: 'ID de empresa inválido' });
+    }
+    const empresaId = empresaIdResult;
+
+    if (empresaId !== null) {
+      const empresaExists = await pool.query(
+        'SELECT 1 FROM public.empresas WHERE id = $1',
+        [empresaId]
+      );
+      if (empresaExists.rowCount === 0) {
+        return res.status(400).json({ error: 'Empresa informada não existe' });
+      }
+    }
+
+    const escritorioIdResult = parseOptionalId(escritorio);
+    if (escritorioIdResult === 'invalid') {
+      return res.status(400).json({ error: 'ID de escritório inválido' });
+    }
+    const escritorioId = escritorioIdResult;
+
+    if (escritorioId !== null) {
+      const escritorioExists = await pool.query(
+        'SELECT 1 FROM public.escritorios WHERE id = $1',
+        [escritorioId]
+      );
+      if (escritorioExists.rowCount === 0) {
+        return res
+          .status(400)
+          .json({ error: 'Escritório informado não existe' });
+      }
+    }
+
     const result = await pool.query(
       'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, escritorio = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
       [
@@ -95,8 +193,8 @@ export const updateUsuario = async (req: Request, res: Response) => {
         cpf,
         email,
         perfil,
-        empresa,
-        escritorio,
+        empresaId,
+        escritorioId,
         oab,
         status,
         senha,
