@@ -619,6 +619,12 @@ export default function Pipeline() {
                       if (!dragged) {
                         navigate(`/pipeline/oportunidade/${opportunity.id}`);
                       }
+                      const targetId = opportunity.id;
+                      setTimeout(() => {
+                        if (!isDragging.current) {
+                          navigate(`/pipeline/oportunidade/${targetId}`);
+                        }
+                      }, 0);
                     }}
                   >
                     <CardHeader className="pb-2">
