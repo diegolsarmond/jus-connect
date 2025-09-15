@@ -27,6 +27,18 @@ const router = Router();
  *           format: float
  *         ativo:
  *           type: boolean
+ *         descricao:
+ *           type: string
+ *         recorrencia:
+ *           type: string
+ *           enum: [mensal, anual, nenhuma]
+ *           nullable: true
+ *         qtde_usuarios:
+ *           type: integer
+ *           nullable: true
+ *         recursos:
+ *           type: string
+ *           nullable: true
  *         datacadastro:
  *           type: string
  *           format: date-time
@@ -70,6 +82,18 @@ router.get('/planos', listPlanos);
  *                 format: float
  *               ativo:
  *                 type: boolean
+ *               descricao:
+ *                 type: string
+ *               recorrencia:
+ *                 type: string
+ *                 enum: [mensal, anual, nenhuma]
+ *                 nullable: true
+ *               qtde_usuarios:
+ *                 type: integer
+ *                 nullable: true
+ *               recursos:
+ *                 type: string
+ *                 nullable: true
  *     responses:
  *       201:
  *         description: Plano criado
@@ -106,6 +130,18 @@ router.post('/planos', createPlano);
  *                 format: float
  *               ativo:
  *                 type: boolean
+ *               descricao:
+ *                 type: string
+ *               recorrencia:
+ *                 type: string
+ *                 enum: [mensal, anual, nenhuma]
+ *                 nullable: true
+ *               qtde_usuarios:
+ *                 type: integer
+ *                 nullable: true
+ *               recursos:
+ *                 type: string
+ *                 nullable: true
  *     responses:
  *       200:
  *         description: Plano atualizado
