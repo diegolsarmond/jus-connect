@@ -35,7 +35,7 @@ const formSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   phone: z.string().optional(),
-  cpf: z.string().min(1, "CPF é obrigatório"),
+  cpf: z.string().min(1, "CPF/CNPJ é obrigatório"),
   cep: z.string().optional(),
   street: z.string().optional(),
   number: z.string().optional(),
@@ -43,7 +43,7 @@ const formSchema = z.object({
   neighborhood: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
-  type: z.enum(["1", "2"]),
+  type: z.enum(["pf", "pj"]),
 });
 
 export default function NovoCliente() {
@@ -72,9 +72,34 @@ export default function NovoCliente() {
       neighborhood: "",
       city: "",
       state: "",
-      type: "1",
+      type: "pf",
     },
   });
+
+  const formatCpfCnpj = (value: string, type: "pf" | "pj") => {
+    const digits = value.replace(/\D/g, "");
+    if (type === "pj") {
+      return digits
+        .slice(0, 14)
+        .replace(/(\d{2})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d)/, "$1/$2")
+        .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+    }
+    return digits
+      .slice(0, 11)
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  };
+
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 10) {
+      return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+    }
+    return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
+  };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -84,10 +109,10 @@ export default function NovoCliente() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nome: values.name,
-          tipo: values.type === "PF" ? "1" : "2",
-          documento: values.cpf,
+          tipo: values.type === "pj" ? "2" : "1",
+          documento: values.cpf.replace(/\D/g, ""),
           email: values.email || null,
-          telefone: values.phone || null,
+           telefone: values.phone ? values.phone.replace(/\D/g, "") : null,
           cep: values.cep || null,
           rua: values.street || null,
           numero: values.number || null,
@@ -132,15 +157,15 @@ export default function NovoCliente() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione o tipo" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="PF">Pessoa Física</SelectItem>
-                        <SelectItem value="PJ">Pessoa Jurídica</SelectItem>
+                        <SelectItem value="pf">Pessoa Física</SelectItem>
+                        <SelectItem value="pj">Pessoa Jurídica</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -182,7 +207,11 @@ export default function NovoCliente() {
                   <FormItem>
                     <FormLabel>Telefone</FormLabel>
                     <FormControl>
-                      <Input placeholder="(11) 99999-9999" {...field} />
+                      <Input
+                        placeholder="(11) 99999-9999"
+                        {...field}
+                        onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -194,9 +223,19 @@ export default function NovoCliente() {
                 name="cpf"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CPF</FormLabel>
+                    <FormLabel>{form.watch("type") === "pj" ? "CNPJ" : "CPF"}</FormLabel>
                     <FormControl>
-                      <Input placeholder="000.000.000-00" {...field} />
+                      <Input
+                        placeholder={
+                          form.watch("type") === "pj"
+                            ? "00.000.000/0000-00"
+                            : "000.000.000-00"
+                        }
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(formatCpfCnpj(e.target.value, form.watch("type")))
+                        }
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

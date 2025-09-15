@@ -62,15 +62,18 @@ export const createCliente = async (req: Request, res: Response) => {
     foto,
   } = req.body;
 
+  const documentoLimpo = documento ? documento.replace(/\D/g, '') : null;
+  const telefoneLimpo = telefone ? telefone.replace(/\D/g, '') : null;
+
   try {
     const result = await pool.query(
       'INSERT INTO public.clientes (nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()) RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro',
       [
         nome,
         tipo,
-        documento,
+        documentoLimpo,
         email,
-        telefone,
+        telefoneLimpo,
         cep,
         rua,
         numero,
@@ -108,15 +111,18 @@ export const updateCliente = async (req: Request, res: Response) => {
     foto,
   } = req.body;
 
+  const documentoLimpo = documento ? documento.replace(/\D/g, '') : null;
+  const telefoneLimpo = telefone ? telefone.replace(/\D/g, '') : null;
+
   try {
     const result = await pool.query(
       'UPDATE public.clientes SET nome = $1, tipo = $2, documento = $3, email = $4, telefone = $5, cep = $6, rua = $7, numero = $8, complemento = $9, bairro = $10, cidade = $11, uf = $12, ativo = $13, foto = $14 WHERE id = $15 RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro',
       [
         nome,
         tipo,
-        documento,
+        documentoLimpo,
         email,
-        telefone,
+        telefoneLimpo,
         cep,
         rua,
         numero,

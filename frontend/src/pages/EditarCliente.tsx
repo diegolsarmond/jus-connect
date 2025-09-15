@@ -54,7 +54,7 @@ const formSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   phone: z.string().optional(),
-  cpf: z.string().min(1, "CPF é obrigatório"),
+  cpf: z.string().min(1, "CPF/CNPJ é obrigatório"),
   cep: z.string().optional(),
   street: z.string().optional(),
   number: z.string().optional(),
@@ -89,6 +89,31 @@ export default function EditarCliente() {
     },
   });
 
+  const formatCpfCnpj = (value: string, type: "pf" | "pj") => {
+    const digits = value.replace(/\D/g, "");
+    if (type === "pj") {
+      return digits
+        .slice(0, 14)
+        .replace(/(\d{2})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d)/, "$1/$2")
+        .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+    }
+    return digits
+      .slice(0, 11)
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  };
+
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 10) {
+      return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+    }
+    return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
+  };
+
   useEffect(() => {
     fetch(
       "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
@@ -106,11 +131,16 @@ export default function EditarCliente() {
           throw new Error("Failed to fetch client");
         }
         const json: ApiClient = await response.json();
+        const type: "pf" | "pj" =
+          String(json.tipo) === "2" ||
+          ["J", "PJ"].includes(String(json.tipo).toUpperCase())
+            ? "pj"
+            : "pf";
         form.reset({
           name: json.nome,
           email: json.email ?? "",
-          phone: json.telefone ?? "",
-          cpf: json.documento,
+          phone: json.telefone ? formatPhone(json.telefone) : "",
+          cpf: json.documento ? formatCpfCnpj(json.documento, type) : "",
           cep: json.cep ?? "",
           street: json.rua ?? "",
           number: json.numero ?? "",
@@ -118,7 +148,7 @@ export default function EditarCliente() {
           neighborhood: json.bairro ?? "",
           city: json.cidade ?? "",
           state: json.uf ?? "",
-          type: ["J", "PJ"].includes(json.tipo.toUpperCase()) ? "pj" : "pf",
+          type,
         });
       } catch (error) {
         console.error("Erro ao buscar cliente:", error);
@@ -138,10 +168,10 @@ export default function EditarCliente() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nome: values.name,
-          tipo: values.type === "pj" ? "PJ" : "PF",
-          documento: values.cpf,
+          tipo: values.type === "pj" ? "2" : "1",
+          documento: values.cpf.replace(/\D/g, ""),
           email: values.email || null,
-          telefone: values.phone || null,
+          telefone: values.phone ? values.phone.replace(/\D/g, "") : null,
           cep: values.cep || null,
           rua: values.street || null,
           numero: values.number || null,
@@ -245,7 +275,11 @@ export default function EditarCliente() {
                   <FormItem>
                     <FormLabel>Telefone</FormLabel>
                     <FormControl>
-                      <Input placeholder="(11) 99999-9999" {...field} />
+                      <Input
+                        placeholder="(11) 99999-9999"
+                        {...field}
+                        onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -257,9 +291,19 @@ export default function EditarCliente() {
                 name="cpf"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CPF</FormLabel>
+                    <FormLabel>{form.watch("type") === "pj" ? "CNPJ" : "CPF"}</FormLabel>
                     <FormControl>
-                      <Input placeholder="000.000.000-00" {...field} />
+                      <Input
+                        placeholder={
+                          form.watch("type") === "pj"
+                            ? "00.000.000/0000-00"
+                            : "000.000.000-00"
+                        }
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(formatCpfCnpj(e.target.value, form.watch("type")))
+                        }
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
