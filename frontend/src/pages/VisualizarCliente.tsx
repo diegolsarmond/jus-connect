@@ -358,33 +358,43 @@ export default function VisualizarCliente() {
         <TabsContent value="documentos" className="mt-4">
           <Card>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
-                <Select value={selectedType} onValueChange={setSelectedType}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Tipo de documento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {documentTypes.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>
-                        {t.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="file"
-                  onChange={(e) =>
-                    setSelectedFile(e.target.files?.[0] ?? null)
-                  }
-                  className="w-full"
-                />
-                <Button
-                  onClick={handleAddDocument}
-                  disabled={!selectedFile || !selectedType}
-                  className="w-full sm:w-auto"
-                >
-                  Adicionar
-                </Button>
+              <div className="space-y-4 rounded-lg border border-dashed border-muted/40 bg-muted/20 p-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Anexar documentos
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Escolha o tipo de documento e selecione o arquivo que deseja anexar ao cliente.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+                  <Select value={selectedType} onValueChange={setSelectedType}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Tipo de documento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {documentTypes.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>
+                          {t.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="file"
+                    onChange={(e) =>
+                      setSelectedFile(e.target.files?.[0] ?? null)
+                    }
+                    className="w-full"
+                  />
+                  <Button
+                    onClick={handleAddDocument}
+                    disabled={!selectedFile || !selectedType}
+                    className="w-full sm:w-auto"
+                  >
+                    Adicionar
+                  </Button>
+                </div>
               </div>
               {documents.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
