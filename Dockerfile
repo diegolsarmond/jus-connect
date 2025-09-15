@@ -10,6 +10,7 @@ RUN npm --prefix backend install
 COPY frontend/package*.json frontend/
 RUN npm --prefix frontend install
 
+
 # Copy application source
 COPY . .
 

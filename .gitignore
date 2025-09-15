@@ -1,1 +1,4 @@
 **/node_modules/
+/frontend/dist/
+/index.html
+
