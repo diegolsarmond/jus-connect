@@ -59,6 +59,8 @@ interface StatusOption {
   name: string;
 }
 
+const STATUS_EMPTY_VALUE = "__no_status__";
+
 export default function VisualizarOportunidade() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -519,7 +521,7 @@ export default function VisualizarOportunidade() {
 
   const handleStatusChange = async (value: string) => {
     if (!id || !opportunity) return;
-    const parsedValue = value === "" ? null : Number(value);
+    const parsedValue = value === STATUS_EMPTY_VALUE ? null : Number(value);
     if (parsedValue !== null && Number.isNaN(parsedValue)) return;
 
     const currentStatus =
@@ -690,7 +692,7 @@ export default function VisualizarOportunidade() {
 
   const statusSelectValue =
     opportunity.status_id === null || opportunity.status_id === undefined
-      ? ""
+      ? STATUS_EMPTY_VALUE
       : String(opportunity.status_id);
   const statusBadgeText =
     typeof opportunity.status === "string" && opportunity.status.trim().length > 0
@@ -769,7 +771,7 @@ export default function VisualizarOportunidade() {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sem status</SelectItem>
+                  <SelectItem value={STATUS_EMPTY_VALUE}>Sem status</SelectItem>
                   {statusOptions.map((option) => (
                     <SelectItem key={option.id} value={option.id}>
                       {option.name}
