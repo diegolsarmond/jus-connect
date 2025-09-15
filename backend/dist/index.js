@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = require("fs");
 const areaAtuacaoRoutes_1 = __importDefault(require("./routes/areaAtuacaoRoutes"));
 const tipoEventoRoutes_1 = __importDefault(require("./routes/tipoEventoRoutes"));
 const tipoProcessoRoutes_1 = __importDefault(require("./routes/tipoProcessoRoutes"));
@@ -89,6 +91,13 @@ app.use('/api', supportRoutes_1.default);
 // Swagger
 const specs = (0, swagger_jsdoc_1.default)(swagger_1.default);
 app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(specs));
+// Static frontend (when available)
+const frontendDistPath = path_1.default.resolve(__dirname, '../../frontend/dist');
+const frontendIndexPath = path_1.default.join(frontendDistPath, 'index.html');
+const hasFrontendBuild = (0, fs_1.existsSync)(frontendIndexPath);
+if (hasFrontendBuild) {
+    app.use(express_1.default.static(frontendDistPath));
+}
 /**
  * @swagger
  * /:
@@ -98,9 +107,19 @@ app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.de
  *       200:
  *         description: Backend up and running
  */
-app.get('/', (_req, res) => {
-    res.send('Backend up and running');
-});
+if (!hasFrontendBuild) {
+    app.get('/', (_req, res) => {
+        res.send('Backend up and running');
+    });
+}
+else {
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/api-docs')) {
+            return next();
+        }
+        res.sendFile(frontendIndexPath);
+    });
+}
 // Start
 const server = app.listen(port, () => {
     const actualPort = server.address().port;

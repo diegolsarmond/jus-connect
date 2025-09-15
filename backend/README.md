@@ -43,3 +43,7 @@ DATABASE_URL="postgres://user:pass@host:port/db" npm start
 Se `DATABASE_URL` não estiver definida, o servidor tentará utilizar a conexão
 descrita em `appsettings.json`. Esse arquivo é opcional; caso ambos estejam
 ausentes, a inicialização falhará com um erro descritivo.
+
+Caso a pasta `../frontend/dist` esteja presente (por exemplo, após executar
+`npm run build` no frontend), o servidor também publicará automaticamente os
+arquivos estáticos do aplicativo React na rota raiz.
