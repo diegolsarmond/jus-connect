@@ -40,6 +40,34 @@ npm run dev
 
 O módulo de templates de documentos consome a API disponível em `http://localhost:3001/api`. Caso o backend esteja em outra URL, defina a variável de ambiente `VITE_API_URL` antes de iniciar o projeto. Caso contrário, o frontend utilizará automaticamente o mesmo domínio em que estiver publicado.
 
+## Conversas (Chat Omnichannel)
+
+Este projeto inclui uma área de conversas inspirada na experiência de mensageria profissional:
+
+- **Atalhos de teclado**: `Ctrl + K` foca a busca de contatos, `Ctrl + N` abre a modal de nova conversa e `Esc` fecha modais em destaque.
+- **Lista de conversas**: filtragem em tempo real, badges de não lidos, ordenação por atividade recente e navegação por teclado.
+- **Janela de chat**: cabeçalho com ações rápidas, histórico virtualizado (renderiza apenas um bloco de mensagens para manter a performance) e carregamento incremental ao rolar para o topo.
+- **Entrada de mensagem**: suporte a emoji, anexos simulados, colagem de imagens e envio com Enter (Shift+Enter cria nova linha).
+- **Modal de dispositivos**: tela dedicada para pareamento por QR code, mantendo a interface acessível e responsiva.
+
+### Como rodar
+
+```sh
+cd frontend
+npm install
+npm run dev
+```
+
+A aplicação estará disponível em `http://localhost:5173`. O servidor mockado de conversas é inicializado automaticamente no carregamento do módulo.
+
+### Ajustando os dados fictícios
+
+- **Conversas e mensagens**: edite `src/features/chat/data/chatData.json` para alterar contatos, mensagens e status.
+- **Comportamento da API**: endpoints simulados ficam em `src/features/chat/services/mockServer.ts`. Ali é possível ajustar paginação, ordenação e payloads retornados.
+- **Estilos do chat**: cada componente usa CSS Modules (por exemplo, `ChatSidebar.module.css`, `ChatWindow.module.css`). As variáveis de cor aproveitam o tema existente do CRM.
+
+Sempre que alterar os mocks, salve o arquivo e a aplicação será recarregada automaticamente pelo Vite.
+
 **Edit a file directly in GitHub**
 
 - Navigate to the desired file(s).

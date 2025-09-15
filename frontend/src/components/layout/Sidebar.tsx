@@ -6,6 +6,7 @@ import {
   Target,
   Calendar,
   CheckSquare,
+  MessageCircle,
   Gavel,
   FileText,
   DollarSign,
@@ -77,6 +78,7 @@ export function Sidebar() {
 
   const navigation: NavItem[] = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Conversas", href: "/conversas", icon: MessageCircle },
     { name: "Clientes", href: "/clientes", icon: Users },
     { name: "Pipeline", href: "/pipeline", icon: Target, children: pipelineMenus },
     { name: "Agenda", href: "/agenda", icon: Calendar },

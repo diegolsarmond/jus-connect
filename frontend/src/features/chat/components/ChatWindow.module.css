@@ -1,0 +1,151 @@
+.wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--background));
+}
+
+.header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.headerInfo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.headerInfo img {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.headerText h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.status {
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.actionButton {
+  border: none;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.actionButton:hover,
+.actionButton:focus-visible {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.menu {
+  position: relative;
+}
+
+.menuPanel {
+  position: absolute;
+  right: 0;
+  top: 110%;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-card);
+  padding: 0.35rem;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 200px;
+  z-index: 30;
+}
+
+.menuPanel button {
+  border: none;
+  background: transparent;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.65rem;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: inherit;
+}
+
+.menuPanel button:hover,
+.menuPanel button:focus-visible {
+  background: hsl(var(--muted));
+}
+
+.placeholder {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  padding: 2rem;
+  gap: 1rem;
+}
+
+.placeholder h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.loadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: hsl(var(--background) / 0.7);
+  backdrop-filter: blur(3px);
+  z-index: 40;
+  font-weight: 600;
+}
+
+.viewportWrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .header {
+    padding: 0.75rem 1rem;
+  }
+
+  .headerInfo img {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
