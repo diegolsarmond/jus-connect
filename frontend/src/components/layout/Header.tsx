@@ -1,4 +1,4 @@
-import { Bell, Search, User } from "lucide-react";
+import { Search, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { IntimacaoMenu } from "@/components/notifications/IntimacaoMenu";
 
 export function Header() {
   const navigate = useNavigate();
@@ -33,12 +34,7 @@ export function Header() {
       <div className="flex items-center gap-3">
         <ModeToggle />
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center">
-            3
-          </span>
-        </Button>
+        <IntimacaoMenu />
 
         {/* User Menu */}
         <DropdownMenu>
