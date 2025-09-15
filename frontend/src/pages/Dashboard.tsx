@@ -11,7 +11,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="space-y-2">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Visão geral do seu CRM jurídico</p>
       </div>
