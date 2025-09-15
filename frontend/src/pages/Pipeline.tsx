@@ -46,6 +46,7 @@ interface Stage {
   id: string;
   name: string;
   color: string;
+  flowId?: string;
 }
 
 interface Flow {
@@ -65,6 +66,8 @@ export default function Pipeline() {
   const [moveStages, setMoveStages] = useState<Stage[]>([]);
   const [selectedStage, setSelectedStage] = useState<string>("");
   const [moveModalOpen, setMoveModalOpen] = useState(false);
+  const [movingOpportunityId, setMovingOpportunityId] = useState<number | null>(null);
+  const [isSavingMove, setIsSavingMove] = useState(false);
 
   useEffect(() => {
     const fetchStages = async () => {
@@ -98,11 +101,18 @@ export default function Pipeline() {
         ];
         setStages(
           filtered.map((r, idx) => {
-            const item = r as { id: number | string; nome?: string };
+            const item = r as {
+              id: number | string;
+              nome?: string;
+              id_fluxo_trabalho?: number | string;
+            };
             return {
               id: String(item.id),
               name: item.nome ?? "",
               color: colors[idx % colors.length],
+              flowId: item.id_fluxo_trabalho
+                ? String(item.id_fluxo_trabalho)
+                : undefined,
             };
           })
         );
@@ -168,12 +178,19 @@ export default function Pipeline() {
   }, [apiUrl]);
 
   useEffect(() => {
-    if (!selectedFlow) return;
+    if (!selectedFlow) {
+      setMoveStages([]);
+      return;
+    }
+
     const fetchStagesForFlow = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/etiquetas`, {
-          headers: { Accept: "application/json" },
-        });
+        const res = await fetch(
+          `${apiUrl}/api/etiquetas/fluxos-trabalho/${selectedFlow}`,
+          {
+            headers: { Accept: "application/json" },
+          }
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         const parsed: unknown[] = Array.isArray(data)
@@ -185,21 +202,30 @@ export default function Pipeline() {
           : Array.isArray(data?.data)
           ? data.data
           : [];
-        const filtered = parsed.filter(
-          (r) =>
-            String((r as { id_fluxo_trabalho?: number | string }).id_fluxo_trabalho) ===
-            selectedFlow,
-        );
-        setMoveStages(
-          filtered.map((r) => {
-            const item = r as { id: number | string; nome?: string };
-            return { id: String(item.id), name: item.nome ?? "", color: "" };
-          }),
+        const mapped = parsed.map((r) => {
+          const item = r as {
+            id: number | string;
+            nome?: string;
+            id_fluxo_trabalho?: number | string;
+          };
+          return {
+            id: String(item.id),
+            name: item.nome ?? "",
+            color: "",
+            flowId: item.id_fluxo_trabalho
+              ? String(item.id_fluxo_trabalho)
+              : undefined,
+          };
+        });
+        setMoveStages(mapped);
+        setSelectedStage((prev) =>
+          prev && !mapped.some((stage) => stage.id === prev) ? "" : prev
         );
       } catch (e) {
         console.error(e);
       }
     };
+    setMoveStages([]);
     fetchStagesForFlow();
   }, [selectedFlow, apiUrl]);
 
@@ -439,6 +465,63 @@ export default function Pipeline() {
     event.preventDefault();
   };
 
+  const handleMoveModalOpenChange = (open: boolean) => {
+    setMoveModalOpen(open);
+    if (!open) {
+      setMovingOpportunityId(null);
+      setSelectedFlow("");
+      setSelectedStage("");
+      setMoveStages([]);
+    }
+  };
+
+  const handleMoveOpportunity = async () => {
+    if (!movingOpportunityId || !selectedStage || !selectedFlow) {
+      return;
+    }
+
+    try {
+      setIsSavingMove(true);
+
+      const storedRefresh = localStorage.getItem("google_refresh_token");
+      if (storedRefresh) {
+        try {
+          await refreshGoogleToken(storedRefresh);
+        } catch (err) {
+          console.error("Erro ao renovar token do Google", err);
+        }
+      }
+
+      const res = await fetch(
+        `${apiUrl}/api/oportunidades/${movingOpportunityId}/etapa`,
+        {
+          method: "PATCH",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ etapa_id: Number(selectedStage) }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      }
+
+      setOpportunities((prev) =>
+        prev.map((opp) =>
+          opp.id === movingOpportunityId ? { ...opp, stage: selectedStage } : opp
+        )
+      );
+
+      handleMoveModalOpenChange(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSavingMove(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -560,8 +643,14 @@ export default function Pipeline() {
                               onSelect={(e) => {
                                 e.stopPropagation();
 
-                                setSelectedFlow("");
-                                setSelectedStage("");
+                                const stageInfo = stages.find(
+                                  (stageItem) => stageItem.id === opportunity.stage
+                                );
+                                const defaultFlowId = stageInfo?.flowId ?? fluxoId ?? "";
+
+                                setMovingOpportunityId(opportunity.id);
+                                setSelectedFlow(defaultFlowId);
+                                setSelectedStage(stageInfo ? stageInfo.id : "");
                                 setMoveStages([]);
                                 setMoveModalOpen(true);
                               }}
@@ -626,7 +715,7 @@ export default function Pipeline() {
         })}
       </div>
 
-      <Dialog open={moveModalOpen} onOpenChange={setMoveModalOpen}>
+      <Dialog open={moveModalOpen} onOpenChange={handleMoveModalOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Mover oportunidade</DialogTitle>
@@ -640,6 +729,7 @@ export default function Pipeline() {
               onValueChange={(value) => {
                 setSelectedFlow(value);
                 setSelectedStage("");
+                setMoveStages([]);
               }}
             >
               <SelectTrigger>
@@ -656,7 +746,7 @@ export default function Pipeline() {
             <Select
               value={selectedStage}
               onValueChange={setSelectedStage}
-              disabled={!moveStages.length}
+              disabled={!selectedFlow || !moveStages.length}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione uma etapa" />
@@ -671,10 +761,15 @@ export default function Pipeline() {
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMoveModalOpen(false)}>
+            <Button variant="outline" onClick={() => handleMoveModalOpenChange(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => setMoveModalOpen(false)}>Mover</Button>
+            <Button
+              onClick={handleMoveOpportunity}
+              disabled={!selectedFlow || !selectedStage || isSavingMove}
+            >
+              {isSavingMove ? "Movendo..." : "Mover"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
