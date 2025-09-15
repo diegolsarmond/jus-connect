@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listUsuarios, getUsuarioById, createUsuario, updateUsuario, deleteUsuario, } from '../controllers/usuarioController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const usuarioController_1 = require("../controllers/usuarioController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -58,7 +60,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Usuario'
  */
-router.get(['/usuarios', '/users'], listUsuarios);
+router.get(['/usuarios', '/users'], usuarioController_1.listUsuarios);
 /**
  * @swagger
  * /api/usuarios/{id}:
@@ -81,7 +83,7 @@ router.get(['/usuarios', '/users'], listUsuarios);
  *       404:
  *         description: Usuário não encontrado
  */
-router.get(['/usuarios/:id', '/users/:id'], getUsuarioById);
+router.get(['/usuarios/:id', '/users/:id'], usuarioController_1.getUsuarioById);
 /**
  * @swagger
  * /api/usuarios:
@@ -128,7 +130,7 @@ router.get(['/usuarios/:id', '/users/:id'], getUsuarioById);
  *             schema:
  *               $ref: '#/components/schemas/Usuario'
  */
-router.post(['/usuarios', '/users'], createUsuario);
+router.post(['/usuarios', '/users'], usuarioController_1.createUsuario);
 /**
  * @swagger
  * /api/usuarios/{id}:
@@ -183,7 +185,7 @@ router.post(['/usuarios', '/users'], createUsuario);
  *       404:
  *         description: Usuário não encontrado
  */
-router.put(['/usuarios/:id', '/users/:id'], updateUsuario);
+router.put(['/usuarios/:id', '/users/:id'], usuarioController_1.updateUsuario);
 /**
  * @swagger
  * /api/usuarios/{id}:
@@ -202,10 +204,10 @@ router.put(['/usuarios/:id', '/users/:id'], updateUsuario);
  *       404:
  *         description: Usuário não encontrado
  */
-router.delete(['/usuarios/:id', '/users/:id'], deleteUsuario);
-router.get('/users', listUsuarios);
-router.get('/users/:id', getUsuarioById);
-router.post('/users', createUsuario);
-router.put('/users/:id', updateUsuario);
-router.delete('/users/:id', deleteUsuario);
-export default router;
+router.delete(['/usuarios/:id', '/users/:id'], usuarioController_1.deleteUsuario);
+router.get('/users', usuarioController_1.listUsuarios);
+router.get('/users/:id', usuarioController_1.getUsuarioById);
+router.post('/users', usuarioController_1.createUsuario);
+router.put('/users/:id', usuarioController_1.updateUsuario);
+router.delete('/users/:id', usuarioController_1.deleteUsuario);
+exports.default = router;

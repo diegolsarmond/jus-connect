@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listEtiquetas, listEtiquetasByFluxoTrabalho, createEtiqueta, updateEtiqueta, deleteEtiqueta, } from '../controllers/etiquetaController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const etiquetaController_1 = require("../controllers/etiquetaController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -47,7 +49,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Etiqueta'
  */
-router.get('/etiquetas', listEtiquetas);
+router.get('/etiquetas', etiquetaController_1.listEtiquetas);
 /**
  * @swagger
  * /api/etiquetas/fluxos-trabalho/{id}:
@@ -70,7 +72,7 @@ router.get('/etiquetas', listEtiquetas);
  *               items:
  *                 $ref: '#/components/schemas/Etiqueta'
  */
-router.get('/etiquetas/fluxos-trabalho/:id', listEtiquetasByFluxoTrabalho);
+router.get('/etiquetas/fluxos-trabalho/:id', etiquetaController_1.listEtiquetasByFluxoTrabalho);
 /**
  * @swagger
  * /api/etiquetas:
@@ -103,7 +105,7 @@ router.get('/etiquetas/fluxos-trabalho/:id', listEtiquetasByFluxoTrabalho);
  *             schema:
  *               $ref: '#/components/schemas/Etiqueta'
  */
-router.post('/etiquetas', createEtiqueta);
+router.post('/etiquetas', etiquetaController_1.createEtiqueta);
 /**
  * @swagger
  * /api/etiquetas/{id}:
@@ -144,7 +146,7 @@ router.post('/etiquetas', createEtiqueta);
  *       404:
  *         description: Etiqueta não encontrada
  */
-router.put('/etiquetas/:id', updateEtiqueta);
+router.put('/etiquetas/:id', etiquetaController_1.updateEtiqueta);
 /**
  * @swagger
  * /api/etiquetas/{id}:
@@ -163,5 +165,5 @@ router.put('/etiquetas/:id', updateEtiqueta);
  *       404:
  *         description: Etiqueta não encontrada
  */
-router.delete('/etiquetas/:id', deleteEtiqueta);
-export default router;
+router.delete('/etiquetas/:id', etiquetaController_1.deleteEtiqueta);
+exports.default = router;

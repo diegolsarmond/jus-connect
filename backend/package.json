@@ -5,9 +5,10 @@
   "type": "commonjs",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node node_modules/tsx/dist/cli.cjs src/index.ts",
-    "test": "node --test dist/tests/templateService.test.js"
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true });\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "test": "node --test --import tsx tests/templateService.test.ts"
 
   },
   "dependencies": {

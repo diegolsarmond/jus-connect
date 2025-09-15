@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listAreas, getAreaById, createArea, updateArea, deleteArea, } from '../controllers/areaAtuacaoController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const areaAtuacaoController_1 = require("../controllers/areaAtuacaoController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -37,7 +39,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/AreaAtuacao'
  */
-router.get('/areas', listAreas);
+router.get('/areas', areaAtuacaoController_1.listAreas);
 /**
  * @swagger
  * /api/areas/{id}:
@@ -60,7 +62,7 @@ router.get('/areas', listAreas);
  *       404:
  *         description: Área não encontrada
  */
-router.get('/areas/:id', getAreaById);
+router.get('/areas/:id', areaAtuacaoController_1.getAreaById);
 /**
  * @swagger
  * /api/areas:
@@ -86,7 +88,7 @@ router.get('/areas/:id', getAreaById);
  *             schema:
  *               $ref: '#/components/schemas/AreaAtuacao'
  */
-router.post('/areas', createArea);
+router.post('/areas', areaAtuacaoController_1.createArea);
 /**
  * @swagger
  * /api/areas/{id}:
@@ -120,7 +122,7 @@ router.post('/areas', createArea);
  *       404:
  *         description: Área não encontrada
  */
-router.put('/areas/:id', updateArea);
+router.put('/areas/:id', areaAtuacaoController_1.updateArea);
 /**
  * @swagger
  * /api/areas/{id}:
@@ -139,5 +141,5 @@ router.put('/areas/:id', updateArea);
  *       404:
  *         description: Área não encontrada
  */
-router.delete('/areas/:id', deleteArea);
-export default router;
+router.delete('/areas/:id', areaAtuacaoController_1.deleteArea);
+exports.default = router;

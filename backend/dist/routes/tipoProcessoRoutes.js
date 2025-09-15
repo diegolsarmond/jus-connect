@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listTiposProcesso, createTipoProcesso, updateTipoProcesso, deleteTipoProcesso, } from '../controllers/tipoProcessoController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const tipoProcessoController_1 = require("../controllers/tipoProcessoController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -37,7 +39,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/TipoProcesso'
  */
-router.get('/tipo-processos', listTiposProcesso);
+router.get('/tipo-processos', tipoProcessoController_1.listTiposProcesso);
 /**
  * @swagger
  * /api/tipo-processos:
@@ -63,7 +65,7 @@ router.get('/tipo-processos', listTiposProcesso);
  *             schema:
  *               $ref: '#/components/schemas/TipoProcesso'
  */
-router.post('/tipo-processos', createTipoProcesso);
+router.post('/tipo-processos', tipoProcessoController_1.createTipoProcesso);
 /**
  * @swagger
  * /api/tipo-processos/{id}:
@@ -97,7 +99,7 @@ router.post('/tipo-processos', createTipoProcesso);
  *       404:
  *         description: Tipo de processo não encontrado
  */
-router.put('/tipo-processos/:id', updateTipoProcesso);
+router.put('/tipo-processos/:id', tipoProcessoController_1.updateTipoProcesso);
 /**
  * @swagger
  * /api/tipo-processos/{id}:
@@ -116,5 +118,5 @@ router.put('/tipo-processos/:id', updateTipoProcesso);
  *       404:
  *         description: Tipo de processo não encontrado
  */
-router.delete('/tipo-processos/:id', deleteTipoProcesso);
-export default router;
+router.delete('/tipo-processos/:id', tipoProcessoController_1.deleteTipoProcesso);
+exports.default = router;

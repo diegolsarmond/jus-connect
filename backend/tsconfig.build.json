@@ -1,15 +1,12 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": []
+    "types": ["node", "express"],
+    "rootDir": "src"
   },
   "include": [
-    "src/services/db.ts",
-    "src/services/templateService.ts",
-    "src/swagger.ts",
-    "src/types/node-shim.d.ts",
-    "src/types/custom.d.ts",
-    "tests/templateService.test.ts"
+    "src/**/*.ts",
+    "src/**/*.tsx"
   ],
   "exclude": []
 }

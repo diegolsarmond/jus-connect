@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listSituacoesProcesso, createSituacaoProcesso, updateSituacaoProcesso, deleteSituacaoProcesso, } from '../controllers/situacaoProcessoController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const situacaoProcessoController_1 = require("../controllers/situacaoProcessoController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -37,7 +39,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/SituacaoProcesso'
  */
-router.get('/situacoes-processo', listSituacoesProcesso);
+router.get('/situacoes-processo', situacaoProcessoController_1.listSituacoesProcesso);
 /**
  * @swagger
  * /api/situacoes-processo:
@@ -63,7 +65,7 @@ router.get('/situacoes-processo', listSituacoesProcesso);
  *             schema:
  *               $ref: '#/components/schemas/SituacaoProcesso'
  */
-router.post('/situacoes-processo', createSituacaoProcesso);
+router.post('/situacoes-processo', situacaoProcessoController_1.createSituacaoProcesso);
 /**
  * @swagger
  * /api/situacoes-processo/{id}:
@@ -97,7 +99,7 @@ router.post('/situacoes-processo', createSituacaoProcesso);
  *       404:
  *         description: Situação de processo não encontrada
  */
-router.put('/situacoes-processo/:id', updateSituacaoProcesso);
+router.put('/situacoes-processo/:id', situacaoProcessoController_1.updateSituacaoProcesso);
 /**
  * @swagger
  * /api/situacoes-processo/{id}:
@@ -116,5 +118,5 @@ router.put('/situacoes-processo/:id', updateSituacaoProcesso);
  *       404:
  *         description: Situação de processo não encontrada
  */
-router.delete('/situacoes-processo/:id', deleteSituacaoProcesso);
-export default router;
+router.delete('/situacoes-processo/:id', situacaoProcessoController_1.deleteSituacaoProcesso);
+exports.default = router;
