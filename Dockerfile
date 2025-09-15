@@ -4,11 +4,11 @@ WORKDIR /app
 
 # Install backend dependencies
 COPY backend/package*.json backend/
-RUN npm --prefix backend install
+RUN npm --prefix backend ci
 
 # Install frontend dependencies
 COPY frontend/package*.json frontend/
-RUN npm --prefix frontend install
+RUN npm --prefix frontend ci
 
 
 # Copy application source
