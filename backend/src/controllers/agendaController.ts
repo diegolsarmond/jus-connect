@@ -27,10 +27,8 @@ export const getTotalCompromissosHoje = async (_req: Request, res: Response) => 
 
 export const createAgenda = async (req: Request, res: Response) => {
   const {
-    id,
     titulo,
-    id_evento,
-    tipo_evento,
+    tipo,
     descricao,
     data,
     hora_inicio,
