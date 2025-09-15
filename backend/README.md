@@ -17,6 +17,8 @@ Instale as dependências e rode o servidor em modo desenvolvimento:
 npm install
 npm run dev
 
+```
+
 # Rodando testes
 
 ```bash
