@@ -1,0 +1,51 @@
+import pool from '../services/db';
+export const listTiposProcesso = async (_req, res) => {
+    try {
+        const result = await pool.query('SELECT id, nome, ativo, datacriacao FROM public.tipo_processo');
+        res.json(result.rows);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+export const createTipoProcesso = async (req, res) => {
+    const { nome, ativo } = req.body;
+    try {
+        const result = await pool.query('INSERT INTO public.tipo_processo (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao', [nome, ativo]);
+        res.status(201).json(result.rows[0]);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+export const updateTipoProcesso = async (req, res) => {
+    const { id } = req.params;
+    const { nome, ativo } = req.body;
+    try {
+        const result = await pool.query('UPDATE public.tipo_processo SET nome = $1, ativo = $2 WHERE id = $3 RETURNING id, nome, ativo, datacriacao', [nome, ativo, id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Tipo de processo não encontrado' });
+        }
+        res.json(result.rows[0]);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+export const deleteTipoProcesso = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query('DELETE FROM public.tipo_processo WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Tipo de processo não encontrado' });
+        }
+        res.status(204).send();
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
