@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const notificationController_1 = require("../controllers/notificationController");
+const router = (0, express_1.Router)();
+router.get('/notifications', notificationController_1.listNotificationsHandler);
+router.get('/notifications/unread-count', notificationController_1.getUnreadCountHandler);
+router.get('/notifications/preferences', notificationController_1.getNotificationPreferencesHandler);
+router.get('/notifications/:id', notificationController_1.getNotificationHandler);
+router.post('/notifications', notificationController_1.createNotificationHandler);
+router.post('/notifications/read-all', notificationController_1.markAllNotificationsAsReadHandler);
+router.post('/notifications/:id/read', notificationController_1.markNotificationAsReadHandler);
+router.post('/notifications/:id/unread', notificationController_1.markNotificationAsUnreadHandler);
+router.put('/notifications/preferences', notificationController_1.updateNotificationPreferencesHandler);
+router.delete('/notifications/:id', notificationController_1.deleteNotificationHandler);
+exports.default = router;
