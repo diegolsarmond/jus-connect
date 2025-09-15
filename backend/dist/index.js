@@ -1,4 +1,5 @@
 import express from 'express';
+import { AddressInfo } from 'net';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
 import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
@@ -28,7 +29,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 /**
@@ -97,6 +98,7 @@ app.get('/', (_req, res) => {
     res.send('Backend up and running');
 });
 // Start
-app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
+const server = app.listen(port, () => {
+    const actualPort = server.address().port;
+    console.log(`Server listening on port ${actualPort}`);
 });
