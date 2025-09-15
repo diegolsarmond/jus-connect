@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/form";
 import { toast } from "@/components/ui/use-toast";
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
 
 const formSchema = z.object({
   subject: z.string().min(1, "Assunto é obrigatório"),

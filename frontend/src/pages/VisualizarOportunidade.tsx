@@ -36,7 +36,7 @@ interface ParticipantData {
 export default function VisualizarOportunidade() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
 
   const [opportunity, setOpportunity] = useState<OpportunityData | null>(null);
   const [snack, setSnack] = useState<{ open: boolean; message?: string }>({ open: false });

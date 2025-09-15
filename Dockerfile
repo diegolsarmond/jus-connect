@@ -10,35 +10,35 @@ ENV NODE_ENV=development
 COPY backend/package*.json backend/
 COPY frontend/package*.json frontend/
 
-# Instala dependências do backend (inclui devDependencies para permitir build TS)
-# Tenta npm ci (determinístico), se falhar faz fallback para npm install.
+# Instala dependÃªncias do backend (inclui devDependencies para permitir build TS)
+# Tenta npm ci (determinÃ­stico), se falhar faz fallback para npm install.
 RUN if [ -f backend/package-lock.json ]; then \
       npm --prefix backend ci || npm --prefix backend install; \
     else \
       npm --prefix backend install; \
     fi
 
-# Instala dependências do frontend (inclui devDependencies)
+# Instala dependÃªncias do frontend (inclui devDependencies)
 RUN if [ -f frontend/package-lock.json ]; then \
       npm --prefix frontend ci || npm --prefix frontend install; \
     else \
       npm --prefix frontend install; \
     fi
 
-# Copia o restante do código-fonte
+# Copia o restante do cÃ³digo-fonte
 COPY . .
 
 # Instala explicitamente alguns tipos que aparecem nos logs como "missing" (devDependencies).
-# Isso ajuda o tsc a compilar quando o lockfile não inclui esses @types.
-# Se algum pacote não existir, o npm apenas emitirá aviso e continuará.
+# Isso ajuda o tsc a compilar quando o lockfile nÃ£o inclui esses @types.
+# Se algum pacote nÃ£o existir, o npm apenas emitirÃ¡ aviso e continuarÃ¡.
 RUN npm --prefix backend i -D @types/pg @types/node @types/express @types/body-parser @types/express-serve-static-core @types/qs @types/serve-static @types/connect @types/range-parser @types/send undici-types @types/mime @types/http-errors @types/swagger-jsdoc @types/swagger-ui-express || true
 
 # Executa build do backend e do frontend
 RUN npm --prefix backend run build && npm --prefix frontend run build
 
-# (Opcional) Remova node_modules grandes do build stage se quiser reduzir o contexto que será copiado.
+# (Opcional) Remova node_modules grandes do build stage se quiser reduzir o contexto que serÃ¡ copiado.
 # Mas deixei node_modules no builder porque alguns projetos TypeScript preferem copiar artefatos compilados + node_modules.
-# Se preferir instalar só produção no final, veja a seção Production abaixo.
+# Se preferir instalar sÃ³ produÃ§Ã£o no final, veja a seÃ§Ã£o Production abaixo.
 
 # ---------- Production stage ----------
 FROM node:20-bullseye-slim
@@ -46,26 +46,26 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Cria diretórios
+EXPOSE 3001
 RUN mkdir -p /app/backend /app/frontend
 
-# Copia artefatos construídos do estágio builder
+# Copia artefatos construÃ­dos do estÃ¡gio builder
 COPY --from=builder /app/backend /app/backend
 COPY --from=builder /app/frontend /app/frontend
 
-# Copia manifest do backend para instalar dependências de produção (caso opte por instalar no final)
+# Copia manifest do backend para instalar dependÃªncias de produÃ§Ã£o (caso opte por instalar no final)
 COPY backend/package*.json backend/
 
-# (Opção) Instala apenas dependências de produção no container final.
-# Se você já copiou node_modules do builder, pode remover este passo.
+# (OpÃ§Ã£o) Instala apenas dependÃªncias de produÃ§Ã£o no container final.
+# Se vocÃª jÃ¡ copiou node_modules do builder, pode remover este passo.
 RUN if [ -f backend/package-lock.json ]; then \
       npm --prefix backend ci --omit=dev --prefer-offline --no-audit || npm --prefix backend install --omit=dev --prefer-offline --no-audit; \
     else \
       npm --prefix backend install --omit=dev --prefer-offline --no-audit; \
     fi
 
-# Porta padrão (ajuste conforme seu app)
+# Porta padrÃ£o (ajuste conforme seu app)
 EXPOSE 3000
 
-# Comando padrão
+# Comando padrÃ£o
 CMD ["npm", "--prefix", "backend", "start"]

@@ -24,7 +24,7 @@ function joinUrl(base: string, path = "") {
 }
 
 export default function Planos() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [newPlano, setNewPlano] = useState({ nome: "", valor: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
