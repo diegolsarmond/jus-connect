@@ -10,7 +10,7 @@ interface MenuItem {
 }
 
 export default function PipelineMenu() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const navigate = useNavigate();
 

@@ -8,7 +8,7 @@ export interface Flow {
   status: 'pendente' | 'pago';
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export async function fetchFlows(): Promise<Flow[]> {
   const res = await fetch(`${API_URL}/financial/flows`);

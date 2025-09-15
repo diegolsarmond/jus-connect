@@ -17,7 +17,7 @@ npm run dev
 ```bash
 cd frontend
 npm install
-# opcional: export VITE_API_URL=http://localhost:3000/api
+# opcional: export VITE_API_URL=http://localhost:3001/api
 npm run dev
 ```
 

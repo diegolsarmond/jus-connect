@@ -28,7 +28,7 @@ function joinUrl(base: string, path = "") {
 export default function ParameterPage({
     title, description, placeholder, emptyMessage, endpoint, booleanFields,
 }: ParameterPageProps) {
-    const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+    const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
 
     const [items, setItems] = useState<Item[]>([]);
     const [newItem, setNewItem] = useState("");

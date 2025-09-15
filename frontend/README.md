@@ -38,7 +38,7 @@ npm run dev
 
 ## Documentos Padrão
 
-O módulo de templates de documentos consome a API disponível em `http://localhost:3000/api`. Caso o backend esteja em outra URL, defina a variável de ambiente `VITE_API_URL` antes de iniciar o projeto.
+O módulo de templates de documentos consome a API disponível em `http://localhost:3001/api`. Caso o backend esteja em outra URL, defina a variável de ambiente `VITE_API_URL` antes de iniciar o projeto.
 
 **Edit a file directly in GitHub**
 

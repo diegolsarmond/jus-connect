@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Upload } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
 
 function joinUrl(base: string, path = "") {
   const b = base.replace(/\/+$/, "");

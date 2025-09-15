@@ -89,7 +89,7 @@ interface ClientOption extends Option {
 }
 
 export default function EditarOportunidade() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3000";
+  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
