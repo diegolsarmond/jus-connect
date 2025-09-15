@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listClienteDocumentos, createClienteDocumento, deleteClienteDocumento, } from '../controllers/clienteDocumentoController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const clienteDocumentoController_1 = require("../controllers/clienteDocumentoController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -19,8 +21,8 @@ const router = Router();
  */
 router
     .route('/clientes/:clienteId/documentos')
-    .get(listClienteDocumentos)
-    .post(createClienteDocumento);
+    .get(clienteDocumentoController_1.listClienteDocumentos)
+    .post(clienteDocumentoController_1.createClienteDocumento);
 /**
  * @swagger
  * /api/clientes/{clienteId}/documentos/{id}:
@@ -28,5 +30,5 @@ router
  *     summary: Remove documento do cliente
  *     tags: [ClienteDocumentos]
  */
-router.delete('/clientes/:clienteId/documentos/:id', deleteClienteDocumento);
-export default router;
+router.delete('/clientes/:clienteId/documentos/:id', clienteDocumentoController_1.deleteClienteDocumento);
+exports.default = router;

@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listPlanos, createPlano, updatePlano, deletePlano, } from '../controllers/planoController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const planoController_1 = require("../controllers/planoController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -40,7 +42,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Plano'
  */
-router.get('/planos', listPlanos);
+router.get('/planos', planoController_1.listPlanos);
 /**
  * @swagger
  * /api/planos:
@@ -69,7 +71,7 @@ router.get('/planos', listPlanos);
  *             schema:
  *               $ref: '#/components/schemas/Plano'
  */
-router.post('/planos', createPlano);
+router.post('/planos', planoController_1.createPlano);
 /**
  * @swagger
  * /api/planos/{id}:
@@ -106,7 +108,7 @@ router.post('/planos', createPlano);
  *       404:
  *         description: Plano não encontrado
  */
-router.put('/planos/:id', updatePlano);
+router.put('/planos/:id', planoController_1.updatePlano);
 /**
  * @swagger
  * /api/planos/{id}:
@@ -125,5 +127,5 @@ router.put('/planos/:id', updatePlano);
  *       404:
  *         description: Plano não encontrado
  */
-router.delete('/planos/:id', deletePlano);
-export default router;
+router.delete('/planos/:id', planoController_1.deletePlano);
+exports.default = router;

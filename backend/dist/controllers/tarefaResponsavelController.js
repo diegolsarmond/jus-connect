@@ -1,9 +1,15 @@
-import pool from '../services/db';
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.addResponsaveis = exports.listResponsaveis = void 0;
+const db_1 = __importDefault(require("../services/db"));
 // Lista os usuários responsáveis por uma tarefa
-export const listResponsaveis = async (req, res) => {
+const listResponsaveis = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await pool.query(`SELECT tr.id_tarefa, tr.id_usuario, u.nome_completo AS nome_responsavel
+        const result = await db_1.default.query(`SELECT tr.id_tarefa, tr.id_usuario, u.nome_completo AS nome_responsavel
        FROM public.tarefas_responsaveis tr
        JOIN public.usuarios u ON tr.id_usuario = u.id
        WHERE tr.id_tarefa = $1`, [id]);
@@ -14,8 +20,9 @@ export const listResponsaveis = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+exports.listResponsaveis = listResponsaveis;
 // Adiciona usuários responsáveis a uma tarefa
-export const addResponsaveis = async (req, res) => {
+const addResponsaveis = async (req, res) => {
     const { id } = req.params;
     const { responsaveis } = req.body;
     if (!Array.isArray(responsaveis) || responsaveis.length === 0) {
@@ -23,7 +30,7 @@ export const addResponsaveis = async (req, res) => {
             .status(400)
             .json({ error: 'responsaveis deve ser um array de IDs de usuários' });
     }
-    const client = await pool.connect();
+    const client = await db_1.default.connect();
     try {
         await client.query('BEGIN');
         const values = responsaveis
@@ -42,3 +49,4 @@ export const addResponsaveis = async (req, res) => {
         client.release();
     }
 };
+exports.addResponsaveis = addResponsaveis;

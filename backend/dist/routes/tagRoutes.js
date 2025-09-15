@@ -1,8 +1,10 @@
-import { Router } from 'express';
-import { listTags, createTag, updateTag, deleteTag } from '../controllers/tagController';
-const router = Router();
-router.get('/tags', listTags);
-router.post('/tags', createTag);
-router.put('/tags/:id', updateTag);
-router.delete('/tags/:id', deleteTag);
-export default router;
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const tagController_1 = require("../controllers/tagController");
+const router = (0, express_1.Router)();
+router.get('/tags', tagController_1.listTags);
+router.post('/tags', tagController_1.createTag);
+router.put('/tags/:id', tagController_1.updateTag);
+router.delete('/tags/:id', tagController_1.deleteTag);
+exports.default = router;

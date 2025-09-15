@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listTarefas, getTarefaById, getResponsavelByTarefa, createTarefa, updateTarefa, concluirTarefa, deleteTarefa, } from '../controllers/tarefaController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const tarefaController_1 = require("../controllers/tarefaController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -75,7 +77,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Tarefa'
  */
-router.get('/tarefas', listTarefas);
+router.get('/tarefas', tarefaController_1.listTarefas);
 /**
  * @swagger
  * /api/tarefas/{id}:
@@ -98,7 +100,7 @@ router.get('/tarefas', listTarefas);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.get('/tarefas/:id', getTarefaById);
+router.get('/tarefas/:id', tarefaController_1.getTarefaById);
 /**
  * @swagger
  * /api/tarefas/{id}/responsavel:
@@ -130,7 +132,7 @@ router.get('/tarefas/:id', getTarefaById);
  *       404:
  *         description: Responsável não encontrado
  */
-router.get('/tarefas/:id/responsavel', getResponsavelByTarefa);
+router.get('/tarefas/:id/responsavel', tarefaController_1.getResponsavelByTarefa);
 /**
  * @swagger
  * /api/tarefas:
@@ -151,7 +153,7 @@ router.get('/tarefas/:id/responsavel', getResponsavelByTarefa);
  *             schema:
  *               $ref: '#/components/schemas/Tarefa'
  */
-router.post('/tarefas', createTarefa);
+router.post('/tarefas', tarefaController_1.createTarefa);
 /**
  * @swagger
  * /api/tarefas/{id}:
@@ -180,7 +182,7 @@ router.post('/tarefas', createTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.put('/tarefas/:id', updateTarefa);
+router.put('/tarefas/:id', tarefaController_1.updateTarefa);
 /**
  * @swagger
  * /api/tarefas/{id}/concluir:
@@ -203,7 +205,7 @@ router.put('/tarefas/:id', updateTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.patch('/tarefas/:id/concluir', concluirTarefa);
+router.patch('/tarefas/:id/concluir', tarefaController_1.concluirTarefa);
 /**
  * @swagger
  * /api/tarefas/{id}:
@@ -222,5 +224,5 @@ router.patch('/tarefas/:id/concluir', concluirTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.delete('/tarefas/:id', deleteTarefa);
-export default router;
+router.delete('/tarefas/:id', tarefaController_1.deleteTarefa);
+exports.default = router;

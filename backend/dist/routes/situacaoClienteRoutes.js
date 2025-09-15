@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listSituacaoClientes, createSituacaoCliente, updateSituacaoCliente, deleteSituacaoCliente, } from '../controllers/situacaoClienteController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const situacaoClienteController_1 = require("../controllers/situacaoClienteController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -37,7 +39,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/SituacaoCliente'
  */
-router.get('/situacao-clientes', listSituacaoClientes);
+router.get('/situacao-clientes', situacaoClienteController_1.listSituacaoClientes);
 /**
  * @swagger
  * /api/situacao-clientes:
@@ -63,7 +65,7 @@ router.get('/situacao-clientes', listSituacaoClientes);
  *             schema:
  *               $ref: '#/components/schemas/SituacaoCliente'
  */
-router.post('/situacao-clientes', createSituacaoCliente);
+router.post('/situacao-clientes', situacaoClienteController_1.createSituacaoCliente);
 /**
  * @swagger
  * /api/situacao-clientes/{id}:
@@ -97,7 +99,7 @@ router.post('/situacao-clientes', createSituacaoCliente);
  *       404:
  *         description: Situação de cliente não encontrada
  */
-router.put('/situacao-clientes/:id', updateSituacaoCliente);
+router.put('/situacao-clientes/:id', situacaoClienteController_1.updateSituacaoCliente);
 /**
  * @swagger
  * /api/situacao-clientes/{id}:
@@ -116,5 +118,5 @@ router.put('/situacao-clientes/:id', updateSituacaoCliente);
  *       404:
  *         description: Situação de cliente não encontrada
  */
-router.delete('/situacao-clientes/:id', deleteSituacaoCliente);
-export default router;
+router.delete('/situacao-clientes/:id', situacaoClienteController_1.deleteSituacaoCliente);
+exports.default = router;

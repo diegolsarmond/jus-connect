@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listClientes, getClienteById, createCliente, updateCliente, deleteCliente, countClientesAtivos, } from '../controllers/clienteController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const clienteController_1 = require("../controllers/clienteController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -61,7 +63,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Cliente'
  */
-router.get('/clientes', listClientes);
+router.get('/clientes', clienteController_1.listClientes);
 /**
  * @swagger
  * /api/clientes/ativos/total:
@@ -79,7 +81,7 @@ router.get('/clientes', listClientes);
  *                 total_clientes_ativos:
  *                   type: integer
  */
-router.get('/clientes/ativos/total', countClientesAtivos);
+router.get('/clientes/ativos/total', clienteController_1.countClientesAtivos);
 /**
  * @swagger
  * /api/clientes/{id}:
@@ -102,7 +104,7 @@ router.get('/clientes/ativos/total', countClientesAtivos);
  *       404:
  *         description: Cliente não encontrado
  */
-router.get('/clientes/:id', getClienteById);
+router.get('/clientes/:id', clienteController_1.getClienteById);
 /**
  * @swagger
  * /api/clientes:
@@ -152,7 +154,7 @@ router.get('/clientes/:id', getClienteById);
  *             schema:
  *               $ref: '#/components/schemas/Cliente'
  */
-router.post('/clientes', createCliente);
+router.post('/clientes', clienteController_1.createCliente);
 /**
  * @swagger
  * /api/clientes/{id}:
@@ -210,7 +212,7 @@ router.post('/clientes', createCliente);
  *       404:
  *         description: Cliente não encontrado
  */
-router.put('/clientes/:id', updateCliente);
+router.put('/clientes/:id', clienteController_1.updateCliente);
 /**
  * @swagger
  * /api/clientes/{id}:
@@ -229,5 +231,5 @@ router.put('/clientes/:id', updateCliente);
  *       404:
  *         description: Cliente não encontrado
  */
-router.delete('/clientes/:id', deleteCliente);
-export default router;
+router.delete('/clientes/:id', clienteController_1.deleteCliente);
+exports.default = router;
