@@ -45,3 +45,8 @@ cd frontend
 npm run build
 # sirva os arquivos da pasta dist com seu servidor HTTP preferido
 ```
+
+Ao configurar o servidor HTTP (Caddy, Nginx, etc.), aponte o `root` para
+`./frontend/dist` em vez da raiz do repositório. O arquivo `index.html` na
+raiz do projeto foi removido para evitar que seja servido por engano.
+
