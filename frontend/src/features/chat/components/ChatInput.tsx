@@ -1,0 +1,247 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Image, Laugh, Link as LinkIcon, Paperclip, Send, FileText } from "lucide-react";
+import type { MessageAttachment, MessageType, SendMessageInput } from "../types";
+import styles from "./ChatInput.module.css";
+
+interface ChatInputProps {
+  onSend: (payload: SendMessageInput) => Promise<void> | void;
+  disabled?: boolean;
+}
+
+const EMOJI_SUGGESTIONS = [
+  "😀",
+  "😁",
+  "😂",
+  "😊",
+  "😉",
+  "😍",
+  "😘",
+  "🤝",
+  "👍",
+  "🙏",
+  "🚀",
+  "💼",
+  "📌",
+  "🗂️",
+  "📎",
+  "⚖️",
+  "📆",
+  "📝",
+  "✅",
+  "❗",
+  "💬",
+  "📞",
+  "📄",
+  "🛡️",
+];
+
+export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
+  const [value, setValue] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [value]);
+
+  const canSend = value.trim().length > 0 && !isSending && !disabled;
+
+  const sendTextMessage = async () => {
+    if (!canSend) return;
+    setIsSending(true);
+    try {
+      await onSend({ content: value.trim(), type: "text" });
+      setValue("");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const sendAttachment = async (file: File, type: MessageType = "image") => {
+    const objectUrl = URL.createObjectURL(file);
+    const attachment: MessageAttachment = {
+      id: `upload-${Date.now()}`,
+      type,
+      url: objectUrl,
+      name: file.name,
+    };
+    setIsSending(true);
+    try {
+      await onSend({ content: file.name, type, attachments: [attachment] });
+      setShowAttachments(false);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void sendTextMessage();
+    }
+  };
+
+  const handlePaste: React.ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
+    const files = Array.from(event.clipboardData?.files ?? []);
+    const imageFile = files.find((file) => file.type.startsWith("image/"));
+    if (imageFile) {
+      event.preventDefault();
+      void sendAttachment(imageFile, "image");
+    }
+  };
+
+  const handleEmojiClick = (emoji: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+    const newValue = `${value.slice(0, selectionStart)}${emoji}${value.slice(selectionEnd)}`;
+    setValue(newValue);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const caretPosition = selectionStart + emoji.length;
+      textarea.setSelectionRange(caretPosition, caretPosition);
+    });
+  };
+
+  const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void sendAttachment(file, file.type.startsWith("image/") ? "image" : "text");
+      event.target.value = "";
+    }
+  };
+
+  const toggleEmoji = () => {
+    setShowEmojiPicker((prev) => !prev);
+    setShowAttachments(false);
+    textareaRef.current?.focus();
+  };
+
+  const toggleAttachments = () => {
+    setShowAttachments((prev) => !prev);
+    setShowEmojiPicker(false);
+  };
+
+  const attachmentOptions = useMemo(
+    () => [
+      {
+        icon: <Image size={18} aria-hidden="true" />, // purely decorativo
+        label: "Imagem da galeria",
+        action: () => fileInputRef.current?.click(),
+      },
+      {
+        icon: <FileText size={18} aria-hidden="true" />, // purely decorativo
+        label: "Documento PDF",
+        action: () =>
+          setValue((current) =>
+            `${current}${current && !current.endsWith(" ") ? " " : ""}[documento anexado]`,
+          ),
+      },
+      {
+        icon: <LinkIcon size={18} aria-hidden="true" />, // purely decorativo
+        label: "Compartilhar link seguro",
+        action: () =>
+          setValue((current) =>
+            `${current}${current && !current.endsWith(" ") ? " " : ""}https://jus.connect/link`,
+          ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <div className={styles.container}>
+      <div className={styles.toolbar}>
+        <button
+          type="button"
+          className={styles.iconButton}
+          onClick={toggleAttachments}
+          aria-haspopup="true"
+          aria-expanded={showAttachments}
+          aria-label="Anexar arquivo"
+        >
+          <Paperclip size={18} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={styles.iconButton}
+          onClick={toggleEmoji}
+          aria-haspopup="true"
+          aria-expanded={showEmojiPicker}
+          aria-label="Inserir emoji"
+        >
+          <Laugh size={18} aria-hidden="true" />
+        </button>
+      </div>
+      <div className={styles.textareaWrapper}>
+        <textarea
+          ref={textareaRef}
+          className={styles.textarea}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          placeholder="Escreva uma mensagem"
+          aria-label="Campo para digitar mensagem"
+          disabled={disabled || isSending}
+        />
+        <button
+          type="button"
+          className={styles.sendButton}
+          onClick={() => void sendTextMessage()}
+          disabled={!canSend}
+          aria-label="Enviar mensagem"
+        >
+          <Send size={18} aria-hidden="true" />
+        </button>
+        {showAttachments && (
+          <div className={styles.popover} role="menu">
+            {attachmentOptions.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                onClick={() => {
+                  option.action();
+                  setShowAttachments(false);
+                }}
+                role="menuitem"
+              >
+                {option.icon}
+                <span>{option.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {showEmojiPicker && (
+          <div className={styles.emojiPicker} role="menu">
+            {EMOJI_SUGGESTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                className={styles.emojiButton}
+                onClick={() => handleEmojiClick(emoji)}
+                aria-label={`Inserir emoji ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={handleFileInputChange}
+      />
+    </div>
+  );
+};

@@ -1,0 +1,76 @@
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin: 0.35rem 0;
+}
+
+.outgoing {
+  justify-content: flex-end;
+}
+
+.incoming {
+  justify-content: flex-start;
+}
+
+.bubble {
+  max-width: min(75%, 520px);
+  padding: 0.65rem 0.75rem 0.55rem;
+  border-radius: 1rem;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  position: relative;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.outgoing .bubble {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-hover)));
+  color: hsl(var(--primary-foreground));
+}
+
+.text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.attachment {
+  width: clamp(180px, 40vw, 320px);
+  border-radius: 0.85rem;
+  object-fit: cover;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+}
+
+.avatar {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 999px;
+  object-fit: cover;
+  margin-bottom: 0.2rem;
+}
+
+.avatarPlaceholder {
+  width: 2.4rem;
+  height: 2.4rem;
+}
+
+.grouped {
+  margin-top: 0.1rem;
+}
+
+.statusIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

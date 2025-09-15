@@ -27,6 +27,7 @@ import Relatorios from "./pages/Relatorios";
 import MeuPerfil from "./pages/MeuPerfil";
 import MeuPlano from "./pages/MeuPlano";
 import Suporte from "./pages/Suporte";
+import Conversas from "./pages/Conversas";
 import AreaAtuacao from "./pages/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/configuracoes/parametros/SituacaoProcesso";
 import TipoProcesso from "./pages/configuracoes/parametros/TipoProcesso";
@@ -67,6 +68,7 @@ const App = () => (
           <Route path="/recuperar-senha" element={<RecuperarSenha />} />
           <Route element={<CRMLayout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/conversas" element={<Conversas />} />
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/clientes/novo" element={<NovoCliente />} />
             <Route path="/clientes/:id/editar" element={<EditarCliente />} />
