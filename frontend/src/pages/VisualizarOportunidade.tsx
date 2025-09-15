@@ -6,6 +6,23 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { getApiBaseUrl } from "@/lib/api";
 
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { format as dfFormat, parseISO } from "date-fns";
 
@@ -43,6 +60,20 @@ export default function VisualizarOportunidade() {
   const [snack, setSnack] = useState<{ open: boolean; message?: string }>({ open: false });
   const [expandedDetails, setExpandedDetails] = useState(false);
   const [participants, setParticipants] = useState<ParticipantData[]>([]);
+  const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  const [documentType, setDocumentType] = useState<"modelo" | "processo" | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [processForm, setProcessForm] = useState({
+    numero: "",
+    comarca: "",
+    vara: "",
+  });
+
+  const resetDocumentDialog = () => {
+    setDocumentType(null);
+    setSelectedTemplate("");
+    setProcessForm({ numero: "", comarca: "", vara: "" });
+  };
 
   const fetchList = async (url: string): Promise<unknown[]> => {
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -425,7 +456,29 @@ export default function VisualizarOportunidade() {
   };
 
   const onCreateDocument = () => {
-    navigate(`/documentos?oportunidade=${id}`);
+    resetDocumentDialog();
+    setDocumentDialogOpen(true);
+  };
+
+  const handleDocumentConfirm = () => {
+    if (!documentType) return;
+
+    const params = new URLSearchParams();
+    if (id) params.set("oportunidade", id);
+    params.set("tipo", documentType);
+
+    if (documentType === "modelo") {
+      if (!selectedTemplate) return;
+      params.set("modelo", selectedTemplate);
+    } else {
+      if (!processForm.numero || !processForm.comarca || !processForm.vara) return;
+      params.set("numero_processo", processForm.numero);
+      params.set("comarca", processForm.comarca);
+      params.set("vara_orgao", processForm.vara);
+    }
+
+    setDocumentDialogOpen(false);
+    navigate(`/documentos?${params.toString()}`);
   };
 
   const renderFormatted = (key: string, value: unknown) => {
@@ -508,6 +561,13 @@ export default function VisualizarOportunidade() {
       </div>
     );
   }
+
+  const isDocumentContinueDisabled =
+    documentType === "modelo"
+      ? !selectedTemplate
+      : documentType === "processo"
+      ? !processForm.numero || !processForm.comarca || !processForm.vara
+      : true;
 
   return (
     <div className="p-6 space-y-6">
@@ -684,7 +744,7 @@ export default function VisualizarOportunidade() {
       </Card>
 
 
-      
+
 
       {/* snackbar / feedback simples com auto-close */}
       {snack.open && (
@@ -705,6 +765,113 @@ export default function VisualizarOportunidade() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={documentDialogOpen}
+        onOpenChange={(open) => {
+          setDocumentDialogOpen(open);
+          if (!open) {
+            resetDocumentDialog();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Criar documento</DialogTitle>
+            <DialogDescription>
+              Escolha como deseja criar o documento desta oportunidade.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={documentType === "modelo" ? "default" : "outline"}
+                onClick={() => setDocumentType("modelo")}
+              >
+                A partir do modelo
+              </Button>
+              <Button
+                type="button"
+                variant={documentType === "processo" ? "default" : "outline"}
+                onClick={() => setDocumentType("processo")}
+              >
+                Vincular processo
+              </Button>
+            </div>
+
+            {documentType === "modelo" && (
+              <div className="space-y-2">
+                <Label htmlFor="document-template">Modelo</Label>
+                <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                  <SelectTrigger id="document-template">
+                    <SelectValue placeholder="Selecione um modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contrato_prestacao">
+                      Contrato de prestação de serviços
+                    </SelectItem>
+                    <SelectItem value="peticao_inicial">Petição inicial</SelectItem>
+                    <SelectItem value="oficio_apresentacao">Ofício de apresentação</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {documentType === "processo" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="process-number">Número do processo</Label>
+                  <Input
+                    id="process-number"
+                    placeholder="0000000-00.0000.0.00.0000"
+                    value={processForm.numero}
+                    onChange={(event) =>
+                      setProcessForm((prev) => ({ ...prev, numero: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="process-comarca">Comarca</Label>
+                  <Input
+                    id="process-comarca"
+                    placeholder="Informe a comarca"
+                    value={processForm.comarca}
+                    onChange={(event) =>
+                      setProcessForm((prev) => ({ ...prev, comarca: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="process-vara">Vara/Órgão</Label>
+                  <Input
+                    id="process-vara"
+                    placeholder="Informe a vara ou órgão"
+                    value={processForm.vara}
+                    onChange={(event) =>
+                      setProcessForm((prev) => ({ ...prev, vara: event.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDocumentDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleDocumentConfirm} disabled={isDocumentContinueDisabled}>
+              Continuar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
