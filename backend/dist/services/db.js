@@ -8,13 +8,24 @@ const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 let connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-    try {
-        const configPath = path_1.default.resolve(__dirname, '../../appsettings.json');
-        const config = JSON.parse((0, fs_1.readFileSync)(configPath, 'utf-8'));
-        connectionString = config.ConnectionStrings?.DefaultConnection;
-    }
-    catch (error) {
-        // appsettings.json is optional; we'll handle missing config below
+    const configPaths = [
+        path_1.default.resolve(__dirname, '../../appsettings.json'),
+        path_1.default.resolve(process.cwd(), 'appsettings.json'),
+    ];
+    for (const configPath of configPaths) {
+        if (!(0, fs_1.existsSync)(configPath)) {
+            continue;
+        }
+        try {
+            const config = JSON.parse((0, fs_1.readFileSync)(configPath, 'utf-8'));
+            connectionString = config.ConnectionStrings?.DefaultConnection;
+            if (connectionString) {
+                break;
+            }
+        }
+        catch (error) {
+            // appsettings.json is optional; we'll handle missing config below
+        }
     }
 }
 if (!connectionString) {

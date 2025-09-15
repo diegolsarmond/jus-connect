@@ -47,6 +47,7 @@ RUN useradd --create-home --shell /bin/false appuser \
 
 # copiar apenas o essencial do builder (artefatos + manifest)
 COPY --from=builder --chown=appuser:appuser /app/backend/dist /app/backend/dist
+COPY --from=builder --chown=appuser:appuser /app/backend/appsettings.json /app/backend/appsettings.json
 COPY --from=builder --chown=appuser:appuser /app/backend/package*.json /app/backend/
 
 # instalar apenas dependências de produção no final
