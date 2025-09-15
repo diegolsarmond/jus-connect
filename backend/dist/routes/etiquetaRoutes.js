@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const etiquetaController_1 = require("../controllers/etiquetaController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listEtiquetas, listEtiquetasByFluxoTrabalho, createEtiqueta, updateEtiqueta, deleteEtiqueta, } from '../controllers/etiquetaController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -49,7 +47,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/Etiqueta'
  */
-router.get('/etiquetas', etiquetaController_1.listEtiquetas);
+router.get('/etiquetas', listEtiquetas);
 /**
  * @swagger
  * /api/etiquetas/fluxos-trabalho/{id}:
@@ -72,7 +70,7 @@ router.get('/etiquetas', etiquetaController_1.listEtiquetas);
  *               items:
  *                 $ref: '#/components/schemas/Etiqueta'
  */
-router.get('/etiquetas/fluxos-trabalho/:id', etiquetaController_1.listEtiquetasByFluxoTrabalho);
+router.get('/etiquetas/fluxos-trabalho/:id', listEtiquetasByFluxoTrabalho);
 /**
  * @swagger
  * /api/etiquetas:
@@ -105,7 +103,7 @@ router.get('/etiquetas/fluxos-trabalho/:id', etiquetaController_1.listEtiquetasB
  *             schema:
  *               $ref: '#/components/schemas/Etiqueta'
  */
-router.post('/etiquetas', etiquetaController_1.createEtiqueta);
+router.post('/etiquetas', createEtiqueta);
 /**
  * @swagger
  * /api/etiquetas/{id}:
@@ -146,7 +144,7 @@ router.post('/etiquetas', etiquetaController_1.createEtiqueta);
  *       404:
  *         description: Etiqueta não encontrada
  */
-router.put('/etiquetas/:id', etiquetaController_1.updateEtiqueta);
+router.put('/etiquetas/:id', updateEtiqueta);
 /**
  * @swagger
  * /api/etiquetas/{id}:
@@ -165,5 +163,5 @@ router.put('/etiquetas/:id', etiquetaController_1.updateEtiqueta);
  *       404:
  *         description: Etiqueta não encontrada
  */
-router.delete('/etiquetas/:id', etiquetaController_1.deleteEtiqueta);
-exports.default = router;
+router.delete('/etiquetas/:id', deleteEtiqueta);
+export default router;

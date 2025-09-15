@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const empresaController_1 = require("../controllers/empresaController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listEmpresas, createEmpresa, updateEmpresa, deleteEmpresa, } from '../controllers/empresaController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -49,7 +47,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/Empresa'
  */
-router.get('/empresas', empresaController_1.listEmpresas);
+router.get('/empresas', listEmpresas);
 /**
  * @swagger
  * /api/empresas:
@@ -85,7 +83,7 @@ router.get('/empresas', empresaController_1.listEmpresas);
  *             schema:
  *               $ref: '#/components/schemas/Empresa'
  */
-router.post('/empresas', empresaController_1.createEmpresa);
+router.post('/empresas', createEmpresa);
 /**
  * @swagger
  * /api/empresas/{id}:
@@ -129,7 +127,7 @@ router.post('/empresas', empresaController_1.createEmpresa);
  *       404:
  *         description: Empresa não encontrada
  */
-router.put('/empresas/:id', empresaController_1.updateEmpresa);
+router.put('/empresas/:id', updateEmpresa);
 /**
  * @swagger
  * /api/empresas/{id}:
@@ -148,5 +146,5 @@ router.put('/empresas/:id', empresaController_1.updateEmpresa);
  *       404:
  *         description: Empresa não encontrada
  */
-router.delete('/empresas/:id', empresaController_1.deleteEmpresa);
-exports.default = router;
+router.delete('/empresas/:id', deleteEmpresa);
+export default router;

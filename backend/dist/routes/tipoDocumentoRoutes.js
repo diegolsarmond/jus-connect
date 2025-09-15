@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const tipoDocumentoController_1 = require("../controllers/tipoDocumentoController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listTiposDocumento, createTipoDocumento, updateTipoDocumento, deleteTipoDocumento, } from '../controllers/tipoDocumentoController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -39,7 +37,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/TipoDocumento'
  */
-router.get('/tipo-documentos', tipoDocumentoController_1.listTiposDocumento);
+router.get('/tipo-documentos', listTiposDocumento);
 /**
  * @swagger
  * /api/tipo-documentos:
@@ -65,7 +63,7 @@ router.get('/tipo-documentos', tipoDocumentoController_1.listTiposDocumento);
  *             schema:
  *               $ref: '#/components/schemas/TipoDocumento'
  */
-router.post('/tipo-documentos', tipoDocumentoController_1.createTipoDocumento);
+router.post('/tipo-documentos', createTipoDocumento);
 /**
  * @swagger
  * /api/tipo-documentos/{id}:
@@ -99,7 +97,7 @@ router.post('/tipo-documentos', tipoDocumentoController_1.createTipoDocumento);
  *       404:
  *         description: Tipo de documento não encontrado
  */
-router.put('/tipo-documentos/:id', tipoDocumentoController_1.updateTipoDocumento);
+router.put('/tipo-documentos/:id', updateTipoDocumento);
 /**
  * @swagger
  * /api/tipo-documentos/{id}:
@@ -118,5 +116,5 @@ router.put('/tipo-documentos/:id', tipoDocumentoController_1.updateTipoDocumento
  *       404:
  *         description: Tipo de documento não encontrado
  */
-router.delete('/tipo-documentos/:id', tipoDocumentoController_1.deleteTipoDocumento);
-exports.default = router;
+router.delete('/tipo-documentos/:id', deleteTipoDocumento);
+export default router;

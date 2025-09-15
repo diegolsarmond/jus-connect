@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const perfilController_1 = require("../controllers/perfilController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listPerfis, createPerfil, updatePerfil, deletePerfil, } from '../controllers/perfilController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -39,7 +37,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/Perfil'
  */
-router.get('/perfis', perfilController_1.listPerfis);
+router.get('/perfis', listPerfis);
 /**
  * @swagger
  * /api/perfis:
@@ -65,7 +63,7 @@ router.get('/perfis', perfilController_1.listPerfis);
  *             schema:
  *               $ref: '#/components/schemas/Perfil'
  */
-router.post('/perfis', perfilController_1.createPerfil);
+router.post('/perfis', createPerfil);
 /**
  * @swagger
  * /api/perfis/{id}:
@@ -99,7 +97,7 @@ router.post('/perfis', perfilController_1.createPerfil);
  *       404:
  *         description: Perfil não encontrado
  */
-router.put('/perfis/:id', perfilController_1.updatePerfil);
+router.put('/perfis/:id', updatePerfil);
 /**
  * @swagger
  * /api/perfis/{id}:
@@ -118,5 +116,5 @@ router.put('/perfis/:id', perfilController_1.updatePerfil);
  *       404:
  *         description: Perfil não encontrado
  */
-router.delete('/perfis/:id', perfilController_1.deletePerfil);
-exports.default = router;
+router.delete('/perfis/:id', deletePerfil);
+export default router;

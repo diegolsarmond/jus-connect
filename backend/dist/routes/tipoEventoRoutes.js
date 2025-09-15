@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const tipoEventoController_1 = require("../controllers/tipoEventoController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listTiposEvento, createTipoEvento, updateTipoEvento, deleteTipoEvento, } from '../controllers/tipoEventoController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -43,7 +41,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/TipoEvento'
  */
-router.get('/tipo-eventos', tipoEventoController_1.listTiposEvento);
+router.get('/tipo-eventos', listTiposEvento);
 /**
  * @swagger
  * /api/tipo-eventos:
@@ -73,7 +71,7 @@ router.get('/tipo-eventos', tipoEventoController_1.listTiposEvento);
  *             schema:
  *               $ref: '#/components/schemas/TipoEvento'
  */
-router.post('/tipo-eventos', tipoEventoController_1.createTipoEvento);
+router.post('/tipo-eventos', createTipoEvento);
 /**
  * @swagger
  * /api/tipo-eventos/{id}:
@@ -111,7 +109,7 @@ router.post('/tipo-eventos', tipoEventoController_1.createTipoEvento);
  *       404:
  *         description: Tipo de evento não encontrado
  */
-router.put('/tipo-eventos/:id', tipoEventoController_1.updateTipoEvento);
+router.put('/tipo-eventos/:id', updateTipoEvento);
 /**
  * @swagger
  * /api/tipo-eventos/{id}:
@@ -130,5 +128,5 @@ router.put('/tipo-eventos/:id', tipoEventoController_1.updateTipoEvento);
  *       404:
  *         description: Tipo de evento não encontrado
  */
-router.delete('/tipo-eventos/:id', tipoEventoController_1.deleteTipoEvento);
-exports.default = router;
+router.delete('/tipo-eventos/:id', deleteTipoEvento);
+export default router;

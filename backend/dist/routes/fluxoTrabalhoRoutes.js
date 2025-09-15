@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const fluxoTrabalhoController_1 = require("../controllers/fluxoTrabalhoController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listFluxosTrabalho, listFluxoTrabalhoMenus, createFluxoTrabalho, updateFluxoTrabalho, deleteFluxoTrabalho, } from '../controllers/fluxoTrabalhoController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -44,7 +42,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/FluxoTrabalho'
  */
-router.get('/fluxos-trabalho', fluxoTrabalhoController_1.listFluxosTrabalho);
+router.get('/fluxos-trabalho', listFluxosTrabalho);
 /**
  * @swagger
  * /api/fluxos-trabalho/menus:
@@ -68,7 +66,7 @@ router.get('/fluxos-trabalho', fluxoTrabalhoController_1.listFluxosTrabalho);
  *                   ordem:
  *                     type: integer
  */
-router.get('/fluxos-trabalho/menus', fluxoTrabalhoController_1.listFluxoTrabalhoMenus);
+router.get('/fluxos-trabalho/menus', listFluxoTrabalhoMenus);
 /**
  * @swagger
  * /api/fluxos-trabalho:
@@ -99,7 +97,7 @@ router.get('/fluxos-trabalho/menus', fluxoTrabalhoController_1.listFluxoTrabalho
  *             schema:
  *               $ref: '#/components/schemas/FluxoTrabalho'
  */
-router.post('/fluxos-trabalho', fluxoTrabalhoController_1.createFluxoTrabalho);
+router.post('/fluxos-trabalho', createFluxoTrabalho);
 /**
  * @swagger
  * /api/fluxos-trabalho/{id}:
@@ -138,7 +136,7 @@ router.post('/fluxos-trabalho', fluxoTrabalhoController_1.createFluxoTrabalho);
  *       404:
  *         description: Fluxo de trabalho não encontrado
  */
-router.put('/fluxos-trabalho/:id', fluxoTrabalhoController_1.updateFluxoTrabalho);
+router.put('/fluxos-trabalho/:id', updateFluxoTrabalho);
 /**
  * @swagger
  * /api/fluxos-trabalho/{id}:
@@ -157,5 +155,5 @@ router.put('/fluxos-trabalho/:id', fluxoTrabalhoController_1.updateFluxoTrabalho
  *       404:
  *         description: Fluxo de trabalho não encontrado
  */
-router.delete('/fluxos-trabalho/:id', fluxoTrabalhoController_1.deleteFluxoTrabalho);
-exports.default = router;
+router.delete('/fluxos-trabalho/:id', deleteFluxoTrabalho);
+export default router;

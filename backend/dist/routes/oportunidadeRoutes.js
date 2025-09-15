@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const oportunidadeController_1 = require("../controllers/oportunidadeController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listOportunidades, listOportunidadesByFase, getOportunidadeById, listEnvolvidosByOportunidade, createOportunidade, updateOportunidade, updateOportunidadeEtapa, deleteOportunidade, } from '../controllers/oportunidadeController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -102,7 +100,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/Oportunidade'
  */
-router.get('/oportunidades', oportunidadeController_1.listOportunidades);
+router.get('/oportunidades', listOportunidades);
 /**
  * @swagger
  * /api/oportunidades/fase/{faseId}:
@@ -125,7 +123,7 @@ router.get('/oportunidades', oportunidadeController_1.listOportunidades);
  *               items:
  *                 $ref: '#/components/schemas/Oportunidade'
  */
-router.get('/oportunidades/fase/:faseId', oportunidadeController_1.listOportunidadesByFase);
+router.get('/oportunidades/fase/:faseId', listOportunidadesByFase);
 /**
  * @swagger
  * /api/oportunidades/{id}:
@@ -148,7 +146,7 @@ router.get('/oportunidades/fase/:faseId', oportunidadeController_1.listOportunid
  *       404:
  *         description: Oportunidade não encontrada
  */
-router.get('/oportunidades/:id', oportunidadeController_1.getOportunidadeById);
+router.get('/oportunidades/:id', getOportunidadeById);
 /**
  * @swagger
  * /api/oportunidades/{id}/envolvidos:
@@ -171,7 +169,7 @@ router.get('/oportunidades/:id', oportunidadeController_1.getOportunidadeById);
  *               items:
  *                 $ref: '#/components/schemas/OportunidadeEnvolvido'
  */
-router.get('/oportunidades/:id/envolvidos', oportunidadeController_1.listEnvolvidosByOportunidade);
+router.get('/oportunidades/:id/envolvidos', listEnvolvidosByOportunidade);
 /**
  * @swagger
  * /api/oportunidades:
@@ -251,7 +249,7 @@ router.get('/oportunidades/:id/envolvidos', oportunidadeController_1.listEnvolvi
  *             schema:
  *               $ref: '#/components/schemas/Oportunidade'
  */
-router.post('/oportunidades', oportunidadeController_1.createOportunidade);
+router.post('/oportunidades', createOportunidade);
 /**
  * @swagger
  * /api/oportunidades/{id}:
@@ -339,7 +337,7 @@ router.post('/oportunidades', oportunidadeController_1.createOportunidade);
  *       404:
  *         description: Oportunidade não encontrada
  */
-router.put('/oportunidades/:id', oportunidadeController_1.updateOportunidade);
+router.put('/oportunidades/:id', updateOportunidade);
 /**
  * @swagger
  * /api/oportunidades/{id}/etapa:
@@ -371,7 +369,7 @@ router.put('/oportunidades/:id', oportunidadeController_1.updateOportunidade);
  *       404:
  *         description: Oportunidade não encontrada
  */
-router.patch('/oportunidades/:id/etapa', oportunidadeController_1.updateOportunidadeEtapa);
+router.patch('/oportunidades/:id/etapa', updateOportunidadeEtapa);
 /**
  * @swagger
  * /api/oportunidades/{id}:
@@ -390,5 +388,5 @@ router.patch('/oportunidades/:id/etapa', oportunidadeController_1.updateOportuni
  *       404:
  *         description: Oportunidade não encontrada
  */
-router.delete('/oportunidades/:id', oportunidadeController_1.deleteOportunidade);
-exports.default = router;
+router.delete('/oportunidades/:id', deleteOportunidade);
+export default router;

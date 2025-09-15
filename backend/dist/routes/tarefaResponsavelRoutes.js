@@ -1,9 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const tarefaResponsavelController_1 = require("../controllers/tarefaResponsavelController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listResponsaveis, addResponsaveis } from '../controllers/tarefaResponsavelController';
+const router = Router();
 // Rotas para responsáveis das tarefas
-router.get('/tarefas/:id/responsaveis', tarefaResponsavelController_1.listResponsaveis);
-router.post('/tarefas/:id/responsaveis', tarefaResponsavelController_1.addResponsaveis);
-exports.default = router;
+router.get('/tarefas/:id/responsaveis', listResponsaveis);
+router.post('/tarefas/:id/responsaveis', addResponsaveis);
+export default router;

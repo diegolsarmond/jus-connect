@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const supportController_1 = require("../controllers/supportController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { createSupportRequest } from '../controllers/supportController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -30,5 +28,5 @@ const router = (0, express_1.Router)();
  *       201:
  *         description: Solicitação criada
  */
-router.post('/support', supportController_1.createSupportRequest);
-exports.default = router;
+router.post('/support', createSupportRequest);
+export default router;

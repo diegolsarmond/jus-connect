@@ -1,13 +1,7 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteTipoEvento = exports.updateTipoEvento = exports.createTipoEvento = exports.listTiposEvento = void 0;
-const db_1 = __importDefault(require("../services/db"));
-const listTiposEvento = async (_req, res) => {
+import pool from '../services/db';
+export const listTiposEvento = async (_req, res) => {
     try {
-        const result = await db_1.default.query('SELECT id, nome, ativo, datacriacao, agenda, tarefa FROM public.tipo_evento');
+        const result = await pool.query('SELECT id, nome, ativo, datacriacao, agenda, tarefa FROM public.tipo_evento');
         res.json(result.rows);
     }
     catch (error) {
@@ -15,11 +9,10 @@ const listTiposEvento = async (_req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.listTiposEvento = listTiposEvento;
-const createTipoEvento = async (req, res) => {
+export const createTipoEvento = async (req, res) => {
     const { nome, ativo, agenda = true, tarefa = true } = req.body;
     try {
-        const result = await db_1.default.query('INSERT INTO public.tipo_evento (nome, ativo, agenda, tarefa, datacriacao) VALUES ($1, $2, $3, $4, NOW()) RETURNING id, nome, ativo, agenda, tarefa, datacriacao', [nome, ativo, agenda, tarefa]);
+        const result = await pool.query('INSERT INTO public.tipo_evento (nome, ativo, agenda, tarefa, datacriacao) VALUES ($1, $2, $3, $4, NOW()) RETURNING id, nome, ativo, agenda, tarefa, datacriacao', [nome, ativo, agenda, tarefa]);
         res.status(201).json(result.rows[0]);
     }
     catch (error) {
@@ -27,12 +20,11 @@ const createTipoEvento = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.createTipoEvento = createTipoEvento;
-const updateTipoEvento = async (req, res) => {
+export const updateTipoEvento = async (req, res) => {
     const { id } = req.params;
     const { nome, ativo, agenda = true, tarefa = true } = req.body;
     try {
-        const result = await db_1.default.query('UPDATE public.tipo_evento SET nome = $1, ativo = $2, agenda = $3, tarefa = $4 WHERE id = $5 RETURNING id, nome, ativo, agenda, tarefa, datacriacao', [nome, ativo, agenda, tarefa, id]);
+        const result = await pool.query('UPDATE public.tipo_evento SET nome = $1, ativo = $2, agenda = $3, tarefa = $4 WHERE id = $5 RETURNING id, nome, ativo, agenda, tarefa, datacriacao', [nome, ativo, agenda, tarefa, id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Tipo de evento não encontrado' });
         }
@@ -43,11 +35,10 @@ const updateTipoEvento = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.updateTipoEvento = updateTipoEvento;
-const deleteTipoEvento = async (req, res) => {
+export const deleteTipoEvento = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db_1.default.query('DELETE FROM public.tipo_evento WHERE id = $1', [id]);
+        const result = await pool.query('DELETE FROM public.tipo_evento WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Tipo de evento não encontrado' });
         }
@@ -58,4 +49,3 @@ const deleteTipoEvento = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.deleteTipoEvento = deleteTipoEvento;

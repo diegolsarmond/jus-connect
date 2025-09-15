@@ -1,8 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const escritorioController_1 = require("../controllers/escritorioController");
-const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { listEscritorios, createEscritorio, updateEscritorio, deleteEscritorio, } from '../controllers/escritorioController';
+const router = Router();
 /**
  * @swagger
  * tags:
@@ -41,7 +39,7 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/Escritorio'
  */
-router.get('/escritorios', escritorioController_1.listEscritorios);
+router.get('/escritorios', listEscritorios);
 /**
  * @swagger
  * /api/escritorios:
@@ -69,7 +67,7 @@ router.get('/escritorios', escritorioController_1.listEscritorios);
  *             schema:
  *               $ref: '#/components/schemas/Escritorio'
  */
-router.post('/escritorios', escritorioController_1.createEscritorio);
+router.post('/escritorios', createEscritorio);
 /**
  * @swagger
  * /api/escritorios/{id}:
@@ -105,7 +103,7 @@ router.post('/escritorios', escritorioController_1.createEscritorio);
  *       404:
  *         description: Escritório não encontrado
  */
-router.put('/escritorios/:id', escritorioController_1.updateEscritorio);
+router.put('/escritorios/:id', updateEscritorio);
 /**
  * @swagger
  * /api/escritorios/{id}:
@@ -124,5 +122,5 @@ router.put('/escritorios/:id', escritorioController_1.updateEscritorio);
  *       404:
  *         description: Escritório não encontrado
  */
-router.delete('/escritorios/:id', escritorioController_1.deleteEscritorio);
-exports.default = router;
+router.delete('/escritorios/:id', deleteEscritorio);
+export default router;

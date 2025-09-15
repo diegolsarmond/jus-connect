@@ -1,13 +1,7 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteArea = exports.updateArea = exports.createArea = exports.getAreaById = exports.listAreas = void 0;
-const db_1 = __importDefault(require("../services/db"));
-const listAreas = async (_req, res) => {
+import pool from '../services/db';
+export const listAreas = async (_req, res) => {
     try {
-        const result = await db_1.default.query('SELECT id, nome, ativo, datacriacao FROM public.area_atuacao');
+        const result = await pool.query('SELECT id, nome, ativo, datacriacao FROM public.area_atuacao');
         res.json(result.rows);
     }
     catch (error) {
@@ -15,11 +9,10 @@ const listAreas = async (_req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.listAreas = listAreas;
-const getAreaById = async (req, res) => {
+export const getAreaById = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db_1.default.query('SELECT id, nome, ativo, datacriacao FROM public.area_atuacao WHERE id = $1', [id]);
+        const result = await pool.query('SELECT id, nome, ativo, datacriacao FROM public.area_atuacao WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Area not found' });
         }
@@ -30,11 +23,10 @@ const getAreaById = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.getAreaById = getAreaById;
-const createArea = async (req, res) => {
+export const createArea = async (req, res) => {
     const { nome, ativo } = req.body;
     try {
-        const result = await db_1.default.query('INSERT INTO public.area_atuacao (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao', [nome, ativo]);
+        const result = await pool.query('INSERT INTO public.area_atuacao (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao', [nome, ativo]);
         res.status(201).json(result.rows[0]);
     }
     catch (error) {
@@ -42,12 +34,11 @@ const createArea = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.createArea = createArea;
-const updateArea = async (req, res) => {
+export const updateArea = async (req, res) => {
     const { id } = req.params;
     const { nome, ativo } = req.body;
     try {
-        const result = await db_1.default.query('UPDATE public.area_atuacao SET nome = $1, ativo = $2 WHERE id = $3 RETURNING id, nome, ativo, datacriacao', [nome, ativo, id]);
+        const result = await pool.query('UPDATE public.area_atuacao SET nome = $1, ativo = $2 WHERE id = $3 RETURNING id, nome, ativo, datacriacao', [nome, ativo, id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Area not found' });
         }
@@ -58,11 +49,10 @@ const updateArea = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.updateArea = updateArea;
-const deleteArea = async (req, res) => {
+export const deleteArea = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db_1.default.query('UPDATE public.area_atuacao SET ativo = FALSE WHERE id = $1', [id]);
+        const result = await pool.query('UPDATE public.area_atuacao SET ativo = FALSE WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Area not found' });
         }
@@ -73,4 +63,3 @@ const deleteArea = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-exports.deleteArea = deleteArea;
