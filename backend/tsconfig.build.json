@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": [
+    "src/services/db.ts",
+    "src/services/templateService.ts",
+    "src/swagger.ts",
+    "src/types/node-shim.d.ts",
+    "src/types/custom.d.ts",
+    "tests/templateService.test.ts"
+  ],
+  "exclude": []
+}

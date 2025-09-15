@@ -1,13 +1,13 @@
 import { Pool } from 'pg';
 import { readFileSync } from 'fs';
+import path from 'path';
 
 let connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
   try {
-    const config = JSON.parse(
-      readFileSync(new URL('../../appsettings.json', import.meta.url), 'utf-8')
-    );
+    const configPath = path.resolve(__dirname, '../../appsettings.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
     connectionString = config.ConnectionStrings?.DefaultConnection;
   } catch (error) {
     // appsettings.json is optional; we'll handle missing config below
