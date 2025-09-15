@@ -11,6 +11,7 @@ import {
   DollarSign,
   BarChart3,
   CreditCard,
+  LifeBuoy,
   Scale,
   Settings,
   ChevronDown,
@@ -84,6 +85,7 @@ export function Sidebar() {
     { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign },
     { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
     { name: "Meu Plano", href: "/meu-plano", icon: CreditCard },
+    { name: "Suporte", href: "/suporte", icon: LifeBuoy },
     {
       name: "Configurações",
       href: "/configuracoes",
