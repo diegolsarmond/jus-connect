@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface Item { id: number; nome: string; [key: string]: string | number | boolean }
 
@@ -28,7 +29,7 @@ function joinUrl(base: string, path = "") {
 export default function ParameterPage({
     title, description, placeholder, emptyMessage, endpoint, booleanFields,
 }: ParameterPageProps) {
-    const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+    const apiUrl = getApiBaseUrl();
 
     const [items, setItems] = useState<Item[]>([]);
     const [newItem, setNewItem] = useState("");

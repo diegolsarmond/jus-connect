@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface Plano {
   id: number;
@@ -24,7 +25,7 @@ function joinUrl(base: string, path = "") {
 }
 
 export default function Planos() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+  const apiUrl = getApiBaseUrl();
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [newPlano, setNewPlano] = useState({ nome: "", valor: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -206,4 +207,3 @@ export default function Planos() {
     </div>
   );
 }
-

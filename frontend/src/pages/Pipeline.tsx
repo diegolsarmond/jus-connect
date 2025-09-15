@@ -27,6 +27,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface Opportunity {
   id: number;
@@ -53,7 +54,7 @@ interface Flow {
 }
 
 export default function Pipeline() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+  const apiUrl = getApiBaseUrl();
   const navigate = useNavigate();
   const { fluxoId } = useParams<{ fluxoId?: string }>();
 

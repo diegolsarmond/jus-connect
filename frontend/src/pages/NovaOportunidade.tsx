@@ -30,6 +30,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { toast } from "@/components/ui/use-toast";
+import { getApiBaseUrl } from "@/lib/api";
 
 const formSchema = z.object({
   tipo_processo: z.string().min(1, "Tipo de Processo é obrigatório"),
@@ -88,7 +89,7 @@ interface ClientOption extends Option {
 }
 
 export default function NovaOportunidade() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+  const apiUrl = getApiBaseUrl();
   const navigate = useNavigate();
 
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -1044,4 +1045,3 @@ export default function NovaOportunidade() {
     </div>
   );
 }
-

@@ -34,9 +34,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getApiBaseUrl } from "@/lib/api";
 
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+const apiUrl = getApiBaseUrl();
 
 function joinUrl(base: string, path = "") {
   const b = base.replace(/\/+$/, "");

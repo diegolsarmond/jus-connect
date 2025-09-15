@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Plus } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface MenuItem {
   id: string;
@@ -10,7 +11,7 @@ interface MenuItem {
 }
 
 export default function PipelineMenu() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+  const apiUrl = getApiBaseUrl();
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const navigate = useNavigate();
 
@@ -78,4 +79,3 @@ export default function PipelineMenu() {
     </div>
   );
 }
-
