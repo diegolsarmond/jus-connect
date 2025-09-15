@@ -10,6 +10,7 @@ import {
   FileText,
   DollarSign,
   BarChart3,
+  CreditCard,
   Scale,
   Settings,
   ChevronDown,
@@ -82,6 +83,7 @@ export function Sidebar() {
     { name: "Documentos", href: "/documentos", icon: FileText },
     { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign },
     { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
+    { name: "Meu Plano", href: "/meu-plano", icon: CreditCard },
     {
       name: "Configurações",
       href: "/configuracoes",
