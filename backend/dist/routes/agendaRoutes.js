@@ -1,6 +1,8 @@
-import { Router } from 'express';
-import { listAgendas, getTotalCompromissosHoje, createAgenda, updateAgenda, deleteAgenda, } from '../controllers/agendaController';
-const router = Router();
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const agendaController_1 = require("../controllers/agendaController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
@@ -62,7 +64,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Agenda'
  */
-router.get('/agendas', listAgendas);
+router.get('/agendas', agendaController_1.listAgendas);
 /**
  * @swagger
  * /api/agendas/total-hoje:
@@ -80,7 +82,7 @@ router.get('/agendas', listAgendas);
  *                 total_compromissos_hoje:
  *                   type: integer
  */
-router.get('/agendas/total-hoje', getTotalCompromissosHoje);
+router.get('/agendas/total-hoje', agendaController_1.getTotalCompromissosHoje);
 /**
  * @swagger
  * /api/agendas:
@@ -131,7 +133,7 @@ router.get('/agendas/total-hoje', getTotalCompromissosHoje);
  *             schema:
  *               $ref: '#/components/schemas/Agenda'
  */
-router.post('/agendas', createAgenda);
+router.post('/agendas', agendaController_1.createAgenda);
 /**
  * @swagger
  * /api/agendas/{id}:
@@ -186,7 +188,7 @@ router.post('/agendas', createAgenda);
  *       404:
  *         description: Agenda não encontrada
  */
-router.put('/agendas/:id', updateAgenda);
+router.put('/agendas/:id', agendaController_1.updateAgenda);
 /**
  * @swagger
  * /api/agendas/{id}:
@@ -205,5 +207,5 @@ router.put('/agendas/:id', updateAgenda);
  *       404:
  *         description: Agenda não encontrada
  */
-router.delete('/agendas/:id', deleteAgenda);
-export default router;
+router.delete('/agendas/:id', agendaController_1.deleteAgenda);
+exports.default = router;

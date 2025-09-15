@@ -1,7 +1,13 @@
-import pool from '../services/db';
-export const listOportunidades = async (_req, res) => {
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.deleteOportunidade = exports.updateOportunidadeEtapa = exports.updateOportunidade = exports.createOportunidade = exports.listEnvolvidosByOportunidade = exports.getOportunidadeById = exports.listOportunidadesByFase = exports.listOportunidades = void 0;
+const db_1 = __importDefault(require("../services/db"));
+const listOportunidades = async (_req, res) => {
     try {
-        const result = await pool.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+        const result = await db_1.default.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
@@ -13,10 +19,11 @@ export const listOportunidades = async (_req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const listOportunidadesByFase = async (req, res) => {
+exports.listOportunidades = listOportunidades;
+const listOportunidadesByFase = async (req, res) => {
     const { faseId } = req.params;
     try {
-        const result = await pool.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+        const result = await db_1.default.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
@@ -28,10 +35,11 @@ export const listOportunidadesByFase = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const getOportunidadeById = async (req, res) => {
+exports.listOportunidadesByFase = listOportunidadesByFase;
+const getOportunidadeById = async (req, res) => {
     const { id } = req.params;
     try {
-        const oportunidadeResult = await pool.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+        const oportunidadeResult = await db_1.default.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
@@ -39,7 +47,7 @@ export const getOportunidadeById = async (req, res) => {
         if (oportunidadeResult.rowCount === 0) {
             return res.status(404).json({ error: 'Oportunidade não encontrada' });
         }
-        const envolvidosResult = await pool.query(`SELECT nome, documento, telefone, endereco, relacao
+        const envolvidosResult = await db_1.default.query(`SELECT nome, documento, telefone, endereco, relacao
        FROM public.oportunidade_envolvidos
        WHERE oportunidade_id = $1`, [id]);
         const oportunidade = oportunidadeResult.rows[0];
@@ -57,10 +65,11 @@ export const getOportunidadeById = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const listEnvolvidosByOportunidade = async (req, res) => {
+exports.getOportunidadeById = getOportunidadeById;
+const listEnvolvidosByOportunidade = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await pool.query(`SELECT id, oportunidade_id, nome, documento, telefone, endereco, relacao
+        const result = await db_1.default.query(`SELECT id, oportunidade_id, nome, documento, telefone, endereco, relacao
        FROM public.oportunidade_envolvidos
        WHERE oportunidade_id = $1`, [id]);
         res.json(result.rows);
@@ -70,10 +79,11 @@ export const listEnvolvidosByOportunidade = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const createOportunidade = async (req, res) => {
+exports.listEnvolvidosByOportunidade = listEnvolvidosByOportunidade;
+const createOportunidade = async (req, res) => {
     const { tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo, vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id, valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento, detalhes, documentos_anexados, criado_por, envolvidos, } = req.body;
     try {
-        const result = await pool.query(`INSERT INTO public.oportunidades
+        const result = await db_1.default.query(`INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
         valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
@@ -107,7 +117,7 @@ export const createOportunidade = async (req, res) => {
         ]);
         const oportunidade = result.rows[0];
         if (Array.isArray(envolvidos) && envolvidos.length > 0) {
-            const queries = envolvidos.map((env) => pool.query(`INSERT INTO public.oportunidade_envolvidos
+            const queries = envolvidos.map((env) => db_1.default.query(`INSERT INTO public.oportunidade_envolvidos
            (oportunidade_id, nome, documento, telefone, endereco, relacao)
            VALUES ($1, $2, $3, $4, $5, $6)`, [
                 oportunidade.id,
@@ -126,11 +136,12 @@ export const createOportunidade = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const updateOportunidade = async (req, res) => {
+exports.createOportunidade = createOportunidade;
+const updateOportunidade = async (req, res) => {
     const { id } = req.params;
     const { tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo, vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id, valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento, detalhes, documentos_anexados, criado_por, envolvidos, } = req.body;
     try {
-        const result = await pool.query(`UPDATE public.oportunidades SET
+        const result = await db_1.default.query(`UPDATE public.oportunidades SET
          tipo_processo_id = $1,
          area_atuacao_id = $2,
          responsavel_id = $3,
@@ -185,8 +196,8 @@ export const updateOportunidade = async (req, res) => {
             return res.status(404).json({ error: 'Oportunidade não encontrada' });
         }
         if (Array.isArray(envolvidos)) {
-            await pool.query('DELETE FROM public.oportunidade_envolvidos WHERE oportunidade_id = $1', [id]);
-            const queries = envolvidos.map((env) => pool.query(`INSERT INTO public.oportunidade_envolvidos
+            await db_1.default.query('DELETE FROM public.oportunidade_envolvidos WHERE oportunidade_id = $1', [id]);
+            const queries = envolvidos.map((env) => db_1.default.query(`INSERT INTO public.oportunidade_envolvidos
            (oportunidade_id, nome, documento, telefone, endereco, relacao)
            VALUES ($1, $2, $3, $4, $5, $6)`, [
                 id,
@@ -205,11 +216,12 @@ export const updateOportunidade = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const updateOportunidadeEtapa = async (req, res) => {
+exports.updateOportunidade = updateOportunidade;
+const updateOportunidadeEtapa = async (req, res) => {
     const { id } = req.params;
     const { etapa_id } = req.body;
     try {
-        const result = await pool.query(`UPDATE public.oportunidades
+        const result = await db_1.default.query(`UPDATE public.oportunidades
        SET etapa_id = $1,
            ultima_atualizacao = NOW()
        WHERE id = $2
@@ -224,10 +236,11 @@ export const updateOportunidadeEtapa = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const deleteOportunidade = async (req, res) => {
+exports.updateOportunidadeEtapa = updateOportunidadeEtapa;
+const deleteOportunidade = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await pool.query('DELETE FROM public.oportunidades WHERE id = $1', [id]);
+        const result = await db_1.default.query('DELETE FROM public.oportunidades WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Oportunidade não encontrada' });
         }
@@ -238,3 +251,4 @@ export const deleteOportunidade = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+exports.deleteOportunidade = deleteOportunidade;

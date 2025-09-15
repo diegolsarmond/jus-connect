@@ -1,7 +1,13 @@
-import pool from '../services/db';
-export const listEmpresas = async (_req, res) => {
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.deleteEmpresa = exports.updateEmpresa = exports.createEmpresa = exports.listEmpresas = void 0;
+const db_1 = __importDefault(require("../services/db"));
+const listEmpresas = async (_req, res) => {
     try {
-        const result = await pool.query('SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro 	FROM public."vw.empresas";');
+        const result = await db_1.default.query('SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro 	FROM public."vw.empresas";');
         res.json(result.rows);
     }
     catch (error) {
@@ -9,10 +15,11 @@ export const listEmpresas = async (_req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const createEmpresa = async (req, res) => {
+exports.listEmpresas = listEmpresas;
+const createEmpresa = async (req, res) => {
     const { nome_empresa, cnpj, telefone, email, plano, responsavel, ativo } = req.body;
     try {
-        const result = await pool.query('INSERT INTO public.empresas (nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro', [nome_empresa, cnpj, telefone, email, plano, responsavel, ativo]);
+        const result = await db_1.default.query('INSERT INTO public.empresas (nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro', [nome_empresa, cnpj, telefone, email, plano, responsavel, ativo]);
         res.status(201).json(result.rows[0]);
     }
     catch (error) {
@@ -20,11 +27,12 @@ export const createEmpresa = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const updateEmpresa = async (req, res) => {
+exports.createEmpresa = createEmpresa;
+const updateEmpresa = async (req, res) => {
     const { id } = req.params;
     const { nome_empresa, cnpj, telefone, email, plano, responsavel, ativo } = req.body;
     try {
-        const result = await pool.query('UPDATE public.empresas SET nome_empresa = $1, cnpj = $2, telefone = $3, email = $4, plano = $5, responsavel = $6, ativo = $7 WHERE id = $8 RETURNING id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro', [nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, id]);
+        const result = await db_1.default.query('UPDATE public.empresas SET nome_empresa = $1, cnpj = $2, telefone = $3, email = $4, plano = $5, responsavel = $6, ativo = $7 WHERE id = $8 RETURNING id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro', [nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Empresa não encontrada' });
         }
@@ -35,10 +43,11 @@ export const updateEmpresa = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-export const deleteEmpresa = async (req, res) => {
+exports.updateEmpresa = updateEmpresa;
+const deleteEmpresa = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await pool.query('DELETE FROM public.empresas WHERE id = $1', [id]);
+        const result = await db_1.default.query('DELETE FROM public.empresas WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Empresa não encontrada' });
         }
@@ -49,3 +58,4 @@ export const deleteEmpresa = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+exports.deleteEmpresa = deleteEmpresa;
