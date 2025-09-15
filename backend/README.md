@@ -40,4 +40,6 @@ npm run build
 DATABASE_URL="postgres://user:pass@host:port/db" npm start
 ```
 
-Se a variável de ambiente `DATABASE_URL` não estiver definida, o valor de `appsettings.json` será utilizado como conexão padrão.
+Se `DATABASE_URL` não estiver definida, o servidor tentará utilizar a conexão
+descrita em `appsettings.json`. Esse arquivo é opcional; caso ambos estejam
+ausentes, a inicialização falhará com um erro descritivo.
