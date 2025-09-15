@@ -38,6 +38,9 @@ interface Envolvido {
 interface OpportunityData {
   id: number;
   title?: string;
+  status_id?: number | null;
+  status?: string;
+  ultima_atualizacao?: string;
   envolvidos?: Envolvido[];
   [key: string]: unknown;
 }
@@ -51,6 +54,11 @@ interface ParticipantData {
   relacao?: string;
 }
 
+interface StatusOption {
+  id: string;
+  name: string;
+}
+
 export default function VisualizarOportunidade() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -60,6 +68,9 @@ export default function VisualizarOportunidade() {
   const [snack, setSnack] = useState<{ open: boolean; message?: string }>({ open: false });
   const [expandedDetails, setExpandedDetails] = useState(false);
   const [participants, setParticipants] = useState<ParticipantData[]>([]);
+  const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusSaving, setStatusSaving] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [documentType, setDocumentType] = useState<"modelo" | "processo" | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -73,6 +84,14 @@ export default function VisualizarOportunidade() {
     setDocumentType(null);
     setSelectedTemplate("");
     setProcessForm({ numero: "", comarca: "", vara: "" });
+  };
+
+  const getStatusLabel = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return undefined;
+    const match = statusOptions.find(
+      (option) => Number(option.id) === Number(value)
+    );
+    return match?.name ?? String(value);
   };
 
   const fetchList = async (url: string): Promise<unknown[]> => {
@@ -131,6 +150,44 @@ export default function VisualizarOportunidade() {
       cancelled = true;
     };
   }, [id, apiUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchStatuses = async () => {
+      try {
+        setStatusLoading(true);
+        const data = await fetchList(`${apiUrl}/api/situacoes-processo`);
+        if (cancelled) return;
+        const options: StatusOption[] = (data as unknown[]).flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const record = item as Record<string, unknown>;
+          const value = record["id"];
+          if (value === undefined || value === null) return [];
+          const labelRaw = record["nome"] ?? record["name"];
+          const label =
+            typeof labelRaw === "string" && labelRaw.trim().length > 0
+              ? labelRaw
+              : String(value);
+          return [{ id: String(value), name: label }];
+        });
+        if (!cancelled) {
+          setStatusOptions(options);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) {
+          setStatusLoading(false);
+        }
+      }
+    };
+
+    fetchStatuses();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl]);
 
   useEffect(() => {
     if (!opportunity || (opportunity as { _namesLoaded?: boolean })._namesLoaded)
@@ -460,6 +517,68 @@ export default function VisualizarOportunidade() {
     setDocumentDialogOpen(true);
   };
 
+  const handleStatusChange = async (value: string) => {
+    if (!id || !opportunity) return;
+    const parsedValue = value === "" ? null : Number(value);
+    if (parsedValue !== null && Number.isNaN(parsedValue)) return;
+
+    const currentStatus =
+      opportunity.status_id === null || opportunity.status_id === undefined
+        ? null
+        : Number(opportunity.status_id);
+
+    if (currentStatus === parsedValue) return;
+
+    const previousStatusId = currentStatus;
+    setStatusSaving(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/oportunidades/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status_id: parsedValue }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: { status_id: number | null; ultima_atualizacao?: string } =
+        await res.json();
+
+      const nextStatusId =
+        data.status_id === undefined ? parsedValue : data.status_id;
+      const statusLabel = getStatusLabel(nextStatusId);
+
+      setOpportunity((prev) =>
+        prev
+          ? {
+              ...prev,
+              status_id: nextStatusId ?? null,
+              status: statusLabel,
+              ultima_atualizacao:
+                data.ultima_atualizacao ?? prev.ultima_atualizacao,
+            }
+          : prev
+      );
+      setSnack({ open: true, message: "Status atualizado" });
+    } catch (error) {
+      console.error(error);
+      setSnack({ open: true, message: "Erro ao atualizar status" });
+      setOpportunity((prev) =>
+        prev
+          ? {
+              ...prev,
+              status_id: previousStatusId,
+              status:
+                previousStatusId === null
+                  ? undefined
+                  : getStatusLabel(previousStatusId) ?? prev.status,
+            }
+          : prev
+      );
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const handleDocumentConfirm = () => {
     if (!documentType) return;
 
@@ -569,6 +688,15 @@ export default function VisualizarOportunidade() {
       ? !processForm.numero || !processForm.comarca || !processForm.vara
       : true;
 
+  const statusSelectValue =
+    opportunity.status_id === null || opportunity.status_id === undefined
+      ? ""
+      : String(opportunity.status_id);
+  const statusBadgeText =
+    typeof opportunity.status === "string" && opportunity.status.trim().length > 0
+      ? opportunity.status
+      : getStatusLabel(opportunity.status_id);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header / ações (REMOVIDO Duplicar) */}
@@ -602,15 +730,58 @@ export default function VisualizarOportunidade() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-2">
-            <CardTitle>{opportunity.title ?? `Proposta #${opportunity.id}`}/{new Date().getFullYear()}</CardTitle>
-            <div className="flex flex-wrap gap-2">
-              {typeof opportunity.fase === "string" && (
-                <Badge variant="outline">{opportunity.fase}</Badge>
-              )}
-              {typeof opportunity.etapa_nome === "string" && (
-                <Badge>{opportunity.etapa_nome}</Badge>
-              )}
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+            <div className="flex flex-col gap-2">
+              <CardTitle>
+                {opportunity.title ?? `Proposta #${opportunity.id}`}/{new Date().getFullYear()}
+              </CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                {typeof opportunity.fase === "string" && (
+                  <Badge variant="outline">{opportunity.fase}</Badge>
+                )}
+                {typeof opportunity.etapa_nome === "string" && (
+                  <Badge>{opportunity.etapa_nome}</Badge>
+                )}
+                {statusBadgeText && <Badge variant="secondary">{statusBadgeText}</Badge>}
+              </div>
+            </div>
+            <div className="flex w-full flex-col gap-1 md:w-auto md:items-end">
+              <Label
+                htmlFor="status-select"
+                className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                Status da proposta
+              </Label>
+              <Select
+                value={statusSelectValue}
+                onValueChange={handleStatusChange}
+                disabled={statusLoading || statusSaving}
+              >
+                <SelectTrigger
+                  id="status-select"
+                  className="w-full md:w-56"
+                  disabled={statusLoading || statusSaving}
+                >
+                  <SelectValue
+                    placeholder={
+                      statusLoading ? "Carregando status..." : "Selecione um status"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Sem status</SelectItem>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {statusSaving ? (
+                <span className="text-xs text-muted-foreground">Atualizando status...</span>
+              ) : statusLoading ? (
+                <span className="text-xs text-muted-foreground">Carregando status...</span>
+              ) : null}
             </div>
           </div>
         </CardHeader>
