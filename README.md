@@ -30,8 +30,13 @@ Após iniciar, acesse o frontend em `http://localhost:5173` e utilize o menu **D
 ```bash
 cd backend
 npm run build
+# Defina DATABASE_URL ou certifique-se de que appsettings.json contenha a conexão
 DATABASE_URL="postgres://user:pass@host:port/db" npm start
 ```
+
+Se `DATABASE_URL` não estiver definido, o servidor buscará a cadeia de conexão em
+`appsettings.json`. Esse arquivo é opcional, mas se ambos estiverem ausentes o
+backend encerrará com um erro informativo.
 
 ### Frontend
 
