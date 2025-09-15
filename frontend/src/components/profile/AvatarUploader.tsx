@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Upload, X, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -17,6 +17,10 @@ export function AvatarUploader({ currentAvatar, userName, onAvatarChange, size =
   const [preview, setPreview] = useState(currentAvatar);
   const [isOpen, setIsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setPreview(currentAvatar);
+  }, [currentAvatar]);
 
   const sizeClasses = {
     sm: "h-16 w-16",
