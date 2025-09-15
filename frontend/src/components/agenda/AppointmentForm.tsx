@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarIcon, Clock, MapPin, Bell } from 'lucide-react';
+import { getApiBaseUrl } from '@/lib/api';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { appointmentTypes, AppointmentType, Appointment } from '@/types/agenda';
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001';
+const apiUrl = getApiBaseUrl();
 
 function joinUrl(base: string, path = '') {
   const b = base.replace(/\/+$/, '');

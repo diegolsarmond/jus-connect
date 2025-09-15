@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getApiBaseUrl } from "@/lib/api";
 
 import { Badge } from "@/components/ui/badge";
 
@@ -36,7 +37,7 @@ interface ParticipantData {
 export default function VisualizarOportunidade() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+  const apiUrl = getApiBaseUrl();
 
   const [opportunity, setOpportunity] = useState<OpportunityData | null>(null);
   const [snack, setSnack] = useState<{ open: boolean; message?: string }>({ open: false });

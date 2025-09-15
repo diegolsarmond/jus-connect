@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar, Plus } from 'lucide-react';
+import { getApiBaseUrl } from '@/lib/api';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,7 +11,7 @@ import { AppointmentList } from '@/components/agenda/AppointmentList';
 import { statusDotClass } from '@/components/agenda/status';
 import { Appointment, AppointmentType, AppointmentStatus } from '@/types/agenda';
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001';
+const apiUrl = getApiBaseUrl();
 
 function joinUrl(base: string, path = '') {
   const b = base.replace(/\/+$/, '');

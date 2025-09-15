@@ -60,6 +60,7 @@ import {
   TooltipContent,
   TooltipProvider,
 } from '@/components/ui/tooltip';
+import { getApiBaseUrl } from '@/lib/api';
 
 interface Task {
   id: number;
@@ -135,7 +136,7 @@ interface ApiTask {
   concluido?: boolean;
 }
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:3001';
+const apiUrl = getApiBaseUrl();
 
 function joinUrl(base: string, path = '') {
   const b = base.replace(/\/+$/, '');

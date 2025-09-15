@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface Etiqueta {
   id: number;
@@ -26,7 +27,7 @@ interface FluxoTrabalhoItem {
 }
 
 export default function Etiquetas() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+  const apiUrl = getApiBaseUrl();
 
   const [items, setItems] = useState<Etiqueta[]>([]);
   const [fluxos, setFluxos] = useState<FluxoTrabalhoItem[]>([]);
@@ -425,4 +426,3 @@ export default function Etiquetas() {
     </div>
   );
 }
-

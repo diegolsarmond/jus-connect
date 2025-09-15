@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface NavItem {
   name: string;
@@ -38,8 +39,7 @@ export function Sidebar() {
   useEffect(() => {
     const fetchMenus = async () => {
       try {
-        const apiUrl =
-          (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+        const apiUrl = getApiBaseUrl();
         const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
           headers: { Accept: "application/json" },
         });

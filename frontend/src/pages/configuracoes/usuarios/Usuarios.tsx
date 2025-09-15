@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { User } from "@/types/user";
+import { getApiBaseUrl } from "@/lib/api";
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+const apiUrl = getApiBaseUrl();
 
 function joinUrl(base: string, path = "") {
   const b = base.replace(/\/+$/, "");

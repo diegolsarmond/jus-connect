@@ -37,19 +37,33 @@ const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+const defaultAllowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+  'http://localhost:4200',
+  'https://jusconnec.quantumtecnologia.com.br',
+];
+
+const additionalAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = new Set([
+  ...defaultAllowedOrigins,
+  ...additionalAllowedOrigins,
+]);
+
+const allowAllOrigins = process.env.CORS_ALLOW_ALL === 'true';
+
 /**
  * Middleware de CORS
  */
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:8080',
-    'http://127.0.0.1:8080',
-    'http://localhost:4200',
-  ];
   const origin = req.headers.origin as string | undefined;
 
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && (allowAllOrigins || allowedOrigins.has(origin))) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Vary', 'Origin'); // boa prática p/ caches
   }

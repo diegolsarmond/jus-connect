@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getApiBaseUrl } from "@/lib/api";
 
 interface FluxoTrabalhoItem {
   id: number;
@@ -20,7 +21,7 @@ interface FluxoTrabalhoItem {
 }
 
 export default function FluxoTrabalho() {
-  const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+  const apiUrl = getApiBaseUrl();
 
   const [items, setItems] = useState<FluxoTrabalhoItem[]>([]);
   const [newNome, setNewNome] = useState("");
@@ -322,4 +323,3 @@ export default function FluxoTrabalho() {
     </div>
   );
 }
-

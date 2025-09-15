@@ -26,8 +26,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
 import { Upload } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { getApiBaseUrl } from "@/lib/api";
 
-const apiUrl = (import.meta.env.VITE_API_URL as string) || "http://localhost:3001";
+const apiUrl = getApiBaseUrl();
 
 function joinUrl(base: string, path = "") {
   const b = base.replace(/\/+$/, "");
