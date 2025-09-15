@@ -231,6 +231,7 @@ export default function Pipeline() {
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const dragStartedSincePointerDown = useRef(false);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     const fetchOpportunities = async () => {
@@ -414,6 +415,7 @@ export default function Pipeline() {
     opportunityId: number,
   ) => {
     dragStartedSincePointerDown.current = true;
+    isDragging.current = true;
     event.dataTransfer.setData("text/plain", opportunityId.toString());
   };
 
@@ -422,6 +424,7 @@ export default function Pipeline() {
     stageId: string
   ) => {
     event.preventDefault();
+    isDragging.current = false;
     const id = Number(event.dataTransfer.getData("text/plain"));
 
     try {
@@ -611,6 +614,9 @@ export default function Pipeline() {
                       dragStartedSincePointerDown.current = false;
                     }}
                     onDragStart={(e) => handleDragStart(e, opportunity.id)}
+                    onDragEnd={() => {
+                      isDragging.current = false;
+                    }}
                     onDragOver={handleDragOver}
                     onClick={() => {
                       const dragged = dragStartedSincePointerDown.current;
