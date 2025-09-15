@@ -49,6 +49,7 @@ RUN useradd --create-home --shell /bin/false appuser \
 COPY --from=builder --chown=appuser:appuser /app/backend/dist /app/backend/dist
 COPY --from=builder --chown=appuser:appuser /app/backend/appsettings.json /app/backend/appsettings.json
 COPY --from=builder --chown=appuser:appuser /app/backend/package*.json /app/backend/
+COPY --from=builder --chown=appuser:appuser /app/frontend/dist /app/frontend/dist
 
 # instalar apenas dependências de produção no final
 RUN if [ -f /app/backend/package-lock.json ]; then \

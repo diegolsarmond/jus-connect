@@ -1,5 +1,7 @@
 import express from 'express';
 import { AddressInfo } from 'net';
+import path from 'path';
+import { existsSync } from 'fs';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
 import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
@@ -100,6 +102,15 @@ app.use('/api', supportRoutes);
 const specs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
+// Static frontend (when available)
+const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
+const frontendIndexPath = path.join(frontendDistPath, 'index.html');
+const hasFrontendBuild = existsSync(frontendIndexPath);
+
+if (hasFrontendBuild) {
+  app.use(express.static(frontendDistPath));
+}
+
 /**
  * @swagger
  * /:
@@ -109,9 +120,19 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
  *       200:
  *         description: Backend up and running
  */
-app.get('/', (_req, res) => {
-  res.send('Backend up and running');
-});
+if (!hasFrontendBuild) {
+  app.get('/', (_req, res) => {
+    res.send('Backend up and running');
+  });
+} else {
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/api-docs')) {
+      return next();
+    }
+
+    res.sendFile(frontendIndexPath);
+  });
+}
 
 // Start
 const server = app.listen(port, () => {

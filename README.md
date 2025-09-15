@@ -43,10 +43,11 @@ backend encerrará com um erro informativo.
 ```bash
 cd frontend
 npm run build
-# sirva os arquivos da pasta dist com seu servidor HTTP preferido
+# os arquivos ficarão disponíveis em ./frontend/dist
 ```
 
-Ao configurar o servidor HTTP (Caddy, Nginx, etc.), aponte o `root` para
-`./frontend/dist` em vez da raiz do repositório. O arquivo `index.html` na
-raiz do projeto foi removido para evitar que seja servido por engano.
+Se a pasta `frontend/dist` estiver presente, o backend servirá automaticamente
+o frontend estático, inclusive na imagem Docker fornecida. Caso prefira usar
+um servidor HTTP dedicado (Caddy, Nginx, etc.), basta apontar o `root` para
+`./frontend/dist`.
 
