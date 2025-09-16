@@ -20,6 +20,7 @@ import EditarOportunidade from "./pages/EditarOportunidade";
 import Agenda from "./pages/Agenda";
 import Tarefas from "./pages/Tarefas";
 import Processos from "./pages/Processos";
+import Intimacoes from "./pages/Intimacoes";
 import DocumentTemplates from "./pages/DocumentTemplates";
 import TemplateEditor from "./pages/TemplateEditor";
 import FinancialFlows from "./pages/FinancialFlows";
@@ -90,6 +91,7 @@ const App = () => (
             <Route path="/agenda" element={<Agenda />} />
             <Route path="/tarefas" element={<Tarefas />} />
             <Route path="/processos" element={<Processos />} />
+            <Route path="/intimacoes" element={<Intimacoes />} />
             <Route path="/documentos" element={<DocumentTemplates />} />
             <Route path="/documentos/:id" element={<TemplateEditor />} />
             <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
