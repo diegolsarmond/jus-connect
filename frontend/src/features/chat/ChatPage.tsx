@@ -5,8 +5,9 @@ import {
   fetchConversations,
   createConversation,
   markConversationRead,
+  updateConversation as updateConversationRequest,
 } from "./services/chatApi";
-import type { ConversationSummary, SendMessageInput } from "./types";
+import type { ConversationSummary, SendMessageInput, UpdateConversationPayload } from "./types";
 import { ChatSidebar } from "./components/ChatSidebar";
 import { ChatWindow } from "./components/ChatWindow";
 import { NewConversationModal } from "./components/NewConversationModal";
@@ -16,6 +17,7 @@ import styles from "./ChatPage.module.css";
 export const ChatPage = () => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [searchValue, setSearchValue] = useState("");
+  const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -35,6 +37,19 @@ export const ChatPage = () => {
     () => conversationsQuery.data ?? [],
     [conversationsQuery.data],
   );
+
+  const responsibleOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const conversation of conversations) {
+      if (conversation.responsible) {
+        map.set(conversation.responsible.id, {
+          id: conversation.responsible.id,
+          name: conversation.responsible.name,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [conversations]);
 
   useEffect(() => {
     if (!selectedConversationId && conversations.length > 0) {
@@ -75,6 +90,17 @@ export const ChatPage = () => {
     sendMessage,
   } = useChatMessages(selectedConversationId);
 
+  const updateConversationMutation = useMutation({
+    mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationPayload }) =>
+      updateConversationRequest(conversationId, changes),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
+        if (!old) return old;
+        return old.map((item) => (item.id === updated.id ? updated : item));
+      });
+    },
+  });
+
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
     markReadMutation.mutate(conversationId);
@@ -83,6 +109,11 @@ export const ChatPage = () => {
   const handleSendMessage = async (payload: SendMessageInput) => {
     await sendMessage(payload);
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  };
+
+  const handleUpdateConversation = async (conversationId: string, changes: UpdateConversationPayload) => {
+    if (!conversationId) return;
+    await updateConversationMutation.mutateAsync({ conversationId, changes });
   };
 
   useEffect(() => {
@@ -116,6 +147,9 @@ export const ChatPage = () => {
         activeConversationId={selectedConversationId}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
+        responsibleFilter={responsibleFilter}
+        responsibleOptions={responsibleOptions}
+        onResponsibleFilterChange={setResponsibleFilter}
         onSelectConversation={handleSelectConversation}
         onNewConversation={() => setNewConversationOpen(true)}
         searchInputRef={searchInputRef}
@@ -129,6 +163,8 @@ export const ChatPage = () => {
         isLoadingMore={isLoadingMore}
         onSendMessage={handleSendMessage}
         onLoadOlder={loadOlder}
+        onUpdateConversation={handleUpdateConversation}
+        isUpdatingConversation={updateConversationMutation.isPending}
       />
       <NewConversationModal
         open={newConversationOpen}

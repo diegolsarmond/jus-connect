@@ -1,13 +1,17 @@
 import chatData from "../data/chatData.json";
+import { teamMembers } from "../data/teamMembers";
 import type {
   ChatDataset,
+  ConversationCustomAttribute,
   ConversationDatasetEntry,
+  ConversationInternalNote,
   ConversationLastMessage,
   ConversationSummary,
   Message,
   MessagePage,
   NewConversationInput,
   SendMessageInput,
+  UpdateConversationPayload,
 } from "../types";
 import { getMessagePreview } from "../utils/format";
 
@@ -28,6 +32,9 @@ const dataset: Dataset = (() => {
   });
   clone.conversations = clone.conversations.map((entry) => ({
     ...entry,
+    tags: entry.tags ?? [],
+    customAttributes: entry.customAttributes ?? [],
+    internalNotes: entry.internalNotes ?? [],
     lastActivity: getLastActivityTimestamp(clone.messages[entry.id]),
   }));
   return clone;
@@ -74,11 +81,40 @@ function buildLastMessage(message: Message | undefined): ConversationLastMessage
   };
 }
 
+function resolveResponsible(responsibleId?: string | null) {
+  if (!responsibleId) return null;
+  return teamMembers.find((member) => member.id === responsibleId) ?? null;
+}
+
+function cloneAttributes(attributes: ConversationCustomAttribute[] | undefined): ConversationCustomAttribute[] {
+  return attributes ? attributes.map((attribute) => ({ ...attribute })) : [];
+}
+
+function cloneInternalNotes(notes: ConversationInternalNote[] | undefined): ConversationInternalNote[] {
+  return notes ? notes.map((note) => ({ ...note })) : [];
+}
+
 function buildSummary(entry: ConversationDatasetEntry): ConversationSummary {
   const messages = dataset.messages[entry.id] ?? [];
   const lastMessage = buildLastMessage(messages[messages.length - 1]);
+  const {
+    responsibleId,
+    tags,
+    customAttributes,
+    isLinkedToClient,
+    clientName,
+    internalNotes,
+    ...rest
+  } = entry;
+  const normalizedClientName = clientName ?? null;
   return {
-    ...entry,
+    ...rest,
+    tags: [...(tags ?? [])],
+    customAttributes: cloneAttributes(customAttributes),
+    isLinkedToClient: Boolean(isLinkedToClient),
+    clientName: normalizedClientName,
+    internalNotes: cloneInternalNotes(internalNotes),
+    responsible: resolveResponsible(responsibleId),
     lastMessage,
   };
 }
@@ -138,11 +174,77 @@ function createConversation(payload: NewConversationInput) {
     shortStatus: "novo contato",
     description: payload.description,
     unreadCount: 0,
+    phoneNumber: payload.phoneNumber,
+    responsibleId: payload.responsibleId ?? null,
+    tags: [],
+    isLinkedToClient: false,
+    clientName: null,
+    customAttributes: [],
+    isPrivate: false,
+    internalNotes: [],
     lastActivity: new Date().toISOString(),
   };
   dataset.conversations.push(newConversation);
   dataset.messages[id] = [];
   return buildSummary(newConversation);
+}
+
+function updateConversation(
+  conversationId: string,
+  updates: UpdateConversationPayload,
+): ConversationSummary {
+  const conversation = dataset.conversations.find((item) => item.id === conversationId);
+  if (!conversation) {
+    throw new Error("Conversa não encontrada");
+  }
+
+  if (updates.responsibleId !== undefined) {
+    conversation.responsibleId = updates.responsibleId ?? null;
+  }
+
+  if (updates.tags !== undefined) {
+    const normalized = updates.tags
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+    const unique = Array.from(new Set(normalized));
+    conversation.tags = unique;
+  }
+
+  if (updates.phoneNumber !== undefined) {
+    conversation.phoneNumber = updates.phoneNumber ?? undefined;
+  }
+
+  if (updates.isLinkedToClient !== undefined) {
+    conversation.isLinkedToClient = updates.isLinkedToClient;
+    if (!updates.isLinkedToClient) {
+      conversation.clientName = null;
+    }
+  }
+
+  if (updates.clientName !== undefined) {
+    const trimmed = updates.clientName ? updates.clientName.trim() : "";
+    conversation.clientName = trimmed.length > 0 ? trimmed : null;
+    if (trimmed.length > 0 && updates.isLinkedToClient === undefined) {
+      conversation.isLinkedToClient = true;
+    }
+    if (trimmed.length === 0 && updates.isLinkedToClient === undefined) {
+      conversation.isLinkedToClient = false;
+    }
+  }
+
+  if (updates.customAttributes !== undefined) {
+    conversation.customAttributes = cloneAttributes(updates.customAttributes);
+  }
+
+  if (updates.isPrivate !== undefined) {
+    conversation.isPrivate = updates.isPrivate;
+  }
+
+  if (updates.internalNotes !== undefined) {
+    conversation.internalNotes = cloneInternalNotes(updates.internalNotes);
+  }
+
+  return buildSummary(conversation);
 }
 
 function appendMessage(
@@ -228,6 +330,14 @@ export const setupMockChatServer = () => {
       }
       const conversationId = decodeURIComponent(match[1]);
       const action = match[2];
+
+      if (!action && method === "PATCH") {
+        const payload = init?.body
+          ? (JSON.parse(init.body.toString()) as UpdateConversationPayload)
+          : {};
+        const updated = updateConversation(conversationId, payload);
+        return withLatency(updated);
+      }
 
       if (method === "POST" && action === "messages") {
         const payload = init?.body

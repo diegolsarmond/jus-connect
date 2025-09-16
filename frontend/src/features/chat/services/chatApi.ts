@@ -4,6 +4,7 @@ import type {
   MessagePage,
   NewConversationInput,
   SendMessageInput,
+  UpdateConversationPayload,
 } from "../types";
 
 const parseJson = async <T>(response: Response): Promise<T> => {
@@ -60,6 +61,18 @@ export const createConversation = async (
 ): Promise<ConversationSummary> => {
   const response = await fetch(`/api/conversations`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJson<ConversationSummary>(response);
+};
+
+export const updateConversation = async (
+  conversationId: string,
+  payload: UpdateConversationPayload,
+): Promise<ConversationSummary> => {
+  const response = await fetch(`/api/conversations/${conversationId}`, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });

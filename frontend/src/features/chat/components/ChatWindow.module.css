@@ -7,11 +7,15 @@
   min-height: 0;
 }
 
+.wrapper[data-private="true"] {
+  background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.35));
+}
+
 .header {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid hsl(var(--border));
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
 }
@@ -35,14 +39,43 @@
   gap: 0.3rem;
 }
 
-.headerText h2 {
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.headerTitleRow h2 {
   font-size: 1.25rem;
   font-weight: 700;
+  margin: 0;
 }
 
 .status {
   font-size: 0.9rem;
   color: hsl(var(--muted-foreground));
+}
+
+.phoneNumber {
+  font-size: 0.85rem;
+  color: hsl(var(--accent-foreground));
+}
+
+.privateIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.wrapper[data-private="true"] .privateIndicator {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
 }
 
 .actions {
@@ -108,6 +141,322 @@
   background: hsl(var(--muted));
 }
 
+.metadataPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.wrapper[data-private="true"] .metadataPanel {
+  background: hsl(var(--muted) / 0.25);
+}
+
+.metadataRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.metadataGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1 1 260px;
+}
+
+.metadataLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.metadataSelect {
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  background: hsl(var(--background));
+  color: inherit;
+  font-size: 0.95rem;
+}
+
+.metadataSelect:focus {
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: 2px;
+}
+
+.metadataActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.secondaryButton {
+  border: 1px solid hsl(var(--border));
+  background: transparent;
+  color: inherit;
+  border-radius: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.secondaryButton:hover,
+.secondaryButton:focus-visible {
+  background: hsl(var(--muted));
+}
+
+.tagsEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.tagsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tagPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.tagPill button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.tagPill button:hover,
+.tagPill button:focus-visible {
+  color: hsl(var(--accent-foreground));
+}
+
+.emptyHint {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.85rem;
+}
+
+.inlineForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.inlineForm input {
+  flex: 1 1 180px;
+  min-width: 160px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--background));
+  color: inherit;
+}
+
+.inlineForm button {
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.inlineForm button:disabled {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: not-allowed;
+}
+
+.inlineForm button:not(:disabled):hover,
+.inlineForm button:not(:disabled):focus-visible {
+  background: hsl(var(--primary-hover));
+}
+
+.detailsGrid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detailsColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.attributeList,
+.noteList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.attributeList li,
+.noteList li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  padding: 0.75rem 1rem;
+  border-radius: 0.9rem;
+}
+
+.attributeList li div,
+.noteContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.attributeList li strong {
+  font-size: 0.9rem;
+  color: hsl(var(--foreground));
+}
+
+.attributeList li span {
+  font-size: 0.85rem;
+}
+
+.attributeList li button,
+.noteList li button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attributeList li button:hover,
+.attributeList li button:focus-visible,
+.noteList li button:hover,
+.noteList li button:focus-visible {
+  color: hsl(var(--accent-foreground));
+}
+
+.attributeForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attributeForm input {
+  flex: 1 1 160px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--background));
+  color: inherit;
+}
+
+.attributeForm button {
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.attributeForm button:disabled {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: not-allowed;
+}
+
+.attributeForm button:not(:disabled):hover,
+.attributeForm button:not(:disabled):focus-visible {
+  background: hsl(var(--primary-hover));
+}
+
+.noteMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.noteMeta time {
+  color: hsl(var(--muted-foreground));
+}
+
+.noteForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.noteForm textarea {
+  min-height: 80px;
+  resize: vertical;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  font-family: inherit;
+  background: hsl(var(--background));
+  color: inherit;
+}
+
+.noteForm button {
+  align-self: flex-start;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.noteForm button:disabled {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: not-allowed;
+}
+
+.noteForm button:not(:disabled):hover,
+.noteForm button:not(:disabled):focus-visible {
+  background: hsl(var(--primary-hover));
+}
+
 .placeholder {
   flex: 1;
   display: grid;
@@ -149,5 +498,13 @@
   .headerInfo img {
     width: 2.5rem;
     height: 2.5rem;
+  }
+
+  .metadataPanel {
+    padding: 1rem;
+  }
+
+  .detailsGrid {
+    grid-template-columns: 1fr;
   }
 }
