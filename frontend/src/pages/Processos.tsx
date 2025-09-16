@@ -23,13 +23,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { getApiUrl } from "@/lib/api";
+
+interface ProcessoCliente {
+  id?: number;
+  nome: string;
+  cpf: string;
+  papel: string;
+}
+
 
 interface Processo {
   numero: string;
   dataDistribuicao: string;
   status: string;
   tipo: string;
-  cliente: { nome: string; cpf: string; papel: string };
+  cliente: ProcessoCliente;
   advogadoResponsavel: string;
   classeJudicial: string;
   assunto: string;
@@ -48,11 +57,28 @@ interface Municipio {
   nome: string;
 }
 
+interface ClienteResumo {
+  id: number;
+  nome: string;
+  documento: string;
+  tipo: string;
+}
+
+interface ApiCliente {
+  id: number;
+  nome?: string;
+  documento?: string;
+  tipo?: string;
+}
+
+
 type ProcessFormState = {
   numero: string;
   uf: string;
   municipio: string;
   orgaoJulgador: string;
+  clienteId: string;
+
 };
 
 const formatProcessNumber = (value: string) => {
@@ -128,10 +154,14 @@ export default function Processos() {
     uf: "",
     municipio: "",
     orgaoJulgador: "",
+    clienteId: "",
+
   });
   const [ufs, setUfs] = useState<Uf[]>([]);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [municipiosLoading, setMunicipiosLoading] = useState(false);
+  const [clientes, setClientes] = useState<ClienteResumo[]>([]);
+  const [clientesLoading, setClientesLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +188,66 @@ export default function Processos() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const fetchClientes = async () => {
+      setClientesLoading(true);
+      try {
+        const res = await fetch(getApiUrl("clientes"), {
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const data: ApiCliente[] = Array.isArray(json)
+          ? json
+          : Array.isArray((json as { rows?: ApiCliente[] })?.rows)
+            ? ((json as { rows: ApiCliente[] }).rows)
+            : Array.isArray((json as { data?: { rows?: ApiCliente[] } })?.data?.rows)
+              ? ((json as { data: { rows: ApiCliente[] } }).data.rows)
+              : Array.isArray((json as { data?: ApiCliente[] })?.data)
+                ? ((json as { data: ApiCliente[] }).data)
+                : [];
+        const mapped = data
+          .filter((cliente) => typeof cliente.id === "number")
+          .map((cliente) => ({
+            id: cliente.id,
+            nome: cliente.nome ?? "Sem nome",
+            documento: cliente.documento ?? "",
+            tipo: cliente.tipo ?? "",
+          }));
+        if (!cancelled) {
+          setClientes(mapped);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setClientes([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setClientesLoading(false);
+        }
+      }
+    };
+
+    fetchClientes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      processForm.clienteId &&
+      !clientes.some((cliente) => String(cliente.id) === processForm.clienteId)
+    ) {
+      setProcessForm((prev) => ({ ...prev, clienteId: "" }));
+    }
+  }, [clientes, processForm.clienteId]);
+
+  useEffect(() => {
+
     if (!processForm.uf) {
       setMunicipios([]);
       setMunicipiosLoading(false);
@@ -191,6 +281,13 @@ export default function Processos() {
   }, [processForm.uf]);
 
   const resetProcessForm = () => {
+    setProcessForm({
+      numero: "",
+      uf: "",
+      municipio: "",
+      orgaoJulgador: "",
+      clienteId: "",
+    });
     setProcessForm({ numero: "", uf: "", municipio: "", orgaoJulgador: "" });
     setMunicipios([]);
     setMunicipiosLoading(false);
@@ -208,10 +305,27 @@ export default function Processos() {
       !processForm.numero ||
       !processForm.uf ||
       !processForm.municipio ||
-      !processForm.orgaoJulgador
+      !processForm.orgaoJulgador ||
+      !processForm.clienteId
+
     ) {
       return;
     }
+
+    const selectedCliente = clientes.find(
+      (cliente) => String(cliente.id) === processForm.clienteId,
+    );
+
+    if (!selectedCliente) {
+      return;
+    }
+
+    const clienteTipo = (selectedCliente.tipo || "").toUpperCase();
+    const papel = clienteTipo.includes("J")
+      ? "Pessoa Jurídica"
+      : clienteTipo.includes("F")
+        ? "Pessoa Física"
+        : "Parte";
 
     const newProcess: Processo = {
       numero: processForm.numero,
@@ -219,6 +333,10 @@ export default function Processos() {
       status: "Em andamento",
       tipo: "Cível",
       cliente: {
+        id: selectedCliente.id,
+        nome: selectedCliente.nome,
+        papel,
+        cpf: selectedCliente.documento,
         nome: "Cliente não informado",
         papel: "Parte",
         cpf: "",
@@ -239,7 +357,9 @@ export default function Processos() {
     !processForm.numero ||
     !processForm.uf ||
     !processForm.municipio ||
-    !processForm.orgaoJulgador;
+    !processForm.orgaoJulgador ||
+    !processForm.clienteId;
+
 
   const filteredProcessos = processos.filter((processo) => {
     const matchesStatus =
@@ -371,6 +491,42 @@ export default function Processos() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="process-client">Cliente</Label>
+              <Select
+                value={processForm.clienteId}
+                onValueChange={(value) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    clienteId: value,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  id="process-client"
+                  disabled={clientesLoading || clientes.length === 0}
+                >
+                  <SelectValue
+                    placeholder={
+                      clientesLoading
+                        ? "Carregando clientes..."
+                        : clientes.length > 0
+                          ? "Selecione o cliente"
+                          : "Nenhum cliente encontrado"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {clientes.map((cliente) => (
+                    <SelectItem key={cliente.id} value={String(cliente.id)}>
+                      {cliente.nome}
+                      {cliente.documento ? ` (${cliente.documento})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="process-uf">UF</Label>
               <Select
