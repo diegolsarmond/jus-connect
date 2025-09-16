@@ -59,6 +59,21 @@ interface StatusOption {
   name: string;
 }
 
+const formatProcessNumber = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 20);
+  const match = digits.match(/^(\d{0,7})(\d{0,2})(\d{0,4})(\d{0,1})(\d{0,2})(\d{0,4})$/);
+  if (!match) return digits;
+  const [, part1 = "", part2 = "", part3 = "", part4 = "", part5 = "", part6 = ""] = match;
+
+  let formatted = part1;
+  if (part2) formatted += `-${part2}`;
+  if (part3) formatted += `.${part3}`;
+  if (part4) formatted += `.${part4}`;
+  if (part5) formatted += `.${part5}`;
+  if (part6) formatted += `.${part6}`;
+  return formatted;
+};
+
 const STATUS_EMPTY_VALUE = "__no_status__";
 
 export default function VisualizarOportunidade() {
@@ -78,15 +93,78 @@ export default function VisualizarOportunidade() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [processForm, setProcessForm] = useState({
     numero: "",
-    comarca: "",
-    vara: "",
+    uf: "",
+    municipio: "",
+    orgaoJulgador: "",
   });
+  const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
+  const [municipios, setMunicipios] = useState<{ id: number; nome: string }[]>([]);
+  const [municipiosLoading, setMunicipiosLoading] = useState(false);
 
   const resetDocumentDialog = () => {
     setDocumentType(null);
     setSelectedTemplate("");
-    setProcessForm({ numero: "", comarca: "", vara: "" });
+    setProcessForm({ numero: "", uf: "", municipio: "", orgaoJulgador: "" });
+    setMunicipios([]);
+    setMunicipiosLoading(false);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchUfs = async () => {
+      try {
+        const res = await fetch(
+          "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { sigla: string; nome: string }[];
+        if (!cancelled) setUfs(data);
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) setUfs([]);
+      }
+    };
+
+    fetchUfs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!processForm.uf) {
+      setMunicipios([]);
+      setMunicipiosLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setMunicipiosLoading(true);
+
+    const fetchMunicipios = async () => {
+      try {
+        const res = await fetch(
+          `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${processForm.uf}/municipios?orderBy=nome`,
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { id: number; nome: string }[];
+        if (!cancelled) setMunicipios(data);
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) setMunicipios([]);
+      } finally {
+        if (!cancelled) setMunicipiosLoading(false);
+      }
+    };
+
+    fetchMunicipios();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [processForm.uf]);
 
   const getStatusLabel = (value: number | null | undefined) => {
     if (value === null || value === undefined) return undefined;
@@ -592,10 +670,17 @@ export default function VisualizarOportunidade() {
       if (!selectedTemplate) return;
       params.set("modelo", selectedTemplate);
     } else {
-      if (!processForm.numero || !processForm.comarca || !processForm.vara) return;
+      if (
+        !processForm.numero ||
+        !processForm.uf ||
+        !processForm.municipio ||
+        !processForm.orgaoJulgador
+      )
+        return;
       params.set("numero_processo", processForm.numero);
-      params.set("comarca", processForm.comarca);
-      params.set("vara_orgao", processForm.vara);
+      params.set("uf", processForm.uf);
+      params.set("comarca", processForm.municipio);
+      params.set("vara_orgao", processForm.orgaoJulgador);
     }
 
     setDocumentDialogOpen(false);
@@ -687,7 +772,11 @@ export default function VisualizarOportunidade() {
     documentType === "modelo"
       ? !selectedTemplate
       : documentType === "processo"
-      ? !processForm.numero || !processForm.comarca || !processForm.vara
+      ?
+          !processForm.numero ||
+          !processForm.uf ||
+          !processForm.municipio ||
+          !processForm.orgaoJulgador
       : true;
 
   const statusSelectValue =
@@ -994,36 +1083,88 @@ export default function VisualizarOportunidade() {
 
             {documentType === "processo" && (
               <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="process-uf">UF</Label>
+                  <Select
+                    value={processForm.uf}
+                    onValueChange={(value) =>
+                      setProcessForm((prev) => ({
+                        ...prev,
+                        uf: value,
+                        municipio: "",
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="process-uf">
+                      <SelectValue placeholder="Selecione a UF" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ufs.map((uf) => (
+                        <SelectItem key={uf.sigla} value={uf.sigla}>
+                          {uf.nome} ({uf.sigla})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="process-municipio">Município</Label>
+                  <Select
+                    value={processForm.municipio}
+                    onValueChange={(value) =>
+                      setProcessForm((prev) => ({ ...prev, municipio: value }))
+                    }
+                  >
+                    <SelectTrigger
+                      id="process-municipio"
+                      disabled={!processForm.uf || municipiosLoading}
+                    >
+                      <SelectValue
+                        placeholder={
+                          !processForm.uf
+                            ? "Selecione a UF primeiro"
+                            : municipiosLoading
+                            ? "Carregando municípios..."
+                            : municipios.length > 0
+                            ? "Selecione o município"
+                            : "Nenhum município encontrado"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {municipios.map((municipio) => (
+                        <SelectItem key={municipio.id} value={municipio.nome}>
+                          {municipio.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="process-orgao">Órgão Julgador</Label>
+                  <Input
+                    id="process-orgao"
+                    placeholder="Informe o órgão julgador"
+                    value={processForm.orgaoJulgador}
+                    onChange={(event) =>
+                      setProcessForm((prev) => ({
+                        ...prev,
+                        orgaoJulgador: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="process-number">Número do processo</Label>
                   <Input
                     id="process-number"
-                    placeholder="0000000-00.0000.0.00.0000"
+                    placeholder="5202268-77.2022.8.13.0024"
                     value={processForm.numero}
                     onChange={(event) =>
-                      setProcessForm((prev) => ({ ...prev, numero: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="process-comarca">Comarca</Label>
-                  <Input
-                    id="process-comarca"
-                    placeholder="Informe a comarca"
-                    value={processForm.comarca}
-                    onChange={(event) =>
-                      setProcessForm((prev) => ({ ...prev, comarca: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="process-vara">Vara/Órgão</Label>
-                  <Input
-                    id="process-vara"
-                    placeholder="Informe a vara ou órgão"
-                    value={processForm.vara}
-                    onChange={(event) =>
-                      setProcessForm((prev) => ({ ...prev, vara: event.target.value }))
+                      setProcessForm((prev) => ({
+                        ...prev,
+                        numero: formatProcessNumber(event.target.value),
+                      }))
                     }
                   />
                 </div>
