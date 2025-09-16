@@ -12,6 +12,20 @@ psql -f sql/templates.sql
 npm run dev
 ```
 
+### Integração com notificações do PJE
+
+Para habilitar o agendamento automático de webhooks com o PJE, defina as
+seguintes variáveis de ambiente antes de iniciar o backend:
+
+| Variável              | Descrição                                                                 |
+| --------------------- | ------------------------------------------------------------------------- |
+| `PJE_CLIENT_ID`       | Identificador do cliente cadastrado no PJE para obter o token OAuth2.     |
+| `PJE_CLIENT_SECRET`   | Segredo associado ao cliente, utilizado na geração do token de acesso.    |
+| `PJE_WEBHOOK_URL`     | URL pública do seu backend que receberá as notificações enviadas pelo PJE. |
+
+Com esses valores configurados, o serviço agenda rotinas para renovar tokens
+expirados e revalidar a assinatura do webhook automaticamente.
+
 ## Frontend
 
 ```bash

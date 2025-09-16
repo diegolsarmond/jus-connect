@@ -10,6 +10,7 @@ import {
   getUnreadCountHandler,
   getNotificationPreferencesHandler,
   updateNotificationPreferencesHandler,
+  receivePjeNotificationHandler,
 } from '../controllers/notificationController';
 
 const router = Router();
@@ -19,6 +20,7 @@ router.get('/notifications/unread-count', getUnreadCountHandler);
 router.get('/notifications/preferences', getNotificationPreferencesHandler);
 router.get('/notifications/:id', getNotificationHandler);
 router.post('/notifications', createNotificationHandler);
+router.post('/notifications/pje/webhook', receivePjeNotificationHandler);
 router.post('/notifications/read-all', markAllNotificationsAsReadHandler);
 router.post('/notifications/:id/read', markNotificationAsReadHandler);
 router.post('/notifications/:id/unread', markNotificationAsUnreadHandler);
