@@ -40,6 +40,8 @@ npm run dev
 
 O módulo de templates de documentos consome a API disponível em `http://localhost:3001/api`. Caso o backend esteja em outra URL, defina a variável de ambiente `VITE_API_URL` antes de iniciar o projeto. Caso contrário, o frontend utilizará automaticamente o mesmo domínio em que estiver publicado.
 
+Para facilitar o desenvolvimento utilizando a API de produção, o projeto inclui um arquivo `.env.development` com `VITE_API_URL=https://jusconnec.quantumtecnologia.com.br`. Assim, ao executar `npm run dev`, o frontend apontará automaticamente para os endpoints em produção.
+
 ## Conversas (Chat Omnichannel)
 
 Este projeto inclui uma área de conversas inspirada na experiência de mensageria profissional:
