@@ -8,10 +8,60 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ExternalLink, Pencil, Trash2, Download, FilePlus2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ExternalLink, Pencil, Trash2, Download, FilePlus2, Loader2 } from 'lucide-react';
 import { fetchTemplates, deleteTemplate, updateTemplate, exportTemplatePdf } from '@/lib/templates';
+import { createDocxBlobFromHtml } from '@/lib/docx';
 import type { Template } from '@/types/templates';
 import type { TemplatePayload } from '@/types/templates';
+
+type ExportFormat = 'pdf' | 'docx';
+
+const INVALID_FILENAME_CHARS = /[<>:"/\\|?*]/g;
+const CONTROL_CHARACTER_RANGE = `${String.fromCharCode(0)}-${String.fromCharCode(31)}`;
+const CONTROL_CHARACTERS_PATTERN = new RegExp(`[${CONTROL_CHARACTER_RANGE}]`, 'g');
+
+function buildFileName(rawTitle: string | undefined, extension: ExportFormat): string {
+  const fallback = `modelo.${extension}`;
+  if (!rawTitle) {
+    return fallback;
+  }
+
+  const cleaned = rawTitle
+    .replace(CONTROL_CHARACTERS_PATTERN, ' ')
+    .replace(INVALID_FILENAME_CHARS, ' ')
+    .trim();
+  const normalized = cleaned.replace(/\s+/g, ' ');
+
+  const truncated = normalized.slice(0, 100);
+  const baseName = truncated.length > 0 ? truncated : 'modelo';
+  const withoutTrailingDots = baseName.replace(/\.+$/, '') || 'modelo';
+  return `${withoutTrailingDots.replace(/\s+/g, '-')}.${extension}`;
+}
+
+function triggerDownloadFromUrl(url: string, fileName: string) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  try {
+    triggerDownloadFromUrl(url, fileName);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 function getSnippet(html: string): string {
   return html
@@ -31,7 +81,7 @@ export default function LibraryPage() {
   const [typeFilter, setTypeFilter] = useState<'todos' | string>('todos');
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [exportingId, setExportingId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState<{ id: number; format: ExportFormat } | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteTemplate(id),
@@ -74,22 +124,42 @@ export default function LibraryPage() {
     );
   }, [templates, searchTerm, typeFilter]);
 
-  async function handleExport(template: Template) {
+  async function handleExportPdf(template: Template) {
+    const previewWindow = window.open('', '_blank', 'noopener,noreferrer');
+    const fileName = buildFileName(template.title, 'pdf');
     try {
-      setExportingId(template.id);
+      setExporting({ id: template.id, format: 'pdf' });
       const blob = await exportTemplatePdf(template.id);
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${template.title || 'template'}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+
+      if (previewWindow) {
+        previewWindow.document.title = fileName;
+        previewWindow.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } else {
+        triggerDownloadFromUrl(url, fileName);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
-      console.error('Erro ao exportar modelo', error);
+      console.error('Erro ao exportar modelo em PDF', error);
+      if (previewWindow) {
+        previewWindow.close();
+      }
     } finally {
-      setExportingId(null);
+      setExporting(null);
+    }
+  }
+
+  function handleExportDocx(template: Template) {
+    try {
+      setExporting({ id: template.id, format: 'docx' });
+      const htmlContent = template.content_html || '<p></p>';
+      const blob = createDocxBlobFromHtml(htmlContent);
+      downloadBlob(blob, buildFileName(template.title, 'docx'));
+    } catch (error) {
+      console.error('Erro ao exportar modelo em DOCX', error);
+    } finally {
+      setExporting(null);
     }
   }
 
@@ -259,21 +329,42 @@ export default function LibraryPage() {
                     Abrir
                   </Button>
                   <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleExport(template)}
-                          disabled={exportingId === template.id}
-                          aria-label="Baixar PDF"
+                    <DropdownMenu>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              disabled={exporting?.id === template.id}
+                              aria-label="Opções de download"
+                            >
+                              {exporting?.id === template.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent>Download</TooltipContent>
+                      </Tooltip>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem
+                          onClick={() => void handleExportPdf(template)}
+                          disabled={exporting?.id === template.id}
                         >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Baixar PDF</TooltipContent>
-                    </Tooltip>
+                          Abrir PDF em nova aba
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleExportDocx(template)}
+                          disabled={exporting?.id === template.id}
+                        >
+                          Baixar DOCX
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
