@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { setupMockChatServer } from "./services/mockServer";
 import {
@@ -14,18 +15,93 @@ import { NewConversationModal } from "./components/NewConversationModal";
 import { useChatMessages } from "./hooks/useChatMessages";
 import styles from "./ChatPage.module.css";
 
+type PendingConversation = {
+  name: string;
+  description?: string;
+  hasAttemptedCreate: boolean;
+};
+
 export const ChatPage = () => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
   const [searchValue, setSearchValue] = useState("");
   const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(
+    null,
+  );
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastContactQueryRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Inicializa o interceptador de fetch para simular uma API REST sem backend real.
     setupMockChatServer();
   }, []);
+
+  useEffect(() => {
+    const state = (location.state ?? null) as
+      | {
+          contactName?: string;
+          contactDescription?: string;
+          contactEmail?: string;
+          contactPhone?: string;
+        }
+      | null;
+
+    const searchParams = new URLSearchParams(location.search);
+    const queryName = searchParams.get("contato");
+    const normalizedName = (state?.contactName ?? queryName ?? "").trim();
+
+    if (!normalizedName) {
+      setPendingConversation(null);
+      if (!location.search) {
+        lastContactQueryRef.current = null;
+      }
+      return;
+    }
+
+    const normalizedLower = normalizedName.toLowerCase();
+
+    if (!state && lastContactQueryRef.current === normalizedLower) {
+      return;
+    }
+
+    const descriptionCandidates = [
+      state?.contactDescription,
+      state?.contactEmail,
+      state?.contactPhone,
+      searchParams.get("descricao") ?? undefined,
+    ].filter((item): item is string => !!item && item.trim().length > 0);
+
+    const uniqueDescription =
+      Array.from(new Set(descriptionCandidates.map((item) => item.trim()))).join(" · ") ||
+      undefined;
+
+    setPendingConversation((prev) => {
+      if (
+        prev &&
+        prev.name.toLowerCase() === normalizedLower &&
+        prev.description === uniqueDescription &&
+        !prev.hasAttemptedCreate
+      ) {
+        return prev;
+      }
+
+      return {
+        name: normalizedName,
+        description: uniqueDescription,
+        hasAttemptedCreate: false,
+      };
+    });
+
+    lastContactQueryRef.current = normalizedLower;
+
+    if (state) {
+      navigate(location.pathname + location.search, { replace: true });
+    }
+  }, [location.pathname, location.search, location.state, navigate]);
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations"],
@@ -78,6 +154,7 @@ export const ChatPage = () => {
       });
       setSelectedConversationId(createdConversation.id);
       setSearchValue("");
+      setPendingConversation(null);
     },
   });
 
@@ -139,6 +216,43 @@ export const ChatPage = () => {
     () => conversations.find((conversation) => conversation.id === selectedConversationId),
     [conversations, selectedConversationId],
   );
+
+  useEffect(() => {
+    if (!pendingConversation) {
+      return;
+    }
+
+    const normalized = pendingConversation.name.toLowerCase();
+    const existing = conversations.find(
+      (conversation) => conversation.name.toLowerCase() === normalized,
+    );
+
+    if (existing) {
+      setSelectedConversationId(existing.id);
+      markReadMutation.mutate(existing.id);
+      setPendingConversation(null);
+      return;
+    }
+
+    if (
+      !pendingConversation.hasAttemptedCreate &&
+      !createConversationMutation.isPending
+    ) {
+      setPendingConversation((prev) =>
+        prev ? { ...prev, hasAttemptedCreate: true } : prev,
+      );
+      createConversationMutation.mutate({
+        name: pendingConversation.name,
+        description: pendingConversation.description,
+      });
+    }
+  }, [
+    pendingConversation,
+    conversations,
+    markReadMutation,
+    createConversationMutation,
+    createConversationMutation.isPending,
+  ]);
 
   return (
     <div className={styles.layout}>
