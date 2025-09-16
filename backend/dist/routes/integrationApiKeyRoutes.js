@@ -1,21 +1,15 @@
-import { Router } from 'express';
-import {
-  createIntegrationApiKey,
-  deleteIntegrationApiKey,
-  listIntegrationApiKeys,
-  updateIntegrationApiKey,
-} from '../controllers/integrationApiKeyController';
-import { generateTextWithIntegration } from '../controllers/aiGenerationController';
-
-const router = Router();
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const integrationApiKeyController_1 = require("../controllers/integrationApiKeyController");
+const aiGenerationController_1 = require("../controllers/aiGenerationController");
+const router = (0, express_1.Router)();
 /**
  * @swagger
  * tags:
  *   - name: Integrações
  *     description: Gerenciamento de chaves de API para integrações de IA
  */
-
 /**
  * @swagger
  * /api/integrations/api-keys:
@@ -26,8 +20,7 @@ const router = Router();
  *       200:
  *         description: Lista de chaves de API
  */
-router.get('/integrations/api-keys', listIntegrationApiKeys);
-
+router.get('/integrations/api-keys', integrationApiKeyController_1.listIntegrationApiKeys);
 /**
  * @swagger
  * /api/integrations/api-keys:
@@ -62,8 +55,7 @@ router.get('/integrations/api-keys', listIntegrationApiKeys);
  *       201:
  *         description: Chave criada
  */
-router.post('/integrations/api-keys', createIntegrationApiKey);
-
+router.post('/integrations/api-keys', integrationApiKeyController_1.createIntegrationApiKey);
 /**
  * @swagger
  * /api/integrations/api-keys/{id}:
@@ -102,8 +94,7 @@ router.post('/integrations/api-keys', createIntegrationApiKey);
  *       404:
  *         description: Chave não encontrada
  */
-router.patch('/integrations/api-keys/:id', updateIntegrationApiKey);
-
+router.patch('/integrations/api-keys/:id', integrationApiKeyController_1.updateIntegrationApiKey);
 /**
  * @swagger
  * /api/integrations/api-keys/{id}:
@@ -122,8 +113,7 @@ router.patch('/integrations/api-keys/:id', updateIntegrationApiKey);
  *       404:
  *         description: Chave não encontrada
  */
-router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
-
+router.delete('/integrations/api-keys/:id', integrationApiKeyController_1.deleteIntegrationApiKey);
 /**
  * @swagger
  * /api/integrations/ai/generate:
@@ -155,6 +145,5 @@ router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
  *       404:
  *         description: Integração não encontrada ou inativa
  */
-router.post('/integrations/ai/generate', generateTextWithIntegration);
-
-export default router;
+router.post('/integrations/ai/generate', aiGenerationController_1.generateTextWithIntegration);
+exports.default = router;

@@ -148,7 +148,7 @@
     min-height: 297mm;
     font-size: 16px;
     line-height: 1.6;
-    color: hsl(var(--foreground));
+    color: inherit;
   }
 
   .wysiwyg-editor p {

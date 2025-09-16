@@ -39,6 +39,18 @@ export interface UpdateIntegrationApiKeyPayload {
   lastUsed?: string | null;
 }
 
+export interface GenerateAiTextPayload {
+  integrationId: number;
+  documentType: string;
+  prompt: string;
+}
+
+export interface GenerateAiTextResponse {
+  content: string;
+  documentType: string;
+  provider: ApiKeyProvider;
+}
+
 const API_KEYS_ENDPOINT = getApiUrl('integrations/api-keys');
 
 async function parseErrorMessage(response: Response): Promise<string> {
@@ -114,4 +126,21 @@ export async function deleteIntegrationApiKey(id: number): Promise<void> {
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
   }
+}
+
+export async function generateAiText(payload: GenerateAiTextPayload): Promise<GenerateAiTextResponse> {
+  const response = await fetch(getApiUrl('integrations/ai/generate'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  return (await response.json()) as GenerateAiTextResponse;
 }
