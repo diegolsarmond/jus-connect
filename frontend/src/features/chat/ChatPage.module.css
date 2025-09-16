@@ -1,8 +1,12 @@
 .layout {
   display: flex;
-  min-height: calc(100vh - 4rem);
+  width: 100%;
+  height: calc(100vh - 4rem);
+  max-height: calc(100vh - 4rem);
   background: hsl(var(--background));
   color: hsl(var(--foreground));
+  overflow: hidden;
+  min-height: 0;
 }
 
 @media (max-width: 900px) {
