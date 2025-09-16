@@ -243,7 +243,7 @@ export function Sidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
         <p className="px-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
-          © 2024 CRM Jurídico
+          © 2025 CRM Jurídico
         </p>
       </SidebarFooter>
       <SidebarRail />
