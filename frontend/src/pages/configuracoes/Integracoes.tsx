@@ -1,9 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   KeyRound,
   Link2,
   Plus,
-  RefreshCcw,
   ShieldCheck,
   Copy,
   Trash2,
@@ -32,6 +31,17 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import {
+  API_KEY_PROVIDER_LABELS,
+  API_KEY_PROVIDERS,
+  type ApiKeyEnvironment,
+  type ApiKeyProvider,
+  type IntegrationApiKey,
+  createIntegrationApiKey,
+  deleteIntegrationApiKey,
+  fetchIntegrationApiKeys,
+  updateIntegrationApiKey,
+} from "@/lib/integrationApiKeys";
 
 const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -48,17 +58,9 @@ const maskCredential = (value: string) => {
   return `${value.slice(0, 4)}••••${value.slice(-4)}`;
 };
 
-type ApiEnvironment = "producao" | "homologacao";
+type ApiEnvironment = ApiKeyEnvironment;
 
-type ApiKey = {
-  id: number;
-  name: string;
-  key: string;
-  environment: ApiEnvironment;
-  createdAt: string;
-  lastUsed: string | null;
-  active: boolean;
-};
+type ApiKey = IntegrationApiKey;
 
 type AuthType = "apiKey" | "oauth" | "basic" | "token" | "webhook";
 
@@ -163,31 +165,54 @@ const getDefaultWebhookForm = (): WebhookForm => ({
 
 export default function Integracoes() {
   const { toast } = useToast();
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([
-    {
-      id: 1,
-      name: "Integração ERP",
-      key: "jus_live_31bda8f08f1c4d39a7f3c82",
-      environment: "producao",
-      createdAt: "2024-01-10T10:15:00Z",
-      lastUsed: "2024-03-18T11:24:00Z",
-      active: true,
-    },
-    {
-      id: 2,
-      name: "Ambiente de testes",
-      key: "jus_test_92ab4c1de780fbc2a43e19b5",
-      environment: "homologacao",
-      createdAt: "2023-11-02T09:00:00Z",
-      lastUsed: "2024-03-01T08:00:00Z",
-      active: false,
-    },
-  ]);
+  const fallbackProvider = (API_KEY_PROVIDERS[0] ?? 'gemini') as ApiKeyProvider;
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
+  const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [pendingApiKeyId, setPendingApiKeyId] = useState<number | null>(null);
+  const [deletingKeyId, setDeletingKeyId] = useState<number | null>(null);
   const [newApiKey, setNewApiKey] = useState({
-    name: "",
+    provider: fallbackProvider,
     key: "",
     environment: "producao" as ApiEnvironment,
   });
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadApiKeys = async () => {
+      setIsLoadingApiKeys(true);
+      try {
+        const items = await fetchIntegrationApiKeys();
+        if (!isMounted) {
+          return;
+        }
+        setApiKeys(items);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        console.error("Failed to load integration API keys:", error);
+        toast({
+          title: "Não foi possível carregar as chaves",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Erro inesperado ao buscar as chaves de API.",
+          variant: "destructive",
+        });
+      } finally {
+        if (isMounted) {
+          setIsLoadingApiKeys(false);
+        }
+      }
+    };
+
+    loadApiKeys();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
   const [integrations, setIntegrations] = useState<Integration[]>([
     {
       id: 1,
@@ -253,64 +278,106 @@ export default function Integracoes() {
   const activeIntegrations = integrations.filter((integration) => integration.enabled).length;
   const activeWebhooks = webhooks.filter((webhook) => webhook.active).length;
 
-  const handleGenerateApiKey = () => {
-    const prefix = newApiKey.environment === "producao" ? "jus_live" : "jus_test";
-    const generated = `${prefix}_${generateRandomString(24)}`;
-    setNewApiKey((prev) => ({ ...prev, key: generated }));
-    toast({
-      title: "Nova chave gerada",
-      description: "Revise o valor antes de salvar a credencial.",
-    });
-  };
-
-  const handleAddApiKey = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddApiKey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newApiKey.name.trim() || !newApiKey.key.trim()) {
+    const trimmedKey = newApiKey.key.trim();
+    if (!trimmedKey) {
       toast({
         title: "Preencha os dados da chave",
-        description: "Informe um nome e o valor antes de salvar.",
+        description: "Informe o valor da chave antes de salvar.",
         variant: "destructive",
       });
       return;
     }
 
-    setApiKeys((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        name: newApiKey.name.trim(),
-        key: newApiKey.key.trim(),
+    setIsSavingApiKey(true);
+    try {
+      const created = await createIntegrationApiKey({
+        provider: newApiKey.provider,
+        key: trimmedKey,
         environment: newApiKey.environment,
-        createdAt: new Date().toISOString(),
-        lastUsed: null,
-        active: true,
-      },
-    ]);
-    toast({
-      title: "Chave adicionada",
-      description: "A credencial está ativa e pronta para uso.",
-    });
-    setNewApiKey({ name: "", key: "", environment: newApiKey.environment });
+      });
+      setApiKeys((prev) => [created, ...prev]);
+      const providerLabel = API_KEY_PROVIDER_LABELS[created.provider];
+      toast({
+        title: "Chave adicionada",
+        description: `${providerLabel} cadastrada com sucesso.`,
+      });
+      setNewApiKey((prev) => ({ ...prev, key: "" }));
+    } catch (error) {
+      toast({
+        title: "Não foi possível salvar a chave",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao registrar a chave de API.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingApiKey(false);
+    }
   };
 
-  const toggleApiKey = (id: number, value: boolean) => {
+  const toggleApiKey = async (id: number, value: boolean) => {
     const current = apiKeys.find((item) => item.id === id);
+    if (!current) {
+      return;
+    }
+
+    const providerLabel = API_KEY_PROVIDER_LABELS[current.provider];
+    const previousState = current.active;
+    setPendingApiKeyId(id);
     setApiKeys((prev) => prev.map((item) => (item.id === id ? { ...item, active: value } : item)));
-    toast({
-      title: value ? "Chave ativada" : "Chave desativada",
-      description: current
-        ? `${current.name} agora está ${value ? "ativa" : "inativa"}.`
-        : undefined,
-    });
+
+    try {
+      const updated = await updateIntegrationApiKey(id, { active: value });
+      setApiKeys((prev) => prev.map((item) => (item.id === id ? updated : item)));
+      toast({
+        title: value ? "Chave ativada" : "Chave desativada",
+        description: `${providerLabel} agora está ${value ? "ativa" : "inativa"}.`,
+      });
+    } catch (error) {
+      setApiKeys((prev) => prev.map((item) => (item.id === id ? { ...item, active: previousState } : item)));
+      toast({
+        title: "Não foi possível atualizar a chave",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao atualizar a chave de API.",
+        variant: "destructive",
+      });
+    } finally {
+      setPendingApiKeyId(null);
+    }
   };
 
-  const removeApiKey = (id: number) => {
+  const removeApiKey = async (id: number) => {
     const current = apiKeys.find((item) => item.id === id);
-    setApiKeys((prev) => prev.filter((item) => item.id !== id));
-    toast({
-      title: "Chave removida",
-      description: current ? `${current.name} foi removida.` : "Credencial excluída.",
-    });
+    if (!current) {
+      return;
+    }
+
+    const providerLabel = API_KEY_PROVIDER_LABELS[current.provider];
+    setDeletingKeyId(id);
+    try {
+      await deleteIntegrationApiKey(id);
+      setApiKeys((prev) => prev.filter((item) => item.id !== id));
+      toast({
+        title: "Chave removida",
+        description: `${providerLabel} foi removida.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Não foi possível remover a chave",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao excluir a chave de API.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingKeyId(null);
+    }
   };
 
   const copyCredential = async (value: string, label: string) => {
@@ -478,7 +545,7 @@ export default function Integracoes() {
                 Chaves de API
               </CardTitle>
               <CardDescription>
-                Gere, revogue e acompanhe o uso de credenciais utilizadas por integrações externas.
+                Cadastre, revogue e acompanhe o uso de credenciais utilizadas por integrações externas.
               </CardDescription>
             </div>
           </CardHeader>
@@ -486,13 +553,24 @@ export default function Integracoes() {
             <form onSubmit={handleAddApiKey} className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="api-key-name">Nome da chave</Label>
-                  <Input
-                    id="api-key-name"
-                    placeholder="Ex: Integração com ERP"
-                    value={newApiKey.name}
-                    onChange={(event) => setNewApiKey((prev) => ({ ...prev, name: event.target.value }))}
-                  />
+                  <Label htmlFor="api-key-provider">Nome da chave</Label>
+                  <Select
+                    value={newApiKey.provider}
+                    onValueChange={(value) =>
+                      setNewApiKey((prev) => ({ ...prev, provider: value as ApiKeyProvider }))
+                    }
+                  >
+                    <SelectTrigger id="api-key-provider">
+                      <SelectValue placeholder="Selecione um provedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {API_KEY_PROVIDERS.map((provider) => (
+                        <SelectItem key={provider} value={provider}>
+                          {API_KEY_PROVIDER_LABELS[provider]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Ambiente</Label>
@@ -527,14 +605,10 @@ export default function Integracoes() {
                     Armazene este valor com segurança e compartilhe apenas com sistemas confiáveis.
                   </p>
                 </div>
-                <div className="flex items-end gap-2">
-                  <Button type="button" variant="outline" onClick={handleGenerateApiKey} className="whitespace-nowrap">
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                    Gerar chave
-                  </Button>
-                  <Button type="submit" className="whitespace-nowrap">
+                <div className="flex items-end justify-end">
+                  <Button type="submit" className="whitespace-nowrap" disabled={isSavingApiKey}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Salvar chave
+                    {isSavingApiKey ? "Salvando..." : "Salvar chave"}
                   </Button>
                 </div>
               </div>
@@ -543,7 +617,7 @@ export default function Integracoes() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
+                  <TableHead>Provedor</TableHead>
                   <TableHead>Ambiente</TableHead>
                   <TableHead>Chave</TableHead>
                   <TableHead>Criada em</TableHead>
@@ -553,60 +627,75 @@ export default function Integracoes() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {apiKeys.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{environmentLabels[item.environment]}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm">{maskCredential(item.key)}</span>
-                    </TableCell>
-                    <TableCell>{formatDateTime(item.createdAt)}</TableCell>
-                    <TableCell>{formatDateTime(item.lastUsed)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant={item.active ? "default" : "outline"}
-                          className={item.active ? "bg-success text-success-foreground" : ""}
-                        >
-                          {item.active ? "Ativa" : "Inativa"}
-                        </Badge>
-                        <Switch
-                          checked={item.active}
-                          onCheckedChange={(checked) => toggleApiKey(item.id, checked)}
-                          aria-label={`Alterar status da chave ${item.name}`}
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => copyCredential(item.key, "Chave de API")}
-                        aria-label="Copiar chave"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => removeApiKey(item.id)}
-                        aria-label="Remover chave"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {apiKeys.length === 0 && (
+                {isLoadingApiKeys ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
-                      Nenhuma chave cadastrada até o momento.
+                      Carregando chaves cadastradas...
                     </TableCell>
                   </TableRow>
+                ) : (
+                  <>
+                    {apiKeys.map((item) => {
+                      const providerLabel = API_KEY_PROVIDER_LABELS[item.provider];
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{providerLabel}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{environmentLabels[item.environment]}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono text-sm">{maskCredential(item.key)}</span>
+                          </TableCell>
+                          <TableCell>{formatDateTime(item.createdAt)}</TableCell>
+                          <TableCell>{formatDateTime(item.lastUsed)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <Badge
+                                variant={item.active ? "default" : "outline"}
+                                className={item.active ? "bg-success text-success-foreground" : ""}
+                              >
+                                {item.active ? "Ativa" : "Inativa"}
+                              </Badge>
+                              <Switch
+                                checked={item.active}
+                                disabled={pendingApiKeyId === item.id}
+                                onCheckedChange={(checked) => void toggleApiKey(item.id, checked)}
+                                aria-label={`Alterar status da chave ${providerLabel}`}
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => copyCredential(item.key, "Chave de API")}
+                              aria-label="Copiar chave"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => void removeApiKey(item.id)}
+                              aria-label="Remover chave"
+                              disabled={deletingKeyId === item.id}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {apiKeys.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                          Nenhuma chave cadastrada até o momento.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 )}
               </TableBody>
             </Table>

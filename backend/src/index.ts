@@ -28,6 +28,7 @@ import tipoDocumentoRoutes from './routes/tipoDocumentoRoutes';
 import clienteDocumentoRoutes from './routes/clienteDocumentoRoutes';
 import supportRoutes from './routes/supportRoutes';
 import notificationRoutes from './routes/notificationRoutes';
+import integrationApiKeyRoutes from './routes/integrationApiKeyRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -113,6 +114,7 @@ app.use('/api', tarefaResponsavelRoutes);
 app.use('/api', clienteDocumentoRoutes);
 app.use('/api', supportRoutes);
 app.use('/api', notificationRoutes);
+app.use('/api', integrationApiKeyRoutes);
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);
