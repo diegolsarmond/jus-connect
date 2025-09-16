@@ -172,6 +172,7 @@ const router = Router();
  *         error:
  *           type: string
  *           description: Mensagem detalhando o motivo do erro
+
  *     WahaIntegrationConfig:
  *       type: object
  *       required:
@@ -227,6 +228,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+
 router.get('/conversations', listConversationsHandler);
 
 /**
@@ -489,6 +491,7 @@ router.post('/webhooks/waha', wahaWebhookHandler);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+
  */
 router.get('/integrations/waha', getWahaConfigHandler);
 
@@ -541,6 +544,7 @@ router.get('/integrations/waha', getWahaConfigHandler);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+
  */
 router.put('/integrations/waha', updateWahaConfigHandler);
 
