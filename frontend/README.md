@@ -1,105 +1,134 @@
-# Welcome to your Lovable project
+# JusConnect — Templates de Documentos
 
-## Project info
+Interface web para gerenciar a biblioteca de templates de documentos jurídicos. O módulo permite listar, criar e editar modelos com placeholders dinâmicos, salvando o conteúdo tanto em HTML quanto em JSON compatível com o editor.
 
-**URL**: https://lovable.dev/projects/cdd61cc2-8e74-4dda-ba23-09bb5b408f07
+## Principais recursos
 
-## How can I edit this code?
+- Biblioteca de modelos em grade com busca, filtro por tipo e ações (abrir, renomear, exportar PDF e excluir).
+- Editor WYSIWYG com aparência de página A4, toolbar completa (formatação, listas, alinhamento, undo/redo, imagem e tabela).
+- Menu de inserção de variáveis hierárquicas (Cliente, Processo, Escritório, Usuário e Data atual) com tags visuais `{{namespace.campo}}`.
+- Modal de metadados (título, tipo, área, complexidade, visibilidade e opções de cadastro automático).
+- Botão flutuante "Salvar novo modelo" que envia `content_html` e `content_editor_json` ao backend.
+- Autenticação mock com armazenamento do token JWT em `localStorage`.
 
-There are several ways of editing your application.
+## Tecnologias utilizadas
 
-**Use Lovable**
+- **React + Vite + TypeScript** para a camada SPA.
+- **Slate** como editor rich text. Escolhido pela flexibilidade para criar nodes customizados (ex.: placeholders `variable`) e controle completo de serialização.
+- **Slate History** para desfazer/refazer, **React Router** para roteamento e **Testing Library + Vitest** para testes de unidade.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/cdd61cc2-8e74-4dda-ba23-09bb5b408f07) and start prompting.
+## Pré-requisitos
 
-Changes made via Lovable will be committed automatically to this repo.
+- Node.js 18+
+- npm 9+
 
-**Use your preferred IDE**
+## Instalação e execução
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-## Documentos Padrão
-
-O módulo de templates de documentos consome a API disponível em `http://localhost:3001/api`. Caso o backend esteja em outra URL, defina a variável de ambiente `VITE_API_URL` antes de iniciar o projeto. Caso contrário, o frontend utilizará automaticamente o mesmo domínio em que estiver publicado.
-
-## Conversas (Chat Omnichannel)
-
-Este projeto inclui uma área de conversas inspirada na experiência de mensageria profissional:
-
-- **Atalhos de teclado**: `Ctrl + K` foca a busca de contatos, `Ctrl + N` abre a modal de nova conversa e `Esc` fecha modais em destaque.
-- **Lista de conversas**: filtragem em tempo real, badges de não lidos, ordenação por atividade recente e navegação por teclado.
-- **Janela de chat**: cabeçalho com ações rápidas, histórico virtualizado (renderiza apenas um bloco de mensagens para manter a performance) e carregamento incremental ao rolar para o topo.
-- **Entrada de mensagem**: suporte a emoji, anexos simulados, colagem de imagens e envio com Enter (Shift+Enter cria nova linha).
-- **Modal de dispositivos**: tela dedicada para pareamento por QR code, mantendo a interface acessível e responsiva.
-
-### Como rodar
-
-```sh
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-A aplicação estará disponível em `http://localhost:5173`. O servidor mockado de conversas é inicializado automaticamente no carregamento do módulo.
+A aplicação ficará disponível em `http://localhost:5173` (ou na porta definida em `VITE_PORT`).
 
-### Ajustando os dados fictícios
+### Variáveis de ambiente
 
-- **Conversas e mensagens**: edite `src/features/chat/data/chatData.json` para alterar contatos, mensagens e status.
-- **Comportamento da API**: endpoints simulados ficam em `src/features/chat/services/mockServer.ts`. Ali é possível ajustar paginação, ordenação e payloads retornados.
-- **Estilos do chat**: cada componente usa CSS Modules (por exemplo, `ChatSidebar.module.css`, `ChatWindow.module.css`). As variáveis de cor aproveitam o tema existente do CRM.
+Defina a URL base do backend (incluindo protocolo) antes de iniciar:
 
-Sempre que alterar os mocks, salve o arquivo e a aplicação será recarregada automaticamente pelo Vite.
+```bash
+BACKEND_URL=http://localhost:3001 npm run dev
+```
 
-**Edit a file directly in GitHub**
+O arquivo `vite.config.ts` expõe automaticamente variáveis que começam com `BACKEND_` ou `VITE_`. Caso esteja em produção, utilize `BACKEND_URL` para apontar para o domínio correto.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Testes automatizados
 
-**Use GitHub Codespaces**
+```bash
+cd frontend
+npm test
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Os testes utilizam Vitest + jsdom e cobrem a serialização das variáveis para o formato `{{namespace.campo}}`.
 
-## What technologies are used for this project?
+## Como funciona a integração
 
-This project is built with:
+- **Login**: formulário simples em `/login`. Envia credenciais para `/api/auth/login`. Caso o endpoint não exista, é gerado um token mock (`mock-token-<timestamp>`).
+- **Templates**: `GET /api/templates`, `GET /api/templates/:id`, `POST /api/templates`, `PUT /api/templates/:id`, `PATCH /api/templates/:id/rename`, `DELETE /api/templates/:id`.
+- **Variáveis**: `GET /api/variables` retorna a árvore de placeholders. Há um fallback local em `EditorPage.tsx` que garante os grupos obrigatórios (Cliente, Processo, Escritório, Usuário e Data atual).
+- **Exportação**: `GET /api/templates/:id/export` gera download de PDF.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Exemplo de requisições com `curl`
 
-## How can I deploy this project?
+```bash
+# Login
+curl -X POST "$BACKEND_URL/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"consultor@jus.com","password":"123456"}'
 
-Simply open [Lovable](https://lovable.dev/projects/cdd61cc2-8e74-4dda-ba23-09bb5b408f07) and click on Share -> Publish.
+# Listar templates
+curl "$BACKEND_URL/api/templates" -H "Authorization: Bearer <TOKEN>"
 
-## Can I connect a custom domain to my Lovable project?
+# Criar template
+curl -X POST "$BACKEND_URL/api/templates" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer <TOKEN>" \
+  -d '{
+    "name":"Contrato de Honorários",
+    "type":"Contrato",
+    "area":"Cível",
+    "complexity":"media",
+    "visibility":"PUBLIC",
+    "autoCreateClient":false,
+    "autoCreateProcess":false,
+    "contentHtml":"<p>Olá {{cliente.primeiro_nome}}</p>",
+    "contentEditorJson":"[]"
+  }'
+```
 
-Yes, you can!
+## Estrutura principal
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```
+frontend/
+├── src/
+│   ├── App.tsx                 # Rotas, provider de autenticação e layout com sidebar
+│   ├── pages/
+│   │   ├── LibraryPage.tsx     # Grade de templates
+│   │   └── EditorPage.tsx      # Editor WYSIWYG + serialização HTML/JSON
+│   ├── components/
+│   │   ├── EditorToolbar.tsx
+│   │   ├── InsertMenu.tsx
+│   │   ├── MetadataModal.tsx
+│   │   ├── SaveButton.tsx
+│   │   ├── Sidebar.tsx
+│   │   └── VariableTag.tsx
+│   └── services/api.ts         # Fetch com autenticação
+└── tests/
+    └── Editor.test.tsx
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+### Comentários importantes no código
+
+- `EditorPage.tsx`: há comentários explicitando onde estender a lista de variáveis (`fallbackVariables`) e como a função `serializeEditorValue` converte o conteúdo do Slate em HTML com placeholders `{{namespace.campo}}`.
+- `api.ts`: comentários indicam onde incluir novos namespaces/variáveis retornados pelo backend.
+
+## Scripts disponíveis
+
+- `npm run dev` — inicia o Vite em modo desenvolvimento.
+- `npm run build` — compila TypeScript e gera artefatos de produção.
+- `npm run test` — executa os testes com Vitest.
+- `npm run prisma:migrate` — placeholder para futuras migrações (backend).
+- `npm run seed` — placeholder para seeds do backend.
+
+## Acessibilidade e responsividade
+
+- Sidebar colapsável com foco por teclado.
+- Editor ocupa 100% da largura em telas menores.
+- Atalhos básicos habilitados (`Ctrl+B`, `Ctrl+I`, `Ctrl+U`).
+- Componentes possuem `aria-label` e modais utilizam `aria-modal`.
+
+## Próximos passos sugeridos
+
+- Conectar o botão "Salvar novo modelo" a endpoints reais de atualização/histórico.
+- Implementar pré-visualização real de PDF na biblioteca (pré-download).
+- Sincronizar variáveis disponíveis com o backend em tempo real (WebSocket) para evitar divergências.

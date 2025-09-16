@@ -1,0 +1,430 @@
+:root {
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1f2937;
+  background-color: #f3f4f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: #f9fafb;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-shell.collapsed .sidebar {
+  width: 64px;
+}
+
+.app-shell.collapsed .sidebar .sidebar-label {
+  display: none;
+}
+
+.sidebar {
+  width: 260px;
+  background: #111827;
+  color: #f9fafb;
+  transition: width 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar nav {
+  flex: 1;
+  padding: 8px 0;
+}
+
+.sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 4px 8px;
+}
+
+.sidebar nav a:hover,
+.sidebar nav a.active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.app-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.library-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.library-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.library-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.template-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.template-preview {
+  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+  padding: 16px;
+  min-height: 160px;
+  position: relative;
+}
+
+.template-preview h3 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+
+.template-preview p {
+  color: #6b7280;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.template-meta {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #f3f4f6;
+}
+
+.template-meta button {
+  background: none;
+  border: none;
+  color: #4b5563;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.template-meta button:hover {
+  background: #f3f4f6;
+}
+
+.editor-layout {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.editor-toolbar {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+}
+
+.editor-page-wrapper {
+  flex: 1;
+  min-width: 280px;
+}
+
+.editor-page {
+  margin: 24px auto;
+  background: #ffffff;
+  width: 794px;
+  max-width: 100%;
+  min-height: 1123px;
+  padding: 32px 40px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+  border: 1px solid #e5e7eb;
+  position: relative;
+}
+
+.editor-page:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+.editor-content {
+  min-height: 1000px;
+  outline: none;
+  line-height: 1.6;
+  font-size: 16px;
+  color: #111827;
+}
+
+.variable-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #34d399;
+  border-radius: 16px;
+  padding: 2px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.variable-tag[data-selected="true"] {
+  background: #059669;
+  color: #f9fafb;
+}
+
+.insert-menu {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.1);
+  min-width: 240px;
+}
+
+.insert-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.insert-menu li button {
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.insert-menu li button:hover {
+  background: #f3f4f6;
+}
+
+.metadata-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.metadata-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  width: min(480px, 90vw);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.metadata-modal h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.metadata-modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.metadata-modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.metadata-modal input,
+.metadata-modal select,
+.metadata-modal textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.metadata-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.save-button {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  background: #4f46e5;
+  color: #ffffff;
+  border: none;
+  border-radius: 28px;
+  padding: 16px 24px;
+  font-size: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 20px 40px rgba(99, 102, 241, 0.35);
+  z-index: 30;
+}
+
+.save-button:hover {
+  background: #4338ca;
+}
+
+.toolbar-group {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar-button {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.toolbar-button[aria-pressed="true"] {
+  background: #e0e7ff;
+  border-color: #6366f1;
+}
+
+.toolbar-select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+@media (max-width: 1024px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+  }
+
+  .sidebar nav {
+    display: flex;
+    flex: 1;
+  }
+
+  .sidebar nav a {
+    flex-direction: column;
+    font-size: 12px;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
+
+  .editor-layout {
+    flex-direction: column;
+  }
+
+  .editor-page {
+    width: 100%;
+    min-height: auto;
+  }
+
+  .editor-content {
+    min-height: 480px;
+  }
+
+  .save-button {
+    right: 16px;
+    bottom: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .library-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .library-filters {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+}
