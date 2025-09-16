@@ -60,6 +60,7 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/mo
 const GEMINI_MODEL_BY_ENVIRONMENT: Record<ApiKeyEnvironment, string> = {
   producao: 'gemini-2.5-flash',
   homologacao: 'gemini-2.5-flash',
+
 };
 
 function mapGeminiStatusToHttp(status: number): number {
@@ -300,9 +301,12 @@ export async function generateDocumentWithGemini({
   const model = GEMINI_MODEL_BY_ENVIRONMENT[environment] ?? GEMINI_MODEL_BY_ENVIRONMENT.producao;
   const url = `${GEMINI_API_BASE_URL}/${model}:generateContent`;
 
+
   const requestBody = {
     contents: [
       {
+        role: 'user',
+
         parts: [{ text: buildGeminiPrompt(documentType, prompt) }],
       },
     ],
@@ -310,6 +314,7 @@ export async function generateDocumentWithGemini({
       thinkingConfig: {
         thinkingBudget: 0,
       },
+
     },
   };
 
@@ -320,6 +325,7 @@ export async function generateDocumentWithGemini({
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': trimmedKey,
+
       },
       body: JSON.stringify(requestBody),
     })) as FetchResponseLike;

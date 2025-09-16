@@ -7,6 +7,7 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/mo
 const GEMINI_MODEL_BY_ENVIRONMENT = {
     producao: 'gemini-2.5-flash',
     homologacao: 'gemini-2.5-flash',
+
 };
 const mapGeminiStatusToHttp = (status) => {
     if (status === 401 || status === 403) {
@@ -212,6 +213,7 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
     const requestBody = {
         contents: [
             {
+
                 parts: [{ text: buildGeminiPrompt(documentType, prompt) }],
             },
         ],
@@ -219,6 +221,7 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
             thinkingConfig: {
                 thinkingBudget: 0,
             },
+
         },
     };
     let response;
@@ -228,6 +231,7 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
             headers: {
                 'Content-Type': 'application/json',
                 'x-goog-api-key': trimmedKey,
+
             },
             body: JSON.stringify(requestBody),
         });
