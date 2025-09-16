@@ -31,6 +31,8 @@ O arquivo `sql/templates.sql` contém a estrutura mínima para as tabelas `templ
 
 O script `sql/support.sql` cria a tabela `support_requests` utilizada pelo módulo de suporte.
 
+O script `sql/integration_api_keys.sql` define a tabela `integration_api_keys`, responsável por armazenar as chaves de API configuradas na tela de Integrações.
+
 ## CORS
 
 Por padrão o backend libera requisições vindas de `localhost` e do domínio `https://jusconnec.quantumtecnologia.com.br`. Caso precise habilitar outros hosts, defina a variável de ambiente `CORS_ALLOWED_ORIGINS` com uma lista de URLs separadas por vírgula:

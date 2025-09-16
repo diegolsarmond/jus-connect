@@ -1,0 +1,126 @@
+import { Router } from 'express';
+import {
+  createIntegrationApiKey,
+  deleteIntegrationApiKey,
+  listIntegrationApiKeys,
+  updateIntegrationApiKey,
+} from '../controllers/integrationApiKeyController';
+
+const router = Router();
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Integrações
+ *     description: Gerenciamento de chaves de API para integrações de IA
+ */
+
+/**
+ * @swagger
+ * /api/integrations/api-keys:
+ *   get:
+ *     summary: Lista as chaves de API configuradas
+ *     tags: [Integrações]
+ *     responses:
+ *       200:
+ *         description: Lista de chaves de API
+ */
+router.get('/integrations/api-keys', listIntegrationApiKeys);
+
+/**
+ * @swagger
+ * /api/integrations/api-keys:
+ *   post:
+ *     summary: Cadastra uma nova chave de API
+ *     tags: [Integrações]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - provider
+ *               - key
+ *               - environment
+ *             properties:
+ *               provider:
+ *                 type: string
+ *                 enum: [gemini, openai]
+ *               key:
+ *                 type: string
+ *               environment:
+ *                 type: string
+ *                 enum: [producao, homologacao]
+ *               active:
+ *                 type: boolean
+ *               lastUsed:
+ *                 type: string
+ *                 format: date-time
+ *     responses:
+ *       201:
+ *         description: Chave criada
+ */
+router.post('/integrations/api-keys', createIntegrationApiKey);
+
+/**
+ * @swagger
+ * /api/integrations/api-keys/{id}:
+ *   patch:
+ *     summary: Atualiza uma chave de API existente
+ *     tags: [Integrações]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               provider:
+ *                 type: string
+ *                 enum: [gemini, openai]
+ *               key:
+ *                 type: string
+ *               environment:
+ *                 type: string
+ *                 enum: [producao, homologacao]
+ *               active:
+ *                 type: boolean
+ *               lastUsed:
+ *                 type: string
+ *                 format: date-time
+ *     responses:
+ *       200:
+ *         description: Chave atualizada
+ *       404:
+ *         description: Chave não encontrada
+ */
+router.patch('/integrations/api-keys/:id', updateIntegrationApiKey);
+
+/**
+ * @swagger
+ * /api/integrations/api-keys/{id}:
+ *   delete:
+ *     summary: Remove uma chave de API
+ *     tags: [Integrações]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       204:
+ *         description: Chave removida com sucesso
+ *       404:
+ *         description: Chave não encontrada
+ */
+router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
+
+export default router;
