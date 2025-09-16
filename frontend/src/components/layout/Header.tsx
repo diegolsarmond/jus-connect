@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModeToggle } from "@/components/ui/mode-toggle";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,15 +19,18 @@ export function Header() {
   const navigate = useNavigate();
 
   return (
-    <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between">
+    <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between gap-4">
       {/* Search */}
-      <div className="flex-1 max-w-md">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Pesquisar clientes, processos..."
-            className="pl-9 bg-muted/50"
-          />
+      <div className="flex flex-1 items-center gap-3">
+        <SidebarTrigger className="text-muted-foreground" />
+        <div className="flex-1 max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Pesquisar clientes, processos..."
+              className="pl-9 bg-muted/50"
+            />
+          </div>
         </div>
       </div>
 

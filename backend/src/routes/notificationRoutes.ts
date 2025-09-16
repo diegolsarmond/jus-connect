@@ -10,6 +10,7 @@ import {
   getUnreadCountHandler,
   getNotificationPreferencesHandler,
   updateNotificationPreferencesHandler,
+  receivePjeNotificationHandler,
 } from '../controllers/notificationController';
 import { getNotificationProvider } from '../services/notificationProviders/registry';
 import { NotificationProviderError } from '../services/notificationProviders/types';
@@ -55,6 +56,7 @@ router.post('/notifications/webhooks/:providerId?', async (req, res) => {
     res.status(500).json({ error: 'Failed to process notification webhook' });
   }
 });
+router.post('/notifications/pje/webhook', receivePjeNotificationHandler);
 router.post('/notifications/read-all', markAllNotificationsAsReadHandler);
 router.post('/notifications/:id/read', markNotificationAsReadHandler);
 router.post('/notifications/:id/unread', markNotificationAsUnreadHandler);
