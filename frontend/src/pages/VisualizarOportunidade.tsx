@@ -936,7 +936,7 @@ export default function VisualizarOportunidade() {
         </CardHeader>
 
         <CardContent>
-          <ScrollArea className="max-h-[130vh]">
+          <ScrollArea className="max-h-[1300vh]">
             <div className="space-y-6">
               {/* percorre as seções definidas e exibe apenas campos que existam */}
               {sectionsDef.map((section) => {
