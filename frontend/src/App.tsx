@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { CRMLayout } from "@/components/layout/CRMLayout";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
@@ -94,7 +94,11 @@ const App = () => (
             <Route path="/processos" element={<Processos />} />
             <Route path="/intimacoes" element={<Intimacoes />} />
             <Route path="/documentos" element={<DocumentTemplates />} />
+            <Route path="/documentos/editor" element={<Navigate to="/documentos" replace />} />
             <Route path="/documentos/editor/:id" element={<TemplateEditor />} />
+            <Route path="/documentos/:id" element={<DocumentEditorRedirect />} />
+            <Route path="/editor/:id" element={<DocumentEditorRedirect />} />
+            <Route path="/editor" element={<Navigate to="/documentos" replace />} />
             <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/meu-perfil" element={<MeuPerfil />} />
@@ -182,3 +186,13 @@ const App = () => (
 );
 
 export default App;
+
+function DocumentEditorRedirect() {
+  const { id } = useParams<{ id?: string }>();
+
+  if (!id) {
+    return <Navigate to="/documentos" replace />;
+  }
+
+  return <Navigate to={`/documentos/editor/${id}`} replace />;
+}
