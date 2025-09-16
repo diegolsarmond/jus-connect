@@ -1,31 +1,84 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Check, Loader2, AlertTriangle } from "lucide-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  Crown,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type Recorrencia = "mensal" | "anual" | "nenhuma";
+type PricingMode = "mensal" | "anual";
 
 type PlanoDetalhe = {
   id: number;
   nome: string;
-  preco: string;
-  valorNumerico: number | null;
   ativo: boolean;
   descricao: string;
   recorrencia: Recorrencia | null;
   qtdeUsuarios: number | null;
   recursos: string[];
   dataCadastro: Date | null;
+  valorMensal: number | null;
+  valorAnual: number | null;
+  precoMensal: string;
+  precoAnual: string | null;
+  descontoAnualPercentual: number | null;
+  economiaAnual: number | null;
+  economiaAnualFormatada: string | null;
 };
 
 type UsageMetrics = {
   usuariosAtivos: number | null;
   clientesAtivos: number | null;
+};
+
+type UsageItem = {
+  label: string;
+  current: number | null;
+  limit?: number | null;
+};
+
+type PricingDisplay = {
+  mainPrice: string;
+  cadenceLabel: string;
+  helper?: string | null;
+  savingsLabel?: string | null;
+  discountBadge?: string | null;
 };
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -39,6 +92,8 @@ const recorrenciaLabels: Record<Recorrencia, string> = {
   anual: "Anual",
   nenhuma: "Sem recorrência",
 };
+
+const ANNUAL_DISCOUNT_PERCENTAGE = 17;
 
 function normalizeApiRows(data: unknown): unknown[] {
   if (Array.isArray(data)) {
@@ -137,7 +192,102 @@ function formatCurrencyValue(value: unknown): string {
     return value.trim();
   }
 
-  return "Valor não disponível";
+  return "Sob consulta";
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function computeAnnualPricing(valorMensal: number | null) {
+  if (valorMensal === null) {
+    return {
+      valorAnual: null,
+      precoAnual: null,
+      economiaAnual: null,
+      economiaAnualFormatada: null,
+      descontoPercentual: null,
+    } as const;
+  }
+
+  const bruto = valorMensal * 12;
+  const desconto = bruto * (ANNUAL_DISCOUNT_PERCENTAGE / 100);
+  const valorAnual = roundCurrency(bruto - desconto);
+  const economiaAnual = roundCurrency(desconto);
+
+  return {
+    valorAnual,
+    precoAnual: currencyFormatter.format(valorAnual),
+    economiaAnual,
+    economiaAnualFormatada: economiaAnual > 0 ? currencyFormatter.format(economiaAnual) : null,
+    descontoPercentual: ANNUAL_DISCOUNT_PERCENTAGE,
+  } as const;
+}
+
+function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): PricingDisplay {
+  const fallback = "Sob consulta";
+
+  if (!plan) {
+    return {
+      mainPrice: fallback,
+      cadenceLabel: mode === "anual" ? "por ano" : "por mês",
+      helper: null,
+      savingsLabel: null,
+      discountBadge: null,
+    };
+  }
+
+  if (mode === "anual") {
+    const mainPrice = plan.precoAnual ?? plan.precoMensal ?? fallback;
+    const helper =
+      plan.valorAnual !== null && plan.valorMensal !== null
+        ? `Equivalente a ${currencyFormatter.format(plan.valorAnual / 12)}/mês`
+        : plan.precoMensal
+          ? `Plano mensal: ${plan.precoMensal}`
+          : null;
+
+    const savingsLabel = plan.economiaAnualFormatada
+      ? `Economize ${plan.economiaAnualFormatada} em relação à cobrança mensal`
+      : null;
+
+    const discountBadge =
+      plan.descontoAnualPercentual !== null ? `-${plan.descontoAnualPercentual}%` : null;
+
+    return {
+      mainPrice,
+      cadenceLabel: "por ano",
+      helper,
+      savingsLabel,
+      discountBadge,
+    };
+  }
+
+  const mainPrice = plan.precoMensal ?? fallback;
+  const helper = plan.precoAnual
+    ? `Ou ${plan.precoAnual}/ano${
+        plan.descontoAnualPercentual !== null ? ` (${plan.descontoAnualPercentual}% off)` : ""
+      }`
+    : plan.recorrencia && plan.recorrencia !== "nenhuma"
+      ? `Cobrança ${recorrenciaLabels[plan.recorrencia].toLowerCase()}`
+      : "Cobrança sob demanda";
+
+  const savingsLabel =
+    plan.precoAnual && plan.economiaAnualFormatada
+      ? `Economize ${plan.economiaAnualFormatada} escolhendo o plano anual`
+      : null;
+
+  const discountBadge =
+    plan.precoAnual && plan.descontoAnualPercentual !== null
+      ? `-${plan.descontoAnualPercentual}%`
+      : null;
+
+  return {
+    mainPrice,
+    cadenceLabel: "por mês",
+    helper,
+    savingsLabel,
+    discountBadge,
+  };
 }
 
 function calculateNextBilling(recorrencia: Recorrencia | null, dataCadastro: Date | null): string | null {
@@ -224,17 +374,17 @@ function findPlanFromEmpresa(planos: PlanoDetalhe[], empresasRows: unknown[]): P
   return null;
 }
 
-type UsageItem = {
-  label: string;
-  current: number | null;
-  limit?: number | null;
-};
-
 export default function MeuPlano() {
   const apiBaseUrl = getApiBaseUrl();
+  const { toast } = useToast();
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [plano, setPlano] = useState<PlanoDetalhe | null>(null);
+  const [planoAtual, setPlanoAtual] = useState<PlanoDetalhe | null>(null);
+  const [previewPlano, setPreviewPlano] = useState<PlanoDetalhe | null>(null);
+  const [planosDisponiveis, setPlanosDisponiveis] = useState<PlanoDetalhe[]>([]);
+  const [pricingMode, setPricingMode] = useState<PricingMode>("mensal");
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [metrics, setMetrics] = useState<UsageMetrics>({ usuariosAtivos: null, clientesAtivos: null });
 
   useEffect(() => {
@@ -309,8 +459,9 @@ export default function MeuPlano() {
             const qtdeUsuarios = toNumber(raw.qtde_usuarios);
             const recursos = parseRecursos(raw.recursos);
             const dataCadastro = parseDate(raw.datacadastro);
-            const valorNumerico = toNumber(raw.valor);
-            const preco = formatCurrencyValue(raw.valor);
+            const valorMensal = toNumber(raw.valor);
+            const precoMensal = valorMensal !== null ? currencyFormatter.format(valorMensal) : formatCurrencyValue(raw.valor);
+            const annualPricing = computeAnnualPricing(valorMensal);
 
             return {
               id: idNumber,
@@ -321,8 +472,13 @@ export default function MeuPlano() {
               qtdeUsuarios: qtdeUsuarios ?? null,
               recursos,
               dataCadastro,
-              preco,
-              valorNumerico,
+              valorMensal,
+              valorAnual: annualPricing.valorAnual,
+              precoMensal,
+              precoAnual: annualPricing.precoAnual,
+              descontoAnualPercentual: annualPricing.descontoPercentual,
+              economiaAnual: annualPricing.economiaAnual,
+              economiaAnualFormatada: annualPricing.economiaAnualFormatada,
             } satisfies PlanoDetalhe;
           })
           .filter((item): item is PlanoDetalhe => item !== null);
@@ -348,14 +504,19 @@ export default function MeuPlano() {
         }
 
         if (!disposed) {
-          setPlano(planoSelecionado);
+          setPlanosDisponiveis(parsedPlanos);
+          setPlanoAtual(planoSelecionado);
+          setPreviewPlano(null);
+          setPricingMode(planoSelecionado.recorrencia === "anual" ? "anual" : "mensal");
           setMetrics({ usuariosAtivos: usuariosCount, clientesAtivos });
         }
       } catch (err) {
         console.error(err);
         if (!disposed) {
           setError(err instanceof Error ? err.message : "Não foi possível carregar os dados do plano.");
-          setPlano(null);
+          setPlanosDisponiveis([]);
+          setPlanoAtual(null);
+          setPreviewPlano(null);
           setMetrics({ usuariosAtivos: null, clientesAtivos: null });
         }
       } finally {
@@ -372,25 +533,35 @@ export default function MeuPlano() {
     };
   }, [apiBaseUrl]);
 
+  const planoExibido = previewPlano ?? planoAtual;
+
+  useEffect(() => {
+    if (pricingMode === "anual" && planoExibido && !planoExibido.precoAnual) {
+      setPricingMode("mensal");
+    }
+  }, [pricingMode, planoExibido]);
+
+  const pricingDisplay = useMemo(() => buildPricingDisplay(planoExibido, pricingMode), [planoExibido, pricingMode]);
+
   const proximaCobranca = useMemo(() => {
-    if (!plano) {
+    if (!planoAtual) {
       return null;
     }
 
-    return calculateNextBilling(plano.recorrencia, plano.dataCadastro);
-  }, [plano]);
+    return calculateNextBilling(planoAtual.recorrencia, planoAtual.dataCadastro);
+  }, [planoAtual]);
 
   const usageItems = useMemo<UsageItem[]>(() => {
-    if (!plano) {
+    if (!planoExibido) {
       return [];
     }
 
     const items: UsageItem[] = [];
-    if (plano.qtdeUsuarios !== null || metrics.usuariosAtivos !== null) {
+    if (planoExibido.qtdeUsuarios !== null || metrics.usuariosAtivos !== null) {
       items.push({
         label: "Usuários ativos",
         current: metrics.usuariosAtivos,
-        limit: plano.qtdeUsuarios,
+        limit: planoExibido.qtdeUsuarios,
       });
     }
     if (metrics.clientesAtivos !== null) {
@@ -401,21 +572,65 @@ export default function MeuPlano() {
     }
 
     return items;
-  }, [metrics.clientesAtivos, metrics.usuariosAtivos, plano]);
+  }, [metrics.clientesAtivos, metrics.usuariosAtivos, planoExibido]);
 
-  const beneficios = plano?.recursos ?? [];
+  const beneficios = planoExibido?.recursos ?? [];
+
+  const destaquePlanoId = useMemo(() => {
+    if (planosDisponiveis.length === 0) {
+      return null;
+    }
+
+    const sorted = [...planosDisponiveis]
+      .filter((item) => item.valorMensal !== null)
+      .sort((a, b) => (b.valorMensal ?? 0) - (a.valorMensal ?? 0));
+
+    return sorted[0]?.id ?? null;
+  }, [planosDisponiveis]);
+
+  const handlePreviewPlan = useCallback(
+    (plan: PlanoDetalhe) => {
+      setPreviewPlano(plan);
+      setDialogOpen(false);
+      setPricingMode((current) => {
+        if (current === "anual" && !plan.precoAnual) {
+          return "mensal";
+        }
+        return current;
+      });
+      toast({
+        title: `Pré-visualizando ${plan.nome}`,
+        description:
+          "Os valores e limites exibidos foram atualizados com base neste plano. Finalize em Configurações > Planos para confirmar a alteração.",
+      });
+    },
+    [toast],
+  );
+
+  const resetPreview = useCallback(() => {
+    setPreviewPlano(null);
+    if (planoAtual) {
+      setPricingMode(planoAtual.recorrencia === "anual" ? "anual" : "mensal");
+    }
+    toast({
+      title: "Plano atual restabelecido",
+      description: "Você voltou a visualizar o plano contratado atualmente.",
+    });
+  }, [planoAtual, toast]);
+
+  const hasAnnualPricing = Boolean(planoExibido?.precoAnual);
 
   return (
     <div className="p-6 space-y-6">
-      <div>
+      <div className="space-y-2">
         <h1 className="text-3xl font-bold">Meu Plano</h1>
         <p className="text-muted-foreground">
-          Acompanhe as informações do plano contratado e o consumo dos principais recursos.
+          Acompanhe as informações do plano contratado e compare facilmente com outras opções disponíveis.
         </p>
       </div>
 
       {loading ? (
-        <Card>
+        <Card className="border-dashed">
           <CardContent className="flex items-center gap-3 py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Carregando informações do plano…</span>
@@ -427,7 +642,7 @@ export default function MeuPlano() {
           <AlertTitle>Não foi possível carregar o plano</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      ) : !plano ? (
+      ) : !planoAtual ? (
         <Alert>
           <AlertTitle>Nenhum plano encontrado</AlertTitle>
           <AlertDescription>
@@ -436,113 +651,323 @@ export default function MeuPlano() {
         </Alert>
       ) : (
         <>
-          <Card>
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <CardTitle className="text-2xl">{plano.nome}</CardTitle>
-                <p className="text-muted-foreground">
-                  {plano.preco}
-                  {plano.recorrencia && plano.recorrencia !== "nenhuma"
-                    ? ` · Cobrança ${recorrenciaLabels[plano.recorrencia].toLowerCase()}`
-                    : ""}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant={plano.ativo ? "secondary" : "outline"}>{plano.ativo ? "Ativo" : "Inativo"}</Badge>
-                {plano.recorrencia && <Badge variant="outline">{recorrenciaLabels[plano.recorrencia]}</Badge>}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {plano.descricao && <p className="text-sm text-muted-foreground">{plano.descricao}</p>}
-              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                {plano.dataCadastro && (
-                  <span>
-                    Assinado em{" "}
-                    <span className="font-medium text-foreground">{formatDate(plano.dataCadastro)}</span>
-                  </span>
-                )}
-                {proximaCobranca ? (
-                  <span>
-                    Próxima cobrança em{" "}
-                    <span className="font-medium text-foreground">{proximaCobranca}</span>
-                  </span>
-                ) : (
-                  <span className="font-medium text-foreground">Cobrança sob demanda</span>
-                )}
-              </div>
-              <Button asChild>
-                <Link to="/configuracoes/planos">Alterar plano</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          {previewPlano && (
+            <Alert>
+              <Sparkles className="h-4 w-4 text-primary" />
+              <AlertTitle>Pré-visualizando o plano {previewPlano.nome}</AlertTitle>
+              <AlertDescription>
+                Os limites e valores abaixo refletem uma simulação. O plano atual permanece <strong>{planoAtual.nome}</strong>.
+                Para contratar definitivamente, acesse <strong>Configurações &gt; Planos</strong>.
+              </AlertDescription>
+            </Alert>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Utilização dos recursos</CardTitle>
-              <CardDescription>Acompanhe o consumo dos principais limites do plano</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {usageItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Ainda não há métricas disponíveis para este plano.
-                </p>
-              ) : (
-                usageItems.map((item) => {
-                  const limit = item.limit ?? null;
-                  const hasLimit = limit !== null && Number.isFinite(limit) && limit > 0;
-                  const hasCurrent = typeof item.current === "number" && Number.isFinite(item.current);
-                  const progress = hasLimit && hasCurrent ? Math.min(100, Math.round((item.current / limit) * 100)) : 0;
-                  return (
-                    <div key={item.label} className="space-y-1.5">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>{item.label}</span>
-                        <span className="font-medium text-foreground">
-                          {hasLimit
-                            ? `${hasCurrent ? item.current : "—"}/${limit}`
-                            : hasCurrent
-                              ? item.current
-                              : "—"}
-                        </span>
-                      </div>
-                      {hasLimit ? (
-                        hasCurrent ? (
-                          <Progress value={progress} aria-label={`Consumo de ${item.label}`} />
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            Dados indisponíveis para este recurso no momento.
-                          </p>
-                        )
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Sem limite definido para este recurso.</p>
-                      )}
+          <Card className="relative overflow-hidden border-none bg-gradient-to-br from-primary/5 via-background to-background shadow-xl">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
+              <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-primary/10 blur-3xl" />
+            </div>
+            <CardContent className="relative z-10 space-y-8 p-6 md:p-10">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+                      {previewPlano ? "Pré-visualização" : "Plano atual"}
+                    </Badge>
+                    <Badge variant={planoExibido?.ativo ? "secondary" : "outline"}>
+                      {planoExibido?.ativo ? "Disponível" : "Indisponível"}
+                    </Badge>
+                    {planoExibido?.recorrencia && (
+                      <Badge variant="outline">{recorrenciaLabels[planoExibido.recorrencia]}</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-3xl font-semibold tracking-tight md:text-4xl">
+                    <Sparkles className="h-7 w-7 text-primary" />
+                    <span>{planoExibido?.nome}</span>
+                  </div>
+                  <p className="max-w-xl text-sm text-muted-foreground">
+                    {planoExibido?.descricao ||
+                      "Uma combinação equilibrada de recursos para manter a operação do seu time em alta performance."}
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-start gap-4 lg:items-end">
+                  <ToggleGroup
+                    type="single"
+                    value={pricingMode}
+                    onValueChange={(value) => value && setPricingMode(value as PricingMode)}
+                    variant="outline"
+                    className="rounded-full border border-primary/30 bg-background/60 p-1"
+                  >
+                    <ToggleGroupItem value="mensal" className="rounded-full px-4 py-2 text-sm">Mensal</ToggleGroupItem>
+                    <ToggleGroupItem value="anual" className="rounded-full px-4 py-2 text-sm" disabled={!hasAnnualPricing}>
+                      Anual
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  <div className="flex flex-col items-start gap-2 lg:items-end">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-4xl font-bold md:text-5xl">{pricingDisplay.mainPrice}</span>
+                      <span className="text-sm font-medium text-muted-foreground">{pricingDisplay.cadenceLabel}</span>
                     </div>
-                  );
-                })
-              )}
+                    {pricingDisplay.discountBadge && (
+                      <Badge variant="secondary" className="rounded-full bg-primary/15 text-primary">
+                        {pricingDisplay.discountBadge} na modalidade anual
+                      </Badge>
+                    )}
+                    {pricingDisplay.savingsLabel && (
+                      <p className="text-xs font-medium text-primary/80">{pricingDisplay.savingsLabel}</p>
+                    )}
+                    {pricingDisplay.helper && (
+                      <p className="text-xs text-muted-foreground">{pricingDisplay.helper}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="border-primary/20" />
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-primary">Plano contratado</p>
+                  <p className="text-sm font-semibold text-foreground">{planoAtual.nome}</p>
+                  {previewPlano && (
+                    <p className="text-xs text-muted-foreground">Visualizando {planoExibido?.nome}</p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Próxima cobrança</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {proximaCobranca ?? "Cobrança sob demanda"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Referente ao plano atual</p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Usuários incluídos</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {planoExibido?.qtdeUsuarios ? `${planoExibido.qtdeUsuarios} usuários` : "Ilimitado"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {previewPlano ? "Limite estimado para o plano em pré-visualização" : "Limite do plano atual"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recorrência</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {planoExibido?.recorrencia
+                      ? recorrenciaLabels[planoExibido.recorrencia]
+                      : "Cobrança sob demanda"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {previewPlano ? "Configuração sugerida para o plano escolhido" : "Configuração atual"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="lg" className="rounded-full shadow-lg shadow-primary/20">
+                      Alterar plano
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-4xl">
+                    <DialogHeader>
+                      <DialogTitle>Escolha um novo plano</DialogTitle>
+                      <DialogDescription>
+                        Compare os planos disponíveis e pré-visualize como cada opção se encaixa nas necessidades do seu time.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-6">
+                      <ToggleGroup
+                        type="single"
+                        value={pricingMode}
+                        onValueChange={(value) => value && setPricingMode(value as PricingMode)}
+                        variant="outline"
+                        className="mx-auto w-fit rounded-full border border-primary/20 bg-background p-1"
+                      >
+                        <ToggleGroupItem value="mensal" className="rounded-full px-4 py-2 text-sm">Mensal</ToggleGroupItem>
+                        <ToggleGroupItem value="anual" className="rounded-full px-4 py-2 text-sm">Anual</ToggleGroupItem>
+                      </ToggleGroup>
+                      <Carousel className="relative">
+                        <CarouselContent>
+                          {planosDisponiveis.map((plano) => {
+                            const carouselPricing = buildPricingDisplay(plano, pricingMode);
+                            const isAtual = planoAtual.id === plano.id;
+                            const isPreviewing = previewPlano?.id === plano.id;
+                            const isSelecionado = previewPlano ? isPreviewing : isAtual;
+                            const isDestaque = destaquePlanoId === plano.id;
+
+                            return (
+                              <CarouselItem key={plano.id} className="md:basis-1/2 lg:basis-1/3">
+                                <div
+                                  className={cn(
+                                    "flex h-full flex-col justify-between rounded-2xl border p-6 shadow-sm transition hover:shadow-lg",
+                                    isSelecionado ? "border-primary shadow-primary/30" : "border-border",
+                                  )}
+                                >
+                                  <div className="space-y-4">
+                                    <div className="flex flex-wrap gap-2">
+                                      {isAtual && !previewPlano && (
+                                        <Badge variant="secondary">Plano atual</Badge>
+                                      )}
+                                      {isPreviewing && (
+                                        <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+                                          Pré-visualizando
+                                        </Badge>
+                                      )}
+                                      {isDestaque && (
+                                        <Badge variant="outline" className="gap-1">
+                                          <Crown className="h-3 w-3" /> Mais completo
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-lg font-semibold text-foreground">{plano.nome}</p>
+                                      <div className="flex items-baseline gap-2">
+                                        <span className="text-2xl font-bold">{carouselPricing.mainPrice}</span>
+                                        <span className="text-xs font-medium uppercase text-muted-foreground">
+                                          {carouselPricing.cadenceLabel}
+                                        </span>
+                                      </div>
+                                      {carouselPricing.savingsLabel && (
+                                        <p className="text-xs font-medium text-primary/80">{carouselPricing.savingsLabel}</p>
+                                      )}
+                                      {carouselPricing.helper && (
+                                        <p className="text-xs text-muted-foreground">{carouselPricing.helper}</p>
+                                      )}
+                                    </div>
+                                    <ul className="space-y-2 text-sm text-muted-foreground">
+                                      {plano.recursos.slice(0, 4).map((recurso) => (
+                                        <li key={recurso} className="flex items-center gap-2 text-left">
+                                          <Check className="h-4 w-4 text-primary" />
+                                          <span>{recurso}</span>
+                                        </li>
+                                      ))}
+                                      {plano.recursos.length === 0 && (
+                                        <li className="text-xs">Atualize o cadastro do plano para listar os benefícios.</li>
+                                      )}
+                                    </ul>
+                                  </div>
+                                  <div className="mt-6 space-y-2">
+                                    <Button
+                                      className="w-full"
+                                      variant={isSelecionado ? "secondary" : "default"}
+                                      onClick={() => handlePreviewPlan(plano)}
+                                      disabled={isAtual && !previewPlano}
+                                    >
+                                      {isSelecionado ? "Visualizando" : "Pré-visualizar"}
+                                    </Button>
+                                    <Button variant="ghost" className="w-full" asChild>
+                                      <Link to="/configuracoes/planos">Gerenciar no painel</Link>
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CarouselItem>
+                            );
+                          })}
+                        </CarouselContent>
+                        <CarouselPrevious className="hidden md:flex" />
+                        <CarouselNext className="hidden md:flex" />
+                      </Carousel>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                {previewPlano && (
+                  <Button size="lg" variant="outline" className="rounded-full" onClick={resetPreview}>
+                    Voltar ao plano atual
+                  </Button>
+                )}
+                <Button size="lg" variant="ghost" className="rounded-full" asChild>
+                  <Link to="/configuracoes/planos" className="flex items-center gap-2">
+                    Gerenciar no painel
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Benefícios inclusos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {beneficios.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Este plano não possui benefícios listados. Atualize os dados do plano para exibir aqui.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {beneficios.map((beneficio) => (
-                    <li key={beneficio} className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
-                      <span>{beneficio}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <Card className="rounded-3xl border border-border/60">
+              <CardHeader>
+                <CardTitle>Utilização dos recursos</CardTitle>
+                <CardDescription>
+                  {previewPlano
+                    ? "Confira como os seus dados atuais se encaixam nos limites do plano pré-visualizado."
+                    : "Acompanhe o consumo dos principais limites do plano."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {usageItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Ainda não há métricas disponíveis para este plano.
+                  </p>
+                ) : (
+                  usageItems.map((item) => {
+                    const limit = item.limit ?? null;
+                    const hasLimit = limit !== null && Number.isFinite(limit) && limit > 0;
+                    const hasCurrent = typeof item.current === "number" && Number.isFinite(item.current);
+                    const progress = hasLimit && hasCurrent ? Math.min(100, Math.round((item.current / limit) * 100)) : 0;
+                    return (
+                      <div key={item.label} className="space-y-2 rounded-2xl border border-border/60 p-4">
+                        <div className="flex items-center justify-between text-sm font-medium">
+                          <span>{item.label}</span>
+                          <span className="text-foreground">
+                            {hasLimit
+                              ? `${hasCurrent ? item.current : "—"}/${limit}`
+                              : hasCurrent
+                                ? item.current
+                                : "—"}
+                          </span>
+                        </div>
+                        {hasLimit ? (
+                          hasCurrent ? (
+                            <Progress value={progress} aria-label={`Consumo de ${item.label}`} />
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Dados indisponíveis para este recurso no momento.
+                            </p>
+                          )
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Sem limite definido para este recurso.</p>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border border-border/60">
+              <CardHeader>
+                <CardTitle>Benefícios inclusos</CardTitle>
+                <CardDescription>
+                  {previewPlano
+                    ? "Principais recursos contemplados no plano selecionado."
+                    : "Recursos disponíveis no plano contratado."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {beneficios.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Este plano não possui benefícios listados. Atualize os dados do plano para exibir aqui.
+                  </p>
+                ) : (
+                  <ul className="grid gap-3 sm:grid-cols-2">
+                    {beneficios.map((beneficio) => (
+                      <li
+                        key={beneficio}
+                        className="flex items-start gap-2 rounded-2xl border border-border/60 bg-background/80 p-3 text-sm"
+                      >
+                        <Check className="mt-0.5 h-4 w-4 text-primary" />
+                        <span>{beneficio}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>
