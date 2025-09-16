@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import IntegrationApiKeyService, { ApiKeyProvider } from '../services/integrationApiKeyService';
+import { AiProviderError } from '../services/aiProviders/errors';
+import { generateDocumentWithGemini } from '../services/aiProviders/geminiProvider';
+import { escapeHtml } from '../utils/html';
 
 const providerLabels: Record<ApiKeyProvider, string> = {
   gemini: 'Gemini',
@@ -8,15 +11,6 @@ const providerLabels: Record<ApiKeyProvider, string> = {
 };
 
 const integrationService = new IntegrationApiKeyService();
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
 
 function toTitleCase(value: string): string {
   return value
@@ -32,6 +26,38 @@ function buildHighlights(prompt: string): string[] {
     .map(segment => segment.trim())
     .filter(Boolean)
     .slice(0, 5);
+}
+
+function buildFallbackContent(documentType: string, prompt: string, providerLabel: string): string {
+  const highlights = buildHighlights(prompt);
+
+  const introParagraph = `Em atendimento à solicitação apresentada, elaboramos o presente ${documentType.toLowerCase()} com base nas orientações fornecidas.`;
+  const approachParagraph =
+    'O texto prioriza clareza, objetividade e coerência jurídica, estruturando os argumentos de modo progressivo para facilitar a revisão.';
+  const conclusionParagraph =
+    'Revise o conteúdo, ajuste os dados específicos do caso concreto e complemente com informações adicionais antes de finalizar o documento.';
+
+  const htmlParts: string[] = [
+    `<p><strong>${escapeHtml(documentType)}</strong></p>`,
+    `<p>${escapeHtml(introParagraph)}</p>`,
+    `<p>${escapeHtml(approachParagraph)}</p>`,
+  ];
+
+  if (highlights.length > 0) {
+    htmlParts.push('<p>Diretrizes consideradas:</p>');
+    htmlParts.push('<ul>');
+    highlights.forEach(item => {
+      htmlParts.push(`<li>${escapeHtml(item)}</li>`);
+    });
+    htmlParts.push('</ul>');
+  } else {
+    htmlParts.push(`<p>${escapeHtml(prompt)}</p>`);
+  }
+
+  htmlParts.push(`<p>${escapeHtml(conclusionParagraph)}</p>`);
+  htmlParts.push(`<p>${escapeHtml(`Integração utilizada: ${providerLabel}.`)}</p>`);
+
+  return htmlParts.join('');
 }
 
 export async function generateTextWithIntegration(req: Request, res: Response) {
@@ -60,36 +86,32 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
       return res.status(404).json({ error: 'Active integration not found' });
     }
 
-    const providerLabel = providerLabels[integration.provider];
+    const providerLabel = providerLabels[integration.provider] ?? integration.provider;
     const normalizedDocumentType = toTitleCase(documentType.trim());
     const normalizedPrompt = prompt.trim();
-    const highlights = buildHighlights(normalizedPrompt);
+    let htmlContent: string | null = null;
 
-    const introParagraph = `Em atendimento à solicitação apresentada, elaboramos o presente ${normalizedDocumentType.toLowerCase()} com base nas orientações fornecidas.`;
-    const approachParagraph =
-      'O texto prioriza clareza, objetividade e coerência jurídica, estruturando os argumentos de modo progressivo para facilitar a revisão.';
-    const conclusionParagraph =
-      'Revise o conteúdo, ajuste os dados específicos do caso concreto e complemente com informações adicionais antes de finalizar o documento.';
-
-    const htmlParts: string[] = [
-      `<p><strong>${escapeHtml(normalizedDocumentType)}</strong></p>`,
-      `<p>${escapeHtml(introParagraph)}</p>`,
-      `<p>${escapeHtml(approachParagraph)}</p>`,
-    ];
-
-    if (highlights.length > 0) {
-      htmlParts.push('<p>Diretrizes consideradas:</p>');
-      htmlParts.push('<ul>');
-      highlights.forEach(item => {
-        htmlParts.push(`<li>${escapeHtml(item)}</li>`);
-      });
-      htmlParts.push('</ul>');
-    } else {
-      htmlParts.push(`<p>${escapeHtml(normalizedPrompt)}</p>`);
+    if (integration.provider === 'gemini') {
+      try {
+        htmlContent = await generateDocumentWithGemini({
+          apiKey: integration.key,
+          documentType: normalizedDocumentType,
+          prompt: normalizedPrompt,
+          environment: integration.environment,
+        });
+      } catch (error) {
+        if (error instanceof AiProviderError) {
+          return res.status(error.statusCode).json({ error: error.message });
+        }
+        throw error;
+      }
     }
 
-    htmlParts.push(`<p>${escapeHtml(conclusionParagraph)}</p>`);
-    htmlParts.push(`<p>${escapeHtml(`Integração utilizada: ${providerLabel}.`)}</p>`);
+    if (!htmlContent || !htmlContent.trim()) {
+      htmlContent = buildFallbackContent(normalizedDocumentType, normalizedPrompt, providerLabel);
+    } else if (!/Integração utilizada/.test(htmlContent)) {
+      htmlContent = `${htmlContent}<p>${escapeHtml(`Integração utilizada: ${providerLabel}.`)}</p>`;
+    }
 
     try {
       await integrationService.update(parsedIntegrationId, { lastUsed: new Date() });
@@ -98,7 +120,7 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
     }
 
     return res.json({
-      content: htmlParts.join(''),
+      content: htmlContent,
       documentType: normalizedDocumentType,
       provider: integration.provider,
     });
