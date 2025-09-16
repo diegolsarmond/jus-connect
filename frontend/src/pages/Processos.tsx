@@ -213,7 +213,12 @@ export default function Processos() {
             id: cliente.id,
             nome: cliente.nome ?? "Sem nome",
             documento: cliente.documento ?? "",
-            tipo: cliente.tipo ?? "",
+            tipo:
+              cliente.tipo === null || cliente.tipo === undefined
+                ? ""
+                : typeof cliente.tipo === "string"
+                  ? cliente.tipo
+                  : String(cliente.tipo),
           }));
         if (!cancelled) {
           setClientes(mapped);
@@ -320,12 +325,28 @@ export default function Processos() {
       return;
     }
 
-    const clienteTipo = (selectedCliente.tipo || "").toUpperCase();
-    const papel = clienteTipo.includes("J")
-      ? "Pessoa Jurídica"
-      : clienteTipo.includes("F")
-        ? "Pessoa Física"
-        : "Parte";
+    const tipoRaw =
+      selectedCliente.tipo === null || selectedCliente.tipo === undefined
+        ? ""
+        : String(selectedCliente.tipo);
+
+    const normalizedTipo = tipoRaw
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase();
+
+    const papel =
+      normalizedTipo.includes("JURIDICA") ||
+      normalizedTipo === "2" ||
+      normalizedTipo === "J" ||
+      normalizedTipo === "PJ"
+        ? "Pessoa Jurídica"
+        : normalizedTipo.includes("FISICA") ||
+            normalizedTipo === "1" ||
+            normalizedTipo === "F" ||
+            normalizedTipo === "PF"
+          ? "Pessoa Física"
+          : "Parte";
 
     const newProcess: Processo = {
       numero: processForm.numero,
@@ -334,12 +355,9 @@ export default function Processos() {
       tipo: "Cível",
       cliente: {
         id: selectedCliente.id,
-        nome: selectedCliente.nome,
+        nome: selectedCliente.nome || "Cliente não informado",
         papel,
-        cpf: selectedCliente.documento,
-        nome: "Cliente não informado",
-        papel: "Parte",
-        cpf: "",
+        cpf: selectedCliente.documento || "",
       },
       advogadoResponsavel: "Não informado",
       classeJudicial: "Não informada",
