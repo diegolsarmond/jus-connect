@@ -31,25 +31,39 @@ const tarefaResponsavelRoutes_1 = __importDefault(require("./routes/tarefaRespon
 const tipoDocumentoRoutes_1 = __importDefault(require("./routes/tipoDocumentoRoutes"));
 const clienteDocumentoRoutes_1 = __importDefault(require("./routes/clienteDocumentoRoutes"));
 const supportRoutes_1 = __importDefault(require("./routes/supportRoutes"));
+const notificationRoutes_1 = __importDefault(require("./routes/notificationRoutes"));
+const integrationApiKeyRoutes_1 = __importDefault(require("./routes/integrationApiKeyRoutes"));
+const chatRoutes_1 = __importDefault(require("./routes/chatRoutes"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const swagger_1 = __importDefault(require("./swagger"));
+const cronJobs_1 = __importDefault(require("./services/cronJobs"));
 const app = (0, express_1.default)();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
 app.use(express_1.default.json({ limit: '50mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
+const defaultAllowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://localhost:4200',
+    'https://jusconnec.quantumtecnologia.com.br',
+];
+const additionalAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+const allowedOrigins = new Set([
+    ...defaultAllowedOrigins,
+    ...additionalAllowedOrigins,
+]);
+const allowAllOrigins = process.env.CORS_ALLOW_ALL === 'true';
 /**
  * Middleware de CORS
  */
 app.use((req, res, next) => {
-    const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-        'http://localhost:4200',
-    ];
     const origin = req.headers.origin;
-    if (origin && allowedOrigins.includes(origin)) {
+    if (origin && (allowAllOrigins || allowedOrigins.has(origin))) {
         res.header('Access-Control-Allow-Origin', origin);
         res.header('Vary', 'Origin'); // boa prática p/ caches
     }
@@ -88,6 +102,11 @@ app.use('/api', tarefaRoutes_1.default);
 app.use('/api', tarefaResponsavelRoutes_1.default);
 app.use('/api', clienteDocumentoRoutes_1.default);
 app.use('/api', supportRoutes_1.default);
+app.use('/api', notificationRoutes_1.default);
+app.use('/api', integrationApiKeyRoutes_1.default);
+app.use('/api', chatRoutes_1.default);
+// Background jobs
+cronJobs_1.default.startProjudiSyncJob();
 // Swagger
 const specs = (0, swagger_jsdoc_1.default)(swagger_1.default);
 app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(specs));

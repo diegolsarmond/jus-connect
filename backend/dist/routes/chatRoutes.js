@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const chatController_1 = require("../controllers/chatController");
+const wahaIntegrationController_1 = require("../controllers/wahaIntegrationController");
+const router = (0, express_1.Router)();
+router.get('/conversations', chatController_1.listConversationsHandler);
+router.post('/conversations', chatController_1.createConversationHandler);
+router.get('/conversations/:conversationId/messages', chatController_1.getConversationMessagesHandler);
+router.post('/conversations/:conversationId/messages', chatController_1.sendConversationMessageHandler);
+router.post('/conversations/:conversationId/read', chatController_1.markConversationReadHandler);
+router.post('/webhooks/waha', chatController_1.wahaWebhookHandler);
+router.get('/integrations/waha', wahaIntegrationController_1.getWahaConfigHandler);
+router.put('/integrations/waha', wahaIntegrationController_1.updateWahaConfigHandler);
+exports.default = router;
