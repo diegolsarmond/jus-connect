@@ -68,6 +68,33 @@
   outline: none;
 }
 
+.filterControl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.filterControl span {
+  font-weight: 600;
+}
+
+.filterSelect {
+  width: 100%;
+  border: 1px solid hsl(var(--sidebar-border));
+  border-radius: 0.75rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.9rem;
+  background: hsl(var(--background));
+  color: inherit;
+}
+
+.filterSelect:focus {
+  outline: 2px solid hsl(var(--sidebar-ring));
+  outline-offset: 1px;
+}
+
 .listContainer {
   flex: 1;
   overflow-y: auto;
@@ -159,12 +186,74 @@
   opacity: 0.85;
 }
 
+.itemMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.78rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.metaResponsible {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: hsl(var(--sidebar-accent));
+  color: inherit;
+  font-weight: 500;
+}
+
+.itemButton[data-active="true"] .metaResponsible {
+  background: rgba(255, 255, 255, 0.2);
+  color: hsl(var(--sidebar-primary-foreground));
+}
+
+.metaTags {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.tagChip {
+  background: hsl(var(--sidebar-accent));
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: inherit;
+}
+
+.itemButton[data-active="true"] .tagChip {
+  background: rgba(255, 255, 255, 0.22);
+  color: hsl(var(--sidebar-primary-foreground));
+}
+
 .timestamp {
   font-size: 0.8rem;
   color: hsl(var(--muted-foreground));
 }
 
 .itemButton[data-active="true"] .timestamp {
+  color: hsl(var(--sidebar-primary-foreground));
+}
+
+.privateBadge {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+
+.itemButton[data-active="true"] .privateBadge {
+  background: rgba(255, 255, 255, 0.2);
   color: hsl(var(--sidebar-primary-foreground));
 }
 

@@ -19,6 +19,28 @@ export interface Message {
   attachments?: MessageAttachment[];
 }
 
+export interface TeamMember {
+  id: string;
+  name: string;
+  avatar: string;
+  role: string;
+}
+
+export type ConversationResponsible = TeamMember;
+
+export interface ConversationCustomAttribute {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface ConversationInternalNote {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface ConversationSummary {
   id: string;
   name: string;
@@ -28,6 +50,14 @@ export interface ConversationSummary {
   unreadCount: number;
   pinned?: boolean;
   lastMessage?: ConversationLastMessage;
+  phoneNumber?: string;
+  responsible?: ConversationResponsible | null;
+  tags: string[];
+  isLinkedToClient?: boolean;
+  clientName?: string | null;
+  customAttributes: ConversationCustomAttribute[];
+  isPrivate?: boolean;
+  internalNotes: ConversationInternalNote[];
 }
 
 export interface ConversationLastMessage {
@@ -48,6 +78,14 @@ export interface ConversationDatasetEntry {
   description?: string;
   unreadCount: number;
   pinned?: boolean;
+  phoneNumber?: string;
+  responsibleId?: string | null;
+  tags?: string[];
+  isLinkedToClient?: boolean;
+  clientName?: string | null;
+  customAttributes?: ConversationCustomAttribute[];
+  isPrivate?: boolean;
+  internalNotes?: ConversationInternalNote[];
 }
 
 export interface ChatDataset {
@@ -64,10 +102,23 @@ export interface NewConversationInput {
   name: string;
   description?: string;
   avatar?: string;
+  phoneNumber?: string;
+  responsibleId?: string | null;
 }
 
 export interface SendMessageInput {
   content: string;
   type?: MessageType;
   attachments?: MessageAttachment[];
+}
+
+export interface UpdateConversationPayload {
+  responsibleId?: string | null;
+  tags?: string[];
+  phoneNumber?: string;
+  isLinkedToClient?: boolean;
+  clientName?: string | null;
+  customAttributes?: ConversationCustomAttribute[];
+  isPrivate?: boolean;
+  internalNotes?: ConversationInternalNote[];
 }

@@ -7,7 +7,25 @@
       "shortStatus": "online",
       "description": "Acordo de honorários • Proc. 2023.451",
       "unreadCount": 2,
-      "pinned": true
+      "pinned": true,
+      "phoneNumber": "+55 11 99123-4567",
+      "responsibleId": "tm-lucas",
+      "tags": ["prioridade alta", "honorários"],
+      "isLinkedToClient": true,
+      "clientName": "Prado & Cia Consultoria",
+      "customAttributes": [
+        { "id": "attr-joana-1", "label": "Origem", "value": "Recomendação" },
+        { "id": "attr-joana-2", "label": "Etapa", "value": "Aprovação do conselho" }
+      ],
+      "isPrivate": false,
+      "internalNotes": [
+        {
+          "id": "note-joana-1",
+          "author": "Lucas Prado",
+          "content": "Registrar follow-up após reunião com o conselho.",
+          "createdAt": "2024-11-04T11:10:00.000Z"
+        }
+      ]
     },
     {
       "id": "conv-financeiro",
@@ -16,7 +34,31 @@
       "shortStatus": "responde normalmente em 1h",
       "description": "Dúvidas sobre faturamento",
       "unreadCount": 0,
-      "pinned": true
+      "pinned": true,
+      "phoneNumber": "+55 11 4002-8922",
+      "responsibleId": "tm-ana",
+      "tags": ["financeiro", "interno"],
+      "isLinkedToClient": false,
+      "clientName": null,
+      "customAttributes": [
+        { "id": "attr-fin-1", "label": "Canal", "value": "Slack" },
+        { "id": "attr-fin-2", "label": "Frequência", "value": "Semanal" }
+      ],
+      "isPrivate": true,
+      "internalNotes": [
+        {
+          "id": "note-fin-1",
+          "author": "Ana Bezerra",
+          "content": "Registrar ajustes de boleto antes do fechamento do mês.",
+          "createdAt": "2024-11-02T14:05:00.000Z"
+        },
+        {
+          "id": "note-fin-2",
+          "author": "Ana Bezerra",
+          "content": "Conversa convertida em privada para alinhar fluxo interno de aprovações.",
+          "createdAt": "2024-11-03T09:25:00.000Z"
+        }
+      ]
     },
     {
       "id": "conv-carlos",
@@ -24,7 +66,18 @@
       "avatar": "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=facearea&w=80&h=80&q=80",
       "shortStatus": "visto às 08:10",
       "description": "Contrato de consultoria",
-      "unreadCount": 0
+      "unreadCount": 0,
+      "phoneNumber": "+55 21 99876-1122",
+      "responsibleId": "tm-marina",
+      "tags": ["consultoria", "andamento"],
+      "isLinkedToClient": true,
+      "clientName": "Inovatech Brasil",
+      "customAttributes": [
+        { "id": "attr-carlos-1", "label": "Segmento", "value": "Tecnologia" },
+        { "id": "attr-carlos-2", "label": "Ticket", "value": "R$ 35.000" }
+      ],
+      "isPrivate": false,
+      "internalNotes": []
     },
     {
       "id": "conv-tribunal",
@@ -32,7 +85,25 @@
       "avatar": "https://images.unsplash.com/photo-1528747008803-1f5c1cbd6c24?auto=format&fit=facearea&w=80&h=80&q=80",
       "shortStatus": "expediente até 19h",
       "description": "Avisos do tribunal",
-      "unreadCount": 5
+      "unreadCount": 5,
+      "phoneNumber": "+55 11 3300-4455",
+      "responsibleId": "tm-lucas",
+      "tags": ["processual", "andamento"],
+      "isLinkedToClient": true,
+      "clientName": "Tribunal de Justiça SP",
+      "customAttributes": [
+        { "id": "attr-tribunal-1", "label": "Classe", "value": "Processo cível" },
+        { "id": "attr-tribunal-2", "label": "Prazo", "value": "07/11/2024" }
+      ],
+      "isPrivate": false,
+      "internalNotes": [
+        {
+          "id": "note-tribunal-1",
+          "author": "Lucas Prado",
+          "content": "Agendar conferência de intimações para equipe de contencioso.",
+          "createdAt": "2024-11-01T18:40:00.000Z"
+        }
+      ]
     },
     {
       "id": "conv-marketing",
@@ -40,7 +111,18 @@
       "avatar": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=facearea&w=80&h=80&q=80",
       "shortStatus": "online",
       "description": "Campanha institucional",
-      "unreadCount": 0
+      "unreadCount": 0,
+      "phoneNumber": "+55 11 95555-2211",
+      "responsibleId": "tm-ana",
+      "tags": ["marketing", "campanhas"],
+      "isLinkedToClient": false,
+      "clientName": null,
+      "customAttributes": [
+        { "id": "attr-marketing-1", "label": "Status", "value": "Produção" },
+        { "id": "attr-marketing-2", "label": "Canal", "value": "LinkedIn" }
+      ],
+      "isPrivate": false,
+      "internalNotes": []
     },
     {
       "id": "conv-diligence",
@@ -48,7 +130,25 @@
       "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=facearea&w=80&h=80&q=80",
       "shortStatus": "último acesso às 22:15",
       "description": "Auditoria Tech&Law",
-      "unreadCount": 3
+      "unreadCount": 3,
+      "phoneNumber": "+55 11 94433-1000",
+      "responsibleId": "tm-ricardo",
+      "tags": ["due diligence", "prioridade média"],
+      "isLinkedToClient": true,
+      "clientName": "Tech&Law Holding",
+      "customAttributes": [
+        { "id": "attr-diligence-1", "label": "Fase", "value": "Coleta de documentos" },
+        { "id": "attr-diligence-2", "label": "Equipe", "value": "3 analistas" }
+      ],
+      "isPrivate": true,
+      "internalNotes": [
+        {
+          "id": "note-diligence-1",
+          "author": "Ricardo Luz",
+          "content": "Reunião interna agendada para revisar checklist de compliance.",
+          "createdAt": "2024-11-04T20:15:00.000Z"
+        }
+      ]
     },
     {
       "id": "conv-ana",
@@ -56,7 +156,18 @@
       "avatar": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=facearea&w=80&h=80&q=80",
       "shortStatus": "aguardando retorno",
       "description": "Revisão de cláusulas",
-      "unreadCount": 0
+      "unreadCount": 0,
+      "phoneNumber": "+55 31 98888-7722",
+      "responsibleId": "tm-marina",
+      "tags": ["contrato", "cliente premium"],
+      "isLinkedToClient": true,
+      "clientName": "Luz Arquitetura",
+      "customAttributes": [
+        { "id": "attr-ana-1", "label": "Prazo", "value": "09/11/2024" },
+        { "id": "attr-ana-2", "label": "Plano", "value": "Consultivo" }
+      ],
+      "isPrivate": false,
+      "internalNotes": []
     },
     {
       "id": "conv-paula",
@@ -64,7 +175,17 @@
       "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=facearea&w=80&h=80&q=80",
       "shortStatus": "online",
       "description": "Atualização audiência",
-      "unreadCount": 1
+      "unreadCount": 1,
+      "phoneNumber": "+55 41 97766-5544",
+      "responsibleId": null,
+      "tags": ["audiência", "andamento"],
+      "isLinkedToClient": true,
+      "clientName": "Paula & Carlos Empreendimentos",
+      "customAttributes": [
+        { "id": "attr-paula-1", "label": "Audiência", "value": "12/11/2024" }
+      ],
+      "isPrivate": false,
+      "internalNotes": []
     }
   ],
   "messages": {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { MessageCircle, Plus, Search, Pin } from "lucide-react";
+import { MessageCircle, Plus, Search, Pin, UserRound } from "lucide-react";
 import type { ConversationSummary } from "../types";
 import { formatConversationTimestamp, normalizeText } from "../utils/format";
 import styles from "./ChatSidebar.module.css";
@@ -9,6 +9,9 @@ interface ChatSidebarProps {
   activeConversationId?: string;
   searchValue: string;
   onSearchChange: (value: string) => void;
+  responsibleFilter: string;
+  responsibleOptions: { id: string; name: string }[];
+  onResponsibleFilterChange: (value: string) => void;
   onSelectConversation: (conversationId: string) => void;
   onNewConversation: () => void;
   searchInputRef: React.RefObject<HTMLInputElement>;
@@ -20,6 +23,9 @@ export const ChatSidebar = ({
   activeConversationId,
   searchValue,
   onSearchChange,
+  responsibleFilter,
+  responsibleOptions,
+  onResponsibleFilterChange,
   onSelectConversation,
   onNewConversation,
   searchInputRef,
@@ -28,10 +34,15 @@ export const ChatSidebar = ({
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const filtered = useMemo(() => {
     const normalizedQuery = normalizeText(searchValue);
+    const byResponsible = conversations.filter((conversation) => {
+      if (responsibleFilter === "all") return true;
+      if (responsibleFilter === "unassigned") return !conversation.responsible;
+      return conversation.responsible?.id === responsibleFilter;
+    });
     if (!normalizedQuery) {
-      return conversations;
+      return byResponsible;
     }
-    return conversations.filter((conversation) => {
+    return byResponsible.filter((conversation) => {
       const normalizedName = normalizeText(conversation.name);
       const normalizedDescription = normalizeText(conversation.description ?? "");
       const lastMessage = conversation.lastMessage?.preview ? normalizeText(conversation.lastMessage.preview) : "";
@@ -41,7 +52,7 @@ export const ChatSidebar = ({
         lastMessage.includes(normalizedQuery)
       );
     });
-  }, [conversations, searchValue]);
+  }, [conversations, searchValue, responsibleFilter]);
 
   useEffect(() => {
     if (!filtered.length) {
@@ -117,6 +128,22 @@ export const ChatSidebar = ({
           />
           <kbd aria-hidden="true">Ctrl K</kbd>
         </div>
+        <label className={styles.filterControl}>
+          <span>Responsável</span>
+          <select
+            className={styles.filterSelect}
+            value={responsibleFilter}
+            onChange={(event) => onResponsibleFilterChange(event.target.value)}
+          >
+            <option value="all">Todos</option>
+            <option value="unassigned">Sem responsável</option>
+            {responsibleOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div
         className={styles.listContainer}
@@ -168,9 +195,32 @@ export const ChatSidebar = ({
                         {conversation.lastMessage?.sender === "me" && <span>Você:</span>}
                         <span>{preview}</span>
                       </div>
+                      <div className={styles.itemMeta}>
+                        <span className={styles.metaResponsible}>
+                          <UserRound size={14} aria-hidden="true" />
+                          {conversation.responsible?.name ?? "Sem responsável"}
+                        </span>
+                        {conversation.tags.length > 0 && (
+                          <div className={styles.metaTags}>
+                            {conversation.tags.slice(0, 2).map((tag) => (
+                              <span key={tag} className={styles.tagChip}>
+                                {tag}
+                              </span>
+                            ))}
+                            {conversation.tags.length > 2 && (
+                              <span className={styles.tagChip} aria-label={`Mais ${conversation.tags.length - 2} etiquetas`}>
+                                +{conversation.tags.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div>
                       {timestamp && <div className={styles.timestamp}>{timestamp}</div>}
+                      {conversation.isPrivate && (
+                        <div className={styles.privateBadge}>Privada</div>
+                      )}
                       {conversation.unreadCount > 0 && (
                         <div className={styles.unreadBadge} aria-label={`${conversation.unreadCount} mensagens não lidas`}>
                           {conversation.unreadCount}
