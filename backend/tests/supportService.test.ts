@@ -138,6 +138,141 @@ test('SupportService.list applies filters and pagination', async () => {
   assert.equal(result.items[0].status, 'resolved');
 });
 
+test('SupportService.listMessagesForRequest returns conversation history with attachments', async () => {
+  const pool = new FakePool([
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 1,
+          support_request_id: 42,
+          sender: 'requester',
+          message: 'Olá',
+          created_at: '2024-02-01T12:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    {
+      rows: [
+        {
+          id: 99,
+          message_id: 1,
+          filename: 'comprovante.pdf',
+          content_type: 'application/pdf',
+          file_size: 5120,
+          created_at: '2024-02-01T12:05:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const service = new SupportService(pool as any);
+
+  const messages = await service.listMessagesForRequest(42);
+
+  assert.ok(messages);
+  assert.equal(messages?.length, 1);
+  assert.equal(messages?.[0].id, 1);
+  assert.equal(messages?.[0].attachments.length, 1);
+  assert.equal(messages?.[0].attachments[0]?.filename, 'comprovante.pdf');
+
+  assert.equal(pool.calls.length, 3);
+  assert.match(pool.calls[0].text ?? '', /SELECT 1 FROM support_requests/i);
+  assert.match(pool.calls[1].text ?? '', /FROM support_request_messages/i);
+  assert.match(pool.calls[2].text ?? '', /FROM support_request_attachments/i);
+  assert.deepEqual(pool.calls[2].values, [[1]]);
+});
+
+test('SupportService.listMessagesForRequest returns null when request is missing', async () => {
+  const pool = new FakePool([{ rows: [], rowCount: 0 }]);
+  const service = new SupportService(pool as any);
+
+  const result = await service.listMessagesForRequest(99);
+
+  assert.equal(result, null);
+  assert.equal(pool.calls.length, 1);
+  assert.match(pool.calls[0].text ?? '', /SELECT 1 FROM support_requests/i);
+});
+
+test('SupportService.createMessage persists message and attachments', async () => {
+  const messageRow = {
+    id: 3,
+    support_request_id: 5,
+    sender: 'requester',
+    message: 'Oi',
+    created_at: '2024-02-02T09:00:00.000Z',
+  };
+
+  const attachmentRow = {
+    id: 7,
+    message_id: 3,
+    filename: 'relatorio.pdf',
+    content_type: 'application/pdf',
+    file_size: 2048,
+    created_at: '2024-02-02T09:05:00.000Z',
+  };
+
+  const pool = new FakePool([
+    { rows: [{}], rowCount: 1 },
+    { rows: [messageRow], rowCount: 1 },
+    { rows: [attachmentRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const service = new SupportService(pool as any);
+
+  const buffer = Buffer.from('conteudo');
+
+  const created = await service.createMessage(5, {
+    message: '  Oi  ',
+    attachments: [
+      {
+        filename: ' relatorio.pdf ',
+        contentType: 'application/pdf',
+        size: buffer.length,
+        content: buffer,
+      },
+    ],
+  });
+
+  assert.ok(created);
+  assert.equal(created?.id, 3);
+  assert.equal(created?.attachments.length, 1);
+  assert.equal(created?.attachments[0]?.filename, 'relatorio.pdf');
+
+  assert.equal(pool.calls.length, 4);
+  assert.match(pool.calls[0].text ?? '', /SELECT 1 FROM support_requests/i);
+  assert.match(pool.calls[1].text ?? '', /INSERT INTO support_request_messages/i);
+  assert.deepEqual(pool.calls[1].values, [5, 'requester', 'Oi']);
+  assert.match(pool.calls[2].text ?? '', /INSERT INTO support_request_attachments/i);
+  assert.equal(pool.calls[2].values?.[1], 'relatorio.pdf');
+  assert.equal(pool.calls[2].values?.[2], 'application/pdf');
+  assert.equal(pool.calls[2].values?.[3], buffer.length);
+  assert.ok(Buffer.isBuffer(pool.calls[2].values?.[4]));
+  assert.match(pool.calls[3].text ?? '', /UPDATE support_requests/i);
+  assert.deepEqual(pool.calls[3].values, [5]);
+});
+
+test('SupportService.createMessage enforces message or attachment requirement', async () => {
+  const pool = new FakePool([{ rows: [{}], rowCount: 1 }]);
+  const service = new SupportService(pool as any);
+
+  await assert.rejects(() => service.createMessage(1, { message: '   ' }), ValidationError);
+});
+
+test('SupportService.createMessage returns null when support request is missing', async () => {
+  const pool = new FakePool([{ rows: [], rowCount: 0 }]);
+  const service = new SupportService(pool as any);
+
+  const result = await service.createMessage(123, { message: 'Hello' });
+
+  assert.equal(result, null);
+  assert.equal(pool.calls.length, 1);
+  assert.match(pool.calls[0].text ?? '', /SELECT 1 FROM support_requests/i);
+});
+
 test('SupportService.update builds dynamic query and handles not found', async () => {
   const updatedRow = {
     id: 7,
