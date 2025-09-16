@@ -40,6 +40,7 @@ interface Opportunity {
   dueDate: string;
   area: string;
   responsible: string;
+  createdAt?: string;
 }
 
 interface Stage {
@@ -385,6 +386,11 @@ export default function Pipeline() {
               responsible: responsibleId
                 ? userMap[responsibleId] || responsibleId
                 : "",
+              createdAt:
+                (item.data_criacao as string) ||
+                (item.datacriacao as string) ||
+                (item.created_at as string) ||
+                "",
             };
           })
         );
@@ -402,6 +408,29 @@ export default function Pipeline() {
   const getTotalValueByStage = (stageId: string) => {
     return getOpportunitiesByStage(stageId)
       .reduce((total, opp) => total + opp.value, 0);
+  };
+
+  const getCreationYear = (createdAt?: string) => {
+    if (!createdAt) return null;
+    const trimmed = createdAt.trim();
+    if (!trimmed) return null;
+
+    const isoMatch = trimmed.match(/^(\d{4})-\d{2}-\d{2}/);
+    if (isoMatch) return Number(isoMatch[1]);
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getFullYear();
+
+    const brDateMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (brDateMatch) return Number(brDateMatch[3]);
+
+    const yearMatch = trimmed.match(/(\d{4})/);
+    return yearMatch ? Number(yearMatch[1]) : null;
+  };
+
+  const formatOpportunityIdentifier = (opportunity: Opportunity) => {
+    const year = getCreationYear(opportunity.createdAt);
+    return year ? `#${opportunity.id}/${year}` : `#${opportunity.id}`;
   };
 
   const getProbabilityColor = (probability: number) => {
@@ -706,13 +735,18 @@ export default function Pipeline() {
                           <Calendar className="h-3 w-3" />
                           {new Date(opportunity.dueDate).toLocaleDateString('pt-BR')}
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-start justify-between gap-2">
                           <Badge variant="outline" className="text-xs">
                             {opportunity.area}
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {opportunity.responsible}
-                          </span>
+                          <div className="text-right leading-tight">
+                            <span className="block text-xs text-muted-foreground">
+                              {opportunity.responsible}
+                            </span>
+                            <span className="block text-[10px] text-muted-foreground">
+                              {formatOpportunityIdentifier(opportunity)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
