@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useState, useRef, useEffect } from 'react';
 import FontSelector from '@/components/FontSelector';
 
-export default function TemplateEditor() {
+export default function EditorPage() {
   const { id } = useParams();
   const isNew = id === 'novo';
   const [title, setTitle] = useState('');

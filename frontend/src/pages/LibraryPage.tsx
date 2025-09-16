@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/table';
 import { useNavigate } from 'react-router-dom';
 
-export default function DocumentTemplates() {
+export default function LibraryPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: templates } = useQuery({ queryKey: ['templates'], queryFn: fetchTemplates });
