@@ -27,10 +27,15 @@ export default function EditorPage() {
   const { data: tags } = useQuery({ queryKey: ['tags'], queryFn: fetchTags });
 
   const saveMut = useMutation({
-    mutationFn: () => (isNew ? createTemplate({ title, content }) : updateTemplate(Number(id), { title, content })),
-    onSuccess: () => {
+    mutationFn: () =>
+      isNew ? createTemplate({ title, content }) : updateTemplate(Number(id), { title, content }),
+    onSuccess: template => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
-      navigate('/documentos');
+      if (isNew) {
+        navigate(`/documentos/editor/${template.id}`);
+      } else {
+        navigate('/documentos');
+      }
     }
   });
 
