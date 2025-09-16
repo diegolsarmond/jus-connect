@@ -94,7 +94,7 @@ const App = () => (
             <Route path="/processos" element={<Processos />} />
             <Route path="/intimacoes" element={<Intimacoes />} />
             <Route path="/documentos" element={<DocumentTemplates />} />
-            <Route path="/documentos/:id" element={<TemplateEditor />} />
+            <Route path="/documentos/editor/:id" element={<TemplateEditor />} />
             <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/meu-perfil" element={<MeuPerfil />} />
