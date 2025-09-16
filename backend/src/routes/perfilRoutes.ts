@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listPerfis,
+  listPerfilModules,
   createPerfil,
   updatePerfil,
   deletePerfil,
@@ -27,7 +28,38 @@ const router = Router();
  *         datacriacao:
  *           type: string
  *           format: date-time
+ *         modulos:
+ *           type: array
+ *           items:
+ *             type: string
  */
+
+/**
+ * @swagger
+ * /api/perfis/modulos:
+ *   get:
+ *     summary: Lista todos os módulos disponíveis para perfis
+ *     tags: [Perfis]
+ *     responses:
+ *       200:
+ *         description: Lista de módulos do sistema
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   nome:
+ *                     type: string
+ *                   descricao:
+ *                     type: string
+ *                   categoria:
+ *                     type: string
+ */
+router.get('/perfis/modulos', listPerfilModules);
 
 /**
  * @swagger
@@ -64,6 +96,10 @@ router.get('/perfis', listPerfis);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               modulos:
+ *                 type: array
+ *                 items:
+ *                   type: string
  *     responses:
  *       201:
  *         description: Perfil criado
@@ -97,6 +133,10 @@ router.post('/perfis', createPerfil);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               modulos:
+ *                 type: array
+ *                 items:
+ *                   type: string
  *     responses:
  *       200:
  *         description: Perfil atualizado
