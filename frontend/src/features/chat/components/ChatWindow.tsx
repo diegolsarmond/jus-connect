@@ -9,6 +9,7 @@ import {
 import {
   CalendarPlus,
   CheckSquare,
+  Info,
   MoreVertical,
   Search,
   Archive,
@@ -70,6 +71,7 @@ export const ChatWindow = ({
   isUpdatingConversation = false,
 }: ChatWindowProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const [stickToBottom, setStickToBottom] = useState(true);
   const [newTag, setNewTag] = useState("");
@@ -87,6 +89,7 @@ export const ChatWindow = ({
   );
 
   useEffect(() => {
+    setDetailsOpen(false);
     if (!conversation) return;
     setNewTag("");
     setClientInput(conversation.clientName ?? "");
@@ -109,6 +112,7 @@ export const ChatWindow = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMenuOpen(false);
+        setDetailsOpen(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -257,290 +261,320 @@ export const ChatWindow = ({
     return <div className={styles.wrapper}>{placeholder}</div>;
   }
 
+  const detailsPanelId = `chat-details-${conversation.id}`;
   const isClientLinked = Boolean(conversation.isLinkedToClient && conversation.clientName);
 
   return (
-    <div className={styles.wrapper} data-private={conversation.isPrivate ? "true" : undefined}>
-      <header className={styles.header}>
-        <div className={styles.headerInfo}>
-          <img src={conversation.avatar} alt="" aria-hidden="true" />
-          <div className={styles.headerText}>
-            <div className={styles.headerTitleRow}>
-              <h2>{conversation.name}</h2>
-              {conversation.isPrivate && (
-                <span className={styles.privateIndicator}>
-                  <Shield size={14} aria-hidden="true" /> Privada
-                </span>
-              )}
+    <div
+      className={styles.wrapper}
+      data-private={conversation.isPrivate ? "true" : undefined}
+      data-details-open={detailsOpen ? "true" : undefined}
+    >
+      <div className={styles.mainColumn}>
+        <header className={styles.header}>
+          <div className={styles.headerInfo}>
+            <img src={conversation.avatar} alt="" aria-hidden="true" />
+            <div className={styles.headerText}>
+              <div className={styles.headerTitleRow}>
+                <h2>{conversation.name}</h2>
+                {conversation.isPrivate && (
+                  <span className={styles.privateIndicator}>
+                    <Shield size={14} aria-hidden="true" /> Privada
+                  </span>
+                )}
+              </div>
+              <span className={styles.status}>{conversation.shortStatus}</span>
+              <span className={styles.phoneNumber}>{conversation.phoneNumber ?? "Telefone não informado"}</span>
             </div>
-            <span className={styles.status}>{conversation.shortStatus}</span>
-            <span className={styles.phoneNumber}>{conversation.phoneNumber ?? "Telefone não informado"}</span>
           </div>
-        </div>
-        <div className={styles.actions} ref={menuRef}>
-          <button type="button" className={styles.actionButton} aria-label="Criar tarefa">
-            <CheckSquare size={18} aria-hidden="true" />
-          </button>
-          <button type="button" className={styles.actionButton} aria-label="Criar agendamento">
-            <CalendarPlus size={18} aria-hidden="true" />
-          </button>
-          <div className={styles.menu}>
+          <div className={styles.actions} ref={menuRef}>
+            <button type="button" className={styles.actionButton} aria-label="Criar tarefa">
+              <CheckSquare size={18} aria-hidden="true" />
+            </button>
+            <button type="button" className={styles.actionButton} aria-label="Criar agendamento">
+              <CalendarPlus size={18} aria-hidden="true" />
+            </button>
             <button
               type="button"
               className={styles.actionButton}
-              aria-haspopup="true"
-              aria-expanded={menuOpen}
-              aria-label="Abrir menu de ações"
-              onClick={() => setMenuOpen((open) => !open)}
+              aria-label={detailsOpen ? "Ocultar detalhes da conversa" : "Exibir detalhes da conversa"}
+              aria-controls={detailsPanelId}
+              aria-expanded={detailsOpen}
+              aria-pressed={detailsOpen}
+              data-active={detailsOpen ? "true" : undefined}
+              onClick={() => setDetailsOpen((open) => !open)}
             >
-              <MoreVertical size={18} aria-hidden="true" />
+              <Info size={18} aria-hidden="true" />
             </button>
-            {menuOpen && (
-              <div className={styles.menuPanel} role="menu">
-                <button type="button" onClick={() => setMenuOpen(false)} role="menuitem">
-                  <Search size={16} aria-hidden="true" /> Pesquisar nesta conversa
-                </button>
-                <button type="button" onClick={() => setMenuOpen(false)} role="menuitem">
-                  <Archive size={16} aria-hidden="true" /> Arquivar conversa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeviceModalOpen(true);
-                    setMenuOpen(false);
-                  }}
-                  role="menuitem"
-                >
-                  <Monitor size={16} aria-hidden="true" /> Conectar dispositivo
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <section className={styles.metadataPanel} aria-label="Detalhes da conversa">
-        <div className={styles.metadataRow}>
-          <div className={styles.metadataGroup}>
-            <span className={styles.metadataLabel}>
-              <UserRound size={14} aria-hidden="true" /> Responsável
-            </span>
-            <select
-              className={styles.metadataSelect}
-              value={conversation.responsible?.id ?? ""}
-              onChange={handleAssignResponsible}
-              disabled={isUpdatingConversation}
-            >
-              <option value="">Sem responsável</option>
-              {teamMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} — {member.role}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={styles.metadataGroup}>
-            <span className={styles.metadataLabel}>
-              <Shield size={14} aria-hidden="true" /> Privacidade
-            </span>
-            <div className={styles.metadataActions}>
-              <span>{conversation.isPrivate ? "Visível apenas para a equipe" : "Visível para toda a equipe"}</span>
+            <div className={styles.menu}>
               <button
                 type="button"
-                className={styles.secondaryButton}
-                onClick={handleTogglePrivate}
-                disabled={isUpdatingConversation}
+                className={styles.actionButton}
+                aria-haspopup="true"
+                aria-expanded={menuOpen}
+                aria-label="Abrir menu de ações"
+                onClick={() => setMenuOpen((open) => !open)}
               >
-                {conversation.isPrivate ? "Tornar pública" : "Marcar como privada"}
+                <MoreVertical size={18} aria-hidden="true" />
               </button>
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.metadataGroup}>
-          <span className={styles.metadataLabel}>Etiquetas</span>
-          <div className={styles.tagsEditor}>
-            <div className={styles.tagsList}>
-              {conversation.tags.map((tag) => (
-                <span key={tag} className={styles.tagPill}>
-                  {tag}
+              {menuOpen && (
+                <div className={styles.menuPanel} role="menu">
+                  <button type="button" onClick={() => setMenuOpen(false)} role="menuitem">
+                    <Search size={16} aria-hidden="true" /> Pesquisar nesta conversa
+                  </button>
+                  <button type="button" onClick={() => setMenuOpen(false)} role="menuitem">
+                    <Archive size={16} aria-hidden="true" /> Arquivar conversa
+                  </button>
                   <button
                     type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    aria-label={`Remover etiqueta ${tag}`}
-                    disabled={isUpdatingConversation}
+                    onClick={() => {
+                      setDeviceModalOpen(true);
+                      setMenuOpen(false);
+                    }}
+                    role="menuitem"
                   >
-                    <X size={12} aria-hidden="true" />
+                    <Monitor size={16} aria-hidden="true" /> Conectar dispositivo
                   </button>
-                </span>
-              ))}
-              {conversation.tags.length === 0 && <span className={styles.emptyHint}>Nenhuma etiqueta cadastrada</span>}
+                </div>
+              )}
             </div>
-            <form onSubmit={handleTagSubmit} className={styles.inlineForm}>
+          </div>
+        </header>
+
+        <div className={styles.viewportWrapper}>
+          {isLoading && <div className={styles.loadingOverlay}>Carregando conversa...</div>}
+          <MessageViewport
+            messages={messages}
+            avatarUrl={conversation.avatar}
+            containerRef={scrollRef}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={onLoadOlder}
+            onStickToBottomChange={setStickToBottom}
+          />
+        </div>
+        <ChatInput onSend={handleSend} disabled={isLoading} />
+        <DeviceLinkModal open={deviceModalOpen} onClose={() => setDeviceModalOpen(false)} />
+      </div>
+      <aside
+        id={detailsPanelId}
+        className={`${styles.detailsPanel} ${detailsOpen ? styles.detailsPanelOpen : ""}`.trim()}
+        aria-hidden={!detailsOpen}
+      >
+        <div className={styles.detailsHeader}>
+          <h3>Detalhes da conversa</h3>
+          <button
+            type="button"
+            className={styles.detailsCloseButton}
+            onClick={() => setDetailsOpen(false)}
+            aria-label="Fechar detalhes da conversa"
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        </div>
+        <div className={styles.detailsContent}>
+          <div className={styles.metadataRow}>
+            <div className={styles.metadataGroup}>
+              <span className={styles.metadataLabel}>
+                <UserRound size={14} aria-hidden="true" /> Responsável
+              </span>
+              <select
+                className={styles.metadataSelect}
+                value={conversation.responsible?.id ?? ""}
+                onChange={handleAssignResponsible}
+                disabled={isUpdatingConversation}
+              >
+                <option value="">Sem responsável</option>
+                {teamMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} — {member.role}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.metadataGroup}>
+              <span className={styles.metadataLabel}>
+                <Shield size={14} aria-hidden="true" /> Privacidade
+              </span>
+              <div className={styles.metadataActions}>
+                <span>{conversation.isPrivate ? "Visível apenas para a equipe" : "Visível para toda a equipe"}</span>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={handleTogglePrivate}
+                  disabled={isUpdatingConversation}
+                >
+                  {conversation.isPrivate ? "Tornar pública" : "Marcar como privada"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.metadataGroup}>
+            <span className={styles.metadataLabel}>Etiquetas</span>
+            <div className={styles.tagsEditor}>
+              <div className={styles.tagsList}>
+                {conversation.tags.map((tag) => (
+                  <span key={tag} className={styles.tagPill}>
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      aria-label={`Remover etiqueta ${tag}`}
+                      disabled={isUpdatingConversation}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  </span>
+                ))}
+                {conversation.tags.length === 0 && <span className={styles.emptyHint}>Nenhuma etiqueta cadastrada</span>}
+              </div>
+              <form onSubmit={handleTagSubmit} className={styles.inlineForm}>
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={(event) => setNewTag(event.target.value)}
+                  placeholder="Adicionar etiqueta"
+                  aria-label="Adicionar etiqueta"
+                  disabled={isUpdatingConversation}
+                />
+                <button type="submit" disabled={isUpdatingConversation || newTag.trim().length === 0}>
+                  Adicionar
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div className={styles.metadataGroup}>
+            <span className={styles.metadataLabel}>Cliente vinculado</span>
+            <form onSubmit={handleClientSubmit} className={styles.inlineForm}>
               <input
                 type="text"
-                value={newTag}
-                onChange={(event) => setNewTag(event.target.value)}
-                placeholder="Adicionar etiqueta"
-                aria-label="Adicionar etiqueta"
+                value={clientInput}
+                onChange={(event) => setClientInput(event.target.value)}
+                list="client-suggestions"
+                placeholder="Nome do cliente"
+                aria-label="Nome do cliente"
                 disabled={isUpdatingConversation}
               />
-              <button type="submit" disabled={isUpdatingConversation || newTag.trim().length === 0}>
-                Adicionar
+              <datalist id="client-suggestions">
+                {CLIENT_SUGGESTIONS.map((client) => (
+                  <option key={client} value={client} />
+                ))}
+              </datalist>
+              <button type="submit" disabled={isUpdatingConversation}>
+                {isClientLinked ? "Atualizar vínculo" : "Vincular cliente"}
+              </button>
+              {isClientLinked && (
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={handleUnlinkClient}
+                  disabled={isUpdatingConversation}
+                >
+                  Remover vínculo
+                </button>
+              )}
+            </form>
+          </div>
+
+          <div className={styles.metadataGroup}>
+            <span className={styles.metadataLabel}>Atributos personalizados</span>
+            {conversation.customAttributes.length === 0 ? (
+              <p className={styles.emptyHint}>Nenhum atributo cadastrado.</p>
+            ) : (
+              <ul className={styles.attributeList}>
+                {conversation.customAttributes.map((attribute) => (
+                  <li key={attribute.id}>
+                    <div>
+                      <strong>{attribute.label}</strong>
+                      <span>{attribute.value}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttribute(attribute.id)}
+                      aria-label={`Remover atributo ${attribute.label}`}
+                      disabled={isUpdatingConversation}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form onSubmit={handleAttributeSubmit} className={styles.attributeForm}>
+              <input
+                type="text"
+                value={newAttributeLabel}
+                onChange={(event) => setNewAttributeLabel(event.target.value)}
+                placeholder="Nome do atributo"
+                aria-label="Nome do atributo"
+                disabled={isUpdatingConversation}
+              />
+              <input
+                type="text"
+                value={newAttributeValue}
+                onChange={(event) => setNewAttributeValue(event.target.value)}
+                placeholder="Valor"
+                aria-label="Valor do atributo"
+                disabled={isUpdatingConversation}
+              />
+              <button
+                type="submit"
+                disabled={
+                  isUpdatingConversation ||
+                  newAttributeLabel.trim().length === 0 ||
+                  newAttributeValue.trim().length === 0
+                }
+              >
+                Adicionar atributo
               </button>
             </form>
           </div>
-        </div>
 
-        <div className={styles.metadataGroup}>
-          <span className={styles.metadataLabel}>Cliente vinculado</span>
-          <form onSubmit={handleClientSubmit} className={styles.inlineForm}>
-            <input
-              type="text"
-              value={clientInput}
-              onChange={(event) => setClientInput(event.target.value)}
-              list="client-suggestions"
-              placeholder="Nome do cliente"
-              aria-label="Nome do cliente"
-              disabled={isUpdatingConversation}
-            />
-            <datalist id="client-suggestions">
-              {CLIENT_SUGGESTIONS.map((client) => (
-                <option key={client} value={client} />
-              ))}
-            </datalist>
-            <button type="submit" disabled={isUpdatingConversation}>
-              {isClientLinked ? "Atualizar vínculo" : "Vincular cliente"}
-            </button>
-            {isClientLinked && (
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={handleUnlinkClient}
-                disabled={isUpdatingConversation}
-              >
-                Remover vínculo
-              </button>
-            )}
-          </form>
-        </div>
-
-        <div className={styles.detailsGrid}>
-          <div className={styles.detailsColumn}>
-            <div className={styles.metadataGroup}>
-              <span className={styles.metadataLabel}>Atributos personalizados</span>
-              {conversation.customAttributes.length === 0 ? (
-                <p className={styles.emptyHint}>Nenhum atributo cadastrado.</p>
-              ) : (
-                <ul className={styles.attributeList}>
-                  {conversation.customAttributes.map((attribute) => (
-                    <li key={attribute.id}>
-                      <div>
-                        <strong>{attribute.label}</strong>
-                        <span>{attribute.value}</span>
-                      </div>
+          <div className={styles.metadataGroup}>
+            <span className={styles.metadataLabel}>Notas internas</span>
+            {conversation.internalNotes.length === 0 ? (
+              <p className={styles.emptyHint}>Nenhuma nota registrada. Utilize este espaço para histórico interno.</p>
+            ) : (
+              <ul className={styles.noteList}>
+                {conversation.internalNotes.map((note) => (
+                  <li key={note.id}>
+                    <div className={styles.noteContent}>{note.content}</div>
+                    <div className={styles.noteMeta}>
+                      <span>{note.author}</span>
+                      <time dateTime={note.createdAt}>{noteFormatter.format(new Date(note.createdAt))}</time>
                       <button
                         type="button"
-                        onClick={() => handleRemoveAttribute(attribute.id)}
-                        aria-label={`Remover atributo ${attribute.label}`}
+                        onClick={() => handleRemoveInternalNote(note.id)}
+                        aria-label="Excluir nota"
                         disabled={isUpdatingConversation}
                       >
                         <X size={12} aria-hidden="true" />
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <form onSubmit={handleAttributeSubmit} className={styles.attributeForm}>
-                <input
-                  type="text"
-                  value={newAttributeLabel}
-                  onChange={(event) => setNewAttributeLabel(event.target.value)}
-                  placeholder="Nome do atributo"
-                  aria-label="Nome do atributo"
-                  disabled={isUpdatingConversation}
-                />
-                <input
-                  type="text"
-                  value={newAttributeValue}
-                  onChange={(event) => setNewAttributeValue(event.target.value)}
-                  placeholder="Valor"
-                  aria-label="Valor do atributo"
-                  disabled={isUpdatingConversation}
-                />
-                <button
-                  type="submit"
-                  disabled={
-                    isUpdatingConversation ||
-                    newAttributeLabel.trim().length === 0 ||
-                    newAttributeValue.trim().length === 0
-                  }
-                >
-                  Adicionar atributo
-                </button>
-              </form>
-            </div>
-          </div>
-          <div className={styles.detailsColumn}>
-            <div className={styles.metadataGroup}>
-              <span className={styles.metadataLabel}>Notas internas</span>
-              {conversation.internalNotes.length === 0 ? (
-                <p className={styles.emptyHint}>Nenhuma nota registrada. Utilize este espaço para histórico interno.</p>
-              ) : (
-                <ul className={styles.noteList}>
-                  {conversation.internalNotes.map((note) => (
-                    <li key={note.id}>
-                      <div className={styles.noteContent}>{note.content}</div>
-                      <div className={styles.noteMeta}>
-                        <span>{note.author}</span>
-                        <time dateTime={note.createdAt}>{noteFormatter.format(new Date(note.createdAt))}</time>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveInternalNote(note.id)}
-                          aria-label="Excluir nota"
-                          disabled={isUpdatingConversation}
-                        >
-                          <X size={12} aria-hidden="true" />
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <form onSubmit={handleInternalNoteSubmit} className={styles.noteForm}>
-                <textarea
-                  value={internalNoteContent}
-                  onChange={(event) => setInternalNoteContent(event.target.value)}
-                  placeholder="Registrar nota interna"
-                  aria-label="Registrar nota interna"
-                  disabled={isUpdatingConversation}
-                />
-                <button
-                  type="submit"
-                  disabled={isUpdatingConversation || internalNoteContent.trim().length === 0}
-                >
-                  Adicionar nota
-                </button>
-              </form>
-            </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form onSubmit={handleInternalNoteSubmit} className={styles.noteForm}>
+              <textarea
+                value={internalNoteContent}
+                onChange={(event) => setInternalNoteContent(event.target.value)}
+                placeholder="Registrar nota interna"
+                aria-label="Registrar nota interna"
+                disabled={isUpdatingConversation}
+              />
+              <button
+                type="submit"
+                disabled={isUpdatingConversation || internalNoteContent.trim().length === 0}
+              >
+                Adicionar nota
+              </button>
+            </form>
           </div>
         </div>
-      </section>
-
-      <div className={styles.viewportWrapper}>
-        {isLoading && <div className={styles.loadingOverlay}>Carregando conversa...</div>}
-        <MessageViewport
-          messages={messages}
-          avatarUrl={conversation.avatar}
-          containerRef={scrollRef}
-          hasMore={hasMore}
-          isLoadingMore={isLoadingMore}
-          onLoadMore={onLoadOlder}
-          onStickToBottomChange={setStickToBottom}
-        />
-      </div>
-      <ChatInput onSend={handleSend} disabled={isLoading} />
-      <DeviceLinkModal open={deviceModalOpen} onClose={() => setDeviceModalOpen(false)} />
+      </aside>
     </div>
   );
 };
