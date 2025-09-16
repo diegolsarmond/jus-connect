@@ -90,10 +90,10 @@ export default function Intimacoes() {
             <Download className="mr-2 h-4 w-4" />
             Exportar dados
           </Button>
-          <Button>
-            <FileText className="mr-2 h-4 w-4" />
-            Nova intimação
-          </Button>
+          {/*<Button>*/}
+          {/*  <FileText className="mr-2 h-4 w-4" />*/}
+          {/*  Nova intimação*/}
+          {/*</Button>*/}
         </div>
       </div>
 
@@ -143,119 +143,28 @@ export default function Intimacoes() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-7">
-        <Card className="lg:col-span-4">
-          <CardHeader>
-            <CardTitle>Volume mensal de intimações</CardTitle>
-            <CardDescription>Comparativo entre intimações enviadas e situação atual</CardDescription>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={intimacoesMensais}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis allowDecimals={false} />
-                <Tooltip formatter={(value: number | string) => [`${value}`, "Quantidade"]} />
-                <Legend />
-                <Bar dataKey="cumpridas" name="Cumpridas" stackId="a" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="emAndamento" name="Em andamento" stackId="a" fill="hsl(var(--secondary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="pendentes" name="Pendentes" stackId="a" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      
 
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Distribuição por status</CardTitle>
-            <CardDescription>Situação atual das intimações</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={intimacoesPorStatus}
-                  dataKey="value"
-                  nameKey="status"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={4}
-                >
-                  {intimacoesPorStatus.map((entry, index) => (
-                    <Cell key={entry.status} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number | string) => [`${value}`, "Intimações"]} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Tipos de intimação</CardTitle>
-            <CardDescription>Principais categorias utilizadas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={intimacoesPorTipo} layout="vertical" margin={{ left: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="tipo" width={160} />
-                <Tooltip formatter={(value: number | string) => [`${value}`, "Intimações"]} />
-                <Bar dataKey="value" name="Total" fill="hsl(var(--accent))" radius={[4, 4, 4, 4]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-4">
-          <CardHeader>
-            <CardTitle>Prazo médio por mês</CardTitle>
-            <CardDescription>Tempo médio de resposta em dias úteis</CardDescription>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={intimacoesMensais}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis domain={[0, "dataMax + 1"]} />
-                <Tooltip formatter={(value: number | string) => formatPrazoTooltip(value)} />
-                <Line
-                  type="monotone"
-                  dataKey="prazoMedio"
-                  name="Prazo médio"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+        
 
       <section className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold">Modelos de intimação</h2>
-            <p className="text-muted-foreground">
-              {modelosAtivos} modelos ativos elaborados por juízes para uso em diferentes situações
-              processuais.
-            </p>
-          </div>
+          {/*<div>*/}
+          {/*  <h2 className="text-2xl font-semibold">Modelos de intimação</h2>*/}
+          {/*  <p className="text-muted-foreground">*/}
+          {/*    Você tem {modelosAtivos} não lidas.*/}
+          {/*    processuais.*/}
+          {/*  </p>*/}
+          {/*</div>*/}
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Exportar modelos
-            </Button>
-            <Button size="sm">
-              <Layers className="mr-2 h-4 w-4" />
-              Gerenciar biblioteca
-            </Button>
+            {/*<Button variant="outline" size="sm">*/}
+            {/*  <Download className="mr-2 h-4 w-4" />*/}
+            {/*  Exportar modelos*/}
+            {/*</Button>*/}
+            {/*<Button size="sm">*/}
+            {/*  <Layers className="mr-2 h-4 w-4" />*/}
+            {/*  Gerenciar biblioteca*/}
+            {/*</Button>*/}
           </div>
         </div>
 
@@ -307,11 +216,11 @@ export default function Intimacoes() {
               <CardFooter className="flex flex-wrap gap-2">
                 <Button size="sm" variant="default">
                   <Eye className="mr-2 h-4 w-4" />
-                  Visualizar modelo
+                  Visualizar intimação
                 </Button>
                 <Button size="sm" variant="outline">
                   <FileText className="mr-2 h-4 w-4" />
-                  Usar modelo
+                  Criar Tarefa
                 </Button>
               </CardFooter>
             </Card>
