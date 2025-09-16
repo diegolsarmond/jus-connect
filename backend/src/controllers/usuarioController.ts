@@ -31,6 +31,67 @@ const parseOptionalId = (value: unknown): number | null | 'invalid' => {
   return 'invalid';
 };
 
+const parseStatus = (value: unknown): boolean | 'invalid' => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+
+    return 'invalid';
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+
+    if (normalized === '') {
+      return 'invalid';
+    }
+
+    if (
+      [
+        'true',
+        '1',
+        't',
+        'y',
+        'yes',
+        'sim',
+        'ativo',
+        'active',
+      ].includes(normalized)
+    ) {
+      return true;
+    }
+
+    if (
+      [
+        'false',
+        '0',
+        'f',
+        'n',
+        'no',
+        'nao',
+        'não',
+        'inativo',
+        'inactive',
+      ].includes(normalized)
+    ) {
+      return false;
+    }
+
+    return 'invalid';
+  }
+
+  return 'invalid';
+};
+
 export const listUsuarios = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
@@ -76,6 +137,11 @@ export const createUsuario = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
+    const parsedStatus = parseStatus(status);
+    if (parsedStatus === 'invalid') {
+      return res.status(400).json({ error: 'Status inválido' });
+    }
+
     const empresaIdResult = parseOptionalId(empresa);
     if (empresaIdResult === 'invalid') {
       return res.status(400).json({ error: 'ID de empresa inválido' });
@@ -120,7 +186,7 @@ export const createUsuario = async (req: Request, res: Response) => {
         empresaId,
         escritorioId,
         oab,
-        status,
+        parsedStatus,
         senha,
         telefone,
         ultimo_login,
@@ -152,6 +218,11 @@ export const updateUsuario = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
+    const parsedStatus = parseStatus(status);
+    if (parsedStatus === 'invalid') {
+      return res.status(400).json({ error: 'Status inválido' });
+    }
+
     const empresaIdResult = parseOptionalId(empresa);
     if (empresaIdResult === 'invalid') {
       return res.status(400).json({ error: 'ID de empresa inválido' });
@@ -196,7 +267,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
         empresaId,
         escritorioId,
         oab,
-        status,
+        parsedStatus,
         senha,
         telefone,
         ultimo_login,
