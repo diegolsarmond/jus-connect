@@ -575,13 +575,16 @@ export default function Pipeline() {
       </Card>
 
       {/* Pipeline Kanban */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="flex gap-6 overflow-x-auto pb-4 items-start">
         {stages.map((stage) => {
           const stageOpportunities = getOpportunitiesByStage(stage.id);
           const totalValue = getTotalValueByStage(stage.id);
 
           return (
-            <div key={stage.id} className="space-y-4">
+            <div
+              key={stage.id}
+              className="space-y-4 min-w-[280px] flex-shrink-0"
+            >
               {/* Stage Header */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -601,7 +604,7 @@ export default function Pipeline() {
 
               {/* Opportunities */}
               <div
-                className="space-y-3 min-h-[400px]"
+                className="space-y-3 min-h-[400px] max-h-[70vh] overflow-y-auto pr-2"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, stage.id)}
               >
