@@ -39,6 +39,7 @@ import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
 import Setores from "./pages/configuracoes/parametros/Setores";
 import Etiquetas from "./pages/configuracoes/parametros/Etiquetas";
 import FluxoTrabalho from "./pages/configuracoes/parametros/FluxoTrabalho";
+import SituacaoProposta from "./pages/configuracoes/parametros/SituacaoProposta";
 import Empresas from "./pages/configuracoes/Empresas";
 import Planos from "./pages/configuracoes/Planos";
 import Integracoes from "./pages/configuracoes/Integracoes";
