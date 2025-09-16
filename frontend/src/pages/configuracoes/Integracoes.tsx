@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Copy,
   Trash2,
+  RefreshCcw,
   Webhook as WebhookIcon,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
