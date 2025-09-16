@@ -142,3 +142,49 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .wysiwyg-editor {
+    min-height: 297mm;
+    font-size: 16px;
+    line-height: 1.6;
+    color: hsl(var(--foreground));
+  }
+
+  .wysiwyg-editor p {
+    margin-bottom: 0.75rem;
+  }
+
+  .wysiwyg-editor table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+
+  .wysiwyg-editor table td,
+  .wysiwyg-editor table th {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem;
+    min-width: 80px;
+  }
+
+  .variable-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    background-color: hsl(var(--primary) / 0.08);
+    color: hsl(var(--primary));
+    border: 1px solid hsl(var(--primary) / 0.2);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .variable-tag:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
