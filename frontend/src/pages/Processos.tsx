@@ -32,6 +32,7 @@ interface ProcessoCliente {
   papel: string;
 }
 
+
 interface Processo {
   numero: string;
   dataDistribuicao: string;
@@ -70,12 +71,14 @@ interface ApiCliente {
   tipo?: string;
 }
 
+
 type ProcessFormState = {
   numero: string;
   uf: string;
   municipio: string;
   orgaoJulgador: string;
   clienteId: string;
+
 };
 
 const formatProcessNumber = (value: string) => {
@@ -152,6 +155,7 @@ export default function Processos() {
     municipio: "",
     orgaoJulgador: "",
     clienteId: "",
+
   });
   const [ufs, setUfs] = useState<Uf[]>([]);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
@@ -243,6 +247,7 @@ export default function Processos() {
   }, [clientes, processForm.clienteId]);
 
   useEffect(() => {
+
     if (!processForm.uf) {
       setMunicipios([]);
       setMunicipiosLoading(false);
@@ -283,6 +288,7 @@ export default function Processos() {
       orgaoJulgador: "",
       clienteId: "",
     });
+    setProcessForm({ numero: "", uf: "", municipio: "", orgaoJulgador: "" });
     setMunicipios([]);
     setMunicipiosLoading(false);
   };
@@ -301,6 +307,7 @@ export default function Processos() {
       !processForm.municipio ||
       !processForm.orgaoJulgador ||
       !processForm.clienteId
+
     ) {
       return;
     }
@@ -330,6 +337,9 @@ export default function Processos() {
         nome: selectedCliente.nome,
         papel,
         cpf: selectedCliente.documento,
+        nome: "Cliente não informado",
+        papel: "Parte",
+        cpf: "",
       },
       advogadoResponsavel: "Não informado",
       classeJudicial: "Não informada",
@@ -349,6 +359,7 @@ export default function Processos() {
     !processForm.municipio ||
     !processForm.orgaoJulgador ||
     !processForm.clienteId;
+
 
   const filteredProcessos = processos.filter((processo) => {
     const matchesStatus =
@@ -515,6 +526,7 @@ export default function Processos() {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="process-uf">UF</Label>
               <Select

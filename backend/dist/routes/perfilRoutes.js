@@ -22,7 +22,37 @@ const router = (0, express_1.Router)();
  *         datacriacao:
  *           type: string
  *           format: date-time
+ *         modulos:
+ *           type: array
+ *           items:
+ *             type: string
  */
+/**
+ * @swagger
+ * /api/perfis/modulos:
+ *   get:
+ *     summary: Lista todos os módulos disponíveis para perfis
+ *     tags: [Perfis]
+ *     responses:
+ *       200:
+ *         description: Lista de módulos do sistema
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   nome:
+ *                     type: string
+ *                   descricao:
+ *                     type: string
+ *                   categoria:
+ *                     type: string
+ */
+router.get('/perfis/modulos', perfilController_1.listPerfilModules);
 /**
  * @swagger
  * /api/perfis:
@@ -57,6 +87,10 @@ router.get('/perfis', perfilController_1.listPerfis);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               modulos:
+ *                 type: array
+ *                 items:
+ *                   type: string
  *     responses:
  *       201:
  *         description: Perfil criado
@@ -89,6 +123,10 @@ router.post('/perfis', perfilController_1.createPerfil);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               modulos:
+ *                 type: array
+ *                 items:
+ *                   type: string
  *     responses:
  *       200:
  *         description: Perfil atualizado

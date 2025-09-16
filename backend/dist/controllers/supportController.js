@@ -36,7 +36,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSupportRequest = createSupportRequest;
 exports.listSupportRequests = listSupportRequests;
 exports.getSupportRequest = getSupportRequest;
+exports.listSupportRequestMessages = listSupportRequestMessages;
+exports.createSupportRequestMessage = createSupportRequestMessage;
+exports.downloadSupportRequestAttachment = downloadSupportRequestAttachment;
 exports.updateSupportRequest = updateSupportRequest;
+const node_buffer_1 = require("node:buffer");
 const supportService_1 = __importStar(require("../services/supportService"));
 const supportService = new supportService_1.default();
 function parseIdParam(param) {
@@ -52,6 +56,67 @@ function extractStatus(value) {
     }
     const normalized = value.trim().toLowerCase();
     return normalized ? normalized : undefined;
+}
+function buildContentDisposition(filename) {
+    const fallback = filename
+        .replace(/["\\\r\n]/g, '_')
+        .replace(/[^\x20-\x7E]/g, '_');
+    const safeFallback = fallback.length > 0 ? fallback : 'arquivo';
+    const encoded = encodeURIComponent(filename);
+    return `attachment; filename="${safeFallback}"; filename*=UTF-8''${encoded}`;
+}
+function parseMessageAttachments(payload) {
+    if (!Array.isArray(payload)) {
+        return [];
+    }
+    return payload.map((item, index) => {
+        if (!item || typeof item !== 'object') {
+            throw new supportService_1.ValidationError(`Attachment at index ${index} is invalid`);
+        }
+        const { filename, contentType, data, size } = item;
+        const normalizedFilename = typeof filename === 'string' ? filename.trim() : '';
+        if (!normalizedFilename) {
+            throw new supportService_1.ValidationError(`Attachment filename is required (index ${index})`);
+        }
+        if (typeof data !== 'string' || data.length === 0) {
+            throw new supportService_1.ValidationError(`Attachment data is required for "${normalizedFilename}"`);
+        }
+        const base64Payload = data.includes(',') ? data.slice(data.indexOf(',') + 1) : data;
+        let buffer;
+        try {
+            buffer = node_buffer_1.Buffer.from(base64Payload, 'base64');
+        }
+        catch (error) {
+            throw new supportService_1.ValidationError(`Attachment data for "${normalizedFilename}" is not valid base64`);
+        }
+        if (buffer.length === 0) {
+            throw new supportService_1.ValidationError(`Attachment "${normalizedFilename}" is empty`);
+        }
+        const attachment = {
+            filename: normalizedFilename,
+            contentType: typeof contentType === 'string' && contentType.trim().length > 0
+                ? contentType.trim()
+                : undefined,
+            size: typeof size === 'number' && Number.isFinite(size)
+                ? Math.max(0, Math.floor(size))
+                : buffer.length,
+            content: buffer,
+        };
+        return attachment;
+    });
+}
+function sendAttachmentResponse(res, attachment) {
+    const contentType = typeof attachment.contentType === 'string' && attachment.contentType.trim().length > 0
+        ? attachment.contentType
+        : 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    const length = attachment.fileSize ?? attachment.content.length;
+    if (Number.isFinite(length)) {
+        res.setHeader('Content-Length', String(length));
+    }
+    res.setHeader('Content-Disposition', buildContentDisposition(attachment.filename));
+    res.setHeader('Cache-Control', 'private, max-age=0');
+    return res.status(200).send(attachment.content);
 }
 async function createSupportRequest(req, res) {
     const { subject, description, requesterName, requesterEmail, status } = req.body;
@@ -131,6 +196,80 @@ async function getSupportRequest(req, res) {
     }
     catch (error) {
         console.error('Failed to fetch support request:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+}
+async function listSupportRequestMessages(req, res) {
+    const requestId = parseIdParam(req.params.id);
+    if (!requestId) {
+        return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    try {
+        const messages = await supportService.listMessagesForRequest(requestId);
+        if (messages === null) {
+            return res.status(404).json({ error: 'Support request not found' });
+        }
+        return res.json({ items: messages });
+    }
+    catch (error) {
+        console.error('Failed to list support request messages:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+}
+async function createSupportRequestMessage(req, res) {
+    const requestId = parseIdParam(req.params.id);
+    if (!requestId) {
+        return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    const { message, sender } = req.body;
+    let attachments = [];
+    try {
+        attachments = parseMessageAttachments(req.body.attachments);
+    }
+    catch (error) {
+        if (error instanceof supportService_1.ValidationError) {
+            return res.status(400).json({ error: error.message });
+        }
+        console.error('Failed to parse support message attachments:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+    const input = {
+        message: typeof message === 'string' ? message : undefined,
+        attachments,
+    };
+    if (typeof sender === 'string' && sender.trim()) {
+        input.sender = sender.trim().toLowerCase();
+    }
+    try {
+        const created = await supportService.createMessage(requestId, input);
+        if (!created) {
+            return res.status(404).json({ error: 'Support request not found' });
+        }
+        return res.status(201).json(created);
+    }
+    catch (error) {
+        if (error instanceof supportService_1.ValidationError) {
+            return res.status(400).json({ error: error.message });
+        }
+        console.error('Failed to create support request message:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+}
+async function downloadSupportRequestAttachment(req, res) {
+    const messageId = parseIdParam(req.params.messageId);
+    const attachmentId = parseIdParam(req.params.attachmentId);
+    if (!messageId || !attachmentId) {
+        return res.status(400).json({ error: 'Invalid attachment reference' });
+    }
+    try {
+        const attachment = await supportService.getAttachment(messageId, attachmentId);
+        if (!attachment) {
+            return res.status(404).json({ error: 'Attachment not found' });
+        }
+        return sendAttachmentResponse(res, attachment);
+    }
+    catch (error) {
+        console.error('Failed to download support attachment:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 }

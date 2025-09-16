@@ -1,15 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateDocumentWithGemini = exports.convertPlainTextToHtml = exports.buildHtmlFromGeminiStructuredResponse = exports.parseGeminiStructuredResponse = void 0;
+exports.parseGeminiStructuredResponse = parseGeminiStructuredResponse;
+exports.buildHtmlFromGeminiStructuredResponse = buildHtmlFromGeminiStructuredResponse;
+exports.convertPlainTextToHtml = convertPlainTextToHtml;
+exports.generateDocumentWithGemini = generateDocumentWithGemini;
 const errors_1 = require("./errors");
 const html_1 = require("../../utils/html");
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODEL_BY_ENVIRONMENT = {
     producao: 'gemini-2.5-flash',
     homologacao: 'gemini-2.5-flash',
-
 };
-const mapGeminiStatusToHttp = (status) => {
+function mapGeminiStatusToHttp(status) {
     if (status === 401 || status === 403) {
         return 401;
     }
@@ -20,18 +22,18 @@ const mapGeminiStatusToHttp = (status) => {
         return 502;
     }
     return 502;
-};
-const extractGeminiErrorMessage = (payload, status) => {
+}
+function extractGeminiErrorMessage(payload, status) {
     if (payload && typeof payload === 'object') {
         const errorObject = payload.error;
-        const message = (errorObject === null || errorObject === void 0 ? void 0 : errorObject.message) || payload.message;
+        const message = errorObject?.message ?? payload.message;
         if (typeof message === 'string' && message.trim().length > 0) {
             return message.trim();
         }
     }
     return `Gemini API request failed with status ${status}`;
-};
-const buildGeminiPrompt = (documentType, prompt) => {
+}
+function buildGeminiPrompt(documentType, prompt) {
     const sanitizedPrompt = prompt.trim();
     return [
         'Você é um assistente jurídico especializado em elaborar minutas estruturadas e coerentes.',
@@ -59,8 +61,8 @@ const buildGeminiPrompt = (documentType, prompt) => {
         'Informações fornecidas:',
         sanitizedPrompt ? `"""${sanitizedPrompt}"""` : 'Nenhum detalhe adicional fornecido.',
     ].join('\n');
-};
-const toSafeString = (value) => {
+}
+function toSafeString(value) {
     if (typeof value === 'string') {
         const trimmed = value.trim();
         return trimmed.length > 0 ? trimmed : null;
@@ -76,16 +78,16 @@ const toSafeString = (value) => {
         }
     }
     return null;
-};
-const toStringArray = (value) => {
+}
+function toStringArray(value) {
     if (!Array.isArray(value)) {
         return [];
     }
     return value
         .map(item => toSafeString(item))
         .filter((item) => typeof item === 'string' && item.length > 0);
-};
-const firstNonEmptyString = (values) => {
+}
+function firstNonEmptyString(values) {
     for (const value of values) {
         const normalized = toSafeString(value);
         if (normalized) {
@@ -93,14 +95,14 @@ const firstNonEmptyString = (values) => {
         }
     }
     return null;
-};
-const cleanGeminiJsonPayload = (text) => {
+}
+function cleanGeminiJsonPayload(text) {
     let cleaned = text.trim();
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
     cleaned = cleaned.replace(/```\s*$/i, '');
     return cleaned.trim();
-};
-const parseGeminiStructuredResponse = (text) => {
+}
+function parseGeminiStructuredResponse(text) {
     if (!text.trim()) {
         return null;
     }
@@ -118,15 +120,16 @@ const parseGeminiStructuredResponse = (text) => {
     catch (error) {
         return null;
     }
-};
-exports.parseGeminiStructuredResponse = parseGeminiStructuredResponse;
-const buildHtmlFromGeminiStructuredResponse = (documentType, payload) => {
+}
+function buildHtmlFromGeminiStructuredResponse(documentType, payload) {
     const htmlParts = [`<p><strong>${(0, html_1.escapeHtml)(documentType)}</strong></p>`];
     const intro = firstNonEmptyString([payload.intro, payload.summary, payload.overview]);
     if (intro) {
         htmlParts.push(`<p>${(0, html_1.escapeHtml)(intro)}</p>`);
     }
-    const sections = Array.isArray(payload.sections) ? payload.sections : [];
+    const sections = Array.isArray(payload.sections)
+        ? payload.sections
+        : [];
     sections.forEach(section => {
         const title = firstNonEmptyString([section.title]);
         if (title) {
@@ -137,8 +140,7 @@ const buildHtmlFromGeminiStructuredResponse = (documentType, payload) => {
             htmlParts.push(`<p>${(0, html_1.escapeHtml)(paragraph)}</p>`);
         });
         const bulletCandidates = [section.bullets, section.items, section.points];
-        const bulletSource = bulletCandidates.find(value => Array.isArray(value)) || [];
-        const bullets = toStringArray(bulletSource);
+        const bullets = toStringArray(bulletCandidates.find(value => Array.isArray(value)) ?? []);
         if (bullets.length > 0) {
             htmlParts.push('<ul>');
             bullets.forEach(item => {
@@ -147,7 +149,7 @@ const buildHtmlFromGeminiStructuredResponse = (documentType, payload) => {
             htmlParts.push('</ul>');
         }
     });
-    const highlights = toStringArray(payload.highlights || payload.directives || payload.topics);
+    const highlights = toStringArray(payload.highlights ?? payload.directives ?? payload.topics);
     if (highlights.length > 0) {
         htmlParts.push('<p>Principais pontos considerados:</p>');
         htmlParts.push('<ul>');
@@ -160,14 +162,13 @@ const buildHtmlFromGeminiStructuredResponse = (documentType, payload) => {
     if (conclusion) {
         htmlParts.push(`<p>${(0, html_1.escapeHtml)(conclusion)}</p>`);
     }
-    const notes = toStringArray(payload.additionalNotes || payload.notes || payload.disclaimer);
+    const notes = toStringArray(payload.additionalNotes ?? payload.notes ?? payload.disclaimer);
     notes.forEach(note => {
         htmlParts.push(`<p>${(0, html_1.escapeHtml)(note)}</p>`);
     });
     return htmlParts.join('');
-};
-exports.buildHtmlFromGeminiStructuredResponse = buildHtmlFromGeminiStructuredResponse;
-const convertPlainTextToHtml = (documentType, text) => {
+}
+function convertPlainTextToHtml(documentType, text) {
     const normalized = text.replace(/\r\n/g, '\n').trim();
     const htmlParts = [`<p><strong>${(0, html_1.escapeHtml)(documentType)}</strong></p>`];
     if (!normalized) {
@@ -201,19 +202,18 @@ const convertPlainTextToHtml = (documentType, text) => {
     });
     flushList();
     return htmlParts.join('');
-};
-exports.convertPlainTextToHtml = convertPlainTextToHtml;
-const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, environment, }) => {
+}
+async function generateDocumentWithGemini({ apiKey, documentType, prompt, environment, }) {
     const trimmedKey = apiKey.trim();
     if (!trimmedKey) {
         throw new errors_1.AiProviderError('A chave de API da integração não está configurada.', 400);
     }
-    const model = GEMINI_MODEL_BY_ENVIRONMENT[environment] || GEMINI_MODEL_BY_ENVIRONMENT.producao;
+    const model = GEMINI_MODEL_BY_ENVIRONMENT[environment] ?? GEMINI_MODEL_BY_ENVIRONMENT.producao;
     const url = `${GEMINI_API_BASE_URL}/${model}:generateContent`;
     const requestBody = {
         contents: [
             {
-
+                role: 'user',
                 parts: [{ text: buildGeminiPrompt(documentType, prompt) }],
             },
         ],
@@ -221,23 +221,23 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
             thinkingConfig: {
                 thinkingBudget: 0,
             },
-
         },
     };
     let response;
     try {
-        response = await fetch(url, {
+        response = (await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'x-goog-api-key': trimmedKey,
-
             },
             body: JSON.stringify(requestBody),
-        });
+        }));
     }
     catch (error) {
-        throw new errors_1.AiProviderError(error instanceof Error ? `Falha ao contactar a API da Gemini: ${error.message}` : 'Falha ao contactar a API da Gemini.', 502);
+        throw new errors_1.AiProviderError(error instanceof Error
+            ? `Falha ao contactar a API da Gemini: ${error.message}`
+            : 'Falha ao contactar a API da Gemini.', 502);
     }
     const rawPayload = await response.text();
     let parsedPayload = null;
@@ -256,12 +256,10 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
         const message = extractGeminiErrorMessage(parsedPayload, response.status);
         throw new errors_1.AiProviderError(message, mapGeminiStatusToHttp(response.status));
     }
-    const candidates = (parsedPayload === null || parsedPayload === void 0 ? void 0 : parsedPayload.candidates) || [];
+    const candidates = parsedPayload?.candidates ?? [];
     const firstCandidate = candidates.find(candidate => {
-        const parts = candidate.content && Array.isArray(candidate.content.parts)
-            ? candidate.content.parts
-            : null;
-        if (!parts) {
+        const parts = candidate.content?.parts;
+        if (!Array.isArray(parts)) {
             return false;
         }
         return parts.some(part => typeof part.text === 'string' && part.text.trim().length > 0);
@@ -269,11 +267,8 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
     if (!firstCandidate) {
         throw new errors_1.AiProviderError('A resposta da Gemini não continha conteúdo gerado.', 502);
     }
-    const candidateParts = firstCandidate.content && Array.isArray(firstCandidate.content.parts)
-        ? firstCandidate.content.parts
-        : [];
-    const combinedText = candidateParts
-        .map(part => (typeof part.text === 'string' ? part.text : ''))
+    const combinedText = firstCandidate.content?.parts
+        ?.map(part => (typeof part.text === 'string' ? part.text : ''))
         .join('\n')
         .trim();
     if (!combinedText) {
@@ -287,5 +282,4 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
         }
     }
     return convertPlainTextToHtml(documentType, combinedText);
-};
-exports.generateDocumentWithGemini = generateDocumentWithGemini;
+}

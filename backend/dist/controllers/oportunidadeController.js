@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteOportunidade = exports.updateOportunidadeEtapa = exports.updateOportunidade = exports.createOportunidade = exports.listEnvolvidosByOportunidade = exports.getOportunidadeById = exports.listOportunidadesByFase = exports.listOportunidades = void 0;
+exports.deleteOportunidade = exports.updateOportunidadeEtapa = exports.updateOportunidadeStatus = exports.updateOportunidade = exports.createOportunidade = exports.listEnvolvidosByOportunidade = exports.getOportunidadeById = exports.listOportunidadesByFase = exports.listOportunidades = void 0;
 const db_1 = __importDefault(require("../services/db"));
 const listOportunidades = async (_req, res) => {
     try {
@@ -217,6 +217,32 @@ const updateOportunidade = async (req, res) => {
     }
 };
 exports.updateOportunidade = updateOportunidade;
+const updateOportunidadeStatus = async (req, res) => {
+    const { id } = req.params;
+    const { status_id } = req.body;
+    const parsedStatus = status_id === null || status_id === undefined || status_id === ''
+        ? null
+        : Number(status_id);
+    if (parsedStatus !== null && Number.isNaN(parsedStatus)) {
+        return res.status(400).json({ error: 'status_id inválido' });
+    }
+    try {
+        const result = await db_1.default.query(`UPDATE public.oportunidades
+       SET status_id = $1,
+           ultima_atualizacao = NOW()
+       WHERE id = $2
+       RETURNING id, status_id, ultima_atualizacao`, [parsedStatus, id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Oportunidade não encontrada' });
+        }
+        res.json(result.rows[0]);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+exports.updateOportunidadeStatus = updateOportunidadeStatus;
 const updateOportunidadeEtapa = async (req, res) => {
     const { id } = req.params;
     const { etapa_id } = req.body;

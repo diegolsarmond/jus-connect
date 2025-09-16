@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.escapeHtml = void 0;
+exports.escapeHtml = escapeHtml;
 function escapeHtml(value) {
     return value
         .replace(/&/g, '&amp;')
@@ -9,4 +9,3 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
-exports.escapeHtml = escapeHtml;
