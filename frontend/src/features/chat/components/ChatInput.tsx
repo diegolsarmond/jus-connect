@@ -60,6 +60,9 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
       setValue("");
     } finally {
       setIsSending(false);
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
     }
   };
 
@@ -190,7 +193,7 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
           onPaste={handlePaste}
           placeholder="Escreva uma mensagem"
           aria-label="Campo para digitar mensagem"
-          disabled={disabled || isSending}
+          disabled={disabled}
         />
         <button
           type="button"
