@@ -9,6 +9,7 @@ cd backend
 npm install
 # configure PostgreSQL e execute o script de tabelas
 psql -f sql/templates.sql
+psql -f sql/intimacoes.sql
 npm run dev
 ```
 
@@ -25,6 +26,21 @@ seguintes variáveis de ambiente antes de iniciar o backend:
 
 Com esses valores configurados, o serviço agenda rotinas para renovar tokens
 expirados e revalidar a assinatura do webhook automaticamente.
+
+### Integração com intimações do Projudi
+
+Para habilitar a sincronização automática das intimações disponibilizadas pelo
+Projudi, defina as seguintes variáveis de ambiente antes de iniciar o backend:
+
+| Variável              | Descrição                                                                 |
+| --------------------- | ------------------------------------------------------------------------- |
+| `PROJUDI_BASE_URL`    | URL base do ambiente do Projudi que será consultado.                      |
+| `PROJUDI_USER`        | Usuário habilitado no Projudi para acesso às intimações.                  |
+| `PROJUDI_PASSWORD`    | Senha do usuário configurado na integração.                               |
+
+O serviço executa uma rotina periódica para autenticar, consultar novas
+intimações e gravá-las na tabela `intimacoes`. É possível monitorar ou
+acionar a sincronização manualmente via `GET /api/notificacoes/projudi/sync`.
 
 ## Frontend
 
