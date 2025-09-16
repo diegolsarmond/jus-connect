@@ -47,7 +47,7 @@
 .headerText {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.45rem;
 }
 
 .headerTitleRow {
@@ -56,10 +56,57 @@
   gap: 0.6rem;
 }
 
+.headerDetails {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
 .headerTitleRow h2 {
   font-size: 1.25rem;
   font-weight: 700;
   margin: 0;
+}
+
+.headerMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.headerResponsible {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.headerTags {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.headerTagChip {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.headerNoTags {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
 }
 
 .status {
