@@ -20,7 +20,13 @@ import { AgendaCalendar } from '@/components/agenda/AgendaCalendar';
 import { AppointmentForm } from '@/components/agenda/AppointmentForm';
 import { AppointmentList } from '@/components/agenda/AppointmentList';
 import { statusDotClass, statusLabel } from '@/components/agenda/status';
-import { Appointment, AppointmentType, AppointmentStatus, appointmentTypes } from '@/types/agenda';
+import {
+  Appointment,
+  AppointmentType,
+  AppointmentStatus,
+  appointmentTypes,
+  normalizeAppointmentType,
+} from '@/types/agenda';
 
 const apiUrl = getApiBaseUrl();
 
@@ -29,17 +35,6 @@ function joinUrl(base: string, path = '') {
   const p = path ? (path.startsWith('/') ? path : `/${path}`) : '';
   return `${b}${p}`;
 }
-
-const APPOINTMENT_TYPE_VALUES: AppointmentType[] = [
-  'reuniao',
-  'visita',
-  'ligacao',
-  'prazo',
-  'outro',
-];
-
-const isValidAppointmentType = (v: unknown): v is AppointmentType =>
-  typeof v === 'string' && (APPOINTMENT_TYPE_VALUES as string[]).includes(v);
 
 export default function Agenda() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -100,8 +95,8 @@ export default function Agenda() {
                 ? tipoJson.data
                 : [];
             tipoRows.forEach((t: { id: number; nome: string }) => {
-              const nome = (t?.nome || '').toString().toLowerCase();
-              if (isValidAppointmentType(nome)) typeMap.set(t.id, nome);
+              const normalized = normalizeAppointmentType(t?.nome);
+              if (normalized) typeMap.set(t.id, normalized);
             });
           }
         } catch (error) {
@@ -133,10 +128,7 @@ export default function Agenda() {
         const data: Appointment[] = (rows as AgendaResponse[]).map((r) => {
           // Resolve o tipo: por id_evento/tipo → map, senão por tipo_evento (string), senão 'outro'
           const typeById = typeMap.get((r.id_evento ?? r.tipo) as number);
-          const typeByName =
-            isValidAppointmentType((r.tipo_evento || '').toLowerCase())
-              ? ((r.tipo_evento as string).toLowerCase() as AppointmentType)
-              : undefined;
+          const typeByName = normalizeAppointmentType(r.tipo_evento);
 
           return {
             id: Number(r.id), // padroniza como number
