@@ -3,22 +3,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateTextWithIntegration = generateTextWithIntegration;
+exports.generateTextWithIntegration = void 0;
 const integrationApiKeyService_1 = __importDefault(require("../services/integrationApiKeyService"));
+const errors_1 = require("../services/aiProviders/errors");
+const geminiProvider_1 = require("../services/aiProviders/geminiProvider");
+const html_1 = require("../utils/html");
 const providerLabels = {
     gemini: 'Gemini',
     openai: 'OpenAI',
     waha: 'WAHA',
 };
 const integrationService = new integrationApiKeyService_1.default();
-function escapeHtml(value) {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
 function toTitleCase(value) {
     return value
         .split(/\s+/)
@@ -32,6 +27,31 @@ function buildHighlights(prompt) {
         .map(segment => segment.trim())
         .filter(Boolean)
         .slice(0, 5);
+}
+function buildFallbackContent(documentType, prompt, providerLabel) {
+    const highlights = buildHighlights(prompt);
+    const introParagraph = `Em atendimento à solicitação apresentada, elaboramos o presente ${documentType.toLowerCase()} com base nas orientações fornecidas.`;
+    const approachParagraph = 'O texto prioriza clareza, objetividade e coerência jurídica, estruturando os argumentos de modo progressivo para facilitar a revisão.';
+    const conclusionParagraph = 'Revise o conteúdo, ajuste os dados específicos do caso concreto e complemente com informações adicionais antes de finalizar o documento.';
+    const htmlParts = [
+        `<p><strong>${(0, html_1.escapeHtml)(documentType)}</strong></p>`,
+        `<p>${(0, html_1.escapeHtml)(introParagraph)}</p>`,
+        `<p>${(0, html_1.escapeHtml)(approachParagraph)}</p>`,
+    ];
+    if (highlights.length > 0) {
+        htmlParts.push('<p>Diretrizes consideradas:</p>');
+        htmlParts.push('<ul>');
+        highlights.forEach(item => {
+            htmlParts.push(`<li>${(0, html_1.escapeHtml)(item)}</li>`);
+        });
+        htmlParts.push('</ul>');
+    }
+    else {
+        htmlParts.push(`<p>${(0, html_1.escapeHtml)(prompt)}</p>`);
+    }
+    htmlParts.push(`<p>${(0, html_1.escapeHtml)(conclusionParagraph)}</p>`);
+    htmlParts.push(`<p>${(0, html_1.escapeHtml)(`Integração utilizada: ${providerLabel}.`)}</p>`);
+    return htmlParts.join('');
 }
 async function generateTextWithIntegration(req, res) {
     const { integrationId, documentType, prompt } = req.body;
@@ -50,31 +70,32 @@ async function generateTextWithIntegration(req, res) {
         if (!integration || !integration.active) {
             return res.status(404).json({ error: 'Active integration not found' });
         }
-        const providerLabel = providerLabels[integration.provider];
+        const providerLabel = providerLabels[integration.provider] || integration.provider;
         const normalizedDocumentType = toTitleCase(documentType.trim());
         const normalizedPrompt = prompt.trim();
-        const highlights = buildHighlights(normalizedPrompt);
-        const introParagraph = `Em atendimento à solicitação apresentada, elaboramos o presente ${normalizedDocumentType.toLowerCase()} com base nas orientações fornecidas.`;
-        const approachParagraph = 'O texto prioriza clareza, objetividade e coerência jurídica, estruturando os argumentos de modo progressivo para facilitar a revisão.';
-        const conclusionParagraph = 'Revise o conteúdo, ajuste os dados específicos do caso concreto e complemente com informações adicionais antes de finalizar o documento.';
-        const htmlParts = [
-            `<p><strong>${escapeHtml(normalizedDocumentType)}</strong></p>`,
-            `<p>${escapeHtml(introParagraph)}</p>`,
-            `<p>${escapeHtml(approachParagraph)}</p>`,
-        ];
-        if (highlights.length > 0) {
-            htmlParts.push('<p>Diretrizes consideradas:</p>');
-            htmlParts.push('<ul>');
-            highlights.forEach(item => {
-                htmlParts.push(`<li>${escapeHtml(item)}</li>`);
-            });
-            htmlParts.push('</ul>');
+        let htmlContent = null;
+        if (integration.provider === 'gemini') {
+            try {
+                htmlContent = await (0, geminiProvider_1.generateDocumentWithGemini)({
+                    apiKey: integration.key,
+                    documentType: normalizedDocumentType,
+                    prompt: normalizedPrompt,
+                    environment: integration.environment,
+                });
+            }
+            catch (error) {
+                if (error instanceof errors_1.AiProviderError) {
+                    return res.status(error.statusCode).json({ error: error.message });
+                }
+                throw error;
+            }
         }
-        else {
-            htmlParts.push(`<p>${escapeHtml(normalizedPrompt)}</p>`);
+        if (!htmlContent || !htmlContent.trim()) {
+            htmlContent = buildFallbackContent(normalizedDocumentType, normalizedPrompt, providerLabel);
         }
-        htmlParts.push(`<p>${escapeHtml(conclusionParagraph)}</p>`);
-        htmlParts.push(`<p>${escapeHtml(`Integração utilizada: ${providerLabel}.`)}</p>`);
+        else if (!/Integração utilizada/.test(htmlContent)) {
+            htmlContent = `${htmlContent}<p>${(0, html_1.escapeHtml)(`Integração utilizada: ${providerLabel}.`)}</p>`;
+        }
         try {
             await integrationService.update(parsedIntegrationId, { lastUsed: new Date() });
         }
@@ -82,7 +103,7 @@ async function generateTextWithIntegration(req, res) {
             console.error('Failed to update integration lastUsed timestamp:', updateError);
         }
         return res.json({
-            content: htmlParts.join(''),
+            content: htmlContent,
             documentType: normalizedDocumentType,
             provider: integration.provider,
         });
@@ -92,3 +113,4 @@ async function generateTextWithIntegration(req, res) {
         return res.status(500).json({ error: 'Internal server error' });
     }
 }
+exports.generateTextWithIntegration = generateTextWithIntegration;
