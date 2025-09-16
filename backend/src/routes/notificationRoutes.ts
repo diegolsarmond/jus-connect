@@ -11,6 +11,7 @@ import {
   getNotificationPreferencesHandler,
   updateNotificationPreferencesHandler,
   receivePjeNotificationHandler,
+  triggerProjudiSyncHandler,
 } from '../controllers/notificationController';
 import { getNotificationProvider } from '../services/notificationProviders/registry';
 import { NotificationProviderError } from '../services/notificationProviders/types';
@@ -57,6 +58,7 @@ router.post('/notifications/webhooks/:providerId?', async (req, res) => {
   }
 });
 router.post('/notifications/pje/webhook', receivePjeNotificationHandler);
+router.get('/notificacoes/projudi/sync', triggerProjudiSyncHandler);
 router.post('/notifications/read-all', markAllNotificationsAsReadHandler);
 router.post('/notifications/:id/read', markNotificationAsReadHandler);
 router.post('/notifications/:id/unread', markNotificationAsUnreadHandler);

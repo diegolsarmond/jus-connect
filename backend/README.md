@@ -33,6 +33,10 @@ O script `sql/support.sql` cria a tabela `support_requests` utilizada pelo módu
 
 O script `sql/integration_api_keys.sql` define a tabela `integration_api_keys`, responsável por armazenar as chaves de API configuradas na tela de Integrações.
 
+O script `sql/intimacoes.sql` cria a tabela `intimacoes`, utilizada para
+persistir os dados normalizados durante a sincronização das intimações do
+Projudi.
+
 ## CORS
 
 Por padrão o backend libera requisições vindas de `localhost` e do domínio `https://jusconnec.quantumtecnologia.com.br`. Caso precise habilitar outros hosts, defina a variável de ambiente `CORS_ALLOWED_ORIGINS` com uma lista de URLs separadas por vírgula:

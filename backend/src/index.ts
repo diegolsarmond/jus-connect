@@ -33,6 +33,7 @@ import chatRoutes from './routes/chatRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
+import cronJobs from './services/cronJobs';
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
@@ -117,6 +118,9 @@ app.use('/api', supportRoutes);
 app.use('/api', notificationRoutes);
 app.use('/api', integrationApiKeyRoutes);
 app.use('/api', chatRoutes);
+
+// Background jobs
+cronJobs.startProjudiSyncJob();
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);

@@ -18,6 +18,8 @@ import pjeNotificationService, {
   PjeConfigurationError,
   PjeWebhookSignatureError,
 } from '../services/pjeNotificationService';
+import cronJobs from '../services/cronJobs';
+import { ProjudiConfigurationError } from '../services/projudiNotificationService';
 
 function resolveUserId(req: Request): string {
   const queryUserId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
@@ -270,6 +272,28 @@ export const receivePjeNotificationHandler = async (req: Request, res: Response)
 
     console.error('Failed to process PJE notification', error);
     res.status(500).json({ error: 'Falha ao processar notificação do PJE' });
+  }
+};
+
+export const triggerProjudiSyncHandler = async (req: Request, res: Response) => {
+  try {
+    const previewRequested = typeof req.query.preview === 'string'
+      && ['true', '1', 'yes'].includes(req.query.preview.toLowerCase());
+
+    if (previewRequested) {
+      const status = cronJobs.getProjudiSyncStatus();
+      return res.json({ triggered: false, status });
+    }
+
+    const result = await cronJobs.triggerProjudiSyncNow();
+    res.json({ triggered: result.triggered, status: result.status });
+  } catch (error) {
+    if (error instanceof ProjudiConfigurationError) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.error('Failed to trigger Projudi sync job', error);
+    res.status(500).json({ error: 'Falha ao sincronizar intimações do Projudi' });
   }
 };
 
