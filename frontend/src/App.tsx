@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CRMLayout } from "@/components/layout/CRMLayout";
+import { routes } from "@/config/routes";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import NovoCliente from "./pages/NovoCliente";
@@ -54,6 +55,7 @@ import SessaoDispositivos from "./pages/configuracoes/usuarios/SessaoDispositivo
 import PrivacidadeLGPD from "./pages/configuracoes/usuarios/PrivacidadeLGPD";
 import NotificacoesPreferencias from "./pages/configuracoes/usuarios/NotificacoesPreferencias";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
 import RecuperarSenha from "./pages/RecuperarSenha";
 import NotFound from "./pages/NotFound";
 
@@ -66,8 +68,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/recuperar-senha" element={<RecuperarSenha />} />
+          <Route path={routes.login} element={<Login />} />
+          <Route path={routes.register} element={<Register />} />
+          <Route path={routes.forgotPassword} element={<RecuperarSenha />} />
           <Route element={<CRMLayout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/conversas" element={<Conversas />} />
