@@ -47,12 +47,17 @@ export class CronJobsService {
 
   constructor(service: ProjudiNotificationService = projudiNotificationService) {
     this.projudiService = service;
+
+    const intervalMs = this.resolveIntervalFromEnv();
+    const lookbackMs = this.resolveLookbackFromEnv();
+    const overlapMs = this.resolveOverlapFromEnv();
+
     this.projudiState = {
       enabled: false,
-      intervalMs: this.resolveIntervalFromEnv(),
-      lookbackMs: this.resolveLookbackFromEnv(),
-      overlapMs: this.resolveOverlapFromEnv(),
-      nextReference: this.computeInitialReference(),
+      intervalMs,
+      lookbackMs,
+      overlapMs,
+      nextReference: this.computeInitialReference(lookbackMs),
       lastReferenceUsed: null,
       lastRunAt: null,
       lastSuccessAt: null,
@@ -192,9 +197,10 @@ export class CronJobsService {
     return new Date(now - overlap);
   }
 
-  private computeInitialReference(): Date {
+  private computeInitialReference(lookbackMs?: number): Date {
     const now = Date.now();
-    return new Date(now - this.projudiState.lookbackMs);
+    const effectiveLookbackMs = lookbackMs ?? this.projudiState.lookbackMs;
+    return new Date(now - effectiveLookbackMs);
   }
 
   private resolveIntervalFromEnv(): number {

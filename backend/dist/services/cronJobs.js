@@ -43,12 +43,15 @@ class CronJobsService {
         this.projudiTimer = null;
         this.projudiRunning = false;
         this.projudiService = service;
+        const intervalMs = this.resolveIntervalFromEnv();
+        const lookbackMs = this.resolveLookbackFromEnv();
+        const overlapMs = this.resolveOverlapFromEnv();
         this.projudiState = {
             enabled: false,
-            intervalMs: this.resolveIntervalFromEnv(),
-            lookbackMs: this.resolveLookbackFromEnv(),
-            overlapMs: this.resolveOverlapFromEnv(),
-            nextReference: this.computeInitialReference(),
+            intervalMs,
+            lookbackMs,
+            overlapMs,
+            nextReference: this.computeInitialReference(lookbackMs),
             lastReferenceUsed: null,
             lastRunAt: null,
             lastSuccessAt: null,
@@ -165,9 +168,10 @@ class CronJobsService {
         const overlap = this.projudiState.overlapMs ?? DEFAULT_OVERLAP_MS;
         return new Date(now - overlap);
     }
-    computeInitialReference() {
+    computeInitialReference(lookbackMs) {
         const now = Date.now();
-        return new Date(now - this.projudiState.lookbackMs);
+        const effectiveLookbackMs = lookbackMs ?? this.projudiState.lookbackMs;
+        return new Date(now - effectiveLookbackMs);
     }
     resolveIntervalFromEnv() {
         const ms = parsePositiveNumber(process.env.PROJUDI_SYNC_INTERVAL_MS);
