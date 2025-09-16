@@ -111,8 +111,8 @@ export function Sidebar() {
               href: "/configuracoes/parametros/perfis",
             },
             {
-              name: "Escritórios",
-              href: "/configuracoes/parametros/escritorios",
+              name: "Setores",
+              href: "/configuracoes/parametros/setores",
             },
             {
               name: "Área de Atuação",

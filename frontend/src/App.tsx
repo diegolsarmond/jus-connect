@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CRMLayout } from "@/components/layout/CRMLayout";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
@@ -35,8 +35,8 @@ import TipoProcesso from "./pages/configuracoes/parametros/TipoProcesso";
 import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
 import TipoDocumento from "./pages/configuracoes/parametros/TipoDocumento";
 import Perfis from "./pages/configuracoes/parametros/Perfis";
-import SituacaoProposta from "./pages/configuracoes/parametros/SituacaoProposta";
-import Escritorios from "./pages/configuracoes/parametros/Escritorios";
+import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
+import Setores from "./pages/configuracoes/parametros/Setores";
 import Etiquetas from "./pages/configuracoes/parametros/Etiquetas";
 import FluxoTrabalho from "./pages/configuracoes/parametros/FluxoTrabalho";
 import Empresas from "./pages/configuracoes/Empresas";
@@ -155,8 +155,12 @@ const App = () => (
             />
             <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
             <Route
+              path="/configuracoes/parametros/setores"
+              element={<Setores />}
+            />
+            <Route
               path="/configuracoes/parametros/escritorios"
-              element={<Escritorios />}
+              element={<Navigate to="/configuracoes/parametros/setores" replace />}
             />
             <Route
               path="/configuracoes/parametros/situacao-proposta"

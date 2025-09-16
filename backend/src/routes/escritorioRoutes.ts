@@ -11,11 +11,11 @@ const router = Router();
 /**
  * @swagger
  * tags:
- *   - name: Escritorios
- *     description: Endpoints para gerenciamento de escritórios
+ *   - name: Setores
+ *     description: Endpoints para gerenciamento de setores (escritórios)
  * components:
  *   schemas:
- *     Escritorio:
+ *     Setor:
  *       type: object
  *       properties:
  *         id:
@@ -35,26 +35,33 @@ const router = Router();
  * @swagger
  * /api/escritorios:
  *   get:
- *     summary: Lista todos os escritórios
- *     tags: [Escritorios]
+ *     summary: Lista todos os setores
+ *     tags: [Setores]
  *     responses:
  *       200:
- *         description: Lista de escritórios
+ *         description: Lista de setores
  *         content:
  *           application/json:
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/Escritorio'
+ *                 $ref: '#/components/schemas/Setor'
  */
-router.get('/escritorios', listEscritorios);
+const basePaths = ['/escritorios', '/setores'];
+
+basePaths.forEach((path) => {
+  router.get(path, listEscritorios);
+  router.post(path, createEscritorio);
+  router.put(`${path}/:id`, updateEscritorio);
+  router.delete(`${path}/:id`, deleteEscritorio);
+});
 
 /**
  * @swagger
  * /api/escritorios:
  *   post:
- *     summary: Cria um novo escritório
- *     tags: [Escritorios]
+ *     summary: Cria um novo setor
+ *     tags: [Setores]
  *     requestBody:
  *       required: true
  *       content:
@@ -70,20 +77,18 @@ router.get('/escritorios', listEscritorios);
  *                 type: boolean
  *     responses:
  *       201:
- *         description: Escritório criado
+ *         description: Setor criado
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Escritorio'
+ *               $ref: '#/components/schemas/Setor'
  */
-router.post('/escritorios', createEscritorio);
-
 /**
  * @swagger
  * /api/escritorios/{id}:
  *   put:
- *     summary: Atualiza um escritório existente
- *     tags: [Escritorios]
+ *     summary: Atualiza um setor existente
+ *     tags: [Setores]
  *     parameters:
  *       - in: path
  *         name: id
@@ -105,22 +110,21 @@ router.post('/escritorios', createEscritorio);
  *                 type: boolean
  *     responses:
  *       200:
- *         description: Escritório atualizado
+ *         description: Setor atualizado
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Escritorio'
+ *               $ref: '#/components/schemas/Setor'
  *       404:
- *         description: Escritório não encontrado
+ *         description: Setor não encontrado
  */
-router.put('/escritorios/:id', updateEscritorio);
 
 /**
  * @swagger
  * /api/escritorios/{id}:
  *   delete:
- *     summary: Remove um escritório
- *     tags: [Escritorios]
+ *     summary: Remove um setor
+ *     tags: [Setores]
  *     parameters:
  *       - in: path
  *         name: id
@@ -129,11 +133,10 @@ router.put('/escritorios/:id', updateEscritorio);
  *         required: true
  *     responses:
  *       204:
- *         description: Escritório removido
+ *         description: Setor removido
  *       404:
- *         description: Escritório não encontrado
+ *         description: Setor não encontrado
  */
-router.delete('/escritorios/:id', deleteEscritorio);
 
 export default router;
 
