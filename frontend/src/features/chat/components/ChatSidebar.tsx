@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { MessageCircle, Plus, Search, Pin, UserRound } from "lucide-react";
+import { MessageCircle, Plus, Search, Pin } from "lucide-react";
 import type { ConversationSummary } from "../types";
 import { formatConversationTimestamp, normalizeText } from "../utils/format";
 import styles from "./ChatSidebar.module.css";
@@ -194,26 +194,6 @@ export const ChatSidebar = ({
                       <div className={styles.itemPreview}>
                         {conversation.lastMessage?.sender === "me" && <span>Você:</span>}
                         <span>{preview}</span>
-                      </div>
-                      <div className={styles.itemMeta}>
-                        <span className={styles.metaResponsible}>
-                          <UserRound size={14} aria-hidden="true" />
-                          {conversation.responsible?.name ?? "Sem responsável"}
-                        </span>
-                        {conversation.tags.length > 0 && (
-                          <div className={styles.metaTags}>
-                            {conversation.tags.slice(0, 2).map((tag) => (
-                              <span key={tag} className={styles.tagChip}>
-                                {tag}
-                              </span>
-                            ))}
-                            {conversation.tags.length > 2 && (
-                              <span className={styles.tagChip} aria-label={`Mais ${conversation.tags.length - 2} etiquetas`}>
-                                +{conversation.tags.length - 2}
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                     <div>

@@ -283,8 +283,29 @@ export const ChatWindow = ({
                   </span>
                 )}
               </div>
-              <span className={styles.status}>{conversation.shortStatus}</span>
-              <span className={styles.phoneNumber}>{conversation.phoneNumber ?? "Telefone não informado"}</span>
+              <div className={styles.headerDetails}>
+                <span className={styles.status}>{conversation.shortStatus}</span>
+                <span className={styles.phoneNumber}>
+                  {conversation.phoneNumber ?? "Telefone não informado"}
+                </span>
+              </div>
+              <div className={styles.headerMeta}>
+                <span className={styles.headerResponsible}>
+                  <UserRound size={14} aria-hidden="true" />
+                  {conversation.responsible?.name ?? "Sem responsável"}
+                </span>
+                {conversation.tags.length > 0 ? (
+                  <div className={styles.headerTags}>
+                    {conversation.tags.map((tag) => (
+                      <span key={tag} className={styles.headerTagChip}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className={styles.headerNoTags}>Sem etiquetas</span>
+                )}
+              </div>
             </div>
           </div>
           <div className={styles.actions} ref={menuRef}>
