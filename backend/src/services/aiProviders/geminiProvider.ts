@@ -58,8 +58,9 @@ export interface GeminiStructuredResponse {
 
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODEL_BY_ENVIRONMENT: Record<ApiKeyEnvironment, string> = {
-  producao: 'gemini-1.5-flash',
-  homologacao: 'gemini-1.5-flash',
+  producao: 'gemini-2.5-flash',
+  homologacao: 'gemini-2.5-flash',
+
 };
 
 function mapGeminiStatusToHttp(status: number): number {
@@ -298,20 +299,22 @@ export async function generateDocumentWithGemini({
   }
 
   const model = GEMINI_MODEL_BY_ENVIRONMENT[environment] ?? GEMINI_MODEL_BY_ENVIRONMENT.producao;
-  const url = `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${encodeURIComponent(trimmedKey)}`;
+  const url = `${GEMINI_API_BASE_URL}/${model}:generateContent`;
+
 
   const requestBody = {
     contents: [
       {
         role: 'user',
+
         parts: [{ text: buildGeminiPrompt(documentType, prompt) }],
       },
     ],
     generationConfig: {
-      temperature: 0.7,
-      topP: 0.95,
-      topK: 40,
-      maxOutputTokens: 2048,
+      thinkingConfig: {
+        thinkingBudget: 0,
+      },
+
     },
   };
 
@@ -321,6 +324,8 @@ export async function generateDocumentWithGemini({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': trimmedKey,
+
       },
       body: JSON.stringify(requestBody),
     })) as FetchResponseLike;

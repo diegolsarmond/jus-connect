@@ -5,8 +5,9 @@ const errors_1 = require("./errors");
 const html_1 = require("../../utils/html");
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODEL_BY_ENVIRONMENT = {
-    producao: 'gemini-1.5-flash',
-    homologacao: 'gemini-1.5-flash',
+    producao: 'gemini-2.5-flash',
+    homologacao: 'gemini-2.5-flash',
+
 };
 const mapGeminiStatusToHttp = (status) => {
     if (status === 401 || status === 403) {
@@ -208,19 +209,19 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
         throw new errors_1.AiProviderError('A chave de API da integração não está configurada.', 400);
     }
     const model = GEMINI_MODEL_BY_ENVIRONMENT[environment] || GEMINI_MODEL_BY_ENVIRONMENT.producao;
-    const url = `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${encodeURIComponent(trimmedKey)}`;
+    const url = `${GEMINI_API_BASE_URL}/${model}:generateContent`;
     const requestBody = {
         contents: [
             {
-                role: 'user',
+
                 parts: [{ text: buildGeminiPrompt(documentType, prompt) }],
             },
         ],
         generationConfig: {
-            temperature: 0.7,
-            topP: 0.95,
-            topK: 40,
-            maxOutputTokens: 2048,
+            thinkingConfig: {
+                thinkingBudget: 0,
+            },
+
         },
     };
     let response;
@@ -229,6 +230,8 @@ const generateDocumentWithGemini = async ({ apiKey, documentType, prompt, enviro
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'x-goog-api-key': trimmedKey,
+
             },
             body: JSON.stringify(requestBody),
         });
