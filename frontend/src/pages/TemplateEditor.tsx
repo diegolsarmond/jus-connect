@@ -1,6 +1,14 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTemplate, createTemplate, updateTemplate, fetchTags, generateWithAI, generateDocument } from '@/lib/templates';
+import {
+  getTemplate,
+  createTemplate,
+  updateTemplate,
+  fetchTags,
+  generateWithAI,
+  generateDocument,
+  type Template
+} from '@/lib/templates';
 import { Button } from '@/components/ui/button';
 import { useState, useRef, useEffect } from 'react';
 import FontSelector from '@/components/FontSelector';
@@ -26,11 +34,18 @@ export default function TemplateEditor() {
 
   const { data: tags } = useQuery({ queryKey: ['tags'], queryFn: fetchTags });
 
-  const saveMut = useMutation({
-    mutationFn: () => (isNew ? createTemplate({ title, content }) : updateTemplate(Number(id), { title, content })),
-    onSuccess: () => {
+  const saveMut = useMutation<Template>({
+    mutationFn: () =>
+      isNew
+        ? createTemplate({ title, content })
+        : updateTemplate(Number(id), { title, content }),
+    onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
-      navigate('/documentos');
+      if (isNew) {
+        navigate(`/documentos/editor/${saved.id}`);
+      } else {
+        navigate('/documentos');
+      }
     }
   });
 
