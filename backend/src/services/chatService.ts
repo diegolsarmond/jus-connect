@@ -571,11 +571,11 @@ export default class ChatService {
     return mapMessage(insertResult.rows[0] as MessageRow);
   }
 
-  async recordIncomingMessage(input: RecordMessageInput): Promise<ChatMessage> {
+  async recordIncomingMessage(input: Omit<RecordMessageInput, 'sender'>): Promise<ChatMessage> {
     return this.recordMessage({ ...input, sender: 'contact', status: input.status ?? 'delivered' });
   }
 
-  async recordOutgoingMessage(input: RecordMessageInput): Promise<ChatMessage> {
+  async recordOutgoingMessage(input: Omit<RecordMessageInput, 'sender'>): Promise<ChatMessage> {
     return this.recordMessage({ ...input, sender: 'me', status: input.status ?? 'sent' });
   }
 
