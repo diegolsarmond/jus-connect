@@ -18,7 +18,14 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { appointmentTypes, AppointmentType, Appointment } from '@/types/agenda';
+import {
+  appointmentTypes,
+  AppointmentType,
+  Appointment,
+  APPOINTMENT_TYPE_VALUES,
+  normalizeAppointmentType,
+  isValidAppointmentType,
+} from '@/types/agenda';
 
 const apiUrl = getApiBaseUrl();
 
@@ -88,7 +95,7 @@ export function AppointmentForm({
 
   const formTitle = initialValues ? 'Editar Agendamento' : 'Novo Agendamento';
 
-  const [tiposEvento, setTiposEvento] = useState<AppointmentType[]>([]);
+  const [tiposEvento, setTiposEvento] = useState<AppointmentType[]>(() => [...APPOINTMENT_TYPE_VALUES]);
   const [clientes, setClientes] = useState<
     { id: number; nome: string; telefone?: string; email?: string }[]
   >([]);
@@ -131,24 +138,35 @@ export function AppointmentForm({
           : Array.isArray(json?.data)
             ? json.data
             : [];
-        let data: AppointmentType[] = rows
-          .filter((t) => t.agenda !== false)
-          .map((t) => t.nome as AppointmentType);
-        const currentType = form.getValues('type') as AppointmentType;
 
-        if (currentType && !data.includes(currentType)) {
+        const data: AppointmentType[] = [];
+        rows
+          .filter((t) => t.agenda !== false)
+          .forEach((t) => {
+            const normalized = normalizeAppointmentType(t.nome);
+            if (normalized && !data.includes(normalized)) {
+              data.push(normalized);
+            }
+          });
+
+        if (!data.includes('outro')) {
+          data.push('outro');
+        }
+
+        const availableTypes = data.length > 0 ? data : [...APPOINTMENT_TYPE_VALUES];
+        const currentType = form.getValues('type');
+
+        if (!currentType || !isValidAppointmentType(currentType)) {
+          form.setValue('type', availableTypes[0]);
+        } else if (!availableTypes.includes(currentType)) {
           if (initialValues) {
-            data = [...data, currentType];
-          } else if (data.length > 0) {
-            form.setValue('type', data[0]);
+            availableTypes.push(currentType);
+          } else {
+            form.setValue('type', availableTypes[0]);
           }
         }
 
-        setTiposEvento(data);
-
-        if (!currentType && data.length > 0) {
-          form.setValue('type', data[0]);
-        }
+        setTiposEvento(availableTypes);
       } catch (error) {
         console.error('Erro ao carregar tipos de evento:', error);
       }
@@ -158,10 +176,11 @@ export function AppointmentForm({
   }, [form, initialValues]);
 
   const handleSubmit = (data: AppointmentFormData) => {
+    const normalizedType = normalizeAppointmentType(data.type) ?? 'outro';
     onSubmit({
       title: data.title,
       description: data.description,
-      type: data.type as AppointmentType,
+      type: normalizedType,
       date: data.date,
       startTime: data.startTime,
       endTime: data.endTime,
