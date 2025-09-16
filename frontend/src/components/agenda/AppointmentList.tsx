@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { 
-  Calendar, 
-  Clock, 
-  User, 
-  MapPin, 
+import {
+  Calendar,
+  Clock,
+  User,
+  MapPin,
   Filter,
   Search,
   MoreHorizontal,
   Edit,
   Trash2,
-  Eye
+  Eye,
+  Ban,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import {
@@ -34,11 +41,13 @@ import { statusLabel } from '@/components/agenda/status';
 interface AppointmentListProps {
   appointments: Appointment[];
   onEdit?: (appointment: Appointment) => void;
-  onDelete?: (appointmentId: string) => void;
+  onDelete?: (appointmentId: number) => void;
   onView?: (appointment: Appointment) => void;
+  onCancel?: (appointment: Appointment) => void;
+  loading?: boolean;
 }
 
-export function AppointmentList({ appointments, onEdit, onDelete, onView }: AppointmentListProps) {
+export function AppointmentList({ appointments, onEdit, onDelete, onView, onCancel }: AppointmentListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<AppointmentType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | 'all'>('all');
@@ -218,8 +227,20 @@ export function AppointmentList({ appointments, onEdit, onDelete, onView }: Appo
                               Editar
                             </DropdownMenuItem>
                           )}
+                          {onCancel && appointment.status !== 'cancelado' && (
+                            <DropdownMenuItem
+                              onClick={() => onCancel(appointment)}
+                              className="text-orange-600 focus:text-orange-600 focus:bg-orange-50 dark:focus:bg-orange-500/20"
+                            >
+                              <Ban className="mr-2 h-4 w-4" />
+                              Cancelar
+                            </DropdownMenuItem>
+                          )}
+                          {onCancel && onDelete && appointment.status !== 'cancelado' && (
+                            <DropdownMenuSeparator />
+                          )}
                           {onDelete && (
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => onDelete(appointment.id)}
                               className="text-destructive"
                             >

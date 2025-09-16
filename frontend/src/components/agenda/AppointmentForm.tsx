@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -50,22 +50,43 @@ interface AppointmentFormProps {
   onSubmit: (appointment: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
   initialDate?: Date;
+  initialValues?: Appointment;
+  submitLabel?: string;
 }
 
-export function AppointmentForm({ onSubmit, onCancel, initialDate }: AppointmentFormProps) {
+export function AppointmentForm({
+  onSubmit,
+  onCancel,
+  initialDate,
+  initialValues,
+  submitLabel,
+}: AppointmentFormProps) {
+  const defaultValues = useMemo<AppointmentFormData>(() => ({
+    title: initialValues?.title ?? '',
+    description: initialValues?.description ?? '',
+    type: initialValues?.type ?? 'reuniao',
+    date: initialValues?.date ?? initialDate ?? new Date(),
+    startTime: initialValues?.startTime ?? '',
+    endTime: initialValues?.endTime ?? '',
+    clientId: initialValues?.clientId ?? '',
+    clientName: initialValues?.clientName ?? '',
+    clientPhone: initialValues?.clientPhone ?? '',
+    clientEmail: initialValues?.clientEmail ?? '',
+    location: initialValues?.location ?? '',
+    reminders: initialValues?.reminders ?? true,
+    notifyClient: initialValues?.notifyClient ?? false,
+  }), [initialValues, initialDate]);
+
   const form = useForm<AppointmentFormData>({
     resolver: zodResolver(appointmentSchema),
-    defaultValues: {
-      type: 'reuniao',
-      date: initialDate || new Date(),
-      reminders: true,
-      notifyClient: false,
-      clientId: '',
-      clientName: '',
-      clientPhone: '',
-      clientEmail: '',
-    },
+    defaultValues,
   });
+
+  useEffect(() => {
+    form.reset(defaultValues);
+  }, [defaultValues, form]);
+
+  const formTitle = initialValues ? 'Editar Agendamento' : 'Novo Agendamento';
 
   const [tiposEvento, setTiposEvento] = useState<AppointmentType[]>([]);
   const [clientes, setClientes] = useState<
@@ -110,11 +131,22 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
           : Array.isArray(json?.data)
             ? json.data
             : [];
-        const data: AppointmentType[] = rows
+        let data: AppointmentType[] = rows
           .filter((t) => t.agenda !== false)
           .map((t) => t.nome as AppointmentType);
+        const currentType = form.getValues('type') as AppointmentType;
+
+        if (currentType && !data.includes(currentType)) {
+          if (initialValues) {
+            data = [...data, currentType];
+          } else if (data.length > 0) {
+            form.setValue('type', data[0]);
+          }
+        }
+
         setTiposEvento(data);
-        if (data.length > 0 && !data.includes(form.getValues('type') as AppointmentType)) {
+
+        if (!currentType && data.length > 0) {
           form.setValue('type', data[0]);
         }
       } catch (error) {
@@ -123,7 +155,7 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
     };
 
     fetchTiposEvento();
-  }, [form]);
+  }, [form, initialValues]);
 
   const handleSubmit = (data: AppointmentFormData) => {
     onSubmit({
@@ -156,7 +188,7 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CalendarIcon className="h-5 w-5" />
-          Novo Agendamento
+          {formTitle}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -348,7 +380,7 @@ export function AppointmentForm({ onSubmit, onCancel, initialDate }: Appointment
 
           <div className="flex gap-3 pt-4">
             <Button type="submit" className="flex-1">
-              Criar Agendamento
+              {submitLabel ?? 'Criar Agendamento'}
             </Button>
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancelar

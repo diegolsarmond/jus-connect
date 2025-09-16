@@ -4,12 +4,23 @@ import { getApiBaseUrl } from '@/lib/api';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { AgendaCalendar } from '@/components/agenda/AgendaCalendar';
 import { AppointmentForm } from '@/components/agenda/AppointmentForm';
 import { AppointmentList } from '@/components/agenda/AppointmentList';
-import { statusDotClass } from '@/components/agenda/status';
-import { Appointment, AppointmentType, AppointmentStatus } from '@/types/agenda';
+import { statusDotClass, statusLabel } from '@/components/agenda/status';
+import { Appointment, AppointmentType, AppointmentStatus, appointmentTypes } from '@/types/agenda';
 
 const apiUrl = getApiBaseUrl();
 
@@ -35,6 +46,9 @@ export default function Agenda() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formInitialDate, setFormInitialDate] = useState<Date>();
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [viewingAppointment, setViewingAppointment] = useState<Appointment | null>(null);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -160,40 +174,73 @@ export default function Agenda() {
   }, [toast]);
 
   const handleCreateAppointment = (date?: Date) => {
+    setEditingAppointment(null);
     setFormInitialDate(date);
     setIsFormOpen(true);
   };
 
-  // cria localmente (exibição); a persistência no backend pode ser adicionada depois
+  // cria/atualiza localmente (exibição); a persistência no backend pode ser adicionada depois
   const handleFormSubmit = (
     appointmentData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>
   ) => {
-    const newAppointment: Appointment = {
-      ...appointmentData,
-      id: Date.now(),              // number
-      status: 'agendado',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    if (editingAppointment) {
+      const updatedAppointment: Appointment = {
+        ...editingAppointment,
+        ...appointmentData,
+        status: editingAppointment.status,
+        updatedAt: new Date(),
+      };
 
-    setAppointments((prev) => [...prev, newAppointment]);
+      setAppointments((prev) =>
+        prev.map((apt) => (apt.id === editingAppointment.id ? updatedAppointment : apt))
+      );
+      setViewingAppointment((current) =>
+        current && current.id === editingAppointment.id ? updatedAppointment : current
+      );
+      toast({
+        title: 'Agendamento atualizado',
+        description: `${updatedAppointment.title} foi atualizado com sucesso.`,
+      });
+    } else {
+      const newAppointment: Appointment = {
+        ...appointmentData,
+        id: Date.now(),
+        status: 'agendado',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      setAppointments((prev) => [...prev, newAppointment]);
+      toast({
+        title: 'Agendamento criado!',
+        description: `${newAppointment.title} foi agendado com sucesso.`,
+      });
+    }
+
+    setSelectedDate(appointmentData.date);
     setIsFormOpen(false);
-
-    toast({
-      title: 'Agendamento criado!',
-      description: `${newAppointment.title} foi agendado com sucesso.`,
-    });
+    setEditingAppointment(null);
+    setFormInitialDate(undefined);
   };
 
   const handleEditAppointment = (appointment: Appointment) => {
-    toast({
-      title: 'Funcionalidade em desenvolvimento',
-      description: 'A edição de agendamentos será implementada em breve.',
-    });
+    setEditingAppointment(appointment);
+    setFormInitialDate(undefined);
+    setIsFormOpen(true);
   };
 
   const handleDeleteAppointment = (appointmentId: number) => {
     setAppointments((prev) => prev.filter((apt) => apt.id !== appointmentId));
+    if (viewingAppointment?.id === appointmentId) {
+      setViewingAppointment(null);
+    }
+    if (editingAppointment?.id === appointmentId) {
+      setEditingAppointment(null);
+      setIsFormOpen(false);
+    }
+    if (appointmentToCancel?.id === appointmentId) {
+      setAppointmentToCancel(null);
+    }
     toast({
       title: 'Agendamento excluído',
       description: 'O agendamento foi removido com sucesso.',
@@ -201,11 +248,49 @@ export default function Agenda() {
   };
 
   const handleViewAppointment = (appointment: Appointment) => {
-    toast({
-      title: 'Visualizar agendamento',
-      description: `Detalhes de: ${appointment.title}`,
-    });
+    setViewingAppointment(appointment);
   };
+
+  const handleRequestCancelAppointment = (appointment: Appointment) => {
+    setAppointmentToCancel(appointment);
+  };
+
+  const handleConfirmCancelAppointment = () => {
+    if (!appointmentToCancel) return;
+
+    const cancellationDate = new Date();
+
+    setAppointments((prev) =>
+      prev.map((apt) =>
+        apt.id === appointmentToCancel.id
+          ? { ...apt, status: 'cancelado', updatedAt: cancellationDate }
+          : apt
+      )
+    );
+    setViewingAppointment((current) =>
+      current && current.id === appointmentToCancel.id
+        ? { ...current, status: 'cancelado', updatedAt: cancellationDate }
+        : current
+    );
+
+    toast({
+      title: 'Agendamento cancelado',
+      description: `${appointmentToCancel.title} foi cancelado.`,
+    });
+
+    setAppointmentToCancel(null);
+  };
+
+  const formatFullDate = (date: Date) =>
+    date.toLocaleDateString('pt-BR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+
+  const formatTimeRange = (appointment: Appointment) =>
+    appointment.endTime ? `${appointment.startTime} - ${appointment.endTime}` : appointment.startTime;
 
   return (
     <div className="p-6 space-y-6">
@@ -231,7 +316,6 @@ export default function Agenda() {
             selectedDate={selectedDate}
             onDateSelect={setSelectedDate}
             onCreateAppointment={handleCreateAppointment}
-            loading={loading}
           />
         </div>
 
@@ -296,21 +380,166 @@ export default function Agenda() {
       <AppointmentList
         appointments={appointments}
         onEdit={handleEditAppointment}
-        onDelete={(id) => handleDeleteAppointment(id)}
+        onDelete={handleDeleteAppointment}
         onView={handleViewAppointment}
+        onCancel={handleRequestCancelAppointment}
         loading={loading}
       />
 
+      {/* View Appointment Dialog */}
+      <Dialog
+        open={Boolean(viewingAppointment)}
+        onOpenChange={(open) => {
+          if (!open) setViewingAppointment(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{viewingAppointment?.title ?? 'Agendamento'}</DialogTitle>
+          </DialogHeader>
+
+          {viewingAppointment && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${statusDotClass[viewingAppointment.status]}`}
+                  />
+                  {statusLabel[viewingAppointment.status]}
+                </Badge>
+                <Badge variant="secondary">
+                  {viewingAppointment.typeName ?? appointmentTypes[viewingAppointment.type].label}
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Data</p>
+                <p className="font-medium capitalize">{formatFullDate(viewingAppointment.date)}</p>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Horário</p>
+                <p className="font-medium">{formatTimeRange(viewingAppointment)}</p>
+              </div>
+
+              {viewingAppointment.description && (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Descrição</p>
+                  <p className="text-sm leading-relaxed">{viewingAppointment.description}</p>
+                </div>
+              )}
+
+              {(viewingAppointment.clientName ||
+                viewingAppointment.clientEmail ||
+                viewingAppointment.clientPhone) && (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Cliente</p>
+                  <div className="text-sm space-y-1">
+                    {viewingAppointment.clientName && <p>{viewingAppointment.clientName}</p>}
+                    {viewingAppointment.clientEmail && (
+                      <p className="text-muted-foreground">{viewingAppointment.clientEmail}</p>
+                    )}
+                    {viewingAppointment.clientPhone && (
+                      <p className="text-muted-foreground">{viewingAppointment.clientPhone}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {viewingAppointment.location && (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Local</p>
+                  <p className="text-sm">{viewingAppointment.location}</p>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Lembretes</p>
+                <p className="text-sm">
+                  {viewingAppointment.reminders ? 'Ativados' : 'Desativados'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap justify-end gap-3 pt-6">
+            <Button variant="outline" onClick={() => setViewingAppointment(null)}>
+              Fechar
+            </Button>
+            {viewingAppointment && (
+              <Button
+                onClick={() => {
+                  const appointment = viewingAppointment;
+                  setViewingAppointment(null);
+                  handleEditAppointment(appointment);
+                }}
+              >
+                Editar
+              </Button>
+            )}
+            {viewingAppointment?.status !== 'cancelado' && viewingAppointment && (
+              <Button
+                variant="destructive"
+                onClick={() => handleRequestCancelAppointment(viewingAppointment)}
+              >
+                Cancelar evento
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={Boolean(appointmentToCancel)}
+        onOpenChange={(open) => {
+          if (!open) setAppointmentToCancel(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar agendamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja realmente cancelar{' '}
+              <span className="font-semibold">{appointmentToCancel?.title}</span>? Essa ação
+              mantém o registro, mas altera o status para cancelado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmCancelAppointment}>
+              Confirmar cancelamento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Create Appointment Dialog */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          setIsFormOpen(open);
+          if (!open) {
+            setEditingAppointment(null);
+            setFormInitialDate(undefined);
+          }
+        }}
+      >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo Agendamento</DialogTitle>
+            <DialogTitle>
+              {editingAppointment ? 'Editar Agendamento' : 'Novo Agendamento'}
+            </DialogTitle>
           </DialogHeader>
           <AppointmentForm
             onSubmit={handleFormSubmit}
-            onCancel={() => setIsFormOpen(false)}
-            initialDate={formInitialDate}
+            onCancel={() => {
+              setIsFormOpen(false);
+              setEditingAppointment(null);
+              setFormInitialDate(undefined);
+            }}
+            initialDate={editingAppointment ? undefined : formInitialDate}
+            initialValues={editingAppointment ?? undefined}
+            submitLabel={editingAppointment ? 'Salvar alterações' : 'Criar Agendamento'}
           />
         </DialogContent>
       </Dialog>
