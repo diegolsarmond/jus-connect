@@ -35,7 +35,7 @@ import TipoProcesso from "./pages/configuracoes/parametros/TipoProcesso";
 import TipoEvento from "./pages/configuracoes/parametros/TipoEvento";
 import TipoDocumento from "./pages/configuracoes/parametros/TipoDocumento";
 import Perfis from "./pages/configuracoes/parametros/Perfis";
-import SituacaoCliente from "./pages/configuracoes/parametros/SituacaoCliente";
+import SituacaoProposta from "./pages/configuracoes/parametros/SituacaoProposta";
 import Escritorios from "./pages/configuracoes/parametros/Escritorios";
 import Etiquetas from "./pages/configuracoes/parametros/Etiquetas";
 import FluxoTrabalho from "./pages/configuracoes/parametros/FluxoTrabalho";
@@ -159,8 +159,8 @@ const App = () => (
               element={<Escritorios />}
             />
             <Route
-              path="/configuracoes/parametros/situacao-cliente"
-              element={<SituacaoCliente />}
+              path="/configuracoes/parametros/situacao-proposta"
+              element={<SituacaoProposta />}
             />
             <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
             <Route
