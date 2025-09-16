@@ -95,8 +95,8 @@ const App = () => (
             <Route path="/intimacoes" element={<Intimacoes />} />
             <Route path="/documentos">
               <Route index element={<LibraryPage />} />
-              <Route path="novo" element={<EditorPage />} />
-              <Route path=":id" element={<EditorPage />} />
+              <Route path="editor/novo" element={<EditorPage />} />
+              <Route path="editor/:id" element={<EditorPage />} />
             </Route>
             <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
             <Route path="/relatorios" element={<Relatorios />} />
