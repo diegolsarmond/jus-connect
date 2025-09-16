@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -9,16 +10,30 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import TaskCreationDialog, { TaskCreationPrefill } from "@/components/tasks/TaskCreationDialog";
+import {
   Download,
   FileText,
   CheckCircle,
   CalendarClock,
-  Layers,
   Eye,
   User,
   Clock,
   Tag,
   AlertTriangle,
+  Hash,
+  MapPin,
+  Gavel,
+  UserCircle,
+  CalendarDays,
+  UserCheck,
 } from "lucide-react";
 import {
   Bar,
@@ -76,6 +91,39 @@ export default function Intimacoes() {
     intimacoesMensais.reduce((total, item) => total + item.prazoMedio, 0) / intimacoesMensais.length;
   const modelosAtivos = modelosIntimacao.filter((modelo) => modelo.status === "Ativo").length;
 
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewingModelo, setViewingModelo] = useState<ModeloIntimacao | null>(null);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [taskPrefill, setTaskPrefill] = useState<TaskCreationPrefill | undefined>();
+
+  const handleViewDialogChange = (open: boolean) => {
+    setIsViewDialogOpen(open);
+    if (!open) {
+      setViewingModelo(null);
+    }
+  };
+
+  const handleOpenView = (modelo: ModeloIntimacao) => {
+    setViewingModelo(modelo);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleTaskDialogChange = (open: boolean) => {
+    setTaskDialogOpen(open);
+    if (!open) {
+      setTaskPrefill(undefined);
+    }
+  };
+
+  const handleOpenTaskDialog = (modelo: ModeloIntimacao) => {
+    setTaskPrefill({
+      title: modelo.titulo,
+      description: modelo.descricao,
+      processLabel: `${modelo.numeroProcesso} · ${modelo.cliente}`,
+    });
+    setTaskDialogOpen(true);
+  };
+
   return (
     <div className="p-6 space-y-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -90,10 +138,6 @@ export default function Intimacoes() {
             <Download className="mr-2 h-4 w-4" />
             Exportar dados
           </Button>
-          {/*<Button>*/}
-          {/*  <FileText className="mr-2 h-4 w-4" />*/}
-          {/*  Nova intimação*/}
-          {/*</Button>*/}
         </div>
       </div>
 
@@ -149,22 +193,11 @@ export default function Intimacoes() {
 
       <section className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {/*<div>*/}
-          {/*  <h2 className="text-2xl font-semibold">Modelos de intimação</h2>*/}
-          {/*  <p className="text-muted-foreground">*/}
-          {/*    Você tem {modelosAtivos} não lidas.*/}
-          {/*    processuais.*/}
-          {/*  </p>*/}
-          {/*</div>*/}
-          <div className="flex gap-2">
-            {/*<Button variant="outline" size="sm">*/}
-            {/*  <Download className="mr-2 h-4 w-4" />*/}
-            {/*  Exportar modelos*/}
-            {/*</Button>*/}
-            {/*<Button size="sm">*/}
-            {/*  <Layers className="mr-2 h-4 w-4" />*/}
-            {/*  Gerenciar biblioteca*/}
-            {/*</Button>*/}
+          <div>
+            <h2 className="text-2xl font-semibold">Modelos de intimação</h2>
+            <p className="text-muted-foreground">
+              {modelosAtivos} modelos ativos disponíveis para personalização e envio rápido.
+            </p>
           </div>
         </div>
 
@@ -181,7 +214,45 @@ export default function Intimacoes() {
                 </div>
               </CardHeader>
               <CardContent className="flex-1 space-y-4 text-sm">
-                <div className="grid gap-2 text-muted-foreground">
+                <div className="grid gap-3 text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-4 w-4" />
+                    <span>
+                      Nº do processo: <span className="font-medium text-foreground">{modelo.numeroProcesso}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    <span>
+                      Comarca: <span className="font-medium text-foreground">{modelo.comarca}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Gavel className="h-4 w-4" />
+                    <span>
+                      Vara: <span className="font-medium text-foreground">{modelo.vara}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <UserCircle className="h-4 w-4" />
+                    <span>
+                      Cliente: <span className="font-medium text-foreground">{modelo.cliente}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4" />
+                    <span>
+                      Distribuído em <span className="font-medium text-foreground">{modelo.dataDistribuicao}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="h-4 w-4" />
+                    <span>
+                      Advogado responsável: <span className="font-medium text-foreground">{modelo.advogadoResponsavel}</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="grid gap-2 border-t border-border/60 pt-4 text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4" />
                     <span>
@@ -196,29 +267,27 @@ export default function Intimacoes() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4" />
-                    <span>
-                      {modelo.prazoResposta}
-                    </span>
+                    <span>{modelo.prazoResposta}</span>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <Tag className="mt-1 h-4 w-4" />
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary">{modelo.area}</Badge>
-                      {modelo.tags.map((tag) => (
-                        <Badge key={tag} variant="outline">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
+                </div>
+                <div className="flex items-start gap-2 text-muted-foreground">
+                  <Tag className="mt-1 h-4 w-4" />
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">{modelo.area}</Badge>
+                    {modelo.tags.map((tag) => (
+                      <Badge key={tag} variant="outline">
+                        {tag}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
               </CardContent>
               <CardFooter className="flex flex-wrap gap-2">
-                <Button size="sm" variant="default">
+                <Button size="sm" variant="default" onClick={() => handleOpenView(modelo)}>
                   <Eye className="mr-2 h-4 w-4" />
                   Visualizar intimação
                 </Button>
-                <Button size="sm" variant="outline">
+                <Button size="sm" variant="outline" onClick={() => handleOpenTaskDialog(modelo)}>
                   <FileText className="mr-2 h-4 w-4" />
                   Criar Tarefa
                 </Button>
@@ -227,6 +296,65 @@ export default function Intimacoes() {
           ))}
         </div>
       </section>
+
+      <Dialog open={isViewDialogOpen} onOpenChange={handleViewDialogChange}>
+        <DialogContent className="max-w-2xl">
+          {viewingModelo && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{viewingModelo.titulo}</DialogTitle>
+                <DialogDescription>{viewingModelo.descricao}</DialogDescription>
+              </DialogHeader>
+              <ScrollArea className="max-h-[70vh] pr-2">
+                <div className="space-y-6 py-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={getStatusVariant(viewingModelo.status)}>{viewingModelo.status}</Badge>
+                    <Badge variant="secondary">{viewingModelo.area}</Badge>
+                    {viewingModelo.tags.map((tag) => (
+                      <Badge key={tag} variant="outline">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="grid gap-4 text-sm sm:grid-cols-2">
+                    {[
+                      { label: "Número do processo", value: viewingModelo.numeroProcesso },
+                      { label: "Comarca", value: viewingModelo.comarca },
+                      { label: "Vara", value: viewingModelo.vara },
+                      { label: "Cliente", value: viewingModelo.cliente },
+                      { label: "Data de distribuição", value: viewingModelo.dataDistribuicao },
+                      { label: "Advogado responsável", value: viewingModelo.advogadoResponsavel },
+                    ].map((item) => (
+                      <div key={item.label} className="space-y-1">
+                        <p className="text-xs font-medium uppercase text-muted-foreground">{item.label}</p>
+                        <p className="font-semibold text-foreground">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid gap-4 text-sm sm:grid-cols-2">
+                    {[
+                      { label: "Juiz responsável", value: viewingModelo.juizResponsavel },
+                      { label: "Prazo de resposta", value: viewingModelo.prazoResposta },
+                      { label: "Última atualização", value: viewingModelo.ultimaAtualizacao },
+                    ].map((item) => (
+                      <div key={item.label} className="space-y-1">
+                        <p className="text-xs font-medium uppercase text-muted-foreground">{item.label}</p>
+                        <p className="font-semibold text-foreground">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <TaskCreationDialog
+        open={taskDialogOpen}
+        onOpenChange={handleTaskDialogChange}
+        prefill={taskPrefill}
+      />
     </div>
   );
 }
