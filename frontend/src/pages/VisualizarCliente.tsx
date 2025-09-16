@@ -1,7 +1,13 @@
 import { useEffect, useState, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Client } from "@/types/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Mail,
   Phone,
@@ -24,6 +31,11 @@ import {
   ListTodo,
   Bell,
   CalendarPlus,
+  MessageCircle,
+  PiggyBank,
+  ArrowUpRight,
+  ArrowDownRight,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Table,
@@ -33,7 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { getApiBaseUrl } from "@/lib/api";
 
 
@@ -70,6 +82,37 @@ interface ApiDocumento {
   tipo_nome: string;
 }
 
+interface ApiFinancialFlow {
+  id: number;
+  tipo: string;
+  descricao: string;
+  valor: number | string;
+  vencimento: string;
+  pagamento: string | null;
+  status: string;
+  conta_id?: number | null;
+  contaId?: number | null;
+  categoria_id?: number | null;
+  categoriaId?: number | null;
+  cliente_id?: number | null;
+  clienteId?: number | null;
+  client_id?: number | null;
+  clientId?: number | null;
+}
+
+type FinancialRecord = {
+  id: number;
+  type: "receita" | "despesa";
+  description: string;
+  value: number;
+  dueDate: string;
+  paymentDate: string | null;
+  status: string;
+  clientId: number | null;
+  accountId: number | null;
+  categoryId: number | null;
+};
+
 type LocalClient = Client & {
   history?: Array<{
     id: number;
@@ -80,6 +123,13 @@ type LocalClient = Client & {
     status: string;
   }>;
   cep?: string;
+  street?: string;
+  streetNumber?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  registrationDate?: string;
 };
 
 const mapApiClientToClient = (c: ApiClient): LocalClient => ({
@@ -96,6 +146,13 @@ const mapApiClientToClient = (c: ApiClient): LocalClient => ({
   processes: [],
   history: [],
   cep: c.cep,
+  street: c.rua,
+  streetNumber: c.numero,
+  complement: c.complemento,
+  neighborhood: c.bairro,
+  city: c.cidade,
+  state: c.uf,
+  registrationDate: c.datacadastro,
 });
 
 export default function VisualizarCliente() {
@@ -119,6 +176,7 @@ export default function VisualizarCliente() {
   const [processSort, setProcessSort] = useState<"asc" | "desc">("asc");
   const [historySearch, setHistorySearch] = useState("");
   const [historySort, setHistorySort] = useState<"asc" | "desc">("desc");
+  const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>([]);
 
   const handleAddDocument = async () => {
     if (selectedFile && selectedType) {
@@ -191,12 +249,20 @@ export default function VisualizarCliente() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [clientRes, typesRes, docsRes] = await Promise.all([
+        const financialUrl = new URL(joinUrl(apiUrl, `/api/financial/flows`));
+        financialUrl.searchParams.set("page", "1");
+        financialUrl.searchParams.set("limit", "100");
+        if (id) {
+          financialUrl.searchParams.set("clienteId", String(id));
+        }
+
+        const [clientRes, typesRes, docsRes, financialRes] = await Promise.all([
           fetch(joinUrl(apiUrl, `/api/clientes/${id}`), {
             headers: { Accept: "application/json" },
           }),
           fetch(joinUrl(apiUrl, `/api/tipo-documentos`)),
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/documentos`)),
+          fetch(financialUrl.toString()),
         ]);
 
         if (clientRes.ok) {
@@ -220,8 +286,62 @@ export default function VisualizarCliente() {
             }))
           );
         }
+
+        if (financialRes.ok) {
+          const financialJson = await financialRes.json();
+          const flowsSource: ApiFinancialFlow[] = Array.isArray(
+            financialJson?.items,
+          )
+            ? financialJson.items
+            : Array.isArray(financialJson)
+            ? financialJson
+            : [];
+
+          const normalizedFlows = flowsSource
+            .map((flow) => {
+              if (!flow) {
+                return null;
+              }
+
+              const rawType =
+                typeof flow.tipo === "string" ? flow.tipo.toLowerCase() : "";
+              const clientIdValue =
+                (flow.cliente_id ??
+                  flow.client_id ??
+                  flow.clienteId ??
+                  flow.clientId) ?? null;
+
+              return {
+                id: Number(flow.id),
+                type: rawType === "receita" ? "receita" : "despesa",
+                description: flow.descricao ?? "",
+                value: Number(flow.valor ?? 0),
+                dueDate: flow.vencimento ?? "",
+                paymentDate: flow.pagamento ?? null,
+                status: flow.status ?? "pendente",
+                clientId:
+                  clientIdValue === null || clientIdValue === undefined
+                    ? null
+                    : Number(clientIdValue),
+                accountId:
+                  (flow.conta_id ?? flow.contaId ?? null) !== null
+                    ? Number(flow.conta_id ?? flow.contaId)
+                    : null,
+                categoryId:
+                  (flow.categoria_id ?? flow.categoriaId ?? null) !== null
+                    ? Number(flow.categoria_id ?? flow.categoriaId)
+                    : null,
+              } as FinancialRecord;
+            })
+            .filter(Boolean) as FinancialRecord[];
+
+          setFinancialRecords(normalizedFlows);
+        } else {
+          setFinancialRecords([]);
+        }
       } catch (error) {
         console.error("Erro ao buscar dados do cliente:", error);
+        setFinancialRecords([]);
       } finally {
         setLoading(false);
       }
@@ -269,8 +389,194 @@ export default function VisualizarCliente() {
       });
   }, [client?.history, historySearch, historySort]);
 
+  const clientFinancialRecords = useMemo(() => {
+    if (!client) {
+      return [] as FinancialRecord[];
+    }
+
+    const normalizedName = client.name?.toLowerCase() ?? "";
+
+    return financialRecords.filter((record) => {
+      if (record.clientId !== null && record.clientId !== undefined) {
+        return String(record.clientId) === String(client.id);
+      }
+
+      if (!normalizedName) {
+        return true;
+      }
+
+      return record.description.toLowerCase().includes(normalizedName);
+    });
+  }, [client, financialRecords]);
+
+  const financialSummary = useMemo(() => {
+    const receipts = clientFinancialRecords
+      .filter((record) => record.type === "receita")
+      .reduce((acc, record) => acc + record.value, 0);
+    const expenses = clientFinancialRecords
+      .filter((record) => record.type === "despesa")
+      .reduce((acc, record) => acc + record.value, 0);
+
+    const pendingRecords = clientFinancialRecords.filter(
+      (record) => record.status?.toLowerCase() !== "pago",
+    );
+
+    const pendingValue = pendingRecords.reduce(
+      (acc, record) => acc + record.value,
+      0,
+    );
+
+    const now = Date.now();
+    const overdueRecords = pendingRecords.filter((record) => {
+      if (!record.dueDate) {
+        return false;
+      }
+
+      const dueTime = new Date(record.dueDate).getTime();
+      if (Number.isNaN(dueTime)) {
+        return false;
+      }
+
+      return dueTime < now;
+    });
+
+    const overdueValue = overdueRecords.reduce(
+      (acc, record) => acc + record.value,
+      0,
+    );
+
+    return {
+      receipts,
+      expenses,
+      balance: receipts - expenses,
+      pendingCount: pendingRecords.length,
+      pendingValue,
+      overdueCount: overdueRecords.length,
+      overdueValue,
+    };
+  }, [clientFinancialRecords]);
+
+  const pendingFinancialRecords = useMemo(() =>
+    clientFinancialRecords
+      .filter((record) => record.status?.toLowerCase() !== "pago")
+      .slice()
+      .sort((a, b) => {
+        const dueA = new Date(a.dueDate ?? "").getTime();
+        const dueB = new Date(b.dueDate ?? "").getTime();
+        if (Number.isNaN(dueA) && Number.isNaN(dueB)) {
+          return 0;
+        }
+        if (Number.isNaN(dueA)) {
+          return 1;
+        }
+        if (Number.isNaN(dueB)) {
+          return -1;
+        }
+        return dueA - dueB;
+      }),
+  [clientFinancialRecords]);
+
+  const paidFinancialRecords = useMemo(() =>
+    clientFinancialRecords
+      .filter((record) => record.status?.toLowerCase() === "pago")
+      .slice()
+      .sort((a, b) => {
+        const dateA = (a.paymentDate || a.dueDate)
+          ? new Date(a.paymentDate || a.dueDate).getTime()
+          : NaN;
+        const dateB = (b.paymentDate || b.dueDate)
+          ? new Date(b.paymentDate || b.dueDate).getTime()
+          : NaN;
+
+        if (Number.isNaN(dateA) && Number.isNaN(dateB)) {
+          return 0;
+        }
+        if (Number.isNaN(dateA)) {
+          return 1;
+        }
+        if (Number.isNaN(dateB)) {
+          return -1;
+        }
+
+        return dateB - dateA;
+      })
+      .slice(0, 5),
+  [clientFinancialRecords]);
+
   const formatDate = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString("pt-BR") : "";
+
+  const formatDisplayDate = (iso?: string | null) => {
+    if (!iso) {
+      return "Não informado";
+    }
+    const formatted = formatDate(iso);
+    return formatted || "Não informado";
+  };
+
+  const formatCurrency = (value: number) =>
+    value.toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+    });
+
+  const isRecordOverdue = (record: FinancialRecord) => {
+    if (record.status?.toLowerCase() === "pago") {
+      return false;
+    }
+
+    if (!record.dueDate) {
+      return false;
+    }
+
+    const due = new Date(record.dueDate).getTime();
+    if (Number.isNaN(due)) {
+      return false;
+    }
+
+    return due < Date.now();
+  };
+
+  const getStatusBadge = (status: string, overdue: boolean) => {
+    const normalized = status?.toLowerCase() ?? "";
+
+    if (normalized === "pago") {
+      return (
+        <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400">
+          Pago
+        </Badge>
+      );
+    }
+
+    if (normalized === "pendente") {
+      if (overdue) {
+        return (
+          <Badge variant="destructive" className="bg-destructive/10 text-destructive">
+            Em atraso
+          </Badge>
+        );
+      }
+
+      return (
+        <Badge
+          variant="outline"
+          className="border-amber-500/30 text-amber-600 dark:text-amber-400"
+        >
+          Pendente
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge
+        variant="outline"
+        className={overdue ? "border-destructive/40 text-destructive" : undefined}
+      >
+        {status}
+      </Badge>
+    );
+  };
 
   if (loading) {
     return (
@@ -328,18 +634,36 @@ export default function VisualizarCliente() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Mail className="h-4 w-4" /> {client.email}
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Phone className="h-4 w-4" /> {client.phone}
+        <CardContent className="space-y-3">
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              <span>{client.email}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4" />
+              <span>{client.phone}</span>
+            </div>
+            <Link
+              to={{
+                pathname: "/conversas",
+                search: `?contato=${encodeURIComponent(client.name)}`,
+              }}
+              state={{
+                contactName: client.name,
+                contactEmail: client.email,
+                contactPhone: client.phone,
+              }}
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Abrir conversa com este contato
+            </Link>
           </div>
           <div className="text-sm text-muted-foreground">
             {client.type === "Pessoa Física" ? "CPF" : "CNPJ"}: {client.document}
           </div>
           <div className="text-sm text-muted-foreground">Endereço: {client.address}</div>
-          <div className="text-sm text-muted-foreground">Área: {client.area}</div>
           <div className="text-sm text-muted-foreground">Status: {client.status}</div>
           <div className="text-sm text-muted-foreground">
             Último contato: {formatDate(client.lastContact)}
@@ -348,11 +672,23 @@ export default function VisualizarCliente() {
       </Card>
 
       <Tabs defaultValue="documentos" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="documentos">Documentos</TabsTrigger>
+        <TabsList className="grid w-full gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <TabsTrigger value="documentos" className="w-full">
+            Documentos
+          </TabsTrigger>
 
-          <TabsTrigger value="processos">Processos</TabsTrigger>
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
+          <TabsTrigger value="processos" className="w-full">
+            Processos
+          </TabsTrigger>
+          <TabsTrigger value="historico" className="w-full">
+            Histórico
+          </TabsTrigger>
+          <TabsTrigger value="financeiro" className="w-full">
+            Financeiro
+          </TabsTrigger>
+          <TabsTrigger value="dados" className="w-full">
+            Dados pessoais
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="documentos" className="mt-4">
@@ -401,8 +737,7 @@ export default function VisualizarCliente() {
                   {documents.map((doc) => (
                     <Card key={doc.id} className="relative">
                       <CardContent className="p-4 space-y-2">
-                        <p className="text-sm font-medium">{doc.filename}</p>
-                        <p className="text-sm text-muted-foreground">{doc.type}</p>
+                        <p className="text-sm font-medium">{doc.type}</p>
                         <Button
                           variant="outline"
                           size="sm"
@@ -570,6 +905,332 @@ export default function VisualizarCliente() {
                     )}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="financeiro" className="mt-4 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardContent className="flex items-start justify-between gap-3 p-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Saldo</p>
+                    <p
+                      className={`text-2xl font-semibold ${
+                        financialSummary.balance >= 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-destructive"
+                      }`}
+                    >
+                      {formatCurrency(financialSummary.balance)}
+                    </p>
+                  </div>
+                  <PiggyBank className="h-8 w-8 text-primary/60" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex items-start justify-between gap-3 p-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Receitas</p>
+                    <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(financialSummary.receipts)}
+                    </p>
+                  </div>
+                  <ArrowUpRight className="h-8 w-8 text-emerald-500" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex items-start justify-between gap-3 p-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Despesas</p>
+                    <p className="text-2xl font-semibold text-destructive">
+                      {formatCurrency(financialSummary.expenses)}
+                    </p>
+                  </div>
+                  <ArrowDownRight className="h-8 w-8 text-destructive" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="flex items-start justify-between gap-3 p-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Pagamentos pendentes</p>
+                    <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
+                      {formatCurrency(financialSummary.pendingValue)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {financialSummary.pendingCount} lançamento(s)
+                    </p>
+                    {financialSummary.overdueCount > 0 && (
+                      <p className="text-xs text-destructive">
+                        {financialSummary.overdueCount} em atraso · {formatCurrency(financialSummary.overdueValue)}
+                      </p>
+                    )}
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-amber-500" />
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+              <Card className="overflow-hidden">
+                <CardHeader>
+                  <CardTitle>Movimentações financeiras</CardTitle>
+                  <CardDescription>
+                    Visão detalhada dos lançamentos vinculados ao cliente.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {clientFinancialRecords.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Descrição</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
+                            <TableHead>Vencimento</TableHead>
+                            <TableHead>Pagamento</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Conta</TableHead>
+                            <TableHead>Categoria</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {clientFinancialRecords.map((record) => {
+                            const overdue = isRecordOverdue(record);
+                            return (
+                              <TableRow
+                                key={record.id}
+                                className={overdue ? "bg-destructive/5" : undefined}
+                              >
+                                <TableCell>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-medium leading-tight">
+                                      {record.description || `Lançamento #${record.id}`}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ID interno: {record.id}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="capitalize">{record.type}</TableCell>
+                                <TableCell className="text-right">
+                                  {formatCurrency(record.value)}
+                                </TableCell>
+                                <TableCell>
+                                  {record.dueDate ? formatDate(record.dueDate) : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {record.paymentDate ? formatDate(record.paymentDate) : "-"}
+                                </TableCell>
+                                <TableCell>{getStatusBadge(record.status, overdue)}</TableCell>
+                                <TableCell>
+                                  {record.accountId ? `#${record.accountId}` : "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {record.categoryId ? `#${record.categoryId}` : "-"}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="p-6 text-center text-sm text-muted-foreground">
+                      Nenhuma movimentação financeira cadastrada para este cliente.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pagamentos pendentes</CardTitle>
+                    <CardDescription>
+                      Acompanhe vencimentos próximos e lançamentos em aberto.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {pendingFinancialRecords.length > 0 ? (
+                      pendingFinancialRecords.slice(0, 5).map((record) => {
+                        const overdue = isRecordOverdue(record);
+                        return (
+                          <div
+                            key={record.id}
+                            className="flex items-start justify-between gap-3 rounded-lg border border-muted/40 bg-muted/10 p-3"
+                          >
+                            <div>
+                              <p className="text-sm font-medium leading-none">
+                                {record.description || `Lançamento #${record.id}`}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Vencimento: {record.dueDate ? formatDate(record.dueDate) : "Não informado"}
+                              </p>
+                            </div>
+                            <div className="space-y-1 text-right">
+                              <p className="text-sm font-semibold">
+                                {formatCurrency(record.value)}
+                              </p>
+                              <Badge
+                                variant={overdue ? "destructive" : "outline"}
+                                className={
+                                  overdue
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                }
+                              >
+                                {overdue ? "Em atraso" : "Pendente"}
+                              </Badge>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum lançamento pendente.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pagamentos realizados</CardTitle>
+                    <CardDescription>
+                      Últimos lançamentos que já foram quitados.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {paidFinancialRecords.length > 0 ? (
+                      paidFinancialRecords.map((record) => (
+                        <div
+                          key={record.id}
+                          className="flex items-start justify-between gap-3 rounded-lg border border-muted/40 bg-muted/10 p-3"
+                        >
+                          <div>
+                            <p className="text-sm font-medium leading-none">
+                              {record.description || `Lançamento #${record.id}`}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Pago em: {formatDisplayDate(record.paymentDate || record.dueDate)}
+                            </p>
+                          </div>
+                          <div className="space-y-1 text-right">
+                            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(record.value)}
+                            </p>
+                            <Badge className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400">
+                              Pago
+                            </Badge>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Ainda não há pagamentos confirmados.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+          <TabsContent value="dados" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Dados pessoais</CardTitle>
+                <CardDescription>
+                  Informações cadastrais utilizadas para identificação e contato.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-id">Código do cliente</Label>
+                    <Input id="personal-id" value={String(client.id)} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-type">Tipo de cliente</Label>
+                    <Input id="personal-type" value={client.type} readOnly />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="personal-name">Nome completo</Label>
+                    <Input id="personal-name" value={client.name} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-document">
+                      {client.type === "Pessoa Física" ? "CPF" : "CNPJ"}
+                    </Label>
+                    <Input id="personal-document" value={client.document} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-status">Status</Label>
+                    <Input id="personal-status" value={client.status} readOnly />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="personal-email">Email</Label>
+                    <Input id="personal-email" type="email" value={client.email} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-phone">Telefone</Label>
+                    <Input id="personal-phone" value={client.phone} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-registration">Data de cadastro</Label>
+                    <Input
+                      id="personal-registration"
+                      value={formatDisplayDate(client.registrationDate)}
+                      readOnly
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-last-contact">Último contato</Label>
+                    <Input
+                      id="personal-last-contact"
+                      value={formatDisplayDate(client.lastContact)}
+                      readOnly
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-cep">CEP</Label>
+                    <Input id="personal-cep" value={client.cep ?? ""} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-state">UF</Label>
+                    <Input id="personal-state" value={client.state ?? ""} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-city">Cidade</Label>
+                    <Input id="personal-city" value={client.city ?? ""} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-neighborhood">Bairro</Label>
+                    <Input
+                      id="personal-neighborhood"
+                      value={client.neighborhood ?? ""}
+                      readOnly
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="personal-street">Logradouro</Label>
+                    <Input id="personal-street" value={client.street ?? ""} readOnly />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="personal-number">Número</Label>
+                    <Input
+                      id="personal-number"
+                      value={client.streetNumber ?? ""}
+                      readOnly
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="personal-complement">Complemento</Label>
+                    <Input
+                      id="personal-complement"
+                      value={client.complement ?? ""}
+                      readOnly
+                    />
+                  </div>
+                </form>
               </CardContent>
             </Card>
           </TabsContent>
