@@ -14,6 +14,10 @@ import {
   NotificationPreferenceUpdates,
   NotificationType,
 } from '../services/notificationService';
+import pjeNotificationService, {
+  PjeConfigurationError,
+  PjeWebhookSignatureError,
+} from '../services/pjeNotificationService';
 
 function resolveUserId(req: Request): string {
   const queryUserId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
@@ -212,6 +216,60 @@ export const updateNotificationPreferencesHandler = (req: Request, res: Response
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+function pickHeaderValue(header: string | string[] | undefined): string | undefined {
+  if (typeof header === 'string') {
+    return header;
+  }
+  if (Array.isArray(header) && header.length > 0) {
+    return header[0];
+  }
+  return undefined;
+}
+
+export const receivePjeNotificationHandler = async (req: Request, res: Response) => {
+  const signatureHeaderNames = [
+    'x-pje-signature',
+    'x-hub-signature-256',
+    'x-hub-signature',
+    'x-signature',
+  ] as const;
+
+  let signature: string | undefined;
+  for (const headerName of signatureHeaderNames) {
+    const value = pickHeaderValue(req.headers[headerName]);
+    if (value && value.trim()) {
+      signature = value;
+      break;
+    }
+  }
+
+  const deliveryId = pickHeaderValue(req.headers['x-delivery-id'])
+    ?? pickHeaderValue(req.headers['x-request-id'])
+    ?? pickHeaderValue(req.headers['x-correlation-id']);
+
+  try {
+    const record = await pjeNotificationService.processIncomingNotification({
+      payload: req.body,
+      signature,
+      deliveryId,
+      headers: req.headers,
+    });
+
+    res.status(202).json({ received: true, id: record.id });
+  } catch (error) {
+    if (error instanceof PjeWebhookSignatureError) {
+      return res.status(401).json({ error: error.message });
+    }
+
+    if (error instanceof PjeConfigurationError) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    console.error('Failed to process PJE notification', error);
+    res.status(500).json({ error: 'Falha ao processar notificação do PJE' });
   }
 };
 
