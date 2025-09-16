@@ -1,11 +1,10 @@
-import { useState } from "react";
-import { ArrowLeft, Save, User, Mail, Phone, Building2, Scale, Globe, Clock } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Save, User, Mail, Scale, Globe, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -17,78 +16,439 @@ import {
 import { ProfileCard } from "@/components/profile/ProfileCard";
 import { AvatarUploader } from "@/components/profile/AvatarUploader";
 import { UserFormData } from "@/types/user";
-import { X } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { CheckedState } from "@radix-ui/react-checkbox";
+import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
-const mockUserData: UserFormData = {
-  name: "Dr. João Silva",
-  email: "joao.silva@escritorio.com.br",
-  phone: "(11) 99999-9999",
+type UserRole = UserFormData["role"];
+
+type EscritorioOption = "principal" | "filial-sp" | "filial-rj";
+
+interface ApiUsuario {
+  id: number;
+  nome_completo: string;
+  cpf: string | null;
+  email: string;
+  perfil: number | null;
+  empresa: number | null;
+  escritorio: number | null;
+  oab: string | null;
+  status: boolean | null;
+  senha: string | null;
+  telefone: string | null;
+  ultimo_login: string | null;
+  observacoes: string | null;
+}
+
+const roleLabels: Record<UserRole, string> = {
+  admin: "Administrador",
+  advogado: "Advogado",
+  estagiario: "Estagiário",
+  secretario: "Secretário",
+};
+
+const roleBadgeVariants: Record<UserRole, "outline" | "default" | "secondary" | "destructive"> = {
+  admin: "destructive",
+  advogado: "default",
+  estagiario: "secondary",
+  secretario: "outline",
+};
+
+const perfilToRole = (perfil: number | null): UserRole => {
+  switch (perfil) {
+    case 1:
+      return "admin";
+    case 3:
+      return "estagiario";
+    case 4:
+      return "secretario";
+    case 2:
+    default:
+      return "advogado";
+  }
+};
+
+const roleToPerfil = (role: UserRole): number => {
+  switch (role) {
+    case "admin":
+      return 1;
+    case "estagiario":
+      return 3;
+    case "secretario":
+      return 4;
+    case "advogado":
+    default:
+      return 2;
+  }
+};
+
+const escritorioIdToOption = (id: number | null): EscritorioOption => {
+  switch (id ?? 1) {
+    case 2:
+      return "filial-sp";
+    case 3:
+      return "filial-rj";
+    case 1:
+    default:
+      return "principal";
+  }
+};
+
+const escritorioOptionToId = (option: string): number | null => {
+  switch (option) {
+    case "principal":
+      return 1;
+    case "filial-sp":
+      return 2;
+    case "filial-rj":
+      return 3;
+    default:
+      return null;
+  }
+};
+
+const createEmptyFormData = (): UserFormData => ({
+  name: "",
+  email: "",
+  phone: "",
   role: "advogado",
   escritorio: "principal",
-  oabNumero: "123456",
-  oabUf: "SP",
-  especialidades: ["Direito Civil", "Direito Empresarial"],
-  tarifaPorHora: 350,
+  oabNumero: undefined,
+  oabUf: undefined,
+  especialidades: [],
+  tarifaPorHora: undefined,
   timezone: "America/Sao_Paulo",
   idioma: "pt-BR",
-  lgpdConsent: true,
+  avatar: undefined,
+  lgpdConsent: false,
+});
+
+const cloneFormData = (data: UserFormData): UserFormData => ({
+  ...data,
+  especialidades: [...data.especialidades],
+});
+
+const parseOab = (oab: string | null): { numero?: string; uf?: string } => {
+  if (!oab) {
+    return {};
+  }
+
+  const [numero, uf] = oab.split("/").map((part) => part?.trim());
+  return {
+    numero: numero || undefined,
+    uf: uf || undefined,
+  };
+};
+
+const formatOab = (numero?: string, uf?: string): string | null => {
+  if (!numero) {
+    return null;
+  }
+
+  return uf ? `${numero}/${uf}` : numero;
+};
+
+const normalizeApiUser = (data: unknown): ApiUsuario => {
+  if (!data || typeof data !== "object") {
+    throw new Error("Resposta inválida do usuário");
+  }
+
+  const user = data as Record<string, unknown>;
+
+  const toNumberOrNull = (value: unknown): number | null => {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const toBooleanOrNull = (value: unknown): boolean | null => {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    if (typeof value === "boolean") {
+      return value;
+    }
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+    if (typeof value === "string") {
+      const normalized = value.toLowerCase();
+      if (normalized === "true" || normalized === "1") return true;
+      if (normalized === "false" || normalized === "0") return false;
+    }
+    return null;
+  };
+
+  const toStringOrNull = (value: unknown): string | null => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    return String(value);
+  };
+
+  const id = toNumberOrNull(user.id);
+  if (id === null) {
+    throw new Error("Usuário sem ID válido");
+  }
+
+  return {
+    id,
+    nome_completo: String(user.nome_completo ?? ""),
+    cpf: toStringOrNull(user.cpf),
+    email: String(user.email ?? ""),
+    perfil: toNumberOrNull(user.perfil),
+    empresa: toNumberOrNull(user.empresa),
+    escritorio: toNumberOrNull(user.escritorio),
+    oab: toStringOrNull(user.oab),
+    status: toBooleanOrNull(user.status),
+    senha: toStringOrNull(user.senha),
+    telefone: toStringOrNull(user.telefone),
+    ultimo_login: toStringOrNull(user.ultimo_login),
+    observacoes: toStringOrNull(user.observacoes),
+  };
+};
+
+const mapApiUserToFormData = (user: ApiUsuario): UserFormData => {
+  const { numero, uf } = parseOab(user.oab);
+
+  return {
+    name: user.nome_completo,
+    email: user.email,
+    phone: user.telefone ?? "",
+    role: perfilToRole(user.perfil),
+    escritorio: escritorioIdToOption(user.escritorio),
+    oabNumero: numero,
+    oabUf: uf,
+    especialidades: [],
+    tarifaPorHora: undefined,
+    timezone: "America/Sao_Paulo",
+    idioma: "pt-BR",
+    avatar: undefined,
+    lgpdConsent: user.status ?? true,
+  };
 };
 
 export default function EditarPerfil() {
-  const [formData, setFormData] = useState<UserFormData>(mockUserData);
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const apiBaseUrl = getApiBaseUrl();
+
+  const [formData, setFormData] = useState<UserFormData>(createEmptyFormData());
+  const [initialData, setInitialData] = useState<UserFormData>(createEmptyFormData());
   const [especialidadesInput, setEspecialidadesInput] = useState("");
   const [isDirty, setIsDirty] = useState(false);
   const [emailVerificationPending, setEmailVerificationPending] = useState(false);
+  const [initialEmail, setInitialEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [apiUser, setApiUser] = useState<ApiUsuario | null>(null);
 
-  const isAdvogado = formData.role === "advogado";
+  const fetchUser = useCallback(async () => {
+    if (!id) {
+      setError("ID do usuário inválido.");
+      setIsLoading(false);
+      return;
+    }
 
-  const handleInputChange = <K extends keyof UserFormData>(
-    field: K,
-    value: UserFormData[K],
-  ) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setIsLoading(true);
+    setError(null);
+    try {
+      const url = joinUrl(apiBaseUrl, `/api/usuarios/${id}`);
+      const response = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!response.ok) {
+        throw new Error(`Erro ${response.status}`);
+      }
+
+      const json = await response.json();
+      const normalizedUser = normalizeApiUser(json);
+      const mappedForm = mapApiUserToFormData(normalizedUser);
+
+      setApiUser(normalizedUser);
+      setFormData(cloneFormData(mappedForm));
+      setInitialData(cloneFormData(mappedForm));
+      setInitialEmail(mappedForm.email);
+      setEmailVerificationPending(false);
+      setIsDirty(false);
+    } catch (err) {
+      console.error("Erro ao carregar usuário:", err);
+      setError("Não foi possível carregar os dados do usuário.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [apiBaseUrl, id]);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  const handleInputChange = <K extends keyof UserFormData>(field: K, value: UserFormData[K]) => {
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        [field]: field === "especialidades" && Array.isArray(value)
+          ? ([...value] as UserFormData[K])
+          : value,
+      } as UserFormData;
+      return next;
+    });
     setIsDirty(true);
 
-    // Simulate email verification requirement
-    if (field === "email" && value !== mockUserData.email) {
-      setEmailVerificationPending(true);
+    if (field === "email" && typeof value === "string") {
+      setEmailVerificationPending(value.trim() !== initialEmail.trim());
     }
   };
 
   const addEspecialidade = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && especialidadesInput.trim()) {
       e.preventDefault();
-      if (!formData.especialidades.includes(especialidadesInput.trim())) {
-        handleInputChange("especialidades", [...formData.especialidades, especialidadesInput.trim()]);
+      const value = especialidadesInput.trim();
+      if (!formData.especialidades.includes(value)) {
+        handleInputChange("especialidades", [...formData.especialidades, value]);
       }
       setEspecialidadesInput("");
     }
   };
 
   const removeEspecialidade = (especialidade: string) => {
-    handleInputChange("especialidades", formData.especialidades.filter(e => e !== especialidade));
+    handleInputChange(
+      "especialidades",
+      formData.especialidades.filter((item) => item !== especialidade),
+    );
   };
 
   const handleAvatarChange = (file: File | null) => {
     if (file) {
-      // In real implementation, upload to server and get URL
       console.log("Avatar file:", file);
       setIsDirty(true);
     }
   };
 
-  const handleSave = () => {
-    console.log("Saving profile:", formData);
-    setIsDirty(false);
-    // Show success toast
+  const handleBack = () => {
+    if (id) {
+      navigate(`/configuracoes/usuarios/${id}`);
+    } else {
+      navigate("/configuracoes/usuarios");
+    }
   };
 
+  const handleCancel = () => {
+    setFormData(cloneFormData(initialData));
+    setEspecialidadesInput("");
+    setIsDirty(false);
+    setEmailVerificationPending(false);
+  };
+
+  const handleSave = async () => {
+    if (!id || !apiUser) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const payload = {
+        nome_completo: formData.name.trim(),
+        cpf: apiUser.cpf,
+        email: formData.email.trim(),
+        perfil: roleToPerfil(formData.role),
+        empresa: apiUser.empresa,
+        escritorio: escritorioOptionToId(formData.escritorio),
+        oab: formatOab(formData.oabNumero, formData.oabUf),
+        status: apiUser.status ?? true,
+        senha: apiUser.senha,
+        telefone: formData.phone.trim() || null,
+        ultimo_login: apiUser.ultimo_login,
+        observacoes: apiUser.observacoes,
+      };
+
+      const url = joinUrl(apiBaseUrl, `/api/usuarios/${id}`);
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ${response.status}`);
+      }
+
+      const updated = normalizeApiUser(await response.json());
+      const updatedForm = mapApiUserToFormData(updated);
+
+      setApiUser(updated);
+      setFormData(cloneFormData(updatedForm));
+      setInitialData(cloneFormData(updatedForm));
+      setInitialEmail(updatedForm.email);
+      setEmailVerificationPending(false);
+      setIsDirty(false);
+
+      toast({ title: "Perfil atualizado com sucesso" });
+    } catch (err) {
+      console.error("Erro ao salvar perfil:", err);
+      toast({
+        title: "Erro ao salvar alterações",
+        description: "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isAdvogado = formData.role === "advogado";
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Editar Perfil</h1>
+            <p className="text-muted-foreground">Atualize suas informações pessoais e profissionais</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Carregando dados do usuário...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Editar Perfil</h1>
+            <p className="text-muted-foreground">Atualize suas informações pessoais e profissionais</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <p className="text-destructive">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => void fetchUser()}>
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={handleBack}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>
@@ -99,11 +459,19 @@ export default function EditarPerfil() {
         </div>
 
         <div className="flex gap-3">
-          <Button variant="outline" disabled={!isDirty}>
+          <Button variant="outline" disabled={!isDirty || isSaving} onClick={handleCancel}>
             Cancelar
           </Button>
-          <Button onClick={handleSave} disabled={!isDirty} className="bg-primary hover:bg-primary-hover">
-            <Save className="h-4 w-4 mr-2" />
+          <Button
+            onClick={handleSave}
+            disabled={!isDirty || isSaving}
+            className="bg-primary hover:bg-primary-hover"
+          >
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
             Salvar Alterações
           </Button>
         </div>
@@ -128,7 +496,10 @@ export default function EditarPerfil() {
 
                 <div className="space-y-2">
                   <Label htmlFor="role">Função</Label>
-                  <Select value={formData.role} onValueChange={(value) => handleInputChange("role", value)}>
+                  <Select
+                    value={formData.role}
+                    onValueChange={(value) => handleInputChange("role", value as UserRole)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -144,7 +515,10 @@ export default function EditarPerfil() {
 
               <div className="space-y-2">
                 <Label htmlFor="escritorio">Escritório</Label>
-                <Select value={formData.escritorio} onValueChange={(value) => handleInputChange("escritorio", value)}>
+                <Select
+                  value={formData.escritorio}
+                  onValueChange={(value) => handleInputChange("escritorio", value as EscritorioOption)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -199,15 +573,18 @@ export default function EditarPerfil() {
                     <Label htmlFor="oabNumero">Número OAB *</Label>
                     <Input
                       id="oabNumero"
-                      value={formData.oabNumero}
-                      onChange={(e) => handleInputChange("oabNumero", e.target.value)}
+                      value={formData.oabNumero ?? ""}
+                      onChange={(e) => handleInputChange("oabNumero", e.target.value || undefined)}
                       placeholder="123456"
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="oabUf">UF *</Label>
-                    <Select value={formData.oabUf} onValueChange={(value) => handleInputChange("oabUf", value)}>
+                    <Select
+                      value={formData.oabUf ?? undefined}
+                      onValueChange={(value) => handleInputChange("oabUf", value || undefined)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="UF" />
                       </SelectTrigger>
@@ -251,8 +628,14 @@ export default function EditarPerfil() {
                   <Input
                     id="tarifaPorHora"
                     type="number"
-                    value={formData.tarifaPorHora}
-                    onChange={(e) => handleInputChange("tarifaPorHora", parseFloat(e.target.value))}
+                    value={formData.tarifaPorHora ?? ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      handleInputChange(
+                        "tarifaPorHora",
+                        value ? Number(value) : undefined,
+                      );
+                    }}
                     placeholder="350.00"
                   />
                 </div>
@@ -265,7 +648,10 @@ export default function EditarPerfil() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="timezone">Timezone</Label>
-                <Select value={formData.timezone} onValueChange={(value) => handleInputChange("timezone", value)}>
+                <Select
+                  value={formData.timezone}
+                  onValueChange={(value) => handleInputChange("timezone", value)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -278,7 +664,10 @@ export default function EditarPerfil() {
 
               <div className="space-y-2">
                 <Label htmlFor="idioma">Idioma</Label>
-                <Select value={formData.idioma} onValueChange={(value) => handleInputChange("idioma", value)}>
+                <Select
+                  value={formData.idioma}
+                  onValueChange={(value) => handleInputChange("idioma", value)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -297,7 +686,9 @@ export default function EditarPerfil() {
               <Checkbox
                 id="lgpdConsent"
                 checked={formData.lgpdConsent}
-                onCheckedChange={(checked) => handleInputChange("lgpdConsent", checked)}
+                onCheckedChange={(checked: CheckedState) =>
+                  handleInputChange("lgpdConsent", checked === true)
+                }
               />
               <div className="space-y-1 leading-none">
                 <Label htmlFor="lgpdConsent" className="cursor-pointer">
@@ -316,7 +707,7 @@ export default function EditarPerfil() {
           {/* Avatar */}
           <ProfileCard title="Avatar">
             <AvatarUploader
-              currentAvatar=""
+              currentAvatar={formData.avatar ?? ""}
               userName={formData.name}
               onAvatarChange={handleAvatarChange}
               size="lg"
@@ -330,14 +721,12 @@ export default function EditarPerfil() {
                 <h3 className="font-semibold text-foreground">{formData.name}</h3>
                 <p className="text-sm text-muted-foreground">{formData.email}</p>
                 <div className="flex justify-center mt-2">
-                  <Badge variant="outline">
-                    {formData.role === "admin" ? "Administrador" : 
-                     formData.role === "advogado" ? "Advogado" :
-                     formData.role === "estagiario" ? "Estagiário" : "Secretário"}
+                  <Badge variant={roleBadgeVariants[formData.role]}>
+                    {roleLabels[formData.role]}
                   </Badge>
                 </div>
               </div>
-              
+
               {isAdvogado && formData.oabNumero && formData.oabUf && (
                 <div className="text-center">
                   <Badge variant="secondary">

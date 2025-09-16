@@ -163,8 +163,8 @@ const App = () => (
               element={<Navigate to="/configuracoes/parametros/setores" replace />}
             />
             <Route
-              path="/configuracoes/parametros/situacao-cliente"
-              element={<SituacaoCliente />}
+              path="/configuracoes/parametros/situacao-proposta"
+              element={<SituacaoProposta />}
             />
             <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
             <Route

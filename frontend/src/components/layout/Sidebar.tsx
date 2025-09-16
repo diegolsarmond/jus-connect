@@ -131,8 +131,8 @@ export function Sidebar() {
               href: "/configuracoes/parametros/tipo-evento",
             },
             {
-              name: "Situação do Cliente",
-              href: "/configuracoes/parametros/situacao-cliente",
+              name: "Situação da Proposta",
+              href: "/configuracoes/parametros/situacao-proposta",
             },
             {
               name: "Etiquetas",
