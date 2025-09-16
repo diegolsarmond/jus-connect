@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -59,6 +60,29 @@ interface StatusOption {
   name: string;
 }
 
+interface InteractionEntry {
+  id: number;
+  comment: string;
+  attachments: { name: string; size: number }[];
+  createdAt: string;
+}
+
+const PREFERRED_ORDER = [
+  "numero_processo_cnj",
+  "numero_protocolo",
+  "vara_ou_orgao",
+  "comarca",
+  "prazo_proximo",
+  "valor_causa",
+  "valor_honorarios",
+  "percentual_honorarios",
+  "forma_pagamento",
+  "contingenciamento",
+  "detalhes",
+  "data_criacao",
+  "ultima_atualizacao",
+] as const;
+
 const formatProcessNumber = (value: string) => {
   const digits = value.replace(/\D/g, "").slice(0, 20);
   const match = digits.match(/^(\d{0,7})(\d{0,2})(\d{0,4})(\d{0,1})(\d{0,2})(\d{0,4})$/);
@@ -100,6 +124,9 @@ export default function VisualizarOportunidade() {
   const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
   const [municipios, setMunicipios] = useState<{ id: number; nome: string }[]>([]);
   const [municipiosLoading, setMunicipiosLoading] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [interactionHistory, setInteractionHistory] = useState<InteractionEntry[]>([]);
 
   const resetDocumentDialog = () => {
     setDocumentType(null);
@@ -469,28 +496,12 @@ export default function VisualizarOportunidade() {
     ].includes(key);
 
   // ordem preferencial (mantive para apresentação)
-  const preferredOrder = [
-    "numero_processo_cnj",
-    "numero_protocolo",
-    "vara_ou_orgao",
-    "comarca",
-    "prazo_proximo",
-    "valor_causa",
-    "valor_honorarios",
-    "percentual_honorarios",
-    "forma_pagamento",
-    "contingenciamento",
-    "detalhes",
-    "data_criacao",
-    "ultima_atualizacao",
-  ];
-
   const orderedEntries = useMemo(() => {
     if (!opportunity) return [];
     const entries = Object.entries(opportunity);
     const ordered: Array<[string, unknown]> = [];
     const used = new Set<string>();
-    for (const k of preferredOrder) {
+    for (const k of PREFERRED_ORDER) {
       const match = entries.find(([key]) => key === k);
       if (match) {
         ordered.push(match);
@@ -538,6 +549,11 @@ export default function VisualizarOportunidade() {
     },
   ];
 
+  const sectionContainerClass =
+    "rounded-lg border border-border bg-muted/40 p-5 shadow-sm";
+  const sectionTitleClass =
+    "mb-4 text-lg font-semibold tracking-wide text-primary";
+
   // cria um mapa das entradas por chave para fácil consulta
   const entriesMap = useMemo(() => {
     if (!opportunity) return new Map<string, unknown>();
@@ -568,6 +584,48 @@ export default function VisualizarOportunidade() {
     } catch {
       setSnack({ open: true, message: "Erro ao copiar" });
     }
+  };
+
+  const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length > 0) {
+      setPendingAttachments((prev) => [...prev, ...files]);
+      event.target.value = "";
+    }
+  };
+
+  const removePendingAttachment = (index: number) => {
+    setPendingAttachments((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const formatFileSize = (size: number) => {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  const handleInteractionSubmit = () => {
+    const trimmedComment = commentText.trim();
+    if (!trimmedComment && pendingAttachments.length === 0) {
+      setSnack({ open: true, message: "Adicione um comentário ou anexo" });
+      return;
+    }
+
+    const entry: InteractionEntry = {
+      id: Date.now(),
+      comment: trimmedComment,
+      attachments: pendingAttachments.map((file) => ({
+        name: file.name,
+        size: file.size,
+      })),
+      createdAt: new Date().toISOString(),
+    };
+
+    setInteractionHistory((prev) => [entry, ...prev]);
+    setPendingAttachments([]);
+    setCommentText("");
+    setSnack({ open: true, message: "Comentário registrado" });
   };
 
   // auto-close do snackbar para não ficar cortando o rodapé
@@ -886,12 +944,16 @@ export default function VisualizarOportunidade() {
                 const fields = section.fields.filter((f) => entriesMap.has(f));
                 if (fields.length === 0) return null;
                 return (
-                  <section key={section.key} aria-labelledby={`heading-${section.key}`} className="p-4 bg-transparent rounded border border-transparent md:border-0">
-                    <h2 id={`heading-${section.key}`} className="text-lg font-semibold mb-3">
+                  <section
+                    key={section.key}
+                    aria-labelledby={`heading-${section.key}`}
+                    className={sectionContainerClass}
+                  >
+                    <h2 id={`heading-${section.key}`} className={sectionTitleClass}>
                       {section.label}
                     </h2>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       {fields.map((key) => {
                         const value = entriesMap.get(key);
                         const label = formatLabel(key);
@@ -901,7 +963,10 @@ export default function VisualizarOportunidade() {
                         const copyText = shouldShowCopy(key) && value !== undefined && value !== null ? String(value) : "";
 
                         return (
-                          <div key={key} className="p-2">
+                          <div
+                            key={key}
+                            className="rounded-lg border border-border/60 bg-background/60 p-3"
+                          >
                             <dl>
                               <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
                               <dd className="mt-1 flex items-start gap-2">
@@ -933,11 +998,11 @@ export default function VisualizarOportunidade() {
               {participants.length > 0 && (
                 <section
                   aria-labelledby="heading-envolvidos"
-                  className="p-4 bg-transparent rounded border border-transparent md:border-0"
+                  className={sectionContainerClass}
                 >
                   <h2
                     id="heading-envolvidos"
-                    className="text-lg font-semibold mb-3"
+                    className={sectionTitleClass}
                   >
                     Dados dos Envolvidos
                   </h2>
@@ -945,13 +1010,16 @@ export default function VisualizarOportunidade() {
                     {participants.map((p, idx) => (
                       <div
                         key={p.id ?? idx}
-                        className="border p-4 rounded-md"
+                        className="rounded-lg border border-border/60 bg-background p-4 shadow-sm"
                       >
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                           {Object.entries(p).map(([k, v]) => {
                             if (!participantLabels[k]) return null;
                             return (
-                              <div key={k} className="p-2">
+                              <div
+                                key={k}
+                                className="rounded-lg border border-border/60 bg-background/60 p-3"
+                              >
                                 <dl>
                                   <dt className="text-sm font-medium text-muted-foreground">
                                     {participantLabels[k]}
@@ -972,13 +1040,131 @@ export default function VisualizarOportunidade() {
                 </section>
               )}
 
+              <section
+                aria-labelledby="heading-interactions"
+                className={sectionContainerClass}
+              >
+                <h2 id="heading-interactions" className={sectionTitleClass}>
+                  Anexos e Comentários
+                </h2>
+                <div className="space-y-5">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-3">
+                      <Label htmlFor="opportunity-attachments">Anexos</Label>
+                      <Input
+                        id="opportunity-attachments"
+                        type="file"
+                        multiple
+                        onChange={handleAttachmentChange}
+                      />
+                      {pendingAttachments.length > 0 && (
+                        <ul className="space-y-2">
+                          {pendingAttachments.map((file, index) => (
+                            <li
+                              key={`${file.name}-${index}`}
+                              className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-sm"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate font-medium">{file.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatFileSize(file.size)}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removePendingAttachment(index)}
+                                aria-label={`Remover anexo ${file.name}`}
+                              >
+                                Remover
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <Label htmlFor="opportunity-comment">Comentário</Label>
+                      <Textarea
+                        id="opportunity-comment"
+                        placeholder="Escreva um comentário sobre esta oportunidade"
+                        value={commentText}
+                        onChange={(event) => setCommentText(event.target.value)}
+                        rows={pendingAttachments.length > 0 ? 6 : 4}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Os comentários e anexos são armazenados localmente para referência
+                      rápida.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={handleInteractionSubmit}
+                      aria-label="Registrar comentário e anexos"
+                    >
+                      Registrar
+                    </Button>
+                  </div>
+
+                  {interactionHistory.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                        Interações recentes
+                      </h3>
+                      <ul className="space-y-3">
+                        {interactionHistory.map((entry) => (
+                          <li
+                            key={entry.id}
+                            className="rounded-lg border border-border/60 bg-background px-4 py-3 shadow-sm"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                              <span>
+                                Registrado em {new Date(entry.createdAt).toLocaleString("pt-BR")}
+                              </span>
+                              {entry.attachments.length > 0 && (
+                                <span>
+                                  {entry.attachments.length} {" "}
+                                  {entry.attachments.length === 1 ? "anexo" : "anexos"}
+                                </span>
+                              )}
+                            </div>
+                            {entry.comment && (
+                              <p className="mt-2 whitespace-pre-line text-sm text-foreground">
+                                {entry.comment}
+                              </p>
+                            )}
+                            {entry.attachments.length > 0 && (
+                              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                                {entry.attachments.map((file, index) => (
+                                  <li
+                                    key={`${file.name}-${index}`}
+                                    className="flex items-center justify-between gap-3 rounded border border-dashed border-border/50 bg-background/50 px-3 py-2"
+                                  >
+                                    <span className="truncate">{file.name}</span>
+                                    <span className="text-xs">{formatFileSize(file.size)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {/* Metadados extras: campos que não estão nas seções acima */}
-              <section aria-labelledby="heading-extras" className="p-4">
-                <h2 id="heading-extras" className="text-lg font-semibold mb-3">
+              <section aria-labelledby="heading-extras" className={sectionContainerClass}>
+                <h2 id="heading-extras" className={sectionTitleClass}>
                   Metadados
                 </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {orderedEntries
                     .filter(([k]) => {
                       // já apresentados nas seções? se não, mostrará aqui (e exclui id/title já mostrados se preferir)
@@ -991,7 +1177,10 @@ export default function VisualizarOportunidade() {
                       );
                     })
                     .map(([k, v]) => (
-                      <div key={k} className="p-2">
+                      <div
+                        key={k}
+                        className="rounded-lg border border-border/60 bg-background/60 p-3"
+                      >
                         <dl>
                           <dt className="text-sm font-medium text-muted-foreground">{formatLabel(k)}</dt>
                           <dd className="mt-1">{renderFormatted(k, v)}</dd>
