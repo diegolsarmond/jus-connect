@@ -52,7 +52,7 @@ export const listPerfis = async (_req: Request, res: Response) => {
               ) AS modulos
          FROM public.perfis p
     LEFT JOIN public.perfil_modulos pm ON pm.perfil_id = p.id
-     GROUP BY p.id
+     GROUP BY p.id, p.nome, p.ativo, p.datacriacao
      ORDER BY p.nome`
     );
     res.json(result.rows.map(formatPerfilRow));
