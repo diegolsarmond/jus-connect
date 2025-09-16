@@ -1,7 +1,46 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateNotificationPreferencesHandler = exports.getNotificationPreferencesHandler = exports.getUnreadCountHandler = exports.deleteNotificationHandler = exports.markAllNotificationsAsReadHandler = exports.markNotificationAsUnreadHandler = exports.markNotificationAsReadHandler = exports.createNotificationHandler = exports.getNotificationHandler = exports.listNotificationsHandler = void 0;
+exports.triggerProjudiSyncHandler = exports.receivePjeNotificationHandler = exports.updateNotificationPreferencesHandler = exports.getNotificationPreferencesHandler = exports.getUnreadCountHandler = exports.deleteNotificationHandler = exports.markAllNotificationsAsReadHandler = exports.markNotificationAsUnreadHandler = exports.markNotificationAsReadHandler = exports.createNotificationHandler = exports.getNotificationHandler = exports.listNotificationsHandler = void 0;
 const notificationService_1 = require("../services/notificationService");
+const pjeNotificationService_1 = __importStar(require("../services/pjeNotificationService"));
+const cronJobs_1 = __importDefault(require("../services/cronJobs"));
+const projudiNotificationService_1 = require("../services/projudiNotificationService");
 function resolveUserId(req) {
     const queryUserId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
     const body = req.body ?? {};
@@ -191,3 +230,71 @@ const updateNotificationPreferencesHandler = (req, res) => {
     }
 };
 exports.updateNotificationPreferencesHandler = updateNotificationPreferencesHandler;
+function pickHeaderValue(header) {
+    if (typeof header === 'string') {
+        return header;
+    }
+    if (Array.isArray(header) && header.length > 0) {
+        return header[0];
+    }
+    return undefined;
+}
+const receivePjeNotificationHandler = async (req, res) => {
+    const signatureHeaderNames = [
+        'x-pje-signature',
+        'x-hub-signature-256',
+        'x-hub-signature',
+        'x-signature',
+    ];
+    let signature;
+    for (const headerName of signatureHeaderNames) {
+        const value = pickHeaderValue(req.headers[headerName]);
+        if (value && value.trim()) {
+            signature = value;
+            break;
+        }
+    }
+    const deliveryId = pickHeaderValue(req.headers['x-delivery-id'])
+        ?? pickHeaderValue(req.headers['x-request-id'])
+        ?? pickHeaderValue(req.headers['x-correlation-id']);
+    try {
+        const record = await pjeNotificationService_1.default.processIncomingNotification({
+            payload: req.body,
+            signature,
+            deliveryId,
+            headers: req.headers,
+        });
+        res.status(202).json({ received: true, id: record.id });
+    }
+    catch (error) {
+        if (error instanceof pjeNotificationService_1.PjeWebhookSignatureError) {
+            return res.status(401).json({ error: error.message });
+        }
+        if (error instanceof pjeNotificationService_1.PjeConfigurationError) {
+            return res.status(500).json({ error: error.message });
+        }
+        console.error('Failed to process PJE notification', error);
+        res.status(500).json({ error: 'Falha ao processar notificação do PJE' });
+    }
+};
+exports.receivePjeNotificationHandler = receivePjeNotificationHandler;
+const triggerProjudiSyncHandler = async (req, res) => {
+    try {
+        const previewRequested = typeof req.query.preview === 'string'
+            && ['true', '1', 'yes'].includes(req.query.preview.toLowerCase());
+        if (previewRequested) {
+            const status = cronJobs_1.default.getProjudiSyncStatus();
+            return res.json({ triggered: false, status });
+        }
+        const result = await cronJobs_1.default.triggerProjudiSyncNow();
+        res.json({ triggered: result.triggered, status: result.status });
+    }
+    catch (error) {
+        if (error instanceof projudiNotificationService_1.ProjudiConfigurationError) {
+            return res.status(400).json({ error: error.message });
+        }
+        console.error('Failed to trigger Projudi sync job', error);
+        res.status(500).json({ error: 'Falha ao sincronizar intimações do Projudi' });
+    }
+};
+exports.triggerProjudiSyncHandler = triggerProjudiSyncHandler;

@@ -28,6 +28,53 @@ const parseOptionalId = (value) => {
     }
     return 'invalid';
 };
+const parseStatus = (value) => {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'number') {
+        if (value === 1) {
+            return true;
+        }
+        if (value === 0) {
+            return false;
+        }
+        return 'invalid';
+    }
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === '') {
+            return 'invalid';
+        }
+        if ([
+            'true',
+            '1',
+            't',
+            'y',
+            'yes',
+            'sim',
+            'ativo',
+            'active',
+        ].includes(normalized)) {
+            return true;
+        }
+        if ([
+            'false',
+            '0',
+            'f',
+            'n',
+            'no',
+            'nao',
+            'não',
+            'inativo',
+            'inactive',
+        ].includes(normalized)) {
+            return false;
+        }
+        return 'invalid';
+    }
+    return 'invalid';
+};
 const listUsuarios = async (_req, res) => {
     try {
         const result = await db_1.default.query('SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"');
@@ -57,6 +104,10 @@ exports.getUsuarioById = getUsuarioById;
 const createUsuario = async (req, res) => {
     const { nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
     try {
+        const parsedStatus = parseStatus(status);
+        if (parsedStatus === 'invalid') {
+            return res.status(400).json({ error: 'Status inválido' });
+        }
         const empresaIdResult = parseOptionalId(empresa);
         if (empresaIdResult === 'invalid') {
             return res.status(400).json({ error: 'ID de empresa inválido' });
@@ -89,7 +140,7 @@ const createUsuario = async (req, res) => {
             empresaId,
             escritorioId,
             oab,
-            status,
+            parsedStatus,
             senha,
             telefone,
             ultimo_login,
@@ -107,6 +158,10 @@ const updateUsuario = async (req, res) => {
     const { id } = req.params;
     const { nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
     try {
+        const parsedStatus = parseStatus(status);
+        if (parsedStatus === 'invalid') {
+            return res.status(400).json({ error: 'Status inválido' });
+        }
         const empresaIdResult = parseOptionalId(empresa);
         if (empresaIdResult === 'invalid') {
             return res.status(400).json({ error: 'ID de empresa inválido' });
@@ -139,7 +194,7 @@ const updateUsuario = async (req, res) => {
             empresaId,
             escritorioId,
             oab,
-            status,
+            parsedStatus,
             senha,
             telefone,
             ultimo_login,

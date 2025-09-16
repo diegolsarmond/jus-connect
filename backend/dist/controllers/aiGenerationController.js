@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateTextWithIntegration = void 0;
+exports.generateTextWithIntegration = generateTextWithIntegration;
 const integrationApiKeyService_1 = __importDefault(require("../services/integrationApiKeyService"));
 const errors_1 = require("../services/aiProviders/errors");
 const geminiProvider_1 = require("../services/aiProviders/geminiProvider");
@@ -70,7 +70,7 @@ async function generateTextWithIntegration(req, res) {
         if (!integration || !integration.active) {
             return res.status(404).json({ error: 'Active integration not found' });
         }
-        const providerLabel = providerLabels[integration.provider] || integration.provider;
+        const providerLabel = providerLabels[integration.provider] ?? integration.provider;
         const normalizedDocumentType = toTitleCase(documentType.trim());
         const normalizedPrompt = prompt.trim();
         let htmlContent = null;
@@ -113,4 +113,3 @@ async function generateTextWithIntegration(req, res) {
         return res.status(500).json({ error: 'Internal server error' });
     }
 }
-exports.generateTextWithIntegration = generateTextWithIntegration;
