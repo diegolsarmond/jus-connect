@@ -236,4 +236,23 @@ export default class IntegrationApiKeyService {
     const result = await this.db.query('DELETE FROM integration_api_keys WHERE id = $1', [id]);
     return result.rowCount > 0;
   }
+
+  async findById(id: number): Promise<IntegrationApiKey | null> {
+    if (!Number.isInteger(id) || id <= 0) {
+      return null;
+    }
+
+    const result = await this.db.query(
+      `SELECT id, provider, key_value, environment, active, last_used, created_at, updated_at
+       FROM integration_api_keys
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    return mapRow(result.rows[0] as IntegrationApiKeyRow);
+  }
 }

@@ -13,7 +13,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useToast } from '@/hooks/use-toast';
+import {
+  API_KEY_PROVIDER_LABELS,
+  fetchIntegrationApiKeys,
+  generateAiText,
+  type IntegrationApiKey,
+} from '@/lib/integrationApiKeys';
 import { createTemplate, getTemplate, updateTemplate } from '@/lib/templates';
 import type {
   EditorJsonContent,
@@ -27,7 +45,7 @@ import { EditorToolbar, type ToolbarAlignment, type ToolbarBlock, type ToolbarSt
 import { SidebarNavigation } from '@/features/document-editor/components/SidebarNavigation';
 import { MetadataModal, type MetadataFormValues } from '@/features/document-editor/components/MetadataModal';
 import { SaveButton } from '@/features/document-editor/components/SaveButton';
-import { Menu } from 'lucide-react';
+import { Menu, Sparkles } from 'lucide-react';
 
 function escapeHtml(text: string): string {
   const div = document.createElement('div');
@@ -141,6 +159,15 @@ const initialToolbarState: ToolbarState = {
   highlight: false,
 };
 
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: 'contrato', label: 'Contrato' },
+  { value: 'peticao', label: 'Petição' },
+  { value: 'parecer', label: 'Parecer' },
+  { value: 'recurso', label: 'Recurso' },
+  { value: 'notificacao', label: 'Notificação' },
+  { value: 'outro', label: 'Outro' },
+];
+
 export default function EditorPage() {
   const { id } = useParams();
   const location = useLocation();
@@ -148,6 +175,7 @@ export default function EditorPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const { toast } = useToast();
 
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [title, setTitle] = useState('');
@@ -161,12 +189,54 @@ export default function EditorPage() {
   const [activeSection, setActiveSection] = useState<'editor' | 'metadata' | 'placeholders'>('editor');
   const [toolbarState, setToolbarState] = useState<ToolbarState>(initialToolbarState);
   const [tagEditor, setTagEditor] = useState<{ element: HTMLElement; label: string } | null>(null);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiDocumentType, setAiDocumentType] = useState<string>(DOCUMENT_TYPE_OPTIONS[0]?.value ?? 'contrato');
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [selectedIntegrationId, setSelectedIntegrationId] = useState<number | null>(null);
+  const [isGeneratingAiContent, setIsGeneratingAiContent] = useState(false);
 
   const editorSectionRef = useRef<HTMLDivElement | null>(null);
   const metadataSectionRef = useRef<HTMLDivElement | null>(null);
   const placeholdersSectionRef = useRef<HTMLDivElement | null>(null);
 
   const locationState = location.state as { openMetadata?: boolean } | null;
+
+  const integrationQuery = useQuery({
+    queryKey: ['integration-api-keys'],
+    queryFn: fetchIntegrationApiKeys,
+  });
+
+  const activeAiIntegrations = useMemo(() => {
+    if (!integrationQuery.data) return [] as IntegrationApiKey[];
+    return [...integrationQuery.data]
+      .filter(integration => integration.active)
+      .sort((a, b) => {
+        if (a.environment === b.environment) {
+          return API_KEY_PROVIDER_LABELS[a.provider].localeCompare(API_KEY_PROVIDER_LABELS[b.provider]);
+        }
+        if (a.environment === 'producao') return -1;
+        if (b.environment === 'producao') return 1;
+        return a.environment.localeCompare(b.environment);
+      });
+  }, [integrationQuery.data]);
+
+  const hasActiveAiIntegrations = activeAiIntegrations.length > 0;
+  const isLoadingAiIntegrations = integrationQuery.isLoading;
+  const isAiButtonDisabled = isLoadingAiIntegrations || !hasActiveAiIntegrations;
+
+  useEffect(() => {
+    if (activeAiIntegrations.length === 0) {
+      if (selectedIntegrationId !== null) {
+        setSelectedIntegrationId(null);
+      }
+      return;
+    }
+
+    const exists = activeAiIntegrations.some(integration => integration.id === selectedIntegrationId);
+    if (!exists) {
+      setSelectedIntegrationId(activeAiIntegrations[0].id);
+    }
+  }, [activeAiIntegrations, selectedIntegrationId]);
 
   useEffect(() => {
     if (locationState?.openMetadata) {
@@ -518,6 +588,69 @@ export default function EditorPage() {
     }
   };
 
+  const handleGenerateAiContent = async () => {
+    const promptText = aiPrompt.trim();
+    if (!selectedIntegrationId) {
+      toast({
+        title: 'Nenhuma integração disponível',
+        description: 'Cadastre ou ative uma integração de IA para utilizar este recurso.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!promptText) {
+      toast({
+        title: 'Descreva o que precisa',
+        description: 'Informe o objetivo do documento para que a IA possa gerar o texto.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const documentTypeLabel =
+      DOCUMENT_TYPE_OPTIONS.find(option => option.value === aiDocumentType)?.label ?? aiDocumentType;
+
+    setIsGeneratingAiContent(true);
+
+    try {
+      const response = await generateAiText({
+        integrationId: selectedIntegrationId,
+        documentType: documentTypeLabel,
+        prompt: promptText,
+      });
+
+      const editor = editorRef.current;
+      if (editor) {
+        editor.innerHTML = response.content;
+        handleContentUpdate();
+        updateToolbarState();
+        focusSection('editor');
+        focusEditor();
+      }
+
+      toast({
+        title: 'Texto gerado com IA',
+        description: `Conteúdo criado com ${API_KEY_PROVIDER_LABELS[response.provider]}.`,
+      });
+
+      setIsAiModalOpen(false);
+      setAiPrompt('');
+    } catch (error) {
+      console.error('Failed to generate AI text', error);
+      toast({
+        title: 'Não foi possível gerar o texto',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Erro inesperado ao gerar o texto com IA.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingAiContent(false);
+    }
+  };
+
   const handleUndo = () => {
     focusEditor();
     document.execCommand('undo');
@@ -611,7 +744,23 @@ export default function EditorPage() {
                   />
                 </div>
               </div>
-              <InsertMenu onSelect={handleInsertVariable} />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => setIsAiModalOpen(true)}
+                  disabled={isAiButtonDisabled}
+                  title={
+                    !isLoadingAiIntegrations && !hasActiveAiIntegrations
+                      ? 'Cadastre uma integração de IA nas configurações para ativar esta funcionalidade.'
+                      : undefined
+                  }
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  {isLoadingAiIntegrations ? 'Carregando IA...' : 'Gerar texto com IA'}
+                </Button>
+                <InsertMenu onSelect={handleInsertVariable} />
+              </div>
             </div>
             <EditorToolbar
               state={toolbarState}
@@ -636,7 +785,7 @@ export default function EditorPage() {
               ) : (
                 <div className="relative flex justify-center">
                   <div className="w-full max-w-[210mm]">
-                    <div className="mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white px-12 py-16 shadow-lg">
+                    <div className="mx-auto min-h-[297mm] w-full max-w-[210mm] bg-card px-12 py-16 text-card-foreground shadow-lg">
                       <div
                         ref={editorRef}
                         className="wysiwyg-editor focus:outline-none"
@@ -762,6 +911,112 @@ export default function EditorPage() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={isAiModalOpen}
+        onOpenChange={open => {
+          if (!open && isGeneratingAiContent) {
+            return;
+          }
+          setIsAiModalOpen(open);
+          if (!open) {
+            setAiPrompt('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Gerar texto com IA</DialogTitle>
+            <DialogDescription>
+              Utilize uma integração cadastrada para criar um rascunho inicial do documento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ai-integration">Integração de IA</Label>
+              {hasActiveAiIntegrations ? (
+                <Select
+                  value={selectedIntegrationId ? String(selectedIntegrationId) : undefined}
+                  onValueChange={value => setSelectedIntegrationId(Number(value))}
+                  disabled={isGeneratingAiContent}
+                >
+                  <SelectTrigger id="ai-integration">
+                    <SelectValue placeholder="Selecione a integração" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeAiIntegrations.map(integration => (
+                      <SelectItem key={integration.id} value={integration.id.toString()}>
+                        {API_KEY_PROVIDER_LABELS[integration.provider]} •{' '}
+                        {integration.environment === 'producao' ? 'Produção' : 'Homologação'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                  Cadastre uma integração de IA em Configurações &gt; Integrações para utilizar este recurso.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-document-type">Tipo de documento</Label>
+              <Select
+                value={aiDocumentType}
+                onValueChange={value => setAiDocumentType(value)}
+                disabled={isGeneratingAiContent}
+              >
+                <SelectTrigger id="ai-document-type">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPE_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-prompt">O que o texto deve abordar?</Label>
+              <Textarea
+                id="ai-prompt"
+                value={aiPrompt}
+                onChange={event => setAiPrompt(event.target.value)}
+                placeholder="Descreva o contexto, o objetivo e os pontos essenciais do documento."
+                rows={6}
+                disabled={isGeneratingAiContent}
+              />
+              <p className="text-xs text-muted-foreground">
+                Quanto mais detalhes você fornecer, mais completo será o rascunho gerado.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (isGeneratingAiContent) return;
+                setIsAiModalOpen(false);
+                setAiPrompt('');
+              }}
+              disabled={isGeneratingAiContent}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleGenerateAiContent}
+              disabled={
+                isGeneratingAiContent || !selectedIntegrationId || aiPrompt.trim().length === 0
+              }
+            >
+              {isGeneratingAiContent ? 'Gerando...' : 'Gerar texto'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <MetadataModal
         open={isMetadataModalOpen}
