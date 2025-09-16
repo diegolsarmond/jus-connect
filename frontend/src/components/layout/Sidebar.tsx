@@ -19,7 +19,6 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  UserCircle,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -87,7 +86,6 @@ export function Sidebar() {
     { name: "Documentos", href: "/documentos", icon: FileText },
     { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign },
     { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
-    { name: "Meu Perfil", href: "/meu-perfil", icon: UserCircle },
     { name: "Meu Plano", href: "/meu-plano", icon: CreditCard },
     { name: "Suporte", href: "/suporte", icon: LifeBuoy },
     {
