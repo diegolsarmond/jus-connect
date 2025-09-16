@@ -1158,7 +1158,7 @@ export default function VisualizarOportunidade() {
                   <Label htmlFor="process-number">Número do processo</Label>
                   <Input
                     id="process-number"
-                    placeholder="5202268-77.2022.8.13.0024"
+                    placeholder="0000000-00.0000.0.00.0000"
                     value={processForm.numero}
                     onChange={(event) =>
                       setProcessForm((prev) => ({
