@@ -283,18 +283,21 @@ export const WhatsAppLayout = () => {
           />
         </aside>
 
-        <section className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
-          <CRMChatWindow
-            conversation={activeConversation}
-            messages={messages}
-            hasMore={false}
-            isLoading={messagesLoading}
-            isLoadingMore={false}
-            onSendMessage={handleSendMessage}
-            onLoadOlder={async () => []}
-            onUpdateConversation={handleUpdateConversation}
-            isUpdatingConversation={false}
-          />
+        <section className="flex flex-1 min-w-0 min-h-0 overflow-hidden px-4 sm:px-6 lg:px-10 justify-center">
+          <div className="flex flex-1 h-full min-h-0 w-full max-w-4xl mx-auto">
+            <CRMChatWindow
+              conversation={activeConversation}
+              messages={messages}
+              hasMore={false}
+              isLoading={messagesLoading}
+              isLoadingMore={false}
+              onSendMessage={handleSendMessage}
+              onLoadOlder={async () => []}
+              onUpdateConversation={handleUpdateConversation}
+              isUpdatingConversation={false}
+            />
+          </div>
+
         </section>
       </div>
     </div>
