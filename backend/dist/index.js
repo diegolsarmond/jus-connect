@@ -38,6 +38,7 @@ const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const swagger_1 = __importDefault(require("./swagger"));
 const cronJobs_1 = __importDefault(require("./services/cronJobs"));
+const chatSchema_1 = require("./services/chatSchema");
 const app = (0, express_1.default)();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
 app.use(express_1.default.json({ limit: '50mb' }));
@@ -139,8 +140,17 @@ else {
         res.sendFile(frontendIndexPath);
     });
 }
-// Start
-const server = app.listen(port, () => {
-    const actualPort = server.address().port;
-    console.log(`Server listening on port ${actualPort}`);
-});
+async function startServer() {
+    try {
+        await (0, chatSchema_1.ensureChatSchema)();
+    }
+    catch (error) {
+        console.error('Failed to initialize chat storage schema', error);
+        process.exit(1);
+    }
+    const server = app.listen(port, () => {
+        const actualPort = server.address().port;
+        console.log(`Server listening on port ${actualPort}`);
+    });
+}
+void startServer();

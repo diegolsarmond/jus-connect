@@ -80,6 +80,16 @@ function parseMessageLimit(value) {
     }
     return parsed;
 }
+function parseConversationLimit(value) {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed) || parsed <= 0) {
+        return undefined;
+    }
+    return parsed;
+}
 function parseSendMessagePayload(body) {
     if (!body || typeof body !== 'object') {
         throw new chatService_1.ValidationError('Request body must be an object');
@@ -96,7 +106,36 @@ function parseSendMessagePayload(body) {
         attachments,
     };
 }
-async function listConversationsHandler(_req, res) {
+async function listConversationsHandler(req, res) {
+    const source = typeof req.query.source === 'string' ? req.query.source : undefined;
+    const preferLocal = source === 'local';
+    const forceRemote = source === 'waha';
+    const session = typeof req.query.session === 'string' ? req.query.session : undefined;
+    const limit = parseConversationLimit(req.query.limit);
+    if (!preferLocal) {
+        try {
+            const conversations = await wahaIntegration.listChats({
+                sessionId: session,
+                limit,
+            });
+            return res.json(conversations);
+        }
+        catch (error) {
+            if (error instanceof wahaIntegrationService_1.IntegrationNotConfiguredError) {
+                if (forceRemote) {
+                    return res.status(503).json({ error: error.message });
+                }
+                console.warn('WAHA integration not configured, falling back to local conversations');
+            }
+            else if (error instanceof chatService_1.ValidationError) {
+                return res.status(400).json({ error: error.message });
+            }
+            else {
+                console.error('Failed to list WAHA chats', error);
+                return res.status(502).json({ error: 'Failed to load conversations from WAHA' });
+            }
+        }
+    }
     try {
         const conversations = await chatService.listConversations();
         res.json(conversations);

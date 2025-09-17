@@ -1,5 +1,6 @@
 import { QueryResultRow } from 'pg';
 import pool from './db';
+import { ensureChatSchema } from './chatSchema';
 
 export type ChatMessageSender = 'me' | 'contact';
 export type ChatMessageStatus = 'sent' | 'delivered' | 'read';
@@ -387,10 +388,22 @@ function computeNextCursor(messages: ChatMessage[]): string | null {
 }
 
 export default class ChatService {
-  constructor(private readonly db: Queryable = pool) {}
+  private readonly schemaReady: Promise<void>;
+
+  constructor(
+    private readonly db: Queryable = pool,
+    schemaInitializer: (client: Queryable) => Promise<void> = ensureChatSchema,
+  ) {
+    this.schemaReady = schemaInitializer(this.db);
+  }
+
+  private async query(text: string, params?: unknown[]) {
+    await this.schemaReady;
+    return this.db.query(text, params);
+  }
 
   async listConversations(): Promise<ConversationSummary[]> {
-    const result = await this.db.query(
+    const result = await this.query(
       `SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
@@ -414,7 +427,7 @@ export default class ChatService {
   }
 
   async listKnownSessions(): Promise<string[]> {
-    const result = await this.db.query(
+    const result = await this.query(
       `SELECT DISTINCT metadata ->> 'session' AS session_id
          FROM chat_conversations
         WHERE metadata ? 'session'`,
@@ -439,7 +452,7 @@ export default class ChatService {
   }
 
   async getConversationDetails(conversationId: string): Promise<ConversationDetails | null> {
-    const result = await this.db.query(
+    const result = await this.query(
       `SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
@@ -465,7 +478,7 @@ export default class ChatService {
     const pinned = normalizeBoolean(input.pinned, false);
     const metadata = normalizeMetadata(input.metadata);
 
-    const result = await this.db.query(
+    const result = await this.query(
       `INSERT INTO chat_conversations (
          id,
          contact_identifier,
@@ -514,7 +527,7 @@ export default class ChatService {
     const pinned = normalizeBoolean(input.pinned, false);
     const metadata = normalizeMetadata(input.metadata);
 
-    const result = await this.db.query(
+    const result = await this.query(
       `INSERT INTO chat_conversations (
          id,
          contact_identifier,
@@ -562,7 +575,7 @@ export default class ChatService {
     const sender = input.sender;
     const id = normalizeMessageId(input.id, externalId);
 
-    const insertResult = await this.db.query(
+    const insertResult = await this.query(
       `INSERT INTO chat_messages (id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (id) DO NOTHING
@@ -571,7 +584,7 @@ export default class ChatService {
     );
 
     if (insertResult.rowCount === 0) {
-      const existing = await this.db.query(
+      const existing = await this.query(
         `SELECT id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments, created_at
            FROM chat_messages
            WHERE id = $1`,
@@ -587,7 +600,7 @@ export default class ChatService {
 
     const preview = buildPreview(content, type, attachments ?? undefined);
 
-    await this.db.query(
+    await this.query(
       `UPDATE chat_conversations
           SET last_message_id = $2,
               last_message_preview = $3,
@@ -633,7 +646,7 @@ export default class ChatService {
       }
     }
 
-    const result = await this.db.query(
+    const result = await this.query(
       `SELECT id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments, created_at
          FROM chat_messages
          WHERE conversation_id = $1
@@ -655,7 +668,7 @@ export default class ChatService {
   }
 
   async markConversationAsRead(conversationId: string): Promise<boolean> {
-    const updateConversation = await this.db.query(
+    const updateConversation = await this.query(
       `UPDATE chat_conversations
           SET unread_count = 0,
               last_message_status = CASE WHEN last_message_sender = 'contact' THEN 'read' ELSE last_message_status END
@@ -668,7 +681,7 @@ export default class ChatService {
       return false;
     }
 
-    await this.db.query(
+    await this.query(
       `UPDATE chat_messages
           SET status = 'read'
         WHERE conversation_id = $1 AND sender = 'contact' AND status <> 'read'`,
@@ -680,7 +693,7 @@ export default class ChatService {
 
   async updateMessageStatusByExternalId(externalId: string, status: ChatMessageStatus): Promise<boolean> {
     const normalizedStatus = normalizeStatus(status);
-    const result = await this.db.query(
+    const result = await this.query(
       `UPDATE chat_messages
           SET status = $2
         WHERE external_id = $1
@@ -693,7 +706,7 @@ export default class ChatService {
     }
 
     for (const row of result.rows as { conversation_id: string; id: string }[]) {
-      await this.db.query(
+      await this.query(
         `UPDATE chat_conversations
             SET last_message_status = CASE WHEN last_message_id = $2 THEN $3 ELSE last_message_status END
           WHERE id = $1`,

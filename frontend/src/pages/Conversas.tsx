@@ -1,5 +1,9 @@
-import { ChatPage } from "../features/chat/ChatPage";
+import { WahaConversationsList } from "../features/chat/components/WahaConversationsList";
 
-const Conversas = () => <ChatPage />;
+const Conversas = () => (
+  <div className="h-full bg-background">
+    <WahaConversationsList />
+  </div>
+);
 
 export default Conversas;

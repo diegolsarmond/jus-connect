@@ -59,7 +59,7 @@ test('ChatService.recordOutgoingMessage persists message and updates conversatio
     { rows: [], rowCount: 1 },
   ]);
 
-  const service = new ChatService(pool as any);
+  const service = new ChatService(pool as any, async () => {});
 
   const message = await service.recordOutgoingMessage({
     conversationId: 'conv-1',
@@ -141,7 +141,7 @@ test('ChatService.getMessages paginates messages in chronological order', async 
     { rows, rowCount: rows.length },
   ]);
 
-  const service = new ChatService(pool as any);
+  const service = new ChatService(pool as any, async () => {});
 
   const page = await service.getMessages('conv-2', null, 2);
 
@@ -153,7 +153,7 @@ test('ChatService.getMessages paginates messages in chronological order', async 
 
 test('ChatService.createConversation validates payload', async () => {
   const pool = new FakePool([]);
-  const service = new ChatService(pool as any);
+  const service = new ChatService(pool as any, async () => {});
 
   await assert.rejects(() => service.createConversation({ contactIdentifier: '' }), ValidationError);
 });
@@ -171,7 +171,7 @@ test('ChatService.listKnownSessions returns distinct, trimmed session identifier
     },
   ]);
 
-  const service = new ChatService(pool as any);
+  const service = new ChatService(pool as any, async () => {});
   const sessions = await service.listKnownSessions();
 
   assert.deepEqual(sessions, ['SessionA', 'SessionB']);
