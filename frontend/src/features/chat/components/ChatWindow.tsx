@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -123,7 +124,7 @@ export const ChatWindow = ({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
     const conversationChanged = previousConversationRef.current !== conversation?.id;
@@ -133,11 +134,33 @@ export const ChatWindow = ({
       messages.length > previousLengthRef.current &&
       lastMessageId !== undefined &&
       lastMessageId !== previousLastMessageRef.current;
+
+    const scrollToBottom = (behavior: ScrollBehavior) => {
+      if (typeof window === "undefined") {
+        const node = scrollRef.current;
+        if (!node) return;
+        node.scrollTop = node.scrollHeight;
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        const node = scrollRef.current;
+        if (!node) return;
+        if (behavior === "smooth") {
+          node.scrollTo({ top: node.scrollHeight, behavior });
+        } else {
+          node.scrollTop = node.scrollHeight;
+        }
+      });
+    };
+
     if (conversationChanged) {
-      container.scrollTop = container.scrollHeight;
+      setStickToBottom(true);
+      scrollToBottom("auto");
     } else if (appendedMessage && stickToBottom) {
-      container.scrollTo({ top: container.scrollHeight, behavior: messages.length < 4 ? "auto" : "smooth" });
+      scrollToBottom(messages.length < 4 ? "auto" : "smooth");
     }
+
     previousConversationRef.current = conversation?.id;
     previousLengthRef.current = messages.length;
     previousLastMessageRef.current = lastMessageId;
@@ -384,7 +407,9 @@ export const ChatWindow = ({
             onStickToBottomChange={setStickToBottom}
           />
         </div>
-        <ChatInput onSend={handleSend} disabled={isLoading} />
+        <div className={styles.inputContainer}>
+          <ChatInput onSend={handleSend} disabled={isLoading} />
+        </div>
         <DeviceLinkModal open={deviceModalOpen} onClose={() => setDeviceModalOpen(false)} />
       </div>
       <aside

@@ -62,18 +62,19 @@ export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
   };
 
   return (
-    <div className="absolute top-0 left-0 right-0 z-50 bg-whatsapp text-white px-4 py-2 flex items-center justify-between shadow-soft">
-      <div className="flex items-center gap-2">
-
+    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 bg-whatsapp px-4 py-2 text-white shadow-soft">
+      <div className="flex items-center gap-2 text-sm">
+        {getStatusIcon()}
+        <span className={`font-semibold tracking-wide ${getStatusColor()}`}>{getStatusText()}</span>
       </div>
-      
+
       <Button
         variant="ghost"
         size="sm"
         onClick={onRefresh}
-        className="text-white hover:bg-white/10 h-8 px-2"
+        className="h-8 px-2 text-white hover:bg-white/10"
       >
-        <RefreshCw className="w-4 h-4" />
+        <RefreshCw className="h-4 w-4" />
       </Button>
     </div>
   );
