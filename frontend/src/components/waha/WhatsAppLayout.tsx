@@ -297,6 +297,7 @@ export const WhatsAppLayout = () => {
               isUpdatingConversation={false}
             />
           </div>
+
         </section>
       </div>
     </div>
