@@ -294,6 +294,7 @@ export const WhatsAppLayout = () => {
           onUpdateConversation={handleUpdateConversation}
           isUpdatingConversation={false}
         />
+
       </div>
     </div>
   );

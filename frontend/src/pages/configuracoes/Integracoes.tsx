@@ -42,6 +42,8 @@ import {
   deleteIntegrationApiKey,
   fetchIntegrationApiKeys,
   updateIntegrationApiKey,
+  getApiKeyProviderLabel,
+  getApiKeyEnvironmentLabel,
 } from "@/lib/integrationApiKeys";
 
 const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -125,10 +127,10 @@ type WebhookForm = {
   secret: string;
 };
 
-const environmentLabels: Record<ApiEnvironment, string> = {
-  producao: "Produção",
-  homologacao: "Sandbox",
-};
+const resolveProviderLabel = (provider: string) => getApiKeyProviderLabel(provider) || "—";
+
+const resolveEnvironmentLabel = (environment: string) =>
+  getApiKeyEnvironmentLabel(environment) || "—";
 
 const authTypeLabels: Record<AuthType, string> = {
   apiKey: "API Key",
@@ -302,7 +304,7 @@ export default function Integracoes() {
         environment: newApiKey.environment,
       });
       setApiKeys((prev) => [created, ...prev]);
-      const providerLabel = API_KEY_PROVIDER_LABELS[created.provider];
+      const providerLabel = resolveProviderLabel(created.provider);
       toast({
         title: "Chave adicionada",
         description: `${providerLabel} cadastrada com sucesso.`,
@@ -328,7 +330,7 @@ export default function Integracoes() {
       return;
     }
 
-    const providerLabel = API_KEY_PROVIDER_LABELS[current.provider];
+    const providerLabel = resolveProviderLabel(current.provider);
     const previousState = current.active;
     setPendingApiKeyId(id);
     setApiKeys((prev) => prev.map((item) => (item.id === id ? { ...item, active: value } : item)));
@@ -361,7 +363,7 @@ export default function Integracoes() {
       return;
     }
 
-    const providerLabel = API_KEY_PROVIDER_LABELS[current.provider];
+    const providerLabel = resolveProviderLabel(current.provider);
     setDeletingKeyId(id);
     try {
       await deleteIntegrationApiKey(id);
@@ -655,12 +657,13 @@ export default function Integracoes() {
                 ) : (
                   <>
                     {apiKeys.map((item) => {
-                      const providerLabel = API_KEY_PROVIDER_LABELS[item.provider];
+                      const providerLabel = resolveProviderLabel(item.provider);
+                      const environmentLabel = resolveEnvironmentLabel(item.environment);
                       return (
                         <TableRow key={item.id}>
                           <TableCell className="font-medium">{providerLabel}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary">{environmentLabels[item.environment]}</Badge>
+                            <Badge variant="secondary">{environmentLabel}</Badge>
                           </TableCell>
                           <TableCell>
                             {item.apiUrl ? (

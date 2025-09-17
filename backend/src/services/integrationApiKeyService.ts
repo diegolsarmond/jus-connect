@@ -21,10 +21,10 @@ type Queryable = {
 
 export interface IntegrationApiKey {
   id: number;
-  provider: ApiKeyProvider;
+  provider: string;
   apiUrl: string | null;
   key: string;
-  environment: ApiKeyEnvironment;
+  environment: string;
   active: boolean;
   lastUsed: string | null;
   createdAt: string;
@@ -160,13 +160,60 @@ function formatNullableDate(value: string | Date | null): string | null {
   return formatDate(value);
 }
 
+let hasLoggedUnexpectedProvider = false;
+let hasLoggedUnexpectedEnvironment = false;
+
+function mapProviderFromRow(value: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const lowerCased = trimmed.toLowerCase();
+  if (API_KEY_PROVIDERS.includes(lowerCased as ApiKeyProvider)) {
+    return lowerCased;
+  }
+
+  if (!hasLoggedUnexpectedProvider) {
+    console.warn('integration_api_keys has unexpected provider value:', value);
+    hasLoggedUnexpectedProvider = true;
+  }
+  return trimmed;
+}
+
+function mapEnvironmentFromRow(value: string): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const lowerCased = trimmed.toLowerCase();
+  if (API_KEY_ENVIRONMENTS.includes(lowerCased as ApiKeyEnvironment)) {
+    return lowerCased;
+  }
+
+  if (!hasLoggedUnexpectedEnvironment) {
+    console.warn('integration_api_keys has unexpected environment value:', value);
+    hasLoggedUnexpectedEnvironment = true;
+  }
+  return trimmed;
+}
+
 function mapRow(row: IntegrationApiKeyRow): IntegrationApiKey {
   return {
     id: row.id,
-    provider: normalizeProvider(row.provider),
+    provider: mapProviderFromRow(row.provider),
     apiUrl: typeof row.url_api === 'string' ? row.url_api.trim() || null : null,
     key: row.key_value,
-    environment: normalizeEnvironment(row.environment),
+    environment: mapEnvironmentFromRow(row.environment),
     active: row.active,
     lastUsed: formatNullableDate(row.last_used),
     createdAt: formatDate(row.created_at),
