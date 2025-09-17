@@ -78,13 +78,16 @@ const buildErrorMessage = (response: Response, rawBody: string) => {
 };
 
 const parseResponse = async (response: Response): Promise<WahaChatSummary[]> => {
-  const text = await response.text();
+  const rawText = await response.text();
   if (!response.ok) {
-    throw new Error(buildErrorMessage(response, text));
+    throw new Error(buildErrorMessage(response, rawText));
   }
+
+  const text = rawText.trim();
   if (!text) {
     return [];
   }
+
   try {
     return JSON.parse(text) as WahaChatSummary[];
   } catch (error) {
