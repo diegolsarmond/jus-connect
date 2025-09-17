@@ -166,6 +166,15 @@ export const ChatWindow = ({
     previousLastMessageRef.current = lastMessageId;
   }, [conversation?.id, messages, stickToBottom]);
 
+  const conversationId = conversation?.id;
+
+  useEffect(() => {
+    if (!conversationId) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [conversationId]);
+
   const runUpdate = async (changes: UpdateConversationPayload) => {
     if (!conversation) return;
     try {
