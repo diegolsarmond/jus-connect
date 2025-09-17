@@ -34,6 +34,13 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429]);
 
+const BASE_URL_SUFFIXES_TO_REMOVE = [
+  /\/v\d+\/messages$/i,
+  /\/v\d+$/i,
+  /\/api\/send[a-z]+$/i,
+  /\/api$/i,
+];
+
 type WahaConfigModule = typeof import('./wahaConfigService');
 type WahaConfigServiceInstance = InstanceType<WahaConfigModule['default']>;
 type ConfigValidationErrorConstructor = WahaConfigModule['ValidationError'];
@@ -91,7 +98,64 @@ const addRetryableRange = (set: Set<number>, start: number, end: number) => {
 
 addRetryableRange(RETRYABLE_STATUS, 500, 599);
 
-const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
+const stripKnownSuffixes = (pathname: string): string => {
+  let result = pathname;
+  let updated = true;
+
+  while (updated) {
+    updated = false;
+    for (const suffix of BASE_URL_SUFFIXES_TO_REMOVE) {
+      if (suffix.test(result)) {
+        result = result.replace(suffix, '');
+        updated = true;
+      }
+    }
+  }
+
+  return result.replace(/\/+$/, '');
+};
+
+const tryParsePathname = (value: string): string => {
+  try {
+    const parsed = new URL(value);
+    return parsed.pathname ?? '';
+  } catch {
+    return '';
+  }
+};
+
+const normalizeBaseUrl = (value: string): string => {
+  const trimmed = value.trim().replace(/\/+$/, '');
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.pathname = stripKnownSuffixes(parsed.pathname ?? '');
+    parsed.hash = '';
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    return trimmed;
+  }
+};
+
+const hasSessionPath = (baseUrl: string): boolean => {
+  const pathname = tryParsePathname(baseUrl);
+  return looksLikeSessionScopedPath(pathname);
+};
+
+const DATABASE_CONNECTION_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNRESET',
+  'ETIMEDOUT',
+]);
+
+const isDatabaseConnectionError = (error: unknown): error is NodeJS.ErrnoException =>
+  !!error &&
+  typeof error === 'object' &&
+  'code' in error &&
+  typeof (error as NodeJS.ErrnoException).code === 'string' &&
+  DATABASE_CONNECTION_ERROR_CODES.has((error as NodeJS.ErrnoException).code as string);
 
 const looksLikeSessionScopedPath = (pathname: string): boolean => {
   const segments = pathname
@@ -111,8 +175,8 @@ const looksLikeSessionScopedPath = (pathname: string): boolean => {
   return !/^v\d+$/i.test(second);
 };
 
-const buildChatEndpointCandidates = (baseUrl: string): string[] => {
-  const normalized = normalizeBaseUrl(baseUrl);
+const buildChatEndpointCandidates = (baseUrl: string, sessionId?: string): string[] => {
+  const normalized = baseUrl;
   const candidates = new Set<string>();
 
   if (/\/chats$/i.test(normalized)) {
@@ -120,18 +184,13 @@ const buildChatEndpointCandidates = (baseUrl: string): string[] => {
     return Array.from(candidates);
   }
 
-  let pathname = '';
+  const hasSession = hasSessionPath(normalized);
 
-  try {
-    const parsed = new URL(normalized);
-    pathname = parsed.pathname ?? '';
-  } catch {
-    pathname = '';
-  }
-
-  const hasSessionPath = looksLikeSessionScopedPath(pathname);
-
-  if (!hasSessionPath) {
+  if (!hasSession) {
+    if (sessionId) {
+      const encodedSession = encodeURIComponent(sessionId);
+      candidates.add(`${normalized}/api/${encodedSession}/chats`);
+    }
     candidates.add(`${normalized}/api/v1/chats`);
     candidates.add(`${normalized}/api/chats`);
   }
@@ -141,15 +200,63 @@ const buildChatEndpointCandidates = (baseUrl: string): string[] => {
   return Array.from(candidates);
 };
 
+const SESSION_NOT_FOUND_PATTERN = /session\s+["']?[^"']+["']?\s+does\s+not\s+exist/i;
+
+const extractResponseMessage = (body: string | undefined): string | undefined => {
+  if (!body) {
+    return undefined;
+  }
+
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === 'string') {
+      return parsed.trim() || undefined;
+    }
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      for (const key of ['error', 'message', 'detail']) {
+        const value = record[key];
+        if (typeof value === 'string') {
+          const normalized = value.trim();
+          if (normalized) {
+            return normalized;
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore JSON parsing errors and fall back to the raw string
+  }
+
+  return trimmed;
+};
+
+const isMissingSessionError = (error: WahaRequestError): boolean => {
+  if (error.status !== 422) {
+    return false;
+  }
+
+  const message = extractResponseMessage(error.responseBody);
+  return message ? SESSION_NOT_FOUND_PATTERN.test(message) : false;
+};
+
 const shouldFallbackToNextEndpoint = (error: unknown): boolean =>
-  error instanceof WahaRequestError && typeof error.status === 'number' && [404, 405].includes(error.status);
+  error instanceof WahaRequestError &&
+  typeof error.status === 'number' &&
+  ([404, 405].includes(error.status) || isMissingSessionError(error));
 
 const fetchChatsPayload = async (
   baseUrl: string,
   options: FetchOptions,
   logger: Logger,
+  sessionId: string | undefined,
 ): Promise<{ payload: unknown; endpoint: string }> => {
-  const endpoints = buildChatEndpointCandidates(baseUrl);
+  const endpoints = buildChatEndpointCandidates(baseUrl, sessionId);
   let lastError: unknown;
 
   for (const endpoint of endpoints) {
@@ -200,6 +307,13 @@ const firstNonEmptyString = (...values: unknown[]): string | undefined => {
   }
   return undefined;
 };
+
+const resolveConfiguredSessionId = (): string | undefined =>
+  firstNonEmptyString(
+    process.env.WAHA_SESSION,
+    process.env.WAHA_SESSION_ID,
+    process.env.WAHA_DEFAULT_SESSION,
+  );
 
 const buildHeaders = (token: string | undefined): Record<string, string> => {
   const headers: Record<string, string> = {
@@ -365,17 +479,30 @@ const resolveContactIdentifier = (chat: Record<string, unknown>, fallbackId: str
     fallbackId,
   );
 
-const buildContactUrl = (baseUrl: string, contactId: string) =>
-  `${baseUrl}/api/v1/contacts/${encodeURIComponent(contactId)}`;
+const buildContactUrl = (baseUrl: string, contactId: string, sessionId: string | undefined) => {
+  const encodedContact = encodeURIComponent(contactId);
+
+  if (hasSessionPath(baseUrl)) {
+    return `${baseUrl}/contacts/${encodedContact}`;
+  }
+
+  if (sessionId) {
+    const encodedSession = encodeURIComponent(sessionId);
+    return `${baseUrl}/api/${encodedSession}/contacts/${encodedContact}`;
+  }
+
+  return `${baseUrl}/api/v1/contacts/${encodedContact}`;
+};
 
 async function fetchAvatarFromContact(
   baseUrl: string,
   contactId: string,
   options: FetchOptions,
   logger: Logger,
+  sessionId: string | undefined,
 ): Promise<string | null> {
   try {
-    const payload = await fetchJson(buildContactUrl(baseUrl, contactId), options, logger);
+    const payload = await fetchJson(buildContactUrl(baseUrl, contactId, sessionId), options, logger);
     if (!payload || typeof payload !== 'object') {
       return null;
     }
@@ -448,30 +575,34 @@ export const listWahaConversations = async (logger: Logger = console): Promise<W
   let token: string | undefined;
   let configError: Error | undefined;
 
-  const configDependencies = await getConfigDependencies();
-
-  if (configDependencies) {
-    const { service, ValidationError: ConfigValidationError } = configDependencies;
-
-    try {
-      const config = await service.requireConfig();
-      baseUrl = config.baseUrl;
-      token = config.apiKey;
-    } catch (error) {
-      if (error instanceof ConfigValidationError) {
-        configError = error;
-        logger.warn(`WAHA configuration warning: ${error.message}`);
-      } else {
-        throw error;
-      }
-    }
+  const baseUrlEnv = process.env.WAHA_BASE_URL?.trim();
+  if (baseUrlEnv) {
+    baseUrl = baseUrlEnv;
+    token = process.env.WAHA_TOKEN?.trim();
   }
 
-  if (!baseUrl) {
-    const baseUrlEnv = process.env.WAHA_BASE_URL?.trim();
-    if (baseUrlEnv) {
-      baseUrl = normalizeBaseUrl(baseUrlEnv);
-      token = token ?? process.env.WAHA_TOKEN?.trim();
+  if (!baseUrl || !token) {
+    const configDependencies = await getConfigDependencies();
+
+    if (configDependencies) {
+      const { service, ValidationError: ConfigValidationError } = configDependencies;
+
+      try {
+        const config = await service.requireConfig();
+        if (!baseUrl) {
+          baseUrl = config.baseUrl;
+        }
+        if (!token) {
+          token = config.apiKey;
+        }
+      } catch (error) {
+        if (error instanceof ConfigValidationError || isDatabaseConnectionError(error)) {
+          configError = error as Error;
+          logger.warn(`WAHA configuration warning: ${error.message}`);
+        } else {
+          throw error;
+        }
+      }
     }
   }
 
@@ -482,12 +613,13 @@ export const listWahaConversations = async (logger: Logger = console): Promise<W
   }
 
   baseUrl = normalizeBaseUrl(baseUrl);
+  const sessionId = resolveConfiguredSessionId();
 
   const timeoutMs = readTimeoutFromEnv();
   const headers = buildHeaders(token);
   const fetchOptions: FetchOptions = { headers, timeoutMs };
 
-  const { payload } = await fetchChatsPayload(baseUrl, fetchOptions, logger);
+  const { payload } = await fetchChatsPayload(baseUrl, fetchOptions, logger, sessionId);
   const chats = extractChatArray(payload);
 
   const results: WahaConversationRow[] = [];
@@ -508,7 +640,13 @@ export const listWahaConversations = async (logger: Logger = console): Promise<W
     if (!photoUrl) {
       const contactIdentifier = resolveContactIdentifier(chat, conversationId);
       if (contactIdentifier) {
-        photoUrl = await fetchAvatarFromContact(baseUrl, contactIdentifier, fetchOptions, logger);
+        photoUrl = await fetchAvatarFromContact(
+          baseUrl,
+          contactIdentifier,
+          fetchOptions,
+          logger,
+          sessionId,
+        );
       }
     }
 
