@@ -6,9 +6,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 export function CRMLayout() {
   const location = useLocation();
   const isConversationsRoute = location.pathname.startsWith("/conversas");
-  const mainClassName = `flex-1 min-h-0 bg-background ${
-    isConversationsRoute ? "overflow-hidden" : "overflow-auto"
-  }`;
+  const mainClassName = `flex-1 bg-background ${isConversationsRoute ? "overflow-hidden" : "overflow-auto"}`;
 
   return (
     <SidebarProvider>
