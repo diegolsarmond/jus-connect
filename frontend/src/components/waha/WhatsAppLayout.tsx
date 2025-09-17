@@ -258,7 +258,7 @@ export const WhatsAppLayout = () => {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20">
+    <div className="flex min-h-screen flex-col overflow-hidden bg-muted/20">
 
       <SessionStatus
         status={wahaState.sessionStatus}
