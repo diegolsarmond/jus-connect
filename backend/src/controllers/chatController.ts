@@ -58,6 +58,17 @@ function parseMessageLimit(value: unknown): number | undefined {
   return parsed;
 }
 
+function parseConversationLimit(value: unknown): number | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
 function parseSendMessagePayload(body: any): SendMessageInput {
   if (!body || typeof body !== 'object') {
     throw new ChatValidationError('Request body must be an object');
@@ -75,7 +86,35 @@ function parseSendMessagePayload(body: any): SendMessageInput {
   };
 }
 
-export async function listConversationsHandler(_req: Request, res: Response) {
+export async function listConversationsHandler(req: Request, res: Response) {
+  const source = typeof req.query.source === 'string' ? req.query.source : undefined;
+  const preferLocal = source === 'local';
+  const forceRemote = source === 'waha';
+  const session = typeof req.query.session === 'string' ? req.query.session : undefined;
+  const limit = parseConversationLimit(req.query.limit);
+
+  if (!preferLocal) {
+    try {
+      const conversations = await wahaIntegration.listChats({
+        sessionId: session,
+        limit,
+      });
+      return res.json(conversations);
+    } catch (error) {
+      if (error instanceof IntegrationNotConfiguredError) {
+        if (forceRemote) {
+          return res.status(503).json({ error: error.message });
+        }
+        console.warn('WAHA integration not configured, falling back to local conversations');
+      } else if (error instanceof ChatValidationError) {
+        return res.status(400).json({ error: error.message });
+      } else {
+        console.error('Failed to list WAHA chats', error);
+        return res.status(502).json({ error: 'Failed to load conversations from WAHA' });
+      }
+    }
+  }
+
   try {
     const conversations = await chatService.listConversations();
     res.json(conversations);
