@@ -64,10 +64,7 @@ export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
   return (
     <div className="absolute top-0 left-0 right-0 z-50 bg-whatsapp text-white px-4 py-2 flex items-center justify-between shadow-soft">
       <div className="flex items-center gap-2">
-        {getStatusIcon()}
-        <span className="text-sm font-medium">
-          WAHA WhatsApp API - {getStatusText()}
-        </span>
+
       </div>
       
       <Button
