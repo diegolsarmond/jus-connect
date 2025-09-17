@@ -203,12 +203,14 @@ const router = (0, express_1.Router)();
  *     summary: Lista conversas sincronizadas com o WAHA
  *     tags:
  *       - Conversas
+
  *     parameters:
  *       - in: query
  *         name: session
  *         schema:
  *           type: string
  *         description: "Identificador da sessão WAHA (ex.: QuantumTecnologia01) para filtrar a consulta remota."
+
  *       - in: query
  *         name: limit
  *         schema:
@@ -216,12 +218,16 @@ const router = (0, express_1.Router)();
  *           minimum: 1
  *           maximum: 200
  *         description: "Quantidade máxima de chats retornados por sessão ao consultar o WAHA (padrão 30)."
+
  *       - in: query
  *         name: source
  *         schema:
  *           type: string
  *           enum: [waha, local]
- *         description: "Define a origem dos dados. Utilize `local` para ignorar o WAHA e retornar apenas registros persistidos."
+
+ *         description: Define a origem dos dados. Utilize `local` para ignorar o WAHA e retornar apenas registros persistidos.
+ *     summary: Lista todas as conversas cadastradas
+ *     tags: [Conversas]
  *     responses:
  *       200:
  *         description: Lista de conversas ordenadas pela atividade mais recente
