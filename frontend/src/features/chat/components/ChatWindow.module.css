@@ -1,10 +1,10 @@
 .wrapper {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   background: hsl(var(--background));
-  height: 100%;
   min-height: 0;
+  min-width: 0;
   position: relative;
   overflow: hidden;
   --details-panel-width: min(420px, 32vw);
@@ -15,10 +15,11 @@
 }
 
 .mainColumn {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   transition: margin-right 0.3s ease;
 }
 
@@ -29,12 +30,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  min-width: 0;
 }
 
 .headerInfo {
   display: flex;
   align-items: center;
   gap: 1rem;
+  min-width: 0;
 }
 
 .headerInfo img {
@@ -48,12 +51,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  min-width: 0;
 }
 
 .headerTitleRow {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .headerDetails {
@@ -61,6 +66,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.65rem;
+  min-width: 0;
 }
 
 .headerTitleRow h2 {
@@ -74,6 +80,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .headerResponsible {
@@ -598,9 +605,11 @@
 
 .viewportWrapper {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
 }
 
 @media (max-width: 1100px) {
