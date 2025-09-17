@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ValidationError = void 0;
 const db_1 = __importDefault(require("./db"));
+const chatSchema_1 = require("./chatSchema");
 class ValidationError extends Error {
     constructor(message) {
         super(message);
@@ -237,11 +238,16 @@ function computeNextCursor(messages) {
     return messages[0].timestamp;
 }
 class ChatService {
-    constructor(db = db_1.default) {
+    constructor(db = db_1.default, schemaInitializer = chatSchema_1.ensureChatSchema) {
         this.db = db;
+        this.schemaReady = schemaInitializer(this.db);
+    }
+    async query(text, params) {
+        await this.schemaReady;
+        return this.db.query(text, params);
     }
     async listConversations() {
-        const result = await this.db.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+        const result = await this.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
          FROM chat_conversations
@@ -261,7 +267,8 @@ class ChatService {
         });
     }
     async listKnownSessions() {
-        const result = await this.db.query(`SELECT DISTINCT metadata ->> 'session' AS session_id
+        const result = await this.query(`SELECT DISTINCT metadata ->> 'session' AS session_id
+
          FROM chat_conversations
         WHERE metadata ? 'session'`);
         const sessions = [];
@@ -280,7 +287,7 @@ class ChatService {
         return sessions;
     }
     async getConversationDetails(conversationId) {
-        const result = await this.db.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+        const result = await this.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
          FROM chat_conversations
@@ -299,7 +306,7 @@ class ChatService {
         const avatar = input.avatar?.trim() || null;
         const pinned = normalizeBoolean(input.pinned, false);
         const metadata = normalizeMetadata(input.metadata);
-        const result = await this.db.query(`INSERT INTO chat_conversations (
+        const result = await this.query(`INSERT INTO chat_conversations (
          id,
          contact_identifier,
          contact_name,
@@ -342,7 +349,7 @@ class ChatService {
         const avatar = input.avatar?.trim() || null;
         const pinned = normalizeBoolean(input.pinned, false);
         const metadata = normalizeMetadata(input.metadata);
-        const result = await this.db.query(`INSERT INTO chat_conversations (
+        const result = await this.query(`INSERT INTO chat_conversations (
          id,
          contact_identifier,
          contact_name,
@@ -383,12 +390,12 @@ class ChatService {
             : null;
         const sender = input.sender;
         const id = normalizeMessageId(input.id, externalId);
-        const insertResult = await this.db.query(`INSERT INTO chat_messages (id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments)
+        const insertResult = await this.query(`INSERT INTO chat_messages (id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (id) DO NOTHING
        RETURNING id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments, created_at`, [id, conversation.id, externalId, sender, content, type, status, timestamp, attachments]);
         if (insertResult.rowCount === 0) {
-            const existing = await this.db.query(`SELECT id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments, created_at
+            const existing = await this.query(`SELECT id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments, created_at
            FROM chat_messages
            WHERE id = $1`, [id]);
             if (existing.rowCount === 0) {
@@ -397,7 +404,7 @@ class ChatService {
             return mapMessage(existing.rows[0]);
         }
         const preview = buildPreview(content, type, attachments ?? undefined);
-        await this.db.query(`UPDATE chat_conversations
+        await this.query(`UPDATE chat_conversations
           SET last_message_id = $2,
               last_message_preview = $3,
               last_message_timestamp = $4,
@@ -429,7 +436,7 @@ class ChatService {
                 filter = 'AND created_at < $3';
             }
         }
-        const result = await this.db.query(`SELECT id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments, created_at
+        const result = await this.query(`SELECT id, conversation_id, external_id, sender, content, message_type, status, timestamp, attachments, created_at
          FROM chat_messages
          WHERE conversation_id = $1
          ${filter}
@@ -445,7 +452,7 @@ class ChatService {
         };
     }
     async markConversationAsRead(conversationId) {
-        const updateConversation = await this.db.query(`UPDATE chat_conversations
+        const updateConversation = await this.query(`UPDATE chat_conversations
           SET unread_count = 0,
               last_message_status = CASE WHEN last_message_sender = 'contact' THEN 'read' ELSE last_message_status END
         WHERE id = $1
@@ -453,14 +460,14 @@ class ChatService {
         if (updateConversation.rowCount === 0) {
             return false;
         }
-        await this.db.query(`UPDATE chat_messages
+        await this.query(`UPDATE chat_messages
           SET status = 'read'
         WHERE conversation_id = $1 AND sender = 'contact' AND status <> 'read'`, [conversationId]);
         return true;
     }
     async updateMessageStatusByExternalId(externalId, status) {
         const normalizedStatus = normalizeStatus(status);
-        const result = await this.db.query(`UPDATE chat_messages
+        const result = await this.query(`UPDATE chat_messages
           SET status = $2
         WHERE external_id = $1
         RETURNING conversation_id, id`, [externalId, normalizedStatus]);
@@ -468,7 +475,7 @@ class ChatService {
             return false;
         }
         for (const row of result.rows) {
-            await this.db.query(`UPDATE chat_conversations
+            await this.query(`UPDATE chat_conversations
             SET last_message_status = CASE WHEN last_message_id = $2 THEN $3 ELSE last_message_status END
           WHERE id = $1`, [row.conversation_id, row.id, normalizedStatus]);
         }

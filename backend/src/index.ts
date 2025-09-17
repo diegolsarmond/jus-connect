@@ -34,6 +34,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
 import cronJobs from './services/cronJobs';
+import { ensureChatSchema } from './services/chatSchema';
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
@@ -158,8 +159,18 @@ if (!hasFrontendBuild) {
   });
 }
 
-// Start
-const server = app.listen(port, () => {
-  const actualPort = (server.address() as AddressInfo).port;
-  console.log(`Server listening on port ${actualPort}`);
-});
+async function startServer() {
+  try {
+    await ensureChatSchema();
+  } catch (error) {
+    console.error('Failed to initialize chat storage schema', error);
+    process.exit(1);
+  }
+
+  const server = app.listen(port, () => {
+    const actualPort = (server.address() as AddressInfo).port;
+    console.log(`Server listening on port ${actualPort}`);
+  });
+}
+
+void startServer();
