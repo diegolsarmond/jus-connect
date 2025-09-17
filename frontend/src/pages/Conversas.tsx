@@ -1,8 +1,8 @@
-import { ChatPage } from "../features/chat/ChatPage";
+import { WhatsAppLayout } from "../components/waha";
 
 const Conversas = () => (
   <div className="h-full bg-background">
-    <ChatPage />
+    <WhatsAppLayout />
   </div>
 );
 
