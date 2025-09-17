@@ -384,7 +384,9 @@ export const ChatWindow = ({
             onStickToBottomChange={setStickToBottom}
           />
         </div>
-        <ChatInput onSend={handleSend} disabled={isLoading} />
+        <div className={styles.inputContainer}>
+          <ChatInput onSend={handleSend} disabled={isLoading} />
+        </div>
         <DeviceLinkModal open={deviceModalOpen} onClose={() => setDeviceModalOpen(false)} />
       </div>
       <aside

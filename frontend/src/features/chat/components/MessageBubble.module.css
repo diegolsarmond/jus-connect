@@ -1,8 +1,8 @@
 .row {
   display: flex;
   align-items: flex-end;
-  gap: 0.6rem;
-  margin: 0.35rem 0;
+  gap: 0.5rem;
+  margin: 0.25rem 0;
 }
 
 .outgoing {
@@ -14,20 +14,23 @@
 }
 
 .bubble {
-  max-width: min(75%, 520px);
-  padding: 0.65rem 0.75rem 0.55rem;
+  max-width: min(72%, 480px);
+  padding: 0.65rem 0.85rem 0.6rem;
   border-radius: 1rem;
-  background: hsl(var(--accent));
-  color: hsl(var(--accent-foreground));
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
   position: relative;
   display: grid;
   gap: 0.35rem;
 }
 
 .outgoing .bubble {
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-hover)));
+  background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
   color: hsl(var(--primary-foreground));
+  border: none;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
 }
 
 .text {
@@ -40,9 +43,9 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.75rem;
-  opacity: 0.85;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  opacity: 0.8;
 }
 
 .attachment {
@@ -66,7 +69,7 @@
 }
 
 .grouped {
-  margin-top: 0.1rem;
+  margin-top: 0.15rem;
 }
 
 .statusIcon {

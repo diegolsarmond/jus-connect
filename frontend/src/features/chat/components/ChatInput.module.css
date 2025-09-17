@@ -1,7 +1,9 @@
 .container {
-  border-top: 1px solid hsl(var(--border));
-  padding: 0.75rem 1rem 1rem;
+  border-radius: 1.5rem;
+  padding: 0.75rem 1rem 0.85rem;
   background: hsl(var(--background));
+  border: 1px solid hsl(var(--border) / 0.6);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -11,6 +13,7 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  padding: 0 0.25rem;
 }
 
 .iconButton {
@@ -38,50 +41,53 @@
   display: flex;
   align-items: flex-end;
   gap: 0.75rem;
+  background: hsl(var(--input));
+  border-radius: 1.25rem;
+  padding: 0.65rem 0.75rem 0.65rem 1rem;
 }
 
 .textarea {
   flex: 1;
-  min-height: 3rem;
-  max-height: 8rem;
+  min-height: 2.75rem;
+  max-height: 7.5rem;
   resize: none;
-  border: 1px solid hsl(var(--border));
-  border-radius: 1rem;
-  padding: 0.75rem 1rem;
-  background: hsl(var(--input));
+  border: none;
+  background: transparent;
   color: inherit;
   font-size: 0.95rem;
   line-height: 1.5;
+  padding: 0;
 }
 
 .textarea:focus {
-  outline: 2px solid hsl(var(--primary));
-  border-color: hsl(var(--primary));
+  outline: none;
 }
 
 .sendButton {
   border: none;
-  background: hsl(var(--primary));
+  background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
   color: hsl(var(--primary-foreground));
   border-radius: 999px;
-  width: 3rem;
-  height: 3rem;
+  width: 2.75rem;
+  height: 2.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: var(--transition-fast);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
 }
 
 .sendButton[disabled] {
   cursor: not-allowed;
   background: hsl(var(--muted));
   color: hsl(var(--muted-foreground));
+  box-shadow: none;
 }
 
 .sendButton:not([disabled]):hover,
 .sendButton:not([disabled]):focus-visible {
-  background: hsl(var(--primary-hover));
+  filter: brightness(1.05);
 }
 
 .popover {
