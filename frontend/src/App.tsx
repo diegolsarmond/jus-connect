@@ -1,11 +1,12 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { CRMLayout } from "@/components/layout/CRMLayout";
+import { Loader2 } from "lucide-react";
 import { routes } from "@/config/routes";
-import Dashboard from "./pages/Dashboard";
+import Landing from "./pages/Landing";
 import Clientes from "./pages/Clientes";
 import NovoCliente from "./pages/NovoCliente";
 import EditarCliente from "./pages/EditarCliente";
@@ -59,6 +60,11 @@ import Register from "./pages/Register";
 import RecuperarSenha from "./pages/RecuperarSenha";
 import NotFound from "./pages/NotFound";
 
+const CRMLayout = lazy(() =>
+  import("@/components/layout/CRMLayout").then((module) => ({ default: module.CRMLayout })),
+);
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -67,124 +73,137 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path={routes.login} element={<Login />} />
-          <Route path={routes.register} element={<Register />} />
-          <Route path={routes.forgotPassword} element={<RecuperarSenha />} />
-          <Route element={<CRMLayout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/conversas" element={<Conversas />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/clientes/novo" element={<NovoCliente />} />
-            <Route path="/clientes/:id/editar" element={<EditarCliente />} />
-            <Route path="/clientes/:id/novo-processo" element={<NovoProcesso />} />
-            <Route
-              path="/clientes/:id/processos/:processoId"
-              element={<VisualizarProcesso />}
-            />
-            <Route
-              path="/clientes/:id/processos/:processoId/contrato"
-              element={<ContratoPreview />}
-            />
-            <Route path="/clientes/:id" element={<VisualizarCliente />} />
-            <Route path="/pipeline" element={<PipelineMenu />} />
-            <Route path="/pipeline/:fluxoId" element={<Pipeline />} />
-            <Route path="/pipeline/nova-oportunidade" element={<NovaOportunidade />} />
-            <Route path="/pipeline/oportunidade/:id" element={<VisualizarOportunidade />} />
-            <Route path="/pipeline/editar-oportunidade/:id" element={<EditarOportunidade />} />
-            <Route path="/agenda" element={<Agenda />} />
-            <Route path="/tarefas" element={<Tarefas />} />
-            <Route path="/processos" element={<Processos />} />
-            <Route path="/intimacoes" element={<Intimacoes />} />
-            <Route path="/documentos">
-              <Route index element={<LibraryPage />} />
-              <Route path="editor/novo" element={<EditorPage />} />
-              <Route path="editor/:id" element={<EditorPage />} />
+        <Suspense fallback={<LandingFallback />}>
+          <Routes>
+            <Route path={routes.login} element={<Login />} />
+            <Route path={routes.register} element={<Register />} />
+            <Route path={routes.forgotPassword} element={<RecuperarSenha />} />
+            <Route element={<CRMLayout />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/conversas" element={<Conversas />} />
+              <Route path="/clientes" element={<Clientes />} />
+              <Route path="/clientes/novo" element={<NovoCliente />} />
+              <Route path="/clientes/:id/editar" element={<EditarCliente />} />
+              <Route path="/clientes/:id/novo-processo" element={<NovoProcesso />} />
+              <Route
+                path="/clientes/:id/processos/:processoId"
+                element={<VisualizarProcesso />}
+              />
+              <Route
+                path="/clientes/:id/processos/:processoId/contrato"
+                element={<ContratoPreview />}
+              />
+              <Route path="/clientes/:id" element={<VisualizarCliente />} />
+              <Route path="/pipeline" element={<PipelineMenu />} />
+              <Route path="/pipeline/:fluxoId" element={<Pipeline />} />
+              <Route path="/pipeline/nova-oportunidade" element={<NovaOportunidade />} />
+              <Route path="/pipeline/oportunidade/:id" element={<VisualizarOportunidade />} />
+              <Route path="/pipeline/editar-oportunidade/:id" element={<EditarOportunidade />} />
+              <Route path="/agenda" element={<Agenda />} />
+              <Route path="/tarefas" element={<Tarefas />} />
+              <Route path="/processos" element={<Processos />} />
+              <Route path="/intimacoes" element={<Intimacoes />} />
+              <Route path="/documentos">
+                <Route index element={<LibraryPage />} />
+                <Route path="editor/novo" element={<EditorPage />} />
+                <Route path="editor/:id" element={<EditorPage />} />
+              </Route>
+              <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
+              <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/meu-perfil" element={<MeuPerfil />} />
+              <Route path="/meu-plano" element={<MeuPlano />} />
+              <Route path="/suporte" element={<Suporte />} />
+              <Route
+                path="/configuracoes"
+                element={
+                  <div className="p-6">
+                    <h1 className="text-3xl font-bold">Configurações</h1>
+                    <p className="text-muted-foreground">Em desenvolvimento</p>
+                  </div>
+                }
+              />
+              <Route path="/configuracoes/usuarios" element={<Usuarios />} />
+              <Route path="/configuracoes/empresas" element={<Empresas />} />
+              <Route path="/configuracoes/empresas/nova" element={<NovaEmpresa />} />
+              <Route path="/configuracoes/planos" element={<Planos />} />
+              <Route path="/configuracoes/integracoes" element={<Integracoes />} />
+              <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
+              <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
+              <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />
+              <Route path="/configuracoes/usuarios/:id/senha" element={<AlterarSenha />} />
+              <Route
+                path="/configuracoes/usuarios/:id/seguranca"
+                element={<ConfiguracaoSeguranca />}
+              />
+              <Route
+                path="/configuracoes/usuarios/:id/sessoes"
+                element={<SessaoDispositivos />}
+              />
+              <Route
+                path="/configuracoes/usuarios/:id/privacidade"
+                element={<PrivacidadeLGPD />}
+              />
+              <Route
+                path="/configuracoes/usuarios/:id/notificacoes"
+                element={<NotificacoesPreferencias />}
+              />
+              <Route
+                path="/configuracoes/parametros/area-de-atuacao"
+                element={<AreaAtuacao />}
+              />
+              <Route
+                path="/configuracoes/parametros/situacao-processo"
+                element={<SituacaoProcesso />}
+              />
+              <Route
+                path="/configuracoes/parametros/tipo-processo"
+                element={<TipoProcesso />}
+              />
+              <Route
+                path="/configuracoes/parametros/tipo-evento"
+                element={<TipoEvento />}
+              />
+              <Route
+                path="/configuracoes/parametros/tipo-documento"
+                element={<TipoDocumento />}
+              />
+              <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
+              <Route path="/configuracoes/parametros/setores" element={<Setores />} />
+              <Route
+                path="/configuracoes/parametros/escritorios"
+                element={<Navigate to="/configuracoes/parametros/setores" replace />}
+              />
+              <Route
+                path="/configuracoes/parametros/situacao-proposta"
+                element={<SituacaoProposta />}
+              />
+              <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
+              <Route
+                path="/configuracoes/parametros/fluxo-de-trabalho"
+                element={<FluxoTrabalho />}
+              />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
             </Route>
-            <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
-            <Route path="/relatorios" element={<Relatorios />} />
-            <Route path="/meu-perfil" element={<MeuPerfil />} />
-            <Route path="/meu-plano" element={<MeuPlano />} />
-            <Route path="/suporte" element={<Suporte />} />
-            <Route
-              path="/configuracoes"
-              element={
-                <div className="p-6">
-                  <h1 className="text-3xl font-bold">Configurações</h1>
-                  <p className="text-muted-foreground">Em desenvolvimento</p>
-                </div>
-              }
-            />
-            <Route path="/configuracoes/usuarios" element={<Usuarios />} />
-            <Route path="/configuracoes/empresas" element={<Empresas />} />
-            <Route path="/configuracoes/empresas/nova" element={<NovaEmpresa />} />
-            <Route path="/configuracoes/planos" element={<Planos />} />
-            <Route path="/configuracoes/integracoes" element={<Integracoes />} />
-            <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
-            <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
-            <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />
-            <Route path="/configuracoes/usuarios/:id/senha" element={<AlterarSenha />} />
-            <Route
-              path="/configuracoes/usuarios/:id/seguranca"
-              element={<ConfiguracaoSeguranca />}
-            />
-            <Route
-              path="/configuracoes/usuarios/:id/sessoes"
-              element={<SessaoDispositivos />}
-            />
-            <Route
-              path="/configuracoes/usuarios/:id/privacidade"
-              element={<PrivacidadeLGPD />}
-            />
-            <Route
-              path="/configuracoes/usuarios/:id/notificacoes"
-              element={<NotificacoesPreferencias />}
-            />
-            <Route
-              path="/configuracoes/parametros/area-de-atuacao"
-              element={<AreaAtuacao />}
-            />
-            <Route
-              path="/configuracoes/parametros/situacao-processo"
-              element={<SituacaoProcesso />}
-            />
-            <Route
-              path="/configuracoes/parametros/tipo-processo"
-              element={<TipoProcesso />}
-            />
-            <Route
-              path="/configuracoes/parametros/tipo-evento"
-              element={<TipoEvento />}
-            />
-            <Route
-              path="/configuracoes/parametros/tipo-documento"
-              element={<TipoDocumento />}
-            />
-            <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
-            <Route
-              path="/configuracoes/parametros/setores"
-              element={<Setores />}
-            />
-            <Route
-              path="/configuracoes/parametros/escritorios"
-              element={<Navigate to="/configuracoes/parametros/setores" replace />}
-            />
-            <Route
-              path="/configuracoes/parametros/situacao-proposta"
-              element={<SituacaoProposta />}
-            />
-            <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
-            <Route
-              path="/configuracoes/parametros/fluxo-de-trabalho"
-              element={<FluxoTrabalho />}
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Route>
-        </Routes>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
+);
+
+const LandingFallback = () => (
+  <div className="relative min-h-screen">
+    <Landing />
+    <div
+      role="status"
+      aria-live="polite"
+      className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-md cursor-wait"
+    >
+      <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
+      <p className="text-sm font-medium text-muted-foreground">Preparando sua experiência...</p>
+    </div>
+  </div>
 );
 
 export default App;
