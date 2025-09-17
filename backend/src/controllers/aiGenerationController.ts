@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import IntegrationApiKeyService from '../services/integrationApiKeyService';
+import IntegrationApiKeyService, {
+  API_KEY_ENVIRONMENTS,
+  type ApiKeyEnvironment,
+} from '../services/integrationApiKeyService';
 import { AiProviderError } from '../services/aiProviders/errors';
 import { generateDocumentWithGemini } from '../services/aiProviders/geminiProvider';
 import { escapeHtml } from '../utils/html';
@@ -10,6 +13,23 @@ const providerLabels: Record<string, string> = {
 };
 
 const integrationService = new IntegrationApiKeyService();
+let hasLoggedUnknownEnvironment = false;
+
+function isApiKeyEnvironment(value: string): value is ApiKeyEnvironment {
+  return API_KEY_ENVIRONMENTS.includes(value as ApiKeyEnvironment);
+}
+
+function resolveEnvironment(value: string): ApiKeyEnvironment {
+  if (isApiKeyEnvironment(value)) {
+    return value;
+  }
+
+  if (!hasLoggedUnknownEnvironment) {
+    console.warn('Integration environment value is not recognized, defaulting to produção:', value);
+    hasLoggedUnknownEnvironment = true;
+  }
+  return 'producao';
+}
 
 function toTitleCase(value: string): string {
   return value
@@ -91,12 +111,13 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
     let htmlContent: string | null = null;
 
     if (integration.provider === 'gemini') {
+      const environment = resolveEnvironment(integration.environment);
       try {
         htmlContent = await generateDocumentWithGemini({
           apiKey: integration.key,
           documentType: normalizedDocumentType,
           prompt: normalizedPrompt,
-          environment: integration.environment,
+          environment,
         });
       } catch (error) {
         if (error instanceof AiProviderError) {

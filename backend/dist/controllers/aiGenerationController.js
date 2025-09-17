@@ -1,10 +1,46 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function () { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function (o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function (o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function (o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o)
+                if (Object.prototype.hasOwnProperty.call(o, k))
+                    ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule)
+            return mod;
+        var result = {};
+        if (mod != null)
+            for (var k = ownKeys(mod), i = 0; i < k.length; i++)
+                if (k[i] !== "default")
+                    __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateTextWithIntegration = generateTextWithIntegration;
-const integrationApiKeyService_1 = __importDefault(require("../services/integrationApiKeyService"));
+const integrationApiKeyService_1 = __importStar(require("../services/integrationApiKeyService"));
 const errors_1 = require("../services/aiProviders/errors");
 const geminiProvider_1 = require("../services/aiProviders/geminiProvider");
 const html_1 = require("../utils/html");
@@ -13,6 +49,20 @@ const providerLabels = {
     openai: 'OpenAI',
 };
 const integrationService = new integrationApiKeyService_1.default();
+let hasLoggedUnknownEnvironment = false;
+function isApiKeyEnvironment(value) {
+    return integrationApiKeyService_1.API_KEY_ENVIRONMENTS.includes(value);
+}
+function resolveEnvironment(value) {
+    if (isApiKeyEnvironment(value)) {
+        return value;
+    }
+    if (!hasLoggedUnknownEnvironment) {
+        console.warn('Integration environment value is not recognized, defaulting to produção:', value);
+        hasLoggedUnknownEnvironment = true;
+    }
+    return 'producao';
+}
 function toTitleCase(value) {
     return value
         .split(/\s+/)
@@ -74,12 +124,13 @@ async function generateTextWithIntegration(req, res) {
         const normalizedPrompt = prompt.trim();
         let htmlContent = null;
         if (integration.provider === 'gemini') {
+            const environment = resolveEnvironment(integration.environment);
             try {
                 htmlContent = await (0, geminiProvider_1.generateDocumentWithGemini)({
                     apiKey: integration.key,
                     documentType: normalizedDocumentType,
                     prompt: normalizedPrompt,
-                    environment: integration.environment,
+                    environment,
                 });
             }
             catch (error) {
