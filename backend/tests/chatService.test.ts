@@ -157,3 +157,22 @@ test('ChatService.createConversation validates payload', async () => {
 
   await assert.rejects(() => service.createConversation({ contactIdentifier: '' }), ValidationError);
 });
+
+test('ChatService.listKnownSessions returns distinct, trimmed session identifiers', async () => {
+  const pool = new FakePool([
+    {
+      rows: [
+        { session_id: 'SessionA' },
+        { session_id: '  SessionB  ' },
+        { session_id: null },
+        { session_id: 'SessionA' },
+      ],
+      rowCount: 4,
+    },
+  ]);
+
+  const service = new ChatService(pool as any);
+  const sessions = await service.listKnownSessions();
+
+  assert.deepEqual(sessions, ['SessionA', 'SessionB']);
+});

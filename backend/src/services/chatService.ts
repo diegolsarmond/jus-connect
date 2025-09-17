@@ -132,6 +132,10 @@ interface MessageRow extends QueryResultRow {
   created_at: string | Date;
 }
 
+interface SessionRow extends QueryResultRow {
+  session_id: string | null;
+}
+
 const DEFAULT_SHORT_STATUS = 'Disponível';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -407,6 +411,31 @@ export default class ChatService {
         lastMessage: mapped.lastMessage,
       };
     });
+  }
+
+  async listKnownSessions(): Promise<string[]> {
+    const result = await this.db.query(
+      `SELECT DISTINCT metadata ->> 'session' AS session_id
+         FROM chat_conversations
+        WHERE metadata ? 'session'`,
+    );
+
+    const sessions: string[] = [];
+    const seen = new Set<string>();
+
+    for (const row of result.rows as SessionRow[]) {
+      if (!row || typeof row.session_id !== 'string') {
+        continue;
+      }
+      const trimmed = row.session_id.trim();
+      if (!trimmed || seen.has(trimmed)) {
+        continue;
+      }
+      seen.add(trimmed);
+      sessions.push(trimmed);
+    }
+
+    return sessions;
   }
 
   async getConversationDetails(conversationId: string): Promise<ConversationDetails | null> {
