@@ -207,6 +207,7 @@ const extractResponseMessage = (body) => {
 const isMissingSessionError = (error) => {
     if (error.status !== 422) {
         return false;
+
     }
     const message = extractResponseMessage(error.responseBody);
     return message ? SESSION_NOT_FOUND_PATTERN.test(message) : false;
@@ -214,6 +215,7 @@ const isMissingSessionError = (error) => {
 const shouldFallbackToNextEndpoint = (error) => error instanceof WahaRequestError &&
     typeof error.status === 'number' &&
     ([404, 405].includes(error.status) || isMissingSessionError(error));
+
 const fetchChatsPayload = async (baseUrl, options, logger, sessionId) => {
     const endpoints = buildChatEndpointCandidates(baseUrl, sessionId);
     let lastError;

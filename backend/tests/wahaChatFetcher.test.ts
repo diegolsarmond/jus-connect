@@ -124,4 +124,5 @@ describe('wahaChatFetcher', () => {
     assert(requestedUrls.some((url) => url.endsWith('/api/v1/chats')));
     assert(requestedUrls.some((url) => url.endsWith('/api/chats')));
   });
+
 });
