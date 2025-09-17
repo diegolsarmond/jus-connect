@@ -938,6 +938,38 @@ function resolveSendTextEndpoint(baseUrl: string): string {
   return `${normalized}/api/sendText`;
 }
 
+=======
+  }
+
+  const sessionCandidate = firstNonEmpty(
+    metadata.session,
+    metadata.sessionId,
+    metadata.session_id,
+    metadata.wahaSession,
+    metadata.integrationSession,
+  );
+  if (!sessionCandidate || !String(sessionCandidate).trim()) {
+    throw new ChatValidationError('Conversation is missing WAHA session information');
+  }
+
+  return {
+    chatId: String(chatIdCandidate).trim(),
+    sessionId: String(sessionCandidate).trim(),
+  };
+}
+
+function resolveSendTextEndpoint(baseUrl: string): string {
+  const normalized = baseUrl.replace(/\/$/, '');
+  const lower = normalized.toLowerCase();
+  if (lower.endsWith('/api/sendtext') || lower.endsWith('/sendtext')) {
+    return normalized;
+  }
+  if (lower.endsWith('/api')) {
+    return `${normalized}/sendText`;
+  }
+  return `${normalized}/api/sendText`;
+}
+
 function buildSendTextPayload(chatId: string, sessionId: string, payload: SendMessageInput): Record<string, unknown> {
   return {
     chatId,

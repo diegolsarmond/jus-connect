@@ -172,6 +172,7 @@ const router = Router();
  *         error:
  *           type: string
  *           description: Mensagem detalhando o motivo do erro
+
  *     WahaIntegrationConfig:
  *       type: object
  *       required:
@@ -230,6 +231,8 @@ const router = Router();
  *           type: string
  *           enum: [waha, local]
  *         description: Define a origem dos dados. Utilize `local` para ignorar o WAHA e retornar apenas registros persistidos.
+ *     summary: Lista todas as conversas cadastradas
+ *     tags: [Conversas]
  *     responses:
  *       200:
  *         description: Lista de conversas ordenadas pela atividade mais recente
@@ -251,6 +254,7 @@ const router = Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+
  *       500:
  *         description: Erro interno ao listar conversas
  *         content:
@@ -258,6 +262,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+
 router.get('/conversations', listConversationsHandler);
 
 /**
@@ -520,6 +525,7 @@ router.post('/webhooks/waha', wahaWebhookHandler);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+
  */
 router.get('/integrations/waha', getWahaConfigHandler);
 
@@ -572,6 +578,7 @@ router.get('/integrations/waha', getWahaConfigHandler);
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+
  */
 router.put('/integrations/waha', updateWahaConfigHandler);
 
