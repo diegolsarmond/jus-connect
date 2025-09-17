@@ -41,6 +41,27 @@ interface WahaSettingsRow extends QueryResultRow {
   updated_at: string | Date;
 }
 
+function stripKnownSuffixes(pathname: string): string {
+  let result = pathname;
+  const suffixes = [
+    /\/v1\/messages$/i,
+    /\/v1$/i,
+    /\/api\/send[a-z]+$/i,
+    /\/api$/i,
+  ];
+  let updated = true;
+  while (updated) {
+    updated = false;
+    for (const suffix of suffixes) {
+      if (suffix.test(result)) {
+        result = result.replace(suffix, '');
+        updated = true;
+      }
+    }
+  }
+  return result.replace(/\/$/, '');
+}
+
 function normalizeBaseUrl(value: string | undefined): string {
   if (typeof value !== 'string') {
     throw new ValidationError('baseUrl is required');
@@ -58,7 +79,7 @@ function normalizeBaseUrl(value: string | undefined): string {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new ValidationError('baseUrl must use http or https');
   }
-  parsed.pathname = parsed.pathname.replace(/\/$/, '');
+  parsed.pathname = stripKnownSuffixes(parsed.pathname);
   parsed.hash = '';
   return parsed.toString().replace(/\/$/, '');
 }

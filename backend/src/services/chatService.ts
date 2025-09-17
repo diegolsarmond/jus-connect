@@ -498,12 +498,15 @@ export default class ChatService {
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE
-         SET contact_identifier = COALESCE(chat_conversations.contact_identifier, EXCLUDED.contact_identifier),
-             contact_name = COALESCE(chat_conversations.contact_name, EXCLUDED.contact_name),
-             contact_avatar = COALESCE(chat_conversations.contact_avatar, EXCLUDED.contact_avatar),
-             short_status = COALESCE(chat_conversations.short_status, EXCLUDED.short_status),
-             description = COALESCE(chat_conversations.description, EXCLUDED.description),
-             metadata = COALESCE(chat_conversations.metadata, EXCLUDED.metadata)
+        SET contact_identifier = COALESCE(chat_conversations.contact_identifier, EXCLUDED.contact_identifier),
+            contact_name = COALESCE(chat_conversations.contact_name, EXCLUDED.contact_name),
+            contact_avatar = COALESCE(chat_conversations.contact_avatar, EXCLUDED.contact_avatar),
+            short_status = COALESCE(chat_conversations.short_status, EXCLUDED.short_status),
+            description = COALESCE(chat_conversations.description, EXCLUDED.description),
+            metadata = CASE
+              WHEN chat_conversations.metadata IS NULL AND EXCLUDED.metadata IS NULL THEN NULL
+              ELSE COALESCE(chat_conversations.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
+            END
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,
