@@ -48,6 +48,10 @@ router.get('/integrations/api-keys', listIntegrationApiKeys);
  *               provider:
  *                 type: string
  *                 enum: [gemini, openai]
+ *               apiUrl:
+ *                 type: string
+ *                 format: uri
+ *                 description: URL base da API utilizada pela integração
  *               key:
  *                 type: string
  *               environment:
@@ -86,6 +90,9 @@ router.post('/integrations/api-keys', createIntegrationApiKey);
  *               provider:
  *                 type: string
  *                 enum: [gemini, openai]
+ *               apiUrl:
+ *                 type: string
+ *                 format: uri
  *               key:
  *                 type: string
  *               environment:

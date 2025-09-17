@@ -28,6 +28,7 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   const insertedRow = {
     id: 1,
     provider: 'openai',
+    url_api: 'https://api.openai.com/v1',
     key_value: 'sk_live_abc123',
     environment: 'producao',
     active: true,
@@ -44,6 +45,7 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
 
   const payload: CreateIntegrationApiKeyInput = {
     provider: '  OPENAI  ',
+    apiUrl: ' https://api.openai.com/v1 ',
     key: '  sk_live_abc123  ',
     environment: ' Producao ',
   };
@@ -53,11 +55,12 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   assert.equal(pool.calls.length, 1);
   const call = pool.calls[0];
   assert.match(call.text, /INSERT INTO integration_api_keys/i);
-  assert.deepEqual(call.values, ['openai', 'sk_live_abc123', 'producao', true, null]);
+  assert.deepEqual(call.values, ['openai', 'https://api.openai.com/v1', 'sk_live_abc123', 'producao', true, null]);
 
   const expected: IntegrationApiKey = {
     id: 1,
     provider: 'openai',
+    apiUrl: 'https://api.openai.com/v1',
     key: 'sk_live_abc123',
     environment: 'producao',
     active: true,
@@ -89,6 +92,7 @@ test('IntegrationApiKeyService.list retrieves keys ordered by creation date', as
     {
       id: 10,
       provider: 'openai',
+      url_api: 'https://sandbox.openai.com',
       key_value: 'sk_test_123',
       environment: 'homologacao',
       active: false,
@@ -111,6 +115,7 @@ test('IntegrationApiKeyService.list retrieves keys ordered by creation date', as
   assert.equal(result.length, 1);
   assert.equal(result[0].id, 10);
   assert.equal(result[0].provider, 'openai');
+  assert.equal(result[0].apiUrl, 'https://sandbox.openai.com');
   assert.equal(result[0].lastUsed, '2024-02-10T12:00:00.000Z');
 });
 
@@ -118,6 +123,7 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
   const updatedRow = {
     id: 7,
     provider: 'openai',
+    url_api: 'https://new.api.openai.com',
     key_value: 'sk_new_value',
     environment: 'homologacao',
     active: false,
@@ -135,6 +141,7 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
 
   const updates: UpdateIntegrationApiKeyInput = {
     provider: 'OpenAI',
+    apiUrl: 'https://new.api.openai.com',
     key: ' sk_new_value ',
     environment: ' Homologacao ',
     active: false,
@@ -144,16 +151,23 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
   const result = await service.update(7, updates);
 
   assert.ok(pool.calls[0].text.startsWith('UPDATE integration_api_keys'));
-  assert.deepEqual(pool.calls[0].values?.slice(0, 4), ['openai', 'sk_new_value', 'homologacao', false]);
-  const lastUsedValue = pool.calls[0].values?.[4];
+  assert.deepEqual(pool.calls[0].values?.slice(0, 5), [
+    'openai',
+    'https://new.api.openai.com',
+    'sk_new_value',
+    'homologacao',
+    false,
+  ]);
+  const lastUsedValue = pool.calls[0].values?.[5];
   assert.ok(lastUsedValue instanceof Date);
   assert.equal((lastUsedValue as Date).toISOString(), '2024-03-01T08:30:00.000Z');
-  assert.equal(pool.calls[0].values?.[5], 7);
+  assert.equal(pool.calls[0].values?.[6], 7);
 
   assert.equal(result?.id, 7);
   assert.equal(result?.provider, 'openai');
   assert.equal(result?.active, false);
   assert.equal(result?.environment, 'homologacao');
+  assert.equal(result?.apiUrl, 'https://new.api.openai.com');
 
   const notFound = await service.update(99, { active: true });
   assert.equal(pool.calls.length, 2);

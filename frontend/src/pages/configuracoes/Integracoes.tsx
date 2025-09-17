@@ -174,6 +174,7 @@ export default function Integracoes() {
   const [deletingKeyId, setDeletingKeyId] = useState<number | null>(null);
   const [newApiKey, setNewApiKey] = useState({
     provider: fallbackProvider,
+    apiUrl: "",
     key: "",
     environment: "producao" as ApiEnvironment,
   });
@@ -282,6 +283,7 @@ export default function Integracoes() {
   const handleAddApiKey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedKey = newApiKey.key.trim();
+    const trimmedApiUrl = newApiKey.apiUrl.trim();
     if (!trimmedKey) {
       toast({
         title: "Preencha os dados da chave",
@@ -295,6 +297,7 @@ export default function Integracoes() {
     try {
       const created = await createIntegrationApiKey({
         provider: newApiKey.provider,
+        apiUrl: trimmedApiUrl ? trimmedApiUrl : null,
         key: trimmedKey,
         environment: newApiKey.environment,
       });
@@ -304,7 +307,7 @@ export default function Integracoes() {
         title: "Chave adicionada",
         description: `${providerLabel} cadastrada com sucesso.`,
       });
-      setNewApiKey((prev) => ({ ...prev, key: "" }));
+      setNewApiKey((prev) => ({ ...prev, key: "", apiUrl: "" }));
     } catch (error) {
       toast({
         title: "Não foi possível salvar a chave",
@@ -592,7 +595,21 @@ export default function Integracoes() {
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto]">
+                <div className="space-y-2">
+                  <Label htmlFor="api-key-url">Endpoint da API</Label>
+                  <Input
+                    id="api-key-url"
+                    placeholder="https://api.fornecedor.com/v1"
+                    value={newApiKey.apiUrl}
+                    onChange={(event) =>
+                      setNewApiKey((prev) => ({ ...prev, apiUrl: event.target.value }))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Informe o endpoint utilizado pelas requisições. Opcional.
+                  </p>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="api-key-value">Valor da chave</Label>
                   <Input
@@ -620,17 +637,18 @@ export default function Integracoes() {
                 <TableRow>
                   <TableHead>Provedor</TableHead>
                   <TableHead>Ambiente</TableHead>
+                  <TableHead>Endpoint</TableHead>
                   <TableHead>Chave</TableHead>
                   <TableHead>Criada em</TableHead>
                   <TableHead>Último uso</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-[120px]">Ações</TableHead>
+                  <TableHead className="w-[150px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoadingApiKeys ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                       Carregando chaves cadastradas...
                     </TableCell>
                   </TableRow>
@@ -643,6 +661,19 @@ export default function Integracoes() {
                           <TableCell className="font-medium">{providerLabel}</TableCell>
                           <TableCell>
                             <Badge variant="secondary">{environmentLabels[item.environment]}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {item.apiUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => void copyCredential(item.apiUrl!, "Endpoint da API")}
+                                className="text-sm text-primary underline-offset-4 hover:underline"
+                              >
+                                {item.apiUrl}
+                              </button>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <span className="font-mono text-sm">{maskCredential(item.key)}</span>
@@ -666,11 +697,22 @@ export default function Integracoes() {
                             </div>
                           </TableCell>
                           <TableCell className="flex items-center gap-2">
+                            {item.apiUrl && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => void copyCredential(item.apiUrl!, "Endpoint da API")}
+                                aria-label="Copiar endpoint da API"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               type="button"
                               size="icon"
                               variant="ghost"
-                              onClick={() => copyCredential(item.key, "Chave de API")}
+                              onClick={() => void copyCredential(item.key, "Chave de API")}
                               aria-label="Copiar chave"
                             >
                               <Copy className="h-4 w-4" />
@@ -691,7 +733,7 @@ export default function Integracoes() {
                     })}
                     {apiKeys.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                           Nenhuma chave cadastrada até o momento.
                         </TableCell>
                       </TableRow>
