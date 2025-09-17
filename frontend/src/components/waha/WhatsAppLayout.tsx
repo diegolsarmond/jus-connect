@@ -7,17 +7,18 @@ import { SessionStatus } from './SessionStatus';
 export const WhatsAppLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const wahaState = useWAHA();
+  const { addMessage } = wahaState;
 
   // Set up webhook receiver for demo purposes
   useEffect(() => {
     window.wahaWebhookReceived = (message) => {
-      wahaState.addMessage(message);
+      addMessage(message);
     };
-    
+
     return () => {
       delete window.wahaWebhookReceived;
     };
-  }, [wahaState.addMessage]);
+  }, [addMessage]);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden pt-14">
