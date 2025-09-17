@@ -1,13 +1,14 @@
 .wrapper {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.35));
-  height: 88%;
-  min-height: 0;
-  position: absolute;
-  overflow: hidden;
-  --details-panel-width: min(420px, 32vw);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.35));
+    height: 88%;
+    max-height: 100%;
+    min-height: 0;
+    position: absolute;
+    overflow: hidden;
+    --details-panel-width: min(420px, 32vw);
 }
 
 .wrapper[data-private="true"] {
