@@ -1,9 +1,10 @@
 .sidebar {
-  width: 360px;
-  max-width: 100%;
-  background: hsl(var(--sidebar-background));
+  width: 100%;
+  max-width: none;
+  background: linear-gradient(180deg, hsl(var(--sidebar-background)), hsl(var(--sidebar-background)) 60%, hsl(var(--background)) 100%);
   color: hsl(var(--sidebar-foreground));
   border-right: 1px solid hsl(var(--sidebar-border));
+  box-shadow: inset -1px 0 0 rgba(15, 23, 42, 0.05), 6px 0 24px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -15,6 +16,11 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(180deg, hsl(var(--sidebar-background)) 0%, hsl(var(--sidebar-background)) 75%, transparent 100%);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.05);
 }
 
 .titleRow {
@@ -98,11 +104,13 @@
 .listContainer {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem 0.75rem 1.5rem;
+  padding: 0.5rem 0.75rem 1.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   min-height: 0;
+  background: hsl(var(--background));
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.04);
 }
 
 .list {
@@ -227,17 +235,20 @@
 }
 
 .footer {
-  padding: 0.75rem 1.25rem 1.5rem;
+  padding: 0.85rem 1.25rem 1.25rem;
   color: hsl(var(--muted-foreground));
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.85rem;
+  background: linear-gradient(0deg, hsl(var(--sidebar-background)) 10%, transparent 100%);
+  border-top: 1px solid hsl(var(--sidebar-border));
 }
 
 @media (max-width: 1200px) {
   .sidebar {
-    width: 320px;
+    width: 100%;
+    max-width: none;
   }
 }
 
