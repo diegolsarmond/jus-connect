@@ -25,11 +25,11 @@ export function Header() {
         <SidebarTrigger className="text-muted-foreground" />
         <div className="flex-1 max-w-md">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Pesquisar clientes, processos..."
-              className="pl-9 bg-muted/50"
-            />
+            {/*<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />*/}
+            {/*<Input*/}
+            {/*  placeholder="Pesquisar clientes, processos..."*/}
+            {/*  className="pl-9 bg-muted/50"*/}
+            {/*/>*/}
           </div>
         </div>
       </div>
