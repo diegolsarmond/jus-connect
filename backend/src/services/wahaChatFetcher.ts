@@ -1,7 +1,4 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import WahaConfigService, {
-  ValidationError as ConfigValidationError,
-} from './wahaConfigService';
 
 export interface WahaConversationRow {
   conversation_id: string;
@@ -37,7 +34,54 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429]);
 
-const configService = new WahaConfigService();
+type WahaConfigModule = typeof import('./wahaConfigService');
+type WahaConfigServiceInstance = InstanceType<WahaConfigModule['default']>;
+type ConfigValidationErrorConstructor = WahaConfigModule['ValidationError'];
+
+let configModulePromise: Promise<WahaConfigModule | null> | undefined;
+let cachedConfigService: WahaConfigServiceInstance | undefined;
+
+const isMissingDatabaseError = (error: unknown): boolean =>
+  error instanceof Error &&
+  error.message.includes('Database connection string not provided');
+
+const loadConfigModule = async (): Promise<WahaConfigModule | null> => {
+  if (!configModulePromise) {
+    configModulePromise = import('./wahaConfigService')
+      .then((module) => module)
+      .catch((error) => {
+        if (isMissingDatabaseError(error)) {
+          return null;
+        }
+        throw error;
+      });
+  }
+
+  return configModulePromise;
+};
+
+const getConfigDependencies = async (): Promise<
+  | {
+      service: WahaConfigServiceInstance;
+      ValidationError: ConfigValidationErrorConstructor;
+    }
+  | null
+> => {
+  const module = await loadConfigModule();
+
+  if (!module) {
+    return null;
+  }
+
+  if (!cachedConfigService) {
+    cachedConfigService = new module.default();
+  }
+
+  return {
+    service: cachedConfigService,
+    ValidationError: module.ValidationError,
+  } as const;
+};
 
 const addRetryableRange = (set: Set<number>, start: number, end: number) => {
   for (let status = start; status <= end; status += 1) {
@@ -318,18 +362,24 @@ const printTable = (rows: WahaConversationRow[], logger: Logger) => {
 export const listWahaConversations = async (logger: Logger = console): Promise<WahaConversationRow[]> => {
   let baseUrl: string | undefined;
   let token: string | undefined;
-  let configError: ConfigValidationError | undefined;
+  let configError: Error | undefined;
 
-  try {
-    const config = await configService.requireConfig();
-    baseUrl = config.baseUrl;
-    token = config.apiKey;
-  } catch (error) {
-    if (error instanceof ConfigValidationError) {
-      configError = error;
-      logger.warn(`WAHA configuration warning: ${error.message}`);
-    } else {
-      throw error;
+  const configDependencies = await getConfigDependencies();
+
+  if (configDependencies) {
+    const { service, ValidationError: ConfigValidationError } = configDependencies;
+
+    try {
+      const config = await service.requireConfig();
+      baseUrl = config.baseUrl;
+      token = config.apiKey;
+    } catch (error) {
+      if (error instanceof ConfigValidationError) {
+        configError = error;
+        logger.warn(`WAHA configuration warning: ${error.message}`);
+      } else {
+        throw error;
+      }
     }
   }
 

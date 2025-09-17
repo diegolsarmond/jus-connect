@@ -35,7 +35,6 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listWahaConversations = exports.WahaRequestError = void 0;
 const promises_1 = require("node:timers/promises");
-const wahaConfigService_1 = __importStar(require("./wahaConfigService"));
 class WahaRequestError extends Error {
     constructor(message, status, responseBody) {
         super(message);
@@ -48,7 +47,35 @@ exports.WahaRequestError = WahaRequestError;
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429]);
-const configService = new wahaConfigService_1.default();
+let configModulePromise;
+let cachedConfigService;
+const isMissingDatabaseError = (error) => error instanceof Error &&
+    error.message.includes('Database connection string not provided');
+const loadConfigModule = async () => {
+    if (!configModulePromise) {
+        configModulePromise = Promise.resolve().then(() => __importStar(require('./wahaConfigService'))).then((module) => module)
+            .catch((error) => {
+            if (isMissingDatabaseError(error)) {
+                return null;
+            }
+            throw error;
+        });
+    }
+    return configModulePromise;
+};
+const getConfigDependencies = async () => {
+    const module = await loadConfigModule();
+    if (!module) {
+        return null;
+    }
+    if (!cachedConfigService) {
+        cachedConfigService = new module.default();
+    }
+    return {
+        service: cachedConfigService,
+        ValidationError: module.ValidationError,
+    };
+};
 const addRetryableRange = (set, start, end) => {
     for (let status = start; status <= end; status += 1) {
         set.add(status);
@@ -237,18 +264,22 @@ const listWahaConversations = async (logger = console) => {
     let baseUrl;
     let token;
     let configError;
-    try {
-        const config = await configService.requireConfig();
-        baseUrl = config.baseUrl;
-        token = config.apiKey;
-    }
-    catch (error) {
-        if (error instanceof wahaConfigService_1.ValidationError) {
-            configError = error;
-            logger.warn(`WAHA configuration warning: ${error.message}`);
+    const configDependencies = await getConfigDependencies();
+    if (configDependencies) {
+        const { service, ValidationError: ConfigValidationError } = configDependencies;
+        try {
+            const config = await service.requireConfig();
+            baseUrl = config.baseUrl;
+            token = config.apiKey;
         }
-        else {
-            throw error;
+        catch (error) {
+            if (error instanceof ConfigValidationError) {
+                configError = error;
+                logger.warn(`WAHA configuration warning: ${error.message}`);
+            }
+            else {
+                throw error;
+            }
         }
     }
     if (!baseUrl) {
