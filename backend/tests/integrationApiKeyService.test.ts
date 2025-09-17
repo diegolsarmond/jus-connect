@@ -119,6 +119,34 @@ test('IntegrationApiKeyService.list retrieves keys ordered by creation date', as
   assert.equal(result[0].lastUsed, '2024-02-10T12:00:00.000Z');
 });
 
+test('IntegrationApiKeyService.list tolerates unexpected provider and environment values', async () => {
+  const rows = [
+    {
+      id: 42,
+      provider: 'Zoho',
+      url_api: null,
+      key_value: 'secret-value',
+      environment: 'custom-env',
+      active: true,
+      last_used: null,
+      created_at: '2024-02-15T10:00:00.000Z',
+      updated_at: '2024-02-16T11:00:00.000Z',
+    },
+  ];
+
+  const pool = new FakePool([
+    { rows, rowCount: rows.length },
+  ]);
+
+  const service = new IntegrationApiKeyService(pool as any);
+
+  const result = await service.list();
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].provider, 'Zoho');
+  assert.equal(result[0].environment, 'custom-env');
+});
+
 test('IntegrationApiKeyService.update builds dynamic query and handles not found', async () => {
   const updatedRow = {
     id: 7,

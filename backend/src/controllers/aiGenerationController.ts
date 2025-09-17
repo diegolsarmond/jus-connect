@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import IntegrationApiKeyService, { ApiKeyProvider } from '../services/integrationApiKeyService';
+import IntegrationApiKeyService from '../services/integrationApiKeyService';
 import { AiProviderError } from '../services/aiProviders/errors';
 import { generateDocumentWithGemini } from '../services/aiProviders/geminiProvider';
 import { escapeHtml } from '../utils/html';
 
-const providerLabels: Record<ApiKeyProvider, string> = {
+const providerLabels: Record<string, string> = {
   gemini: 'Gemini',
   openai: 'OpenAI',
 };

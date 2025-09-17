@@ -27,9 +27,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
 import {
-  API_KEY_PROVIDER_LABELS,
   fetchIntegrationApiKeys,
   generateAiText,
+  getApiKeyEnvironmentLabel,
+  getApiKeyProviderLabel,
   type IntegrationApiKey,
 } from '@/lib/integrationApiKeys';
 import { createTemplate, getTemplate, updateTemplate } from '@/lib/templates';
@@ -212,7 +213,9 @@ export default function EditorPage() {
       .filter(integration => integration.active)
       .sort((a, b) => {
         if (a.environment === b.environment) {
-          return API_KEY_PROVIDER_LABELS[a.provider].localeCompare(API_KEY_PROVIDER_LABELS[b.provider]);
+          const labelA = getApiKeyProviderLabel(a.provider) || a.provider;
+          const labelB = getApiKeyProviderLabel(b.provider) || b.provider;
+          return labelA.localeCompare(labelB);
         }
         if (a.environment === 'producao') return -1;
         if (b.environment === 'producao') return 1;
@@ -631,7 +634,7 @@ export default function EditorPage() {
 
       toast({
         title: 'Texto gerado com IA',
-        description: `Conteúdo criado com ${API_KEY_PROVIDER_LABELS[response.provider]}.`,
+        description: `Conteúdo criado com ${getApiKeyProviderLabel(response.provider) || response.provider}.`,
       });
 
       setIsAiModalOpen(false);
@@ -946,8 +949,8 @@ export default function EditorPage() {
                   <SelectContent>
                     {activeAiIntegrations.map(integration => (
                       <SelectItem key={integration.id} value={integration.id.toString()}>
-                        {API_KEY_PROVIDER_LABELS[integration.provider]} •{' '}
-                        {integration.environment === 'producao' ? 'Produção' : 'Homologação'}
+                        {getApiKeyProviderLabel(integration.provider) || integration.provider} •{' '}
+                        {getApiKeyEnvironmentLabel(integration.environment) || integration.environment}
                       </SelectItem>
                     ))}
                   </SelectContent>
