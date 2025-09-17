@@ -305,14 +305,17 @@ function normalizeContactIdentifier(value: string | undefined): string {
   return trimmed;
 }
 
-function normalizeContactName(value: string | null | undefined, fallback: string): string | null {
+function normalizeContactName(value: string | null | undefined, _fallback: string): string | null {
   if (value === null) {
     return null;
   }
-  if (typeof value === 'string' && value.trim()) {
-    return value.trim();
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
   }
-  return fallback.trim() || null;
+  return null;
 }
 
 function normalizeMetadata(value: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
@@ -541,10 +544,17 @@ export default class ChatService {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE
         SET contact_identifier = COALESCE(chat_conversations.contact_identifier, EXCLUDED.contact_identifier),
-            contact_name = COALESCE(chat_conversations.contact_name, EXCLUDED.contact_name),
-            contact_avatar = COALESCE(chat_conversations.contact_avatar, EXCLUDED.contact_avatar),
-            short_status = COALESCE(chat_conversations.short_status, EXCLUDED.short_status),
-            description = COALESCE(chat_conversations.description, EXCLUDED.description),
+            contact_name = CASE
+              WHEN EXCLUDED.contact_name IS NULL OR EXCLUDED.contact_name = '' THEN chat_conversations.contact_name
+              WHEN chat_conversations.contact_name IS NULL OR chat_conversations.contact_name = '' THEN EXCLUDED.contact_name
+              ELSE EXCLUDED.contact_name
+            END,
+            contact_avatar = CASE
+              WHEN EXCLUDED.contact_avatar IS NULL OR EXCLUDED.contact_avatar = '' THEN chat_conversations.contact_avatar
+              ELSE EXCLUDED.contact_avatar
+            END,
+            short_status = COALESCE(EXCLUDED.short_status, chat_conversations.short_status),
+            description = COALESCE(EXCLUDED.description, chat_conversations.description),
             metadata = CASE
               WHEN chat_conversations.metadata IS NULL AND EXCLUDED.metadata IS NULL THEN NULL
               ELSE COALESCE(chat_conversations.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
