@@ -34,6 +34,7 @@ const supportRoutes_1 = __importDefault(require("./routes/supportRoutes"));
 const notificationRoutes_1 = __importDefault(require("./routes/notificationRoutes"));
 const integrationApiKeyRoutes_1 = __importDefault(require("./routes/integrationApiKeyRoutes"));
 const chatRoutes_1 = __importDefault(require("./routes/chatRoutes"));
+const wahaWebhookRoutes_1 = __importDefault(require("./routes/wahaWebhookRoutes"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const swagger_1 = __importDefault(require("./swagger"));
@@ -106,6 +107,7 @@ app.use('/api', supportRoutes_1.default);
 app.use('/api', notificationRoutes_1.default);
 app.use('/api', integrationApiKeyRoutes_1.default);
 app.use('/api', chatRoutes_1.default);
+app.use('/api', wahaWebhookRoutes_1.default);
 // Background jobs
 cronJobs_1.default.startProjudiSyncJob();
 // Swagger
