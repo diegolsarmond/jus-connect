@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import ChatService, {
   ChatMessageStatus,
   MessageAttachment,
+
 } from '../services/chatService';
 
 const chatService = new ChatService();
@@ -19,6 +20,7 @@ interface ParsedWebhookMessage {
   contactIdentifier: string;
   contactName?: string | null;
   contactAvatar?: string | null;
+
   content: string;
   type: 'text' | 'image';
   timestamp?: Date;
@@ -27,6 +29,7 @@ interface ParsedWebhookMessage {
   fromMe: boolean;
   sessionId?: string;
   attachments?: MessageAttachment[];
+
 }
 
 const MESSAGE_EVENTS = new Set([
@@ -137,6 +140,7 @@ const MESSAGE_MEDIA_KEYS = [
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
+
 
 function toEvent(value: unknown, fallbackInstanceId?: string): WahaWebhookEvent | null {
   if (!value || typeof value !== 'object') {
@@ -376,6 +380,7 @@ interface AttachmentCandidate {
   mimeType?: string;
 }
 
+
 function parseTimestamp(value: unknown): Date | undefined {
   if (!value) {
     return undefined;
@@ -485,6 +490,12 @@ function deriveChatIdentifier(payload: Record<string, unknown>): string | undefi
     (nestedMessage
       ? readString(nestedMessage['chatId']) ?? readString(nestedMessage['remoteJid'])
       : undefined)
+  return (
+    readString(payload.chatId) ??
+    readString(payload.remoteJid) ??
+    readString(payload.from) ??
+    readString(payload.to) ??
+    readString(payload.chat_id)
   );
 }
 
@@ -630,6 +641,13 @@ function deriveContactAvatar(payload: Record<string, unknown>): string | undefin
   }
 
   return undefined;
+  return (
+    readString(payload.senderName) ??
+    readString(payload.pushName) ??
+    readString(payload.notifyName) ??
+    readString(payload.chatName) ??
+    readString(payload.name)
+  );
 }
 
 function extractKeyId(value: unknown): string | undefined {
@@ -799,6 +817,7 @@ function deriveAttachments(
   });
 }
 
+
 function deriveMessageContent(payload: Record<string, unknown>, type: 'text' | 'image'): string {
   const text = payload.text as Record<string, unknown> | undefined;
   const message = payload.message as Record<string, unknown> | undefined;
@@ -870,6 +889,7 @@ function parseMessagePayload(
   const contactName = deriveContactName(record) ?? null;
   const contactAvatar = deriveContactAvatar(record) ?? null;
   const attachments = deriveAttachments(record, messageType, messageId, externalId ?? undefined, chatId);
+
   const content = deriveMessageContent(record, messageType);
 
   return {
@@ -877,6 +897,7 @@ function parseMessagePayload(
     contactIdentifier: chatId,
     contactName,
     contactAvatar,
+
     content,
     type: messageType,
     timestamp,
@@ -885,6 +906,7 @@ function parseMessagePayload(
     fromMe,
     sessionId: event.instanceId,
     attachments,
+
   };
 }
 
@@ -912,6 +934,7 @@ async function handleMessageEvent(event: WahaWebhookEvent): Promise<number> {
         contactIdentifier: parsed.contactIdentifier,
         contactName: parsed.contactName ?? undefined,
         avatar: parsed.contactAvatar ?? undefined,
+
         metadata: parsed.sessionId ? { session: parsed.sessionId } : undefined,
       });
 
@@ -923,6 +946,7 @@ async function handleMessageEvent(event: WahaWebhookEvent): Promise<number> {
         type: parsed.type,
         timestamp: parsed.timestamp,
         attachments: parsed.attachments,
+
       };
 
       if (parsed.fromMe) {

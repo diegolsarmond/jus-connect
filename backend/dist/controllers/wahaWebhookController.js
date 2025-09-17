@@ -105,6 +105,7 @@ const MESSAGE_MEDIA_KEYS = [
 function isRecord(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
+
 function toEvent(value, fallbackInstanceId) {
     if (!value || typeof value !== 'object') {
         return null;
@@ -311,6 +312,7 @@ function extractAvatarFromValue(value, visited = new Set()) {
     }
     return undefined;
 }
+
 function parseTimestamp(value) {
     if (!value) {
         return undefined;
@@ -506,6 +508,18 @@ function deriveContactAvatar(payload) {
         }
     }
     return undefined;
+    return (readString(payload.chatId) ??
+        readString(payload.remoteJid) ??
+        readString(payload.from) ??
+        readString(payload.to) ??
+        readString(payload.chat_id));
+}
+function deriveContactName(payload) {
+    return (readString(payload.senderName) ??
+        readString(payload.pushName) ??
+        readString(payload.notifyName) ??
+        readString(payload.chatName) ??
+        readString(payload.name));
 }
 function extractKeyId(value) {
     if (!value) {
@@ -637,6 +651,7 @@ function deriveAttachments(payload, type, messageId, externalId, conversationId)
         };
     });
 }
+
 function deriveMessageContent(payload, type) {
     const text = payload.text;
     const message = payload.message;
@@ -690,12 +705,14 @@ function parseMessagePayload(payload, event) {
     const contactName = deriveContactName(record) ?? null;
     const contactAvatar = deriveContactAvatar(record) ?? null;
     const attachments = deriveAttachments(record, messageType, messageId, externalId ?? undefined, chatId);
+
     const content = deriveMessageContent(record, messageType);
     return {
         conversationId: chatId,
         contactIdentifier: chatId,
         contactName,
         contactAvatar,
+
         content,
         type: messageType,
         timestamp,
@@ -704,6 +721,7 @@ function parseMessagePayload(payload, event) {
         fromMe,
         sessionId: event.instanceId,
         attachments,
+
     };
 }
 async function handleMessageEvent(event) {
@@ -725,6 +743,7 @@ async function handleMessageEvent(event) {
                 contactIdentifier: parsed.contactIdentifier,
                 contactName: parsed.contactName ?? undefined,
                 avatar: parsed.contactAvatar ?? undefined,
+
                 metadata: parsed.sessionId ? { session: parsed.sessionId } : undefined,
             });
             const recordInput = {
@@ -735,6 +754,7 @@ async function handleMessageEvent(event) {
                 type: parsed.type,
                 timestamp: parsed.timestamp,
                 attachments: parsed.attachments,
+
             };
             if (parsed.fromMe) {
                 await chatService.recordOutgoingMessage(recordInput);
