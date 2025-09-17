@@ -83,6 +83,7 @@ export const ChatWindow = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const previousConversationRef = useRef<string | undefined>(undefined);
   const previousLengthRef = useRef(0);
+  const previousLastMessageRef = useRef<string | undefined>(undefined);
   const noteFormatter = useMemo(
     () => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }),
     [],
@@ -126,7 +127,12 @@ export const ChatWindow = ({
     const container = scrollRef.current;
     if (!container) return;
     const conversationChanged = previousConversationRef.current !== conversation?.id;
-    const appendedMessage = messages.length > previousLengthRef.current;
+    const lastMessageId = messages[messages.length - 1]?.id;
+    const appendedMessage =
+      !conversationChanged &&
+      messages.length > previousLengthRef.current &&
+      lastMessageId !== undefined &&
+      lastMessageId !== previousLastMessageRef.current;
     if (conversationChanged) {
       container.scrollTop = container.scrollHeight;
     } else if (appendedMessage && stickToBottom) {
@@ -134,6 +140,7 @@ export const ChatWindow = ({
     }
     previousConversationRef.current = conversation?.id;
     previousLengthRef.current = messages.length;
+    previousLastMessageRef.current = lastMessageId;
   }, [conversation?.id, messages, stickToBottom]);
 
   const runUpdate = async (changes: UpdateConversationPayload) => {
