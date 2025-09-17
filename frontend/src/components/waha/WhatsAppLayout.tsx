@@ -259,6 +259,7 @@ export const WhatsAppLayout = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20">
+
       <SessionStatus
         status={wahaState.sessionStatus}
         onRefresh={wahaState.checkSessionStatus}
@@ -266,6 +267,7 @@ export const WhatsAppLayout = () => {
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <div className="flex h-full min-h-0 w-[30%] min-w-[300px] max-w-md flex-shrink-0 flex-col overflow-hidden border-r border-border/50 bg-sidebar shadow-[0_12px_24px_rgba(15,23,42,0.06)]">
+
           <CRMChatSidebar
             conversations={conversations}
             activeConversationId={activeConversationId}

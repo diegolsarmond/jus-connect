@@ -15,6 +15,7 @@
 
 .bubble {
   max-width: min(72%, 480px);
+
   padding: 0.65rem 0.85rem 0.6rem;
   border-radius: 1rem;
   background: hsl(var(--card));
