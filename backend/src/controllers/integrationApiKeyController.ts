@@ -44,6 +44,19 @@ function toOptionalDate(value: unknown, field: string): string | Date | null | u
   throw new ValidationError(`${field} must be a string, Date or null`);
 }
 
+function toOptionalString(value: unknown, field: string): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  throw new ValidationError(`${field} must be a string or null`);
+}
+
 export async function listIntegrationApiKeys(_req: Request, res: Response) {
   try {
     const items = await service.list();
@@ -55,8 +68,9 @@ export async function listIntegrationApiKeys(_req: Request, res: Response) {
 }
 
 export async function createIntegrationApiKey(req: Request, res: Response) {
-  const { provider, key, environment, active, lastUsed } = req.body as {
+  const { provider, apiUrl, key, environment, active, lastUsed } = req.body as {
     provider?: string;
+    apiUrl?: unknown;
     key?: string;
     environment?: string;
     active?: unknown;
@@ -70,6 +84,11 @@ export async function createIntegrationApiKey(req: Request, res: Response) {
   };
 
   try {
+    const parsedApiUrl = toOptionalString(apiUrl, 'apiUrl');
+    if (parsedApiUrl !== undefined) {
+      input.apiUrl = parsedApiUrl;
+    }
+
     const parsedActive = toOptionalBoolean(active, 'active');
     if (parsedActive !== undefined) {
       input.active = parsedActive;
@@ -98,7 +117,8 @@ export async function updateIntegrationApiKey(req: Request, res: Response) {
     return res.status(400).json({ error: 'Invalid API key id' });
   }
 
-  const { provider, key, environment, active, lastUsed } = req.body as UpdateIntegrationApiKeyInput & {
+  const { provider, apiUrl, key, environment, active, lastUsed } = req.body as UpdateIntegrationApiKeyInput & {
+    apiUrl?: unknown;
     active?: unknown;
     lastUsed?: unknown;
   };
@@ -116,6 +136,10 @@ export async function updateIntegrationApiKey(req: Request, res: Response) {
   }
 
   try {
+    if (apiUrl !== undefined) {
+      updates.apiUrl = toOptionalString(apiUrl, 'apiUrl') ?? null;
+    }
+
     const parsedActive = toOptionalBoolean(active, 'active');
     if (parsedActive !== undefined) {
       updates.active = parsedActive;

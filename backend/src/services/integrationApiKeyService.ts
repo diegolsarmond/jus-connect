@@ -1,4 +1,5 @@
 import { QueryResultRow } from 'pg';
+import { URL } from 'url';
 import pool from './db';
 
 export const API_KEY_PROVIDERS = ['gemini', 'openai'] as const;
@@ -21,6 +22,7 @@ type Queryable = {
 export interface IntegrationApiKey {
   id: number;
   provider: ApiKeyProvider;
+  apiUrl: string | null;
   key: string;
   environment: ApiKeyEnvironment;
   active: boolean;
@@ -31,6 +33,7 @@ export interface IntegrationApiKey {
 
 export interface CreateIntegrationApiKeyInput {
   provider: string;
+  apiUrl?: string | null;
   key: string;
   environment: string;
   active?: boolean;
@@ -39,6 +42,7 @@ export interface CreateIntegrationApiKeyInput {
 
 export interface UpdateIntegrationApiKeyInput {
   provider?: string;
+  apiUrl?: string | null;
   key?: string;
   environment?: string;
   active?: boolean;
@@ -48,6 +52,7 @@ export interface UpdateIntegrationApiKeyInput {
 interface IntegrationApiKeyRow extends QueryResultRow {
   id: number;
   provider: string;
+  url_api: string | null;
   key_value: string;
   environment: string;
   active: boolean;
@@ -95,6 +100,31 @@ function normalizeKey(value: string | undefined): string {
   return normalized;
 }
 
+function normalizeOptionalApiUrl(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new ValidationError('API URL must be a string value');
+  }
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  try {
+    const parsedUrl = new URL(normalized);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new ValidationError('API URL must use HTTP or HTTPS protocol');
+    }
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+    throw new ValidationError('API URL must be a valid URL');
+  }
+  return normalized;
+}
+
 function normalizeLastUsed(value: unknown): Date | null {
   if (value === undefined || value === null) {
     return null;
@@ -134,6 +164,7 @@ function mapRow(row: IntegrationApiKeyRow): IntegrationApiKey {
   return {
     id: row.id,
     provider: normalizeProvider(row.provider),
+    apiUrl: typeof row.url_api === 'string' ? row.url_api.trim() || null : null,
     key: row.key_value,
     environment: normalizeEnvironment(row.environment),
     active: row.active,
@@ -148,7 +179,7 @@ export default class IntegrationApiKeyService {
 
   async list(): Promise<IntegrationApiKey[]> {
     const result = await this.db.query(
-      `SELECT id, provider, key_value, environment, active, last_used, created_at, updated_at
+      `SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
        FROM integration_api_keys
        ORDER BY created_at DESC`
     );
@@ -158,16 +189,17 @@ export default class IntegrationApiKeyService {
 
   async create(input: CreateIntegrationApiKeyInput): Promise<IntegrationApiKey> {
     const provider = normalizeProvider(input.provider);
+    const apiUrl = normalizeOptionalApiUrl(input.apiUrl);
     const environment = normalizeEnvironment(input.environment);
     const key = normalizeKey(input.key);
     const active = input.active ?? true;
     const lastUsed = normalizeLastUsed(input.lastUsed);
 
     const result = await this.db.query(
-      `INSERT INTO integration_api_keys (provider, key_value, environment, active, last_used)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, provider, key_value, environment, active, last_used, created_at, updated_at`,
-      [provider, key, environment, active, lastUsed]
+      `INSERT INTO integration_api_keys (provider, url_api, key_value, environment, active, last_used)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at`,
+      [provider, apiUrl, key, environment, active, lastUsed]
     );
 
     return mapRow(result.rows[0] as IntegrationApiKeyRow);
@@ -182,6 +214,13 @@ export default class IntegrationApiKeyService {
       const provider = normalizeProvider(updates.provider);
       fields.push(`provider = $${index}`);
       values.push(provider);
+      index += 1;
+    }
+
+    if (updates.apiUrl !== undefined) {
+      const apiUrl = normalizeOptionalApiUrl(updates.apiUrl);
+      fields.push(`url_api = $${index}`);
+      values.push(apiUrl);
       index += 1;
     }
 
@@ -219,7 +258,7 @@ export default class IntegrationApiKeyService {
     const query = `UPDATE integration_api_keys
       SET ${fields.join(', ')}, updated_at = NOW()
       WHERE id = $${index}
-      RETURNING id, provider, key_value, environment, active, last_used, created_at, updated_at`;
+      RETURNING id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at`;
 
     values.push(id);
 
@@ -243,7 +282,7 @@ export default class IntegrationApiKeyService {
     }
 
     const result = await this.db.query(
-      `SELECT id, provider, key_value, environment, active, last_used, created_at, updated_at
+      `SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
        FROM integration_api_keys
        WHERE id = $1`,
       [id]

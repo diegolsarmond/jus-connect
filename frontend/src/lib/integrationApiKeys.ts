@@ -14,6 +14,7 @@ export type ApiKeyEnvironment = (typeof API_KEY_ENVIRONMENTS)[number];
 export interface IntegrationApiKey {
   id: number;
   provider: ApiKeyProvider;
+  apiUrl: string | null;
   key: string;
   environment: ApiKeyEnvironment;
   active: boolean;
@@ -24,6 +25,7 @@ export interface IntegrationApiKey {
 
 export interface CreateIntegrationApiKeyPayload {
   provider: ApiKeyProvider;
+  apiUrl?: string | null;
   key: string;
   environment: ApiKeyEnvironment;
   active?: boolean;
@@ -32,6 +34,7 @@ export interface CreateIntegrationApiKeyPayload {
 
 export interface UpdateIntegrationApiKeyPayload {
   provider?: ApiKeyProvider;
+  apiUrl?: string | null;
   key?: string;
   environment?: ApiKeyEnvironment;
   active?: boolean;
