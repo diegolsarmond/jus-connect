@@ -1,7 +1,7 @@
 import { WhatsAppLayout } from "../components/waha";
 
 const Conversas = () => (
-  <div className="h-full bg-background">
+  <div className="h-full min-h-0 bg-background">
     <WhatsAppLayout />
   </div>
 );

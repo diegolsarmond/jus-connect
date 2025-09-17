@@ -5,7 +5,7 @@ import { WebhookInfo } from './WebhookInfo';
 
 export const WelcomeScreen = () => {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-chat-background p-8 overflow-y-auto">
+    <div className="flex-1 flex flex-col items-center justify-center bg-chat-background p-8 overflow-y-auto min-h-0">
       <div className="max-w-4xl w-full space-y-8">
         {/* Main Welcome */}
         <div className="text-center space-y-4">

@@ -59,7 +59,7 @@ export const ChatArea = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-chat-background">
+    <div className="flex-1 flex flex-col bg-chat-background min-h-0">
       {/* Chat Header */}
       <div className="flex items-center justify-between p-4 bg-sidebar border-b border-border shadow-soft">
         <div className="flex items-center gap-3">
