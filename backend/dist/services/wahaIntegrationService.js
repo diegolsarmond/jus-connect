@@ -230,7 +230,7 @@ function collectAttachments(candidate, _type) {
     }
     return attachments.length > 0 ? attachments : undefined;
 }
-function parseIncomingMessage(candidate) {
+function parseIncomingMessage(candidate, inheritedSessionId) {
     if (!candidate || typeof candidate !== 'object') {
         return null;
     }
@@ -238,24 +238,25 @@ function parseIncomingMessage(candidate) {
     if (fromMe === true || fromMe === 'true') {
         return null;
     }
-    const conversationIdCandidate = firstNonEmpty(candidate.conversationId, candidate.chatId, candidate.chat?.id, candidate.chat?.jid, candidate.from, candidate.remoteJid, candidate.author, candidate.key?.remoteJid, candidate._data?.from);
+    const conversationIdCandidate = firstNonEmpty(candidate.conversationId, candidate.chatId, candidate.chat?.id, candidate.chat?.jid, candidate.chat?.remoteJid, candidate.from, candidate.to, candidate.remoteJid, candidate.author, candidate.key?.remoteJid, candidate.key?.participant, candidate._data?.from, candidate._data?.remoteJid, candidate._data?.Info?.Chat);
     if (!conversationIdCandidate) {
         return null;
     }
-    const messageIdCandidate = firstNonEmpty(candidate.id, candidate.messageId, candidate._id, candidate.key?.id, candidate.message?.key?.id);
-    const externalIdCandidate = firstNonEmpty(candidate.externalId, candidate.key?.id, candidate.messageId, candidate.id);
+    const messageIdCandidate = firstNonEmpty(candidate.id, candidate.messageId, candidate.message_id, candidate._id, candidate.key?.id, candidate.message?.key?.id, candidate._data?.id, candidate._data?.key?.id, candidate._data?.Info?.ID, candidate.media?.Info?.ID);
+    const externalIdCandidate = firstNonEmpty(candidate.externalId, candidate.key?.id, candidate.messageId, candidate.message_id, candidate.id, candidate._data?.Info?.ID);
     if (!messageIdCandidate && !externalIdCandidate) {
         return null;
     }
-    const timestampCandidate = firstNonEmpty(candidate.timestamp, candidate.ts, candidate.sentAt, candidate.messageTimestamp, candidate._data?.t);
+    const timestampCandidate = firstNonEmpty(candidate.timestamp, candidate.ts, candidate.sentAt, candidate.sent_at, candidate.messageTimestamp, candidate.message?.timestamp, candidate.message?.messageTimestamp, candidate._data?.t, candidate._data?.timestamp, candidate._data?.Info?.Timestamp, candidate._data?.Info?.MessageTimestamp);
     const timestamp = normalizeTimestamp(timestampCandidate);
-    const contentCandidate = firstNonEmpty(typeof candidate.text === 'object' ? candidate.text?.body : candidate.text, candidate.body, candidate.message?.conversation, candidate.message?.text, candidate.message?.extendedTextMessage?.text, candidate._data?.body);
+    const contentCandidate = firstNonEmpty(typeof candidate.text === 'object' ? candidate.text?.body : candidate.text, candidate.body, candidate.message?.conversation, candidate.message?.text, candidate.message?.extendedTextMessage?.text, candidate.message?.message?.conversation, candidate.message?.message?.extendedTextMessage?.text, candidate.caption, candidate._data?.body, candidate.media?.Message?.conversation);
     const rawContent = typeof contentCandidate === 'string' ? contentCandidate.trim() : '';
-    const typeCandidate = firstNonEmpty(candidate.type, candidate.message?.type, candidate._data?.type);
+    const typeCandidate = firstNonEmpty(candidate.type, candidate.message?.type, candidate._data?.type, candidate.media?.Info?.Type);
     const attachments = collectAttachments(candidate, normalizeMessageType(typeCandidate, false));
     const type = normalizeMessageType(typeCandidate, Boolean(attachments && attachments.length > 0));
-    const senderNameCandidate = firstNonEmpty(candidate.senderName, candidate.sender?.name, candidate.chat?.name, candidate.pushName, candidate.notifyName);
+    const senderNameCandidate = firstNonEmpty(candidate.senderName, candidate.sender?.name, candidate.chat?.name, candidate.pushName, candidate.notifyName, candidate._data?.pushName, candidate._data?.notifyName);
     const content = rawContent || (attachments && attachments.length > 0 ? 'Arquivo recebido' : 'Mensagem recebida');
+    const sessionCandidate = firstNonEmpty(candidate.session, candidate.sessionId, candidate.session_id, candidate.metadata?.session, candidate.context?.session, candidate.me?.session, inheritedSessionId);
     return {
         conversationId: String(conversationIdCandidate),
         messageId: String(messageIdCandidate ?? externalIdCandidate ?? `waha-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`),
@@ -265,112 +266,118 @@ function parseIncomingMessage(candidate) {
         type,
         senderName: senderNameCandidate ? String(senderNameCandidate) : undefined,
         attachments,
+        sessionId: sessionCandidate ? String(sessionCandidate) : undefined,
     };
 }
-function collectMessageCandidates(payload) {
+function collectCandidates(payload, predicate) {
     const results = [];
-    if (!payload) {
-        return results;
-    }
-    const push = (value) => {
-        if (value && typeof value === 'object') {
-            results.push(value);
+    const visited = new Set();
+    const visit = (value, inheritedSession) => {
+        if (!value || typeof value !== 'object' || visited.has(value)) {
+            return;
         }
-    };
-    for (const item of toArray(payload.messages)) {
-        push(item);
-    }
-    if (payload.message) {
-        push(payload.message);
-    }
-    if (payload.data) {
-        if (Array.isArray(payload.data)) {
-            for (const item of payload.data) {
-                for (const message of toArray(item?.messages)) {
-                    push(message);
+        visited.add(value);
+        const sessionCandidate = firstNonEmpty(value.session, value.payload?.session, value.data?.session, value.context?.session, inheritedSession);
+        const sessionId = sessionCandidate ? String(sessionCandidate) : inheritedSession;
+        if (predicate(value)) {
+            results.push({ node: value, sessionId });
+        }
+        const childSources = [value.payload, value.data, value.value, value.body];
+        const arrayProps = ['messages', 'message', 'statuses', 'entries', 'entry', 'changes', 'items', 'events', 'records'];
+        for (const prop of arrayProps) {
+            const candidate = value[prop];
+            for (const item of toArray(candidate)) {
+                if (item && typeof item === 'object') {
+                    visit(item, sessionId);
                 }
             }
         }
-        else {
-            for (const message of toArray(payload.data.messages)) {
-                push(message);
+        for (const child of childSources) {
+            if (!child) {
+                continue;
+            }
+            if (Array.isArray(child)) {
+                for (const item of child) {
+                    if (item && typeof item === 'object') {
+                        visit(item, sessionId);
+                    }
+                }
+            }
+            else if (typeof child === 'object') {
+                visit(child, sessionId);
             }
         }
-    }
-    if (payload.event === 'message' && payload.data) {
-        push(payload.data);
-    }
-    for (const entry of toArray(payload.entry)) {
-        for (const change of toArray(entry?.changes)) {
-            for (const message of toArray(change?.value?.messages)) {
-                push(message);
-            }
+    };
+    if (Array.isArray(payload)) {
+        for (const item of payload) {
+            visit(item);
         }
+    }
+    else {
+        visit(payload);
     }
     return results;
+}
+function isMessageCandidate(value) {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    return (typeof value.from !== 'undefined' ||
+        typeof value.to !== 'undefined' ||
+        typeof value.chatId !== 'undefined' ||
+        typeof value.remoteJid !== 'undefined' ||
+        typeof value.author !== 'undefined' ||
+        typeof value.body === 'string' ||
+        typeof value.text === 'string' ||
+        typeof value.message === 'object' ||
+        typeof value._data === 'object');
+}
+function collectMessageCandidates(payload) {
+    return collectCandidates(payload, isMessageCandidate);
 }
 function normalizeWebhookMessages(payload) {
     const candidates = collectMessageCandidates(payload);
     const normalized = [];
     for (const candidate of candidates) {
-        const parsed = parseIncomingMessage(candidate);
+        const parsed = parseIncomingMessage(candidate.node, candidate.sessionId);
         if (parsed) {
             normalized.push(parsed);
         }
     }
     return normalized;
 }
+function isStatusCandidate(value) {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    if (typeof value.ack !== 'undefined' ||
+        typeof value.status !== 'undefined' ||
+        typeof value.state !== 'undefined' ||
+        typeof value.deliveryStatus !== 'undefined') {
+        return true;
+    }
+    if (typeof value.event === 'string') {
+        const normalized = value.event.toLowerCase();
+        return normalized.includes('status') || normalized.includes('ack');
+    }
+    return false;
+}
 function collectStatusCandidates(payload) {
-    const results = [];
-    if (!payload) {
-        return results;
-    }
-    const push = (value) => {
-        if (value && typeof value === 'object') {
-            results.push(value);
-        }
-    };
-    for (const status of toArray(payload.statuses)) {
-        push(status);
-    }
-    if (payload.data) {
-        if (Array.isArray(payload.data)) {
-            for (const item of payload.data) {
-                for (const status of toArray(item?.statuses)) {
-                    push(status);
-                }
-            }
-        }
-        else {
-            for (const status of toArray(payload.data.statuses)) {
-                push(status);
-            }
-        }
-    }
-    if (payload.event === 'status' && payload.data) {
-        push(payload.data);
-    }
-    for (const entry of toArray(payload.entry)) {
-        for (const change of toArray(entry?.changes)) {
-            for (const status of toArray(change?.value?.statuses)) {
-                push(status);
-            }
-        }
-    }
-    return results;
+    return collectCandidates(payload, isStatusCandidate);
 }
 function normalizeStatusUpdates(payload) {
     const candidates = collectStatusCandidates(payload);
     const updates = [];
     for (const candidate of candidates) {
-        if (!candidate || typeof candidate !== 'object') {
+        const value = candidate.node;
+        if (!value || typeof value !== 'object') {
             continue;
         }
-        const externalIdCandidate = firstNonEmpty(candidate.id, candidate.messageId, candidate.message_id, candidate.key?.id, candidate.status?.id);
+        const externalIdCandidate = firstNonEmpty(value.id, value.messageId, value.message_id, value.key?.id, value.status?.id, value._data?.Info?.ID);
         if (!externalIdCandidate) {
             continue;
         }
-        const statusCandidate = firstNonEmpty(candidate.status, candidate.state, candidate.ack, candidate.deliveryStatus);
+        const statusCandidate = firstNonEmpty(value.status, value.state, value.ack, value.deliveryStatus);
         updates.push({
             externalId: String(externalIdCandidate),
             status: normalizeStatus(statusCandidate),
@@ -378,47 +385,264 @@ function normalizeStatusUpdates(payload) {
     }
     return updates;
 }
-function resolveChatId(conversation) {
-    const metadataChatId = (conversation.metadata?.chatId ?? conversation.metadata?.chat_id ?? conversation.metadata?.id);
-    if (metadataChatId && metadataChatId.trim()) {
-        return metadataChatId.trim();
+function resolveConversationContext(conversation) {
+    const metadata = (conversation.metadata ?? {});
+    const chatIdCandidate = firstNonEmpty(metadata.chatId, metadata.chat_id, metadata.id, metadata.remoteJid, metadata.contactIdentifier, conversation.contactIdentifier, conversation.id);
+    if (!chatIdCandidate || !String(chatIdCandidate).trim()) {
+        throw new chatService_1.ValidationError('Conversation is missing WAHA chat identifier');
     }
-    return conversation.contactIdentifier || conversation.id;
-}
-function resolveMessagesEndpoint(baseUrl) {
-    const normalized = baseUrl.replace(/\/$/, '');
-    if (normalized.toLowerCase().endsWith('/v1/messages')) {
-        return normalized;
-    }
-    if (normalized.toLowerCase().endsWith('/v1')) {
-        return `${normalized}/messages`;
-    }
-    return `${normalized}/v1/messages`;
-}
-function buildSendPayload(chatId, payload) {
-    const type = payload.type ?? 'text';
-    const messagePayload = {
-        type,
-        text: payload.content,
-    };
-    if (type === 'image') {
-        const attachment = payload.attachments?.[0];
-        if (attachment) {
-            messagePayload.image = {
-                url: attachment.url,
-                caption: payload.content || undefined,
-                name: attachment.name,
-            };
-        }
-    }
-    if (payload.attachments && payload.attachments.length > 0) {
-        messagePayload.attachments = payload.attachments;
+    const sessionCandidate = firstNonEmpty(metadata.session, metadata.sessionId, metadata.session_id, metadata.wahaSession, metadata.integrationSession);
+    if (!sessionCandidate || !String(sessionCandidate).trim()) {
+        throw new chatService_1.ValidationError('Conversation is missing WAHA session information');
     }
     return {
-        chatId,
+        chatId: String(chatIdCandidate).trim(),
+        sessionId: String(sessionCandidate).trim(),
+    };
+}
+function normalizeChatLimit(limit) {
+    if (typeof limit !== 'number' || Number.isNaN(limit) || limit <= 0) {
+        return 30;
+    }
+    const normalized = Math.floor(limit);
+    if (normalized < 1) {
+        return 1;
+    }
+    if (normalized > 200) {
+        return 200;
+    }
+    return normalized;
+}
+function resolveChatsEndpoint(baseUrl, sessionId, limit) {
+    const normalized = baseUrl.replace(/\/$/, '');
+    const encodedSession = encodeURIComponent(sessionId);
+    const endpoint = `${normalized}/api/${encodedSession}/chats`;
+    const separator = endpoint.includes('?') ? '&' : '?';
+    return `${endpoint}${separator}limit=${limit}`;
+}
+function resolveSessionsEndpoint(baseUrl) {
+    const normalized = baseUrl.replace(/\/$/, '');
+    return `${normalized}/api/sessions`;
+}
+function parseSessionIdentifiers(payload) {
+    const identifiers = [];
+    const seen = new Set();
+    const pushValue = (value) => {
+        if (value === undefined || value === null) {
+            return;
+        }
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed && !seen.has(trimmed)) {
+                seen.add(trimmed);
+                identifiers.push(trimmed);
+            }
+            return;
+        }
+        if (typeof value === 'number' && !Number.isNaN(value)) {
+            const normalized = String(value);
+            if (!seen.has(normalized)) {
+                seen.add(normalized);
+                identifiers.push(normalized);
+            }
+            return;
+        }
+        if (typeof value === 'object') {
+            const candidate = firstNonEmpty(value.id, value.session, value.sessionId, value.session_id, value.name);
+            if (candidate && String(candidate).trim()) {
+                const normalized = String(candidate).trim();
+                if (!seen.has(normalized)) {
+                    seen.add(normalized);
+                    identifiers.push(normalized);
+                }
+            }
+        }
+    };
+    const visit = (value) => {
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                visit(item);
+            }
+            return;
+        }
+        pushValue(value);
+    };
+    if (Array.isArray(payload)) {
+        visit(payload);
+    }
+    else if (payload && typeof payload === 'object') {
+        const container = payload;
+        const candidates = [container.data, container.sessions, container.result, container.items, container.payload];
+        for (const candidate of candidates) {
+            if (candidate !== undefined) {
+                visit(candidate);
+            }
+        }
+        if (identifiers.length === 0) {
+            for (const value of Object.values(container)) {
+                if (Array.isArray(value)) {
+                    visit(value);
+                }
+            }
+        }
+    }
+    else {
+        pushValue(payload);
+    }
+    return identifiers;
+}
+function extractWahaChatArray(payload) {
+    if (!payload) {
+        return [];
+    }
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+    if (typeof payload === 'object') {
+        const container = payload;
+        const candidates = [container.data, container.chats, container.items, container.result, container.payload];
+        for (const candidate of candidates) {
+            if (Array.isArray(candidate)) {
+                return candidate;
+            }
+        }
+    }
+    return [];
+}
+function parseWahaLastMessage(value) {
+    if (!value || typeof value !== 'object') {
+        return undefined;
+    }
+    const candidate = value;
+    const contentCandidate = firstNonEmpty(candidate.body, candidate.message, candidate.text, candidate.caption, candidate.content, candidate.conversation, candidate.displayText);
+    if (!contentCandidate || !String(contentCandidate).trim()) {
+        return undefined;
+    }
+    const idCandidate = firstNonEmpty(candidate.id?.id, candidate.id?._serialized, candidate.id, candidate.messageId, candidate.message_id, candidate.key?.id, candidate.key?._serialized);
+    const timestampCandidate = firstNonEmpty(candidate.timestamp, candidate.messageTimestamp, candidate.time, candidate.t, candidate.sendTimestamp, candidate.serverTimestamp, candidate.Info?.Timestamp);
+    const timestamp = normalizeTimestamp(timestampCandidate);
+    const fromMeCandidate = firstNonEmpty(candidate.fromMe, candidate.key?.fromMe, candidate.isFromMe, candidate.from_me);
+    const sender = fromMeCandidate === true || String(fromMeCandidate).toLowerCase() === 'true'
+        ? 'me'
+        : 'contact';
+    const typeCandidate = firstNonEmpty(candidate.type, candidate.messageType);
+    const type = normalizeMessageType(typeCandidate, false);
+    const statusCandidate = firstNonEmpty(candidate.ack, candidate.ackName, candidate.status);
+    let status = 'sent';
+    if (typeof statusCandidate === 'number') {
+        if (statusCandidate >= 3) {
+            status = 'read';
+        }
+        else if (statusCandidate >= 2) {
+            status = 'delivered';
+        }
+    }
+    else if (typeof statusCandidate === 'string') {
+        const normalized = statusCandidate.trim().toLowerCase();
+        if (['read', 'seen', 'viewed'].includes(normalized)) {
+            status = 'read';
+        }
+        else if (['delivered', 'device', 'server', 'arrived'].includes(normalized)) {
+            status = 'delivered';
+        }
+    }
+    const id = idCandidate && String(idCandidate).trim() ? String(idCandidate).trim() : `msg-${timestamp.getTime()}`;
+    return {
+        id,
+        content: String(contentCandidate),
+        timestamp,
+        sender,
         type,
+        status,
+    };
+}
+function normalizeWahaChat(value, sessionId) {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+    const candidate = value;
+    const idCandidate = firstNonEmpty(candidate.id, candidate.chatId, candidate.chat_id, candidate.jid, candidate.remoteJid, candidate.wid, candidate.user);
+    if (!idCandidate || !String(idCandidate).trim()) {
+        return null;
+    }
+    const id = String(idCandidate).trim();
+    const nameCandidate = firstNonEmpty(candidate.name, candidate.pushName, candidate.contactName, candidate.displayName, candidate.formattedName, candidate.formattedTitle, candidate.shortName);
+    const avatarCandidate = firstNonEmpty(candidate.avatar, candidate.picture, candidate.pictureUrl, candidate.profilePicUrl, candidate.profilePicThumbObj?.eurl);
+    const shortStatusCandidate = firstNonEmpty(candidate.shortStatus, candidate.status, candidate.state);
+    const descriptionCandidate = firstNonEmpty(candidate.description, candidate.about, candidate.bio);
+    const unreadCandidate = firstNonEmpty(candidate.unreadCount, candidate.unread, candidate.unreadMessages, candidate.unread_messages);
+    let unreadCount;
+    if (typeof unreadCandidate === 'number' && !Number.isNaN(unreadCandidate)) {
+        unreadCount = unreadCandidate;
+    }
+    else if (typeof unreadCandidate === 'string' && unreadCandidate.trim()) {
+        const parsed = Number.parseInt(unreadCandidate, 10);
+        if (!Number.isNaN(parsed)) {
+            unreadCount = parsed;
+        }
+    }
+    const messages = Array.isArray(candidate.messages) && candidate.messages.length > 0
+        ? candidate.messages[candidate.messages.length - 1]
+        : undefined;
+    const lastMessageCandidate = firstNonEmpty(candidate.lastMessage, candidate.last_message, candidate.last_message_received, messages);
+    const lastMessage = parseWahaLastMessage(lastMessageCandidate);
+    return {
+        id,
+        name: nameCandidate && String(nameCandidate).trim() ? String(nameCandidate).trim() : undefined,
+        avatar: avatarCandidate && String(avatarCandidate).trim() ? String(avatarCandidate).trim() : undefined,
+        shortStatus: shortStatusCandidate && String(shortStatusCandidate).trim()
+            ? String(shortStatusCandidate).trim()
+            : undefined,
+        description: descriptionCandidate && String(descriptionCandidate).trim()
+            ? String(descriptionCandidate).trim()
+            : undefined,
+        unreadCount,
+        lastMessage,
+        sessionId,
+    };
+}
+function buildLastMessagePreview(content, type) {
+    if (type === 'image') {
+        return 'Imagem recebida';
+    }
+    const trimmed = content.trim();
+    if (!trimmed) {
+        return 'Mensagem';
+    }
+    if (trimmed.length > 160) {
+        return `${trimmed.slice(0, 159)}…`;
+    }
+    return trimmed;
+}
+function toConversationSummary(conversation) {
+    return {
+        id: conversation.id,
+        name: conversation.name,
+        avatar: conversation.avatar,
+        shortStatus: conversation.shortStatus,
+        description: conversation.description,
+        unreadCount: conversation.unreadCount,
+        pinned: conversation.pinned,
+        lastMessage: conversation.lastMessage,
+    };
+}
+function resolveSendTextEndpoint(baseUrl) {
+    const normalized = baseUrl.replace(/\/$/, '');
+    const lower = normalized.toLowerCase();
+    if (lower.endsWith('/api/sendtext') || lower.endsWith('/sendtext')) {
+        return normalized;
+    }
+    if (lower.endsWith('/api')) {
+        return `${normalized}/sendText`;
+    }
+    return `${normalized}/api/sendText`;
+}
+function buildSendTextPayload(chatId, sessionId, payload) {
+    return {
+        chatId,
+        session: sessionId,
         text: payload.content,
-        message: messagePayload,
+        linkPreview: true,
     };
 }
 function extractMessageMetadata(data) {
@@ -428,8 +652,8 @@ function extractMessageMetadata(data) {
     const root = data;
     const messages = toArray(root.messages);
     const candidate = messages[0] ?? root;
-    const id = firstNonEmpty(candidate?.id, candidate?.messageId, candidate?.message_id, root.id);
-    const timestampCandidate = firstNonEmpty(candidate?.timestamp, candidate?.ts, candidate?.sentAt, candidate?.messageTimestamp);
+    const id = firstNonEmpty(candidate?.id, candidate?.messageId, candidate?.message_id, candidate?._data?.Info?.ID, root.id);
+    const timestampCandidate = firstNonEmpty(candidate?.timestamp, candidate?.ts, candidate?.sentAt, candidate?.messageTimestamp, candidate?._data?.Info?.Timestamp);
     const timestamp = timestampCandidate ? normalizeTimestamp(timestampCandidate) : undefined;
     return {
         id: id ? String(id) : undefined,
@@ -441,6 +665,104 @@ class WahaIntegrationService {
         this.chatService = chatService;
         this.configService = configService;
         this.httpClient = httpClient;
+    }
+    async determineSessionIds(sessionId, headers, baseUrl) {
+        if (sessionId && sessionId.trim()) {
+            return [sessionId.trim()];
+        }
+        const knownSessions = await this.chatService.listKnownSessions();
+        if (knownSessions.length > 0) {
+            return knownSessions;
+        }
+        const response = await this.httpClient.request(resolveSessionsEndpoint(baseUrl), { headers });
+        if (response.status >= 200 && response.status < 300) {
+            const remoteSessions = parseSessionIdentifiers(response.data);
+            if (remoteSessions.length > 0) {
+                return remoteSessions;
+            }
+        }
+        throw new chatService_1.ValidationError('No WAHA session available to list conversations');
+    }
+    async listChats(options = {}) {
+        let config;
+        try {
+            config = await this.configService.requireConfig();
+        }
+        catch (error) {
+            if (error instanceof wahaConfigService_1.ValidationError) {
+                throw new IntegrationNotConfiguredError(error.message);
+            }
+            throw error;
+        }
+        const limit = normalizeChatLimit(options.limit);
+        const headers = {
+            Authorization: `Bearer ${config.apiKey}`,
+            'X-Api-Key': config.apiKey,
+            Accept: 'application/json',
+        };
+        const sessionIds = await this.determineSessionIds(options.sessionId, headers, config.baseUrl);
+        const conversations = new Map();
+        const order = [];
+        for (const sessionId of sessionIds) {
+            const endpoint = resolveChatsEndpoint(config.baseUrl, sessionId, limit);
+            const response = await this.httpClient.request(endpoint, { headers });
+            if (response.status < 200 || response.status >= 300) {
+                const message = typeof response.data === 'string'
+                    ? response.data
+                    : `WAHA chat list failed with status ${response.status}`;
+                throw new Error(message);
+            }
+            const chats = extractWahaChatArray(response.data)
+                .map((item) => normalizeWahaChat(item, sessionId))
+                .filter((item) => item !== null);
+            for (const chat of chats) {
+                const conversation = await this.chatService.ensureConversation({
+                    id: chat.id,
+                    contactIdentifier: chat.id,
+                    contactName: chat.name ?? chat.id,
+                    avatar: chat.avatar,
+                    shortStatus: chat.shortStatus,
+                    description: chat.description,
+                    metadata: {
+                        provider: 'waha',
+                        chatId: chat.id,
+                        session: chat.sessionId,
+                    },
+                });
+                const summary = toConversationSummary(conversation);
+                if (chat.name) {
+                    summary.name = chat.name;
+                }
+                if (chat.avatar) {
+                    summary.avatar = chat.avatar;
+                }
+                if (chat.shortStatus) {
+                    summary.shortStatus = chat.shortStatus;
+                }
+                if (chat.description) {
+                    summary.description = chat.description;
+                }
+                if (typeof chat.unreadCount === 'number') {
+                    summary.unreadCount = chat.unreadCount;
+                }
+                if (chat.lastMessage) {
+                    summary.lastMessage = {
+                        id: chat.lastMessage.id,
+                        content: chat.lastMessage.content,
+                        preview: buildLastMessagePreview(chat.lastMessage.content, chat.lastMessage.type),
+                        timestamp: chat.lastMessage.timestamp.toISOString(),
+                        sender: chat.lastMessage.sender,
+                        type: chat.lastMessage.type,
+                        status: chat.lastMessage.status,
+                    };
+                }
+                if (!conversations.has(summary.id)) {
+                    order.push(summary.id);
+                }
+                conversations.set(summary.id, summary);
+            }
+        }
+        return order.map((id) => conversations.get(id));
     }
     async sendMessage(conversationId, payload) {
         const conversation = await this.chatService.getConversationDetails(conversationId);
@@ -457,12 +779,19 @@ class WahaIntegrationService {
             }
             throw error;
         }
-        const chatId = resolveChatId(conversation);
-        const endpoint = resolveMessagesEndpoint(config.baseUrl);
-        const requestBody = buildSendPayload(chatId, payload);
+        const { chatId, sessionId } = resolveConversationContext(conversation);
+        if (payload.attachments && payload.attachments.length > 0) {
+            throw new chatService_1.ValidationError('WAHA sendText endpoint does not support attachments');
+        }
+        if (payload.type && payload.type !== 'text') {
+            throw new chatService_1.ValidationError('Only text messages are supported by the WAHA integration');
+        }
+        const endpoint = resolveSendTextEndpoint(config.baseUrl);
+        const requestBody = buildSendTextPayload(chatId, sessionId, payload);
         const headers = {
             Authorization: `Bearer ${config.apiKey}`,
-            'X-API-Key': config.apiKey,
+            'X-Api-Key': config.apiKey,
+            Accept: 'application/json',
         };
         const response = await this.httpClient.postJson(endpoint, requestBody, headers);
         if (response.status < 200 || response.status >= 300) {
@@ -496,14 +825,18 @@ class WahaIntegrationService {
         }
         const messages = normalizeWebhookMessages(body);
         for (const message of messages) {
+            const metadata = {
+                provider: 'waha',
+                chatId: message.conversationId,
+            };
+            if (message.sessionId) {
+                metadata.session = message.sessionId;
+            }
             const conversation = await this.chatService.ensureConversation({
                 id: message.conversationId,
                 contactIdentifier: message.conversationId,
                 contactName: message.senderName ?? message.conversationId,
-                metadata: {
-                    provider: 'waha',
-                    chatId: message.conversationId,
-                },
+                metadata,
             });
             await this.chatService.recordIncomingMessage({
                 id: message.messageId,
