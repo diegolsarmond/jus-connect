@@ -78,4 +78,51 @@ describe('wahaChatFetcher', () => {
       'should not duplicate API path segments when normalizing base url',
     );
   });
+
+  it('falls back to legacy endpoints when WAHA reports missing session', async () => {
+    process.env.WAHA_BASE_URL = 'https://waha.example.com/';
+    process.env.WAHA_TOKEN = 'token';
+
+    const requestedUrls: string[] = [];
+
+    globalThis.fetch = (async (input: any) => {
+      const url = typeof input === 'string' ? input : input?.toString?.() ?? String(input);
+      requestedUrls.push(url);
+
+      if (url.endsWith('/api/v1/chats')) {
+        return {
+          ok: false,
+          status: 422,
+          text: async () =>
+            JSON.stringify({ error: 'Session "v1" does not exist', session: 'v1' }),
+        } as any;
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              chatId: 'abc123',
+              contactName: 'Tester',
+            },
+          ]),
+      } as any;
+    }) as typeof fetch;
+
+    const conversations = await listWahaConversations(LOGGER);
+
+    assert.deepEqual(conversations, [
+      {
+        conversation_id: 'abc123',
+        contact_name: 'Tester',
+        photo_url: null,
+      },
+    ]);
+
+    assert(requestedUrls.some((url) => url.endsWith('/api/v1/chats')));
+    assert(requestedUrls.some((url) => url.endsWith('/api/chats')));
+  });
+
 });

@@ -200,8 +200,55 @@ const buildChatEndpointCandidates = (baseUrl: string, sessionId?: string): strin
   return Array.from(candidates);
 };
 
+const SESSION_NOT_FOUND_PATTERN = /session\s+["']?[^"']+["']?\s+does\s+not\s+exist/i;
+
+const extractResponseMessage = (body: string | undefined): string | undefined => {
+  if (!body) {
+    return undefined;
+  }
+
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === 'string') {
+      return parsed.trim() || undefined;
+    }
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      for (const key of ['error', 'message', 'detail']) {
+        const value = record[key];
+        if (typeof value === 'string') {
+          const normalized = value.trim();
+          if (normalized) {
+            return normalized;
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore JSON parsing errors and fall back to the raw string
+  }
+
+  return trimmed;
+};
+
+const isMissingSessionError = (error: WahaRequestError): boolean => {
+  if (error.status !== 422) {
+    return false;
+  }
+
+  const message = extractResponseMessage(error.responseBody);
+  return message ? SESSION_NOT_FOUND_PATTERN.test(message) : false;
+};
+
 const shouldFallbackToNextEndpoint = (error: unknown): boolean =>
-  error instanceof WahaRequestError && typeof error.status === 'number' && [404, 405].includes(error.status);
+  error instanceof WahaRequestError &&
+  typeof error.status === 'number' &&
+  ([404, 405].includes(error.status) || isMissingSessionError(error));
 
 const fetchChatsPayload = async (
   baseUrl: string,
