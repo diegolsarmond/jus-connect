@@ -268,7 +268,6 @@ class ChatService {
     }
     async listKnownSessions() {
         const result = await this.query(`SELECT DISTINCT metadata ->> 'session' AS session_id
-
          FROM chat_conversations
         WHERE metadata ? 'session'`);
         const sessions = [];
