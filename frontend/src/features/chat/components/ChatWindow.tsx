@@ -284,7 +284,7 @@ export const ChatWindow = ({
     });
   };
 
-  const placeholder = useMemo(
+  const placeholderContent = useMemo(
     () => (
       <div className={styles.placeholder}>
         <div>
@@ -300,7 +300,13 @@ export const ChatWindow = ({
   );
 
   if (!conversation) {
-    return <div className={styles.wrapper}>{placeholder}</div>;
+    return (
+      <div className={styles.wrapper}>
+        <div className={styles.mainColumn}>
+          <div className={styles.viewportWrapper}>{placeholderContent}</div>
+        </div>
+      </div>
+    );
   }
 
   const detailsPanelId = `chat-details-${conversation.id}`;
