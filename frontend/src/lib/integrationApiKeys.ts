@@ -13,14 +13,45 @@ export type ApiKeyEnvironment = (typeof API_KEY_ENVIRONMENTS)[number];
 
 export interface IntegrationApiKey {
   id: number;
-  provider: ApiKeyProvider;
+  provider: string;
   apiUrl: string | null;
   key: string;
-  environment: ApiKeyEnvironment;
+  environment: string;
   active: boolean;
   lastUsed: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export const API_KEY_ENVIRONMENT_LABELS: Record<ApiKeyEnvironment, string> = {
+  producao: 'Produção',
+  homologacao: 'Sandbox',
+};
+
+export function getApiKeyProviderLabel(provider: string): string {
+  if (typeof provider !== 'string') {
+    return '';
+  }
+
+  const normalized = provider.trim().toLowerCase();
+  if (normalized in API_KEY_PROVIDER_LABELS) {
+    return API_KEY_PROVIDER_LABELS[normalized as ApiKeyProvider];
+  }
+
+  return provider.trim() || provider;
+}
+
+export function getApiKeyEnvironmentLabel(environment: string): string {
+  if (typeof environment !== 'string') {
+    return '';
+  }
+
+  const normalized = environment.trim().toLowerCase();
+  if (normalized in API_KEY_ENVIRONMENT_LABELS) {
+    return API_KEY_ENVIRONMENT_LABELS[normalized as ApiKeyEnvironment];
+  }
+
+  return environment.trim() || environment;
 }
 
 export interface CreateIntegrationApiKeyPayload {
