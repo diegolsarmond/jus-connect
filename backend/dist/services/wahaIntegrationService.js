@@ -848,10 +848,6 @@ class WahaIntegrationService {
                 attachments: message.attachments ?? null,
             });
         }
-        const statuses = normalizeStatusUpdates(body);
-        for (const status of statuses) {
-            await this.chatService.updateMessageStatusByExternalId(status.externalId, status.status);
-        }
     }
 }
 exports.default = WahaIntegrationService;

@@ -83,6 +83,67 @@ const addRetryableRange = (set, start, end) => {
 };
 addRetryableRange(RETRYABLE_STATUS, 500, 599);
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, '');
+const looksLikeSessionScopedPath = (pathname) => {
+    const segments = pathname
+        .split('/')
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length > 0);
+    if (segments.length < 2) {
+        return false;
+    }
+    if (segments[0].toLowerCase() !== 'api') {
+        return false;
+    }
+    const second = segments[1];
+    return !/^v\d+$/i.test(second);
+};
+const buildChatEndpointCandidates = (baseUrl) => {
+    const normalized = normalizeBaseUrl(baseUrl);
+    const candidates = new Set();
+    if (/\/chats$/i.test(normalized)) {
+        candidates.add(normalized);
+        return Array.from(candidates);
+    }
+    let pathname = '';
+    try {
+        const parsed = new URL(normalized);
+        pathname = parsed.pathname ?? '';
+    }
+    catch {
+        pathname = '';
+    }
+    const hasSessionPath = looksLikeSessionScopedPath(pathname);
+    if (!hasSessionPath) {
+        candidates.add(`${normalized}/api/v1/chats`);
+        candidates.add(`${normalized}/api/chats`);
+    }
+    candidates.add(`${normalized}/chats`);
+    return Array.from(candidates);
+};
+const shouldFallbackToNextEndpoint = (error) => error instanceof WahaRequestError && typeof error.status === 'number' && [404, 405].includes(error.status);
+const fetchChatsPayload = async (baseUrl, options, logger) => {
+    const endpoints = buildChatEndpointCandidates(baseUrl);
+    let lastError;
+    for (const endpoint of endpoints) {
+        try {
+            const payload = await fetchJson(endpoint, options, logger);
+            return { payload, endpoint };
+        }
+        catch (error) {
+            lastError = error;
+            if (shouldFallbackToNextEndpoint(error)) {
+                const status = error.status;
+                logger.warn(`WAHA chats endpoint ${endpoint} returned status ${status}. Trying alternative path...`);
+                continue;
+            }
+            throw error;
+        }
+    }
+    if (lastError instanceof WahaRequestError) {
+        throw lastError;
+    }
+    throw new WahaRequestError('WAHA request failed');
+};
 const toTrimmedString = (value) => {
     if (typeof value === 'string') {
         const trimmed = value.trim();
@@ -298,7 +359,7 @@ const listWahaConversations = async (logger = console) => {
     const timeoutMs = readTimeoutFromEnv();
     const headers = buildHeaders(token);
     const fetchOptions = { headers, timeoutMs };
-    const payload = await fetchJson(`${baseUrl}/api/v1/chats`, fetchOptions, logger);
+    const { payload } = await fetchChatsPayload(baseUrl, fetchOptions, logger);
     const chats = extractChatArray(payload);
     const results = [];
     for (const item of chats) {
