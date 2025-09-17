@@ -79,6 +79,7 @@ const buildHeaders = (token: string | undefined): Record<string, string> => {
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+    headers['X-Api-Key'] = token;
   }
   return headers;
 };
