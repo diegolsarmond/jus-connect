@@ -591,7 +591,7 @@ export default function Integracoes() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="producao">Produção</SelectItem>
-                      <SelectItem value="homologacao">Sandbox</SelectItem>
+                      <SelectItem value="homologacao">Homologação/Testes</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -602,7 +602,7 @@ export default function Integracoes() {
                   <Label htmlFor="api-key-url">Endpoint da API</Label>
                   <Input
                     id="api-key-url"
-                    placeholder="https://api.fornecedor.com/v1"
+                    placeholder="https://api.quantumtecnologia.com/v1"
                     value={newApiKey.apiUrl}
                     onChange={(event) =>
                       setNewApiKey((prev) => ({ ...prev, apiUrl: event.target.value }))
@@ -616,7 +616,7 @@ export default function Integracoes() {
                   <Label htmlFor="api-key-value">Valor da chave</Label>
                   <Input
                     id="api-key-value"
-                    placeholder="jus_live_..."
+                    placeholder="Informe o valor da Chave API Key"
                     value={newApiKey.key}
                     onChange={(event) => setNewApiKey((prev) => ({ ...prev, key: event.target.value }))}
                     className="font-mono"
