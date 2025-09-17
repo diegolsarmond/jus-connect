@@ -115,11 +115,14 @@ test('listChats lança erro quando integração não está configurada', async (
   }
 
   const service = new WahaIntegrationService(
-    new ChatService({
-      async query() {
-        return { rows: [], rowCount: 0 };
-      },
-    } as any),
+    new ChatService(
+      {
+        async query() {
+          return { rows: [], rowCount: 0 };
+        },
+      } as any,
+      async () => {},
+    ),
     new FakeConfigService() as any,
     {
       async request() {
