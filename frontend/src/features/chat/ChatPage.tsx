@@ -249,31 +249,33 @@ export const ChatPage = () => {
   ]);
 
   return (
-    <div className={styles.layout}>
-      <ChatSidebar
-        conversations={conversations}
-        activeConversationId={selectedConversationId}
-        searchValue={searchValue}
-        onSearchChange={setSearchValue}
-        responsibleFilter={responsibleFilter}
-        responsibleOptions={responsibleOptions}
-        onResponsibleFilterChange={setResponsibleFilter}
-        onSelectConversation={handleSelectConversation}
-        onNewConversation={() => setNewConversationOpen(true)}
-        searchInputRef={searchInputRef}
-        loading={conversationsQuery.isLoading}
-      />
-      <ChatWindow
-        conversation={selectedConversation}
-        messages={messages}
-        hasMore={hasMore}
-        isLoading={messagesLoading}
-        isLoadingMore={isLoadingMore}
-        onSendMessage={handleSendMessage}
-        onLoadOlder={loadOlder}
-        onUpdateConversation={handleUpdateConversation}
-        isUpdatingConversation={updateConversationMutation.isPending}
-      />
+    <div className={styles.page}>
+      <div className={styles.layout}>
+        <ChatSidebar
+          conversations={conversations}
+          activeConversationId={selectedConversationId}
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          responsibleFilter={responsibleFilter}
+          responsibleOptions={responsibleOptions}
+          onResponsibleFilterChange={setResponsibleFilter}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={() => setNewConversationOpen(true)}
+          searchInputRef={searchInputRef}
+          loading={conversationsQuery.isLoading}
+        />
+        <ChatWindow
+          conversation={selectedConversation}
+          messages={messages}
+          hasMore={hasMore}
+          isLoading={messagesLoading}
+          isLoadingMore={isLoadingMore}
+          onSendMessage={handleSendMessage}
+          onLoadOlder={loadOlder}
+          onUpdateConversation={handleUpdateConversation}
+          isUpdatingConversation={updateConversationMutation.isPending}
+        />
+      </div>
       <NewConversationModal
         open={newConversationOpen}
         suggestions={conversations}

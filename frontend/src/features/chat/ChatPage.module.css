@@ -1,12 +1,21 @@
-.layout {
+.page {
   display: flex;
-  width: 100%;
-  height: calc(100vh - 4rem);
-  max-height: calc(100vh - 4rem);
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  overflow: hidden;
+}
+
+.layout {
+  display: flex;
+  flex: 1;
+  width: 100%;
   min-height: 0;
+  overflow: hidden;
+  background: inherit;
+  color: inherit;
 }
 
 @media (max-width: 900px) {
