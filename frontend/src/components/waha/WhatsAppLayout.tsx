@@ -264,38 +264,37 @@ export const WhatsAppLayout = () => {
         onRefresh={wahaState.checkSessionStatus}
       />
 
-      <div className="flex flex-1 h-full overflow-hidden pt-14 box-border">
-        <div className="h-full">
-          <CRMChatSidebar
-            conversations={conversations}
-            activeConversationId={activeConversationId}
-            searchValue={searchValue}
-            onSearchChange={setSearchValue}
-            responsibleFilter={responsibleFilter}
-            responsibleOptions={teamMembers}
-            onResponsibleFilterChange={setResponsibleFilter}
-            onSelectConversation={handleSelectConversation}
-            onNewConversation={() => {
-              void wahaState.loadChats();
-            }}
-            searchInputRef={searchInputRef}
-            loading={wahaState.loading}
-          />
-        </div>
+      <div className="h-full pt-14 box-border flex-shrink-0">
+        <CRMChatSidebar
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          responsibleFilter={responsibleFilter}
+          responsibleOptions={teamMembers}
+          onResponsibleFilterChange={setResponsibleFilter}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={() => {
+            void wahaState.loadChats();
+          }}
+          searchInputRef={searchInputRef}
+          loading={wahaState.loading}
+        />
+      </div>
 
-        <div className="flex-1 min-w-0">
-          <CRMChatWindow
-            conversation={activeConversation}
-            messages={messages}
-            hasMore={false}
-            isLoading={messagesLoading}
-            isLoadingMore={false}
-            onSendMessage={handleSendMessage}
-            onLoadOlder={async () => []}
-            onUpdateConversation={handleUpdateConversation}
-            isUpdatingConversation={false}
-          />
-        </div>
+      <div className="flex flex-1 min-w-0 min-h-0 pt-14 box-border overflow-hidden">
+        <CRMChatWindow
+          conversation={activeConversation}
+          messages={messages}
+          hasMore={false}
+          isLoading={messagesLoading}
+          isLoadingMore={false}
+          onSendMessage={handleSendMessage}
+          onLoadOlder={async () => []}
+          onUpdateConversation={handleUpdateConversation}
+          isUpdatingConversation={false}
+        />
+
       </div>
     </div>
   );
