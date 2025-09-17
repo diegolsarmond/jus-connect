@@ -35,7 +35,6 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listWahaConversations = exports.WahaRequestError = void 0;
 const promises_1 = require("node:timers/promises");
-const wahaConfigService_1 = __importStar(require("./wahaConfigService"));
 class WahaRequestError extends Error {
     constructor(message, status, responseBody) {
         super(message);
@@ -48,7 +47,35 @@ exports.WahaRequestError = WahaRequestError;
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429]);
-const configService = new wahaConfigService_1.default();
+let configModulePromise;
+let cachedConfigService;
+const isMissingDatabaseError = (error) => error instanceof Error &&
+    error.message.includes('Database connection string not provided');
+const loadConfigModule = async () => {
+    if (!configModulePromise) {
+        configModulePromise = Promise.resolve().then(() => __importStar(require('./wahaConfigService'))).then((module) => module)
+            .catch((error) => {
+            if (isMissingDatabaseError(error)) {
+                return null;
+            }
+            throw error;
+        });
+    }
+    return configModulePromise;
+};
+const getConfigDependencies = async () => {
+    const module = await loadConfigModule();
+    if (!module) {
+        return null;
+    }
+    if (!cachedConfigService) {
+        cachedConfigService = new module.default();
+    }
+    return {
+        service: cachedConfigService,
+        ValidationError: module.ValidationError,
+    };
+};
 const addRetryableRange = (set, start, end) => {
     for (let status = start; status <= end; status += 1) {
         set.add(status);
@@ -56,6 +83,67 @@ const addRetryableRange = (set, start, end) => {
 };
 addRetryableRange(RETRYABLE_STATUS, 500, 599);
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, '');
+const looksLikeSessionScopedPath = (pathname) => {
+    const segments = pathname
+        .split('/')
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length > 0);
+    if (segments.length < 2) {
+        return false;
+    }
+    if (segments[0].toLowerCase() !== 'api') {
+        return false;
+    }
+    const second = segments[1];
+    return !/^v\d+$/i.test(second);
+};
+const buildChatEndpointCandidates = (baseUrl) => {
+    const normalized = normalizeBaseUrl(baseUrl);
+    const candidates = new Set();
+    if (/\/chats$/i.test(normalized)) {
+        candidates.add(normalized);
+        return Array.from(candidates);
+    }
+    let pathname = '';
+    try {
+        const parsed = new URL(normalized);
+        pathname = parsed.pathname ?? '';
+    }
+    catch {
+        pathname = '';
+    }
+    const hasSessionPath = looksLikeSessionScopedPath(pathname);
+    if (!hasSessionPath) {
+        candidates.add(`${normalized}/api/v1/chats`);
+        candidates.add(`${normalized}/api/chats`);
+    }
+    candidates.add(`${normalized}/chats`);
+    return Array.from(candidates);
+};
+const shouldFallbackToNextEndpoint = (error) => error instanceof WahaRequestError && typeof error.status === 'number' && [404, 405].includes(error.status);
+const fetchChatsPayload = async (baseUrl, options, logger) => {
+    const endpoints = buildChatEndpointCandidates(baseUrl);
+    let lastError;
+    for (const endpoint of endpoints) {
+        try {
+            const payload = await fetchJson(endpoint, options, logger);
+            return { payload, endpoint };
+        }
+        catch (error) {
+            lastError = error;
+            if (shouldFallbackToNextEndpoint(error)) {
+                const status = error.status;
+                logger.warn(`WAHA chats endpoint ${endpoint} returned status ${status}. Trying alternative path...`);
+                continue;
+            }
+            throw error;
+        }
+    }
+    if (lastError instanceof WahaRequestError) {
+        throw lastError;
+    }
+    throw new WahaRequestError('WAHA request failed');
+};
 const toTrimmedString = (value) => {
     if (typeof value === 'string') {
         const trimmed = value.trim();
@@ -237,18 +325,22 @@ const listWahaConversations = async (logger = console) => {
     let baseUrl;
     let token;
     let configError;
-    try {
-        const config = await configService.requireConfig();
-        baseUrl = config.baseUrl;
-        token = config.apiKey;
-    }
-    catch (error) {
-        if (error instanceof wahaConfigService_1.ValidationError) {
-            configError = error;
-            logger.warn(`WAHA configuration warning: ${error.message}`);
+    const configDependencies = await getConfigDependencies();
+    if (configDependencies) {
+        const { service, ValidationError: ConfigValidationError } = configDependencies;
+        try {
+            const config = await service.requireConfig();
+            baseUrl = config.baseUrl;
+            token = config.apiKey;
         }
-        else {
-            throw error;
+        catch (error) {
+            if (error instanceof ConfigValidationError) {
+                configError = error;
+                logger.warn(`WAHA configuration warning: ${error.message}`);
+            }
+            else {
+                throw error;
+            }
         }
     }
     if (!baseUrl) {
@@ -267,7 +359,7 @@ const listWahaConversations = async (logger = console) => {
     const timeoutMs = readTimeoutFromEnv();
     const headers = buildHeaders(token);
     const fetchOptions = { headers, timeoutMs };
-    const payload = await fetchJson(`${baseUrl}/api/v1/chats`, fetchOptions, logger);
+    const { payload } = await fetchChatsPayload(baseUrl, fetchOptions, logger);
     const chats = extractChatArray(payload);
     const results = [];
     for (const item of chats) {

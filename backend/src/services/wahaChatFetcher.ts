@@ -1,7 +1,4 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import WahaConfigService, {
-  ValidationError as ConfigValidationError,
-} from './wahaConfigService';
 
 export interface WahaConversationRow {
   conversation_id: string;
@@ -37,7 +34,54 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429]);
 
-const configService = new WahaConfigService();
+type WahaConfigModule = typeof import('./wahaConfigService');
+type WahaConfigServiceInstance = InstanceType<WahaConfigModule['default']>;
+type ConfigValidationErrorConstructor = WahaConfigModule['ValidationError'];
+
+let configModulePromise: Promise<WahaConfigModule | null> | undefined;
+let cachedConfigService: WahaConfigServiceInstance | undefined;
+
+const isMissingDatabaseError = (error: unknown): boolean =>
+  error instanceof Error &&
+  error.message.includes('Database connection string not provided');
+
+const loadConfigModule = async (): Promise<WahaConfigModule | null> => {
+  if (!configModulePromise) {
+    configModulePromise = import('./wahaConfigService')
+      .then((module) => module)
+      .catch((error) => {
+        if (isMissingDatabaseError(error)) {
+          return null;
+        }
+        throw error;
+      });
+  }
+
+  return configModulePromise;
+};
+
+const getConfigDependencies = async (): Promise<
+  | {
+      service: WahaConfigServiceInstance;
+      ValidationError: ConfigValidationErrorConstructor;
+    }
+  | null
+> => {
+  const module = await loadConfigModule();
+
+  if (!module) {
+    return null;
+  }
+
+  if (!cachedConfigService) {
+    cachedConfigService = new module.default();
+  }
+
+  return {
+    service: cachedConfigService,
+    ValidationError: module.ValidationError,
+  } as const;
+};
 
 const addRetryableRange = (set: Set<number>, start: number, end: number) => {
   for (let status = start; status <= end; status += 1) {
@@ -48,6 +92,90 @@ const addRetryableRange = (set: Set<number>, start: number, end: number) => {
 addRetryableRange(RETRYABLE_STATUS, 500, 599);
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
+
+const looksLikeSessionScopedPath = (pathname: string): boolean => {
+  const segments = pathname
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  if (segments.length < 2) {
+    return false;
+  }
+
+  if (segments[0]!.toLowerCase() !== 'api') {
+    return false;
+  }
+
+  const second = segments[1]!;
+  return !/^v\d+$/i.test(second);
+};
+
+const buildChatEndpointCandidates = (baseUrl: string): string[] => {
+  const normalized = normalizeBaseUrl(baseUrl);
+  const candidates = new Set<string>();
+
+  if (/\/chats$/i.test(normalized)) {
+    candidates.add(normalized);
+    return Array.from(candidates);
+  }
+
+  let pathname = '';
+
+  try {
+    const parsed = new URL(normalized);
+    pathname = parsed.pathname ?? '';
+  } catch {
+    pathname = '';
+  }
+
+  const hasSessionPath = looksLikeSessionScopedPath(pathname);
+
+  if (!hasSessionPath) {
+    candidates.add(`${normalized}/api/v1/chats`);
+    candidates.add(`${normalized}/api/chats`);
+  }
+
+  candidates.add(`${normalized}/chats`);
+
+  return Array.from(candidates);
+};
+
+const shouldFallbackToNextEndpoint = (error: unknown): boolean =>
+  error instanceof WahaRequestError && typeof error.status === 'number' && [404, 405].includes(error.status);
+
+const fetchChatsPayload = async (
+  baseUrl: string,
+  options: FetchOptions,
+  logger: Logger,
+): Promise<{ payload: unknown; endpoint: string }> => {
+  const endpoints = buildChatEndpointCandidates(baseUrl);
+  let lastError: unknown;
+
+  for (const endpoint of endpoints) {
+    try {
+      const payload = await fetchJson(endpoint, options, logger);
+      return { payload, endpoint };
+    } catch (error) {
+      lastError = error;
+      if (shouldFallbackToNextEndpoint(error)) {
+        const status = (error as WahaRequestError).status;
+        logger.warn(
+          `WAHA chats endpoint ${endpoint} returned status ${status}. Trying alternative path...`,
+        );
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (lastError instanceof WahaRequestError) {
+    throw lastError;
+  }
+
+  throw new WahaRequestError('WAHA request failed');
+};
 
 const toTrimmedString = (value: unknown): string | undefined => {
   if (typeof value === 'string') {
@@ -318,18 +446,24 @@ const printTable = (rows: WahaConversationRow[], logger: Logger) => {
 export const listWahaConversations = async (logger: Logger = console): Promise<WahaConversationRow[]> => {
   let baseUrl: string | undefined;
   let token: string | undefined;
-  let configError: ConfigValidationError | undefined;
+  let configError: Error | undefined;
 
-  try {
-    const config = await configService.requireConfig();
-    baseUrl = config.baseUrl;
-    token = config.apiKey;
-  } catch (error) {
-    if (error instanceof ConfigValidationError) {
-      configError = error;
-      logger.warn(`WAHA configuration warning: ${error.message}`);
-    } else {
-      throw error;
+  const configDependencies = await getConfigDependencies();
+
+  if (configDependencies) {
+    const { service, ValidationError: ConfigValidationError } = configDependencies;
+
+    try {
+      const config = await service.requireConfig();
+      baseUrl = config.baseUrl;
+      token = config.apiKey;
+    } catch (error) {
+      if (error instanceof ConfigValidationError) {
+        configError = error;
+        logger.warn(`WAHA configuration warning: ${error.message}`);
+      } else {
+        throw error;
+      }
     }
   }
 
@@ -353,7 +487,7 @@ export const listWahaConversations = async (logger: Logger = console): Promise<W
   const headers = buildHeaders(token);
   const fetchOptions: FetchOptions = { headers, timeoutMs };
 
-  const payload = await fetchJson(`${baseUrl}/api/v1/chats`, fetchOptions, logger);
+  const { payload } = await fetchChatsPayload(baseUrl, fetchOptions, logger);
   const chats = extractChatArray(payload);
 
   const results: WahaConversationRow[] = [];

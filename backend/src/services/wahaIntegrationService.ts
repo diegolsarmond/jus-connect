@@ -1198,9 +1198,5 @@ export default class WahaIntegrationService {
       });
     }
 
-    const statuses = normalizeStatusUpdates(body);
-    for (const status of statuses) {
-      await this.chatService.updateMessageStatusByExternalId(status.externalId, status.status);
-    }
   }
 }
