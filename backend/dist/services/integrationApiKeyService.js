@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ValidationError = exports.API_KEY_ENVIRONMENTS = exports.API_KEY_PROVIDERS = void 0;
 const db_1 = __importDefault(require("./db"));
-exports.API_KEY_PROVIDERS = ['gemini', 'openai', 'waha'];
+exports.API_KEY_PROVIDERS = ['gemini', 'openai'];
 exports.API_KEY_ENVIRONMENTS = ['producao', 'homologacao'];
 class ValidationError extends Error {
     constructor(message) {
@@ -23,7 +23,7 @@ function normalizeProvider(value) {
         throw new ValidationError('Provider is required');
     }
     if (!exports.API_KEY_PROVIDERS.includes(normalized)) {
-        throw new ValidationError('Provider must be Gemini, OpenAI or WAHA');
+        throw new ValidationError('Provider must be Gemini or OpenAI');
     }
     return normalized;
 }

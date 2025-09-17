@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ensureChatSchema = ensureChatSchema;
 const promises_1 = require("node:fs/promises");
 const node_fs_1 = require("node:fs");
-
 const node_path_1 = __importDefault(require("node:path"));
 const db_1 = __importDefault(require("./db"));
 let cachedSql = null;
@@ -41,8 +40,6 @@ async function resolveSchemaPath() {
     }
     throw new Error(`Chat schema file not found. Checked: ${candidatePaths.map((candidate) => `"${candidate}"`).join(', ')}`);
 }
-=======
-const resolveSchemaPath = () => node_path_1.default.resolve(__dirname, '../..', 'sql', 'chat.sql');
 async function loadSchemaSql() {
     if (cachedSql) {
         return cachedSql;

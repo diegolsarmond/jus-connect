@@ -2,20 +2,12 @@ import { Request, Response } from 'express';
 import ChatService, {
   CreateConversationInput,
   MessagePage,
+  RecordMessageInput,
   SendMessageInput,
   ValidationError as ChatValidationError,
 } from '../services/chatService';
-import WahaIntegrationService, {
-  IntegrationNotConfiguredError,
-  WebhookAuthorizationError,
-} from '../services/wahaIntegrationService';
-import WahaConfigService, {
-  ValidationError as WahaConfigValidationError,
-} from '../services/wahaConfigService';
 
 const chatService = new ChatService();
-const wahaConfigService = new WahaConfigService();
-const wahaIntegration = new WahaIntegrationService(chatService, wahaConfigService);
 
 function parseCreateConversationInput(body: any): CreateConversationInput {
   if (!body || typeof body !== 'object') {
@@ -58,17 +50,6 @@ function parseMessageLimit(value: unknown): number | undefined {
   return parsed;
 }
 
-function parseConversationLimit(value: unknown): number | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed <= 0) {
-    return undefined;
-  }
-  return parsed;
-}
-
 function parseSendMessagePayload(body: any): SendMessageInput {
   if (!body || typeof body !== 'object') {
     throw new ChatValidationError('Request body must be an object');
@@ -86,57 +67,9 @@ function parseSendMessagePayload(body: any): SendMessageInput {
   };
 }
 
-export async function listConversationsHandler(req: Request, res: Response) {
-  const source = typeof req.query.source === 'string' ? req.query.source : undefined;
-  const preferLocal = source === 'local';
-  const forceRemote = source === 'waha';
-  const session = typeof req.query.session === 'string' ? req.query.session : undefined;
-  const limit = parseConversationLimit(req.query.limit);
-  let wahaStatus: 'disabled' | 'degraded' | 'local-only' | undefined;
-  let wahaError: string | undefined;
-
-  if (!preferLocal) {
-    try {
-      const conversations = await wahaIntegration.listChats({
-        sessionId: session,
-        limit,
-      });
-      return res.json(conversations);
-    } catch (error) {
-      if (error instanceof IntegrationNotConfiguredError) {
-        if (forceRemote) {
-          return res.status(503).json({ error: error.message });
-        }
-        console.warn('WAHA integration not configured, falling back to local conversations');
-        wahaStatus = 'disabled';
-        wahaError = error.message;
-      } else if (error instanceof ChatValidationError) {
-        return res.status(400).json({ error: error.message });
-      } else {
-        console.error('Failed to list WAHA chats', error);
-        if (forceRemote) {
-          return res.status(502).json({ error: 'Failed to load conversations from WAHA' });
-        }
-        wahaStatus = 'degraded';
-        wahaError = 'Failed to load conversations from WAHA';
-      }
-    }
-  }
-
+export async function listConversationsHandler(_req: Request, res: Response) {
   try {
     const conversations = await chatService.listConversations();
-    if (!wahaStatus && preferLocal) {
-      wahaStatus = 'local-only';
-    }
-    if (wahaStatus) {
-      res.setHeader('X-WAHA-Status', wahaStatus);
-    }
-    if (wahaError) {
-      const sanitizedError = wahaError.replace(/[\r\n]+/g, ' ').trim();
-      if (sanitizedError) {
-        res.setHeader('X-WAHA-Error', sanitizedError);
-      }
-    }
     res.json(conversations);
   } catch (error) {
     console.error('Failed to list conversations', error);
@@ -178,17 +111,19 @@ export async function sendConversationMessageHandler(req: Request, res: Response
   const { conversationId } = req.params;
   try {
     const payload = parseSendMessagePayload(req.body);
-    const message = await wahaIntegration.sendMessage(conversationId, payload);
+    const message = await chatService.recordOutgoingMessage({
+      conversationId,
+      content: payload.content,
+      type: payload.type,
+      attachments: payload.attachments as RecordMessageInput['attachments'],
+    });
     res.status(201).json(message);
   } catch (error) {
     if (error instanceof ChatValidationError) {
       return res.status(400).json({ error: error.message });
     }
-    if (error instanceof IntegrationNotConfiguredError) {
-      return res.status(503).json({ error: error.message });
-    }
-    console.error('Failed to send message through WAHA', error);
-    res.status(502).json({ error: 'Failed to deliver message to provider' });
+    console.error('Failed to record outgoing message', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 
@@ -202,25 +137,6 @@ export async function markConversationReadHandler(req: Request, res: Response) {
     res.status(204).send();
   } catch (error) {
     console.error('Failed to mark conversation as read', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-}
-
-export async function wahaWebhookHandler(req: Request, res: Response) {
-  try {
-    await wahaIntegration.handleWebhook(req.body, req.headers);
-    res.status(204).send();
-  } catch (error) {
-    if (error instanceof WebhookAuthorizationError) {
-      return res.status(401).json({ error: error.message });
-    }
-    if (error instanceof IntegrationNotConfiguredError) {
-      return res.status(503).json({ error: error.message });
-    }
-    if (error instanceof WahaConfigValidationError || error instanceof ChatValidationError) {
-      return res.status(400).json({ error: error.message });
-    }
-    console.error('Failed to process WAHA webhook', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

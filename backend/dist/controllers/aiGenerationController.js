@@ -11,7 +11,6 @@ const html_1 = require("../utils/html");
 const providerLabels = {
     gemini: 'Gemini',
     openai: 'OpenAI',
-    waha: 'WAHA',
 };
 const integrationService = new integrationApiKeyService_1.default();
 function toTitleCase(value) {

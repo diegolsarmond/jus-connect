@@ -1,12 +1,11 @@
 import { getApiUrl } from './api';
 
-export const API_KEY_PROVIDERS = ['gemini', 'openai', 'waha'] as const;
+export const API_KEY_PROVIDERS = ['gemini', 'openai'] as const;
 export type ApiKeyProvider = (typeof API_KEY_PROVIDERS)[number];
 
 export const API_KEY_PROVIDER_LABELS: Record<ApiKeyProvider, string> = {
   gemini: 'Gemini',
   openai: 'OpenAI',
-  waha: 'WAHA',
 };
 
 export const API_KEY_ENVIRONMENTS = ['producao', 'homologacao'] as const;

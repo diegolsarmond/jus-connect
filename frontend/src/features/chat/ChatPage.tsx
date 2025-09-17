@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { setupMockChatServer } from "./services/mockServer";
 import {
   fetchConversations,
   createConversation,
@@ -34,11 +33,6 @@ export const ChatPage = () => {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Inicializa o interceptador de fetch para simular uma API REST sem backend real.
-    setupMockChatServer();
-  }, []);
 
   useEffect(() => {
     const state = (location.state ?? null) as

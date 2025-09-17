@@ -7,7 +7,6 @@ import { escapeHtml } from '../utils/html';
 const providerLabels: Record<ApiKeyProvider, string> = {
   gemini: 'Gemini',
   openai: 'OpenAI',
-  waha: 'WAHA',
 };
 
 const integrationService = new IntegrationApiKeyService();
