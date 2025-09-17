@@ -264,7 +264,7 @@ export const WhatsAppLayout = () => {
         onRefresh={wahaState.checkSessionStatus}
       />
 
-      <div className="h-full pt-14 box-border flex-shrink-0">
+      <div className="h-full pt-14 box-border flex-shrink-0 w-80 max-w-full">
         <CRMChatSidebar
           conversations={conversations}
           activeConversationId={activeConversationId}
@@ -283,18 +283,19 @@ export const WhatsAppLayout = () => {
       </div>
 
       <div className="flex flex-1 min-w-0 min-h-0 pt-14 box-border overflow-hidden">
-        <CRMChatWindow
-          conversation={activeConversation}
-          messages={messages}
-          hasMore={false}
-          isLoading={messagesLoading}
-          isLoadingMore={false}
-          onSendMessage={handleSendMessage}
-          onLoadOlder={async () => []}
-          onUpdateConversation={handleUpdateConversation}
-          isUpdatingConversation={false}
-        />
-
+        <div className="flex flex-1 flex-col min-h-0 w-full">
+          <CRMChatWindow
+            conversation={activeConversation}
+            messages={messages}
+            hasMore={false}
+            isLoading={messagesLoading}
+            isLoadingMore={false}
+            onSendMessage={handleSendMessage}
+            onLoadOlder={async () => []}
+            onUpdateConversation={handleUpdateConversation}
+            isUpdatingConversation={false}
+          />
+        </div>
       </div>
     </div>
   );
