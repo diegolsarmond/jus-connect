@@ -20,6 +20,7 @@
   flex-direction: column;
   min-height: 0;
   transition: margin-right 0.3s ease;
+  overflow: hidden;
 }
 
 .header {
@@ -29,6 +30,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: hsl(var(--background));
+}
+
+.wrapper[data-private="true"] .header {
+  background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.35));
 }
 
 .headerInfo {
