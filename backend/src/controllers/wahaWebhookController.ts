@@ -490,12 +490,6 @@ function deriveChatIdentifier(payload: Record<string, unknown>): string | undefi
     (nestedMessage
       ? readString(nestedMessage['chatId']) ?? readString(nestedMessage['remoteJid'])
       : undefined)
-  return (
-    readString(payload.chatId) ??
-    readString(payload.remoteJid) ??
-    readString(payload.from) ??
-    readString(payload.to) ??
-    readString(payload.chat_id)
   );
 }
 
@@ -641,13 +635,6 @@ function deriveContactAvatar(payload: Record<string, unknown>): string | undefin
   }
 
   return undefined;
-  return (
-    readString(payload.senderName) ??
-    readString(payload.pushName) ??
-    readString(payload.notifyName) ??
-    readString(payload.chatName) ??
-    readString(payload.name)
-  );
 }
 
 function extractKeyId(value: unknown): string | undefined {
