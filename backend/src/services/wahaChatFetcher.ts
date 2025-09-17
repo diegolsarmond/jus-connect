@@ -1,4 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import WahaConfigService, {
+  ValidationError as ConfigValidationError,
+} from './wahaConfigService';
 
 export interface WahaConversationRow {
   conversation_id: string;
@@ -33,6 +36,8 @@ type MinimalFetchResponse = {
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429]);
+
+const configService = new WahaConfigService();
 
 const addRetryableRange = (set: Set<number>, start: number, end: number) => {
   for (let status = start; status <= end; status += 1) {
@@ -74,6 +79,7 @@ const buildHeaders = (token: string | undefined): Record<string, string> => {
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+    headers['X-Api-Key'] = token;
   }
   return headers;
 };
@@ -310,13 +316,39 @@ const printTable = (rows: WahaConversationRow[], logger: Logger) => {
 };
 
 export const listWahaConversations = async (logger: Logger = console): Promise<WahaConversationRow[]> => {
-  const baseUrlEnv = process.env.WAHA_BASE_URL;
-  if (!baseUrlEnv || !baseUrlEnv.trim()) {
-    throw new WahaRequestError('WAHA_BASE_URL environment variable is not defined');
+  let baseUrl: string | undefined;
+  let token: string | undefined;
+  let configError: ConfigValidationError | undefined;
+
+  try {
+    const config = await configService.requireConfig();
+    baseUrl = config.baseUrl;
+    token = config.apiKey;
+  } catch (error) {
+    if (error instanceof ConfigValidationError) {
+      configError = error;
+      logger.warn(`WAHA configuration warning: ${error.message}`);
+    } else {
+      throw error;
+    }
   }
 
-  const baseUrl = normalizeBaseUrl(baseUrlEnv.trim());
-  const token = process.env.WAHA_TOKEN?.trim();
+  if (!baseUrl) {
+    const baseUrlEnv = process.env.WAHA_BASE_URL?.trim();
+    if (baseUrlEnv) {
+      baseUrl = normalizeBaseUrl(baseUrlEnv);
+      token = token ?? process.env.WAHA_TOKEN?.trim();
+    }
+  }
+
+  if (!baseUrl) {
+    const message = configError?.message ?? 'WAHA_BASE_URL environment variable is not defined';
+    const status = configError ? 503 : undefined;
+    throw new WahaRequestError(message, status);
+  }
+
+  baseUrl = normalizeBaseUrl(baseUrl);
+
   const timeoutMs = readTimeoutFromEnv();
   const headers = buildHeaders(token);
   const fetchOptions: FetchOptions = { headers, timeoutMs };

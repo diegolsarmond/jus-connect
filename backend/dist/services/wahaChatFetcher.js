@@ -1,7 +1,41 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listWahaConversations = exports.WahaRequestError = void 0;
 const promises_1 = require("node:timers/promises");
+const wahaConfigService_1 = __importStar(require("./wahaConfigService"));
 class WahaRequestError extends Error {
     constructor(message, status, responseBody) {
         super(message);
@@ -14,6 +48,7 @@ exports.WahaRequestError = WahaRequestError;
 const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429]);
+const configService = new wahaConfigService_1.default();
 const addRetryableRange = (set, start, end) => {
     for (let status = start; status <= end; status += 1) {
         set.add(status);
@@ -49,6 +84,7 @@ const buildHeaders = (token) => {
     };
     if (token) {
         headers.Authorization = `Bearer ${token}`;
+        headers['X-Api-Key'] = token;
     }
     return headers;
 };
@@ -198,12 +234,36 @@ const printTable = (rows, logger) => {
     logger.log(buildSeparator());
 };
 const listWahaConversations = async (logger = console) => {
-    const baseUrlEnv = process.env.WAHA_BASE_URL;
-    if (!baseUrlEnv || !baseUrlEnv.trim()) {
-        throw new WahaRequestError('WAHA_BASE_URL environment variable is not defined');
+    let baseUrl;
+    let token;
+    let configError;
+    try {
+        const config = await configService.requireConfig();
+        baseUrl = config.baseUrl;
+        token = config.apiKey;
     }
-    const baseUrl = normalizeBaseUrl(baseUrlEnv.trim());
-    const token = process.env.WAHA_TOKEN?.trim();
+    catch (error) {
+        if (error instanceof wahaConfigService_1.ValidationError) {
+            configError = error;
+            logger.warn(`WAHA configuration warning: ${error.message}`);
+        }
+        else {
+            throw error;
+        }
+    }
+    if (!baseUrl) {
+        const baseUrlEnv = process.env.WAHA_BASE_URL?.trim();
+        if (baseUrlEnv) {
+            baseUrl = normalizeBaseUrl(baseUrlEnv);
+            token = token ?? process.env.WAHA_TOKEN?.trim();
+        }
+    }
+    if (!baseUrl) {
+        const message = configError?.message ?? 'WAHA_BASE_URL environment variable is not defined';
+        const status = configError ? 503 : undefined;
+        throw new WahaRequestError(message, status);
+    }
+    baseUrl = normalizeBaseUrl(baseUrl);
     const timeoutMs = readTimeoutFromEnv();
     const headers = buildHeaders(token);
     const fetchOptions = { headers, timeoutMs };
