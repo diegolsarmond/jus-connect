@@ -4,10 +4,6 @@ export interface WahaChatSummary {
   photo_url: string | null;
 }
 
-const parseResponse = async (response: Response): Promise<WahaChatSummary[]> => {
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(text || `Erro ao consultar conversas (${response.status})`);
 const STATUS_MESSAGES: Partial<Record<number, string>> = {
   502:
     "Não foi possível acessar o serviço de conversas (erro 502). Verifique se o WAHA está em execução.",
