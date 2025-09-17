@@ -89,6 +89,15 @@ describe('wahaChatFetcher', () => {
       const url = typeof input === 'string' ? input : input?.toString?.() ?? String(input);
       requestedUrls.push(url);
 
+      if (url.endsWith('/api/default/chats')) {
+        return {
+          ok: false,
+          status: 422,
+          text: async () =>
+            JSON.stringify({ error: 'Session "default" does not exist', session: 'default' }),
+        } as any;
+      }
+
       if (url.endsWith('/api/v1/chats')) {
         return {
           ok: false,
@@ -121,8 +130,50 @@ describe('wahaChatFetcher', () => {
       },
     ]);
 
+    assert(requestedUrls.some((url) => url.endsWith('/api/default/chats')));
     assert(requestedUrls.some((url) => url.endsWith('/api/v1/chats')));
     assert(requestedUrls.some((url) => url.endsWith('/api/chats')));
+  });
+
+  it('uses default session fallback when no session is configured', async () => {
+    process.env.WAHA_BASE_URL = 'https://waha.example.com/';
+    process.env.WAHA_TOKEN = 'token';
+
+    const requestedUrls: string[] = [];
+
+    globalThis.fetch = (async (input: any) => {
+      const url = typeof input === 'string' ? input : input?.toString?.() ?? String(input);
+      requestedUrls.push(url);
+
+      if (!url.endsWith('/api/default/chats')) {
+        throw new Error(`Unexpected endpoint ${url}`);
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              chatId: 'abc123',
+              contactName: 'Tester',
+              photoUrl: 'https://cdn.example.com/avatar.png',
+            },
+          ]),
+      } as any;
+    }) as typeof fetch;
+
+    const conversations = await listWahaConversations(LOGGER);
+
+    assert.deepEqual(conversations, [
+      {
+        conversation_id: 'abc123',
+        contact_name: 'Tester',
+        photo_url: 'https://cdn.example.com/avatar.png',
+      },
+    ]);
+
+    assert.deepEqual(requestedUrls, ['https://waha.example.com/api/default/chats']);
   });
 
 });

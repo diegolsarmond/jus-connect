@@ -41,6 +41,13 @@ const BASE_URL_SUFFIXES_TO_REMOVE = [
   /\/api$/i,
 ];
 
+const DEFAULT_SESSION_FALLBACKS = Object.freeze(['default']);
+
+type EndpointCandidate = {
+  url: string;
+  sessionId?: string;
+};
+
 type WahaConfigModule = typeof import('./wahaConfigService');
 type WahaConfigServiceInstance = InstanceType<WahaConfigModule['default']>;
 type ConfigValidationErrorConstructor = WahaConfigModule['ValidationError'];
@@ -175,29 +182,73 @@ const looksLikeSessionScopedPath = (pathname: string): boolean => {
   return !/^v\d+$/i.test(second);
 };
 
-const buildChatEndpointCandidates = (baseUrl: string, sessionId?: string): string[] => {
+const extractSessionIdFromPathname = (pathname: string): string | undefined => {
+  const segments = pathname
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  if (segments.length < 2) {
+    return undefined;
+  }
+
+  if (segments[0]!.toLowerCase() !== 'api') {
+    return undefined;
+  }
+
+  const candidate = segments[1]!;
+
+  if (/^v\d+$/i.test(candidate)) {
+    return undefined;
+  }
+
+  try {
+    return decodeURIComponent(candidate);
+  } catch {
+    return candidate;
+  }
+};
+
+const buildChatEndpointCandidates = (
+  baseUrl: string,
+  sessionIds: readonly string[],
+): EndpointCandidate[] => {
   const normalized = baseUrl;
-  const candidates = new Set<string>();
+  const seen = new Set<string>();
+  const candidates: EndpointCandidate[] = [];
+
+  const addCandidate = (url: string, sessionId?: string) => {
+    if (seen.has(url)) {
+      return;
+    }
+    seen.add(url);
+    candidates.push({ url, sessionId });
+  };
 
   if (/\/chats$/i.test(normalized)) {
-    candidates.add(normalized);
-    return Array.from(candidates);
+    addCandidate(normalized, sessionIds[0]);
+    return candidates;
   }
 
   const hasSession = hasSessionPath(normalized);
+  const sessionFromBase = extractSessionIdFromPathname(tryParsePathname(normalized));
 
   if (!hasSession) {
-    if (sessionId) {
-      const encodedSession = encodeURIComponent(sessionId);
-      candidates.add(`${normalized}/api/${encodedSession}/chats`);
+    for (const sessionId of sessionIds) {
+      const trimmed = toTrimmedString(sessionId);
+      if (!trimmed) {
+        continue;
+      }
+      const encodedSession = encodeURIComponent(trimmed);
+      addCandidate(`${normalized}/api/${encodedSession}/chats`, trimmed);
     }
-    candidates.add(`${normalized}/api/v1/chats`);
-    candidates.add(`${normalized}/api/chats`);
+    addCandidate(`${normalized}/api/v1/chats`);
+    addCandidate(`${normalized}/api/chats`);
   }
 
-  candidates.add(`${normalized}/chats`);
+  addCandidate(`${normalized}/chats`, hasSession ? sessionFromBase : toTrimmedString(sessionIds[0]));
 
-  return Array.from(candidates);
+  return candidates;
 };
 
 const SESSION_NOT_FOUND_PATTERN = /session\s+["']?[^"']+["']?\s+does\s+not\s+exist/i;
@@ -254,21 +305,22 @@ const fetchChatsPayload = async (
   baseUrl: string,
   options: FetchOptions,
   logger: Logger,
-  sessionId: string | undefined,
-): Promise<{ payload: unknown; endpoint: string }> => {
-  const endpoints = buildChatEndpointCandidates(baseUrl, sessionId);
+  sessionIds: readonly string[],
+): Promise<{ payload: unknown; endpoint: string; sessionId?: string }> => {
+  const endpoints = buildChatEndpointCandidates(baseUrl, sessionIds);
   let lastError: unknown;
 
-  for (const endpoint of endpoints) {
+  for (const candidate of endpoints) {
+    const { url, sessionId } = candidate;
     try {
-      const payload = await fetchJson(endpoint, options, logger);
-      return { payload, endpoint };
+      const payload = await fetchJson(url, options, logger);
+      return { payload, endpoint: url, sessionId };
     } catch (error) {
       lastError = error;
       if (shouldFallbackToNextEndpoint(error)) {
         const status = (error as WahaRequestError).status;
         logger.warn(
-          `WAHA chats endpoint ${endpoint} returned status ${status}. Trying alternative path...`,
+          `WAHA chats endpoint ${url} returned status ${status}. Trying alternative path...`,
         );
         continue;
       }
@@ -314,6 +366,28 @@ const resolveConfiguredSessionId = (): string | undefined =>
     process.env.WAHA_SESSION_ID,
     process.env.WAHA_DEFAULT_SESSION,
   );
+
+const buildSessionCandidateList = (baseUrl: string): string[] => {
+  const sessionIds: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (value: string | undefined) => {
+    const normalized = toTrimmedString(value);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    sessionIds.push(normalized);
+  };
+
+  add(resolveConfiguredSessionId());
+  add(extractSessionIdFromPathname(tryParsePathname(baseUrl)));
+  for (const fallback of DEFAULT_SESSION_FALLBACKS) {
+    add(fallback);
+  }
+
+  return sessionIds;
+};
 
 const buildHeaders = (token: string | undefined): Record<string, string> => {
   const headers: Record<string, string> = {
@@ -613,13 +687,18 @@ export const listWahaConversations = async (logger: Logger = console): Promise<W
   }
 
   baseUrl = normalizeBaseUrl(baseUrl);
-  const sessionId = resolveConfiguredSessionId();
+  const sessionIds = buildSessionCandidateList(baseUrl);
 
   const timeoutMs = readTimeoutFromEnv();
   const headers = buildHeaders(token);
   const fetchOptions: FetchOptions = { headers, timeoutMs };
 
-  const { payload } = await fetchChatsPayload(baseUrl, fetchOptions, logger, sessionId);
+  const { payload, sessionId } = await fetchChatsPayload(
+    baseUrl,
+    fetchOptions,
+    logger,
+    sessionIds,
+  );
   const chats = extractChatArray(payload);
 
   const results: WahaConversationRow[] = [];
