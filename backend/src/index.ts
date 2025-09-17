@@ -30,6 +30,7 @@ import supportRoutes from './routes/supportRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import integrationApiKeyRoutes from './routes/integrationApiKeyRoutes';
 import chatRoutes from './routes/chatRoutes';
+import wahaWebhookRoutes from './routes/wahaWebhookRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -119,6 +120,7 @@ app.use('/api', supportRoutes);
 app.use('/api', notificationRoutes);
 app.use('/api', integrationApiKeyRoutes);
 app.use('/api', chatRoutes);
+app.use('/api', wahaWebhookRoutes);
 
 // Background jobs
 cronJobs.startProjudiSyncJob();
