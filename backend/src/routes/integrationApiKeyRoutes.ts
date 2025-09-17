@@ -47,7 +47,7 @@ router.get('/integrations/api-keys', listIntegrationApiKeys);
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai, waha]
+ *                 enum: [gemini, openai]
  *               key:
  *                 type: string
  *               environment:
@@ -85,7 +85,7 @@ router.post('/integrations/api-keys', createIntegrationApiKey);
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai, waha]
+ *                 enum: [gemini, openai]
  *               key:
  *                 type: string
  *               environment:

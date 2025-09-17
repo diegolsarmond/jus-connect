@@ -87,6 +87,9 @@ export const ChatWindow = ({
     () => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }),
     [],
   );
+  const tags = conversation?.tags ?? [];
+  const customAttributes = conversation?.customAttributes ?? [];
+  const internalNotes = conversation?.internalNotes ?? [];
 
   useEffect(() => {
     setDetailsOpen(false);
@@ -157,18 +160,18 @@ export const ChatWindow = ({
     if (!conversation) return;
     const trimmed = newTag.trim();
     if (!trimmed) return;
-    const exists = conversation.tags.some((tag) => tag.toLowerCase() === trimmed.toLowerCase());
+    const exists = tags.some((tag) => tag.toLowerCase() === trimmed.toLowerCase());
     if (exists) {
       setNewTag("");
       return;
     }
-    await runUpdate({ tags: [...conversation.tags, trimmed] });
+    await runUpdate({ tags: [...tags, trimmed] });
     setNewTag("");
   };
 
   const handleRemoveTag = async (tagToRemove: string) => {
     if (!conversation) return;
-    await runUpdate({ tags: conversation.tags.filter((tag) => tag !== tagToRemove) });
+    await runUpdate({ tags: tags.filter((tag) => tag !== tagToRemove) });
   };
 
   const handleClientSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
@@ -194,7 +197,7 @@ export const ChatWindow = ({
     const value = newAttributeValue.trim();
     if (!label || !value) return;
     const nextAttributes = [
-      ...conversation.customAttributes,
+      ...customAttributes,
       { id: createId(), label, value },
     ];
     await runUpdate({ customAttributes: nextAttributes });
@@ -205,7 +208,7 @@ export const ChatWindow = ({
   const handleRemoveAttribute = async (attributeId: string) => {
     if (!conversation) return;
     await runUpdate({
-      customAttributes: conversation.customAttributes.filter((attribute) => attribute.id !== attributeId),
+      customAttributes: customAttributes.filter((attribute) => attribute.id !== attributeId),
     });
   };
 
@@ -226,7 +229,7 @@ export const ChatWindow = ({
       createdAt: new Date().toISOString(),
     };
     const payload: UpdateConversationPayload = {
-      internalNotes: [...conversation.internalNotes, newNote],
+      internalNotes: [...internalNotes, newNote],
     };
     if (!conversation.isPrivate) {
       payload.isPrivate = true;
@@ -238,7 +241,7 @@ export const ChatWindow = ({
   const handleRemoveInternalNote = async (noteId: string) => {
     if (!conversation) return;
     await runUpdate({
-      internalNotes: conversation.internalNotes.filter((note) => note.id !== noteId),
+      internalNotes: internalNotes.filter((note) => note.id !== noteId),
     });
   };
 
@@ -262,7 +265,7 @@ export const ChatWindow = ({
   }
 
   const detailsPanelId = `chat-details-${conversation.id}`;
-  const isClientLinked = Boolean(conversation.isLinkedToClient && conversation.clientName);
+  const isClientLinked = Boolean(conversation?.isLinkedToClient && conversation?.clientName);
 
   return (
     <div
@@ -294,9 +297,9 @@ export const ChatWindow = ({
                   <UserRound size={14} aria-hidden="true" />
                   {conversation.responsible?.name ?? "Sem responsável"}
                 </span>
-                {conversation.tags.length > 0 ? (
+                {tags.length > 0 ? (
                   <div className={styles.headerTags}>
-                    {conversation.tags.map((tag) => (
+                    {tags.map((tag) => (
                       <span key={tag} className={styles.headerTagChip}>
                         {tag}
                       </span>
@@ -435,7 +438,7 @@ export const ChatWindow = ({
             <span className={styles.metadataLabel}>Etiquetas</span>
             <div className={styles.tagsEditor}>
               <div className={styles.tagsList}>
-                {conversation.tags.map((tag) => (
+                {tags.map((tag) => (
                   <span key={tag} className={styles.tagPill}>
                     {tag}
                     <button
@@ -448,7 +451,7 @@ export const ChatWindow = ({
                     </button>
                   </span>
                 ))}
-                {conversation.tags.length === 0 && <span className={styles.emptyHint}>Nenhuma etiqueta cadastrada</span>}
+                {tags.length === 0 && <span className={styles.emptyHint}>Nenhuma etiqueta cadastrada</span>}
               </div>
               <form onSubmit={handleTagSubmit} className={styles.inlineForm}>
                 <input
@@ -501,11 +504,11 @@ export const ChatWindow = ({
 
           <div className={styles.metadataGroup}>
             <span className={styles.metadataLabel}>Atributos personalizados</span>
-            {conversation.customAttributes.length === 0 ? (
+            {customAttributes.length === 0 ? (
               <p className={styles.emptyHint}>Nenhum atributo cadastrado.</p>
             ) : (
               <ul className={styles.attributeList}>
-                {conversation.customAttributes.map((attribute) => (
+                {customAttributes.map((attribute) => (
                   <li key={attribute.id}>
                     <div>
                       <strong>{attribute.label}</strong>
@@ -555,11 +558,11 @@ export const ChatWindow = ({
 
           <div className={styles.metadataGroup}>
             <span className={styles.metadataLabel}>Notas internas</span>
-            {conversation.internalNotes.length === 0 ? (
+            {internalNotes.length === 0 ? (
               <p className={styles.emptyHint}>Nenhuma nota registrada. Utilize este espaço para histórico interno.</p>
             ) : (
               <ul className={styles.noteList}>
-                {conversation.internalNotes.map((note) => (
+                {internalNotes.map((note) => (
                   <li key={note.id}>
                     <div className={styles.noteContent}>{note.content}</div>
                     <div className={styles.noteMeta}>

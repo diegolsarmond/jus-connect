@@ -5,13 +5,7 @@ import {
   listConversationsHandler,
   markConversationReadHandler,
   sendConversationMessageHandler,
-  wahaWebhookHandler,
 } from '../controllers/chatController';
-import {
-  getWahaConfigHandler,
-  updateWahaConfigHandler,
-} from '../controllers/wahaIntegrationController';
-import { listWahaChatsProxyHandler } from '../controllers/wahaChatProxyController';
 
 const router = Router();
 
@@ -19,9 +13,7 @@ const router = Router();
  * @swagger
  * tags:
  *   - name: Conversas
- *     description: Endpoints para gerenciamento de conversas e integrações de mensagens
- *   - name: Integrações
- *     description: Integrações com plataformas externas de comunicação
+ *     description: Endpoints para gerenciamento de conversas e mensagens registradas no sistema
  * components:
  *   schemas:
  *     ChatMessageAttachment:
@@ -134,7 +126,7 @@ const router = Router();
  *           description: Identificador interno da conversa; caso omitido utiliza-se contactIdentifier
  *         contactIdentifier:
  *           type: string
- *           description: Identificador do contato ou chat no provedor externo
+ *           description: Identificador do contato associado à conversa
  *         contactName:
  *           type: string
  *         description:
@@ -174,65 +166,15 @@ const router = Router();
  *           type: string
  *           description: Mensagem detalhando o motivo do erro
 
- *     WahaIntegrationConfig:
- *       type: object
- *       required:
- *         - baseUrl
- *         - apiKey
- *         - isActive
- *         - createdAt
- *         - updatedAt
- *       properties:
- *         baseUrl:
- *           type: string
- *           format: uri
- *           description: URL base do servidor WAHA, sem barra no final
- *         apiKey:
- *           type: string
- *           description: Chave utilizada para autenticar as requisições ao WAHA
- *         webhookSecret:
- *           type: string
- *           nullable: true
- *           description: Segredo opcional para validação do webhook recebido
- *         isActive:
- *           type: boolean
- *           description: Indica se a integração está ativa para envio/recebimento de mensagens
- *         createdAt:
- *           type: string
- *           format: date-time
- *           description: Data de criação do registro de configuração
- *         updatedAt:
- *           type: string
- *           format: date-time
- *           description: Data da última atualização da configuração
  */
 
 /**
  * @swagger
  * /api/conversations:
  *   get:
- *     summary: Lista conversas sincronizadas com o WAHA
+ *     summary: Lista conversas cadastradas no sistema
  *     tags:
  *       - Conversas
- *     parameters:
- *       - in: query
- *         name: session
- *         schema:
- *           type: string
- *         description: "Identificador da sessão WAHA (ex.: QuantumTecnologia01) para filtrar a consulta remota."
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 200
- *         description: "Quantidade máxima de chats retornados por sessão ao consultar o WAHA (padrão 30)."
- *       - in: query
- *         name: source
- *         schema:
- *           type: string
- *           enum: [waha, local]
- *         description: "Define a origem dos dados. Utilize `local` para ignorar o WAHA e retornar apenas registros persistidos."
  *     responses:
  *       200:
  *         description: Lista de conversas ordenadas pela atividade mais recente
@@ -242,19 +184,6 @@ const router = Router();
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/ConversationSummary'
- *       400:
- *         description: Parâmetros inválidos para consulta remota
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       502:
- *         description: Falha ao consultar o WAHA
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
-
  *       500:
  *         description: Erro interno ao listar conversas
  *         content:
@@ -264,8 +193,6 @@ const router = Router();
  */
 
 router.get('/conversations', listConversationsHandler);
-
-router.get('/chats', listWahaChatsProxyHandler);
 
 /**
  * @swagger
@@ -361,7 +288,7 @@ router.get('/conversations/:conversationId/messages', getConversationMessagesHan
  * @swagger
  * /api/conversations/{conversationId}/messages:
  *   post:
- *     summary: Envia uma mensagem através da integração WAHA
+ *     summary: Registra uma nova mensagem enviada pelo operador
  *     tags: [Conversas]
  *     parameters:
  *       - in: path
@@ -404,19 +331,13 @@ router.get('/conversations/:conversationId/messages', getConversationMessagesHan
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       503:
- *         description: Integração WAHA não configurada ou desativada
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       502:
- *         description: Erro ao entregar a mensagem ao provedor
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
+ *       500:
+ *         description: Erro interno ao registrar a mensagem
+*         content:
+*           application/json:
+*             schema:
+*               $ref: '#/components/schemas/ErrorResponse'
+*/
 router.post('/conversations/:conversationId/messages', sendConversationMessageHandler);
 
 /**
@@ -449,139 +370,5 @@ router.post('/conversations/:conversationId/messages', sendConversationMessageHa
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/conversations/:conversationId/read', markConversationReadHandler);
-
-/**
- * @swagger
- * /api/webhooks/waha:
- *   post:
- *     summary: Recebe eventos de mensagens do WAHA
- *     tags: [Integrações]
- *     requestBody:
- *       required: true
- *       description: Payload de webhook encaminhado pelo servidor WAHA
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             additionalProperties: true
- *     responses:
- *       204:
- *         description: Webhook processado com sucesso
- *       400:
- *         description: Payload inválido recebido
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       401:
- *         description: Falha na validação da assinatura do webhook
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       503:
- *         description: Integração WAHA desativada ou não configurada
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       500:
- *         description: Erro inesperado ao processar o webhook
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
-router.post('/webhooks/waha', wahaWebhookHandler);
-
-/**
- * @swagger
- * /api/integrations/waha:
- *   get:
- *     summary: Obtém a configuração atual da integração com o WAHA
- *     tags: [Integrações]
- *     responses:
- *       200:
- *         description: Configuração encontrada ou null caso não exista
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/WahaIntegrationConfig'
- *               nullable: true
- *             examples:
- *               configurado:
- *                 summary: Configuração ativa
- *                 value:
- *                   baseUrl: https://waha.example.com
- *                   apiKey: super-secret
- *                   webhookSecret: webhook-secret
- *                   isActive: true
- *                   createdAt: '2024-05-05T12:00:00.000Z'
- *                   updatedAt: '2024-05-06T08:30:00.000Z'
- *               naoConfigurado:
- *                 summary: Configuração ausente
- *                 value: null
- *       500:
- *         description: Erro interno ao carregar a configuração
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
-
- */
-router.get('/integrations/waha', getWahaConfigHandler);
-
-/**
- * @swagger
- * /api/integrations/waha:
- *   put:
- *     summary: Cria ou atualiza a configuração da integração com o WAHA
- *     tags: [Integrações]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - baseUrl
- *               - apiKey
- *             properties:
- *               baseUrl:
- *                 type: string
- *                 format: uri
- *                 example: https://waha.example.com
- *               apiKey:
- *                 type: string
- *                 example: super-secret
- *               webhookSecret:
- *                 type: string
- *                 nullable: true
- *                 example: webhook-secret
- *               isActive:
- *                 type: boolean
- *                 example: true
- *     responses:
- *       200:
- *         description: Configuração salva com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/WahaIntegrationConfig'
- *       400:
- *         description: Dados inválidos enviados para configuração
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       500:
- *         description: Erro interno ao salvar a configuração
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
-
- */
-router.put('/integrations/waha', updateWahaConfigHandler);
 
 export default router;

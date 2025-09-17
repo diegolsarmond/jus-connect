@@ -27,7 +27,7 @@ class FakePool {
 test('IntegrationApiKeyService.create normalizes payload and persists values', async () => {
   const insertedRow = {
     id: 1,
-    provider: 'waha',
+    provider: 'openai',
     key_value: 'sk_live_abc123',
     environment: 'producao',
     active: true,
@@ -43,7 +43,7 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   const service = new IntegrationApiKeyService(pool as any);
 
   const payload: CreateIntegrationApiKeyInput = {
-    provider: '  WAHA  ',
+    provider: '  OPENAI  ',
     key: '  sk_live_abc123  ',
     environment: ' Producao ',
   };
@@ -53,11 +53,11 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   assert.equal(pool.calls.length, 1);
   const call = pool.calls[0];
   assert.match(call.text, /INSERT INTO integration_api_keys/i);
-  assert.deepEqual(call.values, ['waha', 'sk_live_abc123', 'producao', true, null]);
+  assert.deepEqual(call.values, ['openai', 'sk_live_abc123', 'producao', true, null]);
 
   const expected: IntegrationApiKey = {
     id: 1,
-    provider: 'waha',
+    provider: 'openai',
     key: 'sk_live_abc123',
     environment: 'producao',
     active: true,

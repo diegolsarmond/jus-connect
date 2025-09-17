@@ -1,7 +1,7 @@
 -- Estrutura para armazenamento de chaves de API das integrações
 CREATE TABLE IF NOT EXISTS integration_api_keys (
   id BIGSERIAL PRIMARY KEY,
-  provider TEXT NOT NULL CHECK (provider IN ('gemini', 'openai', 'waha')),
+  provider TEXT NOT NULL CHECK (provider IN ('gemini', 'openai')),
   key_value TEXT NOT NULL,
   environment TEXT NOT NULL CHECK (environment IN ('producao', 'homologacao')),
   active BOOLEAN NOT NULL DEFAULT TRUE,

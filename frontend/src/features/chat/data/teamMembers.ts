@@ -1,28 +1,20 @@
-import type { TeamMember } from "../types";
-
-export const teamMembers: TeamMember[] = [
+export const teamMembers = [
   {
-    id: "tm-ana",
-    name: "Ana Bezerra",
-    avatar: "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=facearea&w=80&h=80&q=80",
-    role: "Advogada Associada",
+    id: "ana-souza",
+    name: "Ana Souza",
+    avatar: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=facearea&w=80&h=80&q=80",
+    role: "Atendimento",
   },
   {
-    id: "tm-lucas",
-    name: "Lucas Prado",
-    avatar: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=facearea&w=80&h=80&q=80",
-    role: "Coordenador Jurídico",
+    id: "marcos-lima",
+    name: "Marcos Lima",
+    avatar: "https://images.unsplash.com/photo-1528892952291-009c663ce843?auto=format&fit=facearea&w=80&h=80&q=80",
+    role: "Suporte",
   },
   {
-    id: "tm-marina",
-    name: "Marina Sato",
+    id: "patricia-gomes",
+    name: "Patrícia Gomes",
     avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=facearea&w=80&h=80&q=80",
-    role: "Especialista em Compliance",
+    role: "Consultoria",
   },
-  {
-    id: "tm-ricardo",
-    name: "Ricardo Luz",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=facearea&w=80&h=80&q=80",
-    role: "Sócio Diretor",
-  },
-];
+] as const;

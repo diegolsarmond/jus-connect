@@ -52,12 +52,12 @@ export interface ConversationSummary {
   lastMessage?: ConversationLastMessage;
   phoneNumber?: string;
   responsible?: ConversationResponsible | null;
-  tags: string[];
+  tags?: string[];
   isLinkedToClient?: boolean;
   clientName?: string | null;
-  customAttributes: ConversationCustomAttribute[];
+  customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
-  internalNotes: ConversationInternalNote[];
+  internalNotes?: ConversationInternalNote[];
 }
 
 export interface ConversationLastMessage {

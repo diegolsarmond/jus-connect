@@ -38,13 +38,8 @@ exports.createConversationHandler = createConversationHandler;
 exports.getConversationMessagesHandler = getConversationMessagesHandler;
 exports.sendConversationMessageHandler = sendConversationMessageHandler;
 exports.markConversationReadHandler = markConversationReadHandler;
-exports.wahaWebhookHandler = wahaWebhookHandler;
 const chatService_1 = __importStar(require("../services/chatService"));
-const wahaIntegrationService_1 = __importStar(require("../services/wahaIntegrationService"));
-const wahaConfigService_1 = __importStar(require("../services/wahaConfigService"));
 const chatService = new chatService_1.default();
-const wahaConfigService = new wahaConfigService_1.default();
-const wahaIntegration = new wahaIntegrationService_1.default(chatService, wahaConfigService);
 function parseCreateConversationInput(body) {
     if (!body || typeof body !== 'object') {
         throw new chatService_1.ValidationError('Request body must be an object');
@@ -80,16 +75,6 @@ function parseMessageLimit(value) {
     }
     return parsed;
 }
-function parseConversationLimit(value) {
-    if (typeof value !== 'string') {
-        return undefined;
-    }
-    const parsed = Number.parseInt(value, 10);
-    if (Number.isNaN(parsed) || parsed <= 0) {
-        return undefined;
-    }
-    return parsed;
-}
 function parseSendMessagePayload(body) {
     if (!body || typeof body !== 'object') {
         throw new chatService_1.ValidationError('Request body must be an object');
@@ -106,58 +91,9 @@ function parseSendMessagePayload(body) {
         attachments,
     };
 }
-async function listConversationsHandler(req, res) {
-    const source = typeof req.query.source === 'string' ? req.query.source : undefined;
-    const preferLocal = source === 'local';
-    const forceRemote = source === 'waha';
-    const session = typeof req.query.session === 'string' ? req.query.session : undefined;
-    const limit = parseConversationLimit(req.query.limit);
-    let wahaStatus;
-    let wahaError;
-    if (!preferLocal) {
-        try {
-            const conversations = await wahaIntegration.listChats({
-                sessionId: session,
-                limit,
-            });
-            return res.json(conversations);
-        }
-        catch (error) {
-            if (error instanceof wahaIntegrationService_1.IntegrationNotConfiguredError) {
-                if (forceRemote) {
-                    return res.status(503).json({ error: error.message });
-                }
-                console.warn('WAHA integration not configured, falling back to local conversations');
-                wahaStatus = 'disabled';
-                wahaError = error.message;
-            }
-            else if (error instanceof chatService_1.ValidationError) {
-                return res.status(400).json({ error: error.message });
-            }
-            else {
-                console.error('Failed to list WAHA chats', error);
-                if (forceRemote) {
-                    return res.status(502).json({ error: 'Failed to load conversations from WAHA' });
-                }
-                wahaStatus = 'degraded';
-                wahaError = 'Failed to load conversations from WAHA';
-            }
-        }
-    }
+async function listConversationsHandler(_req, res) {
     try {
         const conversations = await chatService.listConversations();
-        if (!wahaStatus && preferLocal) {
-            wahaStatus = 'local-only';
-        }
-        if (wahaStatus) {
-            res.setHeader('X-WAHA-Status', wahaStatus);
-        }
-        if (wahaError) {
-            const sanitizedError = wahaError.replace(/[\r\n]+/g, ' ').trim();
-            if (sanitizedError) {
-                res.setHeader('X-WAHA-Error', sanitizedError);
-            }
-        }
         res.json(conversations);
     }
     catch (error) {
@@ -199,18 +135,20 @@ async function sendConversationMessageHandler(req, res) {
     const { conversationId } = req.params;
     try {
         const payload = parseSendMessagePayload(req.body);
-        const message = await wahaIntegration.sendMessage(conversationId, payload);
+        const message = await chatService.recordOutgoingMessage({
+            conversationId,
+            content: payload.content,
+            type: payload.type,
+            attachments: payload.attachments,
+        });
         res.status(201).json(message);
     }
     catch (error) {
         if (error instanceof chatService_1.ValidationError) {
             return res.status(400).json({ error: error.message });
         }
-        if (error instanceof wahaIntegrationService_1.IntegrationNotConfiguredError) {
-            return res.status(503).json({ error: error.message });
-        }
-        console.error('Failed to send message through WAHA', error);
-        res.status(502).json({ error: 'Failed to deliver message to provider' });
+        console.error('Failed to record outgoing message', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 async function markConversationReadHandler(req, res) {
@@ -224,25 +162,6 @@ async function markConversationReadHandler(req, res) {
     }
     catch (error) {
         console.error('Failed to mark conversation as read', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-}
-async function wahaWebhookHandler(req, res) {
-    try {
-        await wahaIntegration.handleWebhook(req.body, req.headers);
-        res.status(204).send();
-    }
-    catch (error) {
-        if (error instanceof wahaIntegrationService_1.WebhookAuthorizationError) {
-            return res.status(401).json({ error: error.message });
-        }
-        if (error instanceof wahaIntegrationService_1.IntegrationNotConfiguredError) {
-            return res.status(503).json({ error: error.message });
-        }
-        if (error instanceof wahaConfigService_1.ValidationError || error instanceof chatService_1.ValidationError) {
-            return res.status(400).json({ error: error.message });
-        }
-        console.error('Failed to process WAHA webhook', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 }
