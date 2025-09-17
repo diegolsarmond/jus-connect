@@ -11,6 +11,7 @@ import {
   getWahaConfigHandler,
   updateWahaConfigHandler,
 } from '../controllers/wahaIntegrationController';
+import { listWahaChatsProxyHandler } from '../controllers/wahaChatProxyController';
 
 const router = Router();
 
@@ -264,6 +265,8 @@ const router = Router();
  */
 
 router.get('/conversations', listConversationsHandler);
+
+router.get('/chats', listWahaChatsProxyHandler);
 
 /**
  * @swagger
