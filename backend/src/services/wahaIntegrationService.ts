@@ -122,6 +122,7 @@ interface NormalizedIncomingMessage {
   type: ChatMessageType;
   senderName?: string;
   attachments?: MessageAttachment[];
+  sessionId?: string;
 }
 
 interface StatusUpdate {
@@ -261,7 +262,7 @@ function collectAttachments(candidate: any, _type: ChatMessageType): MessageAtta
   return attachments.length > 0 ? attachments : undefined;
 }
 
-function parseIncomingMessage(candidate: any): NormalizedIncomingMessage | null {
+function parseIncomingMessage(candidate: any, inheritedSessionId?: string): NormalizedIncomingMessage | null {
   if (!candidate || typeof candidate !== 'object') {
     return null;
   }
@@ -281,11 +282,16 @@ function parseIncomingMessage(candidate: any): NormalizedIncomingMessage | null 
     candidate.chatId,
     candidate.chat?.id,
     candidate.chat?.jid,
+    candidate.chat?.remoteJid,
     candidate.from,
+    candidate.to,
     candidate.remoteJid,
     candidate.author,
     candidate.key?.remoteJid,
+    candidate.key?.participant,
     candidate._data?.from,
+    candidate._data?.remoteJid,
+    candidate._data?.Info?.Chat,
   );
   if (!conversationIdCandidate) {
     return null;
@@ -294,16 +300,23 @@ function parseIncomingMessage(candidate: any): NormalizedIncomingMessage | null 
   const messageIdCandidate = firstNonEmpty(
     candidate.id,
     candidate.messageId,
+    candidate.message_id,
     candidate._id,
     candidate.key?.id,
     candidate.message?.key?.id,
+    candidate._data?.id,
+    candidate._data?.key?.id,
+    candidate._data?.Info?.ID,
+    candidate.media?.Info?.ID,
   );
 
   const externalIdCandidate = firstNonEmpty(
     candidate.externalId,
     candidate.key?.id,
     candidate.messageId,
+    candidate.message_id,
     candidate.id,
+    candidate._data?.Info?.ID,
   );
 
   if (!messageIdCandidate && !externalIdCandidate) {
@@ -314,8 +327,14 @@ function parseIncomingMessage(candidate: any): NormalizedIncomingMessage | null 
     candidate.timestamp,
     candidate.ts,
     candidate.sentAt,
+    candidate.sent_at,
     candidate.messageTimestamp,
+    candidate.message?.timestamp,
+    candidate.message?.messageTimestamp,
     candidate._data?.t,
+    candidate._data?.timestamp,
+    candidate._data?.Info?.Timestamp,
+    candidate._data?.Info?.MessageTimestamp,
   );
   const timestamp = normalizeTimestamp(timestampCandidate);
 
@@ -325,11 +344,20 @@ function parseIncomingMessage(candidate: any): NormalizedIncomingMessage | null 
     candidate.message?.conversation,
     candidate.message?.text,
     candidate.message?.extendedTextMessage?.text,
+    candidate.message?.message?.conversation,
+    candidate.message?.message?.extendedTextMessage?.text,
+    candidate.caption,
     candidate._data?.body,
+    candidate.media?.Message?.conversation,
   );
   const rawContent = typeof contentCandidate === 'string' ? contentCandidate.trim() : '';
 
-  const typeCandidate = firstNonEmpty(candidate.type, candidate.message?.type, candidate._data?.type);
+  const typeCandidate = firstNonEmpty(
+    candidate.type,
+    candidate.message?.type,
+    candidate._data?.type,
+    candidate.media?.Info?.Type,
+  );
   const attachments = collectAttachments(candidate, normalizeMessageType(typeCandidate, false));
   const type = normalizeMessageType(typeCandidate, Boolean(attachments && attachments.length > 0));
 
@@ -339,9 +367,21 @@ function parseIncomingMessage(candidate: any): NormalizedIncomingMessage | null 
     candidate.chat?.name,
     candidate.pushName,
     candidate.notifyName,
+    candidate._data?.pushName,
+    candidate._data?.notifyName,
   );
 
   const content = rawContent || (attachments && attachments.length > 0 ? 'Arquivo recebido' : 'Mensagem recebida');
+
+  const sessionCandidate = firstNonEmpty(
+    candidate.session,
+    candidate.sessionId,
+    candidate.session_id,
+    candidate.metadata?.session,
+    candidate.context?.session,
+    candidate.me?.session,
+    inheritedSessionId,
+  );
 
   return {
     conversationId: String(conversationIdCandidate),
@@ -352,63 +392,103 @@ function parseIncomingMessage(candidate: any): NormalizedIncomingMessage | null 
     type,
     senderName: senderNameCandidate ? String(senderNameCandidate) : undefined,
     attachments,
+    sessionId: sessionCandidate ? String(sessionCandidate) : undefined,
   };
 }
 
-function collectMessageCandidates(payload: any): any[] {
-  const results: any[] = [];
-  if (!payload) {
-    return results;
-  }
+interface CandidateWrapper {
+  node: any;
+  sessionId?: string;
+}
 
-  const push = (value: unknown) => {
-    if (value && typeof value === 'object') {
-      results.push(value);
+function collectCandidates(payload: any, predicate: (value: any) => boolean): CandidateWrapper[] {
+  const results: CandidateWrapper[] = [];
+  const visited = new Set<any>();
+
+  const visit = (value: any, inheritedSession?: string) => {
+    if (!value || typeof value !== 'object' || visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+
+    const sessionCandidate = firstNonEmpty(
+      value.session,
+      value.payload?.session,
+      value.data?.session,
+      value.context?.session,
+      inheritedSession,
+    );
+    const sessionId = sessionCandidate ? String(sessionCandidate) : inheritedSession;
+
+    if (predicate(value)) {
+      results.push({ node: value, sessionId });
+    }
+
+    const childSources: unknown[] = [value.payload, value.data, value.value, value.body];
+    const arrayProps = ['messages', 'message', 'statuses', 'entries', 'entry', 'changes', 'items', 'events', 'records'];
+
+    for (const prop of arrayProps) {
+      const candidate = (value as Record<string, unknown>)[prop];
+      for (const item of toArray<any>(candidate)) {
+        if (item && typeof item === 'object') {
+          visit(item, sessionId);
+        }
+      }
+    }
+
+    for (const child of childSources) {
+      if (!child) {
+        continue;
+      }
+      if (Array.isArray(child)) {
+        for (const item of child) {
+          if (item && typeof item === 'object') {
+            visit(item, sessionId);
+          }
+        }
+      } else if (typeof child === 'object') {
+        visit(child, sessionId);
+      }
     }
   };
 
-  for (const item of toArray<any>(payload.messages)) {
-    push(item);
-  }
-
-  if (payload.message) {
-    push(payload.message);
-  }
-
-  if (payload.data) {
-    if (Array.isArray(payload.data)) {
-      for (const item of payload.data) {
-        for (const message of toArray<any>(item?.messages)) {
-          push(message);
-        }
-      }
-    } else {
-      for (const message of toArray<any>(payload.data.messages)) {
-        push(message);
-      }
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      visit(item);
     }
-  }
-
-  if (payload.event === 'message' && payload.data) {
-    push(payload.data);
-  }
-
-  for (const entry of toArray<any>(payload.entry)) {
-    for (const change of toArray<any>(entry?.changes)) {
-      for (const message of toArray<any>(change?.value?.messages)) {
-        push(message);
-      }
-    }
+  } else {
+    visit(payload);
   }
 
   return results;
+}
+
+function isMessageCandidate(value: any): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  return (
+    typeof value.from !== 'undefined' ||
+    typeof value.to !== 'undefined' ||
+    typeof value.chatId !== 'undefined' ||
+    typeof value.remoteJid !== 'undefined' ||
+    typeof value.author !== 'undefined' ||
+    typeof value.body === 'string' ||
+    typeof value.text === 'string' ||
+    typeof value.message === 'object' ||
+    typeof value._data === 'object'
+  );
+}
+
+function collectMessageCandidates(payload: any): CandidateWrapper[] {
+  return collectCandidates(payload, isMessageCandidate);
 }
 
 function normalizeWebhookMessages(payload: unknown): NormalizedIncomingMessage[] {
   const candidates = collectMessageCandidates(payload);
   const normalized: NormalizedIncomingMessage[] = [];
   for (const candidate of candidates) {
-    const parsed = parseIncomingMessage(candidate);
+    const parsed = parseIncomingMessage(candidate.node, candidate.sessionId);
     if (parsed) {
       normalized.push(parsed);
     }
@@ -416,73 +496,53 @@ function normalizeWebhookMessages(payload: unknown): NormalizedIncomingMessage[]
   return normalized;
 }
 
-function collectStatusCandidates(payload: any): any[] {
-  const results: any[] = [];
-  if (!payload) {
-    return results;
+function isStatusCandidate(value: any): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
   }
-
-  const push = (value: unknown) => {
-    if (value && typeof value === 'object') {
-      results.push(value);
-    }
-  };
-
-  for (const status of toArray<any>(payload.statuses)) {
-    push(status);
+  if (
+    typeof value.ack !== 'undefined' ||
+    typeof value.status !== 'undefined' ||
+    typeof value.state !== 'undefined' ||
+    typeof value.deliveryStatus !== 'undefined'
+  ) {
+    return true;
   }
-
-  if (payload.data) {
-    if (Array.isArray(payload.data)) {
-      for (const item of payload.data) {
-        for (const status of toArray<any>(item?.statuses)) {
-          push(status);
-        }
-      }
-    } else {
-      for (const status of toArray<any>(payload.data.statuses)) {
-        push(status);
-      }
-    }
+  if (typeof value.event === 'string') {
+    const normalized = value.event.toLowerCase();
+    return normalized.includes('status') || normalized.includes('ack');
   }
+  return false;
+}
 
-  if (payload.event === 'status' && payload.data) {
-    push(payload.data);
-  }
-
-  for (const entry of toArray<any>(payload.entry)) {
-    for (const change of toArray<any>(entry?.changes)) {
-      for (const status of toArray<any>(change?.value?.statuses)) {
-        push(status);
-      }
-    }
-  }
-
-  return results;
+function collectStatusCandidates(payload: any): CandidateWrapper[] {
+  return collectCandidates(payload, isStatusCandidate);
 }
 
 function normalizeStatusUpdates(payload: unknown): StatusUpdate[] {
   const candidates = collectStatusCandidates(payload);
   const updates: StatusUpdate[] = [];
   for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') {
+    const value = candidate.node;
+    if (!value || typeof value !== 'object') {
       continue;
     }
     const externalIdCandidate = firstNonEmpty(
-      candidate.id,
-      candidate.messageId,
-      candidate.message_id,
-      candidate.key?.id,
-      candidate.status?.id,
+      value.id,
+      value.messageId,
+      value.message_id,
+      value.key?.id,
+      value.status?.id,
+      value._data?.Info?.ID,
     );
     if (!externalIdCandidate) {
       continue;
     }
     const statusCandidate = firstNonEmpty(
-      candidate.status,
-      candidate.state,
-      candidate.ack,
-      candidate.deliveryStatus,
+      value.status,
+      value.state,
+      value.ack,
+      value.deliveryStatus,
     );
     updates.push({
       externalId: String(externalIdCandidate),
@@ -492,54 +552,56 @@ function normalizeStatusUpdates(payload: unknown): StatusUpdate[] {
   return updates;
 }
 
-function resolveChatId(conversation: ConversationDetails): string {
-  const metadataChatId = (conversation.metadata?.chatId ?? conversation.metadata?.chat_id ?? conversation.metadata?.id) as
-    | string
-    | undefined;
-  if (metadataChatId && metadataChatId.trim()) {
-    return metadataChatId.trim();
-  }
-  return conversation.contactIdentifier || conversation.id;
-}
-
-function resolveMessagesEndpoint(baseUrl: string): string {
-  const normalized = baseUrl.replace(/\/$/, '');
-  if (normalized.toLowerCase().endsWith('/v1/messages')) {
-    return normalized;
-  }
-  if (normalized.toLowerCase().endsWith('/v1')) {
-    return `${normalized}/messages`;
-  }
-  return `${normalized}/v1/messages`;
-}
-
-function buildSendPayload(chatId: string, payload: SendMessageInput): Record<string, unknown> {
-  const type: ChatMessageType = payload.type ?? 'text';
-  const messagePayload: Record<string, unknown> = {
-    type,
-    text: payload.content,
-  };
-
-  if (type === 'image') {
-    const attachment = payload.attachments?.[0];
-    if (attachment) {
-      messagePayload.image = {
-        url: attachment.url,
-        caption: payload.content || undefined,
-        name: attachment.name,
-      };
-    }
+function resolveConversationContext(conversation: ConversationDetails): { chatId: string; sessionId: string } {
+  const metadata = (conversation.metadata ?? {}) as Record<string, unknown>;
+  const chatIdCandidate = firstNonEmpty(
+    metadata.chatId,
+    metadata.chat_id,
+    metadata.id,
+    metadata.remoteJid,
+    metadata.contactIdentifier,
+    conversation.contactIdentifier,
+    conversation.id,
+  );
+  if (!chatIdCandidate || !String(chatIdCandidate).trim()) {
+    throw new ChatValidationError('Conversation is missing WAHA chat identifier');
   }
 
-  if (payload.attachments && payload.attachments.length > 0) {
-    messagePayload.attachments = payload.attachments;
+  const sessionCandidate = firstNonEmpty(
+    metadata.session,
+    metadata.sessionId,
+    metadata.session_id,
+    metadata.wahaSession,
+    metadata.integrationSession,
+  );
+  if (!sessionCandidate || !String(sessionCandidate).trim()) {
+    throw new ChatValidationError('Conversation is missing WAHA session information');
   }
 
   return {
+    chatId: String(chatIdCandidate).trim(),
+    sessionId: String(sessionCandidate).trim(),
+  };
+}
+
+function resolveSendTextEndpoint(baseUrl: string): string {
+  const normalized = baseUrl.replace(/\/$/, '');
+  const lower = normalized.toLowerCase();
+  if (lower.endsWith('/api/sendtext') || lower.endsWith('/sendtext')) {
+    return normalized;
+  }
+  if (lower.endsWith('/api')) {
+    return `${normalized}/sendText`;
+  }
+  return `${normalized}/api/sendText`;
+}
+
+function buildSendTextPayload(chatId: string, sessionId: string, payload: SendMessageInput): Record<string, unknown> {
+  return {
     chatId,
-    type,
+    session: sessionId,
     text: payload.content,
-    message: messagePayload,
+    linkPreview: true,
   };
 }
 
@@ -550,8 +612,20 @@ function extractMessageMetadata(data: unknown): { id?: string; timestamp?: Date 
   const root = data as Record<string, unknown>;
   const messages = toArray<any>(root.messages);
   const candidate = messages[0] ?? root;
-  const id = firstNonEmpty(candidate?.id, candidate?.messageId, candidate?.message_id, root.id);
-  const timestampCandidate = firstNonEmpty(candidate?.timestamp, candidate?.ts, candidate?.sentAt, candidate?.messageTimestamp);
+  const id = firstNonEmpty(
+    candidate?.id,
+    candidate?.messageId,
+    candidate?.message_id,
+    candidate?._data?.Info?.ID,
+    root.id,
+  );
+  const timestampCandidate = firstNonEmpty(
+    candidate?.timestamp,
+    candidate?.ts,
+    candidate?.sentAt,
+    candidate?.messageTimestamp,
+    candidate?._data?.Info?.Timestamp,
+  );
   const timestamp = timestampCandidate ? normalizeTimestamp(timestampCandidate) : undefined;
   return {
     id: id ? String(id) : undefined,
@@ -582,13 +656,22 @@ export default class WahaIntegrationService {
       throw error;
     }
 
-    const chatId = resolveChatId(conversation);
-    const endpoint = resolveMessagesEndpoint(config.baseUrl);
-    const requestBody = buildSendPayload(chatId, payload);
+    const { chatId, sessionId } = resolveConversationContext(conversation);
+
+    if (payload.attachments && payload.attachments.length > 0) {
+      throw new ChatValidationError('WAHA sendText endpoint does not support attachments');
+    }
+    if (payload.type && payload.type !== 'text') {
+      throw new ChatValidationError('Only text messages are supported by the WAHA integration');
+    }
+
+    const endpoint = resolveSendTextEndpoint(config.baseUrl);
+    const requestBody = buildSendTextPayload(chatId, sessionId, payload);
 
     const headers = {
       Authorization: `Bearer ${config.apiKey}`,
-      'X-API-Key': config.apiKey,
+      'X-Api-Key': config.apiKey,
+      Accept: 'application/json',
     };
 
     const response = await this.httpClient.postJson(endpoint, requestBody, headers);
@@ -633,14 +716,18 @@ export default class WahaIntegrationService {
 
     const messages = normalizeWebhookMessages(body);
     for (const message of messages) {
+      const metadata: Record<string, unknown> = {
+        provider: 'waha',
+        chatId: message.conversationId,
+      };
+      if (message.sessionId) {
+        metadata.session = message.sessionId;
+      }
       const conversation = await this.chatService.ensureConversation({
         id: message.conversationId,
         contactIdentifier: message.conversationId,
         contactName: message.senderName ?? message.conversationId,
-        metadata: {
-          provider: 'waha',
-          chatId: message.conversationId,
-        },
+        metadata,
       });
       await this.chatService.recordIncomingMessage({
         id: message.messageId,
