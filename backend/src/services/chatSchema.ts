@@ -1,5 +1,6 @@
 import { access, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import pool from './db';
 
@@ -45,7 +46,9 @@ async function resolveSchemaPath(): Promise<string> {
     `Chat schema file not found. Checked: ${candidatePaths.map((candidate) => `"${candidate}"`).join(', ')}`,
   );
 }
+=======
 
+const resolveSchemaPath = () => path.resolve(__dirname, '../..', 'sql', 'chat.sql');
 async function loadSchemaSql(): Promise<string> {
   if (cachedSql) {
     return cachedSql;
