@@ -114,7 +114,7 @@ const buildChatEndpointCandidates = (baseUrl) => {
     }
     const hasSessionPath = looksLikeSessionScopedPath(pathname);
     if (!hasSessionPath) {
-        candidates.add(`${normalized}/api/v1/chats`);
+        candidates.add(`${normalized}/api/QuantumTecnologia01/chats`);
         candidates.add(`${normalized}/api/chats`);
     }
     candidates.add(`${normalized}/chats`);
@@ -276,7 +276,7 @@ const ensureConversationId = (chat) => firstNonEmptyString(chat.id, chat.chatId,
 const resolveContactName = (chat, fallbackId) => firstNonEmptyString(chat.name, chat.contactName, chat.pushName, chat.formattedName, chat.contact?.name, fallbackId) ?? fallbackId;
 const resolveAvatar = (chat) => firstNonEmptyString(chat.avatar, chat.photoUrl, chat.photoURL, chat.profilePicUrl, chat.profilePicURL, chat.contact?.avatar, chat.contact?.profilePicUrl);
 const resolveContactIdentifier = (chat, fallbackId) => firstNonEmptyString(chat.contactId, chat.contact_id, chat.contact?.id, fallbackId);
-const buildContactUrl = (baseUrl, contactId) => `${baseUrl}/api/v1/contacts/${encodeURIComponent(contactId)}`;
+const buildContactUrl = (baseUrl, contactId) => `${baseUrl}/api/QuantumTecnologia01/contacts/${encodeURIComponent(contactId)}`;
 async function fetchAvatarFromContact(baseUrl, contactId, options, logger) {
     try {
         const payload = await fetchJson(buildContactUrl(baseUrl, contactId), options, logger);
