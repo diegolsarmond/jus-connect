@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
-import { RefreshCw, Smartphone, QrCode, ShieldCheck } from "lucide-react";
+import { useMemo } from "react";
+import { Smartphone, QrCode, ShieldCheck } from "lucide-react";
 import { Modal } from "./Modal";
+import { WhatsAppWebEmbed } from "../../../components/waha";
 import styles from "./DeviceLinkModal.module.css";
 
 interface DeviceLinkModalProps {
@@ -8,76 +9,61 @@ interface DeviceLinkModalProps {
   onClose: () => void;
 }
 
-const generateCode = () => {
-  const segment = () => Math.floor(100 + Math.random() * 899).toString();
-  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const suffix = letters[Math.floor(Math.random() * letters.length)]!;
-  return `${segment()}-${suffix}${segment().slice(0, 1)}`;
-};
-
 export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
-  const [code, setCode] = useState(() => generateCode());
-  const [refreshing, setRefreshing] = useState(false);
-
   const steps = useMemo(
     () => [
       {
-        title: "Abra o JusConnect Mobile",
+        title: "Abra o WhatsApp no celular",
         description:
-          "No aplicativo, toque em Mais > Dispositivos Conectados e selecione \"Conectar novo dispositivo\".",
+          "No app, toque em Configurações > Dispositivos Conectados e escolha \"Conectar um dispositivo\".",
         icon: <Smartphone size={18} aria-hidden="true" />,
       },
       {
-        title: "Escaneie o código",
+        title: "Escaneie o QR Code",
         description:
-          "Aponte a câmera para este código para autenticar a sessão com criptografia ponta a ponta.",
+          "Utilize a câmera do aparelho para ler o código exibido no painel do WAHA.",
         icon: <QrCode size={18} aria-hidden="true" />,
       },
       {
-        title: "Pronto para conversar",
+        title: "Sincronização automática",
         description:
-          "As conversas serão sincronizadas instantaneamente com o painel web, mantendo notificações e filtros.",
+          "Aguarde alguns instantes até que o WAHA sincronize as conversas com o JusConnect.",
         icon: <ShieldCheck size={18} aria-hidden="true" />,
       },
     ],
     [],
   );
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setCode(generateCode());
-      setRefreshing(false);
-    }, 420);
-  };
-
   return (
     <Modal open={open} onClose={onClose} ariaLabel="Conectar um novo dispositivo">
       <div className={styles.container}>
-        <section className={styles.qrSection} aria-labelledby="qr-title">
-          <h2 id="qr-title" className="sr-only">
-            Código QR para emparelhar dispositivo
-          </h2>
-          <div className={styles.qrFrame} aria-hidden="true">
-            <div className={styles.qrPattern} />
-            <span className={styles.codeChip}>{code}</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className={styles.refreshButton}
-            aria-label="Atualizar código QR"
-            disabled={refreshing}
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-            {refreshing ? "Gerando..." : "Atualizar código"}
-          </button>
+        <section className={styles.integrationPanel} aria-labelledby="waha-integration-title">
+          <header className={styles.integrationHeader}>
+            <h2 id="waha-integration-title">Conecte o WhatsApp Web</h2>
+            <p>
+              Use o painel integrado do WAHA para autenticar sua conta do WhatsApp Business. O QR Code
+              é atualizado automaticamente para garantir uma conexão segura.
+            </p>
+          </header>
+          <WhatsAppWebEmbed
+            className={styles.embedWrapper}
+            fallback={
+              <div className={styles.fallbackMessage}>
+                <h3>Configuração necessária</h3>
+                <p>
+                  Defina <code>VITE_WAHA_WHATSAPP_WEB_URL</code> ou combine{' '}
+                  <code>VITE_WAHA_BASE_URL</code> com <code>VITE_WAHA_WHATSAPP_WEB_PATH</code> para carregar
+                  o WhatsApp Web integrado.
+                </p>
+              </div>
+            }
+          />
         </section>
         <div className={styles.instructions}>
-          <h2>Sincronize o chat com o seu celular</h2>
+          <h2>Como conectar</h2>
           <p>
-            Conecte um dispositivo móvel para responder clientes pelo painel web mantendo a segurança
-            das conversas com autenticação temporária.
+            Após a leitura do QR Code, o WAHA mantém a sessão ativa e sincroniza automaticamente as
+            mensagens com o painel de conversas.
           </p>
           <ol className={styles.steps}>
             {steps.map((step, index) => (
