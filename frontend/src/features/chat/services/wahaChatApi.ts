@@ -20,6 +20,33 @@ const sanitizeHtml = (value: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const logWahaStatus = (response: Response) => {
+  const statusHeader = response.headers.get("x-waha-status");
+  if (!statusHeader) {
+    return;
+  }
+
+  const normalizedStatus = statusHeader.trim().toLowerCase();
+  const messageHeader = response.headers.get("x-waha-error");
+  const prefix = "WAHA";
+
+  if (normalizedStatus === "degraded") {
+    console.warn(
+      `${prefix} integration unavailable. Showing cached conversations instead.` +
+        (messageHeader ? ` (${messageHeader})` : ""),
+    );
+  } else if (normalizedStatus === "disabled") {
+    console.info(
+      `${prefix} integration disabled. Displaying locally stored conversations.` +
+        (messageHeader ? ` (${messageHeader})` : ""),
+    );
+  } else if (normalizedStatus === "local-only") {
+    console.info(
+      `${prefix} integration bypassed. Showing locally stored conversations only.`,
+    );
+  }
+};
+
 const extractMessageFromJson = (payload: unknown) => {
   if (typeof payload === "string") {
     const trimmed = payload.trim();
@@ -78,6 +105,7 @@ const buildErrorMessage = (response: Response, rawBody: string) => {
 };
 
 const parseResponse = async (response: Response): Promise<WahaChatSummary[]> => {
+  logWahaStatus(response);
   const rawText = await response.text();
   if (!response.ok) {
     throw new Error(buildErrorMessage(response, rawText));

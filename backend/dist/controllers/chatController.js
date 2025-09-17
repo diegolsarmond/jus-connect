@@ -112,6 +112,8 @@ async function listConversationsHandler(req, res) {
     const forceRemote = source === 'waha';
     const session = typeof req.query.session === 'string' ? req.query.session : undefined;
     const limit = parseConversationLimit(req.query.limit);
+    let wahaStatus;
+    let wahaError;
     if (!preferLocal) {
         try {
             const conversations = await wahaIntegration.listChats({
@@ -126,18 +128,36 @@ async function listConversationsHandler(req, res) {
                     return res.status(503).json({ error: error.message });
                 }
                 console.warn('WAHA integration not configured, falling back to local conversations');
+                wahaStatus = 'disabled';
+                wahaError = error.message;
             }
             else if (error instanceof chatService_1.ValidationError) {
                 return res.status(400).json({ error: error.message });
             }
             else {
                 console.error('Failed to list WAHA chats', error);
-                return res.status(502).json({ error: 'Failed to load conversations from WAHA' });
+                if (forceRemote) {
+                    return res.status(502).json({ error: 'Failed to load conversations from WAHA' });
+                }
+                wahaStatus = 'degraded';
+                wahaError = 'Failed to load conversations from WAHA';
             }
         }
     }
     try {
         const conversations = await chatService.listConversations();
+        if (!wahaStatus && preferLocal) {
+            wahaStatus = 'local-only';
+        }
+        if (wahaStatus) {
+            res.setHeader('X-WAHA-Status', wahaStatus);
+        }
+        if (wahaError) {
+            const sanitizedError = wahaError.replace(/[\r\n]+/g, ' ').trim();
+            if (sanitizedError) {
+                res.setHeader('X-WAHA-Error', sanitizedError);
+            }
+        }
         res.json(conversations);
     }
     catch (error) {
