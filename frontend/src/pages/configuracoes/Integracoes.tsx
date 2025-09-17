@@ -591,7 +591,7 @@ export default function Integracoes() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="producao">Produção</SelectItem>
-                      <SelectItem value="homologacao">Sandbox</SelectItem>
+                      <SelectItem value="homologacao">Homologação/Testes</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -602,7 +602,7 @@ export default function Integracoes() {
                   <Label htmlFor="api-key-url">Endpoint da API</Label>
                   <Input
                     id="api-key-url"
-                    placeholder="https://api.fornecedor.com/v1"
+                    placeholder="https://api.quantumtecnologia.com/v1"
                     value={newApiKey.apiUrl}
                     onChange={(event) =>
                       setNewApiKey((prev) => ({ ...prev, apiUrl: event.target.value }))
@@ -616,7 +616,7 @@ export default function Integracoes() {
                   <Label htmlFor="api-key-value">Valor da chave</Label>
                   <Input
                     id="api-key-value"
-                    placeholder="jus_live_..."
+                    placeholder="Informe o valor da Chave API Key"
                     value={newApiKey.key}
                     onChange={(event) => setNewApiKey((prev) => ({ ...prev, key: event.target.value }))}
                     className="font-mono"
@@ -748,239 +748,185 @@ export default function Integracoes() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <ShieldCheck className="h-5 w-5 text-primary" />
-                Monitoramento
-              </CardTitle>
-              <CardDescription>
-                Acompanhe rapidamente o estado das integrações e siga boas práticas de segurança.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div className="space-y-3">
-              <div className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground">Chaves ativas</span>
-                  <Badge variant="secondary">
-                    {activeApiKeys} / {apiKeys.length}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Revise periodicamente as credenciais e revogue acessos que não são mais utilizados.
-                </p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground">Integrações habilitadas</span>
-                  <Badge variant="secondary">
-                    {activeIntegrations} / {integrations.length}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Garanta que apenas integrações necessárias tenham permissão para sincronizar dados.
-                </p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-foreground">Webhooks ativos</span>
-                  <Badge variant="secondary">
-                    {activeWebhooks} / {webhooks.length}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Utilize ambientes de teste para validar webhooks antes de ativá-los em produção.
-                </p>
-              </div>
-            </div>
-            <ul className="space-y-2 text-xs text-muted-foreground">
-              <li>• Ative logs de auditoria nas integrações críticas.</li>
-              <li>• Compartilhe segredos apenas por canais seguros.</li>
-              <li>• Defina responsáveis por revisar integrações periodicamente.</li>
-            </ul>
-          </CardContent>
-        </Card>
+
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="space-y-1">
-            <CardTitle className="flex items-center gap-2">
-              <Link2 className="h-5 w-5 text-primary" />
-              Integrações com outros sistemas
-            </CardTitle>
-            <CardDescription>
-              Cadastre conectores personalizados e controle a sincronização com ERPs, marketing e comunicação.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <form onSubmit={handleAddIntegration} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="integration-name">Nome da integração</Label>
-                <Input
-                  id="integration-name"
-                  placeholder="Ex: ERP Financeiro"
-                  value={integrationForm.name}
-                  onChange={(event) => setIntegrationForm((prev) => ({ ...prev, name: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="integration-system">Sistema / fornecedor</Label>
-                <Input
-                  id="integration-system"
-                  placeholder="SAP, Totvs, HubSpot..."
-                  value={integrationForm.system}
-                  onChange={(event) => setIntegrationForm((prev) => ({ ...prev, system: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Método de autenticação</Label>
-                <Select
-                  value={integrationForm.authType}
-                  onValueChange={(value) =>
-                    setIntegrationForm((prev) => ({ ...prev, authType: value as AuthType }))
-                  }
-                >
-                  <SelectTrigger id="integration-auth">
-                    <SelectValue placeholder="Selecione uma opção" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="apiKey">API Key</SelectItem>
-                    <SelectItem value="oauth">OAuth 2.0</SelectItem>
-                    <SelectItem value="basic">Basic Auth</SelectItem>
-                    <SelectItem value="token">Token JWT</SelectItem>
-                    <SelectItem value="webhook">Webhook</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Frequência de sincronização</Label>
-                <Select
-                  value={integrationForm.frequency}
-                  onValueChange={(value) =>
-                    setIntegrationForm((prev) => ({ ...prev, frequency: value as SyncFrequency }))
-                  }
-                >
-                  <SelectTrigger id="integration-frequency">
-                    <SelectValue placeholder="Defina uma frequência" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="realTime">Tempo real</SelectItem>
-                    <SelectItem value="hourly">A cada hora</SelectItem>
-                    <SelectItem value="daily">Diário</SelectItem>
-                    <SelectItem value="weekly">Semanal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+      {/*<Card>*/}
+      {/*  <CardHeader>*/}
+      {/*    <div className="space-y-1">*/}
+      {/*      <CardTitle className="flex items-center gap-2">*/}
+      {/*        <Link2 className="h-5 w-5 text-primary" />*/}
+      {/*        Integrações com outros sistemas*/}
+      {/*      </CardTitle>*/}
+      {/*      <CardDescription>*/}
+      {/*        Cadastre conectores personalizados e controle a sincronização com ERPs, marketing e comunicação.*/}
+      {/*      </CardDescription>*/}
+      {/*    </div>*/}
+      {/*  </CardHeader>*/}
+      {/*  <CardContent className="space-y-6">*/}
+      {/*    <form onSubmit={handleAddIntegration} className="space-y-4">*/}
+      {/*      <div className="grid gap-4 md:grid-cols-2">*/}
+      {/*        <div className="space-y-2">*/}
+      {/*          <Label htmlFor="integration-name">Nome da integração</Label>*/}
+      {/*          <Input*/}
+      {/*            id="integration-name"*/}
+      {/*            placeholder="Ex: ERP Financeiro"*/}
+      {/*            value={integrationForm.name}*/}
+      {/*            onChange={(event) => setIntegrationForm((prev) => ({ ...prev, name: event.target.value }))}*/}
+      {/*          />*/}
+      {/*        </div>*/}
+      {/*        <div className="space-y-2">*/}
+      {/*          <Label htmlFor="integration-system">Sistema / fornecedor</Label>*/}
+      {/*          <Input*/}
+      {/*            id="integration-system"*/}
+      {/*            placeholder="SAP, Totvs, HubSpot..."*/}
+      {/*            value={integrationForm.system}*/}
+      {/*            onChange={(event) => setIntegrationForm((prev) => ({ ...prev, system: event.target.value }))}*/}
+      {/*          />*/}
+      {/*        </div>*/}
+      {/*        <div className="space-y-2">*/}
+      {/*          <Label>Método de autenticação</Label>*/}
+      {/*          <Select*/}
+      {/*            value={integrationForm.authType}*/}
+      {/*            onValueChange={(value) =>*/}
+      {/*              setIntegrationForm((prev) => ({ ...prev, authType: value as AuthType }))*/}
+      {/*            }*/}
+      {/*          >*/}
+      {/*            <SelectTrigger id="integration-auth">*/}
+      {/*              <SelectValue placeholder="Selecione uma opção" />*/}
+      {/*            </SelectTrigger>*/}
+      {/*            <SelectContent>*/}
+      {/*              <SelectItem value="apiKey">API Key</SelectItem>*/}
+      {/*              <SelectItem value="oauth">OAuth 2.0</SelectItem>*/}
+      {/*              <SelectItem value="basic">Basic Auth</SelectItem>*/}
+      {/*              <SelectItem value="token">Token JWT</SelectItem>*/}
+      {/*              <SelectItem value="webhook">Webhook</SelectItem>*/}
+      {/*            </SelectContent>*/}
+      {/*          </Select>*/}
+      {/*        </div>*/}
+      {/*        <div className="space-y-2">*/}
+      {/*          <Label>Frequência de sincronização</Label>*/}
+      {/*          <Select*/}
+      {/*            value={integrationForm.frequency}*/}
+      {/*            onValueChange={(value) =>*/}
+      {/*              setIntegrationForm((prev) => ({ ...prev, frequency: value as SyncFrequency }))*/}
+      {/*            }*/}
+      {/*          >*/}
+      {/*            <SelectTrigger id="integration-frequency">*/}
+      {/*              <SelectValue placeholder="Defina uma frequência" />*/}
+      {/*            </SelectTrigger>*/}
+      {/*            <SelectContent>*/}
+      {/*              <SelectItem value="realTime">Tempo real</SelectItem>*/}
+      {/*              <SelectItem value="hourly">A cada hora</SelectItem>*/}
+      {/*              <SelectItem value="daily">Diário</SelectItem>*/}
+      {/*              <SelectItem value="weekly">Semanal</SelectItem>*/}
+      {/*            </SelectContent>*/}
+      {/*          </Select>*/}
+      {/*        </div>*/}
+      {/*      </div>*/}
 
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="space-y-2">
-                <Label htmlFor="integration-endpoint">Endpoint / URL</Label>
-                <Input
-                  id="integration-endpoint"
-                  placeholder="https://api.seusistema.com/v1/..."
-                  value={integrationForm.endpoint}
-                  onChange={(event) => setIntegrationForm((prev) => ({ ...prev, endpoint: event.target.value }))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Utilize URLs seguras (HTTPS) e restrinja o acesso por IP quando possível.
-                </p>
-              </div>
-              <div className="flex items-end">
-                <Button type="submit" className="whitespace-nowrap">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Adicionar integração
-                </Button>
-              </div>
-            </div>
-          </form>
+      {/*      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">*/}
+      {/*        <div className="space-y-2">*/}
+      {/*          <Label htmlFor="integration-endpoint">Endpoint / URL</Label>*/}
+      {/*          <Input*/}
+      {/*            id="integration-endpoint"*/}
+      {/*            placeholder="https://api.seusistema.com/v1/..."*/}
+      {/*            value={integrationForm.endpoint}*/}
+      {/*            onChange={(event) => setIntegrationForm((prev) => ({ ...prev, endpoint: event.target.value }))}*/}
+      {/*          />*/}
+      {/*          <p className="text-xs text-muted-foreground">*/}
+      {/*            Utilize URLs seguras (HTTPS) e restrinja o acesso por IP quando possível.*/}
+      {/*          </p>*/}
+      {/*        </div>*/}
+      {/*        <div className="flex items-end">*/}
+      {/*          <Button type="submit" className="whitespace-nowrap">*/}
+      {/*            <Plus className="mr-2 h-4 w-4" />*/}
+      {/*            Adicionar integração*/}
+      {/*          </Button>*/}
+      {/*        </div>*/}
+      {/*      </div>*/}
+      {/*    </form>*/}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Integração</TableHead>
-                <TableHead>Sistema</TableHead>
-                <TableHead>Autenticação</TableHead>
-                <TableHead>Frequência</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[120px]">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {integrations.map((integration) => (
-                <TableRow key={integration.id}>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <p className="font-medium">{integration.name}</p>
-                      <p className="text-xs text-muted-foreground max-w-[260px] truncate">
-                        {integration.endpoint}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell>{integration.system}</TableCell>
-                  <TableCell>{authTypeLabels[integration.authType]}</TableCell>
-                  <TableCell>{frequencyLabels[integration.frequency]}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant={integration.enabled ? "default" : "outline"}
-                          className={integration.enabled ? "bg-success text-success-foreground" : ""}
-                        >
-                          {integration.enabled ? "Ativa" : "Pausada"}
-                        </Badge>
-                        <Switch
-                          checked={integration.enabled}
-                          onCheckedChange={(checked) => toggleIntegration(integration.id, checked)}
-                          aria-label={`Alterar status da integração ${integration.name}`}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {integration.lastSync
-                          ? `Última sincronização ${formatDateTime(integration.lastSync)}`
-                          : "Nunca sincronizado"}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => copyCredential(integration.endpoint, `Endpoint ${integration.name}`)}
-                      aria-label="Copiar endpoint"
-                    >
-                      <Link2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => removeIntegration(integration.id)}
-                      aria-label="Remover integração"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {integrations.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                    Nenhuma integração cadastrada no momento.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/*    <Table>*/}
+      {/*      <TableHeader>*/}
+      {/*        <TableRow>*/}
+      {/*          <TableHead>Integração</TableHead>*/}
+      {/*          <TableHead>Sistema</TableHead>*/}
+      {/*          <TableHead>Autenticação</TableHead>*/}
+      {/*          <TableHead>Frequência</TableHead>*/}
+      {/*          <TableHead>Status</TableHead>*/}
+      {/*          <TableHead className="w-[120px]">Ações</TableHead>*/}
+      {/*        </TableRow>*/}
+      {/*      </TableHeader>*/}
+      {/*      <TableBody>*/}
+      {/*        {integrations.map((integration) => (*/}
+      {/*          <TableRow key={integration.id}>*/}
+      {/*            <TableCell>*/}
+      {/*              <div className="space-y-1">*/}
+      {/*                <p className="font-medium">{integration.name}</p>*/}
+      {/*                <p className="text-xs text-muted-foreground max-w-[260px] truncate">*/}
+      {/*                  {integration.endpoint}*/}
+      {/*                </p>*/}
+      {/*              </div>*/}
+      {/*            </TableCell>*/}
+      {/*            <TableCell>{integration.system}</TableCell>*/}
+      {/*            <TableCell>{authTypeLabels[integration.authType]}</TableCell>*/}
+      {/*            <TableCell>{frequencyLabels[integration.frequency]}</TableCell>*/}
+      {/*            <TableCell>*/}
+      {/*              <div className="space-y-1">*/}
+      {/*                <div className="flex items-center gap-3">*/}
+      {/*                  <Badge*/}
+      {/*                    variant={integration.enabled ? "default" : "outline"}*/}
+      {/*                    className={integration.enabled ? "bg-success text-success-foreground" : ""}*/}
+      {/*                  >*/}
+      {/*                    {integration.enabled ? "Ativa" : "Pausada"}*/}
+      {/*                  </Badge>*/}
+      {/*                  <Switch*/}
+      {/*                    checked={integration.enabled}*/}
+      {/*                    onCheckedChange={(checked) => toggleIntegration(integration.id, checked)}*/}
+      {/*                    aria-label={`Alterar status da integração ${integration.name}`}*/}
+      {/*                  />*/}
+      {/*                </div>*/}
+      {/*                <p className="text-xs text-muted-foreground">*/}
+      {/*                  {integration.lastSync*/}
+      {/*                    ? `Última sincronização ${formatDateTime(integration.lastSync)}`*/}
+      {/*                    : "Nunca sincronizado"}*/}
+      {/*                </p>*/}
+      {/*              </div>*/}
+      {/*            </TableCell>*/}
+      {/*            <TableCell className="flex items-center gap-2">*/}
+      {/*              <Button*/}
+      {/*                type="button"*/}
+      {/*                size="icon"*/}
+      {/*                variant="ghost"*/}
+      {/*                onClick={() => copyCredential(integration.endpoint, `Endpoint ${integration.name}`)}*/}
+      {/*                aria-label="Copiar endpoint"*/}
+      {/*              >*/}
+      {/*                <Link2 className="h-4 w-4" />*/}
+      {/*              </Button>*/}
+      {/*              <Button*/}
+      {/*                type="button"*/}
+      {/*                size="icon"*/}
+      {/*                variant="ghost"*/}
+      {/*                onClick={() => removeIntegration(integration.id)}*/}
+      {/*                aria-label="Remover integração"*/}
+      {/*              >*/}
+      {/*                <Trash2 className="h-4 w-4" />*/}
+      {/*              </Button>*/}
+      {/*            </TableCell>*/}
+      {/*          </TableRow>*/}
+      {/*        ))}*/}
+      {/*        {integrations.length === 0 && (*/}
+      {/*          <TableRow>*/}
+      {/*            <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">*/}
+      {/*              Nenhuma integração cadastrada no momento.*/}
+      {/*            </TableCell>*/}
+      {/*          </TableRow>*/}
+      {/*        )}*/}
+      {/*      </TableBody>*/}
+      {/*    </Table>*/}
+      {/*  </CardContent>*/}
+      {/*</Card>*/}
 
       <Card>
         <CardHeader>
@@ -1167,7 +1113,62 @@ export default function Integracoes() {
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
+          </Card>
+          <Card>
+              <CardHeader>
+                  <div className="space-y-1">
+                      <CardTitle className="flex items-center gap-2 text-xl">
+                          <ShieldCheck className="h-5 w-5 text-primary" />
+                          Monitoramento
+                      </CardTitle>
+                      <CardDescription>
+                          Acompanhe rapidamente o estado das integrações e siga boas práticas de segurança.
+                      </CardDescription>
+                  </div>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                  <div className="space-y-3">
+                      <div className="rounded-lg border p-3">
+                          <div className="flex items-center justify-between">
+                              <span className="font-medium text-foreground">Chaves ativas</span>
+                              <Badge variant="secondary">
+                                  {activeApiKeys} / {apiKeys.length}
+                              </Badge>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                              Revise periodicamente as credenciais e revogue acessos que não são mais utilizados.
+                          </p>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                          <div className="flex items-center justify-between">
+                              <span className="font-medium text-foreground">Integrações habilitadas</span>
+                              <Badge variant="secondary">
+                                  {activeIntegrations} / {integrations.length}
+                              </Badge>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                              Garanta que apenas integrações necessárias tenham permissão para sincronizar dados.
+                          </p>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                          <div className="flex items-center justify-between">
+                              <span className="font-medium text-foreground">Webhooks ativos</span>
+                              <Badge variant="secondary">
+                                  {activeWebhooks} / {webhooks.length}
+                              </Badge>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                              Utilize ambientes de teste para validar webhooks antes de ativá-los em produção.
+                          </p>
+                      </div>
+                  </div>
+                  <ul className="space-y-2 text-xs text-muted-foreground">
+                      <li>• Ative logs de auditoria nas integrações críticas.</li>
+                      <li>• Compartilhe segredos apenas por canais seguros.</li>
+                      <li>• Defina responsáveis por revisar integrações periodicamente.</li>
+                  </ul>
+              </CardContent>
+          </Card>
     </div>
   );
 }
