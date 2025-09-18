@@ -24,6 +24,7 @@ import processoRoutes from './routes/processoRoutes';
 import fluxoTrabalhoRoutes from './routes/fluxoTrabalhoRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import oportunidadeRoutes from './routes/oportunidadeRoutes';
+import oportunidadeDocumentoRoutes from './routes/oportunidadeDocumentoRoutes';
 import tarefaRoutes from './routes/tarefaRoutes';
 import tarefaResponsavelRoutes from './routes/tarefaResponsavelRoutes';
 import tipoDocumentoRoutes from './routes/tipoDocumentoRoutes';
@@ -97,7 +98,6 @@ app.use((req, res, next) => {
 // Rotas
 const protectedApiRouter = express.Router();
 protectedApiRouter.use(authenticateRequest);
-
 protectedApiRouter.use(areaAtuacaoRoutes);
 protectedApiRouter.use(tipoEventoRoutes);
 protectedApiRouter.use(tipoProcessoRoutes);
@@ -128,7 +128,6 @@ protectedApiRouter.use(supportRoutes);
 protectedApiRouter.use(notificationRoutes);
 protectedApiRouter.use(integrationApiKeyRoutes);
 protectedApiRouter.use(chatRoutes);
-
 app.use('/api', wahaWebhookRoutes);
 app.use('/api', authRoutes);
 app.use('/api', protectedApiRouter);

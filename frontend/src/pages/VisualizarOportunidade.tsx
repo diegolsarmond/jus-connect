@@ -225,6 +225,7 @@ export default function VisualizarOportunidade() {
   const [documentTemplatesError, setDocumentTemplatesError] = useState<string | null>(
     null,
   );
+  const [documentSubmitting, setDocumentSubmitting] = useState(false);
   const [processForm, setProcessForm] = useState({
     numero: "",
     uf: "",
@@ -258,6 +259,7 @@ export default function VisualizarOportunidade() {
     setMunicipios([]);
     setMunicipiosLoading(false);
     setDocumentTemplatesError(null);
+    setDocumentSubmitting(false);
   };
 
   useEffect(() => {
@@ -1045,29 +1047,60 @@ export default function VisualizarOportunidade() {
     }
   };
 
-  const handleDocumentConfirm = () => {
-    if (!documentType) return;
-
-    const params = new URLSearchParams();
-    if (id) params.set("oportunidade", id);
-    params.set("tipo", documentType);
+  const handleDocumentConfirm = async () => {
+    if (!documentType || !id) return;
 
     if (documentType === "modelo") {
       if (!selectedTemplate) return;
-      params.set("modelo", selectedTemplate);
-    } else {
-      if (
-        !processForm.numero ||
-        !processForm.uf ||
-        !processForm.municipio ||
-        !processForm.orgaoJulgador
-      )
-        return;
-      params.set("numero_processo", processForm.numero);
-      params.set("uf", processForm.uf);
-      params.set("comarca", processForm.municipio);
-      params.set("vara_orgao", processForm.orgaoJulgador);
+      const templateId = Number.parseInt(selectedTemplate, 10);
+      if (Number.isNaN(templateId)) return;
+      setDocumentSubmitting(true);
+      try {
+        const response = await fetch(
+          `${apiUrl}/api/oportunidades/${id}/documentos`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ templateId }),
+          },
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const created = (await response.json()) as { title?: string } | undefined;
+        const createdTitle =
+          created && typeof created.title === "string" && created.title.trim().length > 0
+            ? created.title.trim()
+            : "Documento";
+        setSnack({
+          open: true,
+          message: `${createdTitle} criado com sucesso`,
+        });
+        setDocumentDialogOpen(false);
+      } catch (error) {
+        console.error(error);
+        setSnack({ open: true, message: "Erro ao criar documento" });
+      } finally {
+        setDocumentSubmitting(false);
+      }
+      return;
     }
+
+    if (
+      !processForm.numero ||
+      !processForm.uf ||
+      !processForm.municipio ||
+      !processForm.orgaoJulgador
+    )
+      return;
+
+    const params = new URLSearchParams();
+    params.set("oportunidade", id);
+    params.set("tipo", documentType);
+    params.set("numero_processo", processForm.numero);
+    params.set("uf", processForm.uf);
+    params.set("comarca", processForm.municipio);
+    params.set("vara_orgao", processForm.orgaoJulgador);
 
     setDocumentDialogOpen(false);
     navigate(`/documentos?${params.toString()}`);
@@ -1155,7 +1188,8 @@ export default function VisualizarOportunidade() {
   }
 
   const isDocumentContinueDisabled =
-    documentType === "modelo"
+    documentSubmitting ||
+    (documentType === "modelo"
       ? !selectedTemplate
       : documentType === "processo"
       ?
@@ -1163,7 +1197,7 @@ export default function VisualizarOportunidade() {
           !processForm.uf ||
           !processForm.municipio ||
           !processForm.orgaoJulgador
-      : true;
+      : true);
 
   const statusSelectValue =
     opportunity.status_id === null || opportunity.status_id === undefined
@@ -2078,11 +2112,20 @@ export default function VisualizarOportunidade() {
               type="button"
               variant="outline"
               onClick={() => setDocumentDialogOpen(false)}
+              disabled={documentSubmitting}
             >
               Cancelar
             </Button>
-            <Button type="button" onClick={handleDocumentConfirm} disabled={isDocumentContinueDisabled}>
-              Continuar
+            <Button
+              type="button"
+              onClick={() => void handleDocumentConfirm()}
+              disabled={isDocumentContinueDisabled}
+            >
+              {documentType === "modelo"
+                ? documentSubmitting
+                  ? "Criando..."
+                  : "Criar documento"
+                : "Continuar"}
             </Button>
           </DialogFooter>
         </DialogContent>
