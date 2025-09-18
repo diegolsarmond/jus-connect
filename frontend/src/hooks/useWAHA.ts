@@ -502,6 +502,69 @@ export const useWAHA = () => {
     await loadChats({ reset: false });
   }, [loadChats]);
 
+  const ensureChatInState = useCallback(
+    (chatId: string) => {
+      let placeholder: ChatOverview | null = null;
+
+      setChats((previousChats) => {
+        if (previousChats.some((chat) => chat.id === chatId)) {
+          return previousChats;
+        }
+
+        placeholder = normalizeChatName({
+          id: chatId,
+          name: WAHAService.extractPhoneFromWhatsAppId(chatId),
+          isGroup: chatId.includes('@g.us'),
+          avatar: undefined,
+          lastMessage: undefined,
+          unreadCount: 0,
+        });
+
+        return sortChatsByRecency([...previousChats, placeholder]);
+      });
+
+      if (!placeholder) {
+        return;
+      }
+
+      const chatToEnrich = placeholder;
+      if (enrichingChatsRef.current.has(chatToEnrich.id)) {
+        return;
+      }
+
+      enrichingChatsRef.current.add(chatToEnrich.id);
+      void (async () => {
+        try {
+          const enriched = await enrichChatWithInfo(chatToEnrich);
+          if (!isMountedRef.current) {
+            return;
+          }
+
+          setChats((previousChats) => {
+            const index = previousChats.findIndex((chat) => chat.id === enriched.id);
+            if (index === -1) {
+              return previousChats;
+            }
+
+            const merged = normalizeChatName({
+              ...previousChats[index],
+              ...enriched,
+            });
+
+            const nextChats = [...previousChats];
+            nextChats[index] = merged;
+            return sortChatsByRecency(nextChats);
+          });
+        } catch (error) {
+          console.error('Failed to enrich chat information', error);
+        } finally {
+          enrichingChatsRef.current.delete(chatToEnrich.id);
+        }
+      })();
+    },
+    [enrichChatWithInfo],
+  );
+
   // Load messages for a specific chat
   const loadMessages = useCallback(
     async (chatId: string, options?: { reset?: boolean }): Promise<Message[]> => {
@@ -698,6 +761,7 @@ export const useWAHA = () => {
   // Select active chat
   const selectChat = useCallback(
     async (chatId: string) => {
+      ensureChatInState(chatId);
       setActiveChatId(chatId);
 
       const pagination = ensureMessagePaginationState(chatId);
@@ -707,7 +771,7 @@ export const useWAHA = () => {
 
       void markAsRead(chatId);
     },
-    [ensureMessagePaginationState, loadMessages, markAsRead],
+    [ensureChatInState, ensureMessagePaginationState, loadMessages, markAsRead],
   );
 
   // Add a new message (for webhook integration)
