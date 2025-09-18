@@ -1,10 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +19,26 @@ import {
 import { Label } from "@/components/ui/label";
 import { getApiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Archive,
+  Calendar,
+  Clock,
+  FileText,
+  Gavel as GavelIcon,
+  Landmark,
+  MapPin,
+  Search,
+  Users as UsersIcon,
+} from "lucide-react";
 
 interface ProcessoCliente {
   id?: number;
@@ -205,6 +219,32 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
   };
 };
 
+const getStatusBadgeClassName = (status: string) => {
+  const normalized = status.toLowerCase();
+
+  if (normalized.includes("andamento") || normalized.includes("ativo")) {
+    return "border-emerald-200 bg-emerald-500/10 text-emerald-600";
+  }
+
+  if (normalized.includes("arquiv")) {
+    return "border-slate-200 bg-slate-500/10 text-slate-600";
+  }
+
+  if (normalized.includes("urg")) {
+    return "border-amber-200 bg-amber-500/10 text-amber-600";
+  }
+
+  return "border-primary/20 bg-primary/5 text-primary";
+};
+
+const getTipoBadgeClassName = (tipo: string) => {
+  if (!tipo || tipo.toLowerCase() === "não informado") {
+    return "border-muted-foreground/20 bg-muted text-muted-foreground";
+  }
+
+  return "border-blue-200 bg-blue-500/10 text-blue-600";
+};
+
 export default function Processos() {
   const { toast } = useToast();
   const [processos, setProcessos] = useState<Processo[]>([]);
@@ -224,6 +264,51 @@ export default function Processos() {
   const [processosError, setProcessosError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingProcess, setCreatingProcess] = useState(false);
+
+  const statusOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        processos
+          .map((processo) => processo.status?.trim())
+          .filter((status): status is string => Boolean(status) && status !== "Não informado"),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return values;
+  }, [processos]);
+
+  const tipoOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        processos
+          .map((processo) => processo.tipo?.trim())
+          .filter((tipo): tipo is string => Boolean(tipo) && tipo !== "Não informado"),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return values;
+  }, [processos]);
+
+  const totalProcessos = useMemo(() => processos.length, [processos]);
+
+  const processosEmAndamento = useMemo(
+    () =>
+      processos.filter((processo) =>
+        processo.status.toLowerCase().includes("andamento") ||
+        processo.status.toLowerCase().includes("ativo"),
+      ).length,
+    [processos],
+  );
+
+  const processosArquivados = useMemo(
+    () => processos.filter((processo) => processo.status.toLowerCase().includes("arquiv")).length,
+    [processos],
+  );
+
+  const clientesAtivos = useMemo(
+    () => new Set(processos.map((processo) => processo.cliente.id)).size,
+    [processos],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -303,6 +388,18 @@ export default function Processos() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (statusFilter !== "todos" && !statusOptions.includes(statusFilter)) {
+      setStatusFilter("todos");
+    }
+  }, [statusFilter, statusOptions]);
+
+  useEffect(() => {
+    if (tipoFilter !== "todos" && !tipoOptions.includes(tipoFilter)) {
+      setTipoFilter("todos");
+    }
+  }, [tipoFilter, tipoOptions]);
 
   const loadProcessos = useCallback(async () => {
     const res = await fetch(getApiUrl("processos"), {
@@ -525,138 +622,346 @@ export default function Processos() {
     !processForm.clienteId ||
     creatingProcess;
 
+  const filteredProcessos = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const numericSearch = normalizedSearch.replace(/\D/g, "");
 
-  const filteredProcessos = processos.filter((processo) => {
-    const matchesStatus =
-      statusFilter === "todos" || processo.status === statusFilter;
-    const matchesTipo = tipoFilter === "todos" || processo.tipo === tipoFilter;
-    const search = searchTerm.toLowerCase();
-    const matchesSearch =
-      processo.numero?.toLowerCase().includes(search) ||
-      processo.cliente?.nome?.toLowerCase().includes(search) ||
-      processo.cliente?.cpf?.includes(search) ||
-      processo.advogadoResponsavel?.toLowerCase().includes(search);
+    return processos.filter((processo) => {
+      const matchesStatus =
+        statusFilter === "todos" || processo.status === statusFilter;
+      const matchesTipo = tipoFilter === "todos" || processo.tipo === tipoFilter;
 
-    return matchesStatus && matchesTipo && matchesSearch;
-  });
+      if (!matchesStatus || !matchesTipo) {
+        return false;
+      }
+
+      if (normalizedSearch.length === 0) {
+        return true;
+      }
+
+      const searchPool = [
+        processo.numero,
+        processo.cliente?.nome,
+        processo.advogadoResponsavel,
+        processo.status,
+        processo.tipo,
+      ];
+
+      const hasTextMatch = searchPool.some((value) => {
+        if (!value) return false;
+        return value.toLowerCase().includes(normalizedSearch);
+      });
+
+      const documento = processo.cliente?.cpf ?? "";
+      const hasDocumentoMatch =
+        numericSearch.length > 0 && documento
+          ? documento.replace(/\D/g, "").includes(numericSearch)
+          : false;
+
+      return hasTextMatch || hasDocumentoMatch;
+    });
+  }, [processos, searchTerm, statusFilter, tipoFilter]);
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">Processos</h1>
-          <p className="text-muted-foreground">
-            Listagem de processos cadastrados
+          <p className="text-sm text-muted-foreground">
+            Monitore os processos em andamento, acompanhe movimentações recentes e identifique prioridades com mais clareza.
           </p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)}>Cadastrar processo</Button>
+        <Button onClick={() => setIsDialogOpen(true)} className="self-start">
+          Cadastrar processo
+        </Button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <Input
-          placeholder="Pesquisar por número, cliente, CPF ou advogado"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="md:w-1/3"
-        />
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full md:w-48">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os Status</SelectItem>
-            <SelectItem value="Em andamento">Em andamento</SelectItem>
-            <SelectItem value="Arquivado">Arquivado</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger className="w-full md:w-48">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os Tipos</SelectItem>
-            <SelectItem value="Cível">Cível</SelectItem>
-            <SelectItem value="Trabalhista">Trabalhista</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="border-border/60 bg-card/60 shadow-sm">
+          <CardContent className="flex items-center justify-between gap-4 pt-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <GavelIcon className="h-5 w-5" />
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Total de processos
+              </p>
+              <p className="text-2xl font-semibold">{totalProcessos}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/60 bg-card/60 shadow-sm">
+          <CardContent className="flex items-center justify-between gap-4 pt-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Em andamento
+              </p>
+              <p className="text-2xl font-semibold">{processosEmAndamento}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/60 bg-card/60 shadow-sm">
+          <CardContent className="flex items-center justify-between gap-4 pt-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-500/10 text-slate-600">
+              <Archive className="h-5 w-5" />
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Arquivados
+              </p>
+              <p className="text-2xl font-semibold">{processosArquivados}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/60 bg-card/60 shadow-sm">
+          <CardContent className="flex items-center justify-between gap-4 pt-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 text-blue-600">
+              <UsersIcon className="h-5 w-5" />
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Clientes vinculados
+              </p>
+              <p className="text-2xl font-semibold">{clientesAtivos}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card className="border-border/60 bg-card/60 shadow-sm">
+        <CardHeader className="flex flex-col gap-2 pb-0 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle className="text-lg">Filtros inteligentes</CardTitle>
+            <CardDescription>
+              Refine a visualização por status, tipo de processo ou busque por cliente, número ou documento.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4 pt-4 md:grid-cols-[1.5fr,1fr,1fr]">
+          <div className="relative flex items-center">
+            <Search className="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Pesquisar por número, cliente, CPF ou advogado"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="h-11 pl-9"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-11">
+              <SelectValue placeholder="Status do processo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os status</SelectItem>
+              {statusOptions.length === 0 ? (
+                <SelectItem value="__empty" disabled>
+                  Nenhum status disponível
+                </SelectItem>
+              ) : (
+                statusOptions.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <Select value={tipoFilter} onValueChange={setTipoFilter}>
+            <SelectTrigger className="h-11">
+              <SelectValue placeholder="Tipo do processo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os tipos</SelectItem>
+              {tipoOptions.length === 0 ? (
+                <SelectItem value="__empty" disabled>
+                  Nenhum tipo disponível
+                </SelectItem>
+              ) : (
+                tipoOptions.map((tipo) => (
+                  <SelectItem key={tipo} value={tipo}>
+                    {tipo}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
       {processosLoading ? (
-        <p className="text-sm text-muted-foreground">Carregando processos...</p>
+        <Card className="border-border/60 bg-card/60 shadow-sm">
+          <CardContent className="space-y-4 pt-6">
+            <Skeleton className="h-6 w-1/3" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
       ) : processosError ? (
-        <p className="text-sm text-destructive">{processosError}</p>
+        <Card className="border-destructive/40 bg-destructive/10">
+          <CardContent className="pt-6">
+            <p className="text-sm text-destructive-foreground">{processosError}</p>
+          </CardContent>
+        </Card>
       ) : filteredProcessos.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Nenhum processo encontrado.
-        </p>
+        <Card className="border-border/60 bg-card/60 shadow-sm">
+          <CardContent className="space-y-2 pt-6 text-center">
+            <p className="text-base font-medium text-foreground">
+              Nenhum processo encontrado
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Ajuste os filtros ou refine a busca para visualizar outros resultados.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
-        <Accordion type="single" collapsible className="w-full">
+        <div className="space-y-4">
           {filteredProcessos.map((processo) => (
-            <AccordionItem key={processo.id} value={String(processo.id)}>
-              <AccordionTrigger>
-                <div className="text-left">
-                  <p className="font-medium">Processo {processo.numero}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Distribuído em {processo.dataDistribuicao}
-                  </p>
+            <Card
+              key={processo.id}
+              className="border-border/60 bg-card/60 shadow-sm transition hover:border-primary/40 hover:shadow-md"
+            >
+              <CardHeader className="flex flex-col gap-4 border-b border-border/40 pb-4 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <CardTitle className="text-xl font-semibold">
+                      Processo {processo.numero}
+                    </CardTitle>
+                    <Badge className={`text-xs ${getStatusBadgeClassName(processo.status)}`}>
+                      {processo.status}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${getTipoBadgeClassName(processo.tipo)}`}
+                    >
+                      {processo.tipo}
+                    </Badge>
+                  </div>
+                  <CardDescription className="flex flex-wrap items-center gap-3 text-sm">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Calendar className="h-4 w-4" />
+                      Distribuído em {processo.dataDistribuicao}
+                    </span>
+                    <span className="hidden h-4 w-px bg-border/60 md:block" aria-hidden />
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      {processo.classeJudicial}
+                    </span>
+                    <span className="hidden h-4 w-px bg-border/60 lg:block" aria-hidden />
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      {processo.assunto}
+                    </span>
+                  </CardDescription>
                 </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium">Cliente:</span> {processo.cliente.nome} ({processo.cliente.papel})
-                    </div>
-                    <div>
-                      <span className="font-medium">Classe Judicial:</span> {processo.classeJudicial}
-                    </div>
-                    <div className="md:col-span-2">
-                      <span className="font-medium">Assunto:</span> {processo.assunto}
-                    </div>
-                    <div>
-                      <span className="font-medium">Jurisdição:</span> {processo.jurisdicao}
-                    </div>
-                    <div>
-                      <span className="font-medium">Órgão Julgador:</span> {processo.orgaoJulgador}
+                <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground md:items-end">
+                  <div className="flex items-center gap-2">
+                    <UsersIcon className="h-4 w-4" />
+                    <span className="font-medium text-foreground">
+                      {processo.advogadoResponsavel}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Landmark className="h-4 w-4" />
+                    <span>{processo.orgaoJulgador}</span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Cliente
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {processo.cliente.nome}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {processo.cliente.cpf || "Documento não informado"}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                      >
+                        {processo.cliente.papel}
+                      </Badge>
                     </div>
                   </div>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Jurisdição
+                    </p>
+                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                      <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                      <span>{processo.jurisdicao}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Órgão julgador
+                    </p>
+                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                      <Landmark className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                      <span>{processo.orgaoJulgador}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Classe judicial
+                    </p>
+                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                      <GavelIcon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                      <span>{processo.classeJudicial}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Assunto principal
+                    </p>
+                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                      <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                      <span>{processo.assunto}</span>
+                    </div>
+                  </div>
+                </div>
 
-                  <div>
-                    <h4 className="font-medium mb-2">Últimas Movimentações</h4>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left">
-                            <th className="py-1">Movimento</th>
-                            <th className="py-1">Documento</th>
-                          </tr>
-                        </thead>
-                        <tbody className="[&>tr:not(:last-child)]:border-b">
-                          {processo.movimentacoes.length > 0 ? (
-                            processo.movimentacoes.map((mov, index) => (
-                              <tr key={index}>
-                                <td className="py-1">
-                                  {mov.data} - {mov.descricao}
-                                </td>
-                                <td className="py-1"></td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td className="py-2 text-muted-foreground" colSpan={2}>
-                                Nenhuma movimentação registrada.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                <div className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-foreground">
+                      Últimas movimentações
+                    </h4>
+                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                      {processo.movimentacoes.length} registros
+                    </Badge>
                   </div>
+                  {processo.movimentacoes.length > 0 ? (
+                    <ul className="space-y-3 text-sm">
+                      {processo.movimentacoes.map((movimentacao, index) => (
+                        <li key={`${processo.id}-mov-${index}`} className="flex items-start gap-3">
+                          <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                          <div className="space-y-1">
+                            <p className="font-medium text-foreground">{movimentacao.descricao}</p>
+                            <p className="text-xs text-muted-foreground">{movimentacao.data}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhuma movimentação registrada até o momento.
+                    </p>
+                  )}
                 </div>
-              </AccordionContent>
-            </AccordionItem>
+              </CardContent>
+            </Card>
           ))}
-        </Accordion>
+        </div>
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
