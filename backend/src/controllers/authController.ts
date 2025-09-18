@@ -3,6 +3,7 @@ import pool from '../services/db';
 import { verifyPassword } from '../utils/passwordUtils';
 import { signToken } from '../utils/tokenUtils';
 import { authConfig } from '../constants/auth';
+import { fetchPerfilModules } from '../services/moduleService';
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
@@ -58,6 +59,8 @@ export const login = async (req: Request, res: Response) => {
       authConfig.expirationSeconds
     );
 
+    const modulos = await fetchPerfilModules(user.perfil);
+
     res.json({
       token,
       expiresIn: authConfig.expirationSeconds,
@@ -66,6 +69,7 @@ export const login = async (req: Request, res: Response) => {
         nome_completo: user.nome_completo,
         email: user.email,
         perfil: user.perfil,
+        modulos,
       },
     });
   } catch (error) {
@@ -93,12 +97,15 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 
     const user = result.rows[0];
 
+    const modulos = await fetchPerfilModules(user.perfil);
+
     res.json({
       id: user.id,
       nome_completo: user.nome_completo,
       email: user.email,
       perfil: user.perfil,
       status: user.status,
+      modulos,
     });
   } catch (error) {
     console.error('Erro ao carregar usuário autenticado', error);

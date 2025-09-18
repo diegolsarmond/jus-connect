@@ -40,6 +40,8 @@ const getInitials = (name: string | undefined) => {
 export function Header() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const canAccessConfiguracoes =
+    user?.modulos?.some((moduleId) => moduleId === "configuracoes" || moduleId.startsWith("configuracoes-")) ?? false;
 
   const handleLogout = useCallback(() => {
     logout();
@@ -99,14 +101,16 @@ export function Header() {
               <User className="mr-2 h-4 w-4" />
               Perfil
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                navigate("/configuracoes");
-              }}
-            >
-              Configurações
-            </DropdownMenuItem>
+            {canAccessConfiguracoes && (
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  navigate("/configuracoes");
+                }}
+              >
+                Configurações
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={(event) => {

@@ -7,6 +7,7 @@ declare global {
         userId: number;
         email?: string;
         payload: TokenPayload;
+        modules?: string[];
       };
     }
   }

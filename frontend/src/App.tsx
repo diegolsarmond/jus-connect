@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, type ReactElement } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -61,6 +61,7 @@ import RecuperarSenha from "./pages/RecuperarSenha";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
+import { RequireModule } from "@/features/auth/RequireModule";
 
 const CRMLayout = lazy(() =>
   import("@/components/layout/CRMLayout").then((module) => ({ default: module.CRMLayout })),
@@ -68,6 +69,10 @@ const CRMLayout = lazy(() =>
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 
 const queryClient = new QueryClient();
+
+const withModule = (moduleId: string | string[], element: ReactElement) => (
+  <RequireModule module={moduleId}>{element}</RequireModule>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -88,109 +93,158 @@ const App = () => (
                   </ProtectedRoute>
                 )}
               >
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/conversas" element={<Conversas />} />
-              <Route path="/conversas/:conversationId" element={<Conversas />} />
-              <Route path="/clientes" element={<Clientes />} />
-              <Route path="/clientes/novo" element={<NovoCliente />} />
-              <Route path="/clientes/:id/editar" element={<EditarCliente />} />
-              <Route path="/clientes/:id/novo-processo" element={<NovoProcesso />} />
+              <Route path="/" element={withModule("dashboard", <Dashboard />)} />
+              <Route path="/conversas" element={withModule("conversas", <Conversas />)} />
+              <Route path="/conversas/:conversationId" element={withModule("conversas", <Conversas />)} />
+              <Route path="/clientes" element={withModule("clientes", <Clientes />)} />
+              <Route path="/clientes/novo" element={withModule("clientes", <NovoCliente />)} />
+              <Route path="/clientes/:id/editar" element={withModule("clientes", <EditarCliente />)} />
+              <Route path="/clientes/:id/novo-processo" element={withModule("clientes", <NovoProcesso />)} />
               <Route
                 path="/clientes/:id/processos/:processoId"
-                element={<VisualizarProcesso />}
+                element={withModule("clientes", <VisualizarProcesso />)}
               />
               <Route
                 path="/clientes/:id/processos/:processoId/contrato"
-                element={<ContratoPreview />}
+                element={withModule("clientes", <ContratoPreview />)}
               />
-              <Route path="/clientes/:id" element={<VisualizarCliente />} />
-              <Route path="/pipeline" element={<PipelineMenu />} />
-              <Route path="/pipeline/:fluxoId" element={<Pipeline />} />
-              <Route path="/pipeline/nova-oportunidade" element={<NovaOportunidade />} />
-              <Route path="/pipeline/oportunidade/:id" element={<VisualizarOportunidade />} />
-              <Route path="/pipeline/editar-oportunidade/:id" element={<EditarOportunidade />} />
-              <Route path="/agenda" element={<Agenda />} />
-              <Route path="/tarefas" element={<Tarefas />} />
-              <Route path="/processos" element={<Processos />} />
-              <Route path="/intimacoes" element={<Intimacoes />} />
+              <Route path="/clientes/:id" element={withModule("clientes", <VisualizarCliente />)} />
+              <Route path="/pipeline" element={withModule("pipeline", <PipelineMenu />)} />
+              <Route path="/pipeline/:fluxoId" element={withModule("pipeline", <Pipeline />)} />
+              <Route path="/pipeline/nova-oportunidade" element={withModule("pipeline", <NovaOportunidade />)} />
+              <Route
+                path="/pipeline/oportunidade/:id"
+                element={withModule("pipeline", <VisualizarOportunidade />)}
+              />
+              <Route
+                path="/pipeline/editar-oportunidade/:id"
+                element={withModule("pipeline", <EditarOportunidade />)}
+              />
+              <Route path="/agenda" element={withModule("agenda", <Agenda />)} />
+              <Route path="/tarefas" element={withModule("tarefas", <Tarefas />)} />
+              <Route path="/processos" element={withModule("processos", <Processos />)} />
+              <Route path="/intimacoes" element={withModule("intimacoes", <Intimacoes />)} />
               <Route path="/documentos">
-                <Route index element={<LibraryPage />} />
-                <Route path="editor/novo" element={<EditorPage />} />
-                <Route path="editor/:id" element={<EditorPage />} />
+                <Route index element={withModule("documentos", <LibraryPage />)} />
+                <Route path="editor/novo" element={withModule("documentos", <EditorPage />)} />
+                <Route path="editor/:id" element={withModule("documentos", <EditorPage />)} />
               </Route>
-              <Route path="/financeiro/lancamentos" element={<FinancialFlows />} />
-              <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/financeiro/lancamentos" element={withModule("financeiro", <FinancialFlows />)} />
+              <Route path="/relatorios" element={withModule("relatorios", <Relatorios />)} />
               <Route path="/meu-perfil" element={<MeuPerfil />} />
-              <Route path="/meu-plano" element={<MeuPlano />} />
-              <Route path="/suporte" element={<Suporte />} />
+              <Route path="/meu-plano" element={withModule("meu-plano", <MeuPlano />)} />
+              <Route path="/suporte" element={withModule("suporte", <Suporte />)} />
               <Route
                 path="/configuracoes"
-                element={
+                element={withModule(
+                  ["configuracoes", "configuracoes-usuarios", "configuracoes-integracoes", "configuracoes-parametros"],
                   <div className="p-6">
                     <h1 className="text-3xl font-bold">Configurações</h1>
                     <p className="text-muted-foreground">Em desenvolvimento</p>
-                  </div>
-                }
+                  </div>,
+                )}
               />
-              <Route path="/configuracoes/usuarios" element={<Usuarios />} />
-              <Route path="/configuracoes/empresas" element={<Empresas />} />
-              <Route path="/configuracoes/empresas/nova" element={<NovaEmpresa />} />
-              <Route path="/configuracoes/planos" element={<Planos />} />
-              <Route path="/configuracoes/integracoes" element={<Integracoes />} />
-              <Route path="/configuracoes/usuarios/novo" element={<NovoUsuario />} />
-              <Route path="/configuracoes/usuarios/:id" element={<PerfilUsuario />} />
-              <Route path="/configuracoes/usuarios/:id/editar" element={<EditarPerfil />} />
-              <Route path="/configuracoes/usuarios/:id/senha" element={<AlterarSenha />} />
+              <Route path="/configuracoes/usuarios" element={withModule("configuracoes-usuarios", <Usuarios />)} />
+              <Route path="/configuracoes/empresas" element={withModule("configuracoes", <Empresas />)} />
+              <Route path="/configuracoes/empresas/nova" element={withModule("configuracoes", <NovaEmpresa />)} />
+              <Route path="/configuracoes/planos" element={withModule("configuracoes", <Planos />)} />
+              <Route path="/configuracoes/integracoes" element={withModule("configuracoes-integracoes", <Integracoes />)} />
+              <Route path="/configuracoes/usuarios/novo" element={withModule("configuracoes-usuarios", <NovoUsuario />)} />
+              <Route path="/configuracoes/usuarios/:id" element={withModule("configuracoes-usuarios", <PerfilUsuario />)} />
+              <Route path="/configuracoes/usuarios/:id/editar" element={withModule("configuracoes-usuarios", <EditarPerfil />)} />
+              <Route path="/configuracoes/usuarios/:id/senha" element={withModule("configuracoes-usuarios", <AlterarSenha />)} />
               <Route
                 path="/configuracoes/usuarios/:id/seguranca"
-                element={<ConfiguracaoSeguranca />}
+                element={withModule("configuracoes-usuarios", <ConfiguracaoSeguranca />)}
               />
               <Route
                 path="/configuracoes/usuarios/:id/sessoes"
-                element={<SessaoDispositivos />}
+                element={withModule("configuracoes-usuarios", <SessaoDispositivos />)}
               />
               <Route
                 path="/configuracoes/usuarios/:id/privacidade"
-                element={<PrivacidadeLGPD />}
+                element={withModule("configuracoes-usuarios", <PrivacidadeLGPD />)}
               />
               <Route
                 path="/configuracoes/usuarios/:id/notificacoes"
-                element={<NotificacoesPreferencias />}
+                element={withModule("configuracoes-usuarios", <NotificacoesPreferencias />)}
               />
               <Route
                 path="/configuracoes/parametros/area-de-atuacao"
-                element={<AreaAtuacao />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-area-atuacao"],
+                  <AreaAtuacao />,
+                )}
               />
               <Route
                 path="/configuracoes/parametros/situacao-processo"
-                element={<SituacaoProcesso />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-situacao-processo"],
+                  <SituacaoProcesso />,
+                )}
               />
               <Route
                 path="/configuracoes/parametros/tipo-processo"
-                element={<TipoProcesso />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-tipo-processo"],
+                  <TipoProcesso />,
+                )}
               />
               <Route
                 path="/configuracoes/parametros/tipo-evento"
-                element={<TipoEvento />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-tipo-evento"],
+                  <TipoEvento />,
+                )}
               />
               <Route
                 path="/configuracoes/parametros/tipo-documento"
-                element={<TipoDocumento />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-tipos-documento"],
+                  <TipoDocumento />,
+                )}
               />
-              <Route path="/configuracoes/parametros/perfis" element={<Perfis />} />
-              <Route path="/configuracoes/parametros/setores" element={<Setores />} />
+              <Route
+                path="/configuracoes/parametros/perfis"
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-perfis"],
+                  <Perfis />,
+                )}
+              />
+              <Route
+                path="/configuracoes/parametros/setores"
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-escritorios"],
+                  <Setores />,
+                )}
+              />
               <Route
                 path="/configuracoes/parametros/escritorios"
-                element={<Navigate to="/configuracoes/parametros/setores" replace />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-escritorios"],
+                  <Navigate to="/configuracoes/parametros/setores" replace />,
+                )}
               />
               <Route
                 path="/configuracoes/parametros/situacao-proposta"
-                element={<SituacaoProposta />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-situacao-proposta"],
+                  <SituacaoProposta />,
+                )}
               />
-              <Route path="/configuracoes/parametros/etiquetas" element={<Etiquetas />} />
+              <Route
+                path="/configuracoes/parametros/etiquetas"
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-etiquetas"],
+                  <Etiquetas />,
+                )}
+              />
               <Route
                 path="/configuracoes/parametros/fluxo-de-trabalho"
-                element={<FluxoTrabalho />}
+                element={withModule(
+                  ["configuracoes-parametros", "configuracoes-parametros-fluxo-trabalho"],
+                  <FluxoTrabalho />,
+                )}
               />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

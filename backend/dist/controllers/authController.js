@@ -8,6 +8,7 @@ const db_1 = __importDefault(require("../services/db"));
 const passwordUtils_1 = require("../utils/passwordUtils");
 const tokenUtils_1 = require("../utils/tokenUtils");
 const auth_1 = require("../constants/auth");
+const moduleService_1 = require("../services/moduleService");
 const normalizeEmail = (email) => email.trim().toLowerCase();
 const login = async (req, res) => {
     const { email, senha } = req.body;
@@ -37,6 +38,7 @@ const login = async (req, res) => {
             email: user.email,
             name: user.nome_completo,
         }, auth_1.authConfig.secret, auth_1.authConfig.expirationSeconds);
+        const modulos = await (0, moduleService_1.fetchPerfilModules)(user.perfil);
         res.json({
             token,
             expiresIn: auth_1.authConfig.expirationSeconds,
@@ -45,6 +47,7 @@ const login = async (req, res) => {
                 nome_completo: user.nome_completo,
                 email: user.email,
                 perfil: user.perfil,
+                modulos,
             },
         });
     }
@@ -66,12 +69,14 @@ const getCurrentUser = async (req, res) => {
             return;
         }
         const user = result.rows[0];
+        const modulos = await (0, moduleService_1.fetchPerfilModules)(user.perfil);
         res.json({
             id: user.id,
             nome_completo: user.nome_completo,
             email: user.email,
             perfil: user.perfil,
             status: user.status,
+            modulos,
         });
     }
     catch (error) {
