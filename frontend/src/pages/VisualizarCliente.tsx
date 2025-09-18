@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Client } from "@/types/client";
+import { Client, Process } from "@/types/client";
 import {
   Card,
   CardContent,
@@ -82,6 +82,18 @@ interface ApiDocumento {
   tipo_nome: string;
 }
 
+interface ApiProcess {
+  id: number;
+  numero?: string | null;
+  status?: string | null;
+  tipo?: string | null;
+  advogado_responsavel?: string | null;
+  data_distribuicao?: string | null;
+  assunto?: string | null;
+  atualizado_em?: string | null;
+  criado_em?: string | null;
+}
+
 interface ApiFinancialFlow {
   id: number;
   tipo: string;
@@ -154,6 +166,38 @@ const mapApiClientToClient = (c: ApiClient): LocalClient => ({
   state: c.uf,
   registrationDate: c.datacadastro,
 });
+
+const mapApiProcessToProcess = (process: ApiProcess): Process => ({
+  id: Number(process.id),
+  number: process.numero ?? "",
+  status: process.status ?? "",
+  tipo: process.tipo ?? undefined,
+  distributionDate: process.data_distribuicao ?? undefined,
+  subject: process.assunto ?? undefined,
+  responsibleLawyer: process.advogado_responsavel ?? undefined,
+  lastMovement:
+    process.atualizado_em ?? process.criado_em ?? undefined,
+  createdAt: process.criado_em ?? undefined,
+  updatedAt: process.atualizado_em ?? undefined,
+});
+
+const formatDateToPtBr = (value?: string | null) => {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toLocaleDateString("pt-BR");
+};
+
+const formatDateOrFallback = (value?: string | null, fallback = "-") => {
+  const formatted = formatDateToPtBr(value);
+  return formatted || fallback;
+};
 
 export default function VisualizarCliente() {
   const { id } = useParams();
@@ -256,18 +300,48 @@ export default function VisualizarCliente() {
           financialUrl.searchParams.set("clienteId", String(id));
         }
 
-        const [clientRes, typesRes, docsRes, financialRes] = await Promise.all([
+        const [
+          clientRes,
+          processesRes,
+          typesRes,
+          docsRes,
+          financialRes,
+        ] = await Promise.all([
           fetch(joinUrl(apiUrl, `/api/clientes/${id}`), {
             headers: { Accept: "application/json" },
           }),
+          fetch(joinUrl(apiUrl, `/api/clientes/${id}/processos`)),
           fetch(joinUrl(apiUrl, `/api/tipo-documentos`)),
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/documentos`)),
           fetch(financialUrl.toString()),
         ]);
 
+        let mappedClient: LocalClient | null = null;
         if (clientRes.ok) {
           const json: ApiClient = await clientRes.json();
-          setClient(mapApiClientToClient(json));
+          mappedClient = mapApiClientToClient(json);
+        }
+
+        let mappedProcesses: Process[] = [];
+        if (processesRes.ok) {
+          const processesJson = await processesRes.json();
+          const rawProcesses: ApiProcess[] = Array.isArray(processesJson)
+            ? processesJson
+            : Array.isArray(processesJson?.items)
+              ? processesJson.items
+              : Array.isArray(processesJson?.rows)
+                ? processesJson.rows
+                : Array.isArray(processesJson?.data)
+                  ? processesJson.data
+                  : [];
+
+          mappedProcesses = rawProcesses.map(mapApiProcessToProcess);
+        }
+
+        if (mappedClient) {
+          setClient({ ...mappedClient, processes: mappedProcesses });
+        } else {
+          setClient(null);
         }
 
         if (typesRes.ok) {
@@ -351,26 +425,41 @@ export default function VisualizarCliente() {
   }, [id]);
 
   const filteredProcesses = useMemo(() => {
-    const base = (client?.processes ?? []).map((p) => ({
-      id: p.id,
-      numero: p.number || "",
-      dataDistribuicao: "",
-      assunto: "",
-      advogado: "",
-      ultimaMovimentacao: "",
-      situacao: p.status || "",
-    }));
+    const normalizedSearch = processSearch.trim().toLowerCase();
 
-    return base
-      .filter((p) =>
-        [p.numero, p.assunto, p.advogado].some((field) =>
-          field.toLowerCase().includes(processSearch.toLowerCase()),
-        ),
-      )
+    return (client?.processes ?? [])
+      .filter((process) => {
+        if (!normalizedSearch) {
+          return true;
+        }
+
+        const searchableFields = [
+          process.number ?? "",
+          process.subject ?? "",
+          process.responsibleLawyer ?? "",
+        ];
+
+        return searchableFields.some((field) =>
+          field.toLowerCase().includes(normalizedSearch),
+        );
+      })
       .sort((a, b) => {
-        const comp = a.numero.localeCompare(b.numero);
+        const numeroA = (a.number ?? "").toLowerCase();
+        const numeroB = (b.number ?? "").toLowerCase();
+        const comp = numeroA.localeCompare(numeroB);
         return processSort === "asc" ? comp : -comp;
-      });
+      })
+      .map((process) => ({
+        id: process.id,
+        numero: process.number || "",
+        dataDistribuicao: formatDateOrFallback(process.distributionDate),
+        assunto: process.subject || "",
+        advogado: process.responsibleLawyer || "",
+        ultimaMovimentacao: formatDateOrFallback(
+          process.lastMovement ?? process.updatedAt ?? process.createdAt ?? null,
+        ),
+        situacao: process.status || "",
+      }));
   }, [client?.processes, processSearch, processSort]);
 
   const filteredHistory = useMemo(() => {
@@ -503,14 +592,10 @@ export default function VisualizarCliente() {
       .slice(0, 5),
   [clientFinancialRecords]);
 
-  const formatDate = (iso?: string) =>
-    iso ? new Date(iso).toLocaleDateString("pt-BR") : "";
+  const formatDate = (iso?: string) => formatDateToPtBr(iso);
 
   const formatDisplayDate = (iso?: string | null) => {
-    if (!iso) {
-      return "Não informado";
-    }
-    const formatted = formatDate(iso);
+    const formatted = formatDateToPtBr(iso);
     return formatted || "Não informado";
   };
 
