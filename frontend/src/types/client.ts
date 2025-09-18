@@ -15,6 +15,12 @@ export interface Process {
   valorCausa?: string;
   descricaoFatos?: string;
   pedidos?: string;
+  distributionDate?: string;
+  subject?: string;
+  responsibleLawyer?: string;
+  lastMovement?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Client {
