@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,6 +45,7 @@ import {
   MapPin,
   Search,
   Users as UsersIcon,
+  Eye,
 } from "lucide-react";
 import {
   DATAJUD_CATEGORIAS,
@@ -345,6 +347,7 @@ const getTipoBadgeClassName = (tipo: string) => {
 
 export default function Processos() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [processos, setProcessos] = useState<Processo[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
@@ -1048,6 +1051,19 @@ export default function Processos() {
                     </CardDescription>
                   </div>
                   <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground md:items-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 md:self-end"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        navigate(`/clientes/${processo.cliente.id}/processos/${processo.id}`);
+                      }}
+                    >
+                      <Eye className="h-4 w-4" />
+                      Visualizar processo
+                    </Button>
                     <div className="flex items-center gap-2">
                       <UsersIcon className="h-4 w-4" />
                       <span className="font-medium text-foreground">
