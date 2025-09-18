@@ -4,7 +4,7 @@ import pool from '../services/db';
 export const listSituacoesProposta = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, ativo, datacriacao FROM public.situacao_proposta'
+      'SELECT id, nome, ativo, datacriacao FROM public.situacao_proposta ORDER BY nome ASC'
     );
     res.json(result.rows);
   } catch (error) {

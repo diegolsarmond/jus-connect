@@ -91,6 +91,32 @@ interface ClientOption extends Option {
   tipo?: string;
 }
 
+const parseSituacaoOptions = (data: unknown[]): Option[] => {
+  const byId = new Map<string, Option>();
+
+  data.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const id = record["id"];
+    if (id === null || id === undefined) return;
+
+    const ativo = record["ativo"];
+    if (ativo !== undefined && ativo !== null && ativo !== true) return;
+
+    const rawLabel = record["nome"] ?? record["name"];
+    const label =
+      typeof rawLabel === "string" && rawLabel.trim().length > 0
+        ? rawLabel.trim()
+        : String(id);
+
+    byId.set(String(id), { id: String(id), name: label });
+  });
+
+  return Array.from(byId.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+  );
+};
+
 export default function NovaOportunidade() {
   const apiUrl = getApiBaseUrl();
   const navigate = useNavigate();
@@ -220,31 +246,11 @@ export default function NovaOportunidade() {
           })
         );
 
-        let situacoesData: unknown;
-        try {
-          situacoesData = await fetchJson(`${apiUrl}/api/situacao-propostas`);
-        } catch (error) {
-          console.error("Falha ao buscar situações da proposta na nova API.", error);
-          try {
-            situacoesData = await fetchJson(`${apiUrl}/api/situacoes-processo`);
-          } catch (fallbackError) {
-            console.error("Falha ao buscar situações de processo como alternativa.", fallbackError);
-            situacoesData = [];
-          }
-        }
-
-        const situacoesArray = Array.isArray(situacoesData)
-          ? situacoesData
-          : [];
-
-        setSituacoes(
-          situacoesArray.map((s) => {
-            const item = s as any;
-            return { id: String(item.id), name: item.nome } as Option;
-          })
-        );
+        const situacoesData = await fetchJson(`${apiUrl}/api/situacao-propostas`);
+        setSituacoes(parseSituacaoOptions(situacoesData));
       } catch (e) {
         console.error(e);
+        setSituacoes([]);
       }
     };
     fetchData();

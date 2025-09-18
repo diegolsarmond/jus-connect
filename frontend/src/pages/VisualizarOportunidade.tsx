@@ -60,6 +60,35 @@ interface StatusOption {
   name: string;
 }
 
+const sortStatusOptions = (options: StatusOption[]) =>
+  [...options].sort((a, b) =>
+    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+  );
+
+const parseSituacaoOptions = (data: unknown[]): StatusOption[] => {
+  const byId = new Map<string, StatusOption>();
+
+  data.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const id = record["id"];
+    if (id === null || id === undefined) return;
+
+    const ativo = record["ativo"];
+    if (ativo !== undefined && ativo !== null && ativo !== true) return;
+
+    const rawLabel = record["nome"] ?? record["name"];
+    const label =
+      typeof rawLabel === "string" && rawLabel.trim().length > 0
+        ? rawLabel.trim()
+        : String(id);
+
+    byId.set(String(id), { id: String(id), name: label });
+  });
+
+  return sortStatusOptions(Array.from(byId.values()));
+};
+
 interface InteractionEntry {
   id: number;
   comment: string;
@@ -272,36 +301,43 @@ export default function VisualizarOportunidade() {
     const fetchStatuses = async () => {
       try {
         setStatusLoading(true);
-        let data: unknown[] = [];
-        try {
-          data = await fetchList(`${apiUrl}/api/situacao-propostas`);
-        } catch (error) {
-          console.error("Falha ao buscar situações da proposta na nova API.", error);
-          try {
-            data = await fetchList(`${apiUrl}/api/situacoes-processo`);
-          } catch (fallbackError) {
-            console.error("Falha ao buscar situações de processo como alternativa.", fallbackError);
-            data = [];
-          }
-        }
+        const data = await fetchList(`${apiUrl}/api/situacao-propostas`);
         if (cancelled) return;
-        const options: StatusOption[] = (data as unknown[]).flatMap((item) => {
-          if (!item || typeof item !== "object") return [];
-          const record = item as Record<string, unknown>;
-          const value = record["id"];
-          if (value === undefined || value === null) return [];
-          const labelRaw = record["nome"] ?? record["name"];
-          const label =
-            typeof labelRaw === "string" && labelRaw.trim().length > 0
-              ? labelRaw
-              : String(value);
-          return [{ id: String(value), name: label }];
-        });
+
+        let options = parseSituacaoOptions(data);
+
+        const currentStatusId =
+          opportunity?.status_id === null || opportunity?.status_id === undefined
+            ? null
+            : String(opportunity.status_id);
+
+        if (
+          currentStatusId &&
+          !options.some((option) => option.id === currentStatusId)
+        ) {
+          const currentStatusLabel =
+            typeof opportunity?.status === "string" &&
+            opportunity.status.trim().length > 0
+              ? opportunity.status.trim()
+              : currentStatusId;
+          options = sortStatusOptions([
+            ...options,
+            { id: currentStatusId, name: currentStatusLabel },
+          ]);
+        }
+
         if (!cancelled) {
           setStatusOptions(options);
         }
       } catch (e) {
-        console.error(e);
+        console.error("Falha ao buscar situações da proposta.", e);
+        if (!cancelled) {
+          setStatusOptions([]);
+          setSnack({
+            open: true,
+            message: "Não foi possível carregar as situações da proposta.",
+          });
+        }
       } finally {
         if (!cancelled) {
           setStatusLoading(false);
@@ -309,11 +345,11 @@ export default function VisualizarOportunidade() {
       }
     };
 
-    fetchStatuses();
+    void fetchStatuses();
     return () => {
       cancelled = true;
     };
-  }, [apiUrl]);
+  }, [apiUrl, opportunity?.status_id, opportunity?.status]);
 
   useEffect(() => {
     if (!documentDialogOpen || documentType !== "modelo") return;
