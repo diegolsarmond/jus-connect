@@ -159,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const validateToken = async () => {
       try {
-        const currentUser = await fetchCurrentUser();
+        const currentUser = await fetchCurrentUser(stored.token);
         setUser(currentUser);
         writeStoredAuth({ token: stored.token, user: currentUser, timestamp: Date.now() });
       } catch (error) {
@@ -234,7 +234,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [handleLogout]);
 
   const refreshUser = useCallback(async () => {
-    const currentUser = await fetchCurrentUser();
+    const currentUser = await fetchCurrentUser(tokenRef.current ?? undefined);
     setUser(currentUser);
     if (tokenRef.current) {
       writeStoredAuth({ token: tokenRef.current, user: currentUser, timestamp: Date.now() });
