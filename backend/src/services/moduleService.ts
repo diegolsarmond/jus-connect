@@ -60,7 +60,7 @@ const resolvePerfilId = async (perfil: unknown): Promise<number | null> => {
 export const fetchPerfilModules = async (perfil: unknown): Promise<string[]> => {
   const perfilId = await resolvePerfilId(perfil);
 
-  if (perfilId == null) {
+  if (perfilId == null || typeof perfilId !== 'number' || !Number.isInteger(perfilId)) {
     return [];
   }
 

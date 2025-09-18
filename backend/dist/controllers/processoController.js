@@ -55,36 +55,31 @@ const normalizeDate = (value) => {
     }
     return null;
 };
-let processosColumnInfoPromise = null;
 const getProcessosColumnInfo = async () => {
-    if (!processosColumnInfoPromise) {
-        processosColumnInfoPromise = db_1.default
-            .query(`SELECT column_name
-           FROM information_schema.columns
-          WHERE table_schema = 'public'
-            AND table_name = 'processos'
-            AND column_name IN ('datajud_tipo_justica', 'datajud_alias')`)
-            .then((result) => {
-            const columnNames = new Set();
-            for (const row of result.rows) {
-                if (typeof row.column_name === 'string') {
-                    columnNames.add(row.column_name);
-                }
+    try {
+        const result = await db_1.default.query(`SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'processos'
+          AND column_name IN ('datajud_tipo_justica', 'datajud_alias')`);
+        const columnNames = new Set();
+        for (const row of result.rows) {
+            if (typeof row.column_name === 'string') {
+                columnNames.add(row.column_name);
             }
-            return {
-                hasDatajudTipoJustica: columnNames.has('datajud_tipo_justica'),
-                hasDatajudAlias: columnNames.has('datajud_alias'),
-            };
-        })
-            .catch((error) => {
-            console.error('Erro ao verificar colunas da tabela processos', error);
-            return {
-                hasDatajudTipoJustica: false,
-                hasDatajudAlias: false,
-            };
-        });
+        }
+        return {
+            hasDatajudTipoJustica: columnNames.has('datajud_tipo_justica'),
+            hasDatajudAlias: columnNames.has('datajud_alias'),
+        };
     }
-    return processosColumnInfoPromise;
+    catch (error) {
+        console.error('Erro ao verificar colunas da tabela processos', error);
+        return {
+            hasDatajudTipoJustica: false,
+            hasDatajudAlias: false,
+        };
+    }
 };
 const buildDatajudSelectExpressions = (alias, info) => [
     info.hasDatajudTipoJustica
