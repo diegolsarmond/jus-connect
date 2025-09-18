@@ -1,3 +1,4 @@
+import { sanitizeSessionName } from "@/lib/sessionName";
 import { wahaService } from "@/services/waha";
 
 export interface DeviceSessionEngineInfo {
@@ -34,9 +35,6 @@ const normalizeString = (value: unknown): string | undefined => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
-
-const removeAccents = (value: string): string =>
-  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").normalize("NFC");
 
 const toNumberOrNull = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -123,22 +121,13 @@ const buildWahaUrl = (baseUrl: string, path: string): string => {
 };
 
 export const deriveSessionName = (companyName?: string | null): string => {
-  const normalizedOriginal = normalizeString(companyName);
-  if (normalizedOriginal) {
-    return normalizedOriginal;
+  const sanitized = sanitizeSessionName(companyName);
+  if (sanitized) {
+    return sanitized;
+
   }
 
-  if (!companyName) {
-    return fallbackSessionName;
-  }
-
-  const normalized = removeAccents(companyName)
-    .split(/[^A-Za-z0-9]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join("");
-
-  return normalized.length > 0 ? normalized : fallbackSessionName;
+  return fallbackSessionName;
 };
 
 export const fetchPreferredCompany = async (): Promise<CompanySummary | null> => {
