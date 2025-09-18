@@ -24,6 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { format as dfFormat, parseISO } from "date-fns";
 
@@ -43,6 +49,11 @@ interface OpportunityData {
   status?: string;
   ultima_atualizacao?: string;
   envolvidos?: Envolvido[];
+  valor_causa?: number | string | null;
+  valor_honorarios?: number | string | null;
+  percentual_honorarios?: number | string | null;
+  forma_pagamento?: string | null;
+  qtde_parcelas?: number | string | null;
   [key: string]: unknown;
 }
 
@@ -66,6 +77,98 @@ interface InteractionEntry {
   attachments: { name: string; size: number }[];
   createdAt: string;
 }
+
+interface BillingRecord {
+  id: number;
+  oportunidade_id: number;
+  forma_pagamento: string;
+  condicao_pagamento?: string | null;
+  valor?: number | string | null;
+  parcelas?: number | string | null;
+  observacoes?: string | null;
+  data_faturamento?: string | null;
+  criado_em?: string | null;
+}
+
+const BILLING_PAYMENT_OPTIONS = [
+  "Cartão de crédito",
+  "Cartão de débito",
+  "Boleto",
+  "Pix",
+  "Transferência bancária",
+  "Dinheiro",
+  "Outro",
+] as const;
+
+const BILLING_CONDITIONS = ["À vista", "Parcelado"] as const;
+
+type BillingCondition = (typeof BILLING_CONDITIONS)[number];
+
+interface BillingFormState {
+  formaPagamento: string;
+  formaPagamentoDescricao: string;
+  condicaoPagamento: BillingCondition;
+  parcelas: string;
+  valor: string;
+  dataFaturamento: string;
+  observacoes: string;
+}
+
+const coerceArray = (data: unknown): unknown[] => {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const fromRows = (data as { rows?: unknown[] }).rows;
+    if (Array.isArray(fromRows)) return fromRows;
+    const fromData = (data as { data?: unknown }).data;
+    if (Array.isArray(fromData)) return fromData;
+    const fromDataRows = (data as { data?: { rows?: unknown[] } }).data?.rows;
+    if (Array.isArray(fromDataRows)) return fromDataRows;
+    const fromBilling = (data as { faturamentos?: unknown[] }).faturamentos;
+    if (Array.isArray(fromBilling)) return fromBilling;
+  }
+  return [];
+};
+
+const mapBillingRecords = (data: unknown): BillingRecord[] =>
+  coerceArray(data).flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const id = record["id"];
+    const forma = record["forma_pagamento"];
+    if (id === undefined || id === null || typeof forma !== "string") {
+      return [];
+    }
+
+    const numericId = Number(id);
+    if (Number.isNaN(numericId)) {
+      return [];
+    }
+
+    const oportunidadeIdRaw = record["oportunidade_id"];
+    let numericOpportunity: number | undefined;
+    if (typeof oportunidadeIdRaw === "number") {
+      numericOpportunity = Number.isNaN(oportunidadeIdRaw)
+        ? undefined
+        : oportunidadeIdRaw;
+    } else if (typeof oportunidadeIdRaw === "string") {
+      const parsed = Number(oportunidadeIdRaw);
+      numericOpportunity = Number.isNaN(parsed) ? undefined : parsed;
+    }
+
+    return [
+      {
+        id: numericId,
+        oportunidade_id: numericOpportunity ?? numericId,
+        forma_pagamento: forma,
+        condicao_pagamento: record["condicao_pagamento"] as string | null | undefined,
+        valor: record["valor"] as number | string | null | undefined,
+        parcelas: record["parcelas"] as number | string | null | undefined,
+        observacoes: record["observacoes"] as string | null | undefined,
+        data_faturamento: record["data_faturamento"] as string | null | undefined,
+        criado_em: record["criado_em"] as string | null | undefined,
+      },
+    ];
+  });
 
 const PREFERRED_ORDER = [
   "numero_processo_cnj",
@@ -134,6 +237,19 @@ export default function VisualizarOportunidade() {
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [commentText, setCommentText] = useState("");
   const [interactionHistory, setInteractionHistory] = useState<InteractionEntry[]>([]);
+  const [billingHistory, setBillingHistory] = useState<BillingRecord[]>([]);
+  const [billingDialogOpen, setBillingDialogOpen] = useState(false);
+  const [billingSubmitting, setBillingSubmitting] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingForm, setBillingForm] = useState<BillingFormState>(() => ({
+    formaPagamento: "",
+    formaPagamentoDescricao: "",
+    condicaoPagamento: "À vista",
+    parcelas: "1",
+    valor: "",
+    dataFaturamento: new Date().toISOString().slice(0, 10),
+    observacoes: "",
+  }));
 
   const resetDocumentDialog = () => {
     setDocumentType(null);
@@ -265,6 +381,33 @@ export default function VisualizarOportunidade() {
       cancelled = true;
     };
   }, [id, apiUrl]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    const fetchBillingHistory = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/oportunidades/${id}/faturamentos`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!cancelled) {
+          setBillingHistory(mapBillingRecords(data));
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setBillingHistory([]);
+        }
+      }
+    };
+
+    fetchBillingHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -540,6 +683,16 @@ export default function VisualizarOportunidade() {
     return `${Math.round(number)}%`;
   };
 
+  const parseToNumber = (value: unknown): number | null => {
+    if (typeof value === "number" && !Number.isNaN(value)) return value;
+    if (typeof value === "string" && value.trim().length > 0) {
+      const normalized = value.replace(/\./g, "").replace(",", ".");
+      const parsed = Number(normalized);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
+
   // lista de chaves que podem ser copiadas (removi valor_causa e valor_honorarios conforme pedido)
   const shouldShowCopy = (key: string) =>
     [
@@ -708,6 +861,126 @@ export default function VisualizarOportunidade() {
   const onCreateDocument = () => {
     resetDocumentDialog();
     setDocumentDialogOpen(true);
+  };
+
+  const openBillingDialog = () => {
+    const registeredForma =
+      typeof opportunity?.forma_pagamento === "string"
+        ? opportunity.forma_pagamento.trim()
+        : "";
+    const matchedOption =
+      registeredForma.length > 0
+        ? BILLING_PAYMENT_OPTIONS.find(
+            (option) => option.toLowerCase() === registeredForma.toLowerCase(),
+          )
+        : undefined;
+    const honorarios = parseToNumber(opportunity?.valor_honorarios);
+    const parcelasRegistradas = parseToNumber(opportunity?.qtde_parcelas);
+    const defaultCondition: BillingCondition =
+      parcelasRegistradas && parcelasRegistradas > 1 ? "Parcelado" : "À vista";
+
+    setBillingForm({
+      formaPagamento: matchedOption ?? (registeredForma ? "Outro" : ""),
+      formaPagamentoDescricao:
+        matchedOption || registeredForma.length === 0 ? "" : registeredForma,
+      condicaoPagamento: defaultCondition,
+      parcelas:
+        defaultCondition === "Parcelado"
+          ? parcelasRegistradas && parcelasRegistradas > 1
+            ? String(Math.trunc(parcelasRegistradas))
+            : "2"
+          : "1",
+      valor: honorarios !== null ? honorarios.toFixed(2) : "",
+      dataFaturamento: new Date().toISOString().slice(0, 10),
+      observacoes: "",
+    });
+    setBillingError(null);
+    setBillingDialogOpen(true);
+  };
+
+  const handleBillingConfirm = async () => {
+    if (!id) return;
+
+    const formaSelecionada =
+      billingForm.formaPagamento === "Outro"
+        ? billingForm.formaPagamentoDescricao.trim()
+        : billingForm.formaPagamento;
+
+    if (!formaSelecionada) {
+      setBillingError("Informe a forma de pagamento.");
+      return;
+    }
+
+    if (
+      billingForm.formaPagamento === "Outro" &&
+      billingForm.formaPagamentoDescricao.trim().length === 0
+    ) {
+      setBillingError("Descreva a forma de pagamento personalizada.");
+      return;
+    }
+
+    const valorNormalizado = billingForm.valor.trim();
+    const valorNumero =
+      valorNormalizado.length > 0
+        ? Number(valorNormalizado.replace(/\./g, "").replace(",", "."))
+        : null;
+    if (valorNormalizado.length > 0 && (valorNumero === null || Number.isNaN(valorNumero))) {
+      setBillingError("Informe um valor válido para faturamento.");
+      return;
+    }
+
+    const parcelasValor =
+      billingForm.condicaoPagamento === "Parcelado"
+        ? Number.parseInt(billingForm.parcelas, 10)
+        : null;
+    if (
+      billingForm.condicaoPagamento === "Parcelado" &&
+      (!parcelasValor || Number.isNaN(parcelasValor) || parcelasValor < 1)
+    ) {
+      setBillingError("Informe a quantidade de parcelas.");
+      return;
+    }
+
+    const payload = {
+      forma_pagamento: formaSelecionada,
+      condicao_pagamento: billingForm.condicaoPagamento,
+      valor: valorNumero ?? undefined,
+      parcelas: parcelasValor ?? undefined,
+      observacoes:
+        billingForm.observacoes.trim().length > 0
+          ? billingForm.observacoes.trim()
+          : undefined,
+      data_faturamento: billingForm.dataFaturamento
+        ? `${billingForm.dataFaturamento}T00:00:00`
+        : undefined,
+    };
+
+    setBillingSubmitting(true);
+    setBillingError(null);
+    try {
+      const res = await fetch(`${apiUrl}/api/oportunidades/${id}/faturamentos`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const created = await res.json();
+      const normalized = mapBillingRecords(
+        Array.isArray(created) ? created : [created],
+      );
+      if (normalized.length > 0) {
+        setBillingHistory((prev) => [normalized[0], ...prev]);
+      }
+      setSnack({ open: true, message: "Faturamento registrado com sucesso" });
+      setBillingDialogOpen(false);
+    } catch (error) {
+      console.error(error);
+      setBillingError("Não foi possível registrar o faturamento.");
+    } finally {
+      setBillingSubmitting(false);
+    }
   };
 
   const handleStatusChange = async (value: string) => {
@@ -901,33 +1174,63 @@ export default function VisualizarOportunidade() {
       ? opportunity.status
       : getStatusLabel(opportunity.status_id);
 
+  const lastUpdateText = formatDate(opportunity.ultima_atualizacao);
+
   return (
     <div className="p-6 space-y-6">
       {/* Header / ações (REMOVIDO Duplicar) */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="space-y-2">
           <h1 className="text-3xl font-bold">Visualizar Proposta</h1>
           <p className="text-muted-foreground">Detalhes completos da proposta</p>
         </div>
 
-        <div className="flex gap-2 items-center">
-          <Button variant="ghost" onClick={() => navigate(-1)} aria-label="Voltar">
-            Voltar
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                aria-label="Ações rápidas da oportunidade"
+              >
+                Ações
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onSelect={() => onCreateTask()}>
+                Criar tarefa
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onCreateDocument()}>
+                Criar documento
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button
+            variant="secondary"
+            className="w-full sm:w-auto"
+            onClick={openBillingDialog}
+            disabled={!opportunity}
+            aria-label="Registrar faturamento da oportunidade"
+          >
+            Faturar
           </Button>
-          <Button onClick={onEdit} aria-label="Editar oportunidade">
+
+          <Button
+            className="w-full sm:w-auto"
+            onClick={onEdit}
+            aria-label="Editar oportunidade"
+          >
             Editar
           </Button>
-          <Button variant="destructive" onClick={onDelete} aria-label="Excluir oportunidade">
+
+          <Button
+            className="w-full sm:w-auto"
+            variant="destructive"
+            onClick={onDelete}
+            aria-label="Excluir oportunidade"
+          >
             Excluir
-          </Button>
-          <Button onClick={onCreateTask} aria-label="Criar tarefa">
-            Criar Tarefa
-          </Button>
-          <Button onClick={onCreateDocument} aria-label="Criar documento">
-            Criar Documento
-          </Button>
-          <Button variant="ghost" onClick={onPrint} aria-label="Imprimir">
-            Imprimir
           </Button>
         </div>
       </div>
@@ -1096,6 +1399,87 @@ export default function VisualizarOportunidade() {
               )}
 
               <section
+                aria-labelledby="heading-billing"
+                className={sectionContainerClass}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 id="heading-billing" className={sectionTitleClass}>
+                    Faturamentos
+                  </h2>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={openBillingDialog}
+                    disabled={!opportunity}
+                    aria-label="Registrar novo faturamento"
+                  >
+                    Novo faturamento
+                  </Button>
+                </div>
+
+                {billingHistory.length > 0 ? (
+                  <div className="space-y-3">
+                    {billingHistory.map((record) => {
+                      const valor = parseToNumber(record.valor);
+                      const parcelasValor = parseToNumber(record.parcelas);
+                      const faturamentoData =
+                        typeof record.data_faturamento === "string" &&
+                        record.data_faturamento.trim().length > 0
+                          ? formatDate(record.data_faturamento)
+                          : null;
+
+                      return (
+                        <div
+                          key={record.id}
+                          className="rounded-lg border border-border/60 bg-background/60 p-4 shadow-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold">
+                                {record.forma_pagamento}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                {record.condicao_pagamento && (
+                                  <Badge variant="outline">
+                                    {record.condicao_pagamento}
+                                  </Badge>
+                                )}
+                                {!record.condicao_pagamento &&
+                                  (!parcelasValor || parcelasValor <= 1) && (
+                                    <Badge variant="outline">À vista</Badge>
+                                  )}
+                                {parcelasValor && parcelasValor > 1 && (
+                                  <Badge variant="secondary">
+                                    {parcelasValor}{" "}
+                                    {parcelasValor > 1 ? "parcelas" : "parcela"}
+                                  </Badge>
+                                )}
+                                {faturamentoData && faturamentoData !== "—" && (
+                                  <span>Faturado em {faturamentoData}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-sm font-semibold">
+                              {valor !== null ? formatCurrency(valor) : "—"}
+                            </div>
+                          </div>
+                          {record.observacoes && record.observacoes.length > 0 && (
+                            <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
+                              {record.observacoes}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum faturamento registrado até o momento.
+                  </p>
+                )}
+              </section>
+
+              <section
                 aria-labelledby="heading-interactions"
                 className={sectionContainerClass}
               >
@@ -1249,8 +1633,25 @@ export default function VisualizarOportunidade() {
         </CardContent>
       </Card>
 
-
-
+      <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-muted-foreground">
+          {lastUpdateText && lastUpdateText !== "—"
+            ? `Última atualização em ${lastUpdateText}`
+            : "Revise ou exporte a proposta conforme necessário."}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate(-1)}
+            aria-label="Voltar para a listagem de oportunidades"
+          >
+            Voltar
+          </Button>
+          <Button variant="ghost" onClick={onPrint} aria-label="Imprimir proposta">
+            Imprimir
+          </Button>
+        </div>
+      </div>
 
       {/* snackbar / feedback simples com auto-close */}
       {snack.open && (
@@ -1271,6 +1672,232 @@ export default function VisualizarOportunidade() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={billingDialogOpen}
+        onOpenChange={(open) => {
+          setBillingDialogOpen(open);
+          if (!open) {
+            setBillingError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Faturar oportunidade</DialogTitle>
+            <DialogDescription>
+              Confirme as condições cadastradas e registre o faturamento desta proposta.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <div className="space-y-3 rounded-lg border border-dashed border-border/70 bg-muted/40 p-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                Condições cadastradas
+              </p>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Forma cadastrada</dt>
+                  <dd className="font-medium text-foreground">
+                    {typeof opportunity?.forma_pagamento === "string" &&
+                    opportunity.forma_pagamento.trim().length > 0
+                      ? opportunity.forma_pagamento
+                      : "Não informado"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase text-muted-foreground">Condição prevista</dt>
+                  <dd className="font-medium text-foreground">
+                    {(() => {
+                      const parcelasRegistradas = parseToNumber(
+                        opportunity?.qtde_parcelas,
+                      );
+                      if (parcelasRegistradas && parcelasRegistradas > 1) {
+                        return `${parcelasRegistradas} parcelas`;
+                      }
+                      return "À vista";
+                    })()}
+                  </dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs uppercase text-muted-foreground">Honorários estimados</dt>
+                  <dd className="font-medium text-foreground">
+                    {(() => {
+                      const honorarios = parseToNumber(
+                        opportunity?.valor_honorarios,
+                      );
+                      return honorarios !== null
+                        ? formatCurrency(honorarios)
+                        : "Não informado";
+                    })()}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="billing-forma">Forma de pagamento</Label>
+                <Select
+                  value={billingForm.formaPagamento || undefined}
+                  onValueChange={(value) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      formaPagamento: value,
+                      formaPagamentoDescricao:
+                        value === "Outro" ? prev.formaPagamentoDescricao : "",
+                    }))
+                  }
+                >
+                  <SelectTrigger id="billing-forma">
+                    <SelectValue placeholder="Selecione a forma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BILLING_PAYMENT_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {billingForm.formaPagamento === "Outro" && (
+                  <Input
+                    id="billing-forma-descricao"
+                    placeholder="Descreva a forma de pagamento"
+                    value={billingForm.formaPagamentoDescricao}
+                    onChange={(event) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        formaPagamentoDescricao: event.target.value,
+                      }))
+                    }
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="billing-condicao">Condição de pagamento</Label>
+                <Select
+                  value={billingForm.condicaoPagamento}
+                  onValueChange={(value) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      condicaoPagamento: value as BillingCondition,
+                      parcelas:
+                        value === "Parcelado"
+                          ? prev.parcelas && Number.parseInt(prev.parcelas, 10) > 0
+                            ? prev.parcelas
+                            : "2"
+                          : "1",
+                    }))
+                  }
+                >
+                  <SelectTrigger id="billing-condicao">
+                    <SelectValue placeholder="Selecione a condição" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BILLING_CONDITIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="billing-data">Data de faturamento</Label>
+                <Input
+                  id="billing-data"
+                  type="date"
+                  value={billingForm.dataFaturamento}
+                  onChange={(event) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      dataFaturamento: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="billing-valor">Valor a faturar</Label>
+                <Input
+                  id="billing-valor"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={billingForm.valor}
+                  onChange={(event) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      valor: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              {billingForm.condicaoPagamento === "Parcelado" && (
+                <div className="space-y-2">
+                  <Label htmlFor="billing-parcelas">Quantidade de parcelas</Label>
+                  <Input
+                    id="billing-parcelas"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={billingForm.parcelas}
+                    onChange={(event) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        parcelas: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="billing-observacoes">Observações</Label>
+                <Textarea
+                  id="billing-observacoes"
+                  placeholder="Detalhe informações importantes para o financeiro"
+                  value={billingForm.observacoes}
+                  onChange={(event) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      observacoes: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                />
+              </div>
+            </div>
+
+            {billingError && (
+              <p className="text-sm text-destructive">{billingError}</p>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBillingDialogOpen(false)}
+              disabled={billingSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleBillingConfirm}
+              disabled={billingSubmitting}
+            >
+              {billingSubmitting ? "Registrando..." : "Confirmar faturamento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={documentDialogOpen}
