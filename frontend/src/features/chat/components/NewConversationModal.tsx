@@ -11,6 +11,7 @@ interface NewConversationModalProps {
   onClose: () => void;
   onSelectConversation: (conversationId: string) => void;
   onCreateConversation: (name: string) => Promise<string | null>;
+  allowCreate?: boolean;
 }
 
 export const NewConversationModal = ({
@@ -19,6 +20,7 @@ export const NewConversationModal = ({
   onClose,
   onSelectConversation,
   onCreateConversation,
+  allowCreate = true,
 }: NewConversationModalProps) => {
   const [search, setSearch] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -48,7 +50,8 @@ export const NewConversationModal = ({
     return suggestions.some((conversation) => normalizeText(conversation.name) === normalizedQuery);
   }, [normalizedQuery, suggestions]);
 
-  const canCreate = normalizedQuery.length > 0 && !exactMatch && !isCreating;
+  const canCreate =
+    allowCreate && normalizedQuery.length > 0 && !exactMatch && !isCreating;
 
   const handleCreate = async () => {
     if (!canCreate) return;
@@ -78,7 +81,7 @@ export const NewConversationModal = ({
           <h2>Nova conversa</h2>
           <p>Pesquise um contato existente ou crie um novo canal de atendimento instantaneamente.</p>
         </header>
-        <div className={styles.search}>
+        <div className={`${styles.search} ${!allowCreate ? styles.searchStandalone : ""}`.trim()}>
           <input
             type="text"
             value={search}
@@ -88,20 +91,27 @@ export const NewConversationModal = ({
             aria-label="Pesquisar contato"
             autoFocus
           />
-          <button
-            type="button"
-            className={styles.createButton}
-            onClick={handleCreate}
-            disabled={!canCreate}
-          >
-            <UserPlus size={18} aria-hidden="true" />
-            {isCreating ? "Criando..." : "Criar contato"}
-          </button>
+          {allowCreate && (
+            <button
+              type="button"
+              className={styles.createButton}
+              onClick={handleCreate}
+              disabled={!canCreate}
+            >
+              <UserPlus size={18} aria-hidden="true" />
+              {isCreating ? "Criando..." : "Criar contato"}
+            </button>
+          )}
         </div>
         <section aria-live="polite">
           {filtered.length === 0 ? (
             <div className={styles.empty}>
-              <Sparkles size={18} aria-hidden="true" /> Nenhum resultado. Pressione Enter para criar "{search.trim()}".
+              <Sparkles size={18} aria-hidden="true" />
+              {allowCreate ? (
+                <> Nenhum resultado. Pressione Enter para criar "{search.trim()}".</>
+              ) : (
+                <> Nenhum resultado encontrado para "{search.trim()}".</>
+              )}
             </div>
           ) : (
             <ul className={styles.list} role="listbox" aria-label="Contatos sugeridos">
