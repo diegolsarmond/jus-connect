@@ -515,7 +515,14 @@ export const ChatWindow = ({
         </header>
 
         <div className={styles.viewportWrapper}>
-          {isLoading && <div className={styles.loadingOverlay}>Carregando conversa...</div>}
+          {isLoading && (
+            <div className={styles.loadingOverlay}>
+              <div className={styles.loadingOverlayContent} role="status" aria-live="polite" aria-busy="true">
+                <span className={styles.loadingSpinner} aria-hidden="true" />
+                <span>Carregando conversa...</span>
+              </div>
+            </div>
+          )}
           <MessageViewport
             messages={messages}
             avatarUrl={conversation.avatar}

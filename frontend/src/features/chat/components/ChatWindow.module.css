@@ -644,6 +644,29 @@
   font-weight: 600;
 }
 
+.loadingOverlayContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: hsl(var(--foreground));
+}
+
+.loadingSpinner {
+  width: 2.75rem;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  border: 3px solid hsl(var(--muted-foreground) / 0.35);
+  border-top-color: hsl(var(--primary));
+  animation: chatWindowLoadingSpin 0.8s linear infinite;
+}
+
+@keyframes chatWindowLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .viewportWrapper {
   position: relative;
   flex: 1;
