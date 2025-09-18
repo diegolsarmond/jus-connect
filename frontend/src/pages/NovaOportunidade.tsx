@@ -220,9 +220,25 @@ export default function NovaOportunidade() {
           })
         );
 
-        const situacoesData = await fetchJson(`${apiUrl}/api/situacoes-processo`);
+        let situacoesData: unknown;
+        try {
+          situacoesData = await fetchJson(`${apiUrl}/api/situacao-propostas`);
+        } catch (error) {
+          console.error("Falha ao buscar situações da proposta na nova API.", error);
+          try {
+            situacoesData = await fetchJson(`${apiUrl}/api/situacoes-processo`);
+          } catch (fallbackError) {
+            console.error("Falha ao buscar situações de processo como alternativa.", fallbackError);
+            situacoesData = [];
+          }
+        }
+
+        const situacoesArray = Array.isArray(situacoesData)
+          ? situacoesData
+          : [];
+
         setSituacoes(
-          situacoesData.map((s) => {
+          situacoesArray.map((s) => {
             const item = s as any;
             return { id: String(item.id), name: item.nome } as Option;
           })

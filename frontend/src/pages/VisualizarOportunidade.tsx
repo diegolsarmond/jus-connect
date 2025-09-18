@@ -272,7 +272,18 @@ export default function VisualizarOportunidade() {
     const fetchStatuses = async () => {
       try {
         setStatusLoading(true);
-        const data = await fetchList(`${apiUrl}/api/situacoes-processo`);
+        let data: unknown[] = [];
+        try {
+          data = await fetchList(`${apiUrl}/api/situacao-propostas`);
+        } catch (error) {
+          console.error("Falha ao buscar situações da proposta na nova API.", error);
+          try {
+            data = await fetchList(`${apiUrl}/api/situacoes-processo`);
+          } catch (fallbackError) {
+            console.error("Falha ao buscar situações de processo como alternativa.", fallbackError);
+            data = [];
+          }
+        }
         if (cancelled) return;
         const options: StatusOption[] = (data as unknown[]).flatMap((item) => {
           if (!item || typeof item !== "object") return [];
@@ -433,7 +444,7 @@ export default function VisualizarOportunidade() {
 
         if (opportunity.status_id) {
           const situacoes = (await fetchList(
-            `${apiUrl}/api/situacoes-processo`
+            `${apiUrl}/api/situacao-propostas`
           )) as Array<{ id: unknown; nome?: string }>;
           const situacao = situacoes.find(
             (s) => Number(s.id) === Number(opportunity.status_id)

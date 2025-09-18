@@ -7,7 +7,7 @@ export default function SituacaoProposta() {
       description="Gerencie as situações da proposta"
       placeholder="Nova situação da proposta"
       emptyMessage="Nenhuma situação de proposta cadastrada"
-      endpoint="/api/situacao-clientes"
+      endpoint="/api/situacao-propostas"
     />
   );
 }
