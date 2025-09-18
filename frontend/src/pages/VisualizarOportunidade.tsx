@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
 } from "react";
@@ -113,6 +114,80 @@ interface InteractionEntry {
   attachments: { name: string; size: number }[];
   createdAt: string;
 }
+
+const sanitizeInteractionEntries = (value: unknown): InteractionEntry[] => {
+  if (!Array.isArray(value)) return [];
+
+  const entries: InteractionEntry[] = [];
+
+  value.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+
+    const rawId = record["id"];
+    const idNumber =
+      typeof rawId === "number"
+        ? rawId
+        : typeof rawId === "string"
+          ? Number.parseInt(rawId, 10)
+          : Number.NaN;
+
+    if (!Number.isFinite(idNumber)) return;
+
+    const rawCreatedAt = record["createdAt"];
+    const createdAt =
+      typeof rawCreatedAt === "string" && rawCreatedAt.trim().length > 0
+        ? rawCreatedAt
+        : new Date(idNumber).toISOString();
+
+    const rawComment = record["comment"];
+    const comment = typeof rawComment === "string" ? rawComment : "";
+
+    const attachmentsValue = record["attachments"];
+    const attachments: InteractionEntry["attachments"] = Array.isArray(
+      attachmentsValue,
+    )
+      ? attachmentsValue.flatMap((attachment) => {
+          if (!attachment || typeof attachment !== "object") return [];
+          const attachmentRecord = attachment as Record<string, unknown>;
+          const rawName = attachmentRecord["name"];
+          const name =
+            typeof rawName === "string" && rawName.trim().length > 0
+              ? rawName.trim()
+              : null;
+
+          if (!name) return [];
+
+          const rawSize = attachmentRecord["size"];
+          const size =
+            typeof rawSize === "number"
+              ? rawSize
+              : typeof rawSize === "string"
+                ? Number.parseInt(rawSize, 10)
+                : Number.NaN;
+
+          const normalizedSize =
+            Number.isFinite(size) && size >= 0 ? size : 0;
+
+          return [
+            {
+              name,
+              size: normalizedSize,
+            },
+          ];
+        })
+      : [];
+
+    entries.push({
+      id: idNumber,
+      comment,
+      attachments,
+      createdAt,
+    });
+  });
+
+  return entries;
+};
 
 interface BillingRecord {
   id: number;
@@ -335,6 +410,12 @@ export default function VisualizarOportunidade() {
     dataFaturamento: new Date().toISOString().slice(0, 10),
     observacoes: "",
   }));
+
+  const interactionStorageKey = useMemo(
+    () => (id ? `opportunity-interactions:${id}` : null),
+    [id],
+  );
+  const skipInteractionPersistenceRef = useRef<string | null>(null);
 
   const patchOpportunity = useCallback(
     (updater: (prev: OpportunityData) => OpportunityData) => {
@@ -1027,6 +1108,54 @@ export default function VisualizarOportunidade() {
     setCommentText("");
     setSnack({ open: true, message: "Comentário registrado" });
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    skipInteractionPersistenceRef.current = interactionStorageKey ?? null;
+
+    if (!interactionStorageKey) {
+      setInteractionHistory([]);
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(interactionStorageKey);
+      if (!stored) {
+        setInteractionHistory([]);
+        return;
+      }
+
+      const parsed = JSON.parse(stored) as unknown;
+      setInteractionHistory(sanitizeInteractionEntries(parsed));
+    } catch (error) {
+      console.error("Falha ao carregar interações locais", error);
+      setInteractionHistory([]);
+    }
+  }, [interactionStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!interactionStorageKey) return;
+
+    if (skipInteractionPersistenceRef.current === interactionStorageKey) {
+      skipInteractionPersistenceRef.current = null;
+      return;
+    }
+
+    try {
+      if (interactionHistory.length === 0) {
+        window.localStorage.removeItem(interactionStorageKey);
+      } else {
+        window.localStorage.setItem(
+          interactionStorageKey,
+          JSON.stringify(interactionHistory),
+        );
+      }
+    } catch (error) {
+      console.error("Falha ao persistir interações locais", error);
+    }
+  }, [interactionHistory, interactionStorageKey]);
 
   // auto-close do snackbar para não ficar cortando o rodapé
   useEffect(() => {
