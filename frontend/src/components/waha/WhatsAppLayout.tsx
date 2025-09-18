@@ -195,6 +195,8 @@ export const WhatsAppLayout = ({
     Record<string, Partial<ConversationSummary>>
   >({});
   const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
+  const [hasStartedLoading, setHasStartedLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const wahaState = useWAHA();
   const {
@@ -211,6 +213,18 @@ export const WhatsAppLayout = ({
     hasMoreChats,
     isLoadingMoreChats,
   } = wahaState;
+
+  useEffect(() => {
+    if (loading) {
+      setHasStartedLoading(true);
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    if (hasStartedLoading && !loading) {
+      setHasLoadedOnce(true);
+    }
+  }, [hasStartedLoading, loading]);
 
   // Set up webhook receiver for demo purposes
   useEffect(() => {
@@ -363,7 +377,9 @@ export const WhatsAppLayout = ({
     }
   }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
 
-  const isInitialLoading = loading && conversations.length === 0;
+  const isInitialLoading = loading && !hasLoadedOnce;
+  const shouldShowOverlayLoading = loading && hasLoadedOnce;
+
 
   if (isInitialLoading) {
     return (
@@ -377,7 +393,7 @@ export const WhatsAppLayout = ({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 
       <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
 
@@ -431,6 +447,12 @@ export const WhatsAppLayout = ({
         onCreateConversation={async () => null}
         allowCreate={false}
       />
+
+      {shouldShowOverlayLoading ? (
+        <div className="absolute inset-0 z-50 flex">
+          <ConversationLoadingScreen />
+        </div>
+      ) : null}
     </div>
   );
 };
