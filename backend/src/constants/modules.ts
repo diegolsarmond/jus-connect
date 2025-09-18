@@ -69,6 +69,17 @@ export function normalizeModuleId(value: unknown): string | null {
     return lowerCased;
   }
 
+  const sanitized = trimmed
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+
+  if (sanitized && SYSTEM_MODULE_SET.has(sanitized)) {
+    return sanitized;
+  }
+
   return null;
 }
 
