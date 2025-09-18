@@ -278,10 +278,15 @@ export const WhatsAppLayout = () => {
             onResponsibleFilterChange={setResponsibleFilter}
             onSelectConversation={handleSelectConversation}
             onNewConversation={() => {
-              void wahaState.loadChats();
+              void wahaState.loadChats({ reset: true });
             }}
             searchInputRef={searchInputRef}
             loading={wahaState.loading}
+            hasMore={wahaState.hasMoreChats}
+            isLoadingMore={wahaState.isLoadingMoreChats}
+            onLoadMore={() => {
+              void wahaState.loadMoreChats();
+            }}
           />
         </div>
 

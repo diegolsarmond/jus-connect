@@ -123,6 +123,33 @@
   gap: 0.25rem;
 }
 
+.loadMoreContainer {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: center;
+}
+
+.loadMoreButton {
+  border: 1px solid hsl(var(--sidebar-border));
+  background: hsl(var(--background));
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.5rem 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.loadMoreButton:hover,
+.loadMoreButton:focus-visible {
+  background: hsl(var(--sidebar-accent));
+}
+
+.loadMoreButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .itemButton {
   width: 100%;
   border: none;
