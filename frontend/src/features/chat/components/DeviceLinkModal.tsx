@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import clsx from "clsx";
 import { Smartphone, QrCode, ShieldCheck, RefreshCw, LogOut } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -117,7 +117,7 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
     isError: isQrError,
     error: qrError,
     refetch: refetchQr,
-    remove: clearQr,
+    remove: removeQr,
     dataUpdatedAt: qrUpdatedAt,
   } = useQuery({
     queryKey: ["waha", "session", sessionName, "qr"],
@@ -126,6 +126,12 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
     staleTime: 0,
     gcTime: 0,
   });
+
+  const clearQr = useCallback(() => {
+    if (typeof removeQr === "function") {
+      removeQr();
+    }
+  }, [removeQr]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {

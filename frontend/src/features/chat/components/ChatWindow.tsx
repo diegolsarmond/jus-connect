@@ -29,7 +29,6 @@ import type {
 } from "../types";
 import { ChatInput } from "./ChatInput";
 import { MessageViewport } from "./MessageViewport";
-import { DeviceLinkModal } from "./DeviceLinkModal";
 import styles from "./ChatWindow.module.css";
 import { fetchChatResponsibles, fetchChatTags, type ChatResponsibleOption } from "../services/chatApi";
 
@@ -82,6 +81,7 @@ interface ChatWindowProps {
   onLoadOlder: () => Promise<Message[]>;
   onUpdateConversation: (conversationId: string, changes: UpdateConversationPayload) => Promise<void>;
   isUpdatingConversation?: boolean;
+  onOpenDeviceLinkModal?: () => void;
 }
 
 export const ChatWindow = ({
@@ -94,10 +94,10 @@ export const ChatWindow = ({
   onLoadOlder,
   onUpdateConversation,
   isUpdatingConversation = false,
+  onOpenDeviceLinkModal,
 }: ChatWindowProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const [stickToBottom, setStickToBottom] = useState(true);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(false);
@@ -558,7 +558,7 @@ export const ChatWindow = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setDeviceModalOpen(true);
+                      onOpenDeviceLinkModal?.();
                       setMenuOpen(false);
                     }}
                     role="menuitem"
@@ -593,7 +593,6 @@ export const ChatWindow = ({
         <div className={styles.inputContainer}>
           <ChatInput onSend={handleSend} disabled={isLoading} />
         </div>
-        <DeviceLinkModal open={deviceModalOpen} onClose={() => setDeviceModalOpen(false)} />
       </div>
       <aside
         id={detailsPanelId}
