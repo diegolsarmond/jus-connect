@@ -124,6 +124,7 @@ export const deriveSessionName = (companyName?: string | null): string => {
   const sanitized = sanitizeSessionName(companyName);
   if (sanitized) {
     return sanitized;
+
   }
 
   return fallbackSessionName;
