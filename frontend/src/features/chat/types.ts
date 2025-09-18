@@ -28,6 +28,12 @@ export interface TeamMember {
 
 export type ConversationResponsible = TeamMember;
 
+export interface ConversationParticipant {
+  id: string;
+  name: string;
+  avatar?: string;
+}
+
 export interface ConversationCustomAttribute {
   id: string;
   label: string;
@@ -58,6 +64,7 @@ export interface ConversationSummary {
   customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
   internalNotes?: ConversationInternalNote[];
+  participants?: ConversationParticipant[];
 }
 
 export interface ConversationLastMessage {
@@ -86,6 +93,7 @@ export interface ConversationDatasetEntry {
   customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
   internalNotes?: ConversationInternalNote[];
+  participants?: ConversationParticipant[];
 }
 
 export interface ChatDataset {

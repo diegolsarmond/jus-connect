@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { wahaService } from '@/services/waha';
 import WAHAService from '@/services/waha';
-import { ChatOverview, Message, SessionStatus } from '@/types/waha';
+import { ChatOverview, ChatParticipant, Message, SessionStatus } from '@/types/waha';
 import { useToast } from '@/hooks/use-toast';
 
 const CHAT_PAGE_SIZE = 50;
@@ -32,6 +32,195 @@ const pickFirstString = (...values: unknown[]): string | undefined => {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+
+const PARTICIPANT_NAME_KEYS = [
+  'name',
+  'pushname',
+  'formattedName',
+  'shortName',
+  'notifyName',
+  'displayName',
+  'contactName',
+];
+
+const PARTICIPANT_AVATAR_KEYS = [
+  'avatar',
+  'img',
+  'picture',
+  'profilePicUrl',
+  'profilePicture',
+  'thumb',
+  'thumbnail',
+  'imageUrl',
+  'previewUrl',
+  'eurl',
+];
+
+const PARTICIPANT_ID_KEYS = [
+  'id',
+  '_serialized',
+  'jid',
+  'wid',
+  'user',
+  'userId',
+  'participant',
+  'number',
+];
+
+const readNestedRecord = (value: unknown, key: string): Record<string, unknown> | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const nested = value[key];
+  return isRecord(nested) ? (nested as Record<string, unknown>) : undefined;
+};
+
+const readStringFromRecord = (record: Record<string, unknown> | undefined, keys: string[]): string | undefined => {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    const candidate = pickFirstString(record[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return undefined;
+};
+
+const readParticipantId = (record: Record<string, unknown>, visited = new Set<Record<string, unknown>>()): string | undefined => {
+  if (visited.has(record)) {
+    return undefined;
+  }
+  visited.add(record);
+
+  const direct = readStringFromRecord(record, PARTICIPANT_ID_KEYS);
+  if (direct) {
+    return direct;
+  }
+
+  for (const key of ['contact', 'user', 'participant', 'id', 'jid', 'wid']) {
+    const nested = readNestedRecord(record, key);
+    if (nested) {
+      const nestedId = readParticipantId(nested, visited);
+      if (nestedId) {
+        return nestedId;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const parseParticipant = (value: unknown): ChatParticipant | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const contact = readNestedRecord(value, 'contact');
+  const user = readNestedRecord(value, 'user');
+  const profile = readNestedRecord(value, 'profile');
+  const profileData = readNestedRecord(value, 'profileData');
+  const profileThumb =
+    readNestedRecord(value, 'profilePicThumbObj') ??
+    readNestedRecord(contact, 'profilePicThumbObj') ??
+    readNestedRecord(user, 'profilePicThumbObj') ??
+    readNestedRecord(profile, 'profilePicThumbObj') ??
+    readNestedRecord(profileData, 'profilePicThumbObj');
+
+  const id =
+    readParticipantId(value) ??
+    readParticipantId(contact ?? {}) ??
+    readParticipantId(user ?? {}) ??
+    readParticipantId(profile ?? {}) ??
+    readParticipantId(profileData ?? {});
+
+  const name =
+    readStringFromRecord(value, PARTICIPANT_NAME_KEYS) ??
+    readStringFromRecord(contact, PARTICIPANT_NAME_KEYS) ??
+    readStringFromRecord(user, PARTICIPANT_NAME_KEYS) ??
+    readStringFromRecord(profile, PARTICIPANT_NAME_KEYS) ??
+    readStringFromRecord(profileData, PARTICIPANT_NAME_KEYS);
+
+  const avatar =
+    readStringFromRecord(value, PARTICIPANT_AVATAR_KEYS) ??
+    readStringFromRecord(contact, PARTICIPANT_AVATAR_KEYS) ??
+    readStringFromRecord(user, PARTICIPANT_AVATAR_KEYS) ??
+    readStringFromRecord(profile, PARTICIPANT_AVATAR_KEYS) ??
+    readStringFromRecord(profileThumb, PARTICIPANT_AVATAR_KEYS);
+
+  const normalizedId = id ?? (name ? name.trim() : undefined);
+  if (!normalizedId) {
+    return null;
+  }
+
+  const normalizedName = name ?? WAHAService.extractPhoneFromWhatsAppId(normalizedId);
+
+  return {
+    id: normalizedId,
+    name: normalizedName ?? normalizedId,
+    avatar: avatar ?? undefined,
+  };
+};
+
+const collectParticipants = (info: Record<string, unknown>): ChatParticipant[] => {
+  const seen = new Map<string, ChatParticipant>();
+
+  const pushCandidate = (value: unknown) => {
+    if (!value) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        pushCandidate(item);
+      }
+      return;
+    }
+    if (!isRecord(value)) {
+      return;
+    }
+
+    const participant = parseParticipant(value);
+    if (!participant) {
+      return;
+    }
+
+    const existing = seen.get(participant.id);
+    if (!existing) {
+      seen.set(participant.id, participant);
+      return;
+    }
+
+    const next: ChatParticipant = {
+      id: existing.id,
+      name: existing.name || participant.name,
+      avatar: participant.avatar ?? existing.avatar,
+    };
+    seen.set(participant.id, next);
+  };
+
+  const directCandidates = [
+    info['participants'],
+    info['participantsInfo'],
+    info['contacts'],
+  ];
+  for (const candidate of directCandidates) {
+    pushCandidate(candidate);
+  }
+
+  const nestedSources = ['chat', 'groupMetadata', 'group', 'data'];
+  for (const key of nestedSources) {
+    const record = readNestedRecord(info, key);
+    if (!record) {
+      continue;
+    }
+    pushCandidate(record['participants']);
+    pushCandidate(record['participantsInfo']);
+    pushCandidate(record['contact']);
+  }
+
+  return Array.from(seen.values());
+};
 
 const getLastActivityTimestamp = (chat: ChatOverview): number => {
   const timestamp = chat.lastMessage?.timestamp;
@@ -188,10 +377,13 @@ export const useWAHA = () => {
             readStringProperty(chatInfo, 'picture'),
           ) ?? chat.avatar;
 
+        const participants = collectParticipants(info);
+
         return {
           ...chat,
           name: derivedName,
           avatar: derivedAvatar,
+          participants: participants.length > 0 ? participants : chat.participants,
         };
       }
     } catch (infoError) {

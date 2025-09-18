@@ -4,12 +4,19 @@ export interface WAHAConfig {
   session: string;
 }
 
+export interface ChatParticipant {
+  id: string;
+  name: string;
+  avatar?: string;
+}
+
 export interface ChatOverview {
   id: string;
   name: string | null;
   isGroup: boolean;
   avatar?: string;
   picture?: string; // Adicionando picture que vem da API
+  participants?: ChatParticipant[];
   lastMessage?: {
     id?: string;
     body?: string;
