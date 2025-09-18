@@ -442,6 +442,333 @@ export default function NovaOportunidade() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="fluxo-processo">
+                  <AccordionTrigger>DADOS DA PROPOSTA</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="fase"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Fluxo de Trabalho</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {fluxos.map((f) => (
+                                  <SelectItem key={f.id} value={f.id}>
+                                    {f.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="etapa"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Etapa</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {etapas.map((e) => (
+                                  <SelectItem key={e.id} value={e.id}>
+                                    {e.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="prazo_proximo"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Próximo Prazo</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="status"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Situação da Proposta</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {situacoes.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="dados-solicitante">
+                  <AccordionTrigger>CLIENTE SOLICITANTE</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="solicitante_nome"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nome</FormLabel>
+                            <FormControl>
+                              <Input
+                                list="solicitante-options"
+                                {...field}
+                                onChange={(e) => {
+                                  field.onChange(e.target.value);
+                                  handleSelectClient(e.target.value);
+                                }}
+                              />
+                            </FormControl>
+                            <datalist id="solicitante-options">
+                              {clients.map((c) => (
+                                <option key={c.id} value={c.name} />
+                              ))}
+                            </datalist>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="solicitante_cpf_cnpj"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>CPF/CNPJ</FormLabel>
+                            <FormControl>
+                              <Input disabled {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="solicitante_email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>E-mail</FormLabel>
+                            <FormControl>
+                              <Input disabled {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="solicitante_telefone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Telefone</FormLabel>
+                            <FormControl>
+                              <Input disabled {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="cliente_tipo"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tipo de Cliente</FormLabel>
+                            <FormControl>
+                              <Input disabled {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="honorarios">
+                  <AccordionTrigger>HONORÁRIOS</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="valor_causa"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Expectativa / Valor da Causa</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                value={field.value}
+                                onChange={(e) => field.onChange(formatCurrency(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="valor_honorarios"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor dos Honorários</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                value={field.value}
+                                onChange={(e) => field.onChange(formatCurrency(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="percentual_honorarios"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Percentual de Honorários</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                className="w-24"
+                                value={field.value}
+                                onChange={(e) => field.onChange(formatPercent(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="forma_pagamento"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Forma de Pagamento</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="À vista">À vista</SelectItem>
+                                <SelectItem value="Parcelado">Parcelado</SelectItem>
+                                <SelectItem value="Sucumbência">Sucumbência</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {formaPagamento === "Parcelado" && (
+                        <FormField
+                          control={form.control}
+                            name="qtde_parcelas"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Número de Parcelas</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {[...Array(12)].map((_, i) => (
+                                    <SelectItem key={i + 1} value={String(i + 1)}>
+                                      {i + 1}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
+                      <FormField
+                        control={form.control}
+                        name="contingenciamento"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Contingenciamento</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Provável / Chance Alta">
+                                  Provável / Chance Alta
+                                </SelectItem>
+                                <SelectItem value="Possível / Talvez">
+                                  Possível / Talvez
+                                </SelectItem>
+                                <SelectItem value="Remota / Difícil">
+                                  Remota / Difícil
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                
                 <AccordionItem value="dados-processo">
                   <AccordionTrigger>DADOS DO PROCESSO</AccordionTrigger>
                   <AccordionContent>
@@ -635,191 +962,6 @@ export default function NovaOportunidade() {
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="fluxo-processo">
-                  <AccordionTrigger>DADOS DA PROPOSTA</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="fase"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Fluxo de Trabalho</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {fluxos.map((f) => (
-                                  <SelectItem key={f.id} value={f.id}>
-                                    {f.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="etapa"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Etapa</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {etapas.map((e) => (
-                                  <SelectItem key={e.id} value={e.id}>
-                                    {e.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="prazo_proximo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Próximo Prazo</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="status"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Situação da Proposta</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {situacoes.map((s) => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    {s.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="dados-solicitante">
-                  <AccordionTrigger>CLIENTE SOLICITANTE</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="solicitante_nome"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nome</FormLabel>
-                            <FormControl>
-                              <Input
-                                list="solicitante-options"
-                                {...field}
-                                onChange={(e) => {
-                                  field.onChange(e.target.value);
-                                  handleSelectClient(e.target.value);
-                                }}
-                              />
-                            </FormControl>
-                            <datalist id="solicitante-options">
-                              {clients.map((c) => (
-                                <option key={c.id} value={c.name} />
-                              ))}
-                            </datalist>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="solicitante_cpf_cnpj"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>CPF/CNPJ</FormLabel>
-                            <FormControl>
-                              <Input disabled {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="solicitante_email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>E-mail</FormLabel>
-                            <FormControl>
-                              <Input disabled {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="solicitante_telefone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Telefone</FormLabel>
-                            <FormControl>
-                              <Input disabled {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="cliente_tipo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Tipo de Cliente</FormLabel>
-                            <FormControl>
-                              <Input disabled {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
                 <AccordionItem value="dados-promovido">
                   <AccordionTrigger>ENVOLVIDOS COM O PROCESSO</AccordionTrigger>
                   <AccordionContent>
@@ -980,148 +1122,7 @@ export default function NovaOportunidade() {
                   </AccordionContent>
                 </AccordionItem>
 
-                 <AccordionItem value="honorarios">
-                  <AccordionTrigger>HONORÁRIOS</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="valor_causa"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Expectativa / Valor da Causa</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={field.value}
-                                onChange={(e) => field.onChange(formatCurrency(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="valor_honorarios"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Valor dos Honorários</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={field.value}
-                                onChange={(e) => field.onChange(formatCurrency(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="percentual_honorarios"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Percentual de Honorários</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                className="w-24"
-                                value={field.value}
-                                onChange={(e) => field.onChange(formatPercent(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="forma_pagamento"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Forma de Pagamento</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="À vista">À vista</SelectItem>
-                                <SelectItem value="Parcelado">Parcelado</SelectItem>
-                                <SelectItem value="Sucumbência">Sucumbência</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      {formaPagamento === "Parcelado" && (
-                        <FormField
-                          control={form.control}
-                            name="qtde_parcelas"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Número de Parcelas</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {[...Array(12)].map((_, i) => (
-                                    <SelectItem key={i + 1} value={String(i + 1)}>
-                                      {i + 1}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-
-                      <FormField
-                        control={form.control}
-                        name="contingenciamento"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Contingenciamento</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="Provável / Chance Alta">
-                                  Provável / Chance Alta
-                                </SelectItem>
-                                <SelectItem value="Possível / Talvez">
-                                  Possível / Talvez
-                                </SelectItem>
-                                <SelectItem value="Remota / Difícil">
-                                  Remota / Difícil
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="metadados">
+                 <AccordionItem value="metadados">
                   <AccordionTrigger>SISTEMA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
