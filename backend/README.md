@@ -31,6 +31,8 @@ O arquivo `sql/templates.sql` contém a estrutura mínima para as tabelas `templ
 
 O script `sql/support.sql` cria a tabela `support_requests` utilizada pelo módulo de suporte.
 
+O script `sql/situacoes.sql` cria as tabelas `situacao_cliente`, `situacao_proposta` e `situacao_processo`, além de inserir alguns valores iniciais necessários para os cadastros de situações utilizados nas oportunidades.
+
 O script `sql/integration_api_keys.sql` define a tabela `integration_api_keys`, responsável por armazenar as chaves de API configuradas na tela de Integrações.
 
 O script `sql/intimacoes.sql` cria a tabela `intimacoes`, utilizada para
