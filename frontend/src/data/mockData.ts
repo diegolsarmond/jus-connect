@@ -33,6 +33,15 @@ export const mockRevenueByPlan = [
   { name: "Enterprise", revenue: 2793, customers: 7 },
 ];
 
+export const mockMonthlyFinancials = [
+  { month: "Jan", receita: 18500, despesas: 11200 },
+  { month: "Feb", receita: 19600, despesas: 11800 },
+  { month: "Mar", receita: 20500, despesas: 12000 },
+  { month: "Apr", receita: 21300, despesas: 12500 },
+  { month: "May", receita: 22150, despesas: 12950 },
+  { month: "Jun", receita: 22800, despesas: 13200 },
+];
+
 export const mockAreaDistribution = [
   { name: "Cível", value: 40 },
   { name: "Trabalhista", value: 32 },

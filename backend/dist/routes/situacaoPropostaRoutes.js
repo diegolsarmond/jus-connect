@@ -3,6 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const situacaoPropostaController_1 = require("../controllers/situacaoPropostaController");
 const router = (0, express_1.Router)();
+const collectionPaths = [
+    '/situacao-propostas',
+    '/situacoes-proposta',
+    '/situacoes-propostas',
+    '/situacao-proposta',
+];
+const resourcePaths = Array.from(new Set(collectionPaths.map((path) => `${path.replace(/\/$/, '')}/:id`)));
+
 /**
  * @swagger
  * tags:
@@ -39,7 +47,8 @@ const router = (0, express_1.Router)();
  *               items:
  *                 $ref: '#/components/schemas/SituacaoProposta'
  */
-router.get('/situacao-propostas', situacaoPropostaController_1.listSituacoesProposta);
+router.get(collectionPaths, situacaoPropostaController_1.listSituacoesProposta);
+
 /**
  * @swagger
  * /api/situacao-propostas:
@@ -60,7 +69,8 @@ router.get('/situacao-propostas', situacaoPropostaController_1.listSituacoesProp
  *             schema:
  *               $ref: '#/components/schemas/SituacaoProposta'
  */
-router.post('/situacao-propostas', situacaoPropostaController_1.createSituacaoProposta);
+router.post(collectionPaths, situacaoPropostaController_1.createSituacaoProposta);
+
 /**
  * @swagger
  * /api/situacao-propostas/{id}:
@@ -89,7 +99,8 @@ router.post('/situacao-propostas', situacaoPropostaController_1.createSituacaoPr
  *       404:
  *         description: Situação de proposta não encontrada
  */
-router.put('/situacao-propostas/:id', situacaoPropostaController_1.updateSituacaoProposta);
+router.put(resourcePaths, situacaoPropostaController_1.updateSituacaoProposta);
+
 /**
  * @swagger
  * /api/situacao-propostas/{id}:
@@ -108,5 +119,6 @@ router.put('/situacao-propostas/:id', situacaoPropostaController_1.updateSituaca
  *       404:
  *         description: Situação de proposta não encontrada
  */
-router.delete('/situacao-propostas/:id', situacaoPropostaController_1.deleteSituacaoProposta);
+router.delete(resourcePaths, situacaoPropostaController_1.deleteSituacaoProposta);
+
 exports.default = router;

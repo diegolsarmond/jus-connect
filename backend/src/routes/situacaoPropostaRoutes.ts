@@ -8,6 +8,18 @@ import {
 
 const router = Router();
 
+const collectionPaths = [
+  '/situacao-propostas',
+  '/situacoes-proposta',
+  '/situacoes-propostas',
+  '/situacao-proposta',
+];
+
+const resourcePaths = Array.from(
+  new Set(collectionPaths.map((path) => `${path.replace(/\/$/, '')}/:id`))
+);
+
+
 /**
  * @swagger
  * tags:
@@ -45,6 +57,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/SituacaoProposta'
  */
+
 router.get('/situacao-propostas', listSituacoesProposta);
 
 /**
@@ -67,6 +80,7 @@ router.get('/situacao-propostas', listSituacoesProposta);
  *             schema:
  *               $ref: '#/components/schemas/SituacaoProposta'
  */
+
 router.post('/situacao-propostas', createSituacaoProposta);
 
 /**
@@ -97,6 +111,7 @@ router.post('/situacao-propostas', createSituacaoProposta);
  *       404:
  *         description: Situação de proposta não encontrada
  */
+
 router.put('/situacao-propostas/:id', updateSituacaoProposta);
 
 /**
@@ -117,6 +132,7 @@ router.put('/situacao-propostas/:id', updateSituacaoProposta);
  *       404:
  *         description: Situação de proposta não encontrada
  */
+
 router.delete('/situacao-propostas/:id', deleteSituacaoProposta);
 
 export default router;

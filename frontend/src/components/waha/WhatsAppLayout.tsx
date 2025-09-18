@@ -4,6 +4,7 @@ import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { ChatWindow as CRMChatWindow } from "@/features/chat/components/ChatWindow";
 import { NewConversationModal } from "@/features/chat/components/NewConversationModal";
+import { ConversationLoadingScreen } from "./ConversationLoadingScreen";
 import type {
   ConversationSummary,
   Message as CRMMessage,
@@ -194,6 +195,8 @@ export const WhatsAppLayout = ({
     Record<string, Partial<ConversationSummary>>
   >({});
   const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
+  const [hasStartedLoading, setHasStartedLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const wahaState = useWAHA();
   const {
@@ -210,6 +213,18 @@ export const WhatsAppLayout = ({
     hasMoreChats,
     isLoadingMoreChats,
   } = wahaState;
+
+  useEffect(() => {
+    if (loading) {
+      setHasStartedLoading(true);
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    if (hasStartedLoading && !loading) {
+      setHasLoadedOnce(true);
+    }
+  }, [hasStartedLoading, loading]);
 
   // Set up webhook receiver for demo purposes
   useEffect(() => {
@@ -260,6 +275,13 @@ export const WhatsAppLayout = ({
 
   const handleSelectConversation = useCallback(
     async (conversationId: string, options?: { skipNavigation?: boolean }) => {
+      if (conversationId === activeConversationId && messageMap[conversationId]) {
+        if (!options?.skipNavigation) {
+          onConversationRouteChange?.(conversationId);
+        }
+        return;
+      }
+
       setMessagesLoading(true);
       try {
         await selectChat(conversationId);
@@ -270,7 +292,7 @@ export const WhatsAppLayout = ({
         setMessagesLoading(false);
       }
     },
-    [onConversationRouteChange, selectChat],
+    [activeConversationId, messageMap, onConversationRouteChange, selectChat],
   );
 
   useEffect(() => {
@@ -355,8 +377,23 @@ export const WhatsAppLayout = ({
     }
   }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
 
+  const isInitialLoading = loading && !hasLoadedOnce;
+  const shouldShowOverlayLoading = loading && hasLoadedOnce;
+
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          <ConversationLoadingScreen />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 
       <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
 
@@ -410,6 +447,12 @@ export const WhatsAppLayout = ({
         onCreateConversation={async () => null}
         allowCreate={false}
       />
+
+      {shouldShowOverlayLoading ? (
+        <div className="absolute inset-0 z-50 flex">
+          <ConversationLoadingScreen />
+        </div>
+      ) : null}
     </div>
   );
 };
