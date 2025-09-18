@@ -21,8 +21,34 @@ const normalizePerfilId = (value) => {
     }
     return null;
 };
+const resolvePerfilId = async (perfil) => {
+    const normalizedId = normalizePerfilId(perfil);
+    if (normalizedId != null) {
+        return normalizedId;
+    }
+    if (typeof perfil !== 'string') {
+        return null;
+    }
+    const trimmedPerfil = perfil.trim();
+    if (!trimmedPerfil) {
+        return null;
+    }
+    const result = await db_1.default.query('SELECT id FROM public.perfis WHERE LOWER(nome) = LOWER($1) LIMIT 1', [trimmedPerfil]);
+    if (result.rowCount === 0) {
+        return null;
+    }
+    const value = result.rows[0]?.id;
+    if (typeof value === 'number' && Number.isInteger(value)) {
+        return value;
+    }
+    if (value == null) {
+        return null;
+    }
+    const parsed = Number.parseInt(String(value), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+};
 const fetchPerfilModules = async (perfil) => {
-    const perfilId = normalizePerfilId(perfil);
+    const perfilId = await resolvePerfilId(perfil);
     if (perfilId == null) {
         return [];
     }

@@ -64,6 +64,80 @@ const normalizeDate = (value: unknown): string | null => {
   return null;
 };
 
+type ProcessosColumnInfo = {
+  hasDatajudTipoJustica: boolean;
+  hasDatajudAlias: boolean;
+};
+
+let processosColumnInfoPromise: Promise<ProcessosColumnInfo> | null = null;
+
+const getProcessosColumnInfo = async (): Promise<ProcessosColumnInfo> => {
+  if (!processosColumnInfoPromise) {
+    processosColumnInfoPromise = pool
+      .query(
+        `SELECT column_name
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'processos'
+            AND column_name IN ('datajud_tipo_justica', 'datajud_alias')`
+      )
+      .then((result) => {
+        const columnNames = new Set<string>();
+
+        for (const row of result.rows as Array<{ column_name?: unknown }>) {
+          if (typeof row.column_name === 'string') {
+            columnNames.add(row.column_name);
+          }
+        }
+
+        return {
+          hasDatajudTipoJustica: columnNames.has('datajud_tipo_justica'),
+          hasDatajudAlias: columnNames.has('datajud_alias'),
+        };
+      })
+      .catch((error) => {
+        console.error('Erro ao verificar colunas da tabela processos', error);
+        return {
+          hasDatajudTipoJustica: false,
+          hasDatajudAlias: false,
+        };
+      });
+  }
+
+  return processosColumnInfoPromise;
+};
+
+const buildDatajudSelectExpressions = (
+  alias: string,
+  info: ProcessosColumnInfo
+): string[] => [
+  info.hasDatajudTipoJustica
+    ? `${alias}.datajud_tipo_justica AS datajud_tipo_justica`
+    : 'NULL AS datajud_tipo_justica',
+  info.hasDatajudAlias
+    ? `${alias}.datajud_alias AS datajud_alias`
+    : 'NULL AS datajud_alias',
+];
+
+const formatRequiredFieldsMessage = (fields: string[]): string => {
+  if (fields.length === 0) {
+    return 'Os campos obrigatórios não foram informados';
+  }
+
+  if (fields.length === 1) {
+    return `O campo ${fields[0]} é obrigatório`;
+  }
+
+  const fieldsCopy = [...fields];
+  const lastField = fieldsCopy.pop();
+
+  if (!lastField) {
+    return 'Os campos obrigatórios não foram informados';
+  }
+
+  return `Os campos ${fieldsCopy.join(', ')} e ${lastField} são obrigatórios`;
+};
+
 const mapProcessoRow = (row: any): Processo => ({
   id: row.id,
   cliente_id: row.cliente_id,
@@ -78,8 +152,8 @@ const mapProcessoRow = (row: any): Processo => ({
   jurisdicao: row.jurisdicao,
   advogado_responsavel: row.advogado_responsavel,
   data_distribuicao: row.data_distribuicao,
-  datajud_tipo_justica: row.datajud_tipo_justica,
-  datajud_alias: row.datajud_alias,
+  datajud_tipo_justica: row.datajud_tipo_justica ?? null,
+  datajud_alias: row.datajud_alias ?? null,
   criado_em: row.criado_em,
   atualizado_em: row.atualizado_em,
   cliente: row.cliente_id
@@ -97,8 +171,11 @@ const mapProcessoRow = (row: any): Processo => ({
 
 export const listProcessos = async (_req: Request, res: Response) => {
   try {
+    const columnInfo = await getProcessosColumnInfo();
+    const datajudSelect = buildDatajudSelectExpressions('p', columnInfo).join(',\n        ');
+
     const result = await pool.query(
-      `SELECT 
+      `SELECT
          p.id,
          p.cliente_id,
          p.numero,
@@ -112,8 +189,7 @@ export const listProcessos = async (_req: Request, res: Response) => {
        p.jurisdicao,
        p.advogado_responsavel,
        p.data_distribuicao,
-        p.datajud_tipo_justica,
-        p.datajud_alias,
+        ${datajudSelect},
        p.criado_em,
        p.atualizado_em,
         c.nome AS cliente_nome,
@@ -140,8 +216,11 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
   }
 
   try {
+    const columnInfo = await getProcessosColumnInfo();
+    const datajudSelect = buildDatajudSelectExpressions('p', columnInfo).join(',\n        ');
+
     const result = await pool.query(
-      `SELECT 
+      `SELECT
          p.id,
          p.cliente_id,
          p.numero,
@@ -155,8 +234,7 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
         p.jurisdicao,
         p.advogado_responsavel,
         p.data_distribuicao,
-        p.datajud_tipo_justica,
-        p.datajud_alias,
+        ${datajudSelect},
         p.criado_em,
         p.atualizado_em,
         c.nome AS cliente_nome,
@@ -185,8 +263,11 @@ export const getProcessoById = async (req: Request, res: Response) => {
   }
 
   try {
+    const columnInfo = await getProcessosColumnInfo();
+    const datajudSelect = buildDatajudSelectExpressions('p', columnInfo).join(',\n        ');
+
     const result = await pool.query(
-      `SELECT 
+      `SELECT
          p.id,
          p.cliente_id,
          p.numero,
@@ -200,8 +281,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
         p.jurisdicao,
         p.advogado_responsavel,
         p.data_distribuicao,
-        p.datajud_tipo_justica,
-        p.datajud_alias,
+        ${datajudSelect},
         p.criado_em,
         p.atualizado_em,
         c.nome AS cliente_nome,
@@ -267,13 +347,25 @@ export const createProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
-  const datajudTipoJusticaValue = normalizeLowercase(datajud_tipo_justica);
-  const datajudAliasValue = normalizeLowercase(datajud_alias);
+  const columnInfo = await getProcessosColumnInfo();
+  const datajudTipoJusticaValue = columnInfo.hasDatajudTipoJustica
+    ? normalizeLowercase(datajud_tipo_justica)
+    : null;
+  const datajudAliasValue = columnInfo.hasDatajudAlias
+    ? normalizeLowercase(datajud_alias)
+    : null;
 
-  if (!datajudTipoJusticaValue || !datajudAliasValue) {
-    return res.status(400).json({
-      error: 'Os campos datajud_tipo_justica e datajud_alias são obrigatórios',
-    });
+  const missingDatajudFields: string[] = [];
+  if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
+    missingDatajudFields.push('datajud_tipo_justica');
+  }
+
+  if (columnInfo.hasDatajudAlias && !datajudAliasValue) {
+    missingDatajudFields.push('datajud_alias');
+  }
+
+  if (missingDatajudFields.length > 0) {
+    return res.status(400).json({ error: formatRequiredFieldsMessage(missingDatajudFields) });
   }
 
   try {
@@ -286,24 +378,39 @@ export const createProcesso = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Cliente não encontrado' });
     }
 
+    const columnsAndValues: Array<{ name: string; value: unknown }> = [
+      { name: 'cliente_id', value: parsedClienteId },
+      { name: 'numero', value: numeroValue },
+      { name: 'uf', value: ufValue },
+      { name: 'municipio', value: municipioValue },
+      { name: 'orgao_julgador', value: orgaoValue },
+      { name: 'tipo', value: tipoValue },
+      { name: 'status', value: statusValue },
+      { name: 'classe_judicial', value: classeValue },
+      { name: 'assunto', value: assuntoValue },
+      { name: 'jurisdicao', value: jurisdicaoValue },
+      { name: 'advogado_responsavel', value: advogadoValue },
+      { name: 'data_distribuicao', value: dataDistribuicaoValue },
+    ];
+
+    if (columnInfo.hasDatajudTipoJustica) {
+      columnsAndValues.push({ name: 'datajud_tipo_justica', value: datajudTipoJusticaValue });
+    }
+
+    if (columnInfo.hasDatajudAlias) {
+      columnsAndValues.push({ name: 'datajud_alias', value: datajudAliasValue });
+    }
+
+    const columnNames = columnsAndValues.map((item) => item.name).join(',\n           ');
+    const placeholders = columnsAndValues.map((_, index) => `$${index + 1}`).join(', ');
+    const values = columnsAndValues.map((item) => item.value);
+    const insertedDatajudSelect = buildDatajudSelectExpressions('inserted', columnInfo).join(',\n         ');
+
     const result = await pool.query(
       `WITH inserted AS (
          INSERT INTO public.processos (
-           cliente_id,
-           numero,
-           uf,
-           municipio,
-           orgao_julgador,
-           tipo,
-           status,
-           classe_judicial,
-          assunto,
-          jurisdicao,
-          advogado_responsavel,
-          data_distribuicao,
-          datajud_tipo_justica,
-          datajud_alias
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+           ${columnNames}
+         ) VALUES (${placeholders})
          RETURNING *
        )
        SELECT
@@ -320,8 +427,7 @@ export const createProcesso = async (req: Request, res: Response) => {
          inserted.jurisdicao,
          inserted.advogado_responsavel,
          inserted.data_distribuicao,
-         inserted.datajud_tipo_justica,
-         inserted.datajud_alias,
+         ${insertedDatajudSelect},
          inserted.criado_em,
          inserted.atualizado_em,
          c.nome AS cliente_nome,
@@ -329,22 +435,7 @@ export const createProcesso = async (req: Request, res: Response) => {
          c.tipo AS cliente_tipo
        FROM inserted
        LEFT JOIN public.clientes c ON c.id = inserted.cliente_id`,
-      [
-        parsedClienteId,
-        numeroValue,
-        ufValue,
-        municipioValue,
-        orgaoValue,
-        tipoValue,
-        statusValue,
-        classeValue,
-        assuntoValue,
-        jurisdicaoValue,
-        advogadoValue,
-        dataDistribuicaoValue,
-        datajudTipoJusticaValue,
-        datajudAliasValue,
-      ]
+      values
     );
 
     res.status(201).json(mapProcessoRow(result.rows[0]));
@@ -409,13 +500,25 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
-  const datajudTipoJusticaValue = normalizeLowercase(datajud_tipo_justica);
-  const datajudAliasValue = normalizeLowercase(datajud_alias);
+  const columnInfo = await getProcessosColumnInfo();
+  const datajudTipoJusticaValue = columnInfo.hasDatajudTipoJustica
+    ? normalizeLowercase(datajud_tipo_justica)
+    : null;
+  const datajudAliasValue = columnInfo.hasDatajudAlias
+    ? normalizeLowercase(datajud_alias)
+    : null;
 
-  if (!datajudTipoJusticaValue || !datajudAliasValue) {
-    return res.status(400).json({
-      error: 'Os campos datajud_tipo_justica e datajud_alias são obrigatórios',
-    });
+  const missingDatajudFields: string[] = [];
+  if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
+    missingDatajudFields.push('datajud_tipo_justica');
+  }
+
+  if (columnInfo.hasDatajudAlias && !datajudAliasValue) {
+    missingDatajudFields.push('datajud_alias');
+  }
+
+  if (missingDatajudFields.length > 0) {
+    return res.status(400).json({ error: formatRequiredFieldsMessage(missingDatajudFields) });
   }
 
   try {
@@ -437,28 +540,49 @@ export const updateProcesso = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Cliente não encontrado' });
     }
 
+    const assignments: string[] = [];
+    const values: unknown[] = [];
+    const pushAssignment = (column: string, value: unknown) => {
+      values.push(value);
+      assignments.push(`${column} = $${values.length}`);
+    };
+
+    pushAssignment('cliente_id', parsedClienteId);
+    pushAssignment('numero', numeroValue);
+    pushAssignment('uf', ufValue);
+    pushAssignment('municipio', municipioValue);
+    pushAssignment('orgao_julgador', orgaoValue);
+    pushAssignment('tipo', tipoValue);
+    pushAssignment('status', statusValue);
+    pushAssignment('classe_judicial', classeValue);
+    pushAssignment('assunto', assuntoValue);
+    pushAssignment('jurisdicao', jurisdicaoValue);
+    pushAssignment('advogado_responsavel', advogadoValue);
+    pushAssignment('data_distribuicao', dataDistribuicaoValue);
+
+    if (columnInfo.hasDatajudTipoJustica) {
+      pushAssignment('datajud_tipo_justica', datajudTipoJusticaValue);
+    }
+
+    if (columnInfo.hasDatajudAlias) {
+      pushAssignment('datajud_alias', datajudAliasValue);
+    }
+
+    assignments.push('atualizado_em = NOW()');
+
+    values.push(parsedId);
+    const whereParam = `$${values.length}`;
+    const assignmentClause = assignments.join(',\n           ');
+    const updatedDatajudSelect = buildDatajudSelectExpressions('updated', columnInfo).join(',\n         ');
+
     const result = await pool.query(
       `WITH updated AS (
          UPDATE public.processos SET
-           cliente_id = $1,
-           numero = $2,
-           uf = $3,
-           municipio = $4,
-           orgao_julgador = $5,
-           tipo = $6,
-           status = $7,
-           classe_judicial = $8,
-           assunto = $9,
-           jurisdicao = $10,
-           advogado_responsavel = $11,
-           datajud_tipo_justica = $12,
-           datajud_alias = $13,
-           data_distribuicao = $14,
-           atualizado_em = NOW()
-        WHERE id = $15
+           ${assignmentClause}
+        WHERE id = ${whereParam}
         RETURNING *
       )
-       SELECT 
+       SELECT
          updated.id,
          updated.cliente_id,
          updated.numero,
@@ -472,8 +596,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
         updated.jurisdicao,
         updated.advogado_responsavel,
         updated.data_distribuicao,
-        updated.datajud_tipo_justica,
-        updated.datajud_alias,
+        ${updatedDatajudSelect},
         updated.criado_em,
         updated.atualizado_em,
         c.nome AS cliente_nome,
@@ -481,23 +604,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
         c.tipo AS cliente_tipo
        FROM updated
       LEFT JOIN public.clientes c ON c.id = updated.cliente_id`,
-      [
-        parsedClienteId,
-        numeroValue,
-        ufValue,
-        municipioValue,
-        orgaoValue,
-        tipoValue,
-        statusValue,
-        classeValue,
-        assuntoValue,
-        jurisdicaoValue,
-        advogadoValue,
-        datajudTipoJusticaValue,
-        datajudAliasValue,
-        dataDistribuicaoValue,
-        parsedId,
-      ]
+      values
     );
 
     res.json(mapProcessoRow(result.rows[0]));
@@ -521,8 +628,13 @@ export const getProcessoMovimentacoes = async (req: Request, res: Response) => {
   }
 
   try {
+    const columnInfo = await getProcessosColumnInfo();
+    const datajudAliasSelect = columnInfo.hasDatajudAlias
+      ? 'datajud_alias AS datajud_alias'
+      : 'NULL AS datajud_alias';
+
     const result = await pool.query(
-      'SELECT numero, datajud_alias FROM public.processos WHERE id = $1',
+      `SELECT numero, ${datajudAliasSelect} FROM public.processos WHERE id = $1`,
       [parsedId],
     );
 

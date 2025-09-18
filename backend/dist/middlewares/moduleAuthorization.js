@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorizeModules = void 0;
 const moduleService_1 = require("../services/moduleService");
+const modules_1 = require("../constants/modules");
 const normalizeRequiredModules = (value) => {
     if (Array.isArray(value)) {
         return value;
@@ -9,7 +10,21 @@ const normalizeRequiredModules = (value) => {
     return [value];
 };
 const authorizeModules = (required) => {
-    const requiredModules = normalizeRequiredModules(required).filter((moduleId) => typeof moduleId === 'string');
+    const requiredModuleSet = new Set();
+    for (const moduleId of normalizeRequiredModules(required)) {
+        if (typeof moduleId !== 'string') {
+            continue;
+        }
+        const trimmed = moduleId.trim();
+        if (!trimmed) {
+            continue;
+        }
+        requiredModuleSet.add(trimmed);
+        const normalized = (0, modules_1.normalizeModuleId)(trimmed);
+        if (normalized) {
+            requiredModuleSet.add(normalized);
+        }
+    }
     return async (req, res, next) => {
         if (!req.auth) {
             res.status(401).json({ error: 'Token inválido.' });
@@ -20,10 +35,24 @@ const authorizeModules = (required) => {
                 const modules = await (0, moduleService_1.fetchUserModules)(req.auth.userId);
                 req.auth.modules = modules;
             }
-            const userModules = req.auth.modules ?? [];
-            const hasAccess = requiredModules.length === 0
+            const userModules = new Set();
+            for (const moduleId of req.auth.modules ?? []) {
+                if (typeof moduleId !== 'string') {
+                    continue;
+                }
+                const trimmed = moduleId.trim();
+                if (!trimmed) {
+                    continue;
+                }
+                userModules.add(trimmed);
+                const normalized = (0, modules_1.normalizeModuleId)(trimmed);
+                if (normalized) {
+                    userModules.add(normalized);
+                }
+            }
+            const hasAccess = requiredModuleSet.size === 0
                 ? true
-                : requiredModules.some((moduleId) => userModules.includes(moduleId));
+                : Array.from(requiredModuleSet).some((moduleId) => userModules.has(moduleId));
             if (!hasAccess) {
                 res.status(403).json({ error: 'Acesso negado.' });
                 return;

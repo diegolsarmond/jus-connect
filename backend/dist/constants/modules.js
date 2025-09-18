@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SYSTEM_MODULE_SET = exports.SYSTEM_MODULES = void 0;
+exports.normalizeModuleId = normalizeModuleId;
 exports.sanitizeModuleIds = sanitizeModuleIds;
 exports.sortModules = sortModules;
 exports.SYSTEM_MODULES = [
@@ -39,6 +40,23 @@ exports.SYSTEM_MODULES = [
 ];
 const SYSTEM_MODULE_INDEX = new Map(exports.SYSTEM_MODULES.map((module, index) => [module.id, index]));
 exports.SYSTEM_MODULE_SET = new Set(exports.SYSTEM_MODULES.map((module) => module.id));
+function normalizeModuleId(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+    if (exports.SYSTEM_MODULE_SET.has(trimmed)) {
+        return trimmed;
+    }
+    const lowerCased = trimmed.toLowerCase();
+    if (exports.SYSTEM_MODULE_SET.has(lowerCased)) {
+        return lowerCased;
+    }
+    return null;
+}
 function sanitizeModuleIds(values) {
     if (values == null) {
         return [];
@@ -52,13 +70,13 @@ function sanitizeModuleIds(values) {
         if (typeof value !== 'string') {
             throw new Error('modulos deve conter apenas strings válidas');
         }
-        const trimmed = value.trim();
-        if (!exports.SYSTEM_MODULE_SET.has(trimmed)) {
+        const normalized = normalizeModuleId(value);
+        if (!normalized) {
             throw new Error(`Módulo desconhecido: ${value}`);
         }
-        if (!unique.has(trimmed)) {
-            unique.add(trimmed);
-            sanitized.push(trimmed);
+        if (!unique.has(normalized)) {
+            unique.add(normalized);
+            sanitized.push(normalized);
         }
     }
     return sanitized;
