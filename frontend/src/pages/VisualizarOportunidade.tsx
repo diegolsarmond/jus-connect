@@ -573,33 +573,33 @@ export default function VisualizarOportunidade() {
   const sectionsDef: { key: string; label: string; fields: string[] }[] = [
     {
       key: "processo",
-      label: "Dados do Processo",
+      label: "DADOS DO PROCESSO",
       fields: ["numero_processo_cnj", "numero_protocolo", "tipo_processo_nome", "vara_ou_orgao", "comarca"],
     },
     {
       key: "fluxo",
-      label: "Fluxo do Processo",
+      label: "DADOS DA PROPOSTA",
       fields: ["fase", "etapa_nome", "prazo_proximo", "status"],
     },
     {
       key: "solicitante",
-      label: "Dados do Solicitante",
+      label: "CLIENTE SOLICITANTE",
       fields: ["solicitante_nome", "solicitante_cpf_cnpj", "solicitante_email", "solicitante_telefone", "cliente_tipo"],
     },
 
     {
       key: "detalhes",
-      label: "Detalhes",
+      label: "DETALHES",
       fields: ["detalhes"],
     },
     {
       key: "honorarios",
-      label: "Honorários",
-        fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "qtde_parcelas", "contingenciamento"],
+      label: "HONORÁRIOS",
+      fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "qtde_parcelas", "contingenciamento"],
     },
     {
       key: "metadados",
-      label: "Metadados",
+      label: "SISTEMA",
       fields: ["data_criacao", "ultima_atualizacao", "criado_por", "id", "title"],
     },
   ];
@@ -1059,7 +1059,7 @@ export default function VisualizarOportunidade() {
                     id="heading-envolvidos"
                     className={sectionTitleClass}
                   >
-                    Dados dos Envolvidos
+                    ENVOLVIDOS COM O PROCESSO
                   </h2>
                   <div className="space-y-4">
                     {participants.map((p, idx) => (
