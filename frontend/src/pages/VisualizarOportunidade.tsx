@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -163,6 +169,23 @@ export default function VisualizarOportunidade() {
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [commentText, setCommentText] = useState("");
   const [interactionHistory, setInteractionHistory] = useState<InteractionEntry[]>([]);
+
+  const patchOpportunity = useCallback(
+    (updater: (prev: OpportunityData) => OpportunityData) => {
+      setOpportunity((prev) => {
+        if (!prev) return prev;
+        const next = updater(prev);
+        if ((prev as { _namesLoaded?: boolean })._namesLoaded) {
+          Object.defineProperty(next, "_namesLoaded", {
+            value: true,
+            enumerable: false,
+          });
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   const resetDocumentDialog = () => {
     setDocumentType(null);
@@ -478,16 +501,6 @@ export default function VisualizarOportunidade() {
           }
         }
 
-        if (opportunity.status_id) {
-          const situacoes = (await fetchList(
-            `${apiUrl}/api/situacao-propostas`
-          )) as Array<{ id: unknown; nome?: string }>;
-          const situacao = situacoes.find(
-            (s) => Number(s.id) === Number(opportunity.status_id)
-          );
-          if (situacao) updated.status = situacao.nome;
-        }
-
         Object.defineProperty(updated, "_namesLoaded", {
           value: true,
           enumerable: false,
@@ -787,37 +800,66 @@ export default function VisualizarOportunidade() {
         data.status_id === undefined ? parsedValue : data.status_id;
       const statusLabel = getStatusLabel(nextStatusId);
 
-      setOpportunity((prev) =>
-        prev
-          ? {
-              ...prev,
-              status_id: nextStatusId ?? null,
-              status: statusLabel,
-              ultima_atualizacao:
-                data.ultima_atualizacao ?? prev.ultima_atualizacao,
-            }
-          : prev
-      );
+      patchOpportunity((prev) => ({
+        ...prev,
+        status_id: nextStatusId ?? null,
+        status: statusLabel,
+        ultima_atualizacao:
+          data.ultima_atualizacao ?? prev.ultima_atualizacao,
+      }));
       setSnack({ open: true, message: "Status atualizado" });
     } catch (error) {
       console.error(error);
       setSnack({ open: true, message: "Erro ao atualizar status" });
-      setOpportunity((prev) =>
-        prev
-          ? {
-              ...prev,
-              status_id: previousStatusId,
-              status:
-                previousStatusId === null
-                  ? undefined
-                  : getStatusLabel(previousStatusId) ?? prev.status,
-            }
-          : prev
-      );
+      patchOpportunity((prev) => ({
+        ...prev,
+        status_id: previousStatusId,
+        status:
+          previousStatusId === null
+            ? undefined
+            : getStatusLabel(previousStatusId) ?? prev.status,
+      }));
     } finally {
       setStatusSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (!opportunity || !statusOptions.length) return;
+
+    const statusId =
+      opportunity.status_id === null || opportunity.status_id === undefined
+        ? null
+        : Number(opportunity.status_id);
+
+    if (statusId === null) return;
+
+    const hasMatchingOption = statusOptions.some(
+      (option) => Number(option.id) === statusId
+    );
+
+    if (!hasMatchingOption) return;
+
+    const desiredLabel = getStatusLabel(statusId);
+    if (!desiredLabel) return;
+
+    const currentLabel =
+      typeof opportunity.status === "string"
+        ? opportunity.status.trim()
+        : "";
+
+    if (currentLabel === desiredLabel) return;
+
+    patchOpportunity((prev) => ({
+      ...prev,
+      status: desiredLabel,
+    }));
+  }, [
+    opportunity?.status_id,
+    opportunity?.status,
+    statusOptions,
+    patchOpportunity,
+  ]);
 
   const handleDocumentConfirm = () => {
     if (!documentType) return;
