@@ -237,10 +237,6 @@ export const DeviceLinkContent = ({
       <section className={styles.integrationPanel} aria-labelledby="waha-integration-title">
         <header className={styles.integrationHeader}>
           <h2 id="waha-integration-title">Conecte o WhatsApp Web</h2>
-          <p>
-            Use o painel integrado do WAHA para autenticar sua conta do WhatsApp Business. O QR Code
-            é atualizado automaticamente para garantir uma conexão segura.
-          </p>
         </header>
         <div className={styles.statusCard}>
           <div className={styles.statusHeader}>
@@ -364,19 +360,7 @@ export const DeviceLinkContent = ({
             </p>
           )}
         </div>
-        <WhatsAppWebEmbed
-          className={styles.embedWrapper}
-          fallback={
-            <div className={styles.fallbackMessage}>
-              <h3>Configuração necessária</h3>
-              <p>
-                Defina <code>VITE_WAHA_WHATSAPP_WEB_URL</code> ou combine{" "}
-                <code>VITE_WAHA_BASE_URL</code> com <code>VITE_WAHA_WHATSAPP_WEB_PATH</code> para carregar
-                o WhatsApp Web integrado.
-              </p>
-            </div>
-          }
-        />
+
       </section>
       <div className={styles.instructions}>
         <h2>Como conectar</h2>
