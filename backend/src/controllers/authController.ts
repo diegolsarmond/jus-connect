@@ -34,7 +34,7 @@ export const login = async (req: Request, res: Response) => {
       email: string;
       senha: string | null;
       status: boolean | null;
-      perfil: number | null;
+      perfil: number | string | null;
     };
 
     if (user.status === false) {

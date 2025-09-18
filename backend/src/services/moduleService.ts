@@ -20,7 +20,9 @@ const normalizePerfilId = (value: unknown): number | null => {
   return null;
 };
 
-export const fetchPerfilModules = async (perfilId: number | null): Promise<string[]> => {
+export const fetchPerfilModules = async (perfil: unknown): Promise<string[]> => {
+  const perfilId = normalizePerfilId(perfil);
+
   if (perfilId == null) {
     return [];
   }
@@ -64,7 +66,5 @@ export const fetchUserModules = async (userId: number): Promise<string[]> => {
     return [];
   }
 
-  const perfilId = normalizePerfilId(result.rows[0]?.perfil);
-
-  return fetchPerfilModules(perfilId);
+  return fetchPerfilModules(result.rows[0]?.perfil);
 };

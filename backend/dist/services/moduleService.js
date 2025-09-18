@@ -21,16 +21,27 @@ const normalizePerfilId = (value) => {
     }
     return null;
 };
-const fetchPerfilModules = async (perfilId) => {
+const fetchPerfilModules = async (perfil) => {
+    const perfilId = normalizePerfilId(perfil);
     if (perfilId == null) {
         return [];
     }
     const result = await db_1.default.query('SELECT pm.modulo FROM public.perfil_modulos pm WHERE pm.perfil_id = $1', [perfilId]);
     const uniqueModules = new Set();
     for (const row of result.rows) {
-        if (typeof row.modulo === 'string') {
-            uniqueModules.add(row.modulo);
+        if (typeof row.modulo !== 'string') {
+            continue;
         }
+        const trimmed = row.modulo.trim();
+        if (!trimmed) {
+            continue;
+        }
+        const normalized = (0, modules_1.normalizeModuleId)(trimmed);
+        if (normalized) {
+            uniqueModules.add(normalized);
+            continue;
+        }
+        uniqueModules.add(trimmed);
     }
     return (0, modules_1.sortModules)(Array.from(uniqueModules));
 };
@@ -40,7 +51,6 @@ const fetchUserModules = async (userId) => {
     if (result.rowCount === 0) {
         return [];
     }
-    const perfilId = normalizePerfilId(result.rows[0]?.perfil);
-    return (0, exports.fetchPerfilModules)(perfilId);
+    return (0, exports.fetchPerfilModules)(result.rows[0]?.perfil);
 };
 exports.fetchUserModules = fetchUserModules;
