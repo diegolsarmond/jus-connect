@@ -134,6 +134,14 @@ export const fetchDatajudMovimentacoes = async (
     ? normalizedAlias
     : `api_publica_${normalizedAlias.replace(/^api_publica_/, '')}`;
 
+  const trimmedNumero = typeof numeroProcesso === 'string' ? numeroProcesso.trim() : '';
+  const digitsOnly = trimmedNumero.replace(/\D/g, '');
+  const numeroForQuery = digitsOnly || trimmedNumero;
+
+  if (!numeroForQuery) {
+    throw new Error('Número do processo inválido para consulta');
+  }
+
   const url = `${DATAJUD_BASE_URL}/${aliasWithPrefix}/_search`;
 
   const fetchImpl = resolveFetch();
@@ -149,7 +157,7 @@ export const fetchDatajudMovimentacoes = async (
         Authorization: `APIKey ${apiKey}`,
       },
       body: JSON.stringify({
-        query: { match: { numeroProcesso } },
+        query: { match: { numeroProcesso: numeroForQuery } },
         size: 1,
       }),
       signal: controller.signal,

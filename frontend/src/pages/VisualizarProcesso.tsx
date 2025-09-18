@@ -24,11 +24,31 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 import {
+  DATAJUD_CATEGORIAS,
+  DATAJUD_TRIBUNAIS_BY_CATEGORIA,
   DATAJUD_TRIBUNAL_MAP,
+  type DatajudCategoriaId,
+  type DatajudTribunal,
   getDatajudCategoriaLabel,
   getDatajudTribunalLabel,
   normalizeDatajudAlias,
@@ -172,6 +192,11 @@ type ProcessoMovimentacao = {
   dataIso: string | null;
 };
 
+type EditProcessoFormState = {
+  datajudTipoJustica: string;
+  datajudAlias: string;
+};
+
 const normalizeString = (value: string | null | undefined): string => {
   if (!value) {
     return "";
@@ -304,6 +329,17 @@ const isDatajudResponse = (value: unknown): value is DatajudApiResponse => {
 
   const hits = container.hits;
   return Array.isArray(hits);
+};
+
+const isApiProcessoResponse = (value: unknown): value is ApiProcessoResponse => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return (
+    "id" in (value as Record<string, unknown>) &&
+    "cliente_id" in (value as Record<string, unknown>)
+  );
 };
 
 const formatDatajudComplemento = (
@@ -564,12 +600,20 @@ export default function VisualizarProcesso() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [processo, setProcesso] = useState<ProcessoDetalhes | null>(null);
+  const [processoRaw, setProcessoRaw] = useState<ApiProcessoResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [movimentacoes, setMovimentacoes] = useState<ProcessoMovimentacao[]>([]);
   const [movimentacoesLoading, setMovimentacoesLoading] = useState(false);
   const [movimentacoesError, setMovimentacoesError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
+  const [isEditDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState<EditProcessoFormState>({
+    datajudTipoJustica: "",
+    datajudAlias: "",
+  });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     setMovimentacoes([]);
@@ -577,6 +621,10 @@ export default function VisualizarProcesso() {
     setMovimentacoesLoading(false);
     setLastSync(null);
     setAutoSyncAttempted(false);
+    setProcessoRaw(null);
+    setEditDialogOpen(false);
+    setEditError(null);
+    setEditForm({ datajudTipoJustica: "", datajudAlias: "" });
   }, [processoId]);
 
   useEffect(() => {
@@ -625,12 +673,17 @@ export default function VisualizarProcesso() {
           throw new Error("Resposta inválida do servidor ao carregar o processo");
         }
 
+        const processoResponse = json as ProcessoApiResponse;
         const { detalhes, movimentacoes: initialMovimentacoes } = mapApiProcessoToDetalhes(
-          json as ProcessoApiResponse,
+          processoResponse,
           processoId,
         );
+        const apiProcesso = isApiProcessoResponse(processoResponse)
+          ? (processoResponse as ApiProcessoResponse)
+          : null;
         if (!cancelled) {
           setProcesso(detalhes);
+          setProcessoRaw(apiProcesso);
           if (initialMovimentacoes.length > 0) {
             setMovimentacoes(initialMovimentacoes);
           }
@@ -766,7 +819,188 @@ export default function VisualizarProcesso() {
     [processoId, toast],
   );
 
+  const availableTribunais = useMemo<DatajudTribunal[]>(() => {
+    if (!editForm.datajudTipoJustica) {
+      return [];
+    }
+
+    const key = editForm.datajudTipoJustica as DatajudCategoriaId;
+    return DATAJUD_TRIBUNAIS_BY_CATEGORIA[key] ?? [];
+  }, [editForm.datajudTipoJustica]);
+
   const canSync = Boolean(processo?.datajudAlias);
+  const canEditProcesso = Boolean(processoRaw?.id);
+
+  const handleEditDialogChange = useCallback((open: boolean) => {
+    setEditDialogOpen(open);
+    if (!open) {
+      setEditError(null);
+    }
+  }, []);
+
+  const handleOpenEditDialog = useCallback(() => {
+    if (!processoRaw) {
+      return;
+    }
+
+    const alias = normalizeDatajudAlias(processoRaw.datajud_alias);
+    const categoria =
+      processoRaw.datajud_tipo_justica ??
+      (alias ? DATAJUD_TRIBUNAL_MAP.get(alias)?.categoriaId ?? null : null);
+
+    setEditForm({
+      datajudTipoJustica: categoria ?? "",
+      datajudAlias: alias ?? "",
+    });
+    setEditError(null);
+    setEditDialogOpen(true);
+  }, [processoRaw]);
+
+  const handleEditSubmit = useCallback(async () => {
+    if (!processo || !processoRaw) {
+      return;
+    }
+
+    if (!editForm.datajudTipoJustica || !editForm.datajudAlias) {
+      setEditError("Selecione o tipo de justiça e o tribunal do processo.");
+      return;
+    }
+
+    const normalizedAlias = normalizeDatajudAlias(editForm.datajudAlias);
+    if (!normalizedAlias) {
+      setEditError("Tribunal selecionado é inválido.");
+      return;
+    }
+
+    const numero = processoRaw.numero ?? processo.numero ?? "";
+    const uf = processoRaw.uf ?? processo.uf ?? "";
+    const municipio = processoRaw.municipio ?? processo.municipio ?? "";
+    const orgao = processoRaw.orgao_julgador ?? processo.orgaoJulgador ?? "";
+
+    const requiredFields = [
+      { label: "número do processo", value: numero },
+      { label: "UF", value: uf },
+      { label: "município", value: municipio },
+      { label: "órgão julgador", value: orgao },
+    ];
+
+    const missingField = requiredFields.find(
+      (field) => !field.value || field.value.trim() === "",
+    );
+
+    if (missingField) {
+      setEditError(
+        `O campo ${missingField.label} é obrigatório para atualizar o processo.`,
+      );
+      return;
+    }
+
+    const parsedClienteId =
+      typeof processoRaw.cliente_id === "number" && processoRaw.cliente_id > 0
+        ? processoRaw.cliente_id
+        : processo.cliente?.id ??
+          (clienteIdParam ? Number.parseInt(clienteIdParam, 10) : Number.NaN);
+
+    if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
+      setEditError("Cliente do processo não foi encontrado.");
+      return;
+    }
+
+    const payload = {
+      cliente_id: parsedClienteId,
+      numero,
+      uf,
+      municipio,
+      orgao_julgador: orgao,
+      tipo: processoRaw.tipo ?? null,
+      status: processoRaw.status ?? null,
+      classe_judicial: processoRaw.classe_judicial ?? null,
+      assunto: processoRaw.assunto ?? null,
+      jurisdicao: processoRaw.jurisdicao ?? null,
+      advogado_responsavel: processoRaw.advogado_responsavel ?? null,
+      data_distribuicao:
+        processoRaw.data_distribuicao ?? processo.dataDistribuicao ?? null,
+      datajud_tipo_justica: editForm.datajudTipoJustica,
+      datajud_alias: normalizedAlias,
+    };
+
+    setEditSaving(true);
+    setEditError(null);
+
+    try {
+      const res = await fetch(getApiUrl(`processos/${processoRaw.id}`), {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text();
+      let json: unknown = null;
+
+      if (text) {
+        try {
+          json = JSON.parse(text);
+        } catch (parseError) {
+          console.error("Não foi possível interpretar os dados do processo", parseError);
+        }
+      }
+
+      if (!res.ok) {
+        const message =
+          json && typeof json === "object" &&
+          "error" in json &&
+          typeof (json as { error: unknown }).error === "string"
+            ? (json as { error: string }).error
+            : `Não foi possível atualizar o processo (HTTP ${res.status})`;
+        throw new Error(message);
+      }
+
+      if (!json || typeof json !== "object") {
+        throw new Error("Resposta inválida do servidor ao atualizar o processo");
+      }
+
+      const processoAtualizado = json as ProcessoApiResponse;
+      const { detalhes } = mapApiProcessoToDetalhes(
+        processoAtualizado,
+        processoRaw.id,
+      );
+      setProcesso(detalhes);
+      setProcessoRaw(
+        isApiProcessoResponse(processoAtualizado)
+          ? (processoAtualizado as ApiProcessoResponse)
+          : processoRaw,
+      );
+      setAutoSyncAttempted(false);
+      setEditDialogOpen(false);
+      toast({
+        title: "Processo atualizado",
+        description: "Dados do tribunal foram atualizados com sucesso.",
+      });
+    } catch (updateError) {
+      const message =
+        updateError instanceof Error
+          ? updateError.message
+          : "Erro ao atualizar o processo";
+      setEditError(message);
+      toast({
+        title: "Erro ao atualizar processo",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setEditSaving(false);
+    }
+  }, [
+    clienteIdParam,
+    editForm.datajudAlias,
+    editForm.datajudTipoJustica,
+    processo,
+    processoRaw,
+    toast,
+  ]);
 
   useEffect(() => {
     if (!autoSyncAttempted && canSync) {
@@ -882,6 +1116,18 @@ export default function VisualizarProcesso() {
               <RefreshCcw className="mr-2 h-4 w-4" />
             )}
             {movimentacoesLoading ? "Sincronizando..." : "Sincronizar"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleOpenEditDialog}
+            disabled={!canEditProcesso}
+            title={
+              !canEditProcesso
+                ? "Este processo foi importado do CNJ e não pode ser editado."
+                : undefined
+            }
+          >
+            Editar processo
           </Button>
           <Button onClick={handleGerarContrato} disabled={!clienteIdParam}>
             Gerar contrato
@@ -1084,6 +1330,86 @@ export default function VisualizarProcesso() {
           )}
         </CardContent>
       </Card>
+      <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar processo</DialogTitle>
+            <DialogDescription>
+              Atualize o tribunal do processo para habilitar a consulta ao CNJ.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-process-justica">Tipo de Justiça (DataJud)</Label>
+              <Select
+                value={editForm.datajudTipoJustica}
+                onValueChange={(value) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    datajudTipoJustica: value,
+                    datajudAlias: "",
+                  }))
+                }
+              >
+                <SelectTrigger id="edit-process-justica">
+                  <SelectValue placeholder="Selecione o tipo de justiça" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATAJUD_CATEGORIAS.map((categoria) => (
+                    <SelectItem key={categoria.id} value={categoria.id}>
+                      {categoria.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-process-tribunal">Tribunal (DataJud)</Label>
+              <Select
+                value={editForm.datajudAlias}
+                onValueChange={(value) =>
+                  setEditForm((prev) => ({ ...prev, datajudAlias: value }))
+                }
+                disabled={!editForm.datajudTipoJustica}
+              >
+                <SelectTrigger id="edit-process-tribunal">
+                  <SelectValue
+                    placeholder={
+                      !editForm.datajudTipoJustica
+                        ? "Selecione o tipo de justiça"
+                        : availableTribunais.length > 0
+                          ? "Selecione o tribunal"
+                          : "Nenhum tribunal disponível"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableTribunais.map((tribunal) => (
+                    <SelectItem key={tribunal.alias} value={tribunal.alias}>
+                      {tribunal.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {editError ? (
+              <p className="text-sm text-destructive">{editError}</p>
+            ) : null}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleEditDialogChange(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleEditSubmit} disabled={editSaving}>
+              {editSaving ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
