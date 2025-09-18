@@ -1026,11 +1026,6 @@ export default function VisualizarOportunidade() {
   // seções conforme print fornecido
   const sectionsDef: { key: string; label: string; fields: string[] }[] = [
     {
-      key: "processo",
-      label: "DADOS DO PROCESSO",
-      fields: ["numero_processo_cnj", "numero_protocolo", "tipo_processo_nome", "vara_ou_orgao", "comarca"],
-    },
-    {
       key: "fluxo",
       label: "DADOS DA PROPOSTA",
       fields: ["fase", "etapa_nome", "prazo_proximo", "status"],
@@ -1038,18 +1033,41 @@ export default function VisualizarOportunidade() {
     {
       key: "solicitante",
       label: "CLIENTE SOLICITANTE",
-      fields: ["solicitante_nome", "solicitante_cpf_cnpj", "solicitante_email", "solicitante_telefone", "cliente_tipo"],
-    },
-
-    {
-      key: "detalhes",
-      label: "DETALHES",
-      fields: ["detalhes"],
+      fields: [
+        "solicitante_nome",
+        "solicitante_cpf_cnpj",
+        "solicitante_email",
+        "solicitante_telefone",
+        "cliente_tipo",
+      ],
     },
     {
       key: "honorarios",
       label: "HONORÁRIOS",
-      fields: ["valor_causa", "valor_honorarios", "percentual_honorarios", "forma_pagamento", "qtde_parcelas", "contingenciamento"],
+      fields: [
+        "valor_causa",
+        "valor_honorarios",
+        "percentual_honorarios",
+        "forma_pagamento",
+        "qtde_parcelas",
+        "contingenciamento",
+      ],
+    },
+    {
+      key: "processo",
+      label: "DADOS DO PROCESSO",
+      fields: [
+        "numero_processo_cnj",
+        "numero_protocolo",
+        "tipo_processo_nome",
+        "vara_ou_orgao",
+        "comarca",
+      ],
+    },
+    {
+      key: "detalhes",
+      label: "DETALHES",
+      fields: ["detalhes"],
     },
     {
       key: "metadados",
@@ -1524,19 +1542,53 @@ export default function VisualizarOportunidade() {
         body: JSON.stringify({ status_id: parsedValue }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: { status_id: number | null; ultima_atualizacao?: string } =
-        await res.json();
+
+      const rawText = await res.text();
+      let responseData:
+        | { status_id?: unknown; ultima_atualizacao?: unknown }
+        | null = null;
+      const trimmedText = rawText.trim();
+      if (trimmedText.length > 0) {
+        try {
+          responseData = JSON.parse(trimmedText) as {
+            status_id?: unknown;
+            ultima_atualizacao?: unknown;
+          } | null;
+        } catch (parseError) {
+          console.warn(
+            "Não foi possível interpretar a resposta ao atualizar o status da proposta.",
+            parseError,
+          );
+        }
+      }
+
+      const normalizeStatusId = (input: unknown): number | null | undefined => {
+        if (input === null || input === undefined) return null;
+        const numeric = Number(input);
+        return Number.isNaN(numeric) ? undefined : numeric;
+      };
+
+      const normalizedStatusId =
+        responseData &&
+        Object.prototype.hasOwnProperty.call(responseData, "status_id")
+          ? normalizeStatusId(responseData?.status_id)
+          : undefined;
 
       const nextStatusId =
-        data.status_id === undefined ? parsedValue : data.status_id;
+        normalizedStatusId === undefined ? parsedValue : normalizedStatusId;
       const statusLabel = getStatusLabel(nextStatusId);
+
+      const nextLastUpdate =
+        responseData && typeof responseData?.ultima_atualizacao === "string"
+          ? responseData.ultima_atualizacao
+          : undefined;
 
       patchOpportunity((prev) => ({
         ...prev,
         status_id: nextStatusId ?? null,
         status: statusLabel,
         ultima_atualizacao:
-          data.ultima_atualizacao ?? prev.ultima_atualizacao,
+          nextLastUpdate ?? prev.ultima_atualizacao,
       }));
       setSnack({ open: true, message: "Status atualizado" });
     } catch (error) {
@@ -1718,6 +1770,75 @@ export default function VisualizarOportunidade() {
     return <span>{String(value)}</span>;
   };
 
+  const renderDataSection = (sectionKey: string) => {
+    const section = sectionsDef.find((item) => item.key === sectionKey);
+    if (!section) return null;
+
+    const fields = section.fields.filter((field) => entriesMap.has(field));
+    if (fields.length === 0) return null;
+
+    return (
+      <section
+        aria-labelledby={`heading-${section.key}`}
+        className={sectionContainerClass}
+      >
+        <h2 id={`heading-${section.key}`} className={sectionTitleClass}>
+          {section.label}
+        </h2>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {fields.map((key) => {
+            const value = entriesMap.get(key);
+            const label = formatLabel(key);
+            const formatted = renderFormatted(key, value);
+
+            const copyText =
+              shouldShowCopy(key) && value !== undefined && value !== null
+                ? String(value)
+                : "";
+
+            return (
+              <div
+                key={key}
+                className="rounded-lg border border-border/60 bg-background/60 p-3"
+              >
+                <dl>
+                  <dt className="text-sm font-medium text-muted-foreground">
+                    {label}
+                  </dt>
+                  <dd className="mt-1 flex items-start gap-2">
+                    <div className="flex-1 min-w-0">{formatted}</div>
+
+                    {shouldShowCopy(key) && copyText && (
+                      <button
+                        onClick={() => copyToClipboard(copyText)}
+                        title={`Copiar ${label}`}
+                        aria-label={`Copiar ${label}`}
+                        className="ml-2 inline-flex items-center justify-center rounded px-2 py-1 border text-sm hover:bg-surface"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                        >
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                      </button>
+                    )}
+                  </dd>
+                </dl>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
   if (!opportunity) {
     return (
       <div className="p-6 space-y-4">
@@ -1876,61 +1997,10 @@ export default function VisualizarOportunidade() {
           <ScrollArea className="max-h-[1300vh]">
             <div className="space-y-6">
               {/* percorre as seções definidas e exibe apenas campos que existam */}
-              {sectionsDef.map((section) => {
-                // filtra campos da seção que existam no objeto
-                const fields = section.fields.filter((f) => entriesMap.has(f));
-                if (fields.length === 0) return null;
-                return (
-                  <section
-                    key={section.key}
-                    aria-labelledby={`heading-${section.key}`}
-                    className={sectionContainerClass}
-                  >
-                    <h2 id={`heading-${section.key}`} className={sectionTitleClass}>
-                      {section.label}
-                    </h2>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      {fields.map((key) => {
-                        const value = entriesMap.get(key);
-                        const label = formatLabel(key);
-                        const formatted = renderFormatted(key, value);
-
-                        // valor para copiar apenas se chave permitida
-                        const copyText = shouldShowCopy(key) && value !== undefined && value !== null ? String(value) : "";
-
-                        return (
-                          <div
-                            key={key}
-                            className="rounded-lg border border-border/60 bg-background/60 p-3"
-                          >
-                            <dl>
-                              <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-                              <dd className="mt-1 flex items-start gap-2">
-                                <div className="flex-1 min-w-0">{formatted}</div>
-
-                                {shouldShowCopy(key) && copyText && (
-                                  <button
-                                    onClick={() => copyToClipboard(copyText)}
-                                    title={`Copiar ${label}`}
-                                    aria-label={`Copiar ${label}`}
-                                    className="ml-2 inline-flex items-center justify-center rounded px-2 py-1 border text-sm hover:bg-surface"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                    </svg>
-                                  </button>
-                                )}
-                              </dd>
-                            </dl>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                );
-              })}
+              {renderDataSection("fluxo")}
+              {renderDataSection("solicitante")}
+              {renderDataSection("honorarios")}
+              {renderDataSection("processo")}
 
               {participants.length > 0 && (
                 <section
@@ -1976,6 +2046,9 @@ export default function VisualizarOportunidade() {
                   </div>
                 </section>
               )}
+
+              {renderDataSection("detalhes")}
+              {renderDataSection("metadados")}
 
               <section
                 aria-labelledby="heading-billing"
