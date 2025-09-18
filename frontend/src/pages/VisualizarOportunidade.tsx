@@ -1147,7 +1147,7 @@ export default function VisualizarOportunidade() {
     patchOpportunity,
   ]);
 
-  const handleDocumentConfirm = () => {
+  const handleDocumentConfirm = async () => {
     if (!documentType) return;
 
     const params = new URLSearchParams();
