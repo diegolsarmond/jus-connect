@@ -19,7 +19,6 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { teamMembers } from "../data/teamMembers";
 import type {
   ConversationInternalNote,
   ConversationSummary,
@@ -31,6 +30,7 @@ import { ChatInput } from "./ChatInput";
 import { MessageViewport } from "./MessageViewport";
 import { DeviceLinkModal } from "./DeviceLinkModal";
 import styles from "./ChatWindow.module.css";
+import { fetchChatResponsibles, fetchChatTags, type ChatResponsibleOption } from "../services/chatApi";
 
 const CLIENT_SUGGESTIONS = [
   "Prado & Cia Consultoria",
@@ -75,7 +75,10 @@ export const ChatWindow = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [deviceModalOpen, setDeviceModalOpen] = useState(false);
   const [stickToBottom, setStickToBottom] = useState(true);
-  const [newTag, setNewTag] = useState("");
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [isLoadingTags, setIsLoadingTags] = useState(false);
+  const [responsibleOptions, setResponsibleOptions] = useState<ChatResponsibleOption[]>([]);
+  const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const [clientInput, setClientInput] = useState("");
   const [newAttributeLabel, setNewAttributeLabel] = useState("");
   const [newAttributeValue, setNewAttributeValue] = useState("");
@@ -92,16 +95,121 @@ export const ChatWindow = ({
   const tags = conversation?.tags ?? [];
   const customAttributes = conversation?.customAttributes ?? [];
   const internalNotes = conversation?.internalNotes ?? [];
+  const tagOptions = useMemo(() => {
+    const all = new Set<string>();
+    for (const tag of availableTags) {
+      if (tag) {
+        all.add(tag);
+      }
+    }
+    for (const tag of tags) {
+      if (tag) {
+        all.add(tag);
+      }
+    }
+    return Array.from(all).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [availableTags, tags]);
+  const tagSelectSize = Math.min(Math.max(tagOptions.length, 4), 6);
 
   useEffect(() => {
     setDetailsOpen(false);
     if (!conversation) return;
-    setNewTag("");
     setClientInput(conversation.clientName ?? "");
     setNewAttributeLabel("");
     setNewAttributeValue("");
     setInternalNoteContent("");
   }, [conversation]);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadResponsibles = async () => {
+      try {
+        setIsLoadingResponsibles(true);
+        const options = await fetchChatResponsibles();
+        if (!canceled) {
+          setResponsibleOptions(options);
+        }
+      } catch (error) {
+        console.error("Falha ao carregar responsáveis", error);
+      } finally {
+        if (!canceled) {
+          setIsLoadingResponsibles(false);
+        }
+      }
+    };
+
+    loadResponsibles();
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadTags = async () => {
+      try {
+        setIsLoadingTags(true);
+        const tagsFromApi = await fetchChatTags();
+        if (!canceled) {
+          setAvailableTags(tagsFromApi);
+        }
+      } catch (error) {
+        console.error("Falha ao carregar etiquetas", error);
+      } finally {
+        if (!canceled) {
+          setIsLoadingTags(false);
+        }
+      }
+    };
+
+    loadTags();
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!conversation?.responsible) {
+      return;
+    }
+    setResponsibleOptions((prev) => {
+      if (prev.some((option) => option.id === conversation.responsible!.id)) {
+        return prev;
+      }
+      const next = [
+        ...prev,
+        {
+          id: conversation.responsible.id,
+          name: conversation.responsible.name,
+          role: conversation.responsible.role,
+        },
+      ];
+      return next.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    });
+  }, [conversation?.responsible?.id, conversation?.responsible?.name, conversation?.responsible?.role]);
+
+  useEffect(() => {
+    if (!conversation?.tags) {
+      return;
+    }
+    setAvailableTags((prev) => {
+      const merged = new Set(prev);
+      let changed = false;
+      for (const tag of conversation.tags ?? []) {
+        if (!tag) {
+          continue;
+        }
+        if (!merged.has(tag)) {
+          merged.add(tag);
+          changed = true;
+        }
+      }
+      if (!changed) {
+        return prev;
+      }
+      return Array.from(merged).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    });
+  }, [conversation?.tags]);
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -117,7 +225,6 @@ export const ChatWindow = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMenuOpen(false);
-        setDetailsOpen(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -194,23 +301,21 @@ export const ChatWindow = ({
     await runUpdate({ responsibleId: event.target.value === "" ? null : event.target.value });
   };
 
-  const handleTagSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
-    event.preventDefault();
-    if (!conversation) return;
-    const trimmed = newTag.trim();
-    if (!trimmed) return;
-    const exists = tags.some((tag) => tag.toLowerCase() === trimmed.toLowerCase());
-    if (exists) {
-      setNewTag("");
-      return;
-    }
-    await runUpdate({ tags: [...tags, trimmed] });
-    setNewTag("");
-  };
-
   const handleRemoveTag = async (tagToRemove: string) => {
     if (!conversation) return;
     await runUpdate({ tags: tags.filter((tag) => tag !== tagToRemove) });
+  };
+
+  const handleTagSelectionChange: ChangeEventHandler<HTMLSelectElement> = async (event) => {
+    const selected = Array.from(event.target.selectedOptions, (option) => option.value);
+    if (
+      selected.length === tags.length &&
+      selected.every((value) => tags.includes(value)) &&
+      tags.every((value) => selected.includes(value))
+    ) {
+      return;
+    }
+    await runUpdate({ tags: selected });
   };
 
   const handleClientSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
@@ -369,9 +474,8 @@ export const ChatWindow = ({
               aria-label={detailsOpen ? "Ocultar detalhes da conversa" : "Exibir detalhes da conversa"}
               aria-controls={detailsPanelId}
               aria-expanded={detailsOpen}
-              aria-pressed={detailsOpen}
               data-active={detailsOpen ? "true" : undefined}
-              onClick={() => setDetailsOpen((open) => !open)}
+              onClick={() => setDetailsOpen(true)}
             >
               <Info size={18} aria-hidden="true" />
             </button>
@@ -453,12 +557,12 @@ export const ChatWindow = ({
                 className={styles.metadataSelect}
                 value={conversation.responsible?.id ?? ""}
                 onChange={handleAssignResponsible}
-                disabled={isUpdatingConversation}
+                disabled={isUpdatingConversation || isLoadingResponsibles}
               >
                 <option value="">Sem responsável</option>
-                {teamMembers.map((member) => (
+                {responsibleOptions.map((member) => (
                   <option key={member.id} value={member.id}>
-                    {member.name} — {member.role}
+                    {member.role ? `${member.name} — ${member.role}` : member.name}
                   </option>
                 ))}
               </select>
@@ -500,19 +604,33 @@ export const ChatWindow = ({
                 ))}
                 {tags.length === 0 && <span className={styles.emptyHint}>Nenhuma etiqueta cadastrada</span>}
               </div>
-              <form onSubmit={handleTagSubmit} className={styles.inlineForm}>
-                <input
-                  type="text"
-                  value={newTag}
-                  onChange={(event) => setNewTag(event.target.value)}
-                  placeholder="Adicionar etiqueta"
-                  aria-label="Adicionar etiqueta"
-                  disabled={isUpdatingConversation}
-                />
-                <button type="submit" disabled={isUpdatingConversation || newTag.trim().length === 0}>
-                  Adicionar
-                </button>
-              </form>
+              <label className={styles.tagsSelector}>
+                <span className={styles.tagsSelectorText}>Selecionar etiquetas</span>
+                <select
+                  multiple
+                  size={tagSelectSize}
+                  className={styles.tagsSelect}
+                  value={tags}
+                  onChange={handleTagSelectionChange}
+                  disabled={isUpdatingConversation || isLoadingTags}
+                  aria-label="Selecionar etiquetas da conversa"
+                >
+                  {tagOptions.length === 0 ? (
+                    <option value="" disabled>
+                      {isLoadingTags ? "Carregando etiquetas..." : "Nenhuma etiqueta disponível"}
+                    </option>
+                  ) : (
+                    tagOptions.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              {isLoadingTags && tagOptions.length > 0 && (
+                <span className={styles.tagsLoading}>Atualizando lista de etiquetas…</span>
+              )}
             </div>
           </div>
 

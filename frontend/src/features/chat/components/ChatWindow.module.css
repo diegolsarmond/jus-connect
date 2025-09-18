@@ -363,6 +363,38 @@
   gap: 0.65rem;
 }
 
+.tagsSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tagsSelectorText {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.tagsSelect {
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--background));
+  color: inherit;
+  font-size: 0.9rem;
+}
+
+.tagsSelect:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.tagsLoading {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
 .tagsList {
   display: flex;
   flex-wrap: wrap;

@@ -28,6 +28,15 @@ test('ChatService.recordOutgoingMessage persists message and updates conversatio
     short_status: 'Ativo',
     description: null,
     pinned: false,
+    phone_number: null,
+    responsible_id: null,
+    responsible_snapshot: null,
+    tags: [],
+    client_name: null,
+    is_linked_to_client: false,
+    custom_attributes: [],
+    is_private: false,
+    internal_notes: [],
     unread_count: 0,
     last_message_id: null,
     last_message_preview: null,
@@ -85,6 +94,15 @@ test('ChatService.getMessages paginates messages in chronological order', async 
     short_status: 'Ativo',
     description: null,
     pinned: false,
+    phone_number: null,
+    responsible_id: null,
+    responsible_snapshot: null,
+    tags: [],
+    client_name: null,
+    is_linked_to_client: false,
+    custom_attributes: [],
+    is_private: false,
+    internal_notes: [],
     unread_count: 0,
     last_message_id: null,
     last_message_preview: null,
@@ -175,4 +193,72 @@ test('ChatService.listKnownSessions returns distinct, trimmed session identifier
   const sessions = await service.listKnownSessions();
 
   assert.deepEqual(sessions, ['SessionA', 'SessionB']);
+});
+
+test('ChatService.updateConversation updates metadata fields', async () => {
+  const updatedRow = {
+    id: 'conv-10',
+    contact_identifier: '5511999000000',
+    contact_name: 'Contato',
+    contact_avatar: null,
+    short_status: 'Ativo',
+    description: null,
+    pinned: false,
+    phone_number: null,
+    responsible_id: 7,
+    responsible_snapshot: {
+      id: '7',
+      name: 'Ana Souza',
+      role: 'Advogada',
+      avatar: 'data:image/svg+xml;utf8,avatar',
+    },
+    tags: ['Lead', 'VIP'],
+    client_name: 'Empresa X',
+    is_linked_to_client: true,
+    custom_attributes: [{ id: 'attr-1', label: 'Origem', value: 'Site' }],
+    is_private: true,
+    internal_notes: [
+      { id: 'note-1', author: 'Você', content: 'Teste', createdAt: '2024-01-02T10:00:00.000Z' },
+    ],
+    unread_count: 0,
+    last_message_id: null,
+    last_message_preview: null,
+    last_message_timestamp: null,
+    last_message_sender: null,
+    last_message_type: null,
+    last_message_status: null,
+    metadata: null,
+    created_at: '2024-01-01T00:00:00.000Z',
+    updated_at: '2024-01-02T00:00:00.000Z',
+  };
+
+  const pool = new FakePool([
+    { rows: [{ id: 7, nome_completo: 'Ana Souza', perfil: 'Advogada' }], rowCount: 1 },
+    { rows: [updatedRow], rowCount: 1 },
+  ]);
+
+  const service = new ChatService(pool as any, async () => {});
+
+  const updated = await service.updateConversation('conv-10', {
+    responsibleId: 7,
+    tags: ['VIP', 'Lead'],
+    clientName: 'Empresa X',
+    isLinkedToClient: true,
+    customAttributes: [{ id: 'attr-1', label: 'Origem', value: 'Site' }],
+    isPrivate: true,
+    internalNotes: [
+      { id: 'note-1', author: 'Você', content: 'Teste', createdAt: '2024-01-02T10:00:00Z' },
+    ],
+  });
+
+  assert.equal(pool.calls.length, 2);
+  assert.match(pool.calls[0]!.text ?? '', /FROM public\."vw\.usuarios"/);
+  assert.match(pool.calls[1]!.text ?? '', /UPDATE chat_conversations/);
+  assert.equal(updated?.responsible?.id, '7');
+  assert.deepEqual(updated?.tags, ['Lead', 'VIP']);
+  assert.equal(updated?.clientName, 'Empresa X');
+  assert.equal(updated?.isLinkedToClient, true);
+  assert.equal(updated?.isPrivate, true);
+  assert.equal(updated?.customAttributes?.length, 1);
+  assert.equal(updated?.internalNotes?.length, 1);
 });

@@ -43,6 +43,14 @@ export interface ConversationSummary {
   unreadCount: number;
   pinned?: boolean;
   lastMessage?: ConversationLastMessage;
+  phoneNumber?: string;
+  responsible?: ConversationResponsible | null;
+  tags?: string[];
+  isLinkedToClient?: boolean;
+  clientName?: string | null;
+  customAttributes?: ConversationCustomAttribute[];
+  isPrivate?: boolean;
+  internalNotes?: ConversationInternalNote[];
 }
 
 export interface ConversationDetails extends ConversationSummary {
@@ -50,6 +58,26 @@ export interface ConversationDetails extends ConversationSummary {
   metadata?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ConversationResponsible {
+  id: string;
+  name: string;
+  role?: string;
+  avatar?: string;
+}
+
+export interface ConversationCustomAttribute {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface ConversationInternalNote {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: string;
 }
 
 export interface MessagePage {
@@ -86,6 +114,17 @@ export interface SendMessageInput {
   attachments?: MessageAttachment[];
 }
 
+export interface UpdateConversationInput {
+  responsibleId?: number | null;
+  tags?: string[];
+  phoneNumber?: string | null;
+  isLinkedToClient?: boolean;
+  clientName?: string | null;
+  customAttributes?: ConversationCustomAttribute[];
+  isPrivate?: boolean;
+  internalNotes?: ConversationInternalNote[];
+}
+
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -108,6 +147,15 @@ interface ConversationRow extends QueryResultRow {
   short_status: string | null;
   description: string | null;
   pinned: boolean;
+  phone_number: string | null;
+  responsible_id: number | null;
+  responsible_snapshot: unknown;
+  tags: unknown;
+  client_name: string | null;
+  is_linked_to_client: boolean | null;
+  custom_attributes: unknown;
+  is_private: boolean | null;
+  internal_notes: unknown;
   unread_count: number;
   last_message_id: string | null;
   last_message_preview: string | null;
@@ -240,6 +288,217 @@ function buildAvatar(name: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+function parseJsonValue<T>(value: unknown): T | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    if (!value.trim()) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as T;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  if (typeof value === 'object') {
+    return value as T;
+  }
+
+  return null;
+}
+
+function parseJsonArray(value: unknown): unknown[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  const parsed = parseJsonValue<unknown[]>(value);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function parseStringArray(value: unknown): string[] {
+  const array = parseJsonArray(value);
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const item of array) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    const trimmed = item.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(trimmed);
+  }
+
+  return result;
+}
+
+function parseCustomAttributes(value: unknown): ConversationCustomAttribute[] {
+  const array = parseJsonArray(value);
+  const seen = new Set<string>();
+  const result: ConversationCustomAttribute[] = [];
+
+  for (const item of array) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const entry = item as { id?: unknown; label?: unknown; value?: unknown };
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+    const entryValue = typeof entry.value === 'string' ? entry.value.trim() : '';
+
+    if (!id || !label || !entryValue || seen.has(id)) {
+      continue;
+    }
+
+    seen.add(id);
+    result.push({ id, label, value: entryValue });
+  }
+
+  return result;
+}
+
+function ensureIsoString(value: string | Date | null | undefined): string {
+  if (!value) {
+    return new Date().toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString();
+  }
+
+  return parsed.toISOString();
+}
+
+function parseInternalNotes(value: unknown): ConversationInternalNote[] {
+  const array = parseJsonArray(value);
+  const seen = new Set<string>();
+  const result: ConversationInternalNote[] = [];
+
+  for (const item of array) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+
+    const entry = item as { id?: unknown; author?: unknown; content?: unknown; createdAt?: unknown };
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    const author = typeof entry.author === 'string' ? entry.author.trim() : '';
+    const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+    const createdAtValue = entry.createdAt;
+
+    if (!id || !author || !content || seen.has(id)) {
+      continue;
+    }
+
+    const createdAt = ensureIsoString(
+      typeof createdAtValue === 'string' || createdAtValue instanceof Date ? createdAtValue : undefined,
+    );
+
+    seen.add(id);
+    result.push({ id, author, content, createdAt });
+  }
+
+  return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+type ResponsibleSnapshot = {
+  id?: unknown;
+  name?: unknown;
+  role?: unknown;
+  avatar?: unknown;
+} | null;
+
+function parseResponsibleSnapshot(value: unknown): ResponsibleSnapshot {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    if (!value.trim()) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') {
+        return parsed as ResponsibleSnapshot;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  if (typeof value === 'object') {
+    return value as ResponsibleSnapshot;
+  }
+
+  return null;
+}
+
+function mapResponsible(row: ConversationRow): ConversationResponsible | null {
+  const snapshot = parseResponsibleSnapshot(row.responsible_snapshot);
+
+  const rawId =
+    typeof snapshot?.id === 'string' && snapshot.id.trim()
+      ? snapshot.id.trim()
+      : typeof snapshot?.id === 'number'
+        ? String(snapshot.id)
+        : row.responsible_id !== null && row.responsible_id !== undefined
+          ? String(row.responsible_id)
+          : null;
+
+  if (!rawId) {
+    return null;
+  }
+
+  const name =
+    typeof snapshot?.name === 'string' && snapshot.name.trim()
+      ? snapshot.name.trim()
+      : `Usuário ${rawId}`;
+
+  const role =
+    typeof snapshot?.role === 'string' && snapshot.role.trim()
+      ? snapshot.role.trim()
+      : undefined;
+
+  const avatar =
+    typeof snapshot?.avatar === 'string' && snapshot.avatar.trim()
+      ? snapshot.avatar
+      : buildAvatar(name);
+
+  return {
+    id: rawId,
+    name,
+    role,
+    avatar,
+  };
+}
+
 function mapConversation(row: ConversationRow): ConversationDetails {
   const name = getConversationName(row);
   const avatar = row.contact_avatar && row.contact_avatar.trim()
@@ -256,6 +515,16 @@ function mapConversation(row: ConversationRow): ConversationDetails {
         status: normalizeStatus(row.last_message_status),
       }
     : undefined;
+  const tags = parseStringArray(row.tags).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const customAttributes = parseCustomAttributes(row.custom_attributes);
+  const internalNotes = parseInternalNotes(row.internal_notes);
+  const clientName =
+    typeof row.client_name === 'string' && row.client_name.trim() ? row.client_name.trim() : null;
+  const phoneNumber =
+    typeof row.phone_number === 'string' && row.phone_number.trim() ? row.phone_number.trim() : undefined;
+  const isLinkedToClient = row.is_linked_to_client === true;
+  const isPrivate = row.is_private === true;
+  const responsible = mapResponsible(row);
 
   return {
     id: row.id,
@@ -266,6 +535,14 @@ function mapConversation(row: ConversationRow): ConversationDetails {
     unreadCount: typeof row.unread_count === 'number' ? row.unread_count : 0,
     pinned: row.pinned ?? false,
     lastMessage,
+    phoneNumber,
+    responsible,
+    tags,
+    isLinkedToClient,
+    clientName,
+    customAttributes,
+    isPrivate,
+    internalNotes,
     contactIdentifier: row.contact_identifier,
     metadata: row.metadata ?? null,
     createdAt: formatDate(row.created_at),
@@ -405,9 +682,50 @@ export default class ChatService {
     return this.db.query(text, params);
   }
 
+  private async loadResponsibleSnapshot(userId: number): Promise<{
+    id: number;
+    name: string;
+    role?: string;
+    avatar: string;
+  } | null> {
+    const result = await this.query(
+      'SELECT id, nome_completo, perfil FROM public."vw.usuarios" WHERE id = $1',
+      [userId],
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    const row = result.rows[0] as { id: number | string; nome_completo: string | null; perfil?: unknown };
+    const resolvedId =
+      typeof row.id === 'number'
+        ? row.id
+        : Number.parseInt(String(row.id ?? userId), 10) || userId;
+    const rawName = typeof row.nome_completo === 'string' ? row.nome_completo.trim() : '';
+    const name = rawName || `Usuário ${resolvedId}`;
+    const rawRole = row.perfil;
+
+    let role: string | undefined;
+    if (typeof rawRole === 'string' && rawRole.trim()) {
+      role = rawRole.trim();
+    } else if (typeof rawRole === 'number' && Number.isFinite(rawRole)) {
+      role = `Perfil ${rawRole}`;
+    }
+
+    return {
+      id: resolvedId,
+      name,
+      role,
+      avatar: buildAvatar(name),
+    };
+  }
+
   async listConversations(): Promise<ConversationSummary[]> {
     const result = await this.query(
       `SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
          FROM chat_conversations
@@ -425,6 +743,14 @@ export default class ChatService {
         unreadCount: mapped.unreadCount,
         pinned: mapped.pinned,
         lastMessage: mapped.lastMessage,
+        phoneNumber: mapped.phoneNumber,
+        responsible: mapped.responsible,
+        tags: mapped.tags,
+        isLinkedToClient: mapped.isLinkedToClient,
+        clientName: mapped.clientName,
+        customAttributes: mapped.customAttributes,
+        isPrivate: mapped.isPrivate,
+        internalNotes: mapped.internalNotes,
       };
     });
   }
@@ -457,6 +783,8 @@ export default class ChatService {
   async getConversationDetails(conversationId: string): Promise<ConversationDetails | null> {
     const result = await this.query(
       `SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
          FROM chat_conversations
@@ -502,6 +830,8 @@ export default class ChatService {
              pinned = EXCLUDED.pinned,
              metadata = EXCLUDED.metadata
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,
       [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata]
@@ -517,7 +847,151 @@ export default class ChatService {
       unreadCount: mapped.unreadCount,
       pinned: mapped.pinned,
       lastMessage: mapped.lastMessage,
+      phoneNumber: mapped.phoneNumber,
+      responsible: mapped.responsible,
+      tags: mapped.tags,
+      isLinkedToClient: mapped.isLinkedToClient,
+      clientName: mapped.clientName,
+      customAttributes: mapped.customAttributes,
+      isPrivate: mapped.isPrivate,
+      internalNotes: mapped.internalNotes,
     };
+  }
+
+  async updateConversation(
+    conversationId: string,
+    changes: UpdateConversationInput,
+  ): Promise<ConversationSummary | null> {
+    const normalizedId = typeof conversationId === 'string' ? conversationId.trim() : '';
+    if (!normalizedId) {
+      throw new ValidationError('Conversation id is required');
+    }
+
+    const has = (key: keyof UpdateConversationInput) => Object.prototype.hasOwnProperty.call(changes, key);
+
+    const values: unknown[] = [normalizedId];
+    const assignments: string[] = [];
+
+    const addAssignment = (column: string, value: unknown, cast?: string) => {
+      values.push(value);
+      const placeholder = `$${values.length}`;
+      assignments.push(`${column} = ${cast ? `${placeholder}::${cast}` : placeholder}`);
+    };
+
+    const setNull = (column: string) => {
+      assignments.push(`${column} = NULL`);
+    };
+
+    if (has('responsibleId')) {
+      const responsibleId = changes.responsibleId;
+      if (responsibleId === null) {
+        setNull('responsible_id');
+        setNull('responsible_snapshot');
+      } else {
+        if (typeof responsibleId !== 'number' || !Number.isInteger(responsibleId)) {
+          throw new ValidationError('responsibleId must be an integer');
+        }
+
+        const snapshot = await this.loadResponsibleSnapshot(responsibleId);
+        if (!snapshot) {
+          throw new ValidationError('Responsible user not found');
+        }
+
+        addAssignment('responsible_id', snapshot.id);
+        const snapshotPayload = {
+          id: String(snapshot.id),
+          name: snapshot.name,
+          role: snapshot.role,
+          avatar: snapshot.avatar,
+        };
+        addAssignment('responsible_snapshot', JSON.stringify(snapshotPayload), 'jsonb');
+      }
+    }
+
+    if (has('tags')) {
+      const normalizedTags = parseStringArray(changes.tags ?? []).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      addAssignment('tags', JSON.stringify(normalizedTags), 'jsonb');
+    }
+
+    if (has('phoneNumber')) {
+      const phoneValue = changes.phoneNumber;
+      if (phoneValue === null) {
+        setNull('phone_number');
+      } else if (typeof phoneValue === 'string') {
+        const trimmed = phoneValue.trim();
+        if (!trimmed) {
+          setNull('phone_number');
+        } else {
+          addAssignment('phone_number', trimmed);
+        }
+      } else if (phoneValue !== undefined) {
+        throw new ValidationError('phoneNumber must be a string or null');
+      }
+    }
+
+    if (has('clientName')) {
+      const clientValue = changes.clientName;
+      if (clientValue === null) {
+        setNull('client_name');
+      } else if (typeof clientValue === 'string') {
+        const trimmed = clientValue.trim();
+        if (!trimmed) {
+          setNull('client_name');
+        } else {
+          addAssignment('client_name', trimmed);
+        }
+      } else if (clientValue !== undefined) {
+        throw new ValidationError('clientName must be a string or null');
+      }
+    }
+
+    if (has('isLinkedToClient')) {
+      const linkValue = changes.isLinkedToClient;
+      if (typeof linkValue !== 'boolean') {
+        throw new ValidationError('isLinkedToClient must be a boolean');
+      }
+      addAssignment('is_linked_to_client', linkValue);
+    }
+
+    if (has('customAttributes')) {
+      const normalizedAttributes = parseCustomAttributes(changes.customAttributes ?? []);
+      addAssignment('custom_attributes', JSON.stringify(normalizedAttributes), 'jsonb');
+    }
+
+    if (has('isPrivate')) {
+      const privateValue = changes.isPrivate;
+      if (typeof privateValue !== 'boolean') {
+        throw new ValidationError('isPrivate must be a boolean');
+      }
+      addAssignment('is_private', privateValue);
+    }
+
+    if (has('internalNotes')) {
+      const normalizedNotes = parseInternalNotes(changes.internalNotes ?? []);
+      addAssignment('internal_notes', JSON.stringify(normalizedNotes), 'jsonb');
+    }
+
+    if (assignments.length === 0) {
+      throw new ValidationError('No valid updates provided');
+    }
+
+    const result = await this.query(
+      `UPDATE chat_conversations
+          SET ${assignments.join(', ')}
+        WHERE id = $1
+        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+                  phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                  custom_attributes, is_private, internal_notes,
+                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
+                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,
+      values,
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    return mapConversation(result.rows[0] as ConversationRow);
   }
 
   async ensureConversation(input: CreateConversationInput): Promise<ConversationDetails> {
@@ -560,6 +1034,8 @@ export default class ChatService {
               ELSE COALESCE(chat_conversations.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
             END
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,
       [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata]

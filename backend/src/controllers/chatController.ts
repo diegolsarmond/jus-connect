@@ -4,6 +4,7 @@ import ChatService, {
   MessagePage,
   RecordMessageInput,
   SendMessageInput,
+  UpdateConversationInput,
   ValidationError as ChatValidationError,
 } from '../services/chatService';
 
@@ -67,6 +68,98 @@ function parseSendMessagePayload(body: any): SendMessageInput {
   };
 }
 
+function parseUpdateConversationPayload(body: any): UpdateConversationInput {
+  if (!body || typeof body !== 'object') {
+    throw new ChatValidationError('Request body must be an object');
+  }
+
+  const payload: UpdateConversationInput = {};
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
+
+  if (has('responsibleId')) {
+    const value = body.responsibleId;
+    if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+      payload.responsibleId = null;
+    } else if (typeof value === 'number') {
+      if (!Number.isInteger(value)) {
+        throw new ChatValidationError('responsibleId must be an integer');
+      }
+      payload.responsibleId = value;
+    } else if (typeof value === 'string') {
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+        throw new ChatValidationError('responsibleId must be a valid integer');
+      }
+      payload.responsibleId = parsed;
+    } else {
+      throw new ChatValidationError('responsibleId must be a string, number or null');
+    }
+  }
+
+  if (has('tags')) {
+    if (!Array.isArray(body.tags)) {
+      throw new ChatValidationError('tags must be an array');
+    }
+    payload.tags = body.tags.filter((tag: unknown): tag is string => typeof tag === 'string');
+  }
+
+  if (has('phoneNumber')) {
+    const value = body.phoneNumber;
+    if (value === null || value === undefined) {
+      payload.phoneNumber = null;
+    } else if (typeof value === 'string') {
+      payload.phoneNumber = value;
+    } else {
+      throw new ChatValidationError('phoneNumber must be a string or null');
+    }
+  }
+
+  if (has('clientName')) {
+    const value = body.clientName;
+    if (value === null) {
+      payload.clientName = null;
+    } else if (typeof value === 'string') {
+      payload.clientName = value;
+    } else {
+      throw new ChatValidationError('clientName must be a string or null');
+    }
+  }
+
+  if (has('isLinkedToClient')) {
+    if (typeof body.isLinkedToClient !== 'boolean') {
+      throw new ChatValidationError('isLinkedToClient must be a boolean');
+    }
+    payload.isLinkedToClient = body.isLinkedToClient;
+  }
+
+  if (has('customAttributes')) {
+    if (!Array.isArray(body.customAttributes)) {
+      throw new ChatValidationError('customAttributes must be an array');
+    }
+    payload.customAttributes = body.customAttributes.filter((item: unknown): item is NonNullable<UpdateConversationInput['customAttributes']>[number] =>
+      !!item && typeof item === 'object',
+    );
+  }
+
+  if (has('isPrivate')) {
+    if (typeof body.isPrivate !== 'boolean') {
+      throw new ChatValidationError('isPrivate must be a boolean');
+    }
+    payload.isPrivate = body.isPrivate;
+  }
+
+  if (has('internalNotes')) {
+    if (!Array.isArray(body.internalNotes)) {
+      throw new ChatValidationError('internalNotes must be an array');
+    }
+    payload.internalNotes = body.internalNotes.filter((item: unknown): item is NonNullable<UpdateConversationInput['internalNotes']>[number] =>
+      !!item && typeof item === 'object',
+    );
+  }
+
+  return payload;
+}
+
 export async function listConversationsHandler(_req: Request, res: Response) {
   try {
     const conversations = await chatService.listConversations();
@@ -123,6 +216,24 @@ export async function sendConversationMessageHandler(req: Request, res: Response
       return res.status(400).json({ error: error.message });
     }
     console.error('Failed to record outgoing message', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function updateConversationHandler(req: Request, res: Response) {
+  const { conversationId } = req.params;
+  try {
+    const payload = parseUpdateConversationPayload(req.body);
+    const updated = await chatService.updateConversation(conversationId, payload);
+    if (!updated) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    res.json(updated);
+  } catch (error) {
+    if (error instanceof ChatValidationError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Failed to update conversation', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
