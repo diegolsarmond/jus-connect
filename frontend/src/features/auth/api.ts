@@ -1,6 +1,16 @@
 import { getApiUrl } from "@/lib/api";
 import type { AuthUser, LoginCredentials, LoginResponse } from "./types";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 const parseModules = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
     return [];
@@ -27,6 +37,9 @@ const parseErrorMessage = async (response: Response) => {
     : "Não foi possível concluir a solicitação. Tente novamente.";
 };
 
+const buildApiError = async (response: Response) =>
+  new ApiError(await parseErrorMessage(response), response.status);
+
 export const loginRequest = async (
   credentials: LoginCredentials,
 ): Promise<LoginResponse> => {
@@ -40,7 +53,7 @@ export const loginRequest = async (
   });
 
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
+    throw await buildApiError(response);
   }
 
   const data = (await response.json()) as LoginResponse;
@@ -58,15 +71,21 @@ export const loginRequest = async (
   };
 };
 
-export const fetchCurrentUser = async (): Promise<AuthUser> => {
+export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
+  const headers = new Headers({
+    Accept: "application/json",
+  });
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(getApiUrl("auth/me"), {
-    headers: {
-      Accept: "application/json",
-    },
+    headers,
   });
 
   if (!response.ok) {
-    throw new Error(await parseErrorMessage(response));
+    throw await buildApiError(response);
   }
 
   const data = (await response.json()) as AuthUser & { modulos?: unknown };
