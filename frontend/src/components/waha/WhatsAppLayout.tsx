@@ -3,6 +3,7 @@ import { useWAHA } from "@/hooks/useWAHA";
 import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { ChatWindow as CRMChatWindow } from "@/features/chat/components/ChatWindow";
+import { NewConversationModal } from "@/features/chat/components/NewConversationModal";
 import type {
   ConversationSummary,
   Message as CRMMessage,
@@ -38,6 +39,44 @@ const mapAckToStatus = (ack?: string | number) => {
 
 const createAvatarUrl = (name: string) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1D4ED8&color=FFFFFF`;
+
+const defaultTagPalettes = [
+  ["Novo lead", "WhatsApp"],
+  ["Prioritário", "Processo civil"],
+  ["Financeiro", "Follow-up"],
+  ["Documentos", "Urgente"],
+  ["Onboarding", "Cliente ativo"],
+  ["Reunião", "Retorno agendado"],
+  ["Atendimento", "Triagem"],
+  ["Consultoria", "Revisar contrato"],
+];
+
+const deterministicIndex = (seed: string, length: number) => {
+  if (length <= 0) {
+    return 0;
+  }
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash << 5) - hash + seed.charCodeAt(index);
+    hash |= 0; // Converte para inteiro de 32 bits
+  }
+  return Math.abs(hash) % length;
+};
+
+const pickDefaultResponsible = (chatId: string) => {
+  if (!teamMembers.length) {
+    return null;
+  }
+  return teamMembers[deterministicIndex(chatId, teamMembers.length)] ?? null;
+};
+
+const pickDefaultTags = (chatId: string) => {
+  if (!defaultTagPalettes.length) {
+    return [];
+  }
+  const palette = defaultTagPalettes[deterministicIndex(`${chatId}-tags`, defaultTagPalettes.length)];
+  return palette ? [...palette] : [];
+};
 
 const mergeOverrides = (
   base: ConversationSummary,
@@ -98,8 +137,8 @@ const mapChatToConversation = (
     pinned: chat.pinned ?? false,
     lastMessage,
     phoneNumber: WAHAService.extractPhoneFromWhatsAppId(chat.id),
-    responsible: null,
-    tags: [],
+    responsible: pickDefaultResponsible(chat.id),
+    tags: pickDefaultTags(chat.id),
     isLinkedToClient: false,
     clientName: null,
     customAttributes: [],
@@ -154,9 +193,23 @@ export const WhatsAppLayout = ({
   const [conversationOverrides, setConversationOverrides] = useState<
     Record<string, Partial<ConversationSummary>>
   >({});
+  const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const wahaState = useWAHA();
-  const { addMessage, selectChat, activeChatId } = wahaState;
+  const {
+    chats: rawChats,
+    messages: messageMap,
+    addMessage,
+    selectChat,
+    loadMessages,
+    loadChats,
+    loadMoreChats,
+    activeChatId,
+    checkSessionStatus,
+    loading,
+    hasMoreChats,
+    isLoadingMoreChats,
+  } = wahaState;
 
   // Set up webhook receiver for demo purposes
   useEffect(() => {
@@ -181,7 +234,7 @@ export const WhatsAppLayout = ({
   }, [activeChatId, wahaState.messages]);
 
   const conversations = useMemo(() => {
-    const mapped = wahaState.chats.map((chat) =>
+    const mapped = rawChats.map((chat) =>
       mapChatToConversation(chat, conversationOverrides[chat.id]),
     );
     return mapped.sort((a, b) => {
@@ -189,7 +242,7 @@ export const WhatsAppLayout = ({
       const timeB = b.lastMessage ? new Date(b.lastMessage.timestamp).getTime() : 0;
       return timeB - timeA;
     });
-  }, [wahaState.chats, conversationOverrides]);
+  }, [rawChats, conversationOverrides]);
 
   const activeConversationId = activeChatId ?? undefined;
 
@@ -199,8 +252,8 @@ export const WhatsAppLayout = ({
   );
 
   const rawMessages = useMemo(
-    () => (activeConversationId ? wahaState.messages[activeConversationId] ?? [] : []),
-    [activeConversationId, wahaState.messages],
+    () => (activeConversationId ? messageMap[activeConversationId] ?? [] : []),
+    [activeConversationId, messageMap],
   );
 
   const messages = useMemo(() => rawMessages.map(mapMessageToCRM), [rawMessages]);
@@ -281,53 +334,96 @@ export const WhatsAppLayout = ({
     });
   };
 
+  const conversationSuggestions = useMemo(
+    () => conversations.slice(0, 60),
+    [conversations],
+  );
+
+  const handleModalSelect = useCallback(
+    async (conversationId: string) => {
+      setIsNewConversationOpen(false);
+      await handleSelectConversation(conversationId);
+    },
+    [handleSelectConversation],
+  );
+
+  const handleReload = useCallback(() => {
+    void checkSessionStatus();
+    void loadChats({ reset: true });
+    if (activeConversationId) {
+      void loadMessages(activeConversationId);
+    }
+  }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
+
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden bg-muted/20">
+    <div
+      className="flex min-h-screen flex-col items-center overflow-hidden px-3 py-6 sm:px-6"
+      style={{
+        background:
+          "radial-gradient(circle at -20% -20%, rgba(59,130,246,0.16), transparent 55%)," +
+          "radial-gradient(circle at 110% -10%, rgba(14,165,233,0.18), transparent 50%)," +
+          "linear-gradient(180deg, rgba(241,245,249,0.92) 0%, rgba(226,232,240,0.75) 45%, rgba(226,232,240,0.55) 100%)",
+      }}
+    >
+      <div
+        className="flex w-full flex-1 flex-col gap-4 sm:gap-6"
+        style={{ width: "min(100%, clamp(360px, 50vw, 1100px))" }}
+      >
+        <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
 
-      <SessionStatus
-        status={wahaState.sessionStatus}
-        onRefresh={wahaState.checkSessionStatus}
-      />
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-[32px] border border-white/40 bg-white/60 shadow-[0_32px_56px_rgba(15,23,42,0.18)] backdrop-blur-xl">
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
+            <div className="flex h-full min-h-0 w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-b border-border/40 bg-sidebar/90 backdrop-blur-sm lg:w-[34%] lg:min-w-[300px] lg:max-w-md lg:border-b-0 lg:border-r">
+              <CRMChatSidebar
+                conversations={conversations}
+                activeConversationId={activeConversationId}
+                searchValue={searchValue}
+                onSearchChange={setSearchValue}
+                responsibleFilter={responsibleFilter}
+                responsibleOptions={teamMembers}
+                onResponsibleFilterChange={setResponsibleFilter}
+                onSelectConversation={handleSelectConversation}
+                onNewConversation={() => {
+                  void loadChats({ reset: true });
+                  setIsNewConversationOpen(true);
+                }}
+                searchInputRef={searchInputRef}
+                loading={loading}
+                hasMore={hasMoreChats}
+                isLoadingMore={isLoadingMoreChats}
+                onLoadMore={() => {
+                  void loadMoreChats();
+                }}
+              />
+            </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="flex h-full min-h-0 w-[30%] min-w-[300px] max-w-md flex-shrink-0 flex-col overflow-hidden border-r border-border/50 bg-sidebar shadow-[0_12px_24px_rgba(15,23,42,0.06)]">
-
-          <CRMChatSidebar
-            conversations={conversations}
-            activeConversationId={activeConversationId}
-            searchValue={searchValue}
-            onSearchChange={setSearchValue}
-            responsibleFilter={responsibleFilter}
-            responsibleOptions={teamMembers}
-            onResponsibleFilterChange={setResponsibleFilter}
-            onSelectConversation={handleSelectConversation}
-            onNewConversation={() => {
-              void wahaState.loadChats({ reset: true });
-            }}
-            searchInputRef={searchInputRef}
-            loading={wahaState.loading}
-            hasMore={wahaState.hasMoreChats}
-            isLoadingMore={wahaState.isLoadingMoreChats}
-            onLoadMore={() => {
-              void wahaState.loadMoreChats();
-            }}
-          />
-        </div>
-
-        <div className="flex h-full flex-1 min-w-0 flex-col overflow-hidden bg-background">
-          <CRMChatWindow
-            conversation={activeConversation}
-            messages={messages}
-            hasMore={false}
-            isLoading={messagesLoading}
-            isLoadingMore={false}
-            onSendMessage={handleSendMessage}
-            onLoadOlder={async () => []}
-            onUpdateConversation={handleUpdateConversation}
-            isUpdatingConversation={false}
-          />
+            <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
+              <CRMChatWindow
+                conversation={activeConversation}
+                messages={messages}
+                hasMore={false}
+                isLoading={messagesLoading}
+                isLoadingMore={false}
+                onSendMessage={handleSendMessage}
+                onLoadOlder={async () => []}
+                onUpdateConversation={handleUpdateConversation}
+                isUpdatingConversation={false}
+              />
+            </div>
+          </div>
         </div>
       </div>
+
+      <NewConversationModal
+        open={isNewConversationOpen}
+        suggestions={conversationSuggestions}
+        onClose={() => setIsNewConversationOpen(false)}
+        onSelectConversation={(conversationId) => {
+          void handleModalSelect(conversationId);
+        }}
+        onCreateConversation={async () => null}
+        allowCreate={false}
+      />
     </div>
   );
 };
