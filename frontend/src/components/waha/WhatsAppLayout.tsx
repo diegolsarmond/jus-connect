@@ -2,11 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useWAHA } from "@/hooks/useWAHA";
 import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
-import type { ConversationSummary } from "@/features/chat/types";
+import { ChatWindow as CRMChatWindow } from "@/features/chat/components/ChatWindow";
+import type {
+  ConversationSummary,
+  Message as CRMMessage,
+  SendMessageInput,
+  UpdateConversationPayload,
+} from "@/features/chat/types";
 import { teamMembers } from "@/features/chat/data/teamMembers";
-import type { ChatOverview } from "@/types/waha";
+import type { ChatOverview, Message as WAHAMessage } from "@/types/waha";
 import WAHAService from "@/services/waha";
-import { WebhookInfo } from "./WebhookInfo";
 
 const ensureIsoTimestamp = (value?: number): string => {
   if (!value) {
@@ -105,9 +110,42 @@ const mapChatToConversation = (
   return mergeOverrides(base, overrides);
 };
 
+const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
+  const hasMedia = Boolean(message.hasMedia && message.mediaUrl);
+  const attachments = hasMedia && message.mediaUrl
+    ? [
+        {
+          id: `${message.id}-attachment`,
+          type: "image" as const,
+          url: message.mediaUrl,
+          name: message.filename ?? "Anexo",
+        },
+      ]
+    : undefined;
+
+  const content = hasMedia
+    ? message.caption ?? message.body ?? message.mediaUrl ?? ""
+    : message.body ?? message.caption ?? "";
+
+  return {
+    id: message.id,
+    conversationId: message.chatId,
+    sender: message.fromMe ? "me" : "contact",
+    content,
+    timestamp: ensureIsoTimestamp(message.timestamp),
+    status: mapAckToStatus(message.ack),
+    type: attachments ? "image" : "text",
+    attachments,
+  };
+};
+
 export const WhatsAppLayout = () => {
   const [searchValue, setSearchValue] = useState("");
   const [responsibleFilter, setResponsibleFilter] = useState("all");
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [conversationOverrides, setConversationOverrides] = useState<
+    Record<string, Partial<ConversationSummary>>
+  >({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const wahaState = useWAHA();
   const { addMessage } = wahaState;
@@ -123,14 +161,27 @@ export const WhatsAppLayout = () => {
     };
   }, [addMessage]);
 
+  useEffect(() => {
+    const activeId = wahaState.activeChatId ?? undefined;
+    if (!activeId) {
+      setMessagesLoading(false);
+      return;
+    }
+    if (wahaState.messages[activeId]) {
+      setMessagesLoading(false);
+    }
+  }, [wahaState.activeChatId, wahaState.messages]);
+
   const conversations = useMemo(() => {
-    const mapped = wahaState.chats.map((chat) => mapChatToConversation(chat));
+    const mapped = wahaState.chats.map((chat) =>
+      mapChatToConversation(chat, conversationOverrides[chat.id]),
+    );
     return mapped.sort((a, b) => {
       const timeA = a.lastMessage ? new Date(a.lastMessage.timestamp).getTime() : 0;
       const timeB = b.lastMessage ? new Date(b.lastMessage.timestamp).getTime() : 0;
       return timeB - timeA;
     });
-  }, [wahaState.chats]);
+  }, [wahaState.chats, conversationOverrides]);
 
   const activeConversationId = wahaState.activeChatId ?? undefined;
 
@@ -139,8 +190,71 @@ export const WhatsAppLayout = () => {
     [conversations, activeConversationId],
   );
 
+  const rawMessages = useMemo(
+    () => (activeConversationId ? wahaState.messages[activeConversationId] ?? [] : []),
+    [activeConversationId, wahaState.messages],
+  );
+
+  const messages = useMemo(() => rawMessages.map(mapMessageToCRM), [rawMessages]);
+
   const handleSelectConversation = async (conversationId: string) => {
-    await wahaState.selectChat(conversationId);
+    setMessagesLoading(true);
+    try {
+      await wahaState.selectChat(conversationId);
+    } finally {
+      setMessagesLoading(false);
+    }
+  };
+
+  const handleSendMessage = async (payload: SendMessageInput) => {
+    if (!activeConversationId) {
+      return;
+    }
+    const text = payload.content.trim();
+    if (!text) {
+      return;
+    }
+    await wahaState.sendMessage(activeConversationId, text);
+  };
+
+  const handleUpdateConversation = async (
+    conversationId: string,
+    changes: UpdateConversationPayload,
+  ) => {
+    setConversationOverrides((previous) => {
+      const current = previous[conversationId] ?? {};
+      const next: Partial<ConversationSummary> = { ...current };
+
+      if ("responsibleId" in changes) {
+        const member = changes.responsibleId
+          ? teamMembers.find((item) => item.id === changes.responsibleId) ?? null
+          : null;
+        next.responsible = member;
+      }
+      if ("tags" in changes) {
+        next.tags = changes.tags ?? [];
+      }
+      if ("phoneNumber" in changes) {
+        next.phoneNumber = changes.phoneNumber;
+      }
+      if ("isLinkedToClient" in changes) {
+        next.isLinkedToClient = changes.isLinkedToClient ?? false;
+      }
+      if ("clientName" in changes) {
+        next.clientName = changes.clientName ?? null;
+      }
+      if ("customAttributes" in changes) {
+        next.customAttributes = changes.customAttributes ?? [];
+      }
+      if ("isPrivate" in changes) {
+        next.isPrivate = Boolean(changes.isPrivate);
+      }
+      if ("internalNotes" in changes) {
+        next.internalNotes = changes.internalNotes ?? [];
+      }
+
+      return { ...previous, [conversationId]: next };
+    });
   };
 
   return (
@@ -172,7 +286,17 @@ export const WhatsAppLayout = () => {
         </div>
 
         <div className="flex h-full flex-1 min-w-0 flex-col overflow-hidden bg-background">
-          <WebhookInfo />
+          <CRMChatWindow
+            conversation={activeConversation}
+            messages={messages}
+            hasMore={false}
+            isLoading={messagesLoading}
+            isLoadingMore={false}
+            onSendMessage={handleSendMessage}
+            onLoadOlder={async () => []}
+            onUpdateConversation={handleUpdateConversation}
+            isUpdatingConversation={false}
+          />
         </div>
       </div>
     </div>
