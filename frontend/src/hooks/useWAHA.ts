@@ -264,7 +264,7 @@ const readStringProperty = (
   return pickFirstString(record[key]);
 };
 
-export const useWAHA = () => {
+export const useWAHA = (sessionNameOverride?: string | null) => {
   const [chats, setChats] = useState<ChatOverview[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -285,6 +285,16 @@ export const useWAHA = () => {
   const isFetchingChatsRef = useRef(false);
   const messagePaginationRef = useRef<Record<string, MessagePaginationState>>({});
   const enrichingChatsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    wahaService.setSessionOverride(sessionNameOverride ?? null);
+
+    return () => {
+      if (sessionNameOverride) {
+        wahaService.setSessionOverride(null);
+      }
+    };
+  }, [sessionNameOverride]);
 
   const ensureMessagePaginationState = useCallback(
     (chatId: string): MessagePaginationState => {

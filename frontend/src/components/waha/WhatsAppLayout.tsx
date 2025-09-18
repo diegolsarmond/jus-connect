@@ -22,6 +22,7 @@ import {
   fetchPreferredCompany,
   logoutDeviceSession,
 } from "@/features/chat/services/deviceLinkingApi";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 const ensureIsoTimestamp = (value?: number): string => {
   if (!value) {
@@ -284,7 +285,20 @@ export const WhatsAppLayout = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSessionStatusRef = useRef<string | null>(null);
   const { toast } = useToast();
-  const wahaState = useWAHA();
+  const { user } = useAuth();
+  const companyNameFromAuth = useMemo(() => {
+    const value = user?.empresa_nome;
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }, [user?.empresa_nome]);
+  const sessionNameOverride = useMemo(
+    () => deriveSessionName(companyNameFromAuth),
+    [companyNameFromAuth],
+  );
+  const wahaState = useWAHA(sessionNameOverride);
   const {
     chats: rawChats,
     messages: messageMap,
@@ -496,12 +510,14 @@ export const WhatsAppLayout = ({
     setIsDisconnecting(true);
 
     try {
-      let companyName: string | undefined;
-      try {
-        const company = await fetchPreferredCompany();
-        companyName = company?.name;
-      } catch (error) {
-        console.warn("Falha ao carregar empresa preferencial", error);
+      let companyName = companyNameFromAuth;
+      if (!companyName) {
+        try {
+          const company = await fetchPreferredCompany();
+          companyName = company?.name;
+        } catch (error) {
+          console.warn("Falha ao carregar empresa preferencial", error);
+        }
       }
 
       const sessionName = deriveSessionName(companyName);
@@ -538,6 +554,7 @@ export const WhatsAppLayout = ({
     toast,
     checkSessionStatus,
     loadChats,
+    companyNameFromAuth,
   ]);
 
   const isInitialLoading = loading && !hasLoadedOnce;

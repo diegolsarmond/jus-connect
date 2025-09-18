@@ -308,6 +308,7 @@ const sanitizeMessage = (chatId: string, raw: unknown): Message | null => {
 class WAHAService {
   private config: WAHAConfig | null = null;
   private configPromise: Promise<WAHAConfig> | null = null;
+  private sessionOverride: string | null = null;
 
   private async loadConfig(): Promise<WAHAConfig> {
     if (this.config) {
@@ -329,8 +330,31 @@ class WAHAService {
     return this.configPromise;
   }
 
+  setSessionOverride(sessionName: string | null): void {
+    if (typeof sessionName !== 'string') {
+      this.sessionOverride = null;
+      return;
+    }
+
+    const trimmed = sessionName.trim();
+    this.sessionOverride = trimmed.length > 0 ? trimmed : null;
+  }
+
+  private applySessionOverride(config: WAHAConfig): WAHAConfig {
+    if (!this.sessionOverride) {
+      return config;
+    }
+
+    if (config.session === this.sessionOverride) {
+      return config;
+    }
+
+    return { ...config, session: this.sessionOverride };
+  }
+
   async getResolvedConfig(): Promise<WAHAConfig> {
-    return this.loadConfig();
+    const config = await this.loadConfig();
+    return this.applySessionOverride(config);
   }
 
   private async fetchRemoteConfig(): Promise<WAHAConfig> {
@@ -388,7 +412,7 @@ class WAHAService {
     options: RequestInit = {}
   ): Promise<WAHAResponse<T>> {
     try {
-      const config = await this.loadConfig();
+      const config = await this.getResolvedConfig();
       const url = `${config.baseUrl}${endpoint}`;
       const response = await fetch(url, {
         ...options,
@@ -417,7 +441,7 @@ class WAHAService {
 
   // Get session status
   async getSessionStatus(): Promise<WAHAResponse<SessionStatus>> {
-    const config = await this.loadConfig();
+    const config = await this.getResolvedConfig();
     return this.makeRequest<SessionStatus>(`/api/sessions/${config.session}`);
   }
 
@@ -428,7 +452,7 @@ class WAHAService {
       offset: offset.toString(),
     });
 
-    const config = await this.loadConfig();
+    const config = await this.getResolvedConfig();
     const response = await this.makeRequest<unknown[]>(`/api/${config.session}/chats/overview?${params}`);
 
     if (Array.isArray(response.data)) {
@@ -467,7 +491,7 @@ class WAHAService {
       downloadMedia: (options.downloadMedia || false).toString(),
     });
     
-    const config = await this.loadConfig();
+    const config = await this.getResolvedConfig();
     const response = await this.makeRequest<unknown[]>(`/api/${config.session}/chats/${chatId}/messages?${params}`);
 
     if (Array.isArray(response.data)) {
@@ -483,7 +507,7 @@ class WAHAService {
 
   // Send text message
   async sendTextMessage(request: Omit<SendTextRequest, 'session'>): Promise<WAHAResponse<Message>> {
-    const config = await this.loadConfig();
+    const config = await this.getResolvedConfig();
     const payload: SendTextRequest = {
       ...request,
       session: config.session,
@@ -500,8 +524,8 @@ class WAHAService {
     const params = new URLSearchParams({
       messages: messages.toString(),
     });
-    
-    const config = await this.loadConfig();
+
+    const config = await this.getResolvedConfig();
     return this.makeRequest<void>(`/api/${config.session}/chats/${chatId}/messages/read?${params}`, {
       method: 'POST',
     });
@@ -509,13 +533,13 @@ class WAHAService {
 
   // Get chat info
   async getChatInfo(chatId: string): Promise<WAHAResponse<Record<string, unknown>>> {
-    const config = await this.loadConfig();
+    const config = await this.getResolvedConfig();
     return this.makeRequest<Record<string, unknown>>(`/api/${config.session}/chats/${chatId}`);
   }
 
   // Get QR Code for authentication (if needed)
   async getQRCode(): Promise<WAHAResponse<{ mimetype: string; data: string }>> {
-    const config = await this.loadConfig();
+    const config = await this.getResolvedConfig();
     return this.makeRequest(`/api/${config.session}/auth/qr?format=image`);
   }
 

@@ -6,6 +6,7 @@ import { Modal } from "./Modal";
 import { WhatsAppWebEmbed } from "../../../components/waha";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/features/auth/AuthProvider";
 import {
   deriveSessionName,
   ensureDeviceSession,
@@ -70,6 +71,7 @@ export const DeviceLinkContent = ({
   className,
 }: DeviceLinkContentProps) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const steps = useMemo(
     () => [
       {
@@ -98,13 +100,22 @@ export const DeviceLinkContent = ({
     [],
   );
 
+  const companyNameFromAuth = useMemo(() => {
+    const value = user?.empresa_nome;
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }, [user?.empresa_nome]);
+
   const companyQuery = useQuery({
     queryKey: ["companies", "primary"],
     queryFn: fetchPreferredCompany,
-    enabled: isActive,
+    enabled: isActive && !companyNameFromAuth,
   });
 
-  const companyName = companyQuery.data?.name;
+  const companyName = companyNameFromAuth ?? companyQuery.data?.name ?? null;
   const sessionName = useMemo(() => deriveSessionName(companyName), [companyName]);
 
   const sessionQuery = useQuery<DeviceSessionInfo>({
@@ -273,7 +284,7 @@ export const DeviceLinkContent = ({
             </div>
           </div>
 
-          {companyQuery.isError && (
+          {!companyNameFromAuth && companyQuery.isError && (
             <p className={styles.sessionWarning}>
               Não foi possível carregar as informações da empresa. Utilizando a sessão padrão
               <strong> {sessionName}</strong>.
