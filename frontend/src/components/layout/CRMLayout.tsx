@@ -7,19 +7,22 @@ import { useToast } from "@/hooks/use-toast";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 import { useCallback } from "react";
 import { routes } from "@/config/routes";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 export function CRMLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logout } = useAuth();
   const handleAutoLogout = useCallback(() => {
     toast({
       title: "Sessão encerrada",
       description: "Você foi desconectado por inatividade. Faça login novamente para continuar.",
       variant: "destructive",
     });
+    logout();
     navigate(routes.login, { replace: true });
-  }, [navigate, toast]);
+  }, [logout, navigate, toast]);
 
   useAutoLogout(handleAutoLogout);
   const isConversationsRoute = location.pathname.startsWith("/conversas");

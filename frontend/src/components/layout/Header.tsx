@@ -1,4 +1,5 @@
-import { Search, User } from "lucide-react";
+import { Search, User, LogOut } from "lucide-react";
+import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,36 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { IntimacaoMenu } from "@/components/notifications/IntimacaoMenu";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { routes } from "@/config/routes";
+
+const getInitials = (name: string | undefined) => {
+  if (!name) {
+    return "--";
+  }
+
+  const parts = name
+    .split(/\s+/u)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  return parts
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+};
 
 export function Header() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate(routes.login, { replace: true });
+  }, [logout, navigate]);
 
   return (
     <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between gap-4">
@@ -46,12 +74,16 @@ export function Header() {
             <Button variant="ghost" className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  AB
+                  {getInitials(user?.nome_completo)}
                 </AvatarFallback>
               </Avatar>
               <div className="text-left">
-                <p className="text-sm font-medium">Dr. Diego Armond</p>
-                <p className="text-xs text-muted-foreground">Advogado Sênior</p>
+                <p className="text-sm font-medium truncate max-w-[160px]">
+                  {user?.nome_completo ?? "Usuário"}
+                </p>
+                <p className="text-xs text-muted-foreground truncate max-w-[160px]">
+                  {user?.email ?? "Conta"}
+                </p>
               </div>
             </Button>
           </DropdownMenuTrigger>
@@ -76,7 +108,15 @@ export function Header() {
               Configurações
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Sair</DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                handleLogout();
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sair
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

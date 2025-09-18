@@ -59,6 +59,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import RecuperarSenha from "./pages/RecuperarSenha";
 import NotFound from "./pages/NotFound";
+import { AuthProvider } from "@/features/auth/AuthProvider";
+import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 
 const CRMLayout = lazy(() =>
   import("@/components/layout/CRMLayout").then((module) => ({ default: module.CRMLayout })),
@@ -72,13 +74,20 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Suspense fallback={<LandingFallback />}>
-          <Routes>
-            <Route path={routes.login} element={<Login />} />
-            <Route path={routes.register} element={<Register />} />
-            <Route path={routes.forgotPassword} element={<RecuperarSenha />} />
-            <Route element={<CRMLayout />}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Suspense fallback={<LandingFallback />}>
+            <Routes>
+              <Route path={routes.login} element={<Login />} />
+              <Route path={routes.register} element={<Register />} />
+              <Route path={routes.forgotPassword} element={<RecuperarSenha />} />
+              <Route
+                element={(
+                  <ProtectedRoute>
+                    <CRMLayout />
+                  </ProtectedRoute>
+                )}
+              >
               <Route path="/" element={<Dashboard />} />
               <Route path="/conversas" element={<Conversas />} />
               <Route path="/conversas/:conversationId" element={<Conversas />} />
@@ -184,11 +193,12 @@ const App = () => (
                 element={<FluxoTrabalho />}
               />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Route>
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
