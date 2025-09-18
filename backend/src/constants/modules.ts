@@ -48,6 +48,30 @@ export const SYSTEM_MODULE_SET = new Set<string>(
   SYSTEM_MODULES.map((module) => module.id)
 );
 
+export function normalizeModuleId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (SYSTEM_MODULE_SET.has(trimmed)) {
+    return trimmed;
+  }
+
+  const lowerCased = trimmed.toLowerCase();
+
+  if (SYSTEM_MODULE_SET.has(lowerCased)) {
+    return lowerCased;
+  }
+
+  return null;
+}
+
 export function sanitizeModuleIds(values: unknown): string[] {
   if (values == null) {
     return [];
@@ -65,14 +89,15 @@ export function sanitizeModuleIds(values: unknown): string[] {
       throw new Error('modulos deve conter apenas strings válidas');
     }
 
-    const trimmed = value.trim();
-    if (!SYSTEM_MODULE_SET.has(trimmed)) {
+    const normalized = normalizeModuleId(value);
+
+    if (!normalized) {
       throw new Error(`Módulo desconhecido: ${value}`);
     }
 
-    if (!unique.has(trimmed)) {
-      unique.add(trimmed);
-      sanitized.push(trimmed);
+    if (!unique.has(normalized)) {
+      unique.add(normalized);
+      sanitized.push(normalized);
     }
   }
 
