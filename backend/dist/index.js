@@ -28,6 +28,7 @@ const processoRoutes_1 = __importDefault(require("./routes/processoRoutes"));
 const fluxoTrabalhoRoutes_1 = __importDefault(require("./routes/fluxoTrabalhoRoutes"));
 const uploadRoutes_1 = __importDefault(require("./routes/uploadRoutes"));
 const oportunidadeRoutes_1 = __importDefault(require("./routes/oportunidadeRoutes"));
+const oportunidadeDocumentoRoutes_1 = __importDefault(require("./routes/oportunidadeDocumentoRoutes"));
 const tarefaRoutes_1 = __importDefault(require("./routes/tarefaRoutes"));
 const tarefaResponsavelRoutes_1 = __importDefault(require("./routes/tarefaResponsavelRoutes"));
 const tipoDocumentoRoutes_1 = __importDefault(require("./routes/tipoDocumentoRoutes"));
@@ -37,6 +38,7 @@ const notificationRoutes_1 = __importDefault(require("./routes/notificationRoute
 const integrationApiKeyRoutes_1 = __importDefault(require("./routes/integrationApiKeyRoutes"));
 const chatRoutes_1 = __importDefault(require("./routes/chatRoutes"));
 const wahaWebhookRoutes_1 = __importDefault(require("./routes/wahaWebhookRoutes"));
+const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const swagger_1 = __importDefault(require("./swagger"));
@@ -104,6 +106,7 @@ app.use('/api', processoRoutes_1.default);
 app.use('/api', fluxoTrabalhoRoutes_1.default);
 app.use('/api', uploadRoutes_1.default);
 app.use('/api', oportunidadeRoutes_1.default);
+app.use('/api', oportunidadeDocumentoRoutes_1.default);
 app.use('/api', tarefaRoutes_1.default);
 app.use('/api', tarefaResponsavelRoutes_1.default);
 app.use('/api', clienteDocumentoRoutes_1.default);
@@ -112,6 +115,7 @@ app.use('/api', notificationRoutes_1.default);
 app.use('/api', integrationApiKeyRoutes_1.default);
 app.use('/api', chatRoutes_1.default);
 app.use('/api', wahaWebhookRoutes_1.default);
+app.use('/api', authRoutes_1.default);
 // Background jobs
 cronJobs_1.default.startProjudiSyncJob();
 // Swagger
