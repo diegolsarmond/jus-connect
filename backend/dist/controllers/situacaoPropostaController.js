@@ -8,7 +8,6 @@ const db_1 = __importDefault(require("../services/db"));
 const listSituacoesProposta = async (_req, res) => {
     try {
         const result = await db_1.default.query('SELECT id, nome, ativo, datacriacao FROM public.situacao_proposta ORDER BY nome ASC');
-
         res.json(result.rows);
     }
     catch (error) {
@@ -61,8 +60,8 @@ const deleteSituacaoProposta = async (req, res) => {
 };
 exports.deleteSituacaoProposta = deleteSituacaoProposta;
 exports.default = {
-    listSituacoesProposta,
-    createSituacaoProposta,
-    updateSituacaoProposta,
-    deleteSituacaoProposta,
+    listSituacoesProposta: exports.listSituacoesProposta,
+    createSituacaoProposta: exports.createSituacaoProposta,
+    updateSituacaoProposta: exports.updateSituacaoProposta,
+    deleteSituacaoProposta: exports.deleteSituacaoProposta,
 };

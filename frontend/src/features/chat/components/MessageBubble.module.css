@@ -60,6 +60,32 @@
   box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
 }
 
+.audioWrapper {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.audioPlayer {
+  width: clamp(200px, 44vw, 360px);
+  max-width: 100%;
+}
+
+.attachmentCaption {
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+.audioPlaceholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.85rem;
+  background: rgba(15, 23, 42, 0.08);
+  font-size: 0.85rem;
+  color: inherit;
+}
+
 .avatar {
   width: 2.4rem;
   height: 2.4rem;

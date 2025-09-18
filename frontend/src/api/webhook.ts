@@ -2,14 +2,14 @@
 // In a real application, you would set up an actual server endpoint
 // For this demo, we'll show the structure and integration points
 
-import { WebhookEvent, MessageEvent } from '@/types/waha';
+import { WebhookEvent, MessageEvent, Message } from '@/types/waha';
 
 // Webhook endpoint handler (pseudo-code for demonstration)
 export const handleWAHAWebhook = async (event: WebhookEvent) => {
   console.log('WAHA Webhook received:', event);
   
   switch (event.event) {
-    case 'message':
+    case 'message': {
       const messageEvent = event as MessageEvent;
       console.log('New message received:', messageEvent.payload);
       
@@ -27,6 +27,7 @@ export const handleWAHAWebhook = async (event: WebhookEvent) => {
       }
       
       break;
+    }
       
     case 'message.ack':
       console.log('Message acknowledgment updated:', event.payload);
@@ -71,6 +72,6 @@ export const exampleWebhookPayload: MessageEvent = {
 // Global type declaration for webhook receiver
 declare global {
   interface Window {
-    wahaWebhookReceived?: (message: any) => void;
+    wahaWebhookReceived?: (message: Message) => void;
   }
 }

@@ -38,6 +38,7 @@ export interface Message {
   mediaUrl?: string;
   filename?: string;
   caption?: string;
+  mimeType?: string;
 }
 
 export interface SendTextRequest {
@@ -58,7 +59,7 @@ export interface WAHAResponse<T> {
 export interface WebhookEvent {
   event: 'message' | 'message.ack' | 'session.status' | 'chat.archive' | 'chat.unarchive';
   session: string;
-  payload: any;
+  payload: unknown;
 }
 
 export interface MessageEvent extends WebhookEvent {

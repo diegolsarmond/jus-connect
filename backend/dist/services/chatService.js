@@ -39,20 +39,41 @@ function normalizeStatus(value) {
     return 'sent';
 }
 function normalizeMessageType(value) {
-    return value === 'image' ? 'image' : 'text';
+    if (value === 'image' || value === 'audio') {
+        return value;
+    }
+    return 'text';
 }
+const sanitizeAttachment = (value) => {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+    const attachment = value;
+    const id = typeof attachment.id === 'string' ? attachment.id : undefined;
+    const url = typeof attachment.url === 'string' ? attachment.url : undefined;
+    const name = typeof attachment.name === 'string' ? attachment.name : undefined;
+    const type = attachment.type === 'audio' ? 'audio' : 'image';
+    if (!id || !url || !name) {
+        return null;
+    }
+    return { id, url, name, type };
+};
 function parseAttachments(value) {
     if (!value) {
         return undefined;
     }
     if (Array.isArray(value)) {
-        return value.filter((item) => item && typeof item === 'object');
+        return value
+            .map(sanitizeAttachment)
+            .filter((item) => item !== null);
     }
     if (typeof value === 'string') {
         try {
             const parsed = JSON.parse(value);
             return Array.isArray(parsed)
-                ? parsed.filter((item) => item && typeof item === 'object')
+                ? parsed
+                    .map(sanitizeAttachment)
+                    .filter((item) => item !== null)
                 : undefined;
         }
         catch (error) {
@@ -62,7 +83,9 @@ function parseAttachments(value) {
     if (typeof value === 'object') {
         const parsed = value;
         if (Array.isArray(parsed.attachments)) {
-            return parsed.attachments.filter((item) => item && typeof item === 'object');
+            return parsed.attachments
+                .map(sanitizeAttachment)
+                .filter((item) => item !== null);
         }
     }
     return undefined;
@@ -77,6 +100,10 @@ function buildPreview(content, type, attachments) {
     if (type === 'image') {
         const name = attachments && attachments.length > 0 ? attachments[0].name : undefined;
         return name ? `Imagem • ${name}` : 'Imagem recebida';
+    }
+    if (type === 'audio') {
+        const name = attachments && attachments.length > 0 ? attachments[0].name : undefined;
+        return name ? `Mensagem de áudio • ${name}` : 'Mensagem de áudio';
     }
     const normalized = content.trim();
     if (!normalized) {
@@ -103,6 +130,168 @@ function buildAvatar(name) {
     ].join('');
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
+function parseJsonValue(value) {
+    if (!value) {
+        return null;
+    }
+    if (typeof value === 'string') {
+        if (!value.trim()) {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
+            return null;
+        }
+        catch (error) {
+            return null;
+        }
+    }
+    if (typeof value === 'object') {
+        return value;
+    }
+    return null;
+}
+function parseJsonArray(value) {
+    if (!value) {
+        return [];
+    }
+    if (Array.isArray(value)) {
+        return value;
+    }
+    const parsed = parseJsonValue(value);
+    return Array.isArray(parsed) ? parsed : [];
+}
+function parseStringArray(value) {
+    const array = parseJsonArray(value);
+    const seen = new Set();
+    const result = [];
+    for (const item of array) {
+        if (typeof item !== 'string') {
+            continue;
+        }
+        const trimmed = item.trim();
+        if (!trimmed) {
+            continue;
+        }
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        result.push(trimmed);
+    }
+    return result;
+}
+function parseCustomAttributes(value) {
+    const array = parseJsonArray(value);
+    const seen = new Set();
+    const result = [];
+    for (const item of array) {
+        if (!item || typeof item !== 'object') {
+            continue;
+        }
+        const entry = item;
+        const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+        const label = typeof entry.label === 'string' ? entry.label.trim() : '';
+        const entryValue = typeof entry.value === 'string' ? entry.value.trim() : '';
+        if (!id || !label || !entryValue || seen.has(id)) {
+            continue;
+        }
+        seen.add(id);
+        result.push({ id, label, value: entryValue });
+    }
+    return result;
+}
+function ensureIsoString(value) {
+    if (!value) {
+        return new Date().toISOString();
+    }
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return new Date().toISOString();
+    }
+    return parsed.toISOString();
+}
+function parseInternalNotes(value) {
+    const array = parseJsonArray(value);
+    const seen = new Set();
+    const result = [];
+    for (const item of array) {
+        if (!item || typeof item !== 'object') {
+            continue;
+        }
+        const entry = item;
+        const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+        const author = typeof entry.author === 'string' ? entry.author.trim() : '';
+        const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+        const createdAtValue = entry.createdAt;
+        if (!id || !author || !content || seen.has(id)) {
+            continue;
+        }
+        const createdAt = ensureIsoString(typeof createdAtValue === 'string' || createdAtValue instanceof Date ? createdAtValue : undefined);
+        seen.add(id);
+        result.push({ id, author, content, createdAt });
+    }
+    return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+function parseResponsibleSnapshot(value) {
+    if (!value) {
+        return null;
+    }
+    if (typeof value === 'string') {
+        if (!value.trim()) {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
+            return null;
+        }
+        catch (error) {
+            return null;
+        }
+    }
+    if (typeof value === 'object') {
+        return value;
+    }
+    return null;
+}
+function mapResponsible(row) {
+    const snapshot = parseResponsibleSnapshot(row.responsible_snapshot);
+    const rawId = typeof snapshot?.id === 'string' && snapshot.id.trim()
+        ? snapshot.id.trim()
+        : typeof snapshot?.id === 'number'
+            ? String(snapshot.id)
+            : row.responsible_id !== null && row.responsible_id !== undefined
+                ? String(row.responsible_id)
+                : null;
+    if (!rawId) {
+        return null;
+    }
+    const name = typeof snapshot?.name === 'string' && snapshot.name.trim()
+        ? snapshot.name.trim()
+        : `Usuário ${rawId}`;
+    const role = typeof snapshot?.role === 'string' && snapshot.role.trim()
+        ? snapshot.role.trim()
+        : undefined;
+    const avatar = typeof snapshot?.avatar === 'string' && snapshot.avatar.trim()
+        ? snapshot.avatar
+        : buildAvatar(name);
+    return {
+        id: rawId,
+        name,
+        role,
+        avatar,
+    };
+}
 function mapConversation(row) {
     const name = getConversationName(row);
     const avatar = row.contact_avatar && row.contact_avatar.trim()
@@ -119,6 +308,14 @@ function mapConversation(row) {
             status: normalizeStatus(row.last_message_status),
         }
         : undefined;
+    const tags = parseStringArray(row.tags).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const customAttributes = parseCustomAttributes(row.custom_attributes);
+    const internalNotes = parseInternalNotes(row.internal_notes);
+    const clientName = typeof row.client_name === 'string' && row.client_name.trim() ? row.client_name.trim() : null;
+    const phoneNumber = typeof row.phone_number === 'string' && row.phone_number.trim() ? row.phone_number.trim() : undefined;
+    const isLinkedToClient = row.is_linked_to_client === true;
+    const isPrivate = row.is_private === true;
+    const responsible = mapResponsible(row);
     return {
         id: row.id,
         name,
@@ -128,6 +325,14 @@ function mapConversation(row) {
         unreadCount: typeof row.unread_count === 'number' ? row.unread_count : 0,
         pinned: row.pinned ?? false,
         lastMessage,
+        phoneNumber,
+        responsible,
+        tags,
+        isLinkedToClient,
+        clientName,
+        customAttributes,
+        isPrivate,
+        internalNotes,
         contactIdentifier: row.contact_identifier,
         metadata: row.metadata ?? null,
         createdAt: formatDate(row.created_at),
@@ -213,16 +418,9 @@ function normalizeAttachments(value) {
     if (!value) {
         return null;
     }
-    const normalized = [];
-    for (const attachment of value) {
-        if (!attachment) {
-            continue;
-        }
-        if (!attachment.id || !attachment.url || !attachment.name) {
-            continue;
-        }
-        normalized.push({ ...attachment, type: 'image' });
-    }
+    const normalized = value
+        .map(sanitizeAttachment)
+        .filter((attachment) => attachment !== null);
     return normalized.length > 0 ? normalized : null;
 }
 function normalizeMessageId(id, externalId) {
@@ -249,8 +447,36 @@ class ChatService {
         await this.schemaReady;
         return this.db.query(text, params);
     }
+    async loadResponsibleSnapshot(userId) {
+        const result = await this.query('SELECT id, nome_completo, perfil FROM public."vw.usuarios" WHERE id = $1', [userId]);
+        if (result.rowCount === 0) {
+            return null;
+        }
+        const row = result.rows[0];
+        const resolvedId = typeof row.id === 'number'
+            ? row.id
+            : Number.parseInt(String(row.id ?? userId), 10) || userId;
+        const rawName = typeof row.nome_completo === 'string' ? row.nome_completo.trim() : '';
+        const name = rawName || `Usuário ${resolvedId}`;
+        const rawRole = row.perfil;
+        let role;
+        if (typeof rawRole === 'string' && rawRole.trim()) {
+            role = rawRole.trim();
+        }
+        else if (typeof rawRole === 'number' && Number.isFinite(rawRole)) {
+            role = `Perfil ${rawRole}`;
+        }
+        return {
+            id: resolvedId,
+            name,
+            role,
+            avatar: buildAvatar(name),
+        };
+    }
     async listConversations() {
         const result = await this.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
          FROM chat_conversations
@@ -266,6 +492,14 @@ class ChatService {
                 unreadCount: mapped.unreadCount,
                 pinned: mapped.pinned,
                 lastMessage: mapped.lastMessage,
+                phoneNumber: mapped.phoneNumber,
+                responsible: mapped.responsible,
+                tags: mapped.tags,
+                isLinkedToClient: mapped.isLinkedToClient,
+                clientName: mapped.clientName,
+                customAttributes: mapped.customAttributes,
+                isPrivate: mapped.isPrivate,
+                internalNotes: mapped.internalNotes,
             };
         });
     }
@@ -290,6 +524,8 @@ class ChatService {
     }
     async getConversationDetails(conversationId) {
         const result = await this.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
          FROM chat_conversations
@@ -328,6 +564,8 @@ class ChatService {
              pinned = EXCLUDED.pinned,
              metadata = EXCLUDED.metadata
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`, [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata]);
         const mapped = mapConversation(result.rows[0]);
@@ -340,7 +578,133 @@ class ChatService {
             unreadCount: mapped.unreadCount,
             pinned: mapped.pinned,
             lastMessage: mapped.lastMessage,
+            phoneNumber: mapped.phoneNumber,
+            responsible: mapped.responsible,
+            tags: mapped.tags,
+            isLinkedToClient: mapped.isLinkedToClient,
+            clientName: mapped.clientName,
+            customAttributes: mapped.customAttributes,
+            isPrivate: mapped.isPrivate,
+            internalNotes: mapped.internalNotes,
         };
+    }
+    async updateConversation(conversationId, changes) {
+        const normalizedId = typeof conversationId === 'string' ? conversationId.trim() : '';
+        if (!normalizedId) {
+            throw new ValidationError('Conversation id is required');
+        }
+        const has = (key) => Object.prototype.hasOwnProperty.call(changes, key);
+        const values = [normalizedId];
+        const assignments = [];
+        const addAssignment = (column, value, cast) => {
+            values.push(value);
+            const placeholder = `$${values.length}`;
+            assignments.push(`${column} = ${cast ? `${placeholder}::${cast}` : placeholder}`);
+        };
+        const setNull = (column) => {
+            assignments.push(`${column} = NULL`);
+        };
+        if (has('responsibleId')) {
+            const responsibleId = changes.responsibleId;
+            if (responsibleId === null) {
+                setNull('responsible_id');
+                setNull('responsible_snapshot');
+            }
+            else {
+                if (typeof responsibleId !== 'number' || !Number.isInteger(responsibleId)) {
+                    throw new ValidationError('responsibleId must be an integer');
+                }
+                const snapshot = await this.loadResponsibleSnapshot(responsibleId);
+                if (!snapshot) {
+                    throw new ValidationError('Responsible user not found');
+                }
+                addAssignment('responsible_id', snapshot.id);
+                const snapshotPayload = {
+                    id: String(snapshot.id),
+                    name: snapshot.name,
+                    role: snapshot.role,
+                    avatar: snapshot.avatar,
+                };
+                addAssignment('responsible_snapshot', JSON.stringify(snapshotPayload), 'jsonb');
+            }
+        }
+        if (has('tags')) {
+            const normalizedTags = parseStringArray(changes.tags ?? []).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            addAssignment('tags', JSON.stringify(normalizedTags), 'jsonb');
+        }
+        if (has('phoneNumber')) {
+            const phoneValue = changes.phoneNumber;
+            if (phoneValue === null) {
+                setNull('phone_number');
+            }
+            else if (typeof phoneValue === 'string') {
+                const trimmed = phoneValue.trim();
+                if (!trimmed) {
+                    setNull('phone_number');
+                }
+                else {
+                    addAssignment('phone_number', trimmed);
+                }
+            }
+            else if (phoneValue !== undefined) {
+                throw new ValidationError('phoneNumber must be a string or null');
+            }
+        }
+        if (has('clientName')) {
+            const clientValue = changes.clientName;
+            if (clientValue === null) {
+                setNull('client_name');
+            }
+            else if (typeof clientValue === 'string') {
+                const trimmed = clientValue.trim();
+                if (!trimmed) {
+                    setNull('client_name');
+                }
+                else {
+                    addAssignment('client_name', trimmed);
+                }
+            }
+            else if (clientValue !== undefined) {
+                throw new ValidationError('clientName must be a string or null');
+            }
+        }
+        if (has('isLinkedToClient')) {
+            const linkValue = changes.isLinkedToClient;
+            if (typeof linkValue !== 'boolean') {
+                throw new ValidationError('isLinkedToClient must be a boolean');
+            }
+            addAssignment('is_linked_to_client', linkValue);
+        }
+        if (has('customAttributes')) {
+            const normalizedAttributes = parseCustomAttributes(changes.customAttributes ?? []);
+            addAssignment('custom_attributes', JSON.stringify(normalizedAttributes), 'jsonb');
+        }
+        if (has('isPrivate')) {
+            const privateValue = changes.isPrivate;
+            if (typeof privateValue !== 'boolean') {
+                throw new ValidationError('isPrivate must be a boolean');
+            }
+            addAssignment('is_private', privateValue);
+        }
+        if (has('internalNotes')) {
+            const normalizedNotes = parseInternalNotes(changes.internalNotes ?? []);
+            addAssignment('internal_notes', JSON.stringify(normalizedNotes), 'jsonb');
+        }
+        if (assignments.length === 0) {
+            throw new ValidationError('No valid updates provided');
+        }
+        const result = await this.query(`UPDATE chat_conversations
+          SET ${assignments.join(', ')}
+        WHERE id = $1
+        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+                  phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                  custom_attributes, is_private, internal_notes,
+                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
+                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`, values);
+        if (result.rowCount === 0) {
+            return null;
+        }
+        return mapConversation(result.rows[0]);
     }
     async ensureConversation(input) {
         const contactIdentifier = normalizeContactIdentifier(input.contactIdentifier);
@@ -380,6 +744,8 @@ class ChatService {
               ELSE COALESCE(chat_conversations.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
             END
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`, [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata]);
         return mapConversation(result.rows[0]);

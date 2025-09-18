@@ -23,6 +23,43 @@ const ensureIsoTimestamp = (value?: number): string => {
   return new Date(timestamp).toISOString();
 };
 
+const mapWahaMessageType = (message?: WAHAMessage | null): "text" | "image" | "audio" => {
+  if (!message) {
+    return "text";
+  }
+
+  const rawType = typeof message.type === "string" ? message.type.toLowerCase() : "";
+  const mime = typeof message.mimeType === "string"
+    ? message.mimeType.toLowerCase()
+    : typeof (message as { mimetype?: string }).mimetype === "string"
+      ? (message as { mimetype: string }).mimetype.toLowerCase()
+      : "";
+  const filename = typeof message.filename === "string" ? message.filename.toLowerCase() : "";
+
+  if (rawType === "audio" || rawType === "ptt" || rawType === "voice") {
+    return "audio";
+  }
+  if (mime.startsWith("audio/")) {
+    return "audio";
+  }
+  if ([".ogg", ".mp3", ".m4a", ".wav", ".aac"].some((extension) => filename.endsWith(extension))) {
+    return "audio";
+  }
+
+  if (rawType === "image" || mime.startsWith("image/")) {
+    return "image";
+  }
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"].some((extension) => filename.endsWith(extension))) {
+    return "image";
+  }
+
+  if (message.hasMedia && !mime) {
+    return "image";
+  }
+
+  return "text";
+};
+
 const mapAckToStatus = (ack?: string | number) => {
   if (typeof ack === "string") {
     const normalized = ack.toUpperCase();
@@ -111,6 +148,7 @@ const mapChatToConversation = (
     ? chat.avatar
     : createAvatarUrl(normalizedName);
 
+  const wahaLastMessageType = chat.lastMessage ? mapWahaMessageType(chat.lastMessage as WAHAMessage) : "text";
   const lastMessage = chat.lastMessage
     ? {
         id: chat.lastMessage.id ?? `${chat.id}-last`,
@@ -118,12 +156,14 @@ const mapChatToConversation = (
         preview:
           chat.lastMessage.body?.trim().length
             ? chat.lastMessage.body
-            : chat.lastMessage.type === "image"
+            : wahaLastMessageType === "image"
               ? "Imagem"
-              : "Nova conversa",
+              : wahaLastMessageType === "audio"
+                ? "Mensagem de áudio"
+                : "Nova conversa",
         timestamp: ensureIsoTimestamp(chat.lastMessage.timestamp),
         sender: chat.lastMessage.fromMe ? "me" : "contact",
-        type: chat.lastMessage.type === "image" ? "image" : "text",
+        type: wahaLastMessageType,
         status: mapAckToStatus(chat.lastMessage.ackName ?? chat.lastMessage.ack),
       }
     : undefined;
@@ -151,21 +191,32 @@ const mapChatToConversation = (
 };
 
 const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
-  const hasMedia = Boolean(message.hasMedia && message.mediaUrl);
+  const messageType = mapWahaMessageType(message);
+  const hasMedia = Boolean(message.mediaUrl && messageType !== "text");
   const attachments = hasMedia && message.mediaUrl
     ? [
         {
           id: `${message.id}-attachment`,
-          type: "image" as const,
+          type: (messageType === "audio" ? "audio" : "image") as const,
           url: message.mediaUrl,
-          name: message.filename ?? "Anexo",
+          name: message.filename ?? (messageType === "audio" ? "Áudio" : "Anexo"),
         },
       ]
     : undefined;
 
   const content = hasMedia
-    ? message.caption ?? message.body ?? message.mediaUrl ?? ""
+    ? message.caption ?? message.body ?? message.filename ?? message.mediaUrl ?? ""
     : message.body ?? message.caption ?? "";
+
+  const normalizedType = (() => {
+    if (attachments) {
+      return messageType;
+    }
+    if (messageType === "audio") {
+      return "audio";
+    }
+    return "text";
+  })();
 
   return {
     id: message.id,
@@ -174,7 +225,7 @@ const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
     content,
     timestamp: ensureIsoTimestamp(message.timestamp),
     status: mapAckToStatus(message.ack),
-    type: attachments ? "image" : "text",
+    type: normalizedType,
     attachments,
   };
 };

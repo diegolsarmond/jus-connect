@@ -23,7 +23,11 @@ const estimateHeight = (message: Message) => {
     base += Math.min(160, Math.ceil(message.content.length / 38) * 18);
   }
   if (message.attachments && message.attachments.length > 0) {
-    base += 220;
+    for (const attachment of message.attachments) {
+      base += attachment.type === "audio" ? 120 : 220;
+    }
+  } else if (message.type === "audio") {
+    base += 120;
   }
   return base;
 };
@@ -192,7 +196,7 @@ const MeasuredBubble = ({ message, isOwnMessage, isFirstOfGroup, avatarUrl, onMe
     const observer = new ResizeObserver(update);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [message.id, onMeasure, message.content, message.attachments]);
+  }, [message.id, onMeasure, message.content, message.attachments, message.type]);
 
   return (
     <MessageBubble

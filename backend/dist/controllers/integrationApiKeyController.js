@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listIntegrationApiKeys = listIntegrationApiKeys;
+exports.getIntegrationApiKey = getIntegrationApiKey;
 exports.createIntegrationApiKey = createIntegrationApiKey;
 exports.updateIntegrationApiKey = updateIntegrationApiKey;
 exports.deleteIntegrationApiKey = deleteIntegrationApiKey;
@@ -73,6 +74,18 @@ function toOptionalDate(value, field) {
     }
     throw new integrationApiKeyService_1.ValidationError(`${field} must be a string, Date or null`);
 }
+function toOptionalString(value, field) {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value === null) {
+        return null;
+    }
+    if (typeof value === 'string') {
+        return value;
+    }
+    throw new integrationApiKeyService_1.ValidationError(`${field} must be a string or null`);
+}
 async function listIntegrationApiKeys(_req, res) {
     try {
         const items = await service.list();
@@ -83,14 +96,35 @@ async function listIntegrationApiKeys(_req, res) {
         return res.status(500).json({ error: 'Internal server error' });
     }
 }
+async function getIntegrationApiKey(req, res) {
+    const apiKeyId = parseIdParam(req.params.id);
+    if (!apiKeyId) {
+        return res.status(400).json({ error: 'Invalid API key id' });
+    }
+    try {
+        const apiKey = await service.findById(apiKeyId);
+        if (!apiKey) {
+            return res.status(404).json({ error: 'API key not found' });
+        }
+        return res.json(apiKey);
+    }
+    catch (error) {
+        console.error('Failed to retrieve integration API key:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+}
 async function createIntegrationApiKey(req, res) {
-    const { provider, key, environment, active, lastUsed } = req.body;
+    const { provider, apiUrl, key, environment, active, lastUsed } = req.body;
     const input = {
         provider: provider ?? '',
         key: key ?? '',
         environment: environment ?? '',
     };
     try {
+        const parsedApiUrl = toOptionalString(apiUrl, 'apiUrl');
+        if (parsedApiUrl !== undefined) {
+            input.apiUrl = parsedApiUrl;
+        }
         const parsedActive = toOptionalBoolean(active, 'active');
         if (parsedActive !== undefined) {
             input.active = parsedActive;
@@ -115,7 +149,7 @@ async function updateIntegrationApiKey(req, res) {
     if (!apiKeyId) {
         return res.status(400).json({ error: 'Invalid API key id' });
     }
-    const { provider, key, environment, active, lastUsed } = req.body;
+    const { provider, apiUrl, key, environment, active, lastUsed } = req.body;
     const updates = {};
     if (provider !== undefined) {
         updates.provider = provider;
@@ -127,6 +161,9 @@ async function updateIntegrationApiKey(req, res) {
         updates.environment = environment;
     }
     try {
+        if (apiUrl !== undefined) {
+            updates.apiUrl = toOptionalString(apiUrl, 'apiUrl') ?? null;
+        }
         const parsedActive = toOptionalBoolean(active, 'active');
         if (parsedActive !== undefined) {
             updates.active = parsedActive;

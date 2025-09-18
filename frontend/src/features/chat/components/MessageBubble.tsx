@@ -28,20 +28,44 @@ export const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(
           <div className={styles.avatarPlaceholder} aria-hidden="true" />
         )}
         <div className={styles.bubble}>
-          {message.attachments?.map((attachment) => (
-            <img
-              key={attachment.id}
-              src={attachment.url}
-              alt={attachment.name}
-              className={styles.attachment}
-            />
-          ))}
+          {message.attachments?.map((attachment) => {
+            if (attachment.type === "audio") {
+              return (
+                <div key={attachment.id} className={styles.audioWrapper}>
+                  <audio
+                    controls
+                    src={attachment.url}
+                    className={styles.audioPlayer}
+                    aria-label={`Mensagem de áudio ${attachment.name}`}
+                  >
+                    Seu navegador não suporta a reprodução de áudio.
+                  </audio>
+                  {attachment.name && (
+                    <span className={styles.attachmentCaption}>{attachment.name}</span>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <img
+                key={attachment.id}
+                src={attachment.url}
+                alt={attachment.name}
+                className={styles.attachment}
+              />
+            );
+          })}
           {message.type === "image" && !message.attachments?.length && (
             <img
               src={message.content}
               alt="Imagem enviada"
               className={styles.attachment}
             />
+          )}
+          {message.type === "audio" && !message.attachments?.length && (
+            <div className={styles.audioPlaceholder} aria-label="Mensagem de áudio" role="note">
+              🎧 Mensagem de áudio
+            </div>
           )}
           {message.content && (
             <p className={styles.text}>{message.content}</p>
