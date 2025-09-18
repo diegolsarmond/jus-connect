@@ -115,6 +115,13 @@ export default function VisualizarOportunidade() {
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [documentType, setDocumentType] = useState<"modelo" | "processo" | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [documentTemplates, setDocumentTemplates] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [documentTemplatesLoading, setDocumentTemplatesLoading] = useState(false);
+  const [documentTemplatesError, setDocumentTemplatesError] = useState<string | null>(
+    null,
+  );
   const [processForm, setProcessForm] = useState({
     numero: "",
     uf: "",
@@ -134,6 +141,7 @@ export default function VisualizarOportunidade() {
     setProcessForm({ numero: "", uf: "", municipio: "", orgaoJulgador: "" });
     setMunicipios([]);
     setMunicipiosLoading(false);
+    setDocumentTemplatesError(null);
   };
 
   useEffect(() => {
@@ -295,6 +303,53 @@ export default function VisualizarOportunidade() {
       cancelled = true;
     };
   }, [apiUrl]);
+
+  useEffect(() => {
+    if (!documentDialogOpen || documentType !== "modelo") return;
+
+    let cancelled = false;
+
+    const fetchTemplates = async () => {
+      try {
+        setDocumentTemplatesLoading(true);
+        setDocumentTemplatesError(null);
+        const data = await fetchList(`${apiUrl}/api/templates`);
+        if (cancelled) return;
+        const options = (data as unknown[]).flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const record = item as Record<string, unknown>;
+          const id = record["id"];
+          if (id === undefined || id === null) return [];
+          const rawLabel = record["title"] ?? record["nome"] ?? record["name"];
+          const label =
+            typeof rawLabel === "string" && rawLabel.trim().length > 0
+              ? rawLabel.trim()
+              : `Modelo ${id}`;
+          return [{ value: String(id), label }];
+        });
+        setDocumentTemplates(options);
+        setSelectedTemplate((prev) =>
+          options.some((option) => option.value === prev) ? prev : "",
+        );
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setDocumentTemplates([]);
+          setDocumentTemplatesError("Não foi possível carregar os modelos.");
+        }
+      } finally {
+        if (!cancelled) {
+          setDocumentTemplatesLoading(false);
+        }
+      }
+    };
+
+    void fetchTemplates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, documentDialogOpen, documentType]);
 
   useEffect(() => {
     if (!opportunity || (opportunity as { _namesLoaded?: boolean })._namesLoaded)
@@ -1255,18 +1310,48 @@ export default function VisualizarOportunidade() {
             {documentType === "modelo" && (
               <div className="space-y-2">
                 <Label htmlFor="document-template">Modelo</Label>
-                <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                  <SelectTrigger id="document-template">
-                    <SelectValue placeholder="Selecione um modelo" />
+                <Select
+                  value={selectedTemplate}
+                  onValueChange={setSelectedTemplate}
+                  disabled={
+                    documentTemplatesLoading ||
+                    (documentTemplates.length === 0 && !documentTemplatesError)
+                  }
+                >
+                  <SelectTrigger
+                    id="document-template"
+                    disabled={
+                      documentTemplatesLoading ||
+                      (documentTemplates.length === 0 && !documentTemplatesError)
+                    }
+                  >
+                    <SelectValue
+                      placeholder={
+                        documentTemplatesLoading
+                          ? "Carregando modelos..."
+                          : documentTemplates.length === 0
+                          ? documentTemplatesError ?? "Nenhum modelo disponível"
+                          : "Selecione um modelo"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="contrato_prestacao">
-                      Contrato de prestação de serviços
-                    </SelectItem>
-                    <SelectItem value="peticao_inicial">Petição inicial</SelectItem>
-                    <SelectItem value="oficio_apresentacao">Ofício de apresentação</SelectItem>
+                    {documentTemplates.length > 0 ? (
+                      documentTemplates.map((template) => (
+                        <SelectItem key={template.value} value={template.value}>
+                          {template.label}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__no_template__" disabled>
+                        {documentTemplatesError ?? "Nenhum modelo cadastrado"}
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                {documentTemplatesError && (
+                  <p className="text-sm text-destructive">{documentTemplatesError}</p>
+                )}
               </div>
             )}
 
