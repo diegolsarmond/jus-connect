@@ -51,6 +51,7 @@ const normalizeChatName = (chat: ChatOverview): ChatOverview => {
   };
 };
 
+
 const readStringProperty = (
   record: Record<string, unknown> | undefined,
   key: string,
@@ -242,6 +243,7 @@ export const useWAHA = () => {
           }
           setIsLoadingMoreChats(false);
         }
+
       }
     },
     [enrichChatWithInfo, resetChatPagination, toast],

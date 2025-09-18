@@ -67,6 +67,25 @@ export async function listIntegrationApiKeys(_req: Request, res: Response) {
   }
 }
 
+export async function getIntegrationApiKey(req: Request, res: Response) {
+  const apiKeyId = parseIdParam(req.params.id);
+
+  if (!apiKeyId) {
+    return res.status(400).json({ error: 'Invalid API key id' });
+  }
+
+  try {
+    const apiKey = await service.findById(apiKeyId);
+    if (!apiKey) {
+      return res.status(404).json({ error: 'API key not found' });
+    }
+    return res.json(apiKey);
+  } catch (error) {
+    console.error('Failed to retrieve integration API key:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 export async function createIntegrationApiKey(req: Request, res: Response) {
   const { provider, apiUrl, key, environment, active, lastUsed } = req.body as {
     provider?: string;

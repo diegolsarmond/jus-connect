@@ -49,6 +49,7 @@ const formSchema = z.object({
   etapa: z.string().optional(),
   prazo_proximo: z.string().optional(),
   status: z.string().optional(),
+  solicitante_id: z.string().optional(),
   solicitante_nome: z.string().optional(),
   solicitante_cpf_cnpj: z.string().optional(),
   solicitante_email: z.string().optional(),
@@ -120,6 +121,7 @@ export default function NovaOportunidade() {
       etapa: "",
       prazo_proximo: "",
       status: "",
+      solicitante_id: "",
       solicitante_nome: "",
       solicitante_cpf_cnpj: "",
       solicitante_email: "",
@@ -294,6 +296,11 @@ export default function NovaOportunidade() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       const isProcessoDistribuido = values.processo_distribuido === "sim";
+      const solicitanteIdRaw = values.solicitante_id?.trim();
+      const solicitanteId =
+        solicitanteIdRaw && !Number.isNaN(Number(solicitanteIdRaw))
+          ? Number(solicitanteIdRaw)
+          : null;
 
       const payload = {
         tipo_processo_id: Number(values.tipo_processo),
@@ -313,7 +320,7 @@ export default function NovaOportunidade() {
         etapa_id: values.etapa ? Number(values.etapa) : null,
         prazo_proximo: values.prazo_proximo || null,
         status_id: values.status ? Number(values.status) : null,
-        solicitante_id: null,
+        solicitante_id: solicitanteId,
         valor_causa: parseCurrency(values.valor_causa || ""),
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
@@ -347,12 +354,36 @@ export default function NovaOportunidade() {
   };
 
   const handleSelectClient = (name: string) => {
-    const client = clients.find((c) => c.name === name);
+    const normalizedName = name.trim();
+    const client = clients.find((c) => c.name === normalizedName);
     if (client) {
+      form.setValue("solicitante_id", client.id, {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
       form.setValue("solicitante_cpf_cnpj", client.cpf_cnpj || "");
       form.setValue("solicitante_email", client.email || "");
       form.setValue("solicitante_telefone", client.telefone || "");
       form.setValue("cliente_tipo", client.tipo || "");
+      form.setValue("solicitante_nome", client.name, {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+    } else {
+      form.setValue("solicitante_id", "", {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      if (normalizedName.length === 0) {
+        form.setValue("solicitante_nome", "", {
+          shouldDirty: true,
+          shouldTouch: true,
+        });
+      }
+      form.setValue("solicitante_cpf_cnpj", "");
+      form.setValue("solicitante_email", "");
+      form.setValue("solicitante_telefone", "");
+      form.setValue("cliente_tipo", "");
     }
   };
 
@@ -389,7 +420,7 @@ export default function NovaOportunidade() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="dados-processo">
-                  <AccordionTrigger>Dados do Processo</AccordionTrigger>
+                  <AccordionTrigger>DADOS DO PROCESSO</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -582,7 +613,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="fluxo-processo">
-                  <AccordionTrigger>Fluxo do Processo</AccordionTrigger>
+                  <AccordionTrigger>DADOS DA PROPOSTA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -590,7 +621,7 @@ export default function NovaOportunidade() {
                         name="fase"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Fase</FormLabel>
+                            <FormLabel>Fluxo de Trabalho</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger>
@@ -654,7 +685,7 @@ export default function NovaOportunidade() {
                         name="status"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Status</FormLabel>
+                            <FormLabel>Situação da Proposta</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger>
@@ -678,7 +709,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="dados-solicitante">
-                  <AccordionTrigger>Dados do Solicitante</AccordionTrigger>
+                  <AccordionTrigger>CLIENTE SOLICITANTE</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -767,7 +798,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="dados-promovido">
-                  <AccordionTrigger>Dados dos Envolvidos</AccordionTrigger>
+                  <AccordionTrigger>ENVOLVIDOS COM O PROCESSO</AccordionTrigger>
                   <AccordionContent>
                     {envolvidosFields.map((item, index) => (
                       <div
@@ -843,7 +874,10 @@ export default function NovaOportunidade() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="Réu">Réu</SelectItem>
+                                          <SelectItem value="Réu">Réu</SelectItem>
+                                          <SelectItem value="Réu">Autor</SelectItem>
+                                          <SelectItem value="Réu">Promovente</SelectItem>
+                                          <SelectItem value="Réu">Promovido</SelectItem>
                                   <SelectItem value="Reclamante">Reclamante</SelectItem>
                                   <SelectItem value="Exequente">Exequente</SelectItem>
                                   <SelectItem value="Outro">Outro</SelectItem>
@@ -885,7 +919,7 @@ export default function NovaOportunidade() {
                
 
                 <AccordionItem value="detalhes">
-                  <AccordionTrigger>Detalhes</AccordionTrigger>
+                  <AccordionTrigger>DETALHES</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -893,7 +927,7 @@ export default function NovaOportunidade() {
                         name="detalhes"
                         render={({ field }) => (
                           <FormItem className="md:col-span-2">
-                            <FormLabel>Detalhes</FormLabel>
+                            <FormLabel>Descreva as Informações do Processo</FormLabel>
                             <FormControl>
                               <Textarea {...field} />
                             </FormControl>
@@ -924,7 +958,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                  <AccordionItem value="honorarios">
-                  <AccordionTrigger>Honorários</AccordionTrigger>
+                  <AccordionTrigger>HONORÁRIOS</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -1065,7 +1099,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="metadados">
-                  <AccordionTrigger>Metadados</AccordionTrigger>
+                  <AccordionTrigger>SISTEMA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField

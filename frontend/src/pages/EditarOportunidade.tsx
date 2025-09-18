@@ -23,6 +23,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Accordion,
   AccordionContent,
@@ -36,6 +37,7 @@ const formSchema = z.object({
   tipo_processo: z.string().min(1, "Tipo de Processo é obrigatório"),
   area_atuacao: z.string().optional(),
   responsavel_interno: z.string().optional(),
+  processo_distribuido: z.string().optional(),
   numero_processo_cnj: z.string().optional(),
   numero_protocolo: z.string().optional(),
   vara_ou_orgao: z.string().optional(),
@@ -108,6 +110,7 @@ export default function EditarOportunidade() {
       tipo_processo: "",
       area_atuacao: "",
       responsavel_interno: "",
+      processo_distribuido: "",
       numero_processo_cnj: "",
       numero_protocolo: "",
       vara_ou_orgao: "",
@@ -239,10 +242,17 @@ export default function EditarOportunidade() {
         const res = await fetch(`${apiUrl}/api/oportunidades/${id}`);
         if (!res.ok) throw new Error();
         const data = await res.json();
+        const hasProcessDistribution = Boolean(
+          data.numero_processo_cnj ||
+            data.numero_protocolo ||
+            data.vara_ou_orgao ||
+            data.comarca
+        );
         form.reset({
           tipo_processo: data.tipo_processo_id ? String(data.tipo_processo_id) : "",
           area_atuacao: data.area_atuacao_id ? String(data.area_atuacao_id) : "",
           responsavel_interno: data.responsavel_id ? String(data.responsavel_id) : "",
+          processo_distribuido: hasProcessDistribution ? "sim" : "nao",
           numero_processo_cnj: data.numero_processo_cnj || "",
           numero_protocolo: data.numero_protocolo || "",
           vara_ou_orgao: data.vara_ou_orgao || "",
@@ -334,6 +344,7 @@ export default function EditarOportunidade() {
 
   const faseValue = form.watch("fase");
   const formaPagamento = form.watch("forma_pagamento");
+  const processoDistribuido = form.watch("processo_distribuido");
   useEffect(() => {
     if (!faseValue) return;
     const loadEtapas = async () => {
@@ -351,6 +362,23 @@ export default function EditarOportunidade() {
     };
     loadEtapas();
   }, [faseValue, apiUrl]);
+
+  useEffect(() => {
+    if (processoDistribuido === "sim") return;
+
+    const fieldsToClear: Array<
+      | "numero_processo_cnj"
+      | "numero_protocolo"
+      | "vara_ou_orgao"
+      | "comarca"
+    > = ["numero_processo_cnj", "numero_protocolo", "vara_ou_orgao", "comarca"];
+
+    fieldsToClear.forEach((fieldName) => {
+      if (form.getValues(fieldName)) {
+        form.setValue(fieldName, "");
+      }
+    });
+  }, [processoDistribuido, form]);
 
   const parseCurrency = (value: string) => {
     const digits = value.replace(/\D/g, "");
@@ -375,16 +403,22 @@ export default function EditarOportunidade() {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      const isProcessoDistribuido = values.processo_distribuido === "sim";
+
       const payload = {
         tipo_processo_id: Number(values.tipo_processo),
         area_atuacao_id: values.area_atuacao ? Number(values.area_atuacao) : null,
         responsavel_id: values.responsavel_interno
           ? Number(values.responsavel_interno)
           : null,
-        numero_processo_cnj: values.numero_processo_cnj || null,
-        numero_protocolo: values.numero_protocolo || null,
-        vara_ou_orgao: values.vara_ou_orgao || null,
-        comarca: values.comarca || null,
+        numero_processo_cnj: isProcessoDistribuido
+          ? values.numero_processo_cnj || null
+          : null,
+        numero_protocolo: isProcessoDistribuido
+          ? values.numero_protocolo || null
+          : null,
+        vara_ou_orgao: isProcessoDistribuido ? values.vara_ou_orgao || null : null,
+        comarca: isProcessoDistribuido ? values.comarca || null : null,
         fase_id: values.fase ? Number(values.fase) : null,
         etapa_id: values.etapa ? Number(values.etapa) : null,
         prazo_proximo: values.prazo_proximo || null,
@@ -469,7 +503,7 @@ export default function EditarOportunidade() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="dados-processo">
-                  <AccordionTrigger>Dados do Processo</AccordionTrigger>
+                  <AccordionTrigger>DADOS DO PROCESSO</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -549,66 +583,120 @@ export default function EditarOportunidade() {
 
                       <FormField
                         control={form.control}
-                        name="numero_processo_cnj"
+                        name="processo_distribuido"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Número do Processo (CNJ)</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel>Processo já foi distribuído?</FormLabel>
                             <FormControl>
-                              <Input placeholder="0000000-00.0000.0.00.0000" {...field} />
+                              <RadioGroup
+                                className="flex flex-col sm:flex-row gap-4"
+                                onValueChange={field.onChange}
+                                value={field.value || ""}
+                              >
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem
+                                      value="sim"
+                                      id="processo-distribuido-sim"
+                                    />
+                                  </FormControl>
+                                  <FormLabel
+                                    className="font-normal"
+                                    htmlFor="processo-distribuido-sim"
+                                  >
+                                    Sim
+                                  </FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem
+                                      value="nao"
+                                      id="processo-distribuido-nao"
+                                    />
+                                  </FormControl>
+                                  <FormLabel
+                                    className="font-normal"
+                                    htmlFor="processo-distribuido-nao"
+                                  >
+                                    Não
+                                  </FormLabel>
+                                </FormItem>
+                              </RadioGroup>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
 
-                      <FormField
-                        control={form.control}
-                        name="numero_protocolo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Número do Protocolo/Requerimento</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      {processoDistribuido === "sim" && (
+                        <>
+                          <FormField
+                            control={form.control}
+                            name="numero_processo_cnj"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Número do Processo (CNJ)</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="0000000-00.0000.0.00.0000"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                      <FormField
-                        control={form.control}
-                        name="vara_ou_orgao"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Vara/Órgão</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                          <FormField
+                            control={form.control}
+                            name="numero_protocolo"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Número do Protocolo/Requerimento</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                      <FormField
-                        control={form.control}
-                        name="comarca"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Comarca</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                          <FormField
+                            control={form.control}
+                            name="vara_ou_orgao"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Vara/Órgão</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="comarca"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Comarca</FormLabel>
+                                <FormControl>
+                                  <Input {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </>
+                      )}
 
                 </div>
                   </AccordionContent>
                 </AccordionItem>
 
                 <AccordionItem value="fluxo-processo">
-                  <AccordionTrigger>Fluxo do Processo</AccordionTrigger>
+                  <AccordionTrigger>DADOS DA PROPOSTA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -704,7 +792,7 @@ export default function EditarOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="dados-solicitante">
-                  <AccordionTrigger>Dados do Solicitante</AccordionTrigger>
+                  <AccordionTrigger>CLIENTE SOLICITANTE</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -794,7 +882,7 @@ export default function EditarOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="dados-promovido">
-                  <AccordionTrigger>Dados dos Envolvidos</AccordionTrigger>
+                  <AccordionTrigger>ENVOLVIDOS COM O PROCESSO</AccordionTrigger>
                   <AccordionContent>
                     {envolvidosFields.map((item, index) => (
                       <div
@@ -912,7 +1000,7 @@ export default function EditarOportunidade() {
                
 
                 <AccordionItem value="detalhes">
-                  <AccordionTrigger>Detalhes</AccordionTrigger>
+                  <AccordionTrigger>DETALHES</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -950,8 +1038,8 @@ export default function EditarOportunidade() {
                   </AccordionContent>
                 </AccordionItem>
 
-                 <AccordionItem value="honorarios">
-                  <AccordionTrigger>Honorários</AccordionTrigger>
+                <AccordionItem value="honorarios">
+                  <AccordionTrigger>HONORÁRIOS</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -1092,7 +1180,7 @@ export default function EditarOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="metadados">
-                  <AccordionTrigger>Metadados</AccordionTrigger>
+                  <AccordionTrigger>SISTEMA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
