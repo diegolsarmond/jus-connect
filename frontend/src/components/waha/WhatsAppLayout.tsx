@@ -380,6 +380,7 @@ export const WhatsAppLayout = ({
   const isInitialLoading = loading && !hasLoadedOnce;
   const shouldShowOverlayLoading = loading && hasLoadedOnce;
 
+
   if (isInitialLoading) {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
