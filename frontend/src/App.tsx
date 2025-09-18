@@ -81,6 +81,7 @@ const App = () => (
             <Route element={<CRMLayout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/conversas" element={<Conversas />} />
+              <Route path="/conversas/:conversationId" element={<Conversas />} />
               <Route path="/clientes" element={<Clientes />} />
               <Route path="/clientes/novo" element={<NovoCliente />} />
               <Route path="/clientes/:id/editar" element={<EditarCliente />} />
