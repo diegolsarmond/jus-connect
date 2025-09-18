@@ -91,6 +91,35 @@ interface ClientOption extends Option {
   tipo?: string;
 }
 
+const sortOptions = (options: Option[]) =>
+  [...options].sort((a, b) =>
+    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+  );
+
+const parseSituacaoOptions = (data: unknown[]): Option[] => {
+  const byId = new Map<string, Option>();
+
+  data.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const id = record["id"];
+    if (id === null || id === undefined) return;
+
+    const ativo = record["ativo"];
+    if (ativo !== undefined && ativo !== null && ativo !== true) return;
+
+    const rawLabel = record["nome"] ?? record["name"];
+    const label =
+      typeof rawLabel === "string" && rawLabel.trim().length > 0
+        ? rawLabel.trim()
+        : String(id);
+
+    byId.set(String(id), { id: String(id), name: label });
+  });
+
+  return sortOptions(Array.from(byId.values()));
+};
+
 export default function EditarOportunidade() {
   const apiUrl = getApiBaseUrl();
   const navigate = useNavigate();
@@ -222,14 +251,11 @@ export default function EditarOportunidade() {
         );
 
         const situacoesData = await fetchJson(`${apiUrl}/api/situacao-propostas`);
-        setSituacoes(
-          situacoesData.map((s) => {
-            const item = s as any;
-            return { id: String(item.id), name: item.nome } as Option;
-          })
-        );
+        setSituacoes(parseSituacaoOptions(situacoesData));
+
       } catch (e) {
         console.error(e);
+        setSituacoes([]);
       }
     };
     fetchData();
@@ -308,6 +334,27 @@ export default function EditarOportunidade() {
             ? data.ultima_atualizacao.substring(0, 10)
             : "",
         });
+
+        const currentStatusId =
+          data.status_id === null || data.status_id === undefined
+            ? null
+            : String(data.status_id);
+        if (currentStatusId) {
+          const currentStatusLabel =
+            typeof data.status === "string" && data.status.trim().length > 0
+              ? data.status.trim()
+              : currentStatusId;
+
+          setSituacoes((prev) => {
+            if (prev.some((option) => option.id === currentStatusId)) {
+              return prev;
+            }
+            return sortOptions([
+              ...prev,
+              { id: currentStatusId, name: currentStatusLabel },
+            ]);
+          });
+        }
 
         if (data.solicitante_id) {
           try {

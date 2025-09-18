@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +76,35 @@ interface StatusOption {
   id: string;
   name: string;
 }
+
+const sortStatusOptions = (options: StatusOption[]) =>
+  [...options].sort((a, b) =>
+    a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+  );
+
+const parseSituacaoOptions = (data: unknown[]): StatusOption[] => {
+  const byId = new Map<string, StatusOption>();
+
+  data.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const id = record["id"];
+    if (id === null || id === undefined) return;
+
+    const ativo = record["ativo"];
+    if (ativo !== undefined && ativo !== null && ativo !== true) return;
+
+    const rawLabel = record["nome"] ?? record["name"];
+    const label =
+      typeof rawLabel === "string" && rawLabel.trim().length > 0
+        ? rawLabel.trim()
+        : String(id);
+
+    byId.set(String(id), { id: String(id), name: label });
+  });
+
+  return sortStatusOptions(Array.from(byId.values()));
+};
 
 interface InteractionEntry {
   id: number;
@@ -252,6 +287,23 @@ export default function VisualizarOportunidade() {
     observacoes: "",
   }));
 
+  const patchOpportunity = useCallback(
+    (updater: (prev: OpportunityData) => OpportunityData) => {
+      setOpportunity((prev) => {
+        if (!prev) return prev;
+        const next = updater(prev);
+        if ((prev as { _namesLoaded?: boolean })._namesLoaded) {
+          Object.defineProperty(next, "_namesLoaded", {
+            value: true,
+            enumerable: false,
+          });
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   const resetDocumentDialog = () => {
     setDocumentType(null);
     setSelectedTemplate("");
@@ -419,23 +471,41 @@ export default function VisualizarOportunidade() {
         setStatusLoading(true);
         const data = await fetchList(`${apiUrl}/api/situacao-propostas`);
         if (cancelled) return;
-        const options: StatusOption[] = (data as unknown[]).flatMap((item) => {
-          if (!item || typeof item !== "object") return [];
-          const record = item as Record<string, unknown>;
-          const value = record["id"];
-          if (value === undefined || value === null) return [];
-          const labelRaw = record["nome"] ?? record["name"];
-          const label =
-            typeof labelRaw === "string" && labelRaw.trim().length > 0
-              ? labelRaw
-              : String(value);
-          return [{ id: String(value), name: label }];
-        });
+
+        let options = parseSituacaoOptions(data);
+
+        const currentStatusId =
+          opportunity?.status_id === null || opportunity?.status_id === undefined
+            ? null
+            : String(opportunity.status_id);
+
+        if (
+          currentStatusId &&
+          !options.some((option) => option.id === currentStatusId)
+        ) {
+          const currentStatusLabel =
+            typeof opportunity?.status === "string" &&
+            opportunity.status.trim().length > 0
+              ? opportunity.status.trim()
+              : currentStatusId;
+          options = sortStatusOptions([
+            ...options,
+            { id: currentStatusId, name: currentStatusLabel },
+          ]);
+        }
+
         if (!cancelled) {
           setStatusOptions(options);
         }
       } catch (e) {
-        console.error(e);
+        console.error("Falha ao buscar situações da proposta.", e);
+        if (!cancelled) {
+          setStatusOptions([]);
+          setSnack({
+            open: true,
+            message: "Não foi possível carregar as situações da proposta.",
+          });
+        }
       } finally {
         if (!cancelled) {
           setStatusLoading(false);
@@ -443,11 +513,11 @@ export default function VisualizarOportunidade() {
       }
     };
 
-    fetchStatuses();
+    void fetchStatuses();
     return () => {
       cancelled = true;
     };
-  }, [apiUrl]);
+  }, [apiUrl, opportunity?.status_id, opportunity?.status]);
 
   useEffect(() => {
     if (!documentDialogOpen || documentType !== "modelo") return;
@@ -575,6 +645,7 @@ export default function VisualizarOportunidade() {
             }
           }
         }
+
 
         if (opportunity.status_id) {
           const situacoes = (await fetchList(
@@ -1015,40 +1086,74 @@ export default function VisualizarOportunidade() {
         data.status_id === undefined ? parsedValue : data.status_id;
       const statusLabel = getStatusLabel(nextStatusId);
 
-      setOpportunity((prev) =>
-        prev
-          ? {
-              ...prev,
-              status_id: nextStatusId ?? null,
-              status: statusLabel,
-              ultima_atualizacao:
-                data.ultima_atualizacao ?? prev.ultima_atualizacao,
-            }
-          : prev
-      );
+      patchOpportunity((prev) => ({
+        ...prev,
+        status_id: nextStatusId ?? null,
+        status: statusLabel,
+        ultima_atualizacao:
+          data.ultima_atualizacao ?? prev.ultima_atualizacao,
+      }));
       setSnack({ open: true, message: "Status atualizado" });
     } catch (error) {
       console.error(error);
       setSnack({ open: true, message: "Erro ao atualizar status" });
-      setOpportunity((prev) =>
-        prev
-          ? {
-              ...prev,
-              status_id: previousStatusId,
-              status:
-                previousStatusId === null
-                  ? undefined
-                  : getStatusLabel(previousStatusId) ?? prev.status,
-            }
-          : prev
-      );
+      patchOpportunity((prev) => ({
+        ...prev,
+        status_id: previousStatusId,
+        status:
+          previousStatusId === null
+            ? undefined
+            : getStatusLabel(previousStatusId) ?? prev.status,
+      }));
     } finally {
       setStatusSaving(false);
     }
   };
 
-  const handleDocumentConfirm = async () => {
-    if (!documentType || !id) return;
+  useEffect(() => {
+    if (!opportunity || !statusOptions.length) return;
+
+    const statusId =
+      opportunity.status_id === null || opportunity.status_id === undefined
+        ? null
+        : Number(opportunity.status_id);
+
+    if (statusId === null) return;
+
+    const hasMatchingOption = statusOptions.some(
+      (option) => Number(option.id) === statusId
+    );
+
+    if (!hasMatchingOption) return;
+
+    const desiredLabel = getStatusLabel(statusId);
+    if (!desiredLabel) return;
+
+    const currentLabel =
+      typeof opportunity.status === "string"
+        ? opportunity.status.trim()
+        : "";
+
+    if (currentLabel === desiredLabel) return;
+
+    patchOpportunity((prev) => ({
+      ...prev,
+      status: desiredLabel,
+    }));
+  }, [
+    opportunity?.status_id,
+    opportunity?.status,
+    statusOptions,
+    patchOpportunity,
+  ]);
+
+  const handleDocumentConfirm = () => {
+    if (!documentType) return;
+
+    const params = new URLSearchParams();
+    if (id) params.set("oportunidade", id);
+    params.set("tipo", documentType);
+
 
     if (documentType === "modelo") {
       if (!selectedTemplate) return;

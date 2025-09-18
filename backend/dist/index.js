@@ -92,6 +92,8 @@ app.use('/api', planoRoutes_1.default);
 app.use('/api', situacaoProcessoRoutes_1.default);
 app.use('/api', situacaoClienteRoutes_1.default);
 app.use('/api', situacaoPropostaRoutes_1.default);
+app.use('/api/v1', situacaoPropostaRoutes_1.default);
+
 app.use('/api', etiquetaRoutes_1.default);
 app.use('/api', empresaRoutes_1.default);
 app.use('/api', usuarioRoutes_1.default);
