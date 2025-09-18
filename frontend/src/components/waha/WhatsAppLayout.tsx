@@ -357,7 +357,7 @@ export const WhatsAppLayout = ({
 
   return (
     <div
-      className="flex min-h-screen flex-col overflow-hidden"
+      className="flex min-h-screen flex-col items-center overflow-hidden px-3 py-6 sm:px-6"
       style={{
         background:
           "radial-gradient(circle at -20% -20%, rgba(59,130,246,0.16), transparent 55%)," +
@@ -365,45 +365,53 @@ export const WhatsAppLayout = ({
           "linear-gradient(180deg, rgba(241,245,249,0.92) 0%, rgba(226,232,240,0.75) 45%, rgba(226,232,240,0.55) 100%)",
       }}
     >
-      <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
+      <div
+        className="flex w-full flex-1 flex-col gap-4 sm:gap-6"
+        style={{ width: "min(100%, clamp(360px, 50vw, 1100px))" }}
+      >
+        <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
 
-      <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
-        <div className="flex h-full min-h-0 w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-b border-border/40 bg-sidebar/90 shadow-[0_12px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm lg:w-[34%] lg:min-w-[300px] lg:max-w-md lg:border-b-0 lg:border-r">
-          <CRMChatSidebar
-            conversations={conversations}
-            activeConversationId={activeConversationId}
-            searchValue={searchValue}
-            onSearchChange={setSearchValue}
-            responsibleFilter={responsibleFilter}
-            responsibleOptions={teamMembers}
-            onResponsibleFilterChange={setResponsibleFilter}
-            onSelectConversation={handleSelectConversation}
-            onNewConversation={() => {
-              void loadChats({ reset: true });
-              setIsNewConversationOpen(true);
-            }}
-            searchInputRef={searchInputRef}
-            loading={loading}
-            hasMore={hasMoreChats}
-            isLoadingMore={isLoadingMoreChats}
-            onLoadMore={() => {
-              void loadMoreChats();
-            }}
-          />
-        </div>
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-[32px] border border-white/40 bg-white/60 shadow-[0_32px_56px_rgba(15,23,42,0.18)] backdrop-blur-xl">
+          <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
+            <div className="flex h-full min-h-0 w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-b border-border/40 bg-sidebar/90 backdrop-blur-sm lg:w-[34%] lg:min-w-[300px] lg:max-w-md lg:border-b-0 lg:border-r">
+              <CRMChatSidebar
+                conversations={conversations}
+                activeConversationId={activeConversationId}
+                searchValue={searchValue}
+                onSearchChange={setSearchValue}
+                responsibleFilter={responsibleFilter}
+                responsibleOptions={teamMembers}
+                onResponsibleFilterChange={setResponsibleFilter}
+                onSelectConversation={handleSelectConversation}
+                onNewConversation={() => {
+                  void loadChats({ reset: true });
+                  setIsNewConversationOpen(true);
+                }}
+                searchInputRef={searchInputRef}
+                loading={loading}
+                hasMore={hasMoreChats}
+                isLoadingMore={isLoadingMoreChats}
+                onLoadMore={() => {
+                  void loadMoreChats();
+                }}
+              />
+            </div>
 
-        <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
-          <CRMChatWindow
-            conversation={activeConversation}
-            messages={messages}
-            hasMore={false}
-            isLoading={messagesLoading}
-            isLoadingMore={false}
-            onSendMessage={handleSendMessage}
-            onLoadOlder={async () => []}
-            onUpdateConversation={handleUpdateConversation}
-            isUpdatingConversation={false}
-          />
+            <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
+              <CRMChatWindow
+                conversation={activeConversation}
+                messages={messages}
+                hasMore={false}
+                isLoading={messagesLoading}
+                isLoadingMore={false}
+                onSendMessage={handleSendMessage}
+                onLoadOlder={async () => []}
+                onUpdateConversation={handleUpdateConversation}
+                isUpdatingConversation={false}
+              />
+            </div>
+          </div>
+
         </div>
       </div>
 
