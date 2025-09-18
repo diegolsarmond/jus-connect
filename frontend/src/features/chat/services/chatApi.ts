@@ -78,3 +78,73 @@ export const updateConversation = async (
   });
   return parseJson<ConversationSummary>(response);
 };
+
+interface ApiUser {
+  id: number | string;
+  nome_completo?: string | null;
+  perfil?: string | number | null;
+}
+
+export interface ChatResponsibleOption {
+  id: string;
+  name: string;
+  role?: string;
+}
+
+export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> => {
+  const response = await fetch(`/api/usuarios`);
+  const data = await parseJson<ApiUser[]>(response);
+  const options: ChatResponsibleOption[] = [];
+  const seen = new Set<string>();
+
+  for (const user of data) {
+    if (!user || user.id === undefined || user.id === null) {
+      continue;
+    }
+    const id = String(user.id);
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    const name = typeof user.nome_completo === 'string' ? user.nome_completo.trim() : '';
+    if (!name) {
+      continue;
+    }
+
+    const roleValue = user.perfil;
+    const role =
+      typeof roleValue === 'string' && roleValue.trim()
+        ? roleValue.trim()
+        : typeof roleValue === 'number' && Number.isFinite(roleValue)
+          ? String(roleValue)
+          : undefined;
+
+    seen.add(id);
+    options.push({ id, name, role });
+  }
+
+  return options.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+};
+
+interface ApiEtiqueta {
+  id: number | string;
+  nome?: string | null;
+}
+
+export const fetchChatTags = async (): Promise<string[]> => {
+  const response = await fetch(`/api/etiquetas`);
+  const data = await parseJson<ApiEtiqueta[]>(response);
+  const tags = new Set<string>();
+
+  for (const item of data) {
+    if (!item) {
+      continue;
+    }
+    const name = typeof item.nome === 'string' ? item.nome.trim() : '';
+    if (!name) {
+      continue;
+    }
+    tags.add(name);
+  }
+
+  return Array.from(tags).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+};

@@ -5,6 +5,7 @@ import {
   listConversationsHandler,
   markConversationReadHandler,
   sendConversationMessageHandler,
+  updateConversationHandler,
 } from '../controllers/chatController';
 
 const router = Router();
@@ -235,6 +236,70 @@ router.get('/conversations', listConversationsHandler);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/conversations', createConversationHandler);
+
+/**
+ * @swagger
+ * /api/conversations/{conversationId}:
+ *   patch:
+ *     summary: Atualiza metadados de uma conversa existente
+ *     tags: [Conversas]
+ *     parameters:
+ *       - in: path
+ *         name: conversationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Identificador da conversa que será atualizada
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               responsibleId:
+ *                 type: integer
+ *                 nullable: true
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               clientName:
+ *                 type: string
+ *                 nullable: true
+ *               isLinkedToClient:
+ *                 type: boolean
+ *               customAttributes:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *               internalNotes:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *               isPrivate:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Conversa atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ConversationSummary'
+ *       400:
+ *         description: Dados inválidos enviados para atualização da conversa
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Conversa não encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.patch('/conversations/:conversationId', updateConversationHandler);
 
 /**
  * @swagger
