@@ -58,11 +58,17 @@ export const loginRequest = async (
   };
 };
 
-export const fetchCurrentUser = async (): Promise<AuthUser> => {
+export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
+  const headers = new Headers({
+    Accept: "application/json",
+  });
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(getApiUrl("auth/me"), {
-    headers: {
-      Accept: "application/json",
-    },
+    headers,
   });
 
   if (!response.ok) {
