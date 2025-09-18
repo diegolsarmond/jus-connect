@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { getApiUrl } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProcessoCliente {
   id?: number;
@@ -32,8 +33,8 @@ interface ProcessoCliente {
   papel: string;
 }
 
-
 interface Processo {
+  id: number;
   numero: string;
   dataDistribuicao: string;
   status: string;
@@ -71,6 +72,31 @@ interface ApiCliente {
   tipo?: string;
 }
 
+interface ApiProcessoCliente {
+  id: number;
+  nome: string | null;
+  documento: string | null;
+  tipo: string | null;
+}
+
+interface ApiProcesso {
+  id: number;
+  cliente_id: number;
+  numero: string;
+  uf: string | null;
+  municipio: string | null;
+  orgao_julgador: string | null;
+  tipo: string | null;
+  status: string | null;
+  classe_judicial: string | null;
+  assunto: string | null;
+  jurisdicao: string | null;
+  advogado_responsavel: string | null;
+  data_distribuicao: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  cliente?: ApiProcessoCliente | null;
+}
 
 type ProcessFormState = {
   numero: string;
@@ -78,7 +104,6 @@ type ProcessFormState = {
   municipio: string;
   orgaoJulgador: string;
   clienteId: string;
-
 };
 
 const formatProcessNumber = (value: string) => {
@@ -96,72 +121,109 @@ const formatProcessNumber = (value: string) => {
   return formatted;
 };
 
-const initialProcessos: Processo[] = [
-  {
-    numero: "5152182-10.2019.8.13.0024",
-    dataDistribuicao: "16/10/2019",
-    status: "Arquivado",
-    tipo: "Cível",
+const formatDateToPtBR = (value: string | null | undefined): string => {
+  if (!value) {
+    return "Não informado";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Não informado";
+  }
+
+  return date.toLocaleDateString("pt-BR");
+};
+
+const normalizeClienteTipo = (value: string | null | undefined): string => {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+};
+
+const resolveClientePapel = (tipo: string | null | undefined): string => {
+  const normalized = normalizeClienteTipo(tipo);
+
+  if (
+    normalized.includes("JURIDICA") ||
+    ["2", "J", "PJ"].includes(normalized)
+  ) {
+    return "Pessoa Jurídica";
+  }
+
+  if (
+    normalized.includes("FISICA") ||
+    ["1", "F", "PF"].includes(normalized)
+  ) {
+    return "Pessoa Física";
+  }
+
+  return "Parte";
+};
+
+const createEmptyProcessForm = (): ProcessFormState => ({
+  numero: "",
+  uf: "",
+  municipio: "",
+  orgaoJulgador: "",
+  clienteId: "",
+});
+
+const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
+  const clienteResumo = processo.cliente ?? null;
+  const documento = clienteResumo?.documento ?? "";
+  const jurisdicao =
+    processo.jurisdicao ||
+    [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
+    "Não informado";
+
+  return {
+    id: processo.id,
+    numero: processo.numero,
+    dataDistribuicao:
+      formatDateToPtBR(processo.data_distribuicao || processo.criado_em),
+    status: processo.status?.trim() || "Não informado",
+    tipo: processo.tipo?.trim() || "Não informado",
     cliente: {
-      nome: "Diego Leonardo da Silva Armond",
-      papel: "Autor",
-      cpf: "123.456.789-00",
+      id: clienteResumo?.id ?? processo.cliente_id,
+      nome: clienteResumo?.nome ?? "Cliente não informado",
+      cpf: documento,
+      papel: resolveClientePapel(clienteResumo?.tipo),
     },
-    advogadoResponsavel: "Sergio Aguilar Silva",
-    classeJudicial:
-      "[CÍVEL] CUMPRIMENTO DE SENTENÇA CONTRA A FAZENDA PÚBLICA (12078)",
-    assunto:
-      "DIREITO CIVIL (899) - Obrigações (7681) - Inadimplemento (7691) - Perdas e Danos (7698) DIREITO CIVIL (899) - Responsabilidade Civil (10431) - Indenização por Dano Moral (10433) - Direito de Imagem (10437) DIREITO ADMINISTRATIVO E OUTRAS MATÉRIAS DE DIREITO PÚBLICO (9985) - Responsabilidade da Administração (9991) - Indenização por Dano Moral (9992)",
-    jurisdicao: "Belo Horizonte - Juizado Especial",
-    orgaoJulgador:
-      "3ª Unidade Jurisdicional da Fazenda Pública do Juizado Especial 43º JD Belo Horizonte",
-    movimentacoes: [
-      {
-        data: "13/10/2022 17:02:21",
-        descricao: "Arquivado Definitivamente",
-      },
-      {
-        data: "13/10/2022 16:58:37",
-        descricao: "Juntada de Petição de manifestação",
-      },
-      {
-        data: "06/10/2022 19:09:45",
-        descricao:
-          "Decorrido prazo de ESTADO DE MINAS GERAIS em 04/10/2022 23:59.",
-      },
-      {
-        data: "06/10/2022 19:09:44",
-        descricao:
-          "Decorrido prazo de DIEGO LEONARDO DA SILVA ARMOND em 05/10/2022 23:59.",
-      },
-      {
-        data: "06/10/2022 19:09:44",
-        descricao:
-          "Decorrido prazo de SERGIO AGUILAR SILVA em 05/10/2022 23:59.",
-      },
-    ],
-  },
-];
+    advogadoResponsavel:
+      processo.advogado_responsavel?.trim() || "Não informado",
+    classeJudicial: processo.classe_judicial?.trim() || "Não informada",
+    assunto: processo.assunto?.trim() || "Não informado",
+    jurisdicao,
+    orgaoJulgador: processo.orgao_julgador?.trim() || "Não informado",
+    movimentacoes: [],
+  };
+};
 
 export default function Processos() {
-  const [processos, setProcessos] = useState<Processo[]>(initialProcessos);
+  const { toast } = useToast();
+  const [processos, setProcessos] = useState<Processo[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [tipoFilter, setTipoFilter] = useState("todos");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [processForm, setProcessForm] = useState<ProcessFormState>({
-    numero: "",
-    uf: "",
-    municipio: "",
-    orgaoJulgador: "",
-    clienteId: "",
-
-  });
+  const [processForm, setProcessForm] = useState<ProcessFormState>(
+    createEmptyProcessForm,
+  );
   const [ufs, setUfs] = useState<Uf[]>([]);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [municipiosLoading, setMunicipiosLoading] = useState(false);
   const [clientes, setClientes] = useState<ClienteResumo[]>([]);
   const [clientesLoading, setClientesLoading] = useState(false);
+  const [processosLoading, setProcessosLoading] = useState(false);
+  const [processosError, setProcessosError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creatingProcess, setCreatingProcess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,6 +304,79 @@ export default function Processos() {
     };
   }, []);
 
+  const loadProcessos = useCallback(async () => {
+    const res = await fetch(getApiUrl("processos"), {
+      headers: { Accept: "application/json" },
+    });
+
+    let json: unknown = null;
+    try {
+      json = await res.json();
+    } catch (error) {
+      console.error("Não foi possível interpretar a resposta de processos", error);
+    }
+
+    if (!res.ok) {
+      const message =
+        json && typeof json === "object" &&
+        "error" in json &&
+        typeof (json as { error: unknown }).error === "string"
+          ? (json as { error: string }).error
+          : `Não foi possível carregar os processos (HTTP ${res.status})`;
+      throw new Error(message);
+    }
+
+    const data: ApiProcesso[] = Array.isArray(json)
+      ? (json as ApiProcesso[])
+      : Array.isArray((json as { rows?: ApiProcesso[] })?.rows)
+        ? ((json as { rows: ApiProcesso[] }).rows)
+        : Array.isArray((json as { data?: { rows?: ApiProcesso[] } })?.data?.rows)
+          ? ((json as { data: { rows: ApiProcesso[] } }).data.rows)
+          : Array.isArray((json as { data?: ApiProcesso[] })?.data)
+            ? ((json as { data: ApiProcesso[] }).data)
+            : [];
+
+    return data.map(mapApiProcessoToProcesso);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchProcessos = async () => {
+      setProcessosLoading(true);
+      setProcessosError(null);
+      try {
+        const data = await loadProcessos();
+        if (!active) return;
+        setProcessos(data);
+      } catch (error) {
+        console.error(error);
+        if (!active) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Erro ao carregar processos";
+        setProcessos([]);
+        setProcessosError(message);
+        toast({
+          title: "Erro ao carregar processos",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        if (active) {
+          setProcessosLoading(false);
+        }
+      }
+    };
+
+    fetchProcessos();
+
+    return () => {
+      active = false;
+    };
+  }, [loadProcessos, toast]);
+
   useEffect(() => {
     if (
       processForm.clienteId &&
@@ -286,33 +421,28 @@ export default function Processos() {
   }, [processForm.uf]);
 
   const resetProcessForm = () => {
-    setProcessForm({
-      numero: "",
-      uf: "",
-      municipio: "",
-      orgaoJulgador: "",
-      clienteId: "",
-    });
-    setProcessForm({ numero: "", uf: "", municipio: "", orgaoJulgador: "" });
+    setProcessForm(createEmptyProcessForm());
     setMunicipios([]);
     setMunicipiosLoading(false);
+    setCreateError(null);
   };
 
   const handleDialogOpenChange = (open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
       resetProcessForm();
+    } else {
+      setCreateError(null);
     }
   };
 
-  const handleProcessCreate = () => {
+  const handleProcessCreate = async () => {
     if (
       !processForm.numero ||
       !processForm.uf ||
       !processForm.municipio ||
       !processForm.orgaoJulgador ||
       !processForm.clienteId
-
     ) {
       return;
     }
@@ -325,50 +455,66 @@ export default function Processos() {
       return;
     }
 
-    const tipoRaw =
-      selectedCliente.tipo === null || selectedCliente.tipo === undefined
-        ? ""
-        : String(selectedCliente.tipo);
+    setCreateError(null);
+    setCreatingProcess(true);
 
-    const normalizedTipo = tipoRaw
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toUpperCase();
+    try {
+      const res = await fetch(getApiUrl("processos"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          cliente_id: selectedCliente.id,
+          numero: processForm.numero,
+          uf: processForm.uf,
+          municipio: processForm.municipio,
+          orgao_julgador: processForm.orgaoJulgador,
+          jurisdicao: `${processForm.municipio} - ${processForm.uf}`,
+        }),
+      });
 
-    const papel =
-      normalizedTipo.includes("JURIDICA") ||
-      normalizedTipo === "2" ||
-      normalizedTipo === "J" ||
-      normalizedTipo === "PJ"
-        ? "Pessoa Jurídica"
-        : normalizedTipo.includes("FISICA") ||
-            normalizedTipo === "1" ||
-            normalizedTipo === "F" ||
-            normalizedTipo === "PF"
-          ? "Pessoa Física"
-          : "Parte";
+      let json: unknown = null;
+      try {
+        json = await res.json();
+      } catch (error) {
+        console.error("Não foi possível interpretar a resposta de criação", error);
+      }
 
-    const newProcess: Processo = {
-      numero: processForm.numero,
-      dataDistribuicao: new Date().toLocaleDateString("pt-BR"),
-      status: "Em andamento",
-      tipo: "Cível",
-      cliente: {
-        id: selectedCliente.id,
-        nome: selectedCliente.nome || "Cliente não informado",
-        papel,
-        cpf: selectedCliente.documento || "",
-      },
-      advogadoResponsavel: "Não informado",
-      classeJudicial: "Não informada",
-      assunto: "Não informado",
-      jurisdicao: `${processForm.municipio} - ${processForm.uf}`,
-      orgaoJulgador: processForm.orgaoJulgador,
-      movimentacoes: [],
-    };
+      if (!res.ok) {
+        const message =
+          json && typeof json === "object" &&
+          "error" in json &&
+          typeof (json as { error: unknown }).error === "string"
+            ? (json as { error: string }).error
+            : `Não foi possível cadastrar o processo (HTTP ${res.status})`;
+        throw new Error(message);
+      }
 
-    setProcessos((prev) => [...prev, newProcess]);
-    handleDialogOpenChange(false);
+      if (!json || typeof json !== "object") {
+        throw new Error("Resposta inválida do servidor ao cadastrar o processo");
+      }
+
+      const mapped = mapApiProcessoToProcesso(json as ApiProcesso);
+      setProcessos((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
+      toast({ title: "Processo cadastrado com sucesso" });
+      handleDialogOpenChange(false);
+    } catch (error) {
+      console.error(error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao cadastrar processo";
+      setCreateError(message);
+      toast({
+        title: "Erro ao cadastrar processo",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingProcess(false);
+    }
   };
 
   const isCreateDisabled =
@@ -376,7 +522,8 @@ export default function Processos() {
     !processForm.uf ||
     !processForm.municipio ||
     !processForm.orgaoJulgador ||
-    !processForm.clienteId;
+    !processForm.clienteId ||
+    creatingProcess;
 
 
   const filteredProcessos = processos.filter((processo) => {
@@ -434,14 +581,18 @@ export default function Processos() {
         </Select>
       </div>
 
-      {filteredProcessos.length === 0 ? (
+      {processosLoading ? (
+        <p className="text-sm text-muted-foreground">Carregando processos...</p>
+      ) : processosError ? (
+        <p className="text-sm text-destructive">{processosError}</p>
+      ) : filteredProcessos.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Nenhum processo encontrado.
         </p>
       ) : (
         <Accordion type="single" collapsible className="w-full">
           {filteredProcessos.map((processo) => (
-            <AccordionItem key={processo.numero} value={processo.numero}>
+            <AccordionItem key={processo.id} value={String(processo.id)}>
               <AccordionTrigger>
                 <div className="text-left">
                   <p className="font-medium">Processo {processo.numero}</p>
@@ -481,14 +632,22 @@ export default function Processos() {
                           </tr>
                         </thead>
                         <tbody className="[&>tr:not(:last-child)]:border-b">
-                          {processo.movimentacoes.map((mov, index) => (
-                            <tr key={index}>
-                              <td className="py-1">
-                                {mov.data} - {mov.descricao}
+                          {processo.movimentacoes.length > 0 ? (
+                            processo.movimentacoes.map((mov, index) => (
+                              <tr key={index}>
+                                <td className="py-1">
+                                  {mov.data} - {mov.descricao}
+                                </td>
+                                <td className="py-1"></td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td className="py-2 text-muted-foreground" colSpan={2}>
+                                Nenhuma movimentação registrada.
                               </td>
-                              <td className="py-1"></td>
                             </tr>
-                          ))}
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -631,6 +790,9 @@ export default function Processos() {
               />
             </div>
           </div>
+          {createError ? (
+            <p className="text-sm text-destructive">{createError}</p>
+          ) : null}
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
               Cancelar
@@ -640,7 +802,7 @@ export default function Processos() {
               onClick={handleProcessCreate}
               disabled={isCreateDisabled}
             >
-              Cadastrar
+              {creatingProcess ? "Cadastrando..." : "Cadastrar"}
             </Button>
           </DialogFooter>
         </DialogContent>
