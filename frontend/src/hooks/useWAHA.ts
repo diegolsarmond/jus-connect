@@ -6,7 +6,20 @@ import { useToast } from '@/hooks/use-toast';
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 100;
-const MAX_MESSAGE_PAGES = 20;
+
+type MessagePaginationState = {
+  offset: number;
+  hasMore: boolean;
+  isLoading: boolean;
+  isLoaded: boolean;
+};
+
+const createInitialPaginationState = (): MessagePaginationState => ({
+  offset: 0,
+  hasMore: true,
+  isLoading: false,
+  isLoaded: false,
+});
 
 const pickFirstString = (...values: unknown[]): string | undefined => {
   for (const value of values) {
@@ -71,12 +84,48 @@ export const useWAHA = () => {
   const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
   const [hasMoreChats, setHasMoreChats] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [messagePaginationState, setMessagePaginationState] = useState<
+    Record<string, MessagePaginationState>
+  >({});
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout>();
   const isMountedRef = useRef(true);
   const chatOffsetRef = useRef(0);
   const hasMoreChatsRef = useRef(true);
   const isFetchingChatsRef = useRef(false);
+  const messagePaginationRef = useRef<Record<string, MessagePaginationState>>({});
+  const enrichingChatsRef = useRef(new Set<string>());
+
+  const ensureMessagePaginationState = useCallback(
+    (chatId: string): MessagePaginationState => {
+      const current = messagePaginationRef.current[chatId];
+      if (current) {
+        return current;
+      }
+
+      const initial = createInitialPaginationState();
+      messagePaginationRef.current[chatId] = initial;
+      setMessagePaginationState((prev) => ({
+        ...prev,
+        [chatId]: initial,
+      }));
+      return initial;
+    },
+    [],
+  );
+
+  const updateMessagePaginationState = useCallback(
+    (chatId: string, updates: Partial<MessagePaginationState>) => {
+      const current = ensureMessagePaginationState(chatId);
+      const next = { ...current, ...updates };
+      messagePaginationRef.current[chatId] = next;
+      setMessagePaginationState((prev) => ({
+        ...prev,
+        [chatId]: next,
+      }));
+    },
+    [ensureMessagePaginationState],
+  );
 
   const resetChatPagination = useCallback(() => {
     chatOffsetRef.current = 0;
@@ -254,43 +303,110 @@ export const useWAHA = () => {
   }, [loadChats]);
 
   // Load messages for a specific chat
-  const loadMessages = useCallback(async (chatId: string) => {
-    try {
-      const allMessages: Message[] = [];
-      for (let page = 0; page < MAX_MESSAGE_PAGES; page += 1) {
-        const offset = page * MESSAGE_PAGE_SIZE;
-        const response = await wahaService.getChatMessages(chatId, { limit: MESSAGE_PAGE_SIZE, offset });
+  const loadMessages = useCallback(
+    async (chatId: string, options?: { reset?: boolean }): Promise<Message[]> => {
+      const pagination = ensureMessagePaginationState(chatId);
+      const shouldReset = options?.reset ?? !pagination.isLoaded;
+
+      if (pagination.isLoading) {
+        return [];
+      }
+
+      if (!shouldReset && !pagination.hasMore) {
+        return [];
+      }
+
+      const offset = shouldReset ? 0 : pagination.offset;
+
+      updateMessagePaginationState(chatId, {
+        offset: shouldReset ? 0 : pagination.offset,
+        hasMore: shouldReset ? true : pagination.hasMore,
+        isLoading: true,
+        isLoaded: shouldReset ? false : pagination.isLoaded,
+      });
+
+      try {
+        const response = await wahaService.getChatMessages(chatId, {
+          limit: MESSAGE_PAGE_SIZE,
+          offset,
+        });
+
         if (response.error) {
           throw new Error(response.error);
         }
+
         const batch = response.data ?? [];
-        allMessages.push(...batch);
-        if (batch.length < MESSAGE_PAGE_SIZE) {
-          break;
+
+        if (!isMountedRef.current) {
+          return [];
         }
+
+        const insertedMessages: Message[] = [];
+        let mergedResult: Message[] = [];
+        let hasChanges = shouldReset;
+
+        setMessages((prev) => {
+          const existing = shouldReset ? [] : prev[chatId] ?? [];
+          const existingIds = new Set(existing.map((message) => message.id));
+          const merged = shouldReset ? [] : [...existing];
+
+          batch.forEach((message) => {
+            if (!existingIds.has(message.id)) {
+              merged.push(message);
+              existingIds.add(message.id);
+              insertedMessages.push(message);
+              hasChanges = true;
+            }
+          });
+
+          merged.sort((a, b) => a.timestamp - b.timestamp);
+          mergedResult = merged;
+
+          if (!hasChanges) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            [chatId]: merged,
+          };
+        });
+
+        const nextOffset = offset + batch.length;
+        const hasMore = batch.length === MESSAGE_PAGE_SIZE;
+
+        updateMessagePaginationState(chatId, {
+          offset: nextOffset,
+          hasMore,
+          isLoading: false,
+          isLoaded: true,
+        });
+
+        const sortedInserted = insertedMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+        return shouldReset ? mergedResult : sortedInserted;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load messages';
+        updateMessagePaginationState(chatId, { isLoading: false });
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+        return [];
       }
+    },
+    [
+      ensureMessagePaginationState,
+      toast,
+      updateMessagePaginationState,
+    ],
+  );
 
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      const deduped = Array.from(
-        new Map(allMessages.map((message) => [message.id, message])).values(),
-      ).sort((a, b) => a.timestamp - b.timestamp);
-
-      setMessages((prev) => ({
-        ...prev,
-        [chatId]: deduped,
-      }));
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load messages';
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    }
-  }, [toast]);
+  const loadOlderMessages = useCallback(
+    async (chatId: string): Promise<Message[]> => loadMessages(chatId, { reset: false }),
+    [loadMessages],
+  );
 
   // Send a text message
   const sendMessage = useCallback(async (chatId: string, text: string) => {
@@ -380,47 +496,138 @@ export const useWAHA = () => {
   }, []);
 
   // Select active chat
-  const selectChat = useCallback(async (chatId: string) => {
-    setActiveChatId(chatId);
+  const selectChat = useCallback(
+    async (chatId: string) => {
+      setActiveChatId(chatId);
 
-    if (!messages[chatId]) {
-      await loadMessages(chatId);
-    }
+      const pagination = ensureMessagePaginationState(chatId);
+      if (!pagination.isLoaded) {
+        await loadMessages(chatId, { reset: true });
+      }
 
-    void markAsRead(chatId);
-  }, [messages, loadMessages, markAsRead]);
+      void markAsRead(chatId);
+    },
+    [ensureMessagePaginationState, loadMessages, markAsRead],
+  );
 
   // Add a new message (for webhook integration)
-  const addMessage = useCallback((message: Message) => {
-    if (!isMountedRef.current) {
-      return;
-    }
+  const addMessage = useCallback(
+    (message: Message) => {
+      if (!isMountedRef.current) {
+        return;
+      }
 
-    setMessages(prev => ({
-      ...prev,
-      [message.chatId]: [...(prev[message.chatId] || []), message]
-    }));
+      ensureMessagePaginationState(message.chatId);
+      updateMessagePaginationState(message.chatId, { isLoaded: true });
 
-    // Update chat overview
-    setChats(prev =>
-      sortChatsByRecency(
-        prev.map(chat =>
-          chat.id === message.chatId
-            ? {
-                ...chat,
-                lastMessage: {
-                  body: message.body || '',
-                  timestamp: message.timestamp,
-                  fromMe: message.fromMe,
-                  type: message.type
-                },
-                unreadCount: message.fromMe ? chat.unreadCount : (chat.unreadCount || 0) + 1
+      setMessages((prev) => {
+        const existing = prev[message.chatId] ?? [];
+        if (existing.some((item) => item.id === message.id)) {
+          return prev;
+        }
+
+        const nextMessages = [...existing, message].sort((a, b) => a.timestamp - b.timestamp);
+        return {
+          ...prev,
+          [message.chatId]: nextMessages,
+        };
+      });
+
+      const text = message.body ?? message.caption ?? '';
+      const ackNumber = typeof message.ack === 'number' ? message.ack : undefined;
+      const ackName = typeof message.ack === 'string' ? message.ack : undefined;
+
+      let placeholder: ChatOverview | null = null;
+
+      setChats((previousChats) => {
+        const existingIndex = previousChats.findIndex((chat) => chat.id === message.chatId);
+
+        if (existingIndex >= 0) {
+          const existingChat = previousChats[existingIndex];
+          const unreadCount = message.fromMe
+            ? existingChat.unreadCount ?? 0
+            : (existingChat.unreadCount ?? 0) + 1;
+
+          const updatedChat = normalizeChatName({
+            ...existingChat,
+            lastMessage: {
+              id: message.id,
+              body: text,
+              timestamp: message.timestamp,
+              fromMe: message.fromMe,
+              type: message.type,
+              ack: ackNumber,
+              ackName,
+            },
+            unreadCount,
+          });
+
+          const nextChats = [...previousChats];
+          nextChats[existingIndex] = updatedChat;
+          return sortChatsByRecency(nextChats);
+        }
+
+        const provisionalChat = normalizeChatName({
+          id: message.chatId,
+          name: WAHAService.extractPhoneFromWhatsAppId(message.chatId),
+          isGroup: message.chatId.includes('@g.us'),
+          avatar: undefined,
+          lastMessage: {
+            id: message.id,
+            body: text,
+            timestamp: message.timestamp,
+            fromMe: message.fromMe,
+            type: message.type,
+            ack: ackNumber,
+            ackName,
+          },
+          unreadCount: message.fromMe ? 0 : 1,
+        });
+
+        placeholder = provisionalChat;
+        return sortChatsByRecency([...previousChats, provisionalChat]);
+      });
+
+      if (placeholder) {
+        const chatToEnrich = placeholder;
+        if (!enrichingChatsRef.current.has(chatToEnrich.id)) {
+          enrichingChatsRef.current.add(chatToEnrich.id);
+          void (async () => {
+            try {
+              const enriched = await enrichChatWithInfo(chatToEnrich);
+              if (!isMountedRef.current) {
+                return;
               }
-            : chat
-        ),
-      ),
-    );
-  }, []);
+
+              setChats((previousChats) => {
+                const index = previousChats.findIndex((chat) => chat.id === enriched.id);
+                if (index === -1) {
+                  return previousChats;
+                }
+
+                const merged = normalizeChatName({
+                  ...previousChats[index],
+                  ...enriched,
+                });
+
+                const nextChats = [...previousChats];
+                nextChats[index] = merged;
+                return sortChatsByRecency(nextChats);
+              });
+            } finally {
+              enrichingChatsRef.current.delete(chatToEnrich.id);
+            }
+          })();
+        }
+      }
+
+    },
+    [
+      ensureMessagePaginationState,
+      enrichChatWithInfo,
+      updateMessagePaginationState,
+    ],
+  );
 
   // Initialize
   useEffect(() => {
@@ -454,11 +661,13 @@ export const useWAHA = () => {
     isLoadingMoreChats,
     hasMoreChats,
     error,
+    messagePaginationState,
 
     // Actions
     loadChats,
     loadMoreChats,
     loadMessages,
+    loadOlderMessages,
     sendMessage,
     selectChat,
     markAsRead,
