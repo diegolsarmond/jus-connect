@@ -28,10 +28,14 @@
 }
 
 .outgoing .bubble {
-  background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
+  background: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
   border: none;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
+}
+
+:global(.dark) .outgoing .bubble {
+  background: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary)));
 }
 
 .text {
