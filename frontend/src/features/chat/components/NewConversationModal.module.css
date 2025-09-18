@@ -26,6 +26,14 @@
   align-items: center;
 }
 
+.searchStandalone {
+  gap: 0;
+}
+
+.searchStandalone input {
+  flex: 0 0 100%;
+}
+
 .search input {
   flex: 1;
   border: 1px solid hsl(var(--border));
