@@ -49,7 +49,7 @@ const resolvePerfilId = async (perfil) => {
 };
 const fetchPerfilModules = async (perfil) => {
     const perfilId = await resolvePerfilId(perfil);
-    if (perfilId == null) {
+    if (perfilId == null || typeof perfilId !== 'number' || !Number.isInteger(perfilId)) {
         return [];
     }
     const result = await db_1.default.query('SELECT pm.modulo FROM public.perfil_modulos pm WHERE pm.perfil_id = $1', [perfilId]);

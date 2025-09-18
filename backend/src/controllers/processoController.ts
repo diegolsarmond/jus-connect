@@ -69,42 +69,35 @@ type ProcessosColumnInfo = {
   hasDatajudAlias: boolean;
 };
 
-let processosColumnInfoPromise: Promise<ProcessosColumnInfo> | null = null;
-
 const getProcessosColumnInfo = async (): Promise<ProcessosColumnInfo> => {
-  if (!processosColumnInfoPromise) {
-    processosColumnInfoPromise = pool
-      .query(
-        `SELECT column_name
-           FROM information_schema.columns
-          WHERE table_schema = 'public'
-            AND table_name = 'processos'
-            AND column_name IN ('datajud_tipo_justica', 'datajud_alias')`
-      )
-      .then((result) => {
-        const columnNames = new Set<string>();
+  try {
+    const result = await pool.query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'processos'
+          AND column_name IN ('datajud_tipo_justica', 'datajud_alias')`
+    );
 
-        for (const row of result.rows as Array<{ column_name?: unknown }>) {
-          if (typeof row.column_name === 'string') {
-            columnNames.add(row.column_name);
-          }
-        }
+    const columnNames = new Set<string>();
 
-        return {
-          hasDatajudTipoJustica: columnNames.has('datajud_tipo_justica'),
-          hasDatajudAlias: columnNames.has('datajud_alias'),
-        };
-      })
-      .catch((error) => {
-        console.error('Erro ao verificar colunas da tabela processos', error);
-        return {
-          hasDatajudTipoJustica: false,
-          hasDatajudAlias: false,
-        };
-      });
+    for (const row of result.rows as Array<{ column_name?: unknown }>) {
+      if (typeof row.column_name === 'string') {
+        columnNames.add(row.column_name);
+      }
+    }
+
+    return {
+      hasDatajudTipoJustica: columnNames.has('datajud_tipo_justica'),
+      hasDatajudAlias: columnNames.has('datajud_alias'),
+    };
+  } catch (error) {
+    console.error('Erro ao verificar colunas da tabela processos', error);
+    return {
+      hasDatajudTipoJustica: false,
+      hasDatajudAlias: false,
+    };
   }
-
-  return processosColumnInfoPromise;
 };
 
 const buildDatajudSelectExpressions = (
