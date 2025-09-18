@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -21,10 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Label } from "@/components/ui/label";
-import { Upload } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { getApiBaseUrl } from "@/lib/api";
 
@@ -35,30 +31,6 @@ function joinUrl(base: string, path = "") {
   const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
   return `${b}${p}`;
 }
-
-const roleToPerfil = (role: string): number => {
-  switch (role) {
-    case "administrador":
-      return 1;
-    case "advogado":
-      return 2;
-    case "secretario":
-      return 4;
-    default:
-      return 2;
-  }
-};
-
-const officeToEscritorio = (office: string): number => {
-  switch (office) {
-    case "principal":
-      return 1;
-    case "filial":
-      return 2;
-    default:
-      return 1;
-  }
-};
 
 const existingEmails = [
   "joao.silva@escritorio.com.br",
@@ -71,56 +43,85 @@ const formSchema = z.object({
     .string()
     .email("Email inválido")
     .refine((email) => !existingEmails.includes(email), "Email já cadastrado"),
-  role: z.enum(["advogado", "secretario", "administrador"], {
-    required_error: "Papel é obrigatório",
-  }),
-  office: z.string().min(1, "Escritório é obrigatório"),
-  oab: z
-    .string()
-    .optional()
-    .refine(
-      (value) => !value || /^\d+\/[A-Za-z]{2}$/.test(value),
-      {
-        message: "Formato válido: 123456/SP",
-      }
-    ),
-  status: z.enum(["ativo", "inativo"]),
+  perfilId: z.string().min(1, "Perfil é obrigatório"),
+  setorId: z.string().min(1, "Setor é obrigatório"),
   password: z.string().min(6, "Mínimo de 6 caracteres").optional(),
   phone: z.string().optional(),
-  notes: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
+type ApiPerfil = {
+  id: number;
+  nome: string;
+};
+
+type ApiSetor = {
+  id: number;
+  nome: string;
+};
+
 export default function NovoUsuario() {
   const navigate = useNavigate();
-  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [perfis, setPerfis] = useState<ApiPerfil[]>([]);
+  const [setores, setSetores] = useState<ApiSetor[]>([]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       email: "",
-      role: "secretario",
-      office: "",
-      oab: "",
-      status: "ativo",
+      perfilId: "",
+      setorId: "",
       password: "",
       phone: "",
-      notes: "",
     },
   });
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  useEffect(() => {
+    const extractArray = <T,>(value: unknown): T[] => {
+      if (Array.isArray(value)) {
+        return value as T[];
+      }
+      if (Array.isArray((value as { rows?: unknown })?.rows)) {
+        return (value as { rows: T[] }).rows;
+      }
+      if (Array.isArray((value as { data?: unknown })?.data)) {
+        return (value as { data: T[] }).data;
+      }
+      if (Array.isArray((value as { data?: { rows?: unknown } })?.data?.rows)) {
+        return (value as { data: { rows: T[] } }).data.rows;
+      }
+      return [];
+    };
+
+    const fetchOptions = async () => {
+      try {
+        const [perfisRes, setoresRes] = await Promise.all([
+          fetch(joinUrl(apiUrl, "/api/perfis"), { headers: { Accept: "application/json" } }),
+          fetch(joinUrl(apiUrl, "/api/escritorios"), { headers: { Accept: "application/json" } }),
+        ]);
+
+        if (!perfisRes.ok) {
+          throw new Error("Não foi possível carregar os perfis");
+        }
+        if (!setoresRes.ok) {
+          throw new Error("Não foi possível carregar os setores");
+        }
+
+        const perfisJson = await perfisRes.json();
+        const setoresJson = await setoresRes.json();
+
+        setPerfis(extractArray<ApiPerfil>(perfisJson));
+        setSetores(extractArray<ApiSetor>(setoresJson));
+      } catch (error) {
+        console.error("Erro ao carregar opções:", error);
+        toast({ title: "Erro ao carregar dados", variant: "destructive" });
+      }
+    };
+
+    fetchOptions();
+  }, []);
 
   const onSubmit = async (data: FormValues) => {
     let password = data.password;
@@ -128,19 +129,22 @@ export default function NovoUsuario() {
       password = Math.random().toString(36).slice(-8);
     }
 
+    const perfilId = Number(data.perfilId);
+    const setorId = Number(data.setorId);
+
     const payload = {
       nome_completo: data.name,
       cpf: "",
       email: data.email,
-      perfil: roleToPerfil(data.role),
+      perfil: Number.isNaN(perfilId) ? null : perfilId,
       empresa: 1,
-      escritorio: officeToEscritorio(data.office),
-      oab: data.oab || null,
-      status: data.status === "ativo",
+      escritorio: Number.isNaN(setorId) ? null : setorId,
+      oab: null,
+      status: true,
       senha: password,
       telefone: data.phone || null,
       ultimo_login: null,
-      observacoes: data.notes || null,
+      observacoes: null,
     };
 
     try {
@@ -167,13 +171,6 @@ export default function NovoUsuario() {
       toast({ title: "Erro ao criar usuário", variant: "destructive" });
     }
   };
-
-  const initials = form
-    .watch("name")
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
 
   return (
     <div className="p-6 space-y-6">
@@ -219,44 +216,24 @@ export default function NovoUsuario() {
                 )}
               />
 
-              {/* Avatar */}
-              <div className="flex flex-col items-center gap-4 py-4">
-                <Avatar className="h-24 w-24">
-                  <AvatarImage src={avatarPreview} />
-                  <AvatarFallback>{initials || "U"}</AvatarFallback>
-                </Avatar>
-                <Label
-                  htmlFor="avatar-upload"
-                  className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-muted rounded-md hover:bg-muted/80"
-                >
-                  <Upload className="h-4 w-4" />
-                  Upload
-                </Label>
-                <Input
-                  id="avatar-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarChange}
-                  className="hidden"
-                />
-              </div>
-
               <FormField
                 control={form.control}
-                name="role"
+                name="perfilId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Papel</FormLabel>
+                    <FormLabel>Perfil</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione o papel" />
+                          <SelectValue placeholder="Selecione o perfil" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="advogado">Advogado</SelectItem>
-                        <SelectItem value="secretario">Secretário</SelectItem>
-                        <SelectItem value="administrador">Administrador</SelectItem>
+                        {perfis.map((perfil) => (
+                          <SelectItem key={perfil.id} value={String(perfil.id)}>
+                            {perfil.nome}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -266,55 +243,22 @@ export default function NovoUsuario() {
 
               <FormField
                 control={form.control}
-                name="office"
+                name="setorId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Escritório</FormLabel>
+                    <FormLabel>Setor</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione o escritório" />
+                          <SelectValue placeholder="Selecione o setor" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="principal">Escritório Principal</SelectItem>
-                        <SelectItem value="filial">Filial X</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="oab"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>OAB</FormLabel>
-                    <FormControl>
-                      <Input placeholder="123456/SP" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="ativo">Ativo</SelectItem>
-                        <SelectItem value="inativo">Inativo</SelectItem>
+                        {setores.map((setor) => (
+                          <SelectItem key={setor.id} value={String(setor.id)}>
+                            {setor.nome}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -344,25 +288,6 @@ export default function NovoUsuario() {
                     <FormLabel>Telefone</FormLabel>
                     <FormControl>
                       <Input type="tel" placeholder="(11) 99999-9999" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div>
-                <Label>Último login</Label>
-                <Input value="-" readOnly />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Observações</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Observações" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
