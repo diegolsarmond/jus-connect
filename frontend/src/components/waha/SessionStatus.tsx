@@ -30,15 +30,15 @@ export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
     
     switch (status.status) {
       case 'WORKING':
-        return 'Connected';
+        return 'Conectado';
       case 'STARTING':
-        return 'Starting...';
+        return 'Iniciando...';
       case 'SCAN_QR_CODE':
-        return 'Scan QR Code';
+        return 'Escanear QR Code';
       case 'FAILED':
-        return 'Failed';
+        return 'Conexão Falhou';
       case 'STOPPED':
-        return 'Stopped';
+        return 'Parado';
       default:
         return 'Unknown';
     }

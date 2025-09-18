@@ -19,6 +19,7 @@ const resourcePaths = Array.from(
   new Set(collectionPaths.map((path) => `${path.replace(/\/$/, '')}/:id`))
 );
 
+
 /**
  * @swagger
  * tags:
@@ -56,7 +57,8 @@ const resourcePaths = Array.from(
  *               items:
  *                 $ref: '#/components/schemas/SituacaoProposta'
  */
-router.get(collectionPaths, listSituacoesProposta);
+
+router.get('/situacao-propostas', listSituacoesProposta);
 
 /**
  * @swagger
@@ -78,7 +80,8 @@ router.get(collectionPaths, listSituacoesProposta);
  *             schema:
  *               $ref: '#/components/schemas/SituacaoProposta'
  */
-router.post(collectionPaths, createSituacaoProposta);
+
+router.post('/situacao-propostas', createSituacaoProposta);
 
 /**
  * @swagger
@@ -108,7 +111,8 @@ router.post(collectionPaths, createSituacaoProposta);
  *       404:
  *         description: Situação de proposta não encontrada
  */
-router.put(resourcePaths, updateSituacaoProposta);
+
+router.put('/situacao-propostas/:id', updateSituacaoProposta);
 
 /**
  * @swagger
@@ -128,6 +132,7 @@ router.put(resourcePaths, updateSituacaoProposta);
  *       404:
  *         description: Situação de proposta não encontrada
  */
-router.delete(resourcePaths, deleteSituacaoProposta);
+
+router.delete('/situacao-propostas/:id', deleteSituacaoProposta);
 
 export default router;

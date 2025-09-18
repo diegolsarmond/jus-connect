@@ -8,6 +8,7 @@ const db_1 = __importDefault(require("../services/db"));
 const listSituacoesProposta = async (_req, res) => {
     try {
         const result = await db_1.default.query('SELECT id, nome, ativo, datacriacao FROM public.situacao_proposta ORDER BY nome ASC');
+
         res.json(result.rows);
     }
     catch (error) {

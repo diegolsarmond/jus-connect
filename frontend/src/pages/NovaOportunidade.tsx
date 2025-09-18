@@ -248,6 +248,7 @@ export default function NovaOportunidade() {
 
         const situacoesData = await fetchJson(`${apiUrl}/api/situacao-propostas`);
         setSituacoes(parseSituacaoOptions(situacoesData));
+
       } catch (e) {
         console.error(e);
         setSituacoes([]);

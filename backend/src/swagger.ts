@@ -16,6 +16,11 @@ const swaggerOptions = {
         },
       },
     },
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
   },
   apis: [
     path.join(__dirname, 'routes/*.{ts,js}'),

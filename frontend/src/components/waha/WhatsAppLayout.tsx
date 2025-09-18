@@ -3,6 +3,8 @@ import { useWAHA } from "@/hooks/useWAHA";
 import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { ChatWindow as CRMChatWindow } from "@/features/chat/components/ChatWindow";
+import { NewConversationModal } from "@/features/chat/components/NewConversationModal";
+import { ConversationLoadingScreen } from "./ConversationLoadingScreen";
 import type {
   ConversationSummary,
   Message as CRMMessage,
@@ -38,6 +40,44 @@ const mapAckToStatus = (ack?: string | number) => {
 
 const createAvatarUrl = (name: string) =>
   `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1D4ED8&color=FFFFFF`;
+
+const defaultTagPalettes = [
+  ["Novo lead", "WhatsApp"],
+  ["Prioritário", "Processo civil"],
+  ["Financeiro", "Follow-up"],
+  ["Documentos", "Urgente"],
+  ["Onboarding", "Cliente ativo"],
+  ["Reunião", "Retorno agendado"],
+  ["Atendimento", "Triagem"],
+  ["Consultoria", "Revisar contrato"],
+];
+
+const deterministicIndex = (seed: string, length: number) => {
+  if (length <= 0) {
+    return 0;
+  }
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash << 5) - hash + seed.charCodeAt(index);
+    hash |= 0; // Converte para inteiro de 32 bits
+  }
+  return Math.abs(hash) % length;
+};
+
+const pickDefaultResponsible = (chatId: string) => {
+  if (!teamMembers.length) {
+    return null;
+  }
+  return teamMembers[deterministicIndex(chatId, teamMembers.length)] ?? null;
+};
+
+const pickDefaultTags = (chatId: string) => {
+  if (!defaultTagPalettes.length) {
+    return [];
+  }
+  const palette = defaultTagPalettes[deterministicIndex(`${chatId}-tags`, defaultTagPalettes.length)];
+  return palette ? [...palette] : [];
+};
 
 const mergeOverrides = (
   base: ConversationSummary,
@@ -98,8 +138,8 @@ const mapChatToConversation = (
     pinned: chat.pinned ?? false,
     lastMessage,
     phoneNumber: WAHAService.extractPhoneFromWhatsAppId(chat.id),
-    responsible: null,
-    tags: [],
+    responsible: pickDefaultResponsible(chat.id),
+    tags: pickDefaultTags(chat.id),
     isLinkedToClient: false,
     clientName: null,
     customAttributes: [],
@@ -154,9 +194,37 @@ export const WhatsAppLayout = ({
   const [conversationOverrides, setConversationOverrides] = useState<
     Record<string, Partial<ConversationSummary>>
   >({});
+  const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
+  const [hasStartedLoading, setHasStartedLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const wahaState = useWAHA();
-  const { addMessage, selectChat, activeChatId } = wahaState;
+  const {
+    chats: rawChats,
+    messages: messageMap,
+    addMessage,
+    selectChat,
+    loadMessages,
+    loadChats,
+    loadMoreChats,
+    activeChatId,
+    checkSessionStatus,
+    loading,
+    hasMoreChats,
+    isLoadingMoreChats,
+  } = wahaState;
+
+  useEffect(() => {
+    if (loading) {
+      setHasStartedLoading(true);
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    if (hasStartedLoading && !loading) {
+      setHasLoadedOnce(true);
+    }
+  }, [hasStartedLoading, loading]);
 
   // Set up webhook receiver for demo purposes
   useEffect(() => {
@@ -181,7 +249,7 @@ export const WhatsAppLayout = ({
   }, [activeChatId, wahaState.messages]);
 
   const conversations = useMemo(() => {
-    const mapped = wahaState.chats.map((chat) =>
+    const mapped = rawChats.map((chat) =>
       mapChatToConversation(chat, conversationOverrides[chat.id]),
     );
     return mapped.sort((a, b) => {
@@ -189,7 +257,7 @@ export const WhatsAppLayout = ({
       const timeB = b.lastMessage ? new Date(b.lastMessage.timestamp).getTime() : 0;
       return timeB - timeA;
     });
-  }, [wahaState.chats, conversationOverrides]);
+  }, [rawChats, conversationOverrides]);
 
   const activeConversationId = activeChatId ?? undefined;
 
@@ -199,14 +267,21 @@ export const WhatsAppLayout = ({
   );
 
   const rawMessages = useMemo(
-    () => (activeConversationId ? wahaState.messages[activeConversationId] ?? [] : []),
-    [activeConversationId, wahaState.messages],
+    () => (activeConversationId ? messageMap[activeConversationId] ?? [] : []),
+    [activeConversationId, messageMap],
   );
 
   const messages = useMemo(() => rawMessages.map(mapMessageToCRM), [rawMessages]);
 
   const handleSelectConversation = useCallback(
     async (conversationId: string, options?: { skipNavigation?: boolean }) => {
+      if (conversationId === activeConversationId && messageMap[conversationId]) {
+        if (!options?.skipNavigation) {
+          onConversationRouteChange?.(conversationId);
+        }
+        return;
+      }
+
       setMessagesLoading(true);
       try {
         await selectChat(conversationId);
@@ -217,7 +292,7 @@ export const WhatsAppLayout = ({
         setMessagesLoading(false);
       }
     },
-    [onConversationRouteChange, selectChat],
+    [activeConversationId, messageMap, onConversationRouteChange, selectChat],
   );
 
   useEffect(() => {
@@ -281,17 +356,49 @@ export const WhatsAppLayout = ({
     });
   };
 
+  const conversationSuggestions = useMemo(
+    () => conversations.slice(0, 60),
+    [conversations],
+  );
+
+  const handleModalSelect = useCallback(
+    async (conversationId: string) => {
+      setIsNewConversationOpen(false);
+      await handleSelectConversation(conversationId);
+    },
+    [handleSelectConversation],
+  );
+
+  const handleReload = useCallback(() => {
+    void checkSessionStatus();
+    void loadChats({ reset: true });
+    if (activeConversationId) {
+      void loadMessages(activeConversationId);
+    }
+  }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
+
+  const isInitialLoading = loading && !hasLoadedOnce;
+  const shouldShowOverlayLoading = loading && hasLoadedOnce;
+
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          <ConversationLoadingScreen />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden bg-muted/20">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 
-      <SessionStatus
-        status={wahaState.sessionStatus}
-        onRefresh={wahaState.checkSessionStatus}
-      />
+      <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="flex h-full min-h-0 w-[30%] min-w-[300px] max-w-md flex-shrink-0 flex-col overflow-hidden border-r border-border/50 bg-sidebar shadow-[0_12px_24px_rgba(15,23,42,0.06)]">
-
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-b border-border/40 bg-sidebar/90 shadow-[0_12px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm lg:w-[34%] lg:min-w-[300px] lg:max-w-md lg:border-b-0 lg:border-r">
           <CRMChatSidebar
             conversations={conversations}
             activeConversationId={activeConversationId}
@@ -302,19 +409,20 @@ export const WhatsAppLayout = ({
             onResponsibleFilterChange={setResponsibleFilter}
             onSelectConversation={handleSelectConversation}
             onNewConversation={() => {
-              void wahaState.loadChats({ reset: true });
+              void loadChats({ reset: true });
+              setIsNewConversationOpen(true);
             }}
             searchInputRef={searchInputRef}
-            loading={wahaState.loading}
-            hasMore={wahaState.hasMoreChats}
-            isLoadingMore={wahaState.isLoadingMoreChats}
+            loading={loading}
+            hasMore={hasMoreChats}
+            isLoadingMore={isLoadingMoreChats}
             onLoadMore={() => {
-              void wahaState.loadMoreChats();
+              void loadMoreChats();
             }}
           />
         </div>
 
-        <div className="flex h-full flex-1 min-w-0 flex-col overflow-hidden bg-background">
+        <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
           <CRMChatWindow
             conversation={activeConversation}
             messages={messages}
@@ -328,6 +436,23 @@ export const WhatsAppLayout = ({
           />
         </div>
       </div>
+
+      <NewConversationModal
+        open={isNewConversationOpen}
+        suggestions={conversationSuggestions}
+        onClose={() => setIsNewConversationOpen(false)}
+        onSelectConversation={(conversationId) => {
+          void handleModalSelect(conversationId);
+        }}
+        onCreateConversation={async () => null}
+        allowCreate={false}
+      />
+
+      {shouldShowOverlayLoading ? (
+        <div className="absolute inset-0 z-50 flex">
+          <ConversationLoadingScreen />
+        </div>
+      ) : null}
     </div>
   );
 };

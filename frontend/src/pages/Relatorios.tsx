@@ -5,8 +5,17 @@ import {
   mockCohortData,
   mockAreaDistribution,
   mockConversionFunnel,
+  mockRevenueByPlan,
+  mockMonthlyFinancials,
 } from "@/data/mockData";
-import { TrendingUp, Users, CheckCircle, Gavel } from "lucide-react";
+import {
+  TrendingUp,
+  Users,
+  CheckCircle,
+  Gavel,
+  Wallet,
+  CircleDollarSign,
+} from "lucide-react";
 import {
   LineChart,
   Line,
@@ -37,6 +46,15 @@ export default function Relatorios() {
     taxaConversao,
     crescimentoMensal,
   } = mockAnalytics;
+
+  const totalRevenue = mockRevenueByPlan.reduce((acc, plan) => acc + plan.revenue, 0);
+  const payingClients = mockRevenueByPlan.reduce((acc, plan) => acc + plan.customers, 0);
+  const averageTicket = payingClients > 0 ? totalRevenue / payingClients : 0;
+  const currentMonth = mockMonthlyFinancials.at(-1);
+  const previousMonth = mockMonthlyFinancials.at(-2);
+  const revenueGrowth = previousMonth && previousMonth.receita > 0 && currentMonth
+    ? ((currentMonth.receita - previousMonth.receita) / previousMonth.receita) * 100
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -90,6 +108,59 @@ export default function Relatorios() {
           <CardContent>
             <div className="text-2xl font-bold">{taxaConversao}%</div>
             <p className="text-xs text-muted-foreground">De prospects para clientes</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Faturamento Total</CardTitle>
+            <Wallet className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              R$ {totalRevenue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            </div>
+            <p className="text-xs text-muted-foreground">Receita acumulada por planos</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
+            <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              R$ {averageTicket.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            </div>
+            <p className="text-xs text-muted-foreground">Faturamento médio por cliente</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Clientes Pagantes</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{payingClients}</div>
+            <p className="text-xs text-muted-foreground">Distribuídos entre todos os planos</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Crescimento do Faturamento</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {revenueGrowth >= 0 ? "+" : ""}
+              {revenueGrowth.toFixed(1)}%
+            </div>
+            <p className="text-xs text-muted-foreground">Comparação com o mês anterior</p>
           </CardContent>
         </Card>
       </div>
@@ -152,6 +223,75 @@ export default function Relatorios() {
                 </Pie>
                 <Tooltip formatter={(value) => [`${value}%`, "Percentual"]} />
               </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Composição do Faturamento</CardTitle>
+            <CardDescription>Receita gerada por cada plano</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={mockRevenueByPlan}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip
+                  formatter={(value: number | string) => [
+                    Number(value).toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }),
+                    "Faturamento",
+                  ]}
+                />
+                <Bar dataKey="revenue" fill="hsl(var(--primary))" name="Receita" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Fluxo Financeiro Mensal</CardTitle>
+            <CardDescription>Receitas e despesas consolidadas</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={mockMonthlyFinancials}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip
+                  formatter={(value: number | string, name) => [
+                    Number(value).toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }),
+                    name === "receita" ? "Receita" : "Despesas",
+                  ]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="receita"
+                  stroke="hsl(var(--primary))"
+                  fill="hsl(var(--primary))"
+                  fillOpacity={0.3}
+                  name="Receita"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="despesas"
+                  stroke="hsl(var(--secondary))"
+                  fill="hsl(var(--secondary))"
+                  fillOpacity={0.3}
+                  name="Despesas"
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>

@@ -17,6 +17,7 @@ const router = Router();
  *   post:
  *     summary: Autentica um usuário e retorna um token Bearer
  *     tags: [Autenticação]
+ *     security: []
  *     requestBody:
  *       required: true
  *       content:

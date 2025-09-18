@@ -347,12 +347,151 @@ export const updateOportunidadeEtapa = async (req: Request, res: Response) => {
   }
 };
 
+export const listOportunidadeFaturamentos = async (
+  req: Request,
+  res: Response,
+) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT id, oportunidade_id, forma_pagamento, condicao_pagamento, valor, parcelas,
+              observacoes, data_faturamento, criado_em
+         FROM public.oportunidade_faturamentos
+        WHERE oportunidade_id = $1
+        ORDER BY data_faturamento DESC NULLS LAST, id DESC`,
+      [id],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const createOportunidadeFaturamento = async (
+  req: Request,
+  res: Response,
+) => {
+  const { id } = req.params;
+  const {
+    forma_pagamento,
+    condicao_pagamento,
+    valor,
+    parcelas,
+    observacoes,
+    data_faturamento,
+  } = req.body as {
+    forma_pagamento?: unknown;
+    condicao_pagamento?: unknown;
+    valor?: unknown;
+    parcelas?: unknown;
+    observacoes?: unknown;
+    data_faturamento?: unknown;
+  };
+
+  if (typeof forma_pagamento !== 'string' || forma_pagamento.trim().length === 0) {
+    return res
+      .status(400)
+      .json({ error: 'forma_pagamento é obrigatório e deve ser uma string.' });
+  }
+
+  const normalizedForma = forma_pagamento.trim();
+
+  const normalizeNumber = (input: unknown): number | null => {
+    if (input === null || input === undefined || input === '') {
+      return null;
+    }
+    if (typeof input === 'number') {
+      return Number.isNaN(input) ? null : input;
+    }
+    if (typeof input === 'string') {
+      const sanitized = input.replace(/\./g, '').replace(',', '.');
+      const parsed = Number(sanitized);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
+
+  const parsedValor = normalizeNumber(valor);
+  if (valor !== undefined && parsedValor === null) {
+    return res.status(400).json({ error: 'valor inválido.' });
+  }
+
+  const condicaoValue =
+    typeof condicao_pagamento === 'string' && condicao_pagamento.trim().length > 0
+      ? condicao_pagamento.trim()
+      : null;
+
+  let parsedParcelas: number | null = null;
+  if (
+    condicaoValue &&
+    condicaoValue.toLowerCase() === 'parcelado'
+  ) {
+    if (parcelas === undefined || parcelas === null || parcelas === '') {
+      return res
+        .status(400)
+        .json({ error: 'parcelas é obrigatório para pagamentos parcelados.' });
+    }
+    const parcelasNumber = normalizeNumber(parcelas);
+    if (parcelasNumber === null || !Number.isFinite(parcelasNumber) || parcelasNumber < 1) {
+      return res.status(400).json({ error: 'parcelas inválido.' });
+    }
+    parsedParcelas = Math.trunc(parcelasNumber);
+  }
+
+  let faturamentoDate: Date | null = null;
+  if (data_faturamento !== undefined && data_faturamento !== null && data_faturamento !== '') {
+    const parsedDate = new Date(data_faturamento as string);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ error: 'data_faturamento inválida.' });
+    }
+    faturamentoDate = parsedDate;
+  }
+
+  const observations =
+    typeof observacoes === 'string' && observacoes.trim().length > 0
+      ? observacoes.trim()
+      : null;
+
+  try {
+    const opportunityExists = await pool.query(
+      'SELECT 1 FROM public.oportunidades WHERE id = $1',
+      [id],
+    );
+    if (opportunityExists.rowCount === 0) {
+      return res.status(404).json({ error: 'Oportunidade não encontrada' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO public.oportunidade_faturamentos
+         (oportunidade_id, forma_pagamento, condicao_pagamento, valor, parcelas, observacoes, data_faturamento)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, oportunidade_id, forma_pagamento, condicao_pagamento, valor, parcelas,
+                 observacoes, data_faturamento, criado_em`,
+      [
+        id,
+        normalizedForma,
+        condicaoValue,
+        parsedValor,
+        parsedParcelas,
+        observations,
+        faturamentoDate ?? new Date(),
+      ],
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const deleteOportunidade = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
       'DELETE FROM public.oportunidades WHERE id = $1',
-      [id]
+      [id],
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Oportunidade não encontrada' });
