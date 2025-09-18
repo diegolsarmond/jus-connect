@@ -207,7 +207,12 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
       : "O QR Code será exibido aqui quando a sessão estiver aguardando uma nova autenticação.";
 
   return (
-    <Modal open={open} onClose={onClose} ariaLabel="Conectar um novo dispositivo">
+    <Modal
+      open={open}
+      onClose={onClose}
+      ariaLabel="Conectar um novo dispositivo"
+      contentClassName={styles.modalContent}
+    >
       <div className={styles.container}>
         <section className={styles.integrationPanel} aria-labelledby="waha-integration-title">
           <header className={styles.integrationHeader}>
