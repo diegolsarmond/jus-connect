@@ -357,7 +357,7 @@ export const WhatsAppLayout = ({
 
   return (
     <div
-      className="flex min-h-screen flex-col overflow-hidden"
+      className="flex flex-1 min-h-0 flex-col overflow-hidden"
       style={{
         background:
           "radial-gradient(circle at -20% -20%, rgba(59,130,246,0.16), transparent 55%)," +

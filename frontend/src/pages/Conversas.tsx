@@ -25,7 +25,7 @@ const Conversas = () => {
   );
 
   return (
-    <div className="h-full min-h-0 bg-background flex flex-col overflow-hidden">
+    <div className="h-full min-h-0 flex flex-1 flex-col overflow-hidden bg-background">
       <WhatsAppLayout
         conversationIdFromRoute={conversationId}
         onConversationRouteChange={handleRouteChange}

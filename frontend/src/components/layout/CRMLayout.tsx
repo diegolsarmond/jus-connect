@@ -6,13 +6,13 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 export function CRMLayout() {
   const location = useLocation();
   const isConversationsRoute = location.pathname.startsWith("/conversas");
-  const mainClassName = `flex-1 bg-background ${isConversationsRoute ? "overflow-hidden" : "overflow-auto"}`;
+  const mainClassName = `flex-1 bg-background flex flex-col min-h-0 ${isConversationsRoute ? "overflow-hidden" : "overflow-auto"}`;
 
   return (
     <SidebarProvider>
       <div className="min-h-screen bg-background flex w-full">
         <Sidebar />
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex min-h-0 flex-col">
           <Header />
           <main className={mainClassName}>
             <Outlet />
