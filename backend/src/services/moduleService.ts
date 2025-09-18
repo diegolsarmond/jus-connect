@@ -1,5 +1,5 @@
 import pool from './db';
-import { sortModules } from '../constants/modules';
+import { normalizeModuleId, sortModules } from '../constants/modules';
 
 const normalizePerfilId = (value: unknown): number | null => {
   if (value == null) {
@@ -33,9 +33,22 @@ export const fetchPerfilModules = async (perfilId: number | null): Promise<strin
   const uniqueModules = new Set<string>();
 
   for (const row of result.rows as Array<{ modulo?: unknown }>) {
-    if (typeof row.modulo === 'string') {
-      uniqueModules.add(row.modulo);
+    if (typeof row.modulo !== 'string') {
+      continue;
     }
+
+    const trimmed = row.modulo.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const normalized = normalizeModuleId(trimmed);
+    if (normalized) {
+      uniqueModules.add(normalized);
+      continue;
+    }
+
+    uniqueModules.add(trimmed);
   }
 
   return sortModules(Array.from(uniqueModules));
