@@ -343,6 +343,14 @@ export default function VisualizarProcesso() {
   const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
 
   useEffect(() => {
+    setMovimentacoes([]);
+    setMovimentacoesError(null);
+    setMovimentacoesLoading(false);
+    setLastSync(null);
+    setAutoSyncAttempted(false);
+  }, [processoId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const fetchProcesso = async () => {
