@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ValidationError = exports.API_KEY_ENVIRONMENTS = exports.API_KEY_PROVIDERS = void 0;
+const url_1 = require("url");
 const db_1 = __importDefault(require("./db"));
 exports.API_KEY_PROVIDERS = ['gemini', 'openai'];
 exports.API_KEY_ENVIRONMENTS = ['producao', 'homologacao'];
@@ -50,6 +51,31 @@ function normalizeKey(value) {
     }
     return normalized;
 }
+function normalizeOptionalApiUrl(value) {
+    if (value === undefined || value === null) {
+        return null;
+    }
+    if (typeof value !== 'string') {
+        throw new ValidationError('API URL must be a string value');
+    }
+    const normalized = value.trim();
+    if (!normalized) {
+        return null;
+    }
+    try {
+        const parsedUrl = new url_1.URL(normalized);
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            throw new ValidationError('API URL must use HTTP or HTTPS protocol');
+        }
+    }
+    catch (error) {
+        if (error instanceof ValidationError) {
+            throw error;
+        }
+        throw new ValidationError('API URL must be a valid URL');
+    }
+    return normalized;
+}
 function normalizeLastUsed(value) {
     if (value === undefined || value === null) {
         return null;
@@ -82,12 +108,51 @@ function formatNullableDate(value) {
     }
     return formatDate(value);
 }
+let hasLoggedUnexpectedProvider = false;
+let hasLoggedUnexpectedEnvironment = false;
+function mapProviderFromRow(value) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return '';
+    }
+    const lowerCased = trimmed.toLowerCase();
+    if (exports.API_KEY_PROVIDERS.includes(lowerCased)) {
+        return lowerCased;
+    }
+    if (!hasLoggedUnexpectedProvider) {
+        console.warn('integration_api_keys has unexpected provider value:', value);
+        hasLoggedUnexpectedProvider = true;
+    }
+    return trimmed;
+}
+function mapEnvironmentFromRow(value) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return '';
+    }
+    const lowerCased = trimmed.toLowerCase();
+    if (exports.API_KEY_ENVIRONMENTS.includes(lowerCased)) {
+        return lowerCased;
+    }
+    if (!hasLoggedUnexpectedEnvironment) {
+        console.warn('integration_api_keys has unexpected environment value:', value);
+        hasLoggedUnexpectedEnvironment = true;
+    }
+    return trimmed;
+}
 function mapRow(row) {
     return {
         id: row.id,
-        provider: normalizeProvider(row.provider),
+        provider: mapProviderFromRow(row.provider),
+        apiUrl: typeof row.url_api === 'string' ? row.url_api.trim() || null : null,
         key: row.key_value,
-        environment: normalizeEnvironment(row.environment),
+        environment: mapEnvironmentFromRow(row.environment),
         active: row.active,
         lastUsed: formatNullableDate(row.last_used),
         createdAt: formatDate(row.created_at),
@@ -99,20 +164,21 @@ class IntegrationApiKeyService {
         this.db = db;
     }
     async list() {
-        const result = await this.db.query(`SELECT id, provider, key_value, environment, active, last_used, created_at, updated_at
+        const result = await this.db.query(`SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
        FROM integration_api_keys
        ORDER BY created_at DESC`);
         return result.rows.map(mapRow);
     }
     async create(input) {
         const provider = normalizeProvider(input.provider);
+        const apiUrl = normalizeOptionalApiUrl(input.apiUrl);
         const environment = normalizeEnvironment(input.environment);
         const key = normalizeKey(input.key);
         const active = input.active ?? true;
         const lastUsed = normalizeLastUsed(input.lastUsed);
-        const result = await this.db.query(`INSERT INTO integration_api_keys (provider, key_value, environment, active, last_used)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, provider, key_value, environment, active, last_used, created_at, updated_at`, [provider, key, environment, active, lastUsed]);
+        const result = await this.db.query(`INSERT INTO integration_api_keys (provider, url_api, key_value, environment, active, last_used)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at`, [provider, apiUrl, key, environment, active, lastUsed]);
         return mapRow(result.rows[0]);
     }
     async update(id, updates) {
@@ -123,6 +189,12 @@ class IntegrationApiKeyService {
             const provider = normalizeProvider(updates.provider);
             fields.push(`provider = $${index}`);
             values.push(provider);
+            index += 1;
+        }
+        if (updates.apiUrl !== undefined) {
+            const apiUrl = normalizeOptionalApiUrl(updates.apiUrl);
+            fields.push(`url_api = $${index}`);
+            values.push(apiUrl);
             index += 1;
         }
         if (updates.key !== undefined) {
@@ -154,7 +226,7 @@ class IntegrationApiKeyService {
         const query = `UPDATE integration_api_keys
       SET ${fields.join(', ')}, updated_at = NOW()
       WHERE id = $${index}
-      RETURNING id, provider, key_value, environment, active, last_used, created_at, updated_at`;
+      RETURNING id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at`;
         values.push(id);
         const result = await this.db.query(query, values);
         if (result.rowCount === 0) {
@@ -170,7 +242,7 @@ class IntegrationApiKeyService {
         if (!Number.isInteger(id) || id <= 0) {
             return null;
         }
-        const result = await this.db.query(`SELECT id, provider, key_value, environment, active, last_used, created_at, updated_at
+        const result = await this.db.query(`SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
        FROM integration_api_keys
        WHERE id = $1`, [id]);
         if (result.rowCount === 0) {

@@ -23,6 +23,25 @@ const router = (0, express_1.Router)();
 router.get('/integrations/api-keys', integrationApiKeyController_1.listIntegrationApiKeys);
 /**
  * @swagger
+ * /api/integrations/api-keys/{id}:
+ *   get:
+ *     summary: Recupera os detalhes de uma chave de API específica
+ *     tags: [Integrações]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Chave de API localizada
+ *       404:
+ *         description: Chave não encontrada
+ */
+router.get('/integrations/api-keys/:id', integrationApiKeyController_1.getIntegrationApiKey);
+/**
+ * @swagger
  * /api/integrations/api-keys:
  *   post:
  *     summary: Cadastra uma nova chave de API
@@ -41,6 +60,10 @@ router.get('/integrations/api-keys', integrationApiKeyController_1.listIntegrati
  *               provider:
  *                 type: string
  *                 enum: [gemini, openai]
+ *               apiUrl:
+ *                 type: string
+ *                 format: uri
+ *                 description: URL base da API utilizada pela integração
  *               key:
  *                 type: string
  *               environment:
@@ -78,6 +101,9 @@ router.post('/integrations/api-keys', integrationApiKeyController_1.createIntegr
  *               provider:
  *                 type: string
  *                 enum: [gemini, openai]
+ *               apiUrl:
+ *                 type: string
+ *                 format: uri
  *               key:
  *                 type: string
  *               environment:

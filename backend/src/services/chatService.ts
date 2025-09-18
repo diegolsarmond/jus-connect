@@ -4,11 +4,11 @@ import { ensureChatSchema } from './chatSchema';
 
 export type ChatMessageSender = 'me' | 'contact';
 export type ChatMessageStatus = 'sent' | 'delivered' | 'read';
-export type ChatMessageType = 'text' | 'image';
+export type ChatMessageType = 'text' | 'image' | 'audio';
 
 export interface MessageAttachment {
   id: string;
-  type: 'image';
+  type: 'image' | 'audio';
   url: string;
   name: string;
 }
@@ -215,21 +215,52 @@ function normalizeStatus(value: string | null | undefined): ChatMessageStatus {
 }
 
 function normalizeMessageType(value: string | null | undefined): ChatMessageType {
-  return value === 'image' ? 'image' : 'text';
+  if (value === 'image' || value === 'audio') {
+    return value;
+  }
+  return 'text';
 }
+
+const sanitizeAttachment = (value: unknown): MessageAttachment | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const attachment = value as {
+    id?: unknown;
+    url?: unknown;
+    name?: unknown;
+    type?: unknown;
+  };
+
+  const id = typeof attachment.id === 'string' ? attachment.id : undefined;
+  const url = typeof attachment.url === 'string' ? attachment.url : undefined;
+  const name = typeof attachment.name === 'string' ? attachment.name : undefined;
+  const type = attachment.type === 'audio' ? 'audio' : 'image';
+
+  if (!id || !url || !name) {
+    return null;
+  }
+
+  return { id, url, name, type };
+};
 
 function parseAttachments(value: unknown): MessageAttachment[] | undefined {
   if (!value) {
     return undefined;
   }
   if (Array.isArray(value)) {
-    return value.filter((item) => item && typeof item === 'object') as MessageAttachment[];
+    return value
+      .map(sanitizeAttachment)
+      .filter((item): item is MessageAttachment => item !== null);
   }
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
       return Array.isArray(parsed)
-        ? (parsed.filter((item) => item && typeof item === 'object') as MessageAttachment[])
+        ? parsed
+            .map(sanitizeAttachment)
+            .filter((item): item is MessageAttachment => item !== null)
         : undefined;
     } catch (error) {
       return undefined;
@@ -238,7 +269,9 @@ function parseAttachments(value: unknown): MessageAttachment[] | undefined {
   if (typeof value === 'object') {
     const parsed = value as { attachments?: unknown };
     if (Array.isArray(parsed.attachments)) {
-      return parsed.attachments.filter((item) => item && typeof item === 'object') as MessageAttachment[];
+      return parsed.attachments
+        .map(sanitizeAttachment)
+        .filter((item): item is MessageAttachment => item !== null);
     }
   }
   return undefined;
@@ -259,6 +292,10 @@ function buildPreview(
   if (type === 'image') {
     const name = attachments && attachments.length > 0 ? attachments[0]!.name : undefined;
     return name ? `Imagem • ${name}` : 'Imagem recebida';
+  }
+  if (type === 'audio') {
+    const name = attachments && attachments.length > 0 ? attachments[0]!.name : undefined;
+    return name ? `Mensagem de áudio • ${name}` : 'Mensagem de áudio';
   }
   const normalized = content.trim();
   if (!normalized) {
@@ -637,16 +674,9 @@ function normalizeAttachments(value: MessageAttachment[] | null | undefined): Me
   if (!value) {
     return null;
   }
-  const normalized: MessageAttachment[] = [];
-  for (const attachment of value) {
-    if (!attachment) {
-      continue;
-    }
-    if (!attachment.id || !attachment.url || !attachment.name) {
-      continue;
-    }
-    normalized.push({ ...attachment, type: 'image' });
-  }
+  const normalized = value
+    .map(sanitizeAttachment)
+    .filter((attachment): attachment is MessageAttachment => attachment !== null);
   return normalized.length > 0 ? normalized : null;
 }
 

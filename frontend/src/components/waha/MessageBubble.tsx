@@ -33,6 +33,25 @@ export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) 
   };
 
   const messageContent = () => {
+    if (message.type === 'audio') {
+      if (message.mediaUrl) {
+        return (
+          <div className="flex flex-col gap-1">
+            <audio
+              controls
+              src={message.mediaUrl}
+              className="w-64 max-w-full"
+              aria-label={message.caption ?? 'Mensagem de áudio'}
+            >
+              Seu navegador não suporta a reprodução de áudio.
+            </audio>
+            {message.caption && <span className="text-xs opacity-80">{message.caption}</span>}
+          </div>
+        );
+      }
+      return <div className="italic text-sm">🎧 Mensagem de áudio</div>;
+    }
+
     if (message.type === 'text') {
       return (
         <div className="whitespace-pre-wrap break-words">

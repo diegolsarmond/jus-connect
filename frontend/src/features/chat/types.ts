@@ -1,9 +1,9 @@
 export type MessageStatus = "sent" | "delivered" | "read";
-export type MessageType = "text" | "image";
+export type MessageType = "text" | "image" | "audio";
 
 export interface MessageAttachment {
   id: string;
-  type: "image";
+  type: "image" | "audio";
   url: string;
   name: string;
 }

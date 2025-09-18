@@ -11,6 +11,20 @@ const swaggerOptions = {
             title: 'Jus Connect API',
             version: '1.0.0',
         },
+        components: {
+            securitySchemes: {
+                bearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                    bearerFormat: 'JWT',
+                },
+            },
+        },
+        security: [
+            {
+                bearerAuth: [],
+            },
+        ],
     },
     apis: [
         path_1.default.join(__dirname, 'routes/*.{ts,js}'),

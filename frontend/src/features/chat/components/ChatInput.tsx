@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Laugh, Link as LinkIcon, Paperclip, Send, FileText } from "lucide-react";
+import { Image, Laugh, Link as LinkIcon, Paperclip, Send, FileText, Mic } from "lucide-react";
 import type { MessageAttachment, MessageType, SendMessageInput } from "../types";
 import styles from "./ChatInput.module.css";
 
@@ -41,6 +41,7 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
   const [showAttachments, setShowAttachments] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -121,6 +122,14 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
     }
   };
 
+  const handleAudioInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void sendAttachment(file, "audio");
+      event.target.value = "";
+    }
+  };
+
   const toggleEmoji = () => {
     setShowEmojiPicker((prev) => !prev);
     setShowAttachments(false);
@@ -138,6 +147,11 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
         icon: <Image size={18} aria-hidden="true" />, // purely decorativo
         label: "Imagem da galeria",
         action: () => fileInputRef.current?.click(),
+      },
+      {
+        icon: <Mic size={18} aria-hidden="true" />, // purely decorativo
+        label: "Mensagem de áudio",
+        action: () => audioInputRef.current?.click(),
       },
       {
         icon: <FileText size={18} aria-hidden="true" />, // purely decorativo
@@ -244,6 +258,13 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
         accept="image/*"
         style={{ display: "none" }}
         onChange={handleFileInputChange}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        style={{ display: "none" }}
+        onChange={handleAudioInputChange}
       />
     </div>
   );
