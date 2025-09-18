@@ -4,6 +4,7 @@ import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { ChatWindow as CRMChatWindow } from "@/features/chat/components/ChatWindow";
 import { NewConversationModal } from "@/features/chat/components/NewConversationModal";
+import { ConversationLoadingScreen } from "./ConversationLoadingScreen";
 import type {
   ConversationSummary,
   Message as CRMMessage,
@@ -260,6 +261,13 @@ export const WhatsAppLayout = ({
 
   const handleSelectConversation = useCallback(
     async (conversationId: string, options?: { skipNavigation?: boolean }) => {
+      if (conversationId === activeConversationId && messageMap[conversationId]) {
+        if (!options?.skipNavigation) {
+          onConversationRouteChange?.(conversationId);
+        }
+        return;
+      }
+
       setMessagesLoading(true);
       try {
         await selectChat(conversationId);
@@ -270,7 +278,7 @@ export const WhatsAppLayout = ({
         setMessagesLoading(false);
       }
     },
-    [onConversationRouteChange, selectChat],
+    [activeConversationId, messageMap, onConversationRouteChange, selectChat],
   );
 
   useEffect(() => {
@@ -354,6 +362,19 @@ export const WhatsAppLayout = ({
       void loadMessages(activeConversationId);
     }
   }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
+
+  const isInitialLoading = loading && conversations.length === 0;
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+        <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          <ConversationLoadingScreen />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">

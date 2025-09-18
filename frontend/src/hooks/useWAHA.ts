@@ -382,14 +382,12 @@ export const useWAHA = () => {
   // Select active chat
   const selectChat = useCallback(async (chatId: string) => {
     setActiveChatId(chatId);
-    
-    // Load messages if not already loaded
+
     if (!messages[chatId]) {
       await loadMessages(chatId);
     }
-    
-    // Mark as read
-    await markAsRead(chatId);
+
+    void markAsRead(chatId);
   }, [messages, loadMessages, markAsRead]);
 
   // Add a new message (for webhook integration)
