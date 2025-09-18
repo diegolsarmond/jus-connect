@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWAHA } from "@/hooks/useWAHA";
 import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
@@ -139,7 +139,15 @@ const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
   };
 };
 
-export const WhatsAppLayout = () => {
+interface WhatsAppLayoutProps {
+  conversationIdFromRoute?: string;
+  onConversationRouteChange?: (conversationId: string | null) => void;
+}
+
+export const WhatsAppLayout = ({
+  conversationIdFromRoute,
+  onConversationRouteChange,
+}: WhatsAppLayoutProps) => {
   const [searchValue, setSearchValue] = useState("");
   const [responsibleFilter, setResponsibleFilter] = useState("all");
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -148,7 +156,7 @@ export const WhatsAppLayout = () => {
   >({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const wahaState = useWAHA();
-  const { addMessage } = wahaState;
+  const { addMessage, selectChat, activeChatId } = wahaState;
 
   // Set up webhook receiver for demo purposes
   useEffect(() => {
@@ -162,7 +170,7 @@ export const WhatsAppLayout = () => {
   }, [addMessage]);
 
   useEffect(() => {
-    const activeId = wahaState.activeChatId ?? undefined;
+    const activeId = activeChatId ?? undefined;
     if (!activeId) {
       setMessagesLoading(false);
       return;
@@ -170,7 +178,7 @@ export const WhatsAppLayout = () => {
     if (wahaState.messages[activeId]) {
       setMessagesLoading(false);
     }
-  }, [wahaState.activeChatId, wahaState.messages]);
+  }, [activeChatId, wahaState.messages]);
 
   const conversations = useMemo(() => {
     const mapped = wahaState.chats.map((chat) =>
@@ -183,7 +191,7 @@ export const WhatsAppLayout = () => {
     });
   }, [wahaState.chats, conversationOverrides]);
 
-  const activeConversationId = wahaState.activeChatId ?? undefined;
+  const activeConversationId = activeChatId ?? undefined;
 
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeConversationId),
@@ -197,14 +205,30 @@ export const WhatsAppLayout = () => {
 
   const messages = useMemo(() => rawMessages.map(mapMessageToCRM), [rawMessages]);
 
-  const handleSelectConversation = async (conversationId: string) => {
-    setMessagesLoading(true);
-    try {
-      await wahaState.selectChat(conversationId);
-    } finally {
-      setMessagesLoading(false);
+  const handleSelectConversation = useCallback(
+    async (conversationId: string, options?: { skipNavigation?: boolean }) => {
+      setMessagesLoading(true);
+      try {
+        await selectChat(conversationId);
+        if (!options?.skipNavigation) {
+          onConversationRouteChange?.(conversationId);
+        }
+      } finally {
+        setMessagesLoading(false);
+      }
+    },
+    [onConversationRouteChange, selectChat],
+  );
+
+  useEffect(() => {
+    if (!conversationIdFromRoute) {
+      return;
     }
-  };
+    if (conversationIdFromRoute === activeChatId) {
+      return;
+    }
+    void handleSelectConversation(conversationIdFromRoute, { skipNavigation: true });
+  }, [conversationIdFromRoute, handleSelectConversation, activeChatId]);
 
   const handleSendMessage = async (payload: SendMessageInput) => {
     if (!activeConversationId) {
