@@ -111,6 +111,14 @@ export async function fetchIntegrationApiKeys(): Promise<IntegrationApiKey[]> {
   return data;
 }
 
+export async function fetchIntegrationApiKey(id: number): Promise<IntegrationApiKey> {
+  const response = await fetch(`${API_KEYS_ENDPOINT}/${id}`, { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+  return (await response.json()) as IntegrationApiKey;
+}
+
 export async function createIntegrationApiKey(
   payload: CreateIntegrationApiKeyPayload,
 ): Promise<IntegrationApiKey> {

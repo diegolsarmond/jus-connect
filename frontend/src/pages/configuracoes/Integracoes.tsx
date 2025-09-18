@@ -7,6 +7,8 @@ import {
   Copy,
   Trash2,
   RefreshCcw,
+  Loader2,
+  PencilLine,
   Webhook as WebhookIcon,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,14 +33,25 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
+  API_KEY_ENVIRONMENT_LABELS,
   API_KEY_PROVIDER_LABELS,
   API_KEY_PROVIDERS,
   type ApiKeyEnvironment,
   type ApiKeyProvider,
   type IntegrationApiKey,
+  type UpdateIntegrationApiKeyPayload,
   createIntegrationApiKey,
+  fetchIntegrationApiKey,
   deleteIntegrationApiKey,
   fetchIntegrationApiKeys,
   updateIntegrationApiKey,
@@ -127,10 +140,52 @@ type WebhookForm = {
   secret: string;
 };
 
+type EditApiKeyForm = {
+  provider: ApiKeyProvider;
+  environment: ApiEnvironment;
+  apiUrl: string;
+  key: string;
+  active: boolean;
+};
+
 const resolveProviderLabel = (provider: string) => getApiKeyProviderLabel(provider) || "—";
 
 const resolveEnvironmentLabel = (environment: string) =>
   getApiKeyEnvironmentLabel(environment) || "—";
+
+const environmentOptions = Object.keys(API_KEY_ENVIRONMENT_LABELS) as ApiEnvironment[];
+
+const normalizeProviderValue = (
+  value: string | null | undefined,
+  fallback: ApiKeyProvider,
+): ApiKeyProvider => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  return API_KEY_PROVIDERS.includes(normalized as ApiKeyProvider)
+    ? (normalized as ApiKeyProvider)
+    : fallback;
+};
+
+const normalizeEnvironmentValue = (
+  value: string | null | undefined,
+  fallback: ApiEnvironment,
+): ApiEnvironment => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  return environmentOptions.includes(normalized as ApiEnvironment)
+    ? (normalized as ApiEnvironment)
+    : fallback;
+};
 
 const authTypeLabels: Record<AuthType, string> = {
   apiKey: "API Key",
@@ -169,16 +224,28 @@ const getDefaultWebhookForm = (): WebhookForm => ({
 export default function Integracoes() {
   const { toast } = useToast();
   const fallbackProvider = (API_KEY_PROVIDERS[0] ?? 'gemini') as ApiKeyProvider;
+  const fallbackEnvironment = (environmentOptions[0] ?? 'producao') as ApiEnvironment;
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
   const [isSavingApiKey, setIsSavingApiKey] = useState(false);
   const [pendingApiKeyId, setPendingApiKeyId] = useState<number | null>(null);
   const [deletingKeyId, setDeletingKeyId] = useState<number | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingApiKeyId, setEditingApiKeyId] = useState<number | null>(null);
+  const [isLoadingEditApiKey, setIsLoadingEditApiKey] = useState(false);
+  const [isUpdatingApiKey, setIsUpdatingApiKey] = useState(false);
+  const [editApiKeyForm, setEditApiKeyForm] = useState<EditApiKeyForm>({
+    provider: fallbackProvider,
+    environment: fallbackEnvironment,
+    apiUrl: "",
+    key: "",
+    active: true,
+  });
   const [newApiKey, setNewApiKey] = useState({
     provider: fallbackProvider,
     apiUrl: "",
     key: "",
-    environment: "producao" as ApiEnvironment,
+    environment: fallbackEnvironment,
   });
   useEffect(() => {
     let isMounted = true;
@@ -217,6 +284,109 @@ export default function Integracoes() {
       isMounted = false;
     };
   }, [toast]);
+
+  const resetEditApiKeyState = () => {
+    setEditApiKeyForm({
+      provider: fallbackProvider,
+      environment: fallbackEnvironment,
+      apiUrl: "",
+      key: "",
+      active: true,
+    });
+    setEditingApiKeyId(null);
+    setIsLoadingEditApiKey(false);
+    setIsUpdatingApiKey(false);
+  };
+
+  const handleEditDialogOpenChange = (open: boolean) => {
+    setIsEditDialogOpen(open);
+    if (!open) {
+      resetEditApiKeyState();
+    }
+  };
+
+  const startEditApiKey = async (id: number) => {
+    setEditingApiKeyId(id);
+    setIsEditDialogOpen(true);
+    setIsLoadingEditApiKey(true);
+    try {
+      const apiKey = await fetchIntegrationApiKey(id);
+      setEditApiKeyForm({
+        provider: normalizeProviderValue(apiKey.provider, fallbackProvider),
+        environment: normalizeEnvironmentValue(apiKey.environment, fallbackEnvironment),
+        apiUrl: apiKey.apiUrl ?? "",
+        key: apiKey.key,
+        active: apiKey.active,
+      });
+    } catch (error) {
+      console.error("Failed to load integration API key:", error);
+      toast({
+        title: "Não foi possível carregar a chave",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao buscar a chave selecionada.",
+        variant: "destructive",
+      });
+      setIsEditDialogOpen(false);
+      resetEditApiKeyState();
+    } finally {
+      setIsLoadingEditApiKey(false);
+    }
+  };
+
+  const handleUpdateApiKey = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (editingApiKeyId === null) {
+      return;
+    }
+
+    const trimmedKey = editApiKeyForm.key.trim();
+    const trimmedApiUrl = editApiKeyForm.apiUrl.trim();
+
+    if (!trimmedKey) {
+      toast({
+        title: "Preencha o valor da chave",
+        description: "Informe o valor da chave antes de salvar as alterações.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUpdatingApiKey(true);
+    try {
+      const payload: UpdateIntegrationApiKeyPayload = {
+        provider: editApiKeyForm.provider,
+        environment: editApiKeyForm.environment,
+        key: trimmedKey,
+        active: editApiKeyForm.active,
+        apiUrl: trimmedApiUrl ? trimmedApiUrl : null,
+      };
+
+      const updated = await updateIntegrationApiKey(editingApiKeyId, payload);
+      setApiKeys((prev) => prev.map((item) => (item.id === editingApiKeyId ? updated : item)));
+
+      const providerLabel = resolveProviderLabel(updated.provider);
+      toast({
+        title: "Chave atualizada",
+        description: `${providerLabel} foi atualizada com sucesso.`,
+      });
+
+      handleEditDialogOpenChange(false);
+    } catch (error) {
+      toast({
+        title: "Não foi possível atualizar a chave",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao atualizar a chave de API.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingApiKey(false);
+    }
+  };
   const [integrations, setIntegrations] = useState<Integration[]>([
     {
       id: 1,
@@ -700,6 +870,15 @@ export default function Integracoes() {
                             </div>
                           </TableCell>
                           <TableCell className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => void startEditApiKey(item.id)}
+                              aria-label="Editar chave"
+                            >
+                              <PencilLine className="h-4 w-4" />
+                            </Button>
                             {item.apiUrl && (
                               <Button
                                 type="button"
@@ -1113,62 +1292,185 @@ export default function Integracoes() {
             </TableBody>
           </Table>
         </CardContent>
-          </Card>
-          <Card>
-              <CardHeader>
-                  <div className="space-y-1">
-                      <CardTitle className="flex items-center gap-2 text-xl">
-                          <ShieldCheck className="h-5 w-5 text-primary" />
-                          Monitoramento
-                      </CardTitle>
-                      <CardDescription>
-                          Acompanhe rapidamente o estado das integrações e siga boas práticas de segurança.
-                      </CardDescription>
-                  </div>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                  <div className="space-y-3">
-                      <div className="rounded-lg border p-3">
-                          <div className="flex items-center justify-between">
-                              <span className="font-medium text-foreground">Chaves ativas</span>
-                              <Badge variant="secondary">
-                                  {activeApiKeys} / {apiKeys.length}
-                              </Badge>
-                          </div>
-                          <p className="mt-2 text-xs text-muted-foreground">
-                              Revise periodicamente as credenciais e revogue acessos que não são mais utilizados.
-                          </p>
-                      </div>
-                      <div className="rounded-lg border p-3">
-                          <div className="flex items-center justify-between">
-                              <span className="font-medium text-foreground">Integrações habilitadas</span>
-                              <Badge variant="secondary">
-                                  {activeIntegrations} / {integrations.length}
-                              </Badge>
-                          </div>
-                          <p className="mt-2 text-xs text-muted-foreground">
-                              Garanta que apenas integrações necessárias tenham permissão para sincronizar dados.
-                          </p>
-                      </div>
-                      <div className="rounded-lg border p-3">
-                          <div className="flex items-center justify-between">
-                              <span className="font-medium text-foreground">Webhooks ativos</span>
-                              <Badge variant="secondary">
-                                  {activeWebhooks} / {webhooks.length}
-                              </Badge>
-                          </div>
-                          <p className="mt-2 text-xs text-muted-foreground">
-                              Utilize ambientes de teste para validar webhooks antes de ativá-los em produção.
-                          </p>
-                      </div>
-                  </div>
-                  <ul className="space-y-2 text-xs text-muted-foreground">
-                      <li>• Ative logs de auditoria nas integrações críticas.</li>
-                      <li>• Compartilhe segredos apenas por canais seguros.</li>
-                      <li>• Defina responsáveis por revisar integrações periodicamente.</li>
-                  </ul>
-              </CardContent>
-          </Card>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Monitoramento
+            </CardTitle>
+            <CardDescription>
+              Acompanhe rapidamente o estado das integrações e siga boas práticas de segurança.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <div className="space-y-3">
+            <div className="rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-foreground">Chaves ativas</span>
+                <Badge variant="secondary">
+                  {activeApiKeys} / {apiKeys.length}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Revise periodicamente as credenciais e revogue acessos que não são mais utilizados.
+              </p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-foreground">Integrações habilitadas</span>
+                <Badge variant="secondary">
+                  {activeIntegrations} / {integrations.length}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Garanta que apenas integrações necessárias tenham permissão para sincronizar dados.
+              </p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-foreground">Webhooks ativos</span>
+                <Badge variant="secondary">
+                  {activeWebhooks} / {webhooks.length}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Utilize ambientes de teste para validar webhooks antes de ativá-los em produção.
+              </p>
+            </div>
+          </div>
+          <ul className="space-y-2 text-xs text-muted-foreground">
+            <li>• Ative logs de auditoria nas integrações críticas.</li>
+            <li>• Compartilhe segredos apenas por canais seguros.</li>
+            <li>• Defina responsáveis por revisar integrações periodicamente.</li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar chave de API</DialogTitle>
+            <DialogDescription>
+              Ajuste os dados da credencial selecionada. As alterações entram em vigor imediatamente.
+            </DialogDescription>
+          </DialogHeader>
+          {isLoadingEditApiKey ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <form onSubmit={handleUpdateApiKey} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-api-key-provider">Provedor</Label>
+                  <Select
+                    value={editApiKeyForm.provider}
+                    onValueChange={(value) =>
+                      setEditApiKeyForm((prev) => ({ ...prev, provider: value as ApiKeyProvider }))
+                    }
+                  >
+                    <SelectTrigger id="edit-api-key-provider">
+                      <SelectValue placeholder="Selecione um provedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {API_KEY_PROVIDERS.map((provider) => (
+                        <SelectItem key={provider} value={provider}>
+                          {API_KEY_PROVIDER_LABELS[provider]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-api-key-environment">Ambiente</Label>
+                  <Select
+                    value={editApiKeyForm.environment}
+                    onValueChange={(value) =>
+                      setEditApiKeyForm((prev) => ({
+                        ...prev,
+                        environment: value as ApiEnvironment,
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="edit-api-key-environment">
+                      <SelectValue placeholder="Selecione um ambiente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {environmentOptions.map((environment) => (
+                        <SelectItem key={environment} value={environment}>
+                          {API_KEY_ENVIRONMENT_LABELS[environment]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-api-key-url">Endpoint da API</Label>
+                <Input
+                  id="edit-api-key-url"
+                  placeholder="https://api.seuprovedor.com/v1"
+                  value={editApiKeyForm.apiUrl}
+                  onChange={(event) =>
+                    setEditApiKeyForm((prev) => ({ ...prev, apiUrl: event.target.value }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Informe o endpoint utilizado pelas requisições. Opcional.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-api-key-value">Valor da chave</Label>
+                <Input
+                  id="edit-api-key-value"
+                  value={editApiKeyForm.key}
+                  onChange={(event) =>
+                    setEditApiKeyForm((prev) => ({ ...prev, key: event.target.value }))
+                  }
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Armazene este valor com segurança e compartilhe apenas com sistemas confiáveis.
+                </p>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium leading-none">Status da chave</p>
+                  <p className="text-xs text-muted-foreground">
+                    Controle se a credencial pode ser utilizada pelas integrações.
+                  </p>
+                </div>
+                <Switch
+                  id="edit-api-key-active"
+                  checked={editApiKeyForm.active}
+                  onCheckedChange={(checked) =>
+                    setEditApiKeyForm((prev) => ({ ...prev, active: checked }))
+                  }
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => handleEditDialogOpenChange(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={isUpdatingApiKey}>
+                  {isUpdatingApiKey ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    "Salvar alterações"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

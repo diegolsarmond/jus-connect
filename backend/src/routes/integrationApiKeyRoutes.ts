@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createIntegrationApiKey,
   deleteIntegrationApiKey,
+  getIntegrationApiKey,
   listIntegrationApiKeys,
   updateIntegrationApiKey,
 } from '../controllers/integrationApiKeyController';
@@ -27,6 +28,26 @@ const router = Router();
  *         description: Lista de chaves de API
  */
 router.get('/integrations/api-keys', listIntegrationApiKeys);
+
+/**
+ * @swagger
+ * /api/integrations/api-keys/{id}:
+ *   get:
+ *     summary: Recupera os detalhes de uma chave de API específica
+ *     tags: [Integrações]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Chave de API localizada
+ *       404:
+ *         description: Chave não encontrada
+ */
+router.get('/integrations/api-keys/:id', getIntegrationApiKey);
 
 /**
  * @swagger
