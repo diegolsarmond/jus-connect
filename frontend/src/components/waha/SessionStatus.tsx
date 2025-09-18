@@ -88,17 +88,17 @@ export const SessionStatus = ({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {onManageDevice && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onManageDevice}
-            className="h-8 px-3 text-foreground hover:bg-accent/60 hover:text-foreground dark:border-white/30 dark:text-white dark:hover:bg-white/10"
-          >
-            <QrCode className="h-4 w-4" />
-            <span className="text-xs font-medium sm:text-sm">ver QR Code</span>
-          </Button>
-        )}
+        {/*{onManageDevice && (*/}
+        {/*  <Button*/}
+        {/*    variant="outline"*/}
+        {/*    size="sm"*/}
+        {/*    onClick={onManageDevice}*/}
+        {/*    className="h-8 px-3 text-foreground hover:bg-accent/60 hover:text-foreground dark:border-white/30 dark:text-white dark:hover:bg-white/10"*/}
+        {/*  >*/}
+        {/*    <QrCode className="h-4 w-4" />*/}
+        {/*    <span className="text-xs font-medium sm:text-sm">ver QR Code</span>*/}
+        {/*  </Button>*/}
+        {/*)}*/}
 
         {onDisconnect && (
           <Button
