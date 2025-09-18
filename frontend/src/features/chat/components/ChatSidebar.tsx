@@ -16,6 +16,9 @@ interface ChatSidebarProps {
   onNewConversation: () => void;
   searchInputRef: React.RefObject<HTMLInputElement>;
   loading?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 export const ChatSidebar = ({
@@ -30,6 +33,9 @@ export const ChatSidebar = ({
   onNewConversation,
   searchInputRef,
   loading = false,
+  hasMore = false,
+  onLoadMore,
+  isLoadingMore = false,
 }: ChatSidebarProps) => {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const filtered = useMemo(() => {
@@ -158,60 +164,80 @@ export const ChatSidebar = ({
       >
         {loading ? (
           <div className={styles.empty}>Carregando conversas...</div>
-        ) : filtered.length === 0 ? (
-          <div className={styles.empty}>Nenhuma conversa encontrada.</div>
         ) : (
-          <ul className={styles.list}>
-            {filtered.map((conversation, index) => {
-              const isActive = conversation.id === activeConversationId;
-              const isFocused = index === focusedIndex;
-              const preview = conversation.lastMessage?.preview ?? "Nova conversa";
-              const timestamp = conversation.lastMessage?.timestamp
-                ? formatConversationTimestamp(conversation.lastMessage.timestamp)
-                : "";
-              return (
-                <li key={conversation.id}>
-                  <button
-                    type="button"
-                    id={`conversation-item-${conversation.id}`}
-                    className={styles.itemButton}
-                    data-active={isActive}
-                    data-focused={isFocused}
-                    role="option"
-                    onClick={() => onSelectConversation(conversation.id)}
-                    aria-selected={isActive}
-                  >
-                    <img src={conversation.avatar} alt="" className={styles.avatar} aria-hidden="true" />
-                    <div className={styles.itemContent}>
-                      <div className={styles.itemTitle}>
-                        <span>{conversation.name}</span>
-                        {conversation.pinned && (
-                          <span role="img" aria-label="Conversação fixada">
-                            <Pin size={14} aria-hidden="true" />
-                          </span>
-                        )}
-                      </div>
-                      <div className={styles.itemPreview}>
-                        {conversation.lastMessage?.sender === "me" && <span>Você:</span>}
-                        <span>{preview}</span>
-                      </div>
-                    </div>
-                    <div>
-                      {timestamp && <div className={styles.timestamp}>{timestamp}</div>}
-                      {conversation.isPrivate && (
-                        <div className={styles.privateBadge}>Privada</div>
-                      )}
-                      {conversation.unreadCount > 0 && (
-                        <div className={styles.unreadBadge} aria-label={`${conversation.unreadCount} mensagens não lidas`}>
-                          {conversation.unreadCount}
+          <>
+            {filtered.length === 0 ? (
+              <div className={styles.empty}>Nenhuma conversa encontrada.</div>
+            ) : (
+              <ul className={styles.list}>
+                {filtered.map((conversation, index) => {
+                  const isActive = conversation.id === activeConversationId;
+                  const isFocused = index === focusedIndex;
+                  const preview = conversation.lastMessage?.preview ?? "Nova conversa";
+                  const timestamp = conversation.lastMessage?.timestamp
+                    ? formatConversationTimestamp(conversation.lastMessage.timestamp)
+                    : "";
+                  return (
+                    <li key={conversation.id}>
+                      <button
+                        type="button"
+                        id={`conversation-item-${conversation.id}`}
+                        className={styles.itemButton}
+                        data-active={isActive}
+                        data-focused={isFocused}
+                        role="option"
+                        onClick={() => onSelectConversation(conversation.id)}
+                        aria-selected={isActive}
+                      >
+                        <img src={conversation.avatar} alt="" className={styles.avatar} aria-hidden="true" />
+                        <div className={styles.itemContent}>
+                          <div className={styles.itemTitle}>
+                            <span>{conversation.name}</span>
+                            {conversation.pinned && (
+                              <span role="img" aria-label="Conversação fixada">
+                                <Pin size={14} aria-hidden="true" />
+                              </span>
+                            )}
+                          </div>
+                          <div className={styles.itemPreview}>
+                            {conversation.lastMessage?.sender === "me" && <span>Você:</span>}
+                            <span>{preview}</span>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                        <div>
+                          {timestamp && <div className={styles.timestamp}>{timestamp}</div>}
+                          {conversation.isPrivate && (
+                            <div className={styles.privateBadge}>Privada</div>
+                          )}
+                          {conversation.unreadCount > 0 && (
+                            <div className={styles.unreadBadge} aria-label={`${conversation.unreadCount} mensagens não lidas`}>
+                              {conversation.unreadCount}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {onLoadMore && (hasMore || isLoadingMore) && (
+              <div className={styles.loadMoreContainer}>
+                <button
+                  type="button"
+                  className={styles.loadMoreButton}
+                  onClick={() => {
+                    if (!isLoadingMore) {
+                      onLoadMore?.();
+                    }
+                  }}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? 'Carregando mais conversas...' : 'Carregar mais conversas'}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
       <div className={styles.footer}>

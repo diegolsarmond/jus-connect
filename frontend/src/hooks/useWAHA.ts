@@ -4,6 +4,7 @@ import WAHAService from '@/services/waha';
 import { ChatOverview, Message, SessionStatus } from '@/types/waha';
 import { useToast } from '@/hooks/use-toast';
 
+const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 100;
 const MAX_MESSAGE_PAGES = 20;
 
@@ -39,6 +40,18 @@ const sortChatsByRecency = (chatList: ChatOverview[]): ChatOverview[] =>
     return nameA.localeCompare(nameB);
   });
 
+const normalizeChatName = (chat: ChatOverview): ChatOverview => {
+  const trimmedName = typeof chat.name === 'string' ? chat.name.trim() : '';
+  return {
+    ...chat,
+    name:
+      trimmedName.length > 0
+        ? trimmedName
+        : WAHAService.extractPhoneFromWhatsAppId(chat.id),
+  };
+};
+
+
 const readStringProperty = (
   record: Record<string, unknown> | undefined,
   key: string,
@@ -55,10 +68,21 @@ export const useWAHA = () => {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
+  const [hasMoreChats, setHasMoreChats] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const intervalRef = useRef<NodeJS.Timeout>();
   const isMountedRef = useRef(true);
+  const chatOffsetRef = useRef(0);
+  const hasMoreChatsRef = useRef(true);
+  const isFetchingChatsRef = useRef(false);
+
+  const resetChatPagination = useCallback(() => {
+    chatOffsetRef.current = 0;
+    hasMoreChatsRef.current = true;
+    setHasMoreChats(true);
+  }, []);
 
   const enrichChatWithInfo = useCallback(async (chat: ChatOverview): Promise<ChatOverview> => {
     const fallbackName = chat.name ?? WAHAService.extractPhoneFromWhatsAppId(chat.id);
@@ -131,48 +155,103 @@ export const useWAHA = () => {
   }, []);
 
   // Load chats
-  const loadChats = useCallback(async () => {
-    if (!isMountedRef.current) return;
-    setLoading(true);
-    setError(null); // Limpar erro anterior
-    try {
-      console.log('🔄 Carregando chats...');
-      const response = await wahaService.getChatsOverview();
-      if (response.error) {
-        throw new Error(response.error);
+  const loadChats = useCallback(
+    async (options?: { reset?: boolean }) => {
+      const reset = options?.reset ?? false;
+
+      if (!isMountedRef.current) {
+        return;
       }
-      if (response.data) {
-        console.log('✅ Chats carregados:', response.data.length);
-        const enriched = await Promise.all(response.data.map((chat) => enrichChatWithInfo(chat)));
+
+      if (isFetchingChatsRef.current) {
+        return;
+      }
+
+      if (!reset && !hasMoreChatsRef.current) {
+        return;
+      }
+
+      setError(null);
+
+      if (reset) {
+        resetChatPagination();
+        setLoading(true);
+        setIsLoadingMoreChats(false);
+      } else {
+        setIsLoadingMoreChats(true);
+      }
+
+      isFetchingChatsRef.current = true;
+
+      try {
+        console.log('🔄 Carregando chats...', { reset, offset: chatOffsetRef.current });
+        const offset = reset ? 0 : chatOffsetRef.current;
+        const response = await wahaService.getChatsOverview(CHAT_PAGE_SIZE, offset);
+
+        if (response.error) {
+          throw new Error(response.error);
+        }
+
+        const rawChats = response.data ?? [];
+        const enriched = await Promise.all(rawChats.map((chat) => enrichChatWithInfo(chat)));
+
         if (!isMountedRef.current) {
           return;
         }
-        setChats(
-          sortChatsByRecency(
-            enriched.map((chat) => ({
-              ...chat,
-              name: chat.name ?? WAHAService.extractPhoneFromWhatsAppId(chat.id),
-            })),
-          ),
-        );
+
+        setChats((previousChats) => {
+          const baseChats = reset ? [] : previousChats;
+          const merged = new Map(baseChats.map((chat) => [chat.id, chat]));
+
+          enriched.forEach((chat) => {
+            const normalized = normalizeChatName(chat);
+            const existing = merged.get(chat.id);
+
+            merged.set(chat.id, {
+              ...existing,
+              ...normalized,
+              unreadCount: normalized.unreadCount ?? existing?.unreadCount ?? 0,
+            });
+          });
+
+          return sortChatsByRecency(Array.from(merged.values()).map(normalizeChatName));
+        });
+
+        const receivedCount = enriched.length;
+        const nextOffset = offset + receivedCount;
+        const nextHasMore = receivedCount === CHAT_PAGE_SIZE;
+
+        chatOffsetRef.current = nextOffset;
+        hasMoreChatsRef.current = nextHasMore;
+        setHasMoreChats(nextHasMore);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load chats';
+        console.error('❌ Erro ao carregar chats:', err);
+        if (isMountedRef.current) {
+          setError(errorMessage);
+        }
+        toast({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      } finally {
+        isFetchingChatsRef.current = false;
+        if (isMountedRef.current) {
+          if (reset) {
+            setLoading(false);
+          }
+          setIsLoadingMoreChats(false);
+        }
+
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load chats';
-      console.error('❌ Erro ao carregar chats:', err);
-      if (isMountedRef.current) {
-        setError(errorMessage);
-      }
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [enrichChatWithInfo, toast]);
+    },
+    [enrichChatWithInfo, resetChatPagination, toast],
+  );
+
+  const loadMoreChats = useCallback(async () => {
+    await loadChats({ reset: false });
+  }, [loadChats]);
 
   // Load messages for a specific chat
   const loadMessages = useCallback(async (chatId: string) => {
@@ -348,7 +427,7 @@ export const useWAHA = () => {
   // Initialize
   useEffect(() => {
     isMountedRef.current = true;
-    loadChats();
+    loadChats({ reset: true });
     checkSessionStatus();
 
     // Set up periodic refresh for session status
@@ -374,10 +453,13 @@ export const useWAHA = () => {
     activeChatMessages,
     sessionStatus,
     loading,
+    isLoadingMoreChats,
+    hasMoreChats,
     error,
-    
+
     // Actions
     loadChats,
+    loadMoreChats,
     loadMessages,
     sendMessage,
     selectChat,
