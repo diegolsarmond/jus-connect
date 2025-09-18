@@ -26,6 +26,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -818,150 +824,155 @@ export default function Processos() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <Accordion type="multiple" className="space-y-4">
           {filteredProcessos.map((processo) => (
-            <Card
+            <AccordionItem
               key={processo.id}
-              className="border-border/60 bg-card/60 shadow-sm transition hover:border-primary/40 hover:shadow-md"
+              value={String(processo.id)}
+              className="overflow-hidden rounded-xl border border-border/60 bg-card/60 text-card-foreground shadow-sm transition hover:border-primary/40 hover:shadow-md data-[state=open]:shadow-md"
             >
-              <CardHeader className="flex flex-col gap-4 border-b border-border/40 pb-4 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <CardTitle className="text-xl font-semibold">
-                      Processo {processo.numero}
-                    </CardTitle>
-                    <Badge className={`text-xs ${getStatusBadgeClassName(processo.status)}`}>
-                      {processo.status}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={`text-xs ${getTipoBadgeClassName(processo.tipo)}`}
-                    >
-                      {processo.tipo}
-                    </Badge>
-                  </div>
-                  <CardDescription className="flex flex-wrap items-center gap-3 text-sm">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      Distribuído em {processo.dataDistribuicao}
-                    </span>
-                    <span className="hidden h-4 w-px bg-border/60 md:block" aria-hidden />
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      {processo.classeJudicial}
-                    </span>
-                    <span className="hidden h-4 w-px bg-border/60 lg:block" aria-hidden />
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      {processo.assunto}
-                    </span>
-                  </CardDescription>
-                </div>
-                <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground md:items-end">
-                  <div className="flex items-center gap-2">
-                    <UsersIcon className="h-4 w-4" />
-                    <span className="font-medium text-foreground">
-                      {processo.advogadoResponsavel}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Landmark className="h-4 w-4" />
-                    <span>{processo.orgaoJulgador}</span>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Cliente
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {processo.cliente.nome}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {processo.cliente.cpf || "Documento não informado"}
-                        </p>
-                      </div>
+              <AccordionTrigger className="items-start border-b border-border/40 px-6 py-6 text-left hover:no-underline">
+                <div className="flex w-full flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <CardTitle className="text-xl font-semibold">
+                        Processo {processo.numero}
+                      </CardTitle>
+                      <Badge className={`text-xs ${getStatusBadgeClassName(processo.status)}`}>
+                        {processo.status}
+                      </Badge>
                       <Badge
                         variant="outline"
-                        className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                        className={`text-xs ${getTipoBadgeClassName(processo.tipo)}`}
                       >
-                        {processo.cliente.papel}
+                        {processo.tipo}
                       </Badge>
                     </div>
+                    <CardDescription className="flex flex-wrap items-center gap-3 text-sm">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        Distribuído em {processo.dataDistribuicao}
+                      </span>
+                      <span className="hidden h-4 w-px bg-border/60 md:block" aria-hidden />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <FileText className="h-4 w-4" />
+                        {processo.classeJudicial}
+                      </span>
+                      <span className="hidden h-4 w-px bg-border/60 lg:block" aria-hidden />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        {processo.assunto}
+                      </span>
+                    </CardDescription>
                   </div>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Jurisdição
-                    </p>
-                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                      <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                      <span>{processo.jurisdicao}</span>
+                  <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground md:items-end">
+                    <div className="flex items-center gap-2">
+                      <UsersIcon className="h-4 w-4" />
+                      <span className="font-medium text-foreground">
+                        {processo.advogadoResponsavel}
+                      </span>
                     </div>
-                  </div>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Órgão julgador
-                    </p>
-                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                      <Landmark className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center gap-2">
+                      <Landmark className="h-4 w-4" />
                       <span>{processo.orgaoJulgador}</span>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Classe judicial
-                    </p>
-                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                      <GavelIcon className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                      <span>{processo.classeJudicial}</span>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Assunto principal
-                    </p>
-                    <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                      <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                      <span>{processo.assunto}</span>
-                    </div>
-                  </div>
                 </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-6 pb-6 pt-6">
+                <div className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Cliente
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {processo.cliente.nome}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {processo.cliente.cpf || "Documento não informado"}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                        >
+                          {processo.cliente.papel}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Jurisdição
+                      </p>
+                      <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                        <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        <span>{processo.jurisdicao}</span>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Órgão julgador
+                      </p>
+                      <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                        <Landmark className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        <span>{processo.orgaoJulgador}</span>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Classe judicial
+                      </p>
+                      <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                        <GavelIcon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        <span>{processo.classeJudicial}</span>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Assunto principal
+                      </p>
+                      <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                        <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        <span>{processo.assunto}</span>
+                      </div>
+                    </div>
+                  </div>
 
-                <div className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-semibold text-foreground">
-                      Últimas movimentações
-                    </h4>
-                    <Badge variant="outline" className="text-xs text-muted-foreground">
-                      {processo.movimentacoes.length} registros
-                    </Badge>
+                  <div className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-foreground">
+                        Últimas movimentações
+                      </h4>
+                      <Badge variant="outline" className="text-xs text-muted-foreground">
+                        {processo.movimentacoes.length} registros
+                      </Badge>
+                    </div>
+                    {processo.movimentacoes.length > 0 ? (
+                      <ul className="space-y-3 text-sm">
+                        {processo.movimentacoes.map((movimentacao, index) => (
+                          <li key={`${processo.id}-mov-${index}`} className="flex items-start gap-3">
+                            <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                            <div className="space-y-1">
+                              <p className="font-medium text-foreground">{movimentacao.descricao}</p>
+                              <p className="text-xs text-muted-foreground">{movimentacao.data}</p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhuma movimentação registrada até o momento.
+                      </p>
+                    )}
                   </div>
-                  {processo.movimentacoes.length > 0 ? (
-                    <ul className="space-y-3 text-sm">
-                      {processo.movimentacoes.map((movimentacao, index) => (
-                        <li key={`${processo.id}-mov-${index}`} className="flex items-start gap-3">
-                          <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
-                          <div className="space-y-1">
-                            <p className="font-medium text-foreground">{movimentacao.descricao}</p>
-                            <p className="text-xs text-muted-foreground">{movimentacao.data}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Nenhuma movimentação registrada até o momento.
-                    </p>
-                  )}
                 </div>
-              </CardContent>
-            </Card>
+              </AccordionContent>
+            </AccordionItem>
           ))}
-        </div>
+        </Accordion>
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
