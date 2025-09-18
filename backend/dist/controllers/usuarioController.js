@@ -104,6 +104,9 @@ exports.getUsuarioById = getUsuarioById;
 const createUsuario = async (req, res) => {
     const { nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
     try {
+        if (!req.auth) {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
         const parsedStatus = parseStatus(status);
         if (parsedStatus === 'invalid') {
             return res.status(400).json({ error: 'Status inválido' });
@@ -112,7 +115,27 @@ const createUsuario = async (req, res) => {
         if (empresaIdResult === 'invalid') {
             return res.status(400).json({ error: 'ID de empresa inválido' });
         }
-        const empresaId = empresaIdResult;
+        const empresaUsuarioResult = await db_1.default.query('SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1', [req.auth.userId]);
+        if (empresaUsuarioResult.rowCount === 0) {
+            return res.status(404).json({ error: 'Usuário autenticado não encontrado' });
+        }
+        const empresaAtualResult = parseOptionalId(empresaUsuarioResult.rows[0].empresa);
+        if (empresaAtualResult === 'invalid') {
+            return res
+                .status(500)
+                .json({ error: 'Não foi possível identificar a empresa do usuário autenticado.' });
+        }
+        if (empresaIdResult !== null && empresaAtualResult !== null && empresaIdResult !== empresaAtualResult) {
+            return res
+                .status(403)
+                .json({ error: 'Usuários só podem criar usuários vinculados à sua própria empresa.' });
+        }
+        if (empresaIdResult !== null && empresaAtualResult === null) {
+            return res
+                .status(403)
+                .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+        }
+        const empresaId = empresaAtualResult;
         if (empresaId !== null) {
             const empresaExists = await db_1.default.query('SELECT 1 FROM public.empresas WHERE id = $1', [empresaId]);
             if (empresaExists.rowCount === 0) {
