@@ -411,6 +411,7 @@ export const WhatsAppLayout = ({
               />
             </div>
           </div>
+
         </div>
       </div>
 

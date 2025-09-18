@@ -220,7 +220,7 @@ export default function NovaOportunidade() {
           })
         );
 
-        const situacoesData = await fetchJson(`${apiUrl}/api/situacoes-processo`);
+        const situacoesData = await fetchJson(`${apiUrl}/api/situacao-propostas`);
         setSituacoes(
           situacoesData.map((s) => {
             const item = s as any;
