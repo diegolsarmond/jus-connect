@@ -36,7 +36,7 @@ export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
       case 'SCAN_QR_CODE':
         return 'Escanear QR Code';
       case 'FAILED':
-        return 'Conexão Falhou';
+        return 'ConexÃ£o Falhou';
       case 'STOPPED':
         return 'Parado';
       default:
@@ -62,7 +62,7 @@ export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
   };
 
   return (
-    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 bg-whatsapp px-4 py-2 text-white shadow-soft">
+    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 bg-whatsapp px-4 py-2 text-foreground shadow-soft dark:text-white">
       <div className="flex items-center gap-2 text-sm">
         {getStatusIcon()}
         <span className={`font-semibold tracking-wide ${getStatusColor()}`}>{getStatusText()}</span>
@@ -72,9 +72,10 @@ export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
         variant="ghost"
         size="sm"
         onClick={onRefresh}
-        className="h-8 px-2 text-white hover:bg-white/10"
+        className="h-8 px-3 text-foreground hover:bg-accent/60 hover:text-foreground dark:text-white dark:hover:bg-white/10 dark:hover:text-white"
       >
         <RefreshCw className="h-4 w-4" />
+        <span className="text-xs font-medium sm:text-sm">sincronizar conversas</span>
       </Button>
     </div>
   );
