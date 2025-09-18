@@ -88,7 +88,8 @@ export const useWAHA = () => {
     Record<string, MessagePaginationState>
   >({});
   const { toast } = useToast();
-  const intervalRef = useRef<NodeJS.Timeout>();
+  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const chatsRefreshIntervalRef = useRef<ReturnType<typeof setInterval>>();
   const isMountedRef = useRef(true);
   const chatOffsetRef = useRef(0);
   const hasMoreChatsRef = useRef(true);
@@ -205,8 +206,9 @@ export const useWAHA = () => {
 
   // Load chats
   const loadChats = useCallback(
-    async (options?: { reset?: boolean }) => {
+    async (options?: { reset?: boolean; silent?: boolean }) => {
       const reset = options?.reset ?? false;
+      const silent = options?.silent ?? false;
 
       if (!isMountedRef.current) {
         return;
@@ -224,9 +226,11 @@ export const useWAHA = () => {
 
       if (reset) {
         resetChatPagination();
-        setLoading(true);
-        setIsLoadingMoreChats(false);
-      } else {
+        if (!silent) {
+          setLoading(true);
+          setIsLoadingMoreChats(false);
+        }
+      } else if (!silent) {
         setIsLoadingMoreChats(true);
       }
 
@@ -279,18 +283,22 @@ export const useWAHA = () => {
         if (isMountedRef.current) {
           setError(errorMessage);
         }
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive',
-        });
+        if (!silent) {
+          toast({
+            title: 'Error',
+            description: errorMessage,
+            variant: 'destructive',
+          });
+        }
       } finally {
         isFetchingChatsRef.current = false;
         if (isMountedRef.current) {
-          if (reset) {
+          if (reset && !silent) {
             setLoading(false);
           }
-          setIsLoadingMoreChats(false);
+          if (!silent) {
+            setIsLoadingMoreChats(false);
+          }
         }
 
       }
@@ -635,13 +643,34 @@ export const useWAHA = () => {
     loadChats({ reset: true });
     checkSessionStatus();
 
-    // Set up periodic refresh for session status
-    intervalRef.current = setInterval(checkSessionStatus, 30000); // Reduzido para 30 segundos
+    const refreshChatsIfVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      void loadChats({ reset: true, silent: true });
+    };
+
+    if (typeof window !== 'undefined') {
+      intervalRef.current = setInterval(checkSessionStatus, 30000); // Reduzido para 30 segundos
+      chatsRefreshIntervalRef.current = setInterval(refreshChatsIfVisible, 15000);
+    }
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', refreshChatsIfVisible);
+    }
 
     return () => {
       isMountedRef.current = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = undefined;
+      }
+      if (chatsRefreshIntervalRef.current) {
+        clearInterval(chatsRefreshIntervalRef.current);
+        chatsRefreshIntervalRef.current = undefined;
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', refreshChatsIfVisible);
       }
     };
   }, [loadChats, checkSessionStatus]);
