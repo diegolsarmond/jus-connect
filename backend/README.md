@@ -39,6 +39,10 @@ O script `sql/intimacoes.sql` cria a tabela `intimacoes`, utilizada para
 persistir os dados normalizados durante a sincronização das intimações do
 Projudi.
 
+O script `sql/user_profile.sql` define as tabelas utilizadas pela tela "Meu
+Perfil", responsáveis por armazenar os dados personalizados do usuário,
+histórico de auditoria e sessões ativas.
+
 ## CORS
 
 Por padrão o backend libera requisições vindas de `localhost` e do domínio `https://jusconnec.quantumtecnologia.com.br`. Caso precise habilitar outros hosts, defina a variável de ambiente `CORS_ALLOWED_ORIGINS` com uma lista de URLs separadas por vírgula:
