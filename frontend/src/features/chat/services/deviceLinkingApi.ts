@@ -123,6 +123,11 @@ const buildWahaUrl = (baseUrl: string, path: string): string => {
 };
 
 export const deriveSessionName = (companyName?: string | null): string => {
+  const normalizedOriginal = normalizeString(companyName);
+  if (normalizedOriginal) {
+    return normalizedOriginal;
+  }
+
   if (!companyName) {
     return fallbackSessionName;
   }
