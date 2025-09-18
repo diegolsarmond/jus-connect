@@ -1,5 +1,6 @@
 import type { MouseEvent, PropsWithChildren } from "react";
 import { useEffect, useRef } from "react";
+import clsx from "clsx";
 import { createPortal } from "react-dom";
 import styles from "./Modal.module.css";
 
@@ -7,6 +8,7 @@ interface ModalProps {
   open: boolean;
   ariaLabel: string;
   onClose: () => void;
+  contentClassName?: string;
 }
 
 const focusableSelectors = [
@@ -18,7 +20,13 @@ const focusableSelectors = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
-export const Modal = ({ open, ariaLabel, onClose, children }: PropsWithChildren<ModalProps>) => {
+export const Modal = ({
+  open,
+  ariaLabel,
+  onClose,
+  contentClassName,
+  children,
+}: PropsWithChildren<ModalProps>) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
 
@@ -79,7 +87,7 @@ export const Modal = ({ open, ariaLabel, onClose, children }: PropsWithChildren<
     <div className={styles.overlay} role="presentation" onMouseDown={handleBackdropClick}>
       <div
         ref={containerRef}
-        className={styles.content}
+        className={clsx(styles.content, contentClassName)}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
