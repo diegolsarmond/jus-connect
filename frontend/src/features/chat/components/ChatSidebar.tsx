@@ -241,7 +241,7 @@ export const ChatSidebar = ({
         )}
       </div>
       <div className={styles.footer}>
-        <MessageCircle size={16} aria-hidden="true" /> Ctrl+N cria nova conversa • Esc fecha modais
+              <MessageCircle size={16} aria-hidden="true" /> Esta atualização só comporta mensagens de texto.
       </div>
     </aside>
   );
