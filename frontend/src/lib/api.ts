@@ -1,4 +1,11 @@
-const rawEnvApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const envApiUrlCandidates = [
+  import.meta.env.VITE_API_URL as string | undefined,
+  import.meta.env.VITE_API_BASE_URL as string | undefined,
+];
+
+const rawEnvApiUrl = envApiUrlCandidates
+  .map((value) => value?.trim())
+  .find((value): value is string => Boolean(value?.length));
 const isDevEnvironment = Boolean(import.meta.env.DEV);
 
 function normalizeBaseUrl(url: string): string {
