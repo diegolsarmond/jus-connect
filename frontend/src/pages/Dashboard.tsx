@@ -1,13 +1,127 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { mockAnalytics, mockMonthlyData, mockAreaDistribution } from "@/data/mockData";
 import { TrendingUp, TrendingDown, Gavel, CheckCircle, Users } from "lucide-react";
+import { getApiUrl } from "@/lib/api";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))'];
 
+type ProcessoDashboardMetrics = {
+  total: number;
+  active: number;
+  concluded: number;
+  closingRate: number;
+};
+
+type ProcessoApiSummary = {
+  status?: string | null;
+};
+
+const CLOSED_STATUS_KEYWORDS = [
+  "encerrado",
+  "concluido",
+  "finalizado",
+  "arquivado",
+  "baixado",
+  "baixa",
+];
+
+const normalizeStatus = (status: unknown): string => {
+  if (typeof status !== "string") {
+    return "";
+  }
+
+  return status
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+};
+
+const isConcludedStatus = (status: unknown): boolean => {
+  const normalized = normalizeStatus(status);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return CLOSED_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
 export default function Dashboard() {
-  const { processosAtivos, processosConcluidos, indiceEncerramento, clientesAtivos, clientesProspecto, totalClientes, taxaConversao, crescimentoMensal } = mockAnalytics;
+  const { clientesAtivos, clientesProspecto, totalClientes, taxaConversao, crescimentoMensal } = mockAnalytics;
+  const [processMetrics, setProcessMetrics] = useState<ProcessoDashboardMetrics>({
+    total: mockAnalytics.processosAtivos + mockAnalytics.processosConcluidos,
+    active: mockAnalytics.processosAtivos,
+    concluded: mockAnalytics.processosConcluidos,
+    closingRate: mockAnalytics.indiceEncerramento,
+  });
+
+  useEffect(() => {
+    const abortController = new AbortController();
+    let isMounted = true;
+
+    const loadProcessMetrics = async () => {
+      try {
+        const response = await fetch(getApiUrl("processos"), {
+          headers: { Accept: "application/json" },
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          console.error(`Falha ao carregar processos para o dashboard (HTTP ${response.status})`);
+          return;
+        }
+
+        const data = (await response.json()) as unknown;
+
+        if (!Array.isArray(data)) {
+          console.error("Resposta inválida da API ao listar processos para o dashboard.");
+          return;
+        }
+
+        const processos = data as ProcessoApiSummary[];
+
+        const concludedCount = processos.reduce((total, processo) => {
+          return isConcludedStatus(processo.status) ? total + 1 : total;
+        }, 0);
+
+        const totalCount = data.length;
+        const activeCount = Math.max(totalCount - concludedCount, 0);
+        const closingRate = totalCount === 0 ? 0 : Math.round((concludedCount / totalCount) * 100);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProcessMetrics({
+          total: totalCount,
+          active: activeCount,
+          concluded: concludedCount,
+          closingRate,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        console.error("Erro ao carregar processos para o dashboard", error);
+      }
+    };
+
+    void loadProcessMetrics();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, []);
+
+  const processosPorCliente = clientesAtivos > 0
+    ? (processMetrics.active / clientesAtivos).toFixed(1)
+    : "0.0";
 
   return (
     <div className="space-y-6">
@@ -24,7 +138,7 @@ export default function Dashboard() {
             <Gavel className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{processosAtivos}</div>
+            <div className="text-2xl font-bold">{processMetrics.active}</div>
             <div className="flex items-center text-xs text-muted-foreground">
               <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
               +{crescimentoMensal}% mês anterior
@@ -38,7 +152,7 @@ export default function Dashboard() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{processosConcluidos}</div>
+            <div className="text-2xl font-bold">{processMetrics.concluded}</div>
             <p className="text-xs text-muted-foreground">Encerrados no mês</p>
           </CardContent>
         </Card>
@@ -49,7 +163,7 @@ export default function Dashboard() {
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{indiceEncerramento}%</div>
+            <div className="text-2xl font-bold">{processMetrics.closingRate}%</div>
             <p className="text-xs text-muted-foreground">Casos finalizados</p>
           </CardContent>
         </Card>
@@ -179,11 +293,11 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">Taxa de Conversão de Clientes</p>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{(processosAtivos / clientesAtivos).toFixed(1)}</div>
+              <div className="text-2xl font-bold text-primary">{processosPorCliente}</div>
               <p className="text-sm text-muted-foreground">Processos por Cliente</p>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{indiceEncerramento}%</div>
+              <div className="text-2xl font-bold text-primary">{processMetrics.closingRate}%</div>
               <p className="text-sm text-muted-foreground">Índice de Encerramento</p>
             </div>
             <div className="text-center">
