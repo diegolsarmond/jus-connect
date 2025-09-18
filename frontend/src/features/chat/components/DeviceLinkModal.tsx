@@ -277,6 +277,7 @@ export const DeviceLinkContent = ({
             <p className={styles.sessionWarning}>
               Não foi possível carregar as informações da empresa. Utilizando a sessão padrão
               <strong> {sessionName}</strong>.
+
             </p>
           )}
 
