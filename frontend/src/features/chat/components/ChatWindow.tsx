@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type {
   ConversationInternalNote,
+  ConversationParticipant,
   ConversationSummary,
   Message,
   SendMessageInput,
@@ -47,6 +48,29 @@ const createId = () =>
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : `tmp-${Math.random().toString(36).slice(2, 10)}`;
+
+const MAX_VISIBLE_PARTICIPANTS = 6;
+
+const getParticipantName = (participant: ConversationParticipant): string => {
+  const name = participant.name?.trim();
+  if (name && name.length > 0) {
+    return name;
+  }
+  const id = participant.id.trim();
+  const atIndex = id.indexOf("@");
+  return atIndex > 0 ? id.slice(0, atIndex) : id;
+};
+
+const getParticipantInitials = (name: string): string => {
+  const parts = name
+    .split(/\s+/)
+    .filter((part) => part.length > 0)
+    .slice(0, 2);
+  if (parts.length === 0) {
+    return name.slice(0, 2).toUpperCase();
+  }
+  return parts.map((part) => part[0]!.toUpperCase()).join("");
+};
 
 interface ChatWindowProps {
   conversation?: ConversationSummary;
@@ -95,6 +119,9 @@ export const ChatWindow = ({
   const tags = conversation?.tags ?? [];
   const customAttributes = conversation?.customAttributes ?? [];
   const internalNotes = conversation?.internalNotes ?? [];
+  const participants = conversation?.participants ?? [];
+  const visibleParticipants = participants.slice(0, MAX_VISIBLE_PARTICIPANTS);
+  const overflowCount = participants.length - visibleParticipants.length;
   const tagOptions = useMemo(() => {
     const all = new Set<string>();
     for (const tag of availableTags) {
@@ -459,6 +486,36 @@ export const ChatWindow = ({
                   <span className={styles.headerNoTags}>Sem etiquetas</span>
                 )}
               </div>
+              {visibleParticipants.length > 0 && (
+                <div className={styles.participantsRow}>
+                  <span className={styles.participantsLabel}>Participantes</span>
+                  <div className={styles.participantsList} role="list">
+                    {visibleParticipants.map((participant) => {
+                      const name = getParticipantName(participant);
+                      const avatar = participant.avatar?.trim();
+                      const initials = getParticipantInitials(name);
+                      return (
+                        <div key={participant.id} className={styles.participantItem} role="listitem">
+                          <div className={styles.participantAvatar} aria-hidden="true">
+                            {avatar ? <img src={avatar} alt="" /> : <span>{initials}</span>}
+                          </div>
+                          <span className={styles.participantName} title={name}>
+                            {name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {overflowCount > 0 && (
+                      <span
+                        className={styles.participantOverflow}
+                        aria-label={`${overflowCount} participantes adicionais`}
+                      >
+                        +{overflowCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className={styles.actions} ref={menuRef}>

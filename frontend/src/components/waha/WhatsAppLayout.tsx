@@ -12,7 +12,7 @@ import type {
   UpdateConversationPayload,
 } from "@/features/chat/types";
 import { teamMembers } from "@/features/chat/data/teamMembers";
-import type { ChatOverview, Message as WAHAMessage } from "@/types/waha";
+import type { ChatOverview, ChatParticipant, Message as WAHAMessage } from "@/types/waha";
 import WAHAService from "@/services/waha";
 
 const ensureIsoTimestamp = (value?: number): string => {
@@ -129,12 +129,30 @@ const mergeOverrides = (
     tags: overrides.tags ?? base.tags,
     customAttributes: overrides.customAttributes ?? base.customAttributes,
     internalNotes: overrides.internalNotes ?? base.internalNotes,
+    participants: overrides.participants ?? base.participants,
     responsible:
       overrides.responsible !== undefined ? overrides.responsible : base.responsible ?? null,
     phoneNumber: overrides.phoneNumber ?? base.phoneNumber,
     clientName: overrides.clientName ?? base.clientName,
     isLinkedToClient: overrides.isLinkedToClient ?? base.isLinkedToClient,
     isPrivate: overrides.isPrivate ?? base.isPrivate,
+  };
+};
+
+const mapParticipantToSummary = (
+  participant: ChatParticipant,
+  fallbackIndex: number,
+) => {
+  const baseName = participant.name?.trim() || WAHAService.extractPhoneFromWhatsAppId(participant.id) || `Integrante ${fallbackIndex + 1}`;
+  const trimmedName = baseName.trim();
+  const avatar = participant.avatar && participant.avatar.trim().length > 0
+    ? participant.avatar
+    : createAvatarUrl(trimmedName);
+
+  return {
+    id: participant.id,
+    name: trimmedName,
+    avatar,
   };
 };
 
@@ -147,6 +165,10 @@ const mapChatToConversation = (
   const avatar = chat.avatar && chat.avatar.trim().length > 0
     ? chat.avatar
     : createAvatarUrl(normalizedName);
+
+  const participants = chat.participants?.map((participant, index) =>
+    mapParticipantToSummary(participant, index),
+  );
 
   const wahaLastMessageType = chat.lastMessage ? mapWahaMessageType(chat.lastMessage as WAHAMessage) : "text";
   const lastMessage = chat.lastMessage
@@ -185,6 +207,7 @@ const mapChatToConversation = (
     customAttributes: [],
     isPrivate: false,
     internalNotes: [],
+    participants,
   };
 
   return mergeOverrides(base, overrides);
