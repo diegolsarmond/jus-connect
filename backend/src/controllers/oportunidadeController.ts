@@ -1,5 +1,165 @@
 import { Request, Response } from 'express';
+import type { PoolClient } from 'pg';
 import pool from '../services/db';
+
+const normalizeDecimal = (input: unknown): number | null => {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    return input;
+  }
+  if (typeof input === 'string' && input.trim().length > 0) {
+    const sanitized = input.replace(/\./g, '').replace(',', '.');
+    const parsed = Number(sanitized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof input === 'bigint') {
+    return Number(input);
+  }
+  return null;
+};
+
+const normalizeInteger = (input: unknown): number | null => {
+  if (typeof input === 'number' && Number.isFinite(input)) {
+    const normalized = Math.trunc(input);
+    return normalized > 0 ? normalized : null;
+  }
+  if (typeof input === 'string' && input.trim().length > 0) {
+    const parsed = Number(input);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+    const normalized = Math.trunc(parsed);
+    return normalized > 0 ? normalized : null;
+  }
+  if (typeof input === 'bigint') {
+    const normalized = Number(input);
+    return Number.isFinite(normalized) && normalized > 0
+      ? Math.trunc(normalized)
+      : null;
+  }
+  return null;
+};
+
+const normalizeText = (input: unknown): string | null => {
+  if (typeof input !== 'string') {
+    return null;
+  }
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed;
+};
+
+const normalizePaymentLabel = (input: unknown): string | null => {
+  const text = normalizeText(input);
+  if (!text) {
+    return null;
+  }
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+};
+
+const shouldCreateInstallments = (paymentLabel: string | null): boolean => {
+  if (!paymentLabel) return false;
+  if (paymentLabel.includes('parcel')) return true;
+  if (paymentLabel.includes('vista')) return true;
+  return false;
+};
+
+const buildInstallmentValues = (total: number, count: number): number[] => {
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(count) || count <= 0) {
+    return [];
+  }
+  const centsTotal = Math.round(total * 100);
+  const baseValue = Math.floor(centsTotal / count);
+  let remainder = centsTotal - baseValue * count;
+  const values: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    let cents = baseValue;
+    if (remainder > 0) {
+      cents += 1;
+      remainder -= 1;
+    }
+    values.push(cents / 100);
+  }
+  return values;
+};
+
+const resetOpportunityInstallments = async (
+  client: PoolClient,
+  oportunidadeId: number,
+  values: number[],
+) => {
+  await client.query('DELETE FROM public.oportunidade_parcelas WHERE oportunidade_id = $1', [
+    oportunidadeId,
+  ]);
+
+  if (values.length === 0) {
+    return;
+  }
+
+  for (let index = 0; index < values.length; index += 1) {
+    const valorParcela = values[index];
+    await client.query(
+      `INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor)
+       VALUES ($1, $2, $3)`,
+      [oportunidadeId, index + 1, valorParcela],
+    );
+  }
+};
+
+const createOrReplaceOpportunityInstallments = async (
+  client: PoolClient,
+  oportunidadeId: number,
+  valorHonorarios: unknown,
+  formaPagamento: unknown,
+  qtdeParcelas: unknown,
+) => {
+  const normalizedPayment = normalizePaymentLabel(formaPagamento);
+  const honorarios = normalizeDecimal(valorHonorarios);
+  if (!honorarios || honorarios <= 0 || !shouldCreateInstallments(normalizedPayment)) {
+    await resetOpportunityInstallments(client, oportunidadeId, []);
+    return;
+  }
+
+  const parcelasCount = normalizeInteger(qtdeParcelas);
+  const totalParcelas = normalizedPayment?.includes('parcel')
+    ? parcelasCount ?? 1
+    : 1;
+
+  if (!totalParcelas || totalParcelas <= 0) {
+    await resetOpportunityInstallments(client, oportunidadeId, []);
+    return;
+  }
+
+  const values = buildInstallmentValues(honorarios, totalParcelas);
+  await resetOpportunityInstallments(client, oportunidadeId, values);
+};
+
+const ensureOpportunityInstallments = async (
+  client: PoolClient,
+  oportunidadeId: number,
+  valorHonorarios: unknown,
+  formaPagamento: unknown,
+  qtdeParcelas: unknown,
+) => {
+  const existing = await client.query(
+    'SELECT id FROM public.oportunidade_parcelas WHERE oportunidade_id = $1 LIMIT 1',
+    [oportunidadeId],
+  );
+  if ((existing.rowCount ?? 0) > 0) {
+    return;
+  }
+  await createOrReplaceOpportunityInstallments(
+    client,
+    oportunidadeId,
+    valorHonorarios,
+    formaPagamento,
+    qtdeParcelas,
+  );
+};
 
 export const listOportunidades = async (_req: Request, res: Response) => {
   try {
@@ -115,8 +275,11 @@ export const createOportunidade = async (req: Request, res: Response) => {
     envolvidos,
   } = req.body;
 
+  const client = await pool.connect();
+
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const result = await client.query(
       `INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
@@ -154,7 +317,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
     const oportunidade = result.rows[0];
     if (Array.isArray(envolvidos) && envolvidos.length > 0) {
       const queries = envolvidos.map((env: any) =>
-        pool.query(
+        client.query(
           `INSERT INTO public.oportunidade_envolvidos
            (oportunidade_id, nome, documento, telefone, endereco, relacao)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -170,10 +333,21 @@ export const createOportunidade = async (req: Request, res: Response) => {
       );
       await Promise.all(queries);
     }
+    await createOrReplaceOpportunityInstallments(
+      client,
+      oportunidade.id,
+      valor_honorarios,
+      forma_pagamento,
+      qtde_parcelas,
+    );
+    await client.query('COMMIT');
     res.status(201).json(oportunidade);
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 };
 
@@ -368,6 +542,24 @@ export const listOportunidadeFaturamentos = async (
   }
 };
 
+export const listOportunidadeParcelas = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT id, oportunidade_id, numero_parcela, valor, valor_pago, status, data_prevista,
+              quitado_em, faturamento_id, criado_em, atualizado_em
+         FROM public.oportunidade_parcelas
+        WHERE oportunidade_id = $1
+        ORDER BY numero_parcela ASC`,
+      [id],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createOportunidadeFaturamento = async (
   req: Request,
   res: Response,
@@ -389,54 +581,30 @@ export const createOportunidadeFaturamento = async (
     data_faturamento?: unknown;
   };
 
-  if (typeof forma_pagamento !== 'string' || forma_pagamento.trim().length === 0) {
+  const formaValue = normalizeText(forma_pagamento);
+  if (!formaValue) {
     return res
       .status(400)
       .json({ error: 'forma_pagamento é obrigatório e deve ser uma string.' });
   }
 
-  const normalizedForma = forma_pagamento.trim();
-
-  const normalizeNumber = (input: unknown): number | null => {
-    if (input === null || input === undefined || input === '') {
-      return null;
-    }
-    if (typeof input === 'number') {
-      return Number.isNaN(input) ? null : input;
-    }
-    if (typeof input === 'string') {
-      const sanitized = input.replace(/\./g, '').replace(',', '.');
-      const parsed = Number(sanitized);
-      return Number.isNaN(parsed) ? null : parsed;
-    }
-    return null;
-  };
-
-  const parsedValor = normalizeNumber(valor);
+  const parsedValor = valor === undefined ? null : normalizeDecimal(valor);
   if (valor !== undefined && parsedValor === null) {
     return res.status(400).json({ error: 'valor inválido.' });
   }
 
-  const condicaoValue =
-    typeof condicao_pagamento === 'string' && condicao_pagamento.trim().length > 0
-      ? condicao_pagamento.trim()
-      : null;
+  const condicaoValue = normalizeText(condicao_pagamento);
+  const condicaoNormalized = normalizePaymentLabel(condicaoValue);
+  const isParcelado = condicaoNormalized ? condicaoNormalized.includes('parcel') : false;
 
   let parsedParcelas: number | null = null;
-  if (
-    condicaoValue &&
-    condicaoValue.toLowerCase() === 'parcelado'
-  ) {
-    if (parcelas === undefined || parcelas === null || parcelas === '') {
+  if (isParcelado) {
+    parsedParcelas = normalizeInteger(parcelas);
+    if (parsedParcelas === null) {
       return res
         .status(400)
         .json({ error: 'parcelas é obrigatório para pagamentos parcelados.' });
     }
-    const parcelasNumber = normalizeNumber(parcelas);
-    if (parcelasNumber === null || !Number.isFinite(parcelasNumber) || parcelasNumber < 1) {
-      return res.status(400).json({ error: 'parcelas inválido.' });
-    }
-    parsedParcelas = Math.trunc(parcelasNumber);
   }
 
   let faturamentoDate: Date | null = null;
@@ -448,21 +616,85 @@ export const createOportunidadeFaturamento = async (
     faturamentoDate = parsedDate;
   }
 
-  const observations =
-    typeof observacoes === 'string' && observacoes.trim().length > 0
-      ? observacoes.trim()
-      : null;
+  const observations = normalizeText(observacoes);
+
+  const client = await pool.connect();
 
   try {
-    const opportunityExists = await pool.query(
-      'SELECT 1 FROM public.oportunidades WHERE id = $1',
+    await client.query('BEGIN');
+
+    const opportunityResult = await client.query(
+      `SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios
+         FROM public.oportunidades
+        WHERE id = $1`,
       [id],
     );
-    if (opportunityExists.rowCount === 0) {
+
+    if (opportunityResult.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Oportunidade não encontrada' });
     }
 
-    const result = await pool.query(
+    const opportunity = opportunityResult.rows[0];
+
+    await ensureOpportunityInstallments(
+      client,
+      Number(id),
+      opportunity.valor_honorarios,
+      opportunity.forma_pagamento,
+      opportunity.qtde_parcelas,
+    );
+
+    const installmentsResult = await client.query(
+      `SELECT id, valor, numero_parcela
+         FROM public.oportunidade_parcelas
+        WHERE oportunidade_id = $1
+          AND status = 'pendente'
+        ORDER BY numero_parcela ASC`,
+      [id],
+    );
+
+    type InstallmentRow = { id: number; valor: number };
+    const pendingInstallments: InstallmentRow[] = installmentsResult.rows.map((row) => ({
+      id: Number(row.id),
+      valor: Number(row.valor),
+    }));
+
+    let installmentsToClose: InstallmentRow[] = [];
+    if (pendingInstallments.length > 0) {
+      if (isParcelado) {
+        const desiredCount = parsedParcelas ?? 1;
+        if (desiredCount > pendingInstallments.length) {
+          await client.query('ROLLBACK');
+          return res
+            .status(400)
+            .json({ error: 'Quantidade de parcelas indisponível para faturamento.' });
+        }
+        installmentsToClose = pendingInstallments.slice(0, desiredCount);
+      } else {
+        installmentsToClose = pendingInstallments;
+      }
+    }
+
+    let valorToPersist = parsedValor;
+    if (installmentsToClose.length > 0) {
+      const sum = installmentsToClose.reduce((acc, installment) => acc + installment.valor, 0);
+      if (valorToPersist === null) {
+        valorToPersist = sum;
+      } else if (Math.abs(valorToPersist - sum) > 0.009) {
+        valorToPersist = sum;
+      }
+    }
+
+    const parcelasToPersist = isParcelado
+      ? parsedParcelas ?? (installmentsToClose.length > 0 ? installmentsToClose.length : null)
+      : installmentsToClose.length > 0
+        ? installmentsToClose.length
+        : null;
+
+    const faturamentoDateValue = faturamentoDate ?? new Date();
+
+    const insertResult = await client.query(
       `INSERT INTO public.oportunidade_faturamentos
          (oportunidade_id, forma_pagamento, condicao_pagamento, valor, parcelas, observacoes, data_faturamento)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -470,19 +702,44 @@ export const createOportunidadeFaturamento = async (
                  observacoes, data_faturamento, criado_em`,
       [
         id,
-        normalizedForma,
+        formaValue,
         condicaoValue,
-        parsedValor,
-        parsedParcelas,
+        valorToPersist,
+        parcelasToPersist,
         observations,
-        faturamentoDate ?? new Date(),
+        faturamentoDateValue,
       ],
     );
 
-    res.status(201).json(result.rows[0]);
+    const faturamento = insertResult.rows[0];
+
+    if (installmentsToClose.length > 0) {
+      for (const installment of installmentsToClose) {
+        await client.query(
+          `UPDATE public.oportunidade_parcelas
+             SET status = 'quitado',
+                 valor_pago = $2,
+                 quitado_em = $3,
+                 faturamento_id = $4,
+                 atualizado_em = NOW()
+           WHERE id = $1`,
+          [installment.id, installment.valor, faturamentoDateValue, faturamento.id],
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json(faturamento);
   } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Rollback failed after faturamento creation error.', rollbackError);
+    }
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 };
 

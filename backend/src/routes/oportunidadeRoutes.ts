@@ -10,6 +10,7 @@ import {
   updateOportunidadeEtapa,
   deleteOportunidade,
   listOportunidadeFaturamentos,
+  listOportunidadeParcelas,
   createOportunidadeFaturamento,
 } from '../controllers/oportunidadeController';
 
@@ -188,6 +189,57 @@ router.get('/oportunidades/:id', getOportunidadeById);
  *                 $ref: '#/components/schemas/OportunidadeEnvolvido'
  */
 router.get('/oportunidades/:id/envolvidos', listEnvolvidosByOportunidade);
+
+/**
+ * @swagger
+ * /api/oportunidades/{id}/parcelas:
+ *   get:
+ *     summary: Lista as parcelas registradas da oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Lista de parcelas da oportunidade
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   oportunidade_id:
+ *                     type: integer
+ *                   numero_parcela:
+ *                     type: integer
+ *                   valor:
+ *                     type: number
+ *                   valor_pago:
+ *                     type: number
+ *                   status:
+ *                     type: string
+ *                   data_prevista:
+ *                     type: string
+ *                     format: date
+ *                   quitado_em:
+ *                     type: string
+ *                     format: date-time
+ *                   faturamento_id:
+ *                     type: integer
+ *                   criado_em:
+ *                     type: string
+ *                     format: date-time
+ *                   atualizado_em:
+ *                     type: string
+ *                     format: date-time
+ */
+router.get('/oportunidades/:id/parcelas', listOportunidadeParcelas);
 
 /**
  * @swagger
