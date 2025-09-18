@@ -138,12 +138,38 @@ export const DATAJUD_CATEGORIA_MAP = new Map(
   DATAJUD_CATEGORIAS.map((categoria) => [categoria.id, categoria.nome] as const),
 );
 
-export const getDatajudTribunalLabel = (alias: string | null | undefined) => {
+export const normalizeDatajudAlias = (
+  alias: string | null | undefined,
+): string | null => {
   if (!alias) {
     return null;
   }
 
-  const tribunal = DATAJUD_TRIBUNAL_MAP.get(alias);
+  const sanitized = alias
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\s+/g, "_");
+
+  if (!sanitized) {
+    return null;
+  }
+
+  if (sanitized.startsWith("api_publica_")) {
+    return sanitized;
+  }
+
+  const withoutPrefix = sanitized.replace(/^api_publica_/, "");
+  return `api_publica_${withoutPrefix}`;
+};
+
+export const getDatajudTribunalLabel = (alias: string | null | undefined) => {
+  const normalizedAlias = normalizeDatajudAlias(alias);
+  if (!normalizedAlias) {
+    return null;
+  }
+
+  const tribunal = DATAJUD_TRIBUNAL_MAP.get(normalizedAlias);
   return tribunal ? tribunal.nome : null;
 };
 

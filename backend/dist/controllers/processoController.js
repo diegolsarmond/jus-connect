@@ -21,6 +21,21 @@ const normalizeLowercase = (value) => {
     const normalized = normalizeString(value);
     return normalized ? normalized.toLowerCase() : null;
 };
+const normalizeDatajudAliasValue = (value) => {
+    const normalized = normalizeLowercase(value);
+    if (!normalized) {
+        return null;
+    }
+    const sanitized = normalized.replace(/^\/+/g, '').replace(/\/+$/g, '').replace(/\s+/g, '_');
+    if (!sanitized) {
+        return null;
+    }
+    if (sanitized.startsWith('api_publica_')) {
+        return sanitized;
+    }
+    const withoutPrefix = sanitized.replace(/^api_publica_/, '');
+    return `api_publica_${withoutPrefix}`;
+};
 const normalizeDate = (value) => {
     if (value === null || value === undefined) {
         return null;
@@ -118,7 +133,7 @@ const mapProcessoRow = (row) => ({
     advogado_responsavel: row.advogado_responsavel,
     data_distribuicao: row.data_distribuicao,
     datajud_tipo_justica: row.datajud_tipo_justica ?? null,
-    datajud_alias: row.datajud_alias ?? null,
+    datajud_alias: normalizeDatajudAliasValue(row.datajud_alias),
     criado_em: row.criado_em,
     atualizado_em: row.atualizado_em,
     cliente: row.cliente_id
@@ -278,7 +293,7 @@ const createProcesso = async (req, res) => {
         ? normalizeLowercase(datajud_tipo_justica)
         : null;
     const datajudAliasValue = columnInfo.hasDatajudAlias
-        ? normalizeLowercase(datajud_alias)
+        ? normalizeDatajudAliasValue(datajud_alias)
         : null;
     const missingDatajudFields = [];
     if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
@@ -390,7 +405,7 @@ const updateProcesso = async (req, res) => {
         ? normalizeLowercase(datajud_tipo_justica)
         : null;
     const datajudAliasValue = columnInfo.hasDatajudAlias
-        ? normalizeLowercase(datajud_alias)
+        ? normalizeDatajudAliasValue(datajud_alias)
         : null;
     const missingDatajudFields = [];
     if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
@@ -496,7 +511,7 @@ const getProcessoMovimentacoes = async (req, res) => {
         }
         const row = result.rows[0];
         const numeroProcesso = normalizeString(row.numero);
-        const datajudAlias = normalizeString(row.datajud_alias);
+        const datajudAlias = normalizeDatajudAliasValue(row.datajud_alias);
         if (!numeroProcesso || !datajudAlias) {
             return res.json([]);
         }

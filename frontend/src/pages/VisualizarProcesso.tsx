@@ -30,6 +30,7 @@ import { getApiUrl } from "@/lib/api";
 import {
   getDatajudCategoriaLabel,
   getDatajudTribunalLabel,
+  normalizeDatajudAlias,
 } from "@/data/datajud";
 
 interface ApiProcessoCliente {
@@ -226,7 +227,7 @@ const mapApiProcessoToDetalhes = (processo: ApiProcessoResponse): ProcessoDetalh
     "Não informado";
   const dataDistribuicao = normalizeString(processo.data_distribuicao) || null;
   const datajudTipoJustica = normalizeString(processo.datajud_tipo_justica) || null;
-  const datajudAlias = normalizeString(processo.datajud_alias) || null;
+  const datajudAlias = normalizeDatajudAlias(processo.datajud_alias);
   const datajudCategoriaLabel = getDatajudCategoriaLabel(datajudTipoJustica);
   const datajudTribunal = getDatajudTribunalLabel(datajudAlias);
   const clienteResumo = processo.cliente ?? null;

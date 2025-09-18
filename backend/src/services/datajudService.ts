@@ -120,8 +120,21 @@ export const fetchDatajudMovimentacoes = async (
     throw new Error('DATAJUD_API_KEY não configurada');
   }
 
-  const normalizedAlias = alias.replace(/^\/+|\/+$/g, '');
-  const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
+  const normalizedAlias = alias
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/\s+/g, '_');
+
+  if (!normalizedAlias) {
+    throw new Error('Alias do Datajud inválido para consulta');
+  }
+
+  const aliasWithPrefix = normalizedAlias.startsWith('api_publica_')
+    ? normalizedAlias
+    : `api_publica_${normalizedAlias.replace(/^api_publica_/, '')}`;
+
+  const url = `${DATAJUD_BASE_URL}/${aliasWithPrefix}/_search`;
 
   const fetchImpl = resolveFetch();
   const controller = new AbortController();
