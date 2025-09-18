@@ -19,7 +19,21 @@ export const login = async (req: Request, res: Response) => {
     const normalizedEmail = normalizeEmail(email);
 
     const userResult = await pool.query(
-      'SELECT id, nome_completo, email, senha, status, perfil FROM public.usuarios WHERE LOWER(email) = $1 LIMIT 1',
+      `SELECT u.id,
+              u.nome_completo,
+              u.email,
+              u.senha,
+              u.status,
+              u.perfil,
+              u.empresa AS empresa_id,
+              emp.nome_empresa AS empresa_nome,
+              u.escritorio AS setor_id,
+              esc.nome AS setor_nome
+         FROM public.usuarios u
+         LEFT JOIN public.empresas emp ON emp.id = u.empresa
+         LEFT JOIN public.escritorios esc ON esc.id = u.escritorio
+        WHERE LOWER(u.email) = $1
+        LIMIT 1`,
       [normalizedEmail]
     );
 
@@ -35,6 +49,10 @@ export const login = async (req: Request, res: Response) => {
       senha: string | null;
       status: boolean | null;
       perfil: number | string | null;
+      empresa_id: number | null;
+      empresa_nome: string | null;
+      setor_id: number | null;
+      setor_nome: string | null;
     };
 
     if (user.status === false) {
@@ -70,6 +88,10 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         perfil: user.perfil,
         modulos,
+        empresa_id: user.empresa_id,
+        empresa_nome: user.empresa_nome,
+        setor_id: user.setor_id,
+        setor_nome: user.setor_nome,
       },
     });
   } catch (error) {
@@ -86,7 +108,20 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      'SELECT id, nome_completo, email, perfil, status FROM public."vw.usuarios" WHERE id = $1',
+      `SELECT u.id,
+              u.nome_completo,
+              u.email,
+              u.perfil,
+              u.status,
+              u.empresa AS empresa_id,
+              emp.nome_empresa AS empresa_nome,
+              u.escritorio AS setor_id,
+              esc.nome AS setor_nome
+         FROM public.usuarios u
+         LEFT JOIN public.empresas emp ON emp.id = u.empresa
+         LEFT JOIN public.escritorios esc ON esc.id = u.escritorio
+        WHERE u.id = $1
+        LIMIT 1`,
       [req.auth.userId]
     );
 
@@ -105,6 +140,10 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       email: user.email,
       perfil: user.perfil,
       status: user.status,
+      empresa_id: user.empresa_id,
+      empresa_nome: user.empresa_nome,
+      setor_id: user.setor_id,
+      setor_nome: user.setor_nome,
       modulos,
     });
   } catch (error) {
