@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 import {
+  DATAJUD_TRIBUNAL_MAP,
   getDatajudCategoriaLabel,
   getDatajudTribunalLabel,
   normalizeDatajudAlias,
@@ -67,6 +68,74 @@ interface ApiProcessoMovimentacao {
   descricao?: string | null;
   dataHora?: string | null;
 }
+
+interface DatajudProcessoClasse {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoSistema {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoFormato {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoOrgaoJulgador {
+  codigoMunicipioIBGE?: number | null;
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoAssunto {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudMovimentoComplemento {
+  codigo?: number | null;
+  valor?: number | null;
+  nome?: string | null;
+  descricao?: string | null;
+}
+
+interface DatajudMovimento {
+  codigo?: number | string | null;
+  nome?: string | null;
+  dataHora?: string | null;
+  descricao?: string | null;
+  complementosTabelados?: DatajudMovimentoComplemento[] | null;
+}
+
+interface DatajudProcessoSource {
+  numeroProcesso?: string | null;
+  classe?: DatajudProcessoClasse | null;
+  sistema?: DatajudProcessoSistema | null;
+  formato?: DatajudProcessoFormato | null;
+  tribunal?: string | null;
+  dataHoraUltimaAtualizacao?: string | null;
+  grau?: string | null;
+  "@timestamp"?: string | null;
+  dataAjuizamento?: string | null;
+  movimentos?: DatajudMovimento[] | null;
+  orgaoJulgador?: DatajudProcessoOrgaoJulgador | null;
+  assuntos?: DatajudProcessoAssunto[] | null;
+}
+
+interface DatajudProcessoHit {
+  _id?: string | number | null;
+  _index?: string | null;
+  _source?: DatajudProcessoSource | null;
+}
+
+interface DatajudApiResponse {
+  hits?: { hits?: DatajudProcessoHit[] | null } | null;
+}
+
+type ProcessoApiResponse = ApiProcessoResponse | DatajudApiResponse;
 
 type ProcessoDetalhes = {
   id: number;
@@ -210,70 +279,230 @@ const getTipoBadgeClassName = (tipo: string) => {
   return "border-blue-200 bg-blue-500/10 text-blue-600";
 };
 
-const mapApiProcessoToDetalhes = (processo: ApiProcessoResponse): ProcessoDetalhes => {
-  const rawNumero = normalizeString(processo.numero);
-  const rawStatus = normalizeString(processo.status) || "Não informado";
-  const rawTipo = normalizeString(processo.tipo) || "Não informado";
-  const rawClasse = normalizeString(processo.classe_judicial) || "Não informada";
-  const rawAssunto = normalizeString(processo.assunto) || "Não informado";
-  const rawOrgao = normalizeString(processo.orgao_julgador) || "Não informado";
+const normalizeToNull = (value: string | null | undefined): string | null => {
+  const normalized = normalizeString(value);
+  return normalized || null;
+};
+
+const isDatajudResponse = (value: unknown): value is DatajudApiResponse => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  if (!("hits" in value)) {
+    return false;
+  }
+
+  const container = (value as DatajudApiResponse).hits;
+  if (!container || typeof container !== "object") {
+    return false;
+  }
+
+  if (!("hits" in container)) {
+    return false;
+  }
+
+  const hits = container.hits;
+  return Array.isArray(hits);
+};
+
+const formatDatajudComplemento = (
+  complemento: DatajudMovimentoComplemento,
+): string | null => {
+  const nome = normalizeString(complemento?.nome);
+  const descricao = normalizeString(complemento?.descricao);
+
+  if (nome && descricao) {
+    return `${nome} (${descricao})`;
+  }
+
+  if (nome) {
+    return nome;
+  }
+
+  if (descricao) {
+    return descricao;
+  }
+
+  return null;
+};
+
+const mapDatajudMovimentoToLocal = (
+  movimento: DatajudMovimento,
+): ProcessoMovimentacao => {
+  const nome = normalizeString(movimento?.nome) || "Movimentação";
+  const descricaoPreferida = normalizeString(movimento?.descricao);
+  const complementos = Array.isArray(movimento?.complementosTabelados)
+    ? movimento.complementosTabelados
+        .map((item) => formatDatajudComplemento(item))
+        .filter((item): item is string => Boolean(item))
+    : [];
+  const descricao =
+    descricaoPreferida ||
+    (complementos.length > 0 ? `${nome} · ${complementos.join(", ")}` : nome);
+
+  return mapApiMovimentacaoToLocal({
+    codigo: movimento?.codigo ?? null,
+    nome,
+    descricao,
+    dataHora: normalizeToNull(movimento?.dataHora),
+  });
+};
+
+type ProcessoMappingResult = {
+  detalhes: ProcessoDetalhes;
+  movimentacoes: ProcessoMovimentacao[];
+};
+
+const mapApiProcessoToDetalhes = (
+  processo: ProcessoApiResponse,
+  fallbackId?: string | number,
+): ProcessoMappingResult => {
+  if (isDatajudResponse(processo)) {
+    const hits = processo.hits?.hits ?? [];
+    const firstHit = hits.find((hit) => hit && typeof hit === "object" && hit?._source) ?? null;
+
+    if (!firstHit || !firstHit._source) {
+      throw new Error("Processo não encontrado na API do CNJ");
+    }
+
+    const source = firstHit._source;
+    const numero = normalizeString(source.numeroProcesso) || "Não informado";
+    const classeJudicial = normalizeString(source.classe?.nome) || "Não informada";
+    const assuntos = Array.isArray(source.assuntos)
+      ? source.assuntos
+          .map((assunto) => normalizeString(assunto?.nome))
+          .filter(Boolean)
+          .join(", ")
+      : "";
+    const assunto = assuntos || "Não informado";
+    const orgaoJulgador = normalizeString(source.orgaoJulgador?.nome) || "Não informado";
+    const tribunal = normalizeString(source.tribunal);
+    const graus = normalizeString(source.grau);
+    const formato = normalizeString(source.formato?.nome);
+    const sistema = normalizeString(source.sistema?.nome);
+    const dataDistribuicao = normalizeToNull(source.dataAjuizamento);
+    const atualizadoEm =
+      normalizeToNull(source.dataHoraUltimaAtualizacao) || normalizeToNull(source["@timestamp"]);
+    const alias = normalizeDatajudAlias(
+      typeof firstHit._index === "string" ? firstHit._index : null,
+    );
+    const tribunalLabel = getDatajudTribunalLabel(alias) ?? (tribunal || null);
+    const categoriaId = alias ? DATAJUD_TRIBUNAL_MAP.get(alias)?.categoriaId ?? null : null;
+    const categoriaLabel = categoriaId ? getDatajudCategoriaLabel(categoriaId) : null;
+    const tipoBadgeParts = [formato, sistema, graus ? `Grau ${graus}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    const fallbackNumericId =
+      fallbackId !== undefined ? Number.parseInt(String(fallbackId), 10) : Number.NaN;
+    const id = Number.isInteger(fallbackNumericId) && fallbackNumericId > 0 ? fallbackNumericId : 0;
+
+    const mappedMovimentacoes = Array.isArray(source.movimentos)
+      ? source.movimentos
+          .map((movimento) => mapDatajudMovimentoToLocal(movimento))
+          .sort((a, b) => {
+            const dateA = a.dataIso ? new Date(a.dataIso).getTime() : 0;
+            const dateB = b.dataIso ? new Date(b.dataIso).getTime() : 0;
+            return dateB - dateA;
+          })
+      : [];
+
+    return {
+      detalhes: {
+        id,
+        numero,
+        status: (tribunalLabel ?? tribunal) || "Não informado",
+        tipo: tipoBadgeParts || "Não informado",
+        classeJudicial,
+        assunto,
+        jurisdicao: (tribunalLabel ?? tribunal) || "Não informado",
+        orgaoJulgador,
+        advogadoResponsavel: "Não informado",
+        dataDistribuicao,
+        dataDistribuicaoFormatada: formatDateToPtBR(dataDistribuicao),
+        criadoEm: dataDistribuicao,
+        atualizadoEm,
+        datajudTipoJustica: categoriaLabel,
+        datajudAlias: alias,
+        datajudTribunal: tribunalLabel ?? (tribunal || null),
+        uf: "",
+        municipio: "",
+        cliente: null,
+      },
+      movimentacoes: mappedMovimentacoes,
+    };
+  }
+
+  const rawNumero = normalizeString((processo as ApiProcessoResponse).numero);
+  const rawStatus = normalizeString((processo as ApiProcessoResponse).status) || "Não informado";
+  const rawTipo = normalizeString((processo as ApiProcessoResponse).tipo) || "Não informado";
+  const rawClasse =
+    normalizeString((processo as ApiProcessoResponse).classe_judicial) || "Não informada";
+  const rawAssunto = normalizeString((processo as ApiProcessoResponse).assunto) || "Não informado";
+  const rawOrgao =
+    normalizeString((processo as ApiProcessoResponse).orgao_julgador) || "Não informado";
   const rawAdvogado =
-    normalizeString(processo.advogado_responsavel) || "Não informado";
-  const rawMunicipio = normalizeString(processo.municipio);
-  const rawUf = normalizeString(processo.uf);
+    normalizeString((processo as ApiProcessoResponse).advogado_responsavel) || "Não informado";
+  const rawMunicipio = normalizeString((processo as ApiProcessoResponse).municipio);
+  const rawUf = normalizeString((processo as ApiProcessoResponse).uf);
   const jurisdicao =
-    normalizeString(processo.jurisdicao) ||
+    normalizeString((processo as ApiProcessoResponse).jurisdicao) ||
     [rawMunicipio, rawUf].filter(Boolean).join(" - ") ||
     "Não informado";
-  const dataDistribuicao = normalizeString(processo.data_distribuicao) || null;
-  const datajudTipoJustica = normalizeString(processo.datajud_tipo_justica) || null;
-  const datajudAlias = normalizeDatajudAlias(processo.datajud_alias);
+  const dataDistribuicao =
+    normalizeString((processo as ApiProcessoResponse).data_distribuicao) || null;
+  const datajudTipoJustica =
+    normalizeString((processo as ApiProcessoResponse).datajud_tipo_justica) || null;
+  const datajudAlias = normalizeDatajudAlias((processo as ApiProcessoResponse).datajud_alias);
   const datajudCategoriaLabel = getDatajudCategoriaLabel(datajudTipoJustica);
   const datajudTribunal = getDatajudTribunalLabel(datajudAlias);
-  const clienteResumo = processo.cliente ?? null;
+  const clienteResumo = (processo as ApiProcessoResponse).cliente ?? null;
   const clienteId =
     typeof clienteResumo?.id === "number"
       ? clienteResumo.id
-      : typeof processo.cliente_id === "number"
-        ? processo.cliente_id
+      : typeof (processo as ApiProcessoResponse).cliente_id === "number"
+        ? (processo as ApiProcessoResponse).cliente_id
         : null;
-  const clienteNome = normalizeString(clienteResumo?.nome) || "Cliente não informado";
+  const clienteNome =
+    normalizeString(clienteResumo?.nome) || "Cliente não informado";
   const clienteDocumento = normalizeString(clienteResumo?.documento);
   const clientePapel = resolveClientePapel(clienteResumo?.tipo);
 
   return {
-    id:
-      typeof processo.id === "number"
-        ? processo.id
-        : Number.parseInt(String(processo.id ?? 0), 10) || 0,
-    numero: rawNumero || "Não informado",
-    status: rawStatus,
-    tipo: rawTipo,
-    classeJudicial: rawClasse,
-    assunto: rawAssunto,
-    jurisdicao,
-    orgaoJulgador: rawOrgao,
-    advogadoResponsavel: rawAdvogado,
-    dataDistribuicao,
-    dataDistribuicaoFormatada: formatDateToPtBR(dataDistribuicao),
-    criadoEm: processo.criado_em ?? null,
-    atualizadoEm: processo.atualizado_em ?? null,
-    datajudTipoJustica: datajudCategoriaLabel ?? datajudTipoJustica,
-    datajudAlias,
-    datajudTribunal,
-    uf: rawUf,
-    municipio: rawMunicipio,
-    cliente: clienteResumo
-      ? {
-          id: clienteId,
-          nome: clienteNome,
-          documento: clienteDocumento,
-          papel: clientePapel,
-        }
-      : null,
+    detalhes: {
+      id:
+        typeof (processo as ApiProcessoResponse).id === "number"
+          ? (processo as ApiProcessoResponse).id
+          : Number.parseInt(String((processo as ApiProcessoResponse).id ?? 0), 10) || 0,
+      numero: rawNumero || "Não informado",
+      status: rawStatus,
+      tipo: rawTipo,
+      classeJudicial: rawClasse,
+      assunto: rawAssunto,
+      jurisdicao,
+      orgaoJulgador: rawOrgao,
+      advogadoResponsavel: rawAdvogado,
+      dataDistribuicao,
+      dataDistribuicaoFormatada: formatDateToPtBR(dataDistribuicao),
+      criadoEm: (processo as ApiProcessoResponse).criado_em ?? null,
+      atualizadoEm: (processo as ApiProcessoResponse).atualizado_em ?? null,
+      datajudTipoJustica: datajudCategoriaLabel ?? datajudTipoJustica,
+      datajudAlias,
+      datajudTribunal,
+      uf: rawUf,
+      municipio: rawMunicipio,
+      cliente: clienteResumo
+        ? {
+            id: clienteId,
+            nome: clienteNome,
+            documento: clienteDocumento,
+            papel: clientePapel,
+          }
+        : null,
+    },
+    movimentacoes: [],
   };
 };
-
 const mapApiMovimentacaoToLocal = (
   movimentacao: ApiProcessoMovimentacao,
 ): ProcessoMovimentacao => {
@@ -396,9 +625,15 @@ export default function VisualizarProcesso() {
           throw new Error("Resposta inválida do servidor ao carregar o processo");
         }
 
-        const mapped = mapApiProcessoToDetalhes(json as ApiProcessoResponse);
+        const { detalhes, movimentacoes: initialMovimentacoes } = mapApiProcessoToDetalhes(
+          json as ProcessoApiResponse,
+          processoId,
+        );
         if (!cancelled) {
-          setProcesso(mapped);
+          setProcesso(detalhes);
+          if (initialMovimentacoes.length > 0) {
+            setMovimentacoes(initialMovimentacoes);
+          }
         }
       } catch (fetchError) {
         const message =
