@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { Processo } from '../models/processo';
+import { fetchDatajudMovimentacoes } from '../services/datajudService';
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -14,6 +15,11 @@ const normalizeString = (value: unknown): string | null => {
 const normalizeUppercase = (value: unknown): string | null => {
   const normalized = normalizeString(value);
   return normalized ? normalized.toUpperCase() : null;
+};
+
+const normalizeLowercase = (value: unknown): string | null => {
+  const normalized = normalizeString(value);
+  return normalized ? normalized.toLowerCase() : null;
 };
 
 const normalizeDate = (value: unknown): string | null => {
@@ -72,6 +78,8 @@ const mapProcessoRow = (row: any): Processo => ({
   jurisdicao: row.jurisdicao,
   advogado_responsavel: row.advogado_responsavel,
   data_distribuicao: row.data_distribuicao,
+  datajud_tipo_justica: row.datajud_tipo_justica,
+  datajud_alias: row.datajud_alias,
   criado_em: row.criado_em,
   atualizado_em: row.atualizado_em,
   cliente: row.cliente_id
@@ -99,16 +107,18 @@ export const listProcessos = async (_req: Request, res: Response) => {
          p.orgao_julgador,
          p.tipo,
          p.status,
-         p.classe_judicial,
-         p.assunto,
-         p.jurisdicao,
-         p.advogado_responsavel,
-         p.data_distribuicao,
-         p.criado_em,
-         p.atualizado_em,
-         c.nome AS cliente_nome,
-         c.documento AS cliente_documento,
-         c.tipo AS cliente_tipo
+       p.classe_judicial,
+       p.assunto,
+       p.jurisdicao,
+       p.advogado_responsavel,
+       p.data_distribuicao,
+        p.datajud_tipo_justica,
+        p.datajud_alias,
+       p.criado_em,
+       p.atualizado_em,
+        c.nome AS cliente_nome,
+        c.documento AS cliente_documento,
+        c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        ORDER BY p.criado_em DESC`
@@ -140,16 +150,18 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
          p.orgao_julgador,
          p.tipo,
          p.status,
-         p.classe_judicial,
-         p.assunto,
-         p.jurisdicao,
-         p.advogado_responsavel,
-         p.data_distribuicao,
-         p.criado_em,
-         p.atualizado_em,
-         c.nome AS cliente_nome,
-         c.documento AS cliente_documento,
-         c.tipo AS cliente_tipo
+        p.classe_judicial,
+        p.assunto,
+        p.jurisdicao,
+        p.advogado_responsavel,
+        p.data_distribuicao,
+        p.datajud_tipo_justica,
+        p.datajud_alias,
+        p.criado_em,
+        p.atualizado_em,
+        c.nome AS cliente_nome,
+        c.documento AS cliente_documento,
+        c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        WHERE p.cliente_id = $1
@@ -183,16 +195,18 @@ export const getProcessoById = async (req: Request, res: Response) => {
          p.orgao_julgador,
          p.tipo,
          p.status,
-         p.classe_judicial,
-         p.assunto,
-         p.jurisdicao,
-         p.advogado_responsavel,
-         p.data_distribuicao,
-         p.criado_em,
-         p.atualizado_em,
-         c.nome AS cliente_nome,
-         c.documento AS cliente_documento,
-         c.tipo AS cliente_tipo
+        p.classe_judicial,
+        p.assunto,
+        p.jurisdicao,
+        p.advogado_responsavel,
+        p.data_distribuicao,
+        p.datajud_tipo_justica,
+        p.datajud_alias,
+        p.criado_em,
+        p.atualizado_em,
+        c.nome AS cliente_nome,
+        c.documento AS cliente_documento,
+        c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        WHERE p.id = $1`,
@@ -224,6 +238,8 @@ export const createProcesso = async (req: Request, res: Response) => {
     jurisdicao,
     advogado_responsavel,
     data_distribuicao,
+    datajud_tipo_justica,
+    datajud_alias,
   } = req.body;
 
   const parsedClienteId = Number(cliente_id);
@@ -251,6 +267,14 @@ export const createProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
+  const datajudTipoJusticaValue = normalizeLowercase(datajud_tipo_justica);
+  const datajudAliasValue = normalizeLowercase(datajud_alias);
+
+  if (!datajudTipoJusticaValue || !datajudAliasValue) {
+    return res.status(400).json({
+      error: 'Os campos datajud_tipo_justica e datajud_alias são obrigatórios',
+    });
+  }
 
   try {
     const clienteExists = await pool.query(
@@ -273,14 +297,16 @@ export const createProcesso = async (req: Request, res: Response) => {
            tipo,
            status,
            classe_judicial,
-           assunto,
-           jurisdicao,
-           advogado_responsavel,
-           data_distribuicao
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          assunto,
+          jurisdicao,
+          advogado_responsavel,
+          data_distribuicao,
+          datajud_tipo_justica,
+          datajud_alias
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *
        )
-       SELECT 
+       SELECT
          inserted.id,
          inserted.cliente_id,
          inserted.numero,
@@ -294,6 +320,8 @@ export const createProcesso = async (req: Request, res: Response) => {
          inserted.jurisdicao,
          inserted.advogado_responsavel,
          inserted.data_distribuicao,
+         inserted.datajud_tipo_justica,
+         inserted.datajud_alias,
          inserted.criado_em,
          inserted.atualizado_em,
          c.nome AS cliente_nome,
@@ -314,6 +342,8 @@ export const createProcesso = async (req: Request, res: Response) => {
         jurisdicaoValue,
         advogadoValue,
         dataDistribuicaoValue,
+        datajudTipoJusticaValue,
+        datajudAliasValue,
       ]
     );
 
@@ -350,6 +380,8 @@ export const updateProcesso = async (req: Request, res: Response) => {
     jurisdicao,
     advogado_responsavel,
     data_distribuicao,
+    datajud_tipo_justica,
+    datajud_alias,
   } = req.body;
 
   const parsedClienteId = Number(cliente_id);
@@ -377,6 +409,14 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
+  const datajudTipoJusticaValue = normalizeLowercase(datajud_tipo_justica);
+  const datajudAliasValue = normalizeLowercase(datajud_alias);
+
+  if (!datajudTipoJusticaValue || !datajudAliasValue) {
+    return res.status(400).json({
+      error: 'Os campos datajud_tipo_justica e datajud_alias são obrigatórios',
+    });
+  }
 
   try {
     const existingProcess = await pool.query(
@@ -411,11 +451,13 @@ export const updateProcesso = async (req: Request, res: Response) => {
            assunto = $9,
            jurisdicao = $10,
            advogado_responsavel = $11,
-           data_distribuicao = $12,
+           datajud_tipo_justica = $12,
+           datajud_alias = $13,
+           data_distribuicao = $14,
            atualizado_em = NOW()
-         WHERE id = $13
-         RETURNING *
-       )
+        WHERE id = $15
+        RETURNING *
+      )
        SELECT 
          updated.id,
          updated.cliente_id,
@@ -426,17 +468,19 @@ export const updateProcesso = async (req: Request, res: Response) => {
          updated.tipo,
          updated.status,
          updated.classe_judicial,
-         updated.assunto,
-         updated.jurisdicao,
-         updated.advogado_responsavel,
-         updated.data_distribuicao,
-         updated.criado_em,
-         updated.atualizado_em,
-         c.nome AS cliente_nome,
-         c.documento AS cliente_documento,
-         c.tipo AS cliente_tipo
+        updated.assunto,
+        updated.jurisdicao,
+        updated.advogado_responsavel,
+        updated.data_distribuicao,
+        updated.datajud_tipo_justica,
+        updated.datajud_alias,
+        updated.criado_em,
+        updated.atualizado_em,
+        c.nome AS cliente_nome,
+        c.documento AS cliente_documento,
+        c.tipo AS cliente_tipo
        FROM updated
-       LEFT JOIN public.clientes c ON c.id = updated.cliente_id`,
+      LEFT JOIN public.clientes c ON c.id = updated.cliente_id`,
       [
         parsedClienteId,
         numeroValue,
@@ -449,6 +493,8 @@ export const updateProcesso = async (req: Request, res: Response) => {
         assuntoValue,
         jurisdicaoValue,
         advogadoValue,
+        datajudTipoJusticaValue,
+        datajudAliasValue,
         dataDistribuicaoValue,
         parsedId,
       ]
@@ -462,6 +508,67 @@ export const updateProcesso = async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Número de processo já cadastrado' });
     }
 
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getProcessoMovimentacoes = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const parsedId = Number(id);
+
+  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT numero, datajud_alias FROM public.processos WHERE id = $1',
+      [parsedId],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    const row = result.rows[0] as { numero: string | null; datajud_alias: string | null };
+
+    const numeroProcesso = normalizeString(row.numero);
+    const datajudAlias = normalizeString(row.datajud_alias);
+
+    if (!numeroProcesso || !datajudAlias) {
+      return res.json([]);
+    }
+
+    try {
+      const movimentacoes = await fetchDatajudMovimentacoes(
+        datajudAlias,
+        numeroProcesso,
+      );
+      return res.json(movimentacoes);
+    } catch (error: any) {
+      console.error(error);
+      if (error instanceof Error) {
+        if (error.message.includes('DATAJUD_API_KEY')) {
+          return res.status(503).json({
+            error: 'Integração com o Datajud não está configurada',
+          });
+        }
+
+        if (error.message.toLowerCase().includes('tempo excedido')) {
+          return res.status(504).json({ error: error.message });
+        }
+
+        return res
+          .status(502)
+          .json({ error: error.message || 'Erro ao consultar movimentações do Datajud' });
+      }
+
+      return res
+        .status(502)
+        .json({ error: 'Erro ao consultar movimentações do Datajud' });
+    }
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

@@ -19,6 +19,8 @@ export interface Processo {
   jurisdicao: string | null;
   advogado_responsavel: string | null;
   data_distribuicao: string | null;
+  datajud_tipo_justica: string | null;
+  datajud_alias: string | null;
   criado_em: string;
   atualizado_em: string;
   cliente?: ProcessoClienteResumo | null;

@@ -45,6 +45,12 @@ import {
   Search,
   Users as UsersIcon,
 } from "lucide-react";
+import {
+  DATAJUD_CATEGORIAS,
+  DATAJUD_TRIBUNAIS_BY_CATEGORIA,
+  getDatajudCategoriaLabel,
+  getDatajudTribunalLabel,
+} from "@/data/datajud";
 
 interface ProcessoCliente {
   id?: number;
@@ -65,7 +71,16 @@ interface Processo {
   assunto: string;
   jurisdicao: string;
   orgaoJulgador: string;
-  movimentacoes: { data: string; descricao: string }[];
+  datajudTipoJustica: string | null;
+  datajudAlias: string | null;
+  datajudTribunal: string | null;
+  movimentacoes: {
+    data: string;
+    descricao: string;
+    codigo?: number | null;
+    nome?: string;
+    dataIso?: string | null;
+  }[];
 }
 
 interface Uf {
@@ -116,7 +131,21 @@ interface ApiProcesso {
   criado_em: string;
   atualizado_em: string;
   cliente?: ApiProcessoCliente | null;
+  datajud_tipo_justica?: string | null;
+  datajud_alias?: string | null;
 }
+
+interface ApiProcessoMovimentacao {
+  codigo?: number | null;
+  nome?: string | null;
+  dataHora?: string | null;
+  descricao?: string | null;
+}
+
+const isApiProcessoMovimentacao = (
+  value: unknown,
+): value is ApiProcessoMovimentacao =>
+  value !== null && typeof value === "object";
 
 type ProcessFormState = {
   numero: string;
@@ -124,6 +153,8 @@ type ProcessFormState = {
   municipio: string;
   orgaoJulgador: string;
   clienteId: string;
+  datajudTipoJustica: string;
+  datajudAlias: string;
 };
 
 const formatProcessNumber = (value: string) => {
@@ -152,6 +183,25 @@ const formatDateToPtBR = (value: string | null | undefined): string => {
   }
 
   return date.toLocaleDateString("pt-BR");
+};
+
+const formatDateTimeToPtBR = (value: string | null | undefined): string => {
+  if (!value) {
+    return "Data não informada";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Data não informada";
+  }
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const normalizeClienteTipo = (value: string | null | undefined): string => {
@@ -192,6 +242,8 @@ const createEmptyProcessForm = (): ProcessFormState => ({
   municipio: "",
   orgaoJulgador: "",
   clienteId: "",
+  datajudTipoJustica: "",
+  datajudAlias: "",
 });
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
@@ -201,6 +253,10 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     processo.jurisdicao ||
     [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
     "Não informado";
+  const rawCategoria = processo.datajud_tipo_justica?.trim() || null;
+  const categoriaLabel = getDatajudCategoriaLabel(rawCategoria);
+  const datajudAlias = processo.datajud_alias?.trim() || null;
+  const datajudTribunal = getDatajudTribunalLabel(datajudAlias);
 
   return {
     id: processo.id,
@@ -221,7 +277,43 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     assunto: processo.assunto?.trim() || "Não informado",
     jurisdicao,
     orgaoJulgador: processo.orgao_julgador?.trim() || "Não informado",
+    datajudTipoJustica: categoriaLabel ?? rawCategoria,
+    datajudAlias,
+    datajudTribunal,
     movimentacoes: [],
+  };
+};
+
+const mapApiMovimentacaoToLocal = (
+  movimentacao: ApiProcessoMovimentacao,
+): Processo["movimentacoes"][number] => {
+  const rawCodigo = movimentacao.codigo;
+  let codigo: number | null = null;
+
+  if (typeof rawCodigo === "number" && Number.isFinite(rawCodigo)) {
+    codigo = rawCodigo;
+  } else if (typeof rawCodigo === "string") {
+    const parsed = Number.parseInt(rawCodigo, 10);
+    codigo = Number.isNaN(parsed) ? null : parsed;
+  }
+
+  const nome =
+    typeof movimentacao.nome === "string" && movimentacao.nome.trim()
+      ? movimentacao.nome.trim()
+      : "Movimentação";
+
+  const descricao =
+    typeof movimentacao.descricao === "string" &&
+    movimentacao.descricao.trim()
+      ? movimentacao.descricao.trim()
+      : nome;
+
+  return {
+    codigo,
+    nome,
+    descricao,
+    data: formatDateTimeToPtBR(movimentacao.dataHora ?? null),
+    dataIso: movimentacao.dataHora ?? null,
   };
 };
 
@@ -271,6 +363,57 @@ export default function Processos() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingProcess, setCreatingProcess] = useState(false);
 
+  const fetchProcessMovimentacoes = useCallback(
+    async (processo: Processo): Promise<Processo["movimentacoes"]> => {
+      if (!processo.datajudAlias) {
+        return [];
+      }
+
+      try {
+        const res = await fetch(
+          getApiUrl(`processos/${processo.id}/movimentacoes`),
+          {
+            headers: { Accept: "application/json" },
+          },
+        );
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error(
+            `Não foi possível interpretar as movimentações do processo ${processo.id}`,
+            error,
+          );
+          return [];
+        }
+
+        const movimentos = Array.isArray(json)
+          ? json.filter(isApiProcessoMovimentacao)
+          : [];
+
+        return movimentos
+          .map(mapApiMovimentacaoToLocal)
+          .sort((a, b) => {
+            const dateA = a.dataIso ? new Date(a.dataIso).getTime() : 0;
+            const dateB = b.dataIso ? new Date(b.dataIso).getTime() : 0;
+            return dateB - dateA;
+          });
+      } catch (error) {
+        console.error(
+          `Erro ao carregar movimentações do processo ${processo.id}`,
+          error,
+        );
+        return [];
+      }
+    },
+    [],
+  );
+
   const statusOptions = useMemo(() => {
     const values = Array.from(
       new Set(
@@ -296,6 +439,15 @@ export default function Processos() {
   }, [processos]);
 
   const totalProcessos = useMemo(() => processos.length, [processos]);
+
+  const availableTribunais = useMemo(() => {
+    if (!processForm.datajudTipoJustica) {
+      return [];
+    }
+
+    const key = processForm.datajudTipoJustica as keyof typeof DATAJUD_TRIBUNAIS_BY_CATEGORIA;
+    return DATAJUD_TRIBUNAIS_BY_CATEGORIA[key] ?? [];
+  }, [processForm.datajudTipoJustica]);
 
   const processosEmAndamento = useMemo(
     () =>
@@ -439,8 +591,17 @@ export default function Processos() {
             ? ((json as { data: ApiProcesso[] }).data)
             : [];
 
-    return data.map(mapApiProcessoToProcesso);
-  }, []);
+    const mapped = data.map(mapApiProcessoToProcesso);
+
+    const movimentacoes = await Promise.all(
+      mapped.map((processo) => fetchProcessMovimentacoes(processo)),
+    );
+
+    return mapped.map((processo, index) => ({
+      ...processo,
+      movimentacoes: movimentacoes[index] ?? [],
+    }));
+  }, [fetchProcessMovimentacoes]);
 
   useEffect(() => {
     let active = true;
@@ -545,7 +706,9 @@ export default function Processos() {
       !processForm.uf ||
       !processForm.municipio ||
       !processForm.orgaoJulgador ||
-      !processForm.clienteId
+      !processForm.clienteId ||
+      !processForm.datajudTipoJustica ||
+      !processForm.datajudAlias
     ) {
       return;
     }
@@ -575,6 +738,8 @@ export default function Processos() {
           municipio: processForm.municipio,
           orgao_julgador: processForm.orgaoJulgador,
           jurisdicao: `${processForm.municipio} - ${processForm.uf}`,
+          datajud_tipo_justica: processForm.datajudTipoJustica,
+          datajud_alias: processForm.datajudAlias,
         }),
       });
 
@@ -600,7 +765,11 @@ export default function Processos() {
       }
 
       const mapped = mapApiProcessoToProcesso(json as ApiProcesso);
-      setProcessos((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
+      const movimentacoes = await fetchProcessMovimentacoes(mapped);
+      setProcessos((prev) => [
+        { ...mapped, movimentacoes },
+        ...prev.filter((p) => p.id !== mapped.id),
+      ]);
       toast({ title: "Processo cadastrado com sucesso" });
       handleDialogOpenChange(false);
     } catch (error) {
@@ -626,6 +795,8 @@ export default function Processos() {
     !processForm.municipio ||
     !processForm.orgaoJulgador ||
     !processForm.clienteId ||
+    !processForm.datajudTipoJustica ||
+    !processForm.datajudAlias ||
     creatingProcess;
 
   const filteredProcessos = useMemo(() => {
@@ -651,6 +822,9 @@ export default function Processos() {
         processo.advogadoResponsavel,
         processo.status,
         processo.tipo,
+        processo.datajudTribunal ?? undefined,
+        processo.datajudTipoJustica ?? undefined,
+        processo.orgaoJulgador,
       ];
 
       const hasTextMatch = searchPool.some((value) => {
@@ -847,6 +1021,14 @@ export default function Processos() {
                       >
                         {processo.tipo}
                       </Badge>
+                      {processo.datajudTipoJustica ? (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-violet-200 bg-violet-500/10 text-violet-600"
+                        >
+                          {processo.datajudTipoJustica}
+                        </Badge>
+                      ) : null}
                     </div>
                     <CardDescription className="flex flex-wrap items-center gap-3 text-sm">
                       <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -921,6 +1103,24 @@ export default function Processos() {
                         <span>{processo.orgaoJulgador}</span>
                       </div>
                     </div>
+                    {processo.datajudTribunal ? (
+                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Tribunal (DataJud)
+                        </p>
+                        <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                          <Archive className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                          <div className="flex flex-col gap-1">
+                            <span>{processo.datajudTribunal}</span>
+                            {processo.datajudAlias ? (
+                              <span className="text-xs text-muted-foreground">
+                                Alias: {processo.datajudAlias}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Classe judicial
@@ -962,9 +1162,13 @@ export default function Processos() {
                           </li>
                         ))}
                       </ul>
+                    ) : processo.datajudAlias ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhuma movimentação foi retornada pela API pública para este processo até o momento.
+                      </p>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        Nenhuma movimentação registrada até o momento.
+                        Informe o tribunal do processo ao cadastrar para carregar as movimentações automaticamente.
                       </p>
                     )}
                   </div>
@@ -1014,6 +1218,66 @@ export default function Processos() {
                     <SelectItem key={cliente.id} value={String(cliente.id)}>
                       {cliente.nome}
                       {cliente.documento ? ` (${cliente.documento})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="process-justica">Tipo de Justiça (DataJud)</Label>
+              <Select
+                value={processForm.datajudTipoJustica}
+                onValueChange={(value) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    datajudTipoJustica: value,
+                    datajudAlias: "",
+                  }))
+                }
+              >
+                <SelectTrigger id="process-justica">
+                  <SelectValue placeholder="Selecione o tipo de justiça" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATAJUD_CATEGORIAS.map((categoria) => (
+                    <SelectItem key={categoria.id} value={categoria.id}>
+                      {categoria.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="process-tribunal">Tribunal (DataJud)</Label>
+              <Select
+                value={processForm.datajudAlias}
+                onValueChange={(value) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    datajudAlias: value,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  id="process-tribunal"
+                  disabled={!processForm.datajudTipoJustica}
+                >
+                  <SelectValue
+                    placeholder={
+                      !processForm.datajudTipoJustica
+                        ? "Selecione o tipo de justiça"
+                        : availableTribunais.length > 0
+                          ? "Selecione o tribunal"
+                          : "Nenhum tribunal disponível"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableTribunais.map((tribunal) => (
+                    <SelectItem key={tribunal.alias} value={tribunal.alias}>
+                      {tribunal.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
