@@ -1,4 +1,5 @@
 const rawEnvApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const isDevEnvironment = Boolean(import.meta.env.DEV);
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
@@ -14,6 +15,13 @@ function stripApiSuffix(url: string): string {
 function resolveFallbackBaseUrl(): string {
   if (rawEnvApiUrl && rawEnvApiUrl.length > 0) {
     return stripApiSuffix(rawEnvApiUrl);
+  }
+
+  if (isDevEnvironment) {
+    // Durante o desenvolvimento o frontend roda em uma porta distinta do backend
+    // (por padrão 5173), portanto precisamos garantir que as requisições sejam
+    // direcionadas ao servidor de API local.
+    return 'http://localhost:3001';
   }
 
   if (typeof window !== 'undefined' && window.location?.origin) {
