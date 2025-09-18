@@ -50,6 +50,12 @@ Para cenários específicos é possível liberar todas as origens definindo `COR
 ## Documentação
 Após iniciar o servidor, acesse [http://localhost:3001/api-docs](http://localhost:3001/api-docs) para visualizar a documentação Swagger.
 
+## Autenticação
+
+Os endpoints `POST /api/auth/login` e `GET /api/auth/me` permitem autenticar usuários e recuperar os dados do usuário logado.
+Defina a variável `AUTH_TOKEN_SECRET` com um valor seguro em produção. Opcionalmente, utilize `AUTH_TOKEN_EXPIRATION` para
+customizar o tempo de expiração (em segundos ou usando sufixos como `15m`, `2h` ou `7d`).
+
 ## Produção
 
 Para gerar o build e executar o servidor em produção:
