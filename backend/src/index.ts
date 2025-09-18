@@ -39,6 +39,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
 import cronJobs from './services/cronJobs';
 import { ensureChatSchema } from './services/chatSchema';
+import { authenticateRequest } from './middlewares/authMiddleware';
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
@@ -94,39 +95,44 @@ app.use((req, res, next) => {
 });
 
 // Rotas
-app.use('/api', areaAtuacaoRoutes);
-app.use('/api', tipoEventoRoutes);
-app.use('/api', tipoProcessoRoutes);
-app.use('/api', tipoDocumentoRoutes);
-app.use('/api', escritorioRoutes);
-app.use('/api', perfilRoutes);
-app.use('/api', planoRoutes);
-app.use('/api', situacaoProcessoRoutes);
-app.use('/api', situacaoClienteRoutes);
-app.use('/api', situacaoPropostaRoutes);
-app.use('/api', etiquetaRoutes);
-app.use('/api', empresaRoutes);
-app.use('/api', usuarioRoutes);
-app.use('/api/v1', usuarioRoutes);
-app.use('/api', clienteRoutes);
-app.use('/api', agendaRoutes);
-app.use('/api', templateRoutes);
-app.use('/api', tagRoutes);
-app.use('/api', documentRoutes);
-app.use('/api', financialRoutes);
-app.use('/api', processoRoutes);
-app.use('/api', fluxoTrabalhoRoutes);
-app.use('/api', uploadRoutes);
-app.use('/api', oportunidadeRoutes);
-app.use('/api', tarefaRoutes);
-app.use('/api', tarefaResponsavelRoutes);
-app.use('/api', clienteDocumentoRoutes);
-app.use('/api', supportRoutes);
-app.use('/api', notificationRoutes);
-app.use('/api', integrationApiKeyRoutes);
-app.use('/api', chatRoutes);
+const protectedApiRouter = express.Router();
+protectedApiRouter.use(authenticateRequest);
+
+protectedApiRouter.use(areaAtuacaoRoutes);
+protectedApiRouter.use(tipoEventoRoutes);
+protectedApiRouter.use(tipoProcessoRoutes);
+protectedApiRouter.use(tipoDocumentoRoutes);
+protectedApiRouter.use(escritorioRoutes);
+protectedApiRouter.use(perfilRoutes);
+protectedApiRouter.use(planoRoutes);
+protectedApiRouter.use(situacaoProcessoRoutes);
+protectedApiRouter.use(situacaoClienteRoutes);
+protectedApiRouter.use(situacaoPropostaRoutes);
+protectedApiRouter.use(etiquetaRoutes);
+protectedApiRouter.use(empresaRoutes);
+protectedApiRouter.use(usuarioRoutes);
+protectedApiRouter.use(clienteRoutes);
+protectedApiRouter.use(agendaRoutes);
+protectedApiRouter.use(templateRoutes);
+protectedApiRouter.use(tagRoutes);
+protectedApiRouter.use(documentRoutes);
+protectedApiRouter.use(financialRoutes);
+protectedApiRouter.use(processoRoutes);
+protectedApiRouter.use(fluxoTrabalhoRoutes);
+protectedApiRouter.use(uploadRoutes);
+protectedApiRouter.use(oportunidadeRoutes);
+protectedApiRouter.use(tarefaRoutes);
+protectedApiRouter.use(tarefaResponsavelRoutes);
+protectedApiRouter.use(clienteDocumentoRoutes);
+protectedApiRouter.use(supportRoutes);
+protectedApiRouter.use(notificationRoutes);
+protectedApiRouter.use(integrationApiKeyRoutes);
+protectedApiRouter.use(chatRoutes);
+
 app.use('/api', wahaWebhookRoutes);
 app.use('/api', authRoutes);
+app.use('/api', protectedApiRouter);
+app.use('/api/v1', authenticateRequest, usuarioRoutes);
 
 // Background jobs
 cronJobs.startProjudiSyncJob();
