@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
 } from "react";
@@ -107,12 +108,112 @@ const parseSituacaoOptions = (data: unknown[]): StatusOption[] => {
   return sortStatusOptions(Array.from(byId.values()));
 };
 
+interface InteractionAttachment {
+  name: string;
+  size: number;
+  mimeType?: string;
+  dataUrl?: string;
+}
+
 interface InteractionEntry {
   id: number;
   comment: string;
-  attachments: { name: string; size: number }[];
+  attachments: InteractionAttachment[];
   createdAt: string;
 }
+
+const sanitizeInteractionEntries = (value: unknown): InteractionEntry[] => {
+  if (!Array.isArray(value)) return [];
+
+  const entries: InteractionEntry[] = [];
+
+  value.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+
+    const rawId = record["id"];
+    const idNumber =
+      typeof rawId === "number"
+        ? rawId
+        : typeof rawId === "string"
+          ? Number.parseInt(rawId, 10)
+          : Number.NaN;
+
+    if (!Number.isFinite(idNumber)) return;
+
+    const rawCreatedAt = record["createdAt"];
+    const createdAt =
+      typeof rawCreatedAt === "string" && rawCreatedAt.trim().length > 0
+        ? rawCreatedAt
+        : new Date(idNumber).toISOString();
+
+    const rawComment = record["comment"];
+    const comment = typeof rawComment === "string" ? rawComment : "";
+
+    const attachmentsValue = record["attachments"];
+    const attachments: InteractionEntry["attachments"] = Array.isArray(
+      attachmentsValue,
+    )
+      ? attachmentsValue.flatMap((attachment) => {
+          if (!attachment || typeof attachment !== "object") return [];
+          const attachmentRecord = attachment as Record<string, unknown>;
+          const rawName = attachmentRecord["name"];
+          const name =
+            typeof rawName === "string" && rawName.trim().length > 0
+              ? rawName.trim()
+              : null;
+
+          if (!name) return [];
+
+          const rawSize = attachmentRecord["size"];
+          const size =
+            typeof rawSize === "number"
+              ? rawSize
+              : typeof rawSize === "string"
+                ? Number.parseInt(rawSize, 10)
+                : Number.NaN;
+
+          const normalizedSize =
+            Number.isFinite(size) && size >= 0 ? size : 0;
+
+          const rawMimeType = attachmentRecord["mimeType"] ?? attachmentRecord["type"];
+          const mimeType =
+            typeof rawMimeType === "string" && rawMimeType.trim().length > 0
+              ? rawMimeType.trim()
+              : undefined;
+
+          const rawDataUrl = attachmentRecord["dataUrl"] ?? attachmentRecord["dataURL"];
+          const trimmedDataUrl =
+            typeof rawDataUrl === "string" && rawDataUrl.trim().length > 0
+              ? rawDataUrl.trim()
+              : null;
+
+          const dataUrl =
+            trimmedDataUrl && trimmedDataUrl.startsWith("data:")
+              ? trimmedDataUrl
+              : undefined;
+
+          return [
+            {
+              name,
+              size: normalizedSize,
+              ...(mimeType ? { mimeType } : {}),
+              ...(dataUrl ? { dataUrl } : {}),
+            },
+          ];
+        })
+      : [];
+
+    entries.push({
+      id: idNumber,
+      comment,
+      attachments,
+      createdAt,
+    });
+  });
+
+  return entries;
+};
 
 interface BillingRecord {
   id: number;
@@ -335,6 +436,12 @@ export default function VisualizarOportunidade() {
     dataFaturamento: new Date().toISOString().slice(0, 10),
     observacoes: "",
   }));
+
+  const interactionStorageKey = useMemo(
+    () => (id ? `opportunity-interactions:${id}` : null),
+    [id],
+  );
+  const skipInteractionPersistenceRef = useRef<string | null>(null);
 
   const patchOpportunity = useCallback(
     (updater: (prev: OpportunityData) => OpportunityData) => {
@@ -1005,28 +1112,125 @@ export default function VisualizarOportunidade() {
     return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   };
 
-  const handleInteractionSubmit = () => {
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === "string" && result.trim().length > 0) {
+          resolve(result);
+        } else {
+          reject(new Error("FileReader returned an empty result"));
+        }
+      };
+      reader.onerror = () => {
+        reject(reader.error ?? new Error("Erro ao ler arquivo"));
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const handleInteractionSubmit = async () => {
     const trimmedComment = commentText.trim();
     if (!trimmedComment && pendingAttachments.length === 0) {
       setSnack({ open: true, message: "Adicione um comentário ou anexo" });
       return;
     }
 
+    let hadAttachmentErrors = false;
+    let attachments: InteractionEntry["attachments"] = [];
+
+    if (pendingAttachments.length > 0) {
+      attachments = await Promise.all(
+        pendingAttachments.map(async (file) => {
+          const mimeType = file.type && file.type.trim().length > 0 ? file.type : undefined;
+          try {
+            const dataUrl = await readFileAsDataUrl(file);
+            const attachment: InteractionAttachment = {
+              name: file.name,
+              size: file.size,
+              ...(mimeType ? { mimeType } : {}),
+              dataUrl,
+            };
+            return attachment;
+          } catch (error) {
+            console.error(error);
+            hadAttachmentErrors = true;
+            const attachment: InteractionAttachment = {
+              name: file.name,
+              size: file.size,
+              ...(mimeType ? { mimeType } : {}),
+            };
+            return attachment;
+          }
+        }),
+      );
+    }
+
     const entry: InteractionEntry = {
       id: Date.now(),
       comment: trimmedComment,
-      attachments: pendingAttachments.map((file) => ({
-        name: file.name,
-        size: file.size,
-      })),
+      attachments,
       createdAt: new Date().toISOString(),
     };
 
     setInteractionHistory((prev) => [entry, ...prev]);
     setPendingAttachments([]);
     setCommentText("");
-    setSnack({ open: true, message: "Comentário registrado" });
+    setSnack({
+      open: true,
+      message: hadAttachmentErrors
+        ? "Comentário registrado, mas alguns anexos não puderam ser processados"
+        : "Comentário registrado",
+    });
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    skipInteractionPersistenceRef.current = interactionStorageKey ?? null;
+
+    if (!interactionStorageKey) {
+      setInteractionHistory([]);
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(interactionStorageKey);
+      if (!stored) {
+        setInteractionHistory([]);
+        return;
+      }
+
+      const parsed = JSON.parse(stored) as unknown;
+      setInteractionHistory(sanitizeInteractionEntries(parsed));
+    } catch (error) {
+      console.error("Falha ao carregar interações locais", error);
+      setInteractionHistory([]);
+    }
+  }, [interactionStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!interactionStorageKey) return;
+
+    if (skipInteractionPersistenceRef.current === interactionStorageKey) {
+      skipInteractionPersistenceRef.current = null;
+      return;
+    }
+
+    try {
+      if (interactionHistory.length === 0) {
+        window.localStorage.removeItem(interactionStorageKey);
+      } else {
+        window.localStorage.setItem(
+          interactionStorageKey,
+          JSON.stringify(interactionHistory),
+        );
+      }
+    } catch (error) {
+      console.error("Falha ao persistir interações locais", error);
+    }
+  }, [interactionHistory, interactionStorageKey]);
 
   // auto-close do snackbar para não ficar cortando o rodapé
   useEffect(() => {
@@ -1999,10 +2203,41 @@ export default function VisualizarOportunidade() {
                                 {entry.attachments.map((file, index) => (
                                   <li
                                     key={`${file.name}-${index}`}
-                                    className="flex items-center justify-between gap-3 rounded border border-dashed border-border/50 bg-background/50 px-3 py-2"
+                                    className="flex flex-wrap items-center justify-between gap-3 rounded border border-dashed border-border/50 bg-background/50 px-3 py-2"
                                   >
-                                    <span className="truncate">{file.name}</span>
-                                    <span className="text-xs">{formatFileSize(file.size)}</span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate font-medium text-foreground">{file.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {formatFileSize(file.size)}
+                                      </p>
+                                    </div>
+                                    {file.dataUrl ? (
+                                      <div className="flex shrink-0 items-center gap-2">
+                                        <Button asChild size="sm" variant="ghost">
+                                          <a
+                                            href={file.dataUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            aria-label={`Abrir anexo ${file.name}`}
+                                          >
+                                            Abrir
+                                          </a>
+                                        </Button>
+                                        <Button asChild size="sm" variant="secondary">
+                                          <a
+                                            href={file.dataUrl}
+                                            download={file.name}
+                                            aria-label={`Baixar anexo ${file.name}`}
+                                          >
+                                            Baixar
+                                          </a>
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs italic text-muted-foreground">
+                                        Conteúdo indisponível
+                                      </span>
+                                    )}
                                   </li>
                                 ))}
                               </ul>
