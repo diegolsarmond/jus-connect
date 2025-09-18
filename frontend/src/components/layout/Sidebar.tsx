@@ -40,22 +40,32 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { getApiBaseUrl } from "@/lib/api";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 interface NavItem {
   name: string;
   href?: string;
   icon?: LucideIcon;
   children?: NavItem[];
+  moduleId?: string;
 }
 
 export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
+  const { user } = useAuth();
+  const allowedModules = useMemo(() => new Set(user?.modulos ?? []), [user?.modulos]);
   const [pipelineMenus, setPipelineMenus] = useState<NavItem[]>([]);
+  const hasPipelineAccess = allowedModules.has("pipeline");
 
   useEffect(() => {
     const fetchMenus = async () => {
+      if (!hasPipelineAccess) {
+        setPipelineMenus([]);
+        return;
+      }
+
       try {
         const apiUrl = getApiBaseUrl();
         const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
@@ -90,78 +100,92 @@ export function Sidebar() {
       }
     };
     fetchMenus();
-  }, []);
+  }, [hasPipelineAccess]);
 
   const navigation = useMemo<NavItem[]>(
     () => [
-      { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Conversas", href: "/conversas", icon: MessageCircle },
-      { name: "Clientes", href: "/clientes", icon: Users },
-      { name: "Pipeline", href: "/pipeline", icon: Target, children: pipelineMenus },
-      { name: "Agenda", href: "/agenda", icon: Calendar },
-      { name: "Tarefas", href: "/tarefas", icon: CheckSquare },
-      { name: "Processos", href: "/processos", icon: Gavel },
-      { name: "Intimações", href: "/intimacoes", icon: BellRing },
-      { name: "Documentos Padrões", href: "/documentos", icon: FileText },
-      { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign },
-      { name: "Relatórios", href: "/relatorios", icon: BarChart3 },
-      { name: "Meu Plano", href: "/meu-plano", icon: CreditCard },
-      { name: "Suporte", href: "/suporte", icon: LifeBuoy },
+      { name: "Dashboard", href: "/", icon: LayoutDashboard, moduleId: "dashboard" },
+      { name: "Conversas", href: "/conversas", icon: MessageCircle, moduleId: "conversas" },
+      { name: "Clientes", href: "/clientes", icon: Users, moduleId: "clientes" },
+      { name: "Pipeline", href: "/pipeline", icon: Target, children: pipelineMenus, moduleId: "pipeline" },
+      { name: "Agenda", href: "/agenda", icon: Calendar, moduleId: "agenda" },
+      { name: "Tarefas", href: "/tarefas", icon: CheckSquare, moduleId: "tarefas" },
+      { name: "Processos", href: "/processos", icon: Gavel, moduleId: "processos" },
+      { name: "Intimações", href: "/intimacoes", icon: BellRing, moduleId: "intimacoes" },
+      { name: "Documentos Padrões", href: "/documentos", icon: FileText, moduleId: "documentos" },
+      { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign, moduleId: "financeiro" },
+      { name: "Relatórios", href: "/relatorios", icon: BarChart3, moduleId: "relatorios" },
+      { name: "Meu Plano", href: "/meu-plano", icon: CreditCard, moduleId: "meu-plano" },
+      { name: "Suporte", href: "/suporte", icon: LifeBuoy, moduleId: "suporte" },
       {
         name: "Configurações",
         href: "/configuracoes",
         icon: Settings,
+        moduleId: "configuracoes",
         children: [
           {
             name: "Usuários",
             href: "/configuracoes/usuarios",
+            moduleId: "configuracoes-usuarios",
           },
           {
             name: "Integrações",
             href: "/configuracoes/integracoes",
+            moduleId: "configuracoes-integracoes",
           },
           {
             name: "Parâmetros",
+            moduleId: "configuracoes-parametros",
             children: [
               {
                 name: "Perfis",
                 href: "/configuracoes/parametros/perfis",
+                moduleId: "configuracoes-parametros-perfis",
               },
               {
                 name: "Setores",
                 href: "/configuracoes/parametros/setores",
+                moduleId: "configuracoes-parametros-escritorios",
               },
               {
                 name: "Área de Atuação",
                 href: "/configuracoes/parametros/area-de-atuacao",
+                moduleId: "configuracoes-parametros-area-atuacao",
               },
               {
                 name: "Situação do Processo",
                 href: "/configuracoes/parametros/situacao-processo",
+                moduleId: "configuracoes-parametros-situacao-processo",
               },
               {
                 name: "Tipo de Processo",
                 href: "/configuracoes/parametros/tipo-processo",
+                moduleId: "configuracoes-parametros-tipo-processo",
               },
               {
                 name: "Tipo de Evento",
                 href: "/configuracoes/parametros/tipo-evento",
+                moduleId: "configuracoes-parametros-tipo-evento",
               },
               {
                 name: "Situação da Proposta",
                 href: "/configuracoes/parametros/situacao-proposta",
+                moduleId: "configuracoes-parametros-situacao-proposta",
               },
               {
                 name: "Etiquetas",
                 href: "/configuracoes/parametros/etiquetas",
+                moduleId: "configuracoes-parametros-etiquetas",
               },
               {
                 name: "Tipos de Documento",
                 href: "/configuracoes/parametros/tipo-documento",
+                moduleId: "configuracoes-parametros-tipos-documento",
               },
               {
                 name: "Fluxo de Trabalho",
                 href: "/configuracoes/parametros/fluxo-de-trabalho",
+                moduleId: "configuracoes-parametros-fluxo-trabalho",
               },
             ],
           },
@@ -170,6 +194,28 @@ export function Sidebar() {
     ],
     [pipelineMenus],
   );
+
+  const filteredNavigation = useMemo<NavItem[]>(() => {
+    const filterItems = (items: NavItem[]): NavItem[] =>
+      items
+        .map((item) => {
+          const filteredChildren = item.children ? filterItems(item.children) : undefined;
+          const hasVisibleChildren = Boolean(filteredChildren && filteredChildren.length > 0);
+          const isAllowed = item.moduleId ? allowedModules.has(item.moduleId) : false;
+
+          if (isAllowed || hasVisibleChildren || (!item.moduleId && !item.children)) {
+            return {
+              ...item,
+              children: filteredChildren,
+            } satisfies NavItem;
+          }
+
+          return null;
+        })
+        .filter((item): item is NavItem => item !== null);
+
+    return filterItems(navigation);
+  }, [navigation, allowedModules]);
 
   const isPathActive = (href?: string) => {
     if (!href) return false;
@@ -231,7 +277,13 @@ export function Sidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent className="px-2">
-        <SidebarMenu>{renderNavItems(navigation)}</SidebarMenu>
+        {filteredNavigation.length > 0 ? (
+          <SidebarMenu>{renderNavItems(filteredNavigation)}</SidebarMenu>
+        ) : (
+          <div className="px-4 py-6 text-sm text-sidebar-foreground/60">
+            Nenhum módulo disponível para o seu perfil.
+          </div>
+        )}
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border px-2 py-4">
         <SidebarMenu>

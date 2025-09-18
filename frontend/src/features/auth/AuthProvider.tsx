@@ -33,6 +33,22 @@ const STORAGE_KEY = "jus-connect:auth";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null => {
+  if (!user) {
+    return null;
+  }
+
+  const candidate = user as AuthUser & { modulos?: unknown };
+  const modules = Array.isArray(candidate.modulos)
+    ? candidate.modulos.filter((module): module is string => typeof module === "string")
+    : [];
+
+  return {
+    ...candidate,
+    modulos: modules,
+  } satisfies AuthUser;
+};
+
 const readStoredAuth = (): StoredAuthData | null => {
   if (typeof window === "undefined") {
     return null;
@@ -49,7 +65,12 @@ const readStoredAuth = (): StoredAuthData | null => {
       return null;
     }
 
-    return parsed;
+    const sanitizedUser = sanitizeAuthUser(parsed.user ?? null) ?? undefined;
+
+    return {
+      ...parsed,
+      user: sanitizedUser,
+    };
   } catch (error) {
     console.warn("Failed to parse stored auth data", error);
     return null;
@@ -66,7 +87,8 @@ const writeStoredAuth = (data: StoredAuthData | null) => {
     return;
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  const user = sanitizeAuthUser(data.user ?? null) ?? undefined;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, user }));
 };
 
 const shouldAttachAuthHeader = (requestUrl: string, apiBaseUrl: string): boolean => {

@@ -1,6 +1,14 @@
 import { getApiUrl } from "@/lib/api";
 import type { AuthUser, LoginCredentials, LoginResponse } from "./types";
 
+const parseModules = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+};
+
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
@@ -40,7 +48,14 @@ export const loginRequest = async (
     throw new Error("Resposta de autenticação inválida.");
   }
 
-  return data;
+  return {
+    token: data.token,
+    expiresIn: data.expiresIn,
+    user: {
+      ...data.user,
+      modulos: parseModules((data.user as AuthUser & { modulos?: unknown }).modulos),
+    },
+  };
 };
 
 export const fetchCurrentUser = async (): Promise<AuthUser> => {
@@ -54,10 +69,13 @@ export const fetchCurrentUser = async (): Promise<AuthUser> => {
     throw new Error(await parseErrorMessage(response));
   }
 
-  const data = (await response.json()) as AuthUser;
+  const data = (await response.json()) as AuthUser & { modulos?: unknown };
   if (typeof data?.id !== "number") {
     throw new Error("Não foi possível carregar os dados do usuário.");
   }
 
-  return data;
+  return {
+    ...data,
+    modulos: parseModules(data.modulos),
+  } satisfies AuthUser;
 };

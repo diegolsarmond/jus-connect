@@ -4,6 +4,7 @@ export interface AuthUser {
   email: string;
   perfil: number | null;
   status?: boolean | null;
+  modulos: string[];
 }
 
 export interface LoginCredentials {

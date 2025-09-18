@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Router } from 'express';
 import { AddressInfo } from 'net';
 import path from 'path';
 import { existsSync } from 'fs';
@@ -41,6 +41,7 @@ import swaggerOptions from './swagger';
 import cronJobs from './services/cronJobs';
 import { ensureChatSchema } from './services/chatSchema';
 import { authenticateRequest } from './middlewares/authMiddleware';
+import { authorizeModules } from './middlewares/moduleAuthorization';
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
@@ -98,36 +99,72 @@ app.use((req, res, next) => {
 // Rotas
 const protectedApiRouter = express.Router();
 protectedApiRouter.use(authenticateRequest);
-protectedApiRouter.use(areaAtuacaoRoutes);
-protectedApiRouter.use(tipoEventoRoutes);
-protectedApiRouter.use(tipoProcessoRoutes);
-protectedApiRouter.use(tipoDocumentoRoutes);
-protectedApiRouter.use(escritorioRoutes);
-protectedApiRouter.use(perfilRoutes);
-protectedApiRouter.use(planoRoutes);
-protectedApiRouter.use(situacaoProcessoRoutes);
-protectedApiRouter.use(situacaoClienteRoutes);
-protectedApiRouter.use(situacaoPropostaRoutes);
-protectedApiRouter.use(etiquetaRoutes);
-protectedApiRouter.use(empresaRoutes);
-protectedApiRouter.use(usuarioRoutes);
-protectedApiRouter.use(clienteRoutes);
-protectedApiRouter.use(agendaRoutes);
-protectedApiRouter.use(templateRoutes);
-protectedApiRouter.use(tagRoutes);
-protectedApiRouter.use(documentRoutes);
-protectedApiRouter.use(financialRoutes);
-protectedApiRouter.use(processoRoutes);
-protectedApiRouter.use(fluxoTrabalhoRoutes);
-protectedApiRouter.use(uploadRoutes);
-protectedApiRouter.use(oportunidadeRoutes);
-protectedApiRouter.use(tarefaRoutes);
-protectedApiRouter.use(tarefaResponsavelRoutes);
-protectedApiRouter.use(clienteDocumentoRoutes);
-protectedApiRouter.use(supportRoutes);
-protectedApiRouter.use(notificationRoutes);
-protectedApiRouter.use(integrationApiKeyRoutes);
-protectedApiRouter.use(chatRoutes);
+
+const registerModuleRoutes = (modules: string | string[], router: Router) => {
+  protectedApiRouter.use(authorizeModules(modules), router);
+};
+
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-area-atuacao'],
+  areaAtuacaoRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-tipo-evento'],
+  tipoEventoRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-tipo-processo'],
+  tipoProcessoRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-tipos-documento'],
+  tipoDocumentoRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-escritorios'],
+  escritorioRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-perfis'],
+  perfilRoutes
+);
+registerModuleRoutes('configuracoes', planoRoutes);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-situacao-processo'],
+  situacaoProcessoRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-situacao-cliente'],
+  situacaoClienteRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-situacao-proposta'],
+  situacaoPropostaRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-etiquetas'],
+  etiquetaRoutes
+);
+registerModuleRoutes('configuracoes', empresaRoutes);
+registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);
+registerModuleRoutes('clientes', clienteRoutes);
+registerModuleRoutes('agenda', agendaRoutes);
+registerModuleRoutes('documentos', templateRoutes);
+registerModuleRoutes('documentos', tagRoutes);
+registerModuleRoutes('documentos', documentRoutes);
+registerModuleRoutes('financeiro', financialRoutes);
+registerModuleRoutes('processos', processoRoutes);
+registerModuleRoutes('pipeline', fluxoTrabalhoRoutes);
+registerModuleRoutes('documentos', uploadRoutes);
+registerModuleRoutes('pipeline', oportunidadeRoutes);
+registerModuleRoutes('pipeline', oportunidadeDocumentoRoutes);
+registerModuleRoutes('tarefas', tarefaRoutes);
+registerModuleRoutes('tarefas', tarefaResponsavelRoutes);
+registerModuleRoutes(['clientes', 'documentos'], clienteDocumentoRoutes);
+registerModuleRoutes('suporte', supportRoutes);
+registerModuleRoutes('intimacoes', notificationRoutes);
+registerModuleRoutes('configuracoes-integracoes', integrationApiKeyRoutes);
+registerModuleRoutes('conversas', chatRoutes);
 app.use('/api', wahaWebhookRoutes);
 app.use('/api', authRoutes);
 app.use('/api', protectedApiRouter);
