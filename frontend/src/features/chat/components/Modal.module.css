@@ -18,6 +18,8 @@
   max-width: min(640px, 100%);
   width: 100%;
   outline: none;
+  max-height: min(92vh, 720px);
+  overflow-y: auto;
 }
 
 @media (max-width: 768px) {

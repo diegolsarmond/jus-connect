@@ -30,6 +30,7 @@ import type {
 import { ChatInput } from "./ChatInput";
 import { MessageViewport } from "./MessageViewport";
 import styles from "./ChatWindow.module.css";
+import { DeviceLinkContent } from "./DeviceLinkModal";
 import { fetchChatResponsibles, fetchChatTags, type ChatResponsibleOption } from "../services/chatApi";
 
 const CLIENT_SUGGESTIONS = [
@@ -416,26 +417,19 @@ export const ChatWindow = ({
     });
   };
 
-  const placeholderContent = useMemo(
-    () => (
-      <div className={styles.placeholder}>
-        <div>
-          <h3>Selecione uma conversa</h3>
-          <p>
-            Utilize a barra lateral para escolher um contato, iniciar um novo chat ou pesquisar processos.
-            Os atalhos Ctrl+K e Ctrl+N aceleram sua navegação.
-          </p>
-        </div>
-      </div>
-    ),
-    [],
-  );
-
   if (!conversation) {
     return (
       <div className={styles.wrapper}>
         <div className={styles.mainColumn}>
-          <div className={styles.viewportWrapper}>{placeholderContent}</div>
+          <div className={styles.viewportWrapper}>
+            <div className={styles.deviceLinkPlaceholder}>
+              <DeviceLinkContent
+                isActive
+                layout="inline"
+                className={styles.deviceLinkContent}
+              />
+            </div>
+          </div>
         </div>
       </div>
     );
