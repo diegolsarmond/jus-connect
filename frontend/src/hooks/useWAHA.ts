@@ -19,6 +19,26 @@ const pickFirstString = (...values: unknown[]): string | undefined => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+const getLastActivityTimestamp = (chat: ChatOverview): number => {
+  const timestamp = chat.lastMessage?.timestamp;
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+    return timestamp;
+  }
+  return 0;
+};
+
+const sortChatsByRecency = (chatList: ChatOverview[]): ChatOverview[] =>
+  [...chatList].sort((a, b) => {
+    const diff = getLastActivityTimestamp(b) - getLastActivityTimestamp(a);
+    if (diff !== 0) {
+      return diff;
+    }
+
+    const nameA = (a.name ?? '').toLowerCase();
+    const nameB = (b.name ?? '').toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
 const readStringProperty = (
   record: Record<string, unknown> | undefined,
   key: string,
@@ -128,10 +148,12 @@ export const useWAHA = () => {
           return;
         }
         setChats(
-          enriched.map((chat) => ({
-            ...chat,
-            name: chat.name ?? WAHAService.extractPhoneFromWhatsAppId(chat.id),
-          })),
+          sortChatsByRecency(
+            enriched.map((chat) => ({
+              ...chat,
+              name: chat.name ?? WAHAService.extractPhoneFromWhatsAppId(chat.id),
+            })),
+          ),
         );
       }
     } catch (err) {
@@ -212,19 +234,23 @@ export const useWAHA = () => {
         }));
 
         // Update the last message in the chat overview
-        setChats(prev => prev.map(chat =>
-          chat.id === chatId
-            ? {
-                ...chat,
-                lastMessage: {
-                  body: text,
-                  timestamp: response.data!.timestamp,
-                  fromMe: true,
-                  type: 'text'
-                }
-              }
-            : chat
-        ));
+        setChats(prev =>
+          sortChatsByRecency(
+            prev.map(chat =>
+              chat.id === chatId
+                ? {
+                    ...chat,
+                    lastMessage: {
+                      body: text,
+                      timestamp: response.data!.timestamp,
+                      fromMe: true,
+                      type: 'text'
+                    }
+                  }
+                : chat
+            ),
+          ),
+        );
 
         toast({
           title: 'Message sent',
@@ -261,9 +287,13 @@ export const useWAHA = () => {
 
       // Update unread count in local state
       if (isMountedRef.current) {
-        setChats(prev => prev.map(chat =>
-          chat.id === chatId ? { ...chat, unreadCount: 0 } : chat
-        ));
+        setChats(prev =>
+          sortChatsByRecency(
+            prev.map(chat =>
+              chat.id === chatId ? { ...chat, unreadCount: 0 } : chat
+            ),
+          ),
+        );
       }
     } catch (err) {
       console.error('Failed to mark as read:', err);
@@ -295,20 +325,24 @@ export const useWAHA = () => {
     }));
 
     // Update chat overview
-    setChats(prev => prev.map(chat =>
-      chat.id === message.chatId
-        ? {
-            ...chat,
-            lastMessage: {
-              body: message.body || '',
-              timestamp: message.timestamp,
-              fromMe: message.fromMe,
-              type: message.type
-            },
-            unreadCount: message.fromMe ? chat.unreadCount : (chat.unreadCount || 0) + 1
-          }
-        : chat
-    ));
+    setChats(prev =>
+      sortChatsByRecency(
+        prev.map(chat =>
+          chat.id === message.chatId
+            ? {
+                ...chat,
+                lastMessage: {
+                  body: message.body || '',
+                  timestamp: message.timestamp,
+                  fromMe: message.fromMe,
+                  type: message.type
+                },
+                unreadCount: message.fromMe ? chat.unreadCount : (chat.unreadCount || 0) + 1
+              }
+            : chat
+        ),
+      ),
+    );
   }, []);
 
   // Initialize
