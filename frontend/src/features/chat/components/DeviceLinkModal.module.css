@@ -13,6 +13,208 @@
   height: 100%;
 }
 
+.statusCard {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-card);
+}
+
+.statusHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sessionLabel {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.sessionName {
+  color: hsl(var(--foreground));
+  font-weight: 700;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.statusBadgeConnected {
+  background: hsl(var(--success-light));
+  color: hsl(var(--success));
+}
+
+.statusBadgePending {
+  background: hsl(var(--warning-light));
+  color: hsl(var(--warning));
+}
+
+.statusBadgeError {
+  background: hsl(var(--destructive) / 0.15);
+  color: hsl(var(--destructive));
+}
+
+.sessionActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.sessionWarning {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.85rem;
+  background: hsl(var(--warning-light));
+  color: hsl(var(--warning));
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.sessionWarning strong {
+  font-weight: 700;
+  color: inherit;
+}
+
+.sessionFeedback {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9rem;
+}
+
+.statusSpinner,
+.buttonSpinner {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 2px solid hsl(var(--muted-foreground) / 0.2);
+  border-top-color: hsl(var(--primary));
+  animation: spin 0.8s linear infinite;
+}
+
+.buttonSpinner {
+  border-color: currentColor;
+  border-top-color: transparent;
+  border-right-color: transparent;
+}
+
+.statusDescription {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.6;
+}
+
+.sessionError {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.85rem;
+  background: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.sessionMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.sessionMetaHighlight {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.qrSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px dashed hsl(var(--border));
+  background: hsl(var(--muted));
+}
+
+.qrHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.qrHeader h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.qrActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.qrContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 220px;
+  text-align: center;
+}
+
+.qrImage {
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  box-shadow: var(--shadow-card);
+}
+
+.qrPlaceholder {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+
+.refreshIconSpinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .integrationHeader h2 {
   margin: 0 0 0.5rem;
   font-size: 1.35rem;
@@ -139,6 +341,27 @@
   .instructions {
     order: 1;
     text-align: center;
+  }
+
+  .sessionActions {
+    justify-content: center;
+  }
+
+  .statusHeader {
+    align-items: center;
+  }
+
+  .sessionMetaRow {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .qrHeader {
+    justify-content: center;
+  }
+
+  .qrActions {
+    justify-content: center;
   }
 
   .stepItem {

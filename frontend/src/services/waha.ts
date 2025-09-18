@@ -329,6 +329,10 @@ class WAHAService {
     return this.configPromise;
   }
 
+  async getResolvedConfig(): Promise<WAHAConfig> {
+    return this.loadConfig();
+  }
+
   private async fetchRemoteConfig(): Promise<WAHAConfig> {
     const endpoint = getApiUrl(`integrations/api-keys/${WAHA_INTEGRATION_ID}`);
     const response = await fetch(endpoint, {
