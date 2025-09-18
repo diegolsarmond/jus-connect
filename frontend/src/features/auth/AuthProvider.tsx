@@ -10,7 +10,7 @@ import {
 } from "react";
 import { getApiBaseUrl } from "@/lib/api";
 import { LAST_ACTIVITY_KEY } from "@/hooks/useAutoLogout";
-import { fetchCurrentUser, loginRequest } from "./api";
+import { ApiError, fetchCurrentUser, loginRequest } from "./api";
 import type { AuthUser, LoginCredentials, LoginResponse } from "./types";
 
 interface StoredAuthData {
@@ -163,8 +163,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(currentUser);
         writeStoredAuth({ token: stored.token, user: currentUser, timestamp: Date.now() });
       } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          console.warn("Stored authentication token is no longer valid", error);
+          handleLogout();
+          return;
+        }
+
         console.warn("Failed to validate stored token", error);
-        handleLogout();
       } finally {
         setIsLoading(false);
       }
