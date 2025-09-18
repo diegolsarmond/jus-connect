@@ -49,6 +49,7 @@ const formSchema = z.object({
   etapa: z.string().optional(),
   prazo_proximo: z.string().optional(),
   status: z.string().optional(),
+  solicitante_id: z.string().optional(),
   solicitante_nome: z.string().optional(),
   solicitante_cpf_cnpj: z.string().optional(),
   solicitante_email: z.string().optional(),
@@ -120,6 +121,7 @@ export default function NovaOportunidade() {
       etapa: "",
       prazo_proximo: "",
       status: "",
+      solicitante_id: "",
       solicitante_nome: "",
       solicitante_cpf_cnpj: "",
       solicitante_email: "",
@@ -294,6 +296,11 @@ export default function NovaOportunidade() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       const isProcessoDistribuido = values.processo_distribuido === "sim";
+      const solicitanteIdRaw = values.solicitante_id?.trim();
+      const solicitanteId =
+        solicitanteIdRaw && !Number.isNaN(Number(solicitanteIdRaw))
+          ? Number(solicitanteIdRaw)
+          : null;
 
       const payload = {
         tipo_processo_id: Number(values.tipo_processo),
@@ -313,7 +320,7 @@ export default function NovaOportunidade() {
         etapa_id: values.etapa ? Number(values.etapa) : null,
         prazo_proximo: values.prazo_proximo || null,
         status_id: values.status ? Number(values.status) : null,
-        solicitante_id: null,
+        solicitante_id: solicitanteId,
         valor_causa: parseCurrency(values.valor_causa || ""),
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
@@ -347,12 +354,36 @@ export default function NovaOportunidade() {
   };
 
   const handleSelectClient = (name: string) => {
-    const client = clients.find((c) => c.name === name);
+    const normalizedName = name.trim();
+    const client = clients.find((c) => c.name === normalizedName);
     if (client) {
+      form.setValue("solicitante_id", client.id, {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
       form.setValue("solicitante_cpf_cnpj", client.cpf_cnpj || "");
       form.setValue("solicitante_email", client.email || "");
       form.setValue("solicitante_telefone", client.telefone || "");
       form.setValue("cliente_tipo", client.tipo || "");
+      form.setValue("solicitante_nome", client.name, {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+    } else {
+      form.setValue("solicitante_id", "", {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      if (normalizedName.length === 0) {
+        form.setValue("solicitante_nome", "", {
+          shouldDirty: true,
+          shouldTouch: true,
+        });
+      }
+      form.setValue("solicitante_cpf_cnpj", "");
+      form.setValue("solicitante_email", "");
+      form.setValue("solicitante_telefone", "");
+      form.setValue("cliente_tipo", "");
     }
   };
 
