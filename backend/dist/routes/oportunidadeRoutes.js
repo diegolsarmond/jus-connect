@@ -174,6 +174,163 @@ router.get('/oportunidades/:id', oportunidadeController_1.getOportunidadeById);
 router.get('/oportunidades/:id/envolvidos', oportunidadeController_1.listEnvolvidosByOportunidade);
 /**
  * @swagger
+ * /api/oportunidades/{id}/parcelas:
+ *   get:
+ *     summary: Lista as parcelas registradas da oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Lista de parcelas da oportunidade
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   oportunidade_id:
+ *                     type: integer
+ *                   numero_parcela:
+ *                     type: integer
+ *                   valor:
+ *                     type: number
+ *                   valor_pago:
+ *                     type: number
+ *                   status:
+ *                     type: string
+ *                   data_prevista:
+ *                     type: string
+ *                     format: date
+ *                   quitado_em:
+ *                     type: string
+ *                     format: date-time
+ *                   faturamento_id:
+ *                     type: integer
+ *                   criado_em:
+ *                     type: string
+ *                     format: date-time
+ *                   atualizado_em:
+ *                     type: string
+ *                     format: date-time
+ */
+router.get('/oportunidades/:id/parcelas', oportunidadeController_1.listOportunidadeParcelas);
+/**
+ * @swagger
+ * /api/oportunidades/{id}/faturamentos:
+ *   get:
+ *     summary: Lista os faturamentos registrados para uma oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Lista de faturamentos registrados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   oportunidade_id:
+ *                     type: integer
+ *                   forma_pagamento:
+ *                     type: string
+ *                   condicao_pagamento:
+ *                     type: string
+ *                   valor:
+ *                     type: number
+ *                   parcelas:
+ *                     type: integer
+ *                   observacoes:
+ *                     type: string
+ *                   data_faturamento:
+ *                     type: string
+ *                     format: date-time
+ *                   criado_em:
+ *                     type: string
+ *                     format: date-time
+ */
+router.get('/oportunidades/:id/faturamentos', oportunidadeController_1.listOportunidadeFaturamentos);
+/**
+ * @swagger
+ * /api/oportunidades/{id}/faturamentos:
+ *   post:
+ *     summary: Registra um faturamento para a oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               forma_pagamento:
+ *                 type: string
+ *               condicao_pagamento:
+ *                 type: string
+ *                 enum: ["À vista", "Parcelado"]
+ *               valor:
+ *                 type: number
+ *               parcelas:
+ *                 type: integer
+ *               observacoes:
+ *                 type: string
+ *               data_faturamento:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       201:
+ *         description: Faturamento registrado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 oportunidade_id:
+ *                   type: integer
+ *                 forma_pagamento:
+ *                   type: string
+ *                 condicao_pagamento:
+ *                   type: string
+ *                 valor:
+ *                   type: number
+ *                 parcelas:
+ *                   type: integer
+ *                 observacoes:
+ *                   type: string
+ *                 data_faturamento:
+ *                   type: string
+ *                   format: date-time
+ *                 criado_em:
+ *                   type: string
+ *                   format: date-time
+ */
+router.post('/oportunidades/:id/faturamentos', oportunidadeController_1.createOportunidadeFaturamento);
+/**
+ * @swagger
  * /api/oportunidades:
  *   post:
  *     summary: Cria uma nova oportunidade

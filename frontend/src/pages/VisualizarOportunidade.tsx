@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,20 @@ interface BillingRecord {
   criado_em?: string | null;
 }
 
+interface InstallmentRecord {
+  id: number;
+  oportunidade_id: number;
+  numero_parcela: number;
+  valor: number | string;
+  valor_pago?: number | string | null;
+  status?: string | null;
+  data_prevista?: string | null;
+  quitado_em?: string | null;
+  faturamento_id?: number | null;
+  criado_em?: string | null;
+  atualizado_em?: string | null;
+}
+
 const BILLING_PAYMENT_OPTIONS = [
   "Cartão de crédito",
   "Cartão de débito",
@@ -170,6 +184,39 @@ const mapBillingRecords = (data: unknown): BillingRecord[] =>
     ];
   });
 
+const mapInstallmentRecords = (data: unknown): InstallmentRecord[] =>
+  coerceArray(data).flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const idRaw = record["id"];
+    const numeroRaw = record["numero_parcela"];
+    if (idRaw === undefined || numeroRaw === undefined) return [];
+    const id = Number(idRaw);
+    const numero = Number(numeroRaw);
+    if (Number.isNaN(id) || Number.isNaN(numero)) return [];
+    const oportunidadeIdRaw = record["oportunidade_id"];
+    const oportunidadeId =
+      oportunidadeIdRaw === undefined || oportunidadeIdRaw === null
+        ? id
+        : Number(oportunidadeIdRaw);
+
+    return [
+      {
+        id,
+        oportunidade_id: Number.isNaN(oportunidadeId) ? id : oportunidadeId,
+        numero_parcela: numero,
+        valor: record["valor"] as number | string,
+        valor_pago: record["valor_pago"] as number | string | null | undefined,
+        status: typeof record["status"] === "string" ? record["status"] : null,
+        data_prevista: record["data_prevista"] as string | null | undefined,
+        quitado_em: record["quitado_em"] as string | null | undefined,
+        faturamento_id: record["faturamento_id"] as number | null | undefined,
+        criado_em: record["criado_em"] as string | null | undefined,
+        atualizado_em: record["atualizado_em"] as string | null | undefined,
+      },
+    ];
+  });
+
 const PREFERRED_ORDER = [
   "numero_processo_cnj",
   "numero_protocolo",
@@ -237,6 +284,7 @@ export default function VisualizarOportunidade() {
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [commentText, setCommentText] = useState("");
   const [interactionHistory, setInteractionHistory] = useState<InteractionEntry[]>([]);
+  const [installments, setInstallments] = useState<InstallmentRecord[]>([]);
   const [billingHistory, setBillingHistory] = useState<BillingRecord[]>([]);
   const [billingDialogOpen, setBillingDialogOpen] = useState(false);
   const [billingSubmitting, setBillingSubmitting] = useState(false);
@@ -381,6 +429,34 @@ export default function VisualizarOportunidade() {
       cancelled = true;
     };
   }, [id, apiUrl]);
+
+  const fetchInstallments = useCallback(async (): Promise<InstallmentRecord[]> => {
+    if (!id) return [];
+    const res = await fetch(`${apiUrl}/api/oportunidades/${id}/parcelas`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return mapInstallmentRecords(data).sort(
+      (a, b) => a.numero_parcela - b.numero_parcela,
+    );
+  }, [apiUrl, id]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    fetchInstallments()
+      .then((records) => {
+        if (!cancelled) setInstallments(records);
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) setInstallments([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, fetchInstallments]);
 
   useEffect(() => {
     if (!id) return;
@@ -693,6 +769,14 @@ export default function VisualizarOportunidade() {
     return null;
   };
 
+  const formatNumberForInput = useCallback((value: number | null) => {
+    if (value === null || !Number.isFinite(value)) return "";
+    return value.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }, []);
+
   // lista de chaves que podem ser copiadas (removi valor_causa e valor_honorarios conforme pedido)
   const shouldShowCopy = (key: string) =>
     [
@@ -721,6 +805,40 @@ export default function VisualizarOportunidade() {
     }
     return ordered;
   }, [opportunity]);
+
+  const sortedInstallments = useMemo(() => {
+    if (installments.length === 0) return [] as InstallmentRecord[];
+    return [...installments].sort((a, b) => a.numero_parcela - b.numero_parcela);
+  }, [installments]);
+
+  const pendingInstallments = useMemo(() => {
+    if (sortedInstallments.length === 0) return [] as InstallmentRecord[];
+    return sortedInstallments.filter((installment) => {
+      const statusText =
+        typeof installment.status === "string" ? installment.status.toLowerCase() : "";
+      return statusText !== "quitado" && statusText !== "quitada";
+    });
+  }, [sortedInstallments]);
+
+  const calculateInstallmentTotal = useCallback(
+    (count: number): number | null => {
+      if (!Number.isFinite(count) || count <= 0) return null;
+      if (pendingInstallments.length === 0 || count > pendingInstallments.length) {
+        return null;
+      }
+      let total = 0;
+      for (let index = 0; index < count; index += 1) {
+        const installment = pendingInstallments[index];
+        const value = installment ? parseToNumber(installment.valor) : null;
+        if (value === null) {
+          return null;
+        }
+        total += value;
+      }
+      return total;
+    },
+    [pendingInstallments],
+  );
 
   // seções conforme print fornecido
   const sectionsDef: { key: string; label: string; fields: string[] }[] = [
@@ -876,21 +994,40 @@ export default function VisualizarOportunidade() {
         : undefined;
     const honorarios = parseToNumber(opportunity?.valor_honorarios);
     const parcelasRegistradas = parseToNumber(opportunity?.qtde_parcelas);
+    const pendingCount = pendingInstallments.length;
     const defaultCondition: BillingCondition =
-      parcelasRegistradas && parcelasRegistradas > 1 ? "Parcelado" : "À vista";
+      pendingCount > 1 || (parcelasRegistradas && parcelasRegistradas > 1)
+        ? "Parcelado"
+        : "À vista";
+
+    const parcelasBase =
+      defaultCondition === "Parcelado"
+        ? 1
+        : pendingCount > 0
+          ? pendingCount
+          : parcelasRegistradas && parcelasRegistradas > 0
+            ? Math.trunc(parcelasRegistradas)
+            : 1;
+
+    const parcelasParaValor = Math.max(parcelasBase, 1);
+
+    const computedTotal =
+      defaultCondition === "Parcelado"
+        ? calculateInstallmentTotal(parcelasParaValor) ??
+          (honorarios !== null && parcelasRegistradas && parcelasRegistradas > 0
+            ? (honorarios / Math.max(Math.trunc(parcelasRegistradas), 1)) * parcelasParaValor
+            : null)
+        : pendingCount > 0
+          ? calculateInstallmentTotal(parcelasParaValor)
+          : honorarios;
 
     setBillingForm({
       formaPagamento: matchedOption ?? (registeredForma ? "Outro" : ""),
       formaPagamentoDescricao:
         matchedOption || registeredForma.length === 0 ? "" : registeredForma,
       condicaoPagamento: defaultCondition,
-      parcelas:
-        defaultCondition === "Parcelado"
-          ? parcelasRegistradas && parcelasRegistradas > 1
-            ? String(Math.trunc(parcelasRegistradas))
-            : "2"
-          : "1",
-      valor: honorarios !== null ? honorarios.toFixed(2) : "",
+      parcelas: defaultCondition === "Parcelado" ? String(parcelasParaValor) : "1",
+      valor: formatNumberForInput(computedTotal ?? null),
       dataFaturamento: new Date().toISOString().slice(0, 10),
       observacoes: "",
     });
@@ -900,6 +1037,9 @@ export default function VisualizarOportunidade() {
 
   const handleBillingConfirm = async () => {
     if (!id) return;
+
+    const honorariosRegistrados = parseToNumber(opportunity?.valor_honorarios);
+    const totalParcelasRegistradas = parseToNumber(opportunity?.qtde_parcelas);
 
     const formaSelecionada =
       billingForm.formaPagamento === "Outro"
@@ -920,7 +1060,7 @@ export default function VisualizarOportunidade() {
     }
 
     const valorNormalizado = billingForm.valor.trim();
-    const valorNumero =
+    let valorNumero =
       valorNormalizado.length > 0
         ? Number(valorNormalizado.replace(/\./g, "").replace(",", "."))
         : null;
@@ -941,11 +1081,52 @@ export default function VisualizarOportunidade() {
       return;
     }
 
+    if (
+      billingForm.condicaoPagamento === "Parcelado" &&
+      parcelasValor &&
+      pendingInstallments.length > 0 &&
+      parcelasValor > pendingInstallments.length
+    ) {
+      setBillingError("Quantidade de parcelas excede as parcelas pendentes disponíveis.");
+      return;
+    }
+
+    if (billingForm.condicaoPagamento === "Parcelado") {
+      if (parcelasValor) {
+        const calculated = calculateInstallmentTotal(parcelasValor);
+        if (calculated !== null) {
+          valorNumero = calculated;
+        } else if (
+          valorNumero === null &&
+          honorariosRegistrados !== null &&
+          totalParcelasRegistradas &&
+          totalParcelasRegistradas > 0
+        ) {
+          valorNumero =
+            (honorariosRegistrados /
+              Math.max(Math.trunc(totalParcelasRegistradas), 1)) * parcelasValor;
+        }
+      }
+    } else {
+      const pendingCount = pendingInstallments.length;
+      const calculated = pendingCount > 0 ? calculateInstallmentTotal(pendingCount) : null;
+      if (calculated !== null) {
+        valorNumero = calculated;
+      } else if (valorNumero === null) {
+        valorNumero = honorariosRegistrados;
+      }
+    }
+
     const payload = {
       forma_pagamento: formaSelecionada,
       condicao_pagamento: billingForm.condicaoPagamento,
       valor: valorNumero ?? undefined,
-      parcelas: parcelasValor ?? undefined,
+      parcelas:
+        billingForm.condicaoPagamento === "Parcelado"
+          ? parcelasValor ?? undefined
+          : pendingInstallments.length > 0
+            ? pendingInstallments.length
+            : undefined,
       observacoes:
         billingForm.observacoes.trim().length > 0
           ? billingForm.observacoes.trim()
@@ -973,6 +1154,12 @@ export default function VisualizarOportunidade() {
       if (normalized.length > 0) {
         setBillingHistory((prev) => [normalized[0], ...prev]);
       }
+      try {
+        const updatedInstallments = await fetchInstallments();
+        setInstallments(updatedInstallments);
+      } catch (installmentError) {
+        console.error(installmentError);
+      }
       setSnack({ open: true, message: "Faturamento registrado com sucesso" });
       setBillingDialogOpen(false);
     } catch (error) {
@@ -982,6 +1169,57 @@ export default function VisualizarOportunidade() {
       setBillingSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (!billingDialogOpen) return;
+
+    if (billingForm.condicaoPagamento === "Parcelado") {
+      const parcelasCount = Number.parseInt(billingForm.parcelas, 10);
+      if (!Number.isFinite(parcelasCount) || parcelasCount <= 0) {
+        return;
+      }
+      const computed =
+        calculateInstallmentTotal(parcelasCount) ??
+        (() => {
+          const honorariosValue = parseToNumber(opportunity?.valor_honorarios);
+          const totalParcelas = parseToNumber(opportunity?.qtde_parcelas);
+          if (
+            honorariosValue !== null &&
+            totalParcelas !== null &&
+            totalParcelas > 0
+          ) {
+            return (
+              (honorariosValue / Math.max(Math.trunc(totalParcelas), 1)) * parcelasCount
+            );
+          }
+          return null;
+        })();
+
+      if (computed !== null) {
+        const formatted = formatNumberForInput(computed);
+        setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
+      }
+    } else if (billingForm.condicaoPagamento === "À vista") {
+      const pendingCount = pendingInstallments.length;
+      const computed =
+        pendingCount > 0
+          ? calculateInstallmentTotal(pendingCount)
+          : parseToNumber(opportunity?.valor_honorarios);
+      if (computed !== null) {
+        const formatted = formatNumberForInput(computed);
+        setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
+      }
+    }
+  }, [
+    billingDialogOpen,
+    billingForm.condicaoPagamento,
+    billingForm.parcelas,
+    calculateInstallmentTotal,
+    formatNumberForInput,
+    pendingInstallments.length,
+    opportunity?.valor_honorarios,
+    opportunity?.qtde_parcelas,
+  ]);
 
   const handleStatusChange = async (value: string) => {
     if (!id || !opportunity) return;
@@ -1417,6 +1655,51 @@ export default function VisualizarOportunidade() {
                   </Button>
                 </div>
 
+                {sortedInstallments.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-muted-foreground">
+                      Cronograma de parcelas
+                    </h3>
+                    <div className="space-y-2">
+                      {sortedInstallments.map((installment) => {
+                        const valorParcela = parseToNumber(installment.valor);
+                        const statusText =
+                          typeof installment.status === "string"
+                            ? installment.status.toLowerCase()
+                            : "";
+                        const isPaid = statusText === "quitado" || statusText === "quitada";
+                        const quitadoEm =
+                          typeof installment.quitado_em === "string" &&
+                          installment.quitado_em.trim().length > 0
+                            ? formatDate(installment.quitado_em)
+                            : null;
+
+                        return (
+                          <div
+                            key={installment.id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 p-3"
+                          >
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                Parcela {installment.numero_parcela}
+                              </p>
+                              <p className="text-sm font-semibold">
+                                {valorParcela !== null ? formatCurrency(valorParcela) : "—"}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
+                              <Badge variant={isPaid ? "secondary" : "outline"}>
+                                {isPaid ? "Quitada" : "Pendente"}
+                              </Badge>
+                              {quitadoEm && <span>Quitada em {quitadoEm}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {billingHistory.length > 0 ? (
                   <div className="space-y-3">
                     {billingHistory.map((record) => {
@@ -1785,9 +2068,11 @@ export default function VisualizarOportunidade() {
                       condicaoPagamento: value as BillingCondition,
                       parcelas:
                         value === "Parcelado"
-                          ? prev.parcelas && Number.parseInt(prev.parcelas, 10) > 0
-                            ? prev.parcelas
-                            : "2"
+                          ? pendingInstallments.length > 0
+                            ? "1"
+                            : prev.parcelas && Number.parseInt(prev.parcelas, 10) > 0
+                              ? prev.parcelas
+                              : "1"
                           : "1",
                     }))
                   }
@@ -1828,6 +2113,7 @@ export default function VisualizarOportunidade() {
                   inputMode="decimal"
                   min="0"
                   step="0.01"
+                  readOnly={billingForm.condicaoPagamento === "Parcelado"}
                   value={billingForm.valor}
                   onChange={(event) =>
                     setBillingForm((prev) => ({
@@ -1836,6 +2122,11 @@ export default function VisualizarOportunidade() {
                     }))
                   }
                 />
+                {billingForm.condicaoPagamento === "Parcelado" && (
+                  <p className="text-xs text-muted-foreground">
+                    O valor é calculado automaticamente conforme as parcelas selecionadas.
+                  </p>
+                )}
               </div>
 
               {billingForm.condicaoPagamento === "Parcelado" && (
