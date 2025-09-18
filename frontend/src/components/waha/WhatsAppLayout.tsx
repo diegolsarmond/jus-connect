@@ -256,6 +256,7 @@ export const WhatsAppLayout = ({
     addMessage,
     selectChat,
     loadMessages,
+    loadOlderMessages,
     loadChats,
     loadMoreChats,
     activeChatId,
@@ -263,6 +264,7 @@ export const WhatsAppLayout = ({
     loading,
     hasMoreChats,
     isLoadingMoreChats,
+    messagePaginationState,
   } = wahaState;
 
   useEffect(() => {
@@ -294,10 +296,12 @@ export const WhatsAppLayout = ({
       setMessagesLoading(false);
       return;
     }
-    if (wahaState.messages[activeId]) {
+
+    const pagination = messagePaginationState[activeId];
+    if (messageMap[activeId] || !pagination?.isLoading) {
       setMessagesLoading(false);
     }
-  }, [activeChatId, wahaState.messages]);
+  }, [activeChatId, messageMap, messagePaginationState]);
 
   const conversations = useMemo(() => {
     const mapped = rawChats.map((chat) =>
@@ -323,6 +327,12 @@ export const WhatsAppLayout = ({
   );
 
   const messages = useMemo(() => rawMessages.map(mapMessageToCRM), [rawMessages]);
+
+  const activePagination = activeConversationId
+    ? messagePaginationState[activeConversationId]
+    : undefined;
+  const hasMoreMessages = Boolean(activePagination?.hasMore);
+  const isLoadingMoreMessages = Boolean(activePagination?.isLoading && activePagination?.isLoaded);
 
   const handleSelectConversation = useCallback(
     async (conversationId: string, options?: { skipNavigation?: boolean }) => {
@@ -424,7 +434,14 @@ export const WhatsAppLayout = ({
     void checkSessionStatus();
     void loadChats({ reset: true });
     if (activeConversationId) {
-      void loadMessages(activeConversationId);
+      setMessagesLoading(true);
+      void (async () => {
+        try {
+          await loadMessages(activeConversationId, { reset: true });
+        } finally {
+          setMessagesLoading(false);
+        }
+      })();
     }
   }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
 
@@ -477,11 +494,17 @@ export const WhatsAppLayout = ({
           <CRMChatWindow
             conversation={activeConversation}
             messages={messages}
-            hasMore={false}
+            hasMore={hasMoreMessages}
             isLoading={messagesLoading}
-            isLoadingMore={false}
+            isLoadingMore={isLoadingMoreMessages}
             onSendMessage={handleSendMessage}
-            onLoadOlder={async () => []}
+            onLoadOlder={async () => {
+              if (!activeConversationId) {
+                return [];
+              }
+              const olderMessages = await loadOlderMessages(activeConversationId);
+              return olderMessages.map(mapMessageToCRM);
+            }}
             onUpdateConversation={handleUpdateConversation}
             isUpdatingConversation={false}
           />

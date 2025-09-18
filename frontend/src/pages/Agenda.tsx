@@ -36,6 +36,56 @@ function joinUrl(base: string, path = '') {
   return `${b}${p}`;
 }
 
+function normalizeTimeString(time?: string | null): string | undefined {
+  if (typeof time !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = time.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const colonParts = trimmed.split(':');
+  if (colonParts.length >= 2) {
+    const hoursPart = colonParts[0] ?? '';
+    const minutesPart = colonParts[1] ?? '';
+
+    const hours = hoursPart.padStart(2, '0').slice(-2);
+    const minutes = minutesPart.padStart(2, '0').slice(0, 2);
+
+    return `${hours}:${minutes}`;
+  }
+
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) {
+    return undefined;
+  }
+
+  let hoursDigits: string;
+  let minutesDigits: string;
+
+  if (digits.length <= 2) {
+    hoursDigits = digits;
+    minutesDigits = '00';
+  } else if (digits.length === 3) {
+    hoursDigits = digits.slice(0, 1);
+    minutesDigits = digits.slice(1);
+  } else {
+    hoursDigits = digits.slice(0, 2);
+    minutesDigits = digits.slice(2, 4);
+  }
+
+  const hours = hoursDigits.padStart(2, '0').slice(-2);
+  const minutes = minutesDigits.padEnd(2, '0').slice(0, 2);
+
+  return `${hours}:${minutes}`;
+}
+
+function ensureTimeString(time?: string | null): string {
+  return normalizeTimeString(time) ?? (typeof time === 'string' ? time.trim() : '');
+}
+
 export default function Agenda() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -138,8 +188,8 @@ export default function Agenda() {
             typeName: r.tipo_evento ?? undefined,
             status: mapStatus(r.status),
             date: toDateOnly(r.data),
-            startTime: r.hora_inicio,
-            endTime: r.hora_fim ?? undefined,
+            startTime: ensureTimeString(r.hora_inicio),
+            endTime: normalizeTimeString(r.hora_fim) ?? undefined,
             clientName: r.cliente ?? undefined,
             location: r.local ?? undefined,
             reminders: String(r.lembrete) === 'true' || Number(r.lembrete) === 1,
@@ -175,10 +225,16 @@ export default function Agenda() {
   const handleFormSubmit = (
     appointmentData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>
   ) => {
+    const normalizedData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'> = {
+      ...appointmentData,
+      startTime: ensureTimeString(appointmentData.startTime),
+      endTime: appointmentData.endTime ? ensureTimeString(appointmentData.endTime) : undefined,
+    };
+
     if (editingAppointment) {
       const updatedAppointment: Appointment = {
         ...editingAppointment,
-        ...appointmentData,
+        ...normalizedData,
         status: editingAppointment.status,
         updatedAt: new Date(),
       };
@@ -195,7 +251,7 @@ export default function Agenda() {
       });
     } else {
       const newAppointment: Appointment = {
-        ...appointmentData,
+        ...normalizedData,
         id: Date.now(),
         status: 'agendado',
         createdAt: new Date(),
@@ -281,8 +337,11 @@ export default function Agenda() {
       year: 'numeric',
     });
 
-  const formatTimeRange = (appointment: Appointment) =>
-    appointment.endTime ? `${appointment.startTime} - ${appointment.endTime}` : appointment.startTime;
+  const formatTimeRange = (appointment: Appointment) => {
+    const start = ensureTimeString(appointment.startTime);
+    const end = appointment.endTime ? ensureTimeString(appointment.endTime) : undefined;
+    return end ? `${start} - ${end}` : start;
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -358,7 +417,7 @@ export default function Agenda() {
                         {appointment.title}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {appointment.date.toLocaleDateString()} às {appointment.startTime}
+                        {appointment.date.toLocaleDateString()} às {ensureTimeString(appointment.startTime)}
                       </p>
                     </div>
                   </div>

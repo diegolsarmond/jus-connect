@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { getApiBaseUrl } from "@/lib/api";
+import { LAST_ACTIVITY_KEY } from "@/hooks/useAutoLogout";
 import { fetchCurrentUser, loginRequest } from "./api";
 import type { AuthUser, LoginCredentials, LoginResponse } from "./types";
 
@@ -107,6 +108,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     hasUnauthorizedErrorRef.current = false;
     tokenRef.current = null;
     writeStoredAuth(null);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+      } catch (error) {
+        console.warn("Falha ao limpar registro de atividade", error);
+      }
+    }
   }, []);
 
   const logoutRef = useRef(handleLogout);

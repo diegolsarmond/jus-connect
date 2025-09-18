@@ -193,12 +193,14 @@ const sanitizeInteractionEntries = (value: unknown): InteractionEntry[] => {
               ? trimmedDataUrl
               : undefined;
 
+
           return [
             {
               name,
               size: normalizedSize,
               ...(mimeType ? { mimeType } : {}),
               ...(dataUrl ? { dataUrl } : {}),
+
             },
           ];
         })
