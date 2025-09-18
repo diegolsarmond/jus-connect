@@ -356,15 +356,7 @@ export const WhatsAppLayout = ({
   }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
 
   return (
-    <div
-      className="flex min-h-screen flex-col overflow-hidden"
-      style={{
-        background:
-          "radial-gradient(circle at -20% -20%, rgba(59,130,246,0.16), transparent 55%)," +
-          "radial-gradient(circle at 110% -10%, rgba(14,165,233,0.18), transparent 50%)," +
-          "linear-gradient(180deg, rgba(241,245,249,0.92) 0%, rgba(226,232,240,0.75) 45%, rgba(226,232,240,0.55) 100%)",
-      }}
-    >
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
 
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
