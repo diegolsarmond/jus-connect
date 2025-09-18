@@ -101,17 +101,17 @@ export function Header() {
               <User className="mr-2 h-4 w-4" />
               Perfil
             </DropdownMenuItem>
-            {canAccessConfiguracoes && (
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.preventDefault();
-                  navigate("/configuracoes");
-                }}
-              >
-                Configurações
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
+            {/*{canAccessConfiguracoes && (*/}
+            {/*  <DropdownMenuItem*/}
+            {/*    onSelect={(event) => {*/}
+            {/*      event.preventDefault();*/}
+            {/*      navigate("/configuracoes");*/}
+            {/*    }}*/}
+            {/*  >*/}
+            {/*    Configurações*/}
+            {/*  </DropdownMenuItem>*/}
+            {/*)}*/}
+            {/*<DropdownMenuSeparator />*/}
             <DropdownMenuItem
               onSelect={(event) => {
                 event.preventDefault();
