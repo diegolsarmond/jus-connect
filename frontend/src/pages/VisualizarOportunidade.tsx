@@ -1389,11 +1389,6 @@ export default function VisualizarOportunidade() {
   const handleDocumentConfirm = async () => {
     if (!documentType) return;
 
-    const params = new URLSearchParams();
-    if (id) params.set("oportunidade", id);
-    params.set("tipo", documentType);
-
-
     if (documentType === "modelo") {
       if (!selectedTemplate) return;
       const templateId = Number.parseInt(selectedTemplate, 10);
@@ -1439,7 +1434,7 @@ export default function VisualizarOportunidade() {
       return;
 
     const params = new URLSearchParams();
-    params.set("oportunidade", id);
+    if (id) params.set("oportunidade", id);
     params.set("tipo", documentType);
     params.set("numero_processo", processForm.numero);
     params.set("uf", processForm.uf);
