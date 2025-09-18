@@ -389,7 +389,7 @@ export default function NovaOportunidade() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="dados-processo">
-                  <AccordionTrigger>Dados do Processo</AccordionTrigger>
+                  <AccordionTrigger>DADOS DO PROCESSO</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -582,7 +582,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="fluxo-processo">
-                  <AccordionTrigger>Fluxo do Processo</AccordionTrigger>
+                  <AccordionTrigger>DADOS DA PROPOSTA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -590,7 +590,7 @@ export default function NovaOportunidade() {
                         name="fase"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Fase</FormLabel>
+                            <FormLabel>Fluxo de Trabalho</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger>
@@ -654,7 +654,7 @@ export default function NovaOportunidade() {
                         name="status"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Status</FormLabel>
+                            <FormLabel>Situação da Proposta</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger>
@@ -678,7 +678,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="dados-solicitante">
-                  <AccordionTrigger>Dados do Solicitante</AccordionTrigger>
+                  <AccordionTrigger>CLIENTE SOLICITANTE</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -767,7 +767,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="dados-promovido">
-                  <AccordionTrigger>Dados dos Envolvidos</AccordionTrigger>
+                  <AccordionTrigger>ENVOLVIDOS COM O PROCESSO</AccordionTrigger>
                   <AccordionContent>
                     {envolvidosFields.map((item, index) => (
                       <div
@@ -843,7 +843,10 @@ export default function NovaOportunidade() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="Réu">Réu</SelectItem>
+                                          <SelectItem value="Réu">Réu</SelectItem>
+                                          <SelectItem value="Réu">Autor</SelectItem>
+                                          <SelectItem value="Réu">Promovente</SelectItem>
+                                          <SelectItem value="Réu">Promovido</SelectItem>
                                   <SelectItem value="Reclamante">Reclamante</SelectItem>
                                   <SelectItem value="Exequente">Exequente</SelectItem>
                                   <SelectItem value="Outro">Outro</SelectItem>
@@ -885,7 +888,7 @@ export default function NovaOportunidade() {
                
 
                 <AccordionItem value="detalhes">
-                  <AccordionTrigger>Detalhes</AccordionTrigger>
+                  <AccordionTrigger>DETALHES</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -893,7 +896,7 @@ export default function NovaOportunidade() {
                         name="detalhes"
                         render={({ field }) => (
                           <FormItem className="md:col-span-2">
-                            <FormLabel>Detalhes</FormLabel>
+                            <FormLabel>Descreva as Informações do Processo</FormLabel>
                             <FormControl>
                               <Textarea {...field} />
                             </FormControl>
@@ -924,7 +927,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                  <AccordionItem value="honorarios">
-                  <AccordionTrigger>Honorários</AccordionTrigger>
+                  <AccordionTrigger>HONORÁRIOS</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -1065,7 +1068,7 @@ export default function NovaOportunidade() {
                 </AccordionItem>
 
                 <AccordionItem value="metadados">
-                  <AccordionTrigger>Metadados</AccordionTrigger>
+                  <AccordionTrigger>SISTEMA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
