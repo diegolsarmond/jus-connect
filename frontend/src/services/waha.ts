@@ -1,4 +1,37 @@
+import { getApiUrl } from '@/lib/api';
 import { WAHAConfig, ChatOverview, Message, SendTextRequest, WAHAResponse, SessionStatus } from '@/types/waha';
+
+const resolveIntegrationId = (): number => {
+  const rawValue = (import.meta.env.VITE_WAHA_INTEGRATION_ID as string | undefined)?.trim();
+  if (!rawValue) {
+    return 1;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 1;
+  }
+
+  return Math.floor(parsed);
+};
+
+const WAHA_INTEGRATION_ID = resolveIntegrationId();
+
+const DEFAULT_WAHA_SESSION = (
+  import.meta.env.VITE_WAHA_SESSION as string | undefined
+)?.trim() || 'QuantumTecnologia01';
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
+const normalizeBaseUrl = (url: string): string => url.replace(/\/+$/, '');
+
+type IntegrationApiKeyPayload = {
+  apiUrl?: unknown;
+  key?: unknown;
+  environment?: unknown;
+  metadata?: unknown;
+};
 
 type RawRecord = Record<string, unknown>;
 
@@ -273,29 +306,92 @@ const sanitizeMessage = (chatId: string, raw: unknown): Message | null => {
 };
 
 class WAHAService {
-  private config: WAHAConfig;
+  private config: WAHAConfig | null = null;
+  private configPromise: Promise<WAHAConfig> | null = null;
 
-  constructor() {
-    // WAHA API Configuration
-    this.config = {
-      baseUrl: 'https://waha.quantumtecnologia.com.br',
-      apiKey: '4YF9gDywbivQWAP_JpGZsGTVgVz3gP55T1hXbYAg8y8',
-      session: 'QuantumTecnologia01'
+  private async loadConfig(): Promise<WAHAConfig> {
+    if (this.config) {
+      return this.config;
+    }
+
+    if (!this.configPromise) {
+      this.configPromise = this.fetchRemoteConfig()
+        .then((resolvedConfig) => {
+          this.config = resolvedConfig;
+          return resolvedConfig;
+        })
+        .catch((error) => {
+          this.configPromise = null;
+          throw error;
+        });
+    }
+
+    return this.configPromise;
+  }
+
+  private async fetchRemoteConfig(): Promise<WAHAConfig> {
+    const endpoint = getApiUrl(`integrations/api-keys/${WAHA_INTEGRATION_ID}`);
+    const response = await fetch(endpoint, {
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha ao carregar configurações do WAHA (status ${response.status})`);
+    }
+
+    const payload = (await response.json()) as IntegrationApiKeyPayload | null;
+    const apiUrl = isNonEmptyString(payload?.apiUrl) ? payload.apiUrl.trim() : undefined;
+    const apiKey = isNonEmptyString(payload?.key) ? payload.key.trim() : undefined;
+
+    if (!apiUrl) {
+      throw new Error('Configuração WAHA inválida: URL da API não foi informada.');
+    }
+
+    if (!apiKey) {
+      throw new Error('Configuração WAHA inválida: chave da API não foi informada.');
+    }
+
+    const environment = isNonEmptyString(payload?.environment) ? payload.environment.trim() : undefined;
+    let session: string | undefined;
+
+    if (environment && !['producao', 'homologacao'].includes(environment.toLowerCase())) {
+      session = environment;
+    }
+
+    const metadata = payload?.metadata;
+    if (!session && metadata && typeof metadata === 'object') {
+      const metadataRecord = metadata as Record<string, unknown>;
+      const metadataSession =
+        metadataRecord.session ??
+        metadataRecord.wahaSession ??
+        metadataRecord.whatsappSession ??
+        metadataRecord.sessionName;
+
+      if (isNonEmptyString(metadataSession)) {
+        session = metadataSession.trim();
+      }
+    }
+
+    return {
+      baseUrl: normalizeBaseUrl(apiUrl),
+      apiKey,
+      session: session ?? DEFAULT_WAHA_SESSION,
     };
   }
 
   private async makeRequest<T>(
-    endpoint: string, 
+    endpoint: string,
     options: RequestInit = {}
   ): Promise<WAHAResponse<T>> {
     try {
-      const url = `${this.config.baseUrl}${endpoint}`;
+      const config = await this.loadConfig();
+      const url = `${config.baseUrl}${endpoint}`;
       const response = await fetch(url, {
         ...options,
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'Content-Type': 'application/json',
-          'X-Api-Key': this.config.apiKey,
+          'X-Api-Key': config.apiKey,
           ...options.headers,
         },
       });
@@ -308,16 +404,17 @@ class WAHAService {
       return { data, status: response.status };
     } catch (error) {
       console.error('WAHA API Error:', error);
-      return { 
+      return {
         error: error instanceof Error ? error.message : 'Unknown error',
-        status: 500 
+        status: 500,
       };
     }
   }
 
   // Get session status
   async getSessionStatus(): Promise<WAHAResponse<SessionStatus>> {
-    return this.makeRequest<SessionStatus>(`/api/sessions/${this.config.session}`);
+    const config = await this.loadConfig();
+    return this.makeRequest<SessionStatus>(`/api/sessions/${config.session}`);
   }
 
   // Get chats overview
@@ -326,8 +423,9 @@ class WAHAService {
       limit: limit.toString(),
       offset: offset.toString(),
     });
-    
-    const response = await this.makeRequest<unknown[]>(`/api/${this.config.session}/chats/overview?${params}`);
+
+    const config = await this.loadConfig();
+    const response = await this.makeRequest<unknown[]>(`/api/${config.session}/chats/overview?${params}`);
 
     if (Array.isArray(response.data)) {
       console.log('📊 Raw chats data:', response.data.length, 'chats');
@@ -365,7 +463,8 @@ class WAHAService {
       downloadMedia: (options.downloadMedia || false).toString(),
     });
     
-    const response = await this.makeRequest<unknown[]>(`/api/${this.config.session}/chats/${chatId}/messages?${params}`);
+    const config = await this.loadConfig();
+    const response = await this.makeRequest<unknown[]>(`/api/${config.session}/chats/${chatId}/messages?${params}`);
 
     if (Array.isArray(response.data)) {
       const messages = response.data
@@ -380,9 +479,10 @@ class WAHAService {
 
   // Send text message
   async sendTextMessage(request: Omit<SendTextRequest, 'session'>): Promise<WAHAResponse<Message>> {
+    const config = await this.loadConfig();
     const payload: SendTextRequest = {
       ...request,
-      session: this.config.session,
+      session: config.session,
     };
 
     return this.makeRequest<Message>('/api/sendText', {
@@ -397,19 +497,22 @@ class WAHAService {
       messages: messages.toString(),
     });
     
-    return this.makeRequest<void>(`/api/${this.config.session}/chats/${chatId}/messages/read?${params}`, {
+    const config = await this.loadConfig();
+    return this.makeRequest<void>(`/api/${config.session}/chats/${chatId}/messages/read?${params}`, {
       method: 'POST',
     });
   }
 
   // Get chat info
   async getChatInfo(chatId: string): Promise<WAHAResponse<Record<string, unknown>>> {
-    return this.makeRequest<Record<string, unknown>>(`/api/${this.config.session}/chats/${chatId}`);
+    const config = await this.loadConfig();
+    return this.makeRequest<Record<string, unknown>>(`/api/${config.session}/chats/${chatId}`);
   }
 
   // Get QR Code for authentication (if needed)
   async getQRCode(): Promise<WAHAResponse<{ mimetype: string; data: string }>> {
-    return this.makeRequest(`/api/${this.config.session}/auth/qr?format=image`);
+    const config = await this.loadConfig();
+    return this.makeRequest(`/api/${config.session}/auth/qr?format=image`);
   }
 
   // Utility method to format phone number to WhatsApp ID
