@@ -20,11 +20,13 @@ export function CRMLayout() {
     isConversationsRoute ? "h-full overflow-hidden" : "overflow-auto",
   );
 
+
   return (
     <SidebarProvider>
       <div className={rootClassName}>
         <Sidebar />
         <div className={containerClassName}>
+
           <Header />
           <main className={mainClassName}>
             <Outlet />
