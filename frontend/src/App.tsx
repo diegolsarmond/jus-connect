@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { adminRelativePath, routes } from "@/config/routes";
+import { routes } from "@/config/routes";
 import Landing from "./pages/Landing";
 import Clientes from "./pages/Clientes";
 import NovoCliente from "./pages/NovoCliente";
@@ -62,22 +62,6 @@ import NotFound from "./pages/NotFound";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 import { RequireModule } from "@/features/auth/RequireModule";
-import { RequireAdminUser } from "@/features/auth/RequireAdminUser";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import AdminDashboard from "./pages/administrator/Dashboard";
-import AdminCompanies from "./pages/administrator/Companies";
-import AdminNewCompany from "./pages/administrator/NewCompany";
-import AdminPlans from "./pages/administrator/Plans";
-import AdminNewPlan from "./pages/administrator/NewPlan";
-import AdminSubscriptions from "./pages/administrator/Subscriptions";
-import AdminNewSubscription from "./pages/administrator/NewSubscription";
-import AdminUsers from "./pages/administrator/Users";
-import AdminNewUser from "./pages/administrator/NewUser";
-import AdminAnalytics from "./pages/administrator/Analytics";
-import AdminSupport from "./pages/administrator/Support";
-import AdminLogs from "./pages/administrator/Logs";
-import AdminSettings from "./pages/administrator/Settings";
-import AdminNotFound from "./pages/administrator/NotFound";
 
 const CRMLayout = lazy(() =>
   import("@/components/layout/CRMLayout").then((module) => ({ default: module.CRMLayout })),
@@ -263,34 +247,9 @@ const App = () => (
                 )}
               />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Route>
-            <Route
-              path={`${routes.admin.root}/*`}
-              element={(
-                <ProtectedRoute>
-                  <RequireAdminUser>
-                    <DashboardLayout />
-                  </RequireAdminUser>
-                </ProtectedRoute>
-              )}
-            >
-              <Route index element={<AdminDashboard />} />
-              <Route path={adminRelativePath.companies} element={<AdminCompanies />} />
-              <Route path={adminRelativePath.newCompany} element={<AdminNewCompany />} />
-              <Route path={adminRelativePath.plans} element={<AdminPlans />} />
-              <Route path={adminRelativePath.newPlan} element={<AdminNewPlan />} />
-              <Route path={adminRelativePath.subscriptions} element={<AdminSubscriptions />} />
-              <Route path={adminRelativePath.newSubscription} element={<AdminNewSubscription />} />
-              <Route path={adminRelativePath.users} element={<AdminUsers />} />
-              <Route path={adminRelativePath.newUser} element={<AdminNewUser />} />
-              <Route path={adminRelativePath.analytics} element={<AdminAnalytics />} />
-              <Route path={adminRelativePath.support} element={<AdminSupport />} />
-              <Route path={adminRelativePath.logs} element={<AdminLogs />} />
-              <Route path={adminRelativePath.settings} element={<AdminSettings />} />
-              <Route path="*" element={<AdminNotFound />} />
-            </Route>
-          </Routes>
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
           </Suspense>
         </BrowserRouter>
       </AuthProvider>

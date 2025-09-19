@@ -20,47 +20,46 @@ import {
   Settings,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { isActiveRoute, routes } from "@/config/routes";
 
 const navigation = [
   {
     name: "Dashboard",
-    href: routes.admin.dashboard,
+    href: "/",
     icon: LayoutDashboard,
   },
   {
     name: "Empresas",
-    href: routes.admin.companies,
+    href: "/companies",
     icon: Building2,
   },
   {
     name: "Planos",
-    href: routes.admin.plans,
+    href: "/plans",
     icon: Package,
   },
   {
     name: "Assinaturas",
-    href: routes.admin.subscriptions,
+    href: "/subscriptions",
     icon: CreditCard,
   },
   {
     name: "Usuários",
-    href: routes.admin.users,
+    href: "/users",
     icon: Users,
   },
   {
     name: "Relatórios",
-    href: routes.admin.analytics,
+    href: "/analytics",
     icon: BarChart3,
   },
   {
     name: "Suporte",
-    href: routes.admin.support,
+    href: "/support",
     icon: HeadphonesIcon,
   },
   {
     name: "Configurações",
-    href: routes.admin.settings,
+    href: "/settings",
     icon: Settings,
   },
 ];
@@ -86,7 +85,7 @@ export default function DashboardLayout() {
                 <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton
                     asChild
-                    isActive={isActiveRoute(location.pathname, item.href)}
+                    isActive={location.pathname === item.href}
                   >
                     <Link to={item.href} className="flex items-center gap-3">
                       <item.icon className="h-4 w-4" />

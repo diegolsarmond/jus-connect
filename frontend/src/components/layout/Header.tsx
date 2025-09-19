@@ -1,4 +1,4 @@
-import { Search, User, LogOut, ArrowLeftRight } from "lucide-react";
+import { Search, User, LogOut } from "lucide-react";
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -101,18 +101,6 @@ export function Header() {
               <User className="mr-2 h-4 w-4" />
               Perfil
             </DropdownMenuItem>
-            {user?.id === 3 && (
-              <DropdownMenuItem
-                onSelect={(event) => {
-                  event.preventDefault();
-                  navigate(routes.admin.dashboard);
-                }}
-              >
-                <ArrowLeftRight className="mr-2 h-4 w-4" />
-                Alternar perfil
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
             {/*{canAccessConfiguracoes && (*/}
             {/*  <DropdownMenuItem*/}
             {/*    onSelect={(event) => {*/}
