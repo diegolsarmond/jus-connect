@@ -1,5 +1,5 @@
-import { Suspense } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Suspense, useCallback } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -21,7 +21,7 @@ import {
   Loader2,
   Settings,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { HeaderActions } from "@/components/layout/HeaderActions";
 import { isActiveRoute, routes } from "@/config/routes";
 
 const navigation = [
@@ -69,6 +69,14 @@ const navigation = [
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleNavigate = useCallback(
+    (target: string) => {
+      navigate(target);
+    },
+    [navigate],
+  );
 
   return (
     <SidebarProvider>
@@ -87,13 +95,12 @@ export default function DashboardLayout() {
               {navigation.map((item) => (
                 <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton
-                    asChild
                     isActive={isActiveRoute(location.pathname, item.href)}
+                    onClick={() => handleNavigate(item.href)}
+                    className="flex items-center gap-3"
                   >
-                    <Link to={item.href} className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.name}</span>
-                    </Link>
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.name}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -106,9 +113,8 @@ export default function DashboardLayout() {
             <div className="flex h-14 items-center gap-4 px-4">
               <SidebarTrigger />
               <div className="flex-1" />
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground">Admin CRM SaaS</span>
-              </div>
+              <span className="text-sm text-muted-foreground">Admin CRM SaaS</span>
+              <HeaderActions />
             </div>
           </header>
 
