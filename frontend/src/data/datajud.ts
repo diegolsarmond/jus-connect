@@ -138,6 +138,9 @@ export const DATAJUD_CATEGORIA_MAP = new Map(
   DATAJUD_CATEGORIAS.map((categoria) => [categoria.id, categoria.nome] as const),
 );
 
+const DATAJUD_ALIAS_PATTERN = /api_publica_[a-z0-9_-]+/;
+
+
 export const normalizeDatajudAlias = (
   alias: string | null | undefined,
 ): string | null => {
@@ -145,21 +148,52 @@ export const normalizeDatajudAlias = (
     return null;
   }
 
-  const sanitized = alias
-    .trim()
-    .toLowerCase()
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\s+/g, "_");
-
-  if (!sanitized) {
+  const trimmed = alias.trim();
+  if (!trimmed) {
     return null;
   }
 
-  if (sanitized.startsWith("api_publica_")) {
-    return sanitized;
+  const lower = trimmed.toLowerCase();
+
+  const directMatch = lower.match(DATAJUD_ALIAS_PATTERN);
+  if (directMatch && directMatch[0]) {
+    return directMatch[0];
   }
 
-  const withoutPrefix = sanitized.replace(/^api_publica_/, "");
+  let candidate = lower;
+
+  if (candidate.includes("://")) {
+    try {
+      const url = new URL(candidate);
+      candidate = url.pathname;
+    } catch (error) {
+      // Ignora URLs inválidas e segue com a normalização manual
+    }
+  }
+
+  candidate = candidate
+    .replace(/^https?:\/\//, "")
+    .replace(/^(?:www\.)?(?:api[-_]?publica\.)?datajud\.cnj\.jus\.br/, "")
+    .replace(/^\/+/, "");
+
+  const withoutQueryOrFragment = candidate.split(/[?#]/)[0] ?? "";
+  if (!withoutQueryOrFragment) {
+    return null;
+  }
+
+  const firstSegment = withoutQueryOrFragment.split("/")[0] ?? "";
+  const sanitizedSegment = firstSegment.replace(/[^a-z0-9_-]/g, "");
+
+  if (!sanitizedSegment) {
+    return null;
+  }
+
+  const withoutPrefix = sanitizedSegment.replace(/^api_publica_/, "");
+  if (!withoutPrefix) {
+    return null;
+  }
+
+
   return `api_publica_${withoutPrefix}`;
 };
 

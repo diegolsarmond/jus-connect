@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteProcesso = exports.getProcessoMovimentacoes = exports.updateProcesso = exports.createProcesso = exports.getProcessoById = exports.listProcessosByCliente = exports.listProcessos = void 0;
 const db_1 = __importDefault(require("../services/db"));
 const datajudService_1 = require("../services/datajudService");
+const datajud_1 = require("../utils/datajud");
 const normalizeString = (value) => {
     if (typeof value !== 'string') {
         return null;
@@ -133,7 +134,8 @@ const mapProcessoRow = (row) => ({
     advogado_responsavel: row.advogado_responsavel,
     data_distribuicao: row.data_distribuicao,
     datajud_tipo_justica: row.datajud_tipo_justica ?? null,
-    datajud_alias: normalizeDatajudAliasValue(row.datajud_alias),
+    datajud_alias: (0, datajud_1.canonicalizeDatajudAlias)(row.datajud_alias),
+
     criado_em: row.criado_em,
     atualizado_em: row.atualizado_em,
     cliente: row.cliente_id
@@ -293,7 +295,8 @@ const createProcesso = async (req, res) => {
         ? normalizeLowercase(datajud_tipo_justica)
         : null;
     const datajudAliasValue = columnInfo.hasDatajudAlias
-        ? normalizeDatajudAliasValue(datajud_alias)
+        ? (0, datajud_1.canonicalizeDatajudAlias)(datajud_alias)
+
         : null;
     const missingDatajudFields = [];
     if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
@@ -405,7 +408,8 @@ const updateProcesso = async (req, res) => {
         ? normalizeLowercase(datajud_tipo_justica)
         : null;
     const datajudAliasValue = columnInfo.hasDatajudAlias
-        ? normalizeDatajudAliasValue(datajud_alias)
+        ? (0, datajud_1.canonicalizeDatajudAlias)(datajud_alias)
+
         : null;
     const missingDatajudFields = [];
     if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
@@ -511,7 +515,8 @@ const getProcessoMovimentacoes = async (req, res) => {
         }
         const row = result.rows[0];
         const numeroProcesso = normalizeString(row.numero);
-        const datajudAlias = normalizeDatajudAliasValue(row.datajud_alias);
+        const datajudAlias = (0, datajud_1.canonicalizeDatajudAlias)(row.datajud_alias);
+
         if (!numeroProcesso || !datajudAlias) {
             return res.json([]);
         }

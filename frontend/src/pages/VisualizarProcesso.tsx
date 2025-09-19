@@ -485,11 +485,10 @@ const mapApiProcessoToDetalhes = (
     normalizeString((processo as ApiProcessoResponse).jurisdicao) ||
     [rawMunicipio, rawUf].filter(Boolean).join(" - ") ||
     "Não informado";
-  const dataDistribuicao =
-    normalizeString((processo as ApiProcessoResponse).data_distribuicao) || null;
-  const datajudTipoJustica =
-    normalizeString((processo as ApiProcessoResponse).datajud_tipo_justica) || null;
-  const datajudAlias = normalizeDatajudAlias((processo as ApiProcessoResponse).datajud_alias);
+  const dataDistribuicao = normalizeString(processo.data_distribuicao) || null;
+  const datajudTipoJustica = normalizeString(processo.datajud_tipo_justica) || null;
+  const datajudAlias = normalizeDatajudAlias(processo.datajud_alias);
+
   const datajudCategoriaLabel = getDatajudCategoriaLabel(datajudTipoJustica);
   const datajudTribunal = getDatajudTribunalLabel(datajudAlias);
   const clienteResumo = (processo as ApiProcessoResponse).cliente ?? null;

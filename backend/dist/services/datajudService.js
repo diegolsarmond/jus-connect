@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchDatajudMovimentacoes = void 0;
+const datajud_1 = require("../utils/datajud");
 const DATAJUD_BASE_URL = 'https://api-publica.datajud.cnj.jus.br';
 const DATAJUD_TIMEOUT_MS = 15000;
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim() !== '';
@@ -68,18 +69,12 @@ const fetchDatajudMovimentacoes = async (alias, numeroProcesso) => {
     if (!apiKey) {
         throw new Error('DATAJUD_API_KEY não configurada');
     }
-    const normalizedAlias = alias
-        .trim()
-        .toLowerCase()
-        .replace(/^\/+|\/+$/g, '')
-        .replace(/\s+/g, '_');
+    const normalizedAlias = (0, datajud_1.canonicalizeDatajudAlias)(alias);
     if (!normalizedAlias) {
         throw new Error('Alias do Datajud inválido para consulta');
     }
-    const aliasWithPrefix = normalizedAlias.startsWith('api_publica_')
-        ? normalizedAlias
-        : `api_publica_${normalizedAlias.replace(/^api_publica_/, '')}`;
-    const url = `${DATAJUD_BASE_URL}/${aliasWithPrefix}/_search`;
+    const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
+
     const fetchImpl = resolveFetch();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DATAJUD_TIMEOUT_MS);

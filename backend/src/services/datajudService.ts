@@ -1,3 +1,5 @@
+import { canonicalizeDatajudAlias } from '../utils/datajud';
+
 const DATAJUD_BASE_URL = 'https://api-publica.datajud.cnj.jus.br';
 const DATAJUD_TIMEOUT_MS = 15000;
 
@@ -120,29 +122,15 @@ export const fetchDatajudMovimentacoes = async (
     throw new Error('DATAJUD_API_KEY não configurada');
   }
 
-  const normalizedAlias = alias
-    .trim()
-    .toLowerCase()
-    .replace(/^\/+|\/+$/g, '')
-    .replace(/\s+/g, '_');
+  const normalizedAlias = canonicalizeDatajudAlias(alias);
+
 
   if (!normalizedAlias) {
     throw new Error('Alias do Datajud inválido para consulta');
   }
 
-  const aliasWithPrefix = normalizedAlias.startsWith('api_publica_')
-    ? normalizedAlias
-    : `api_publica_${normalizedAlias.replace(/^api_publica_/, '')}`;
+  const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
 
-  const trimmedNumero = typeof numeroProcesso === 'string' ? numeroProcesso.trim() : '';
-  const digitsOnly = trimmedNumero.replace(/\D/g, '');
-  const numeroForQuery = digitsOnly || trimmedNumero;
-
-  if (!numeroForQuery) {
-    throw new Error('Número do processo inválido para consulta');
-  }
-
-  const url = `${DATAJUD_BASE_URL}/${aliasWithPrefix}/_search`;
 
   const fetchImpl = resolveFetch();
   const controller = new AbortController();

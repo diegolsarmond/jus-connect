@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../services/db';
 import { Processo } from '../models/processo';
 import { fetchDatajudMovimentacoes } from '../services/datajudService';
+import { canonicalizeDatajudAlias } from '../utils/datajud';
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -165,7 +166,8 @@ const mapProcessoRow = (row: any): Processo => ({
   advogado_responsavel: row.advogado_responsavel,
   data_distribuicao: row.data_distribuicao,
   datajud_tipo_justica: row.datajud_tipo_justica ?? null,
-  datajud_alias: normalizeDatajudAliasValue(row.datajud_alias),
+  datajud_alias: canonicalizeDatajudAlias(row.datajud_alias),
+
   criado_em: row.criado_em,
   atualizado_em: row.atualizado_em,
   cliente: row.cliente_id
@@ -364,7 +366,8 @@ export const createProcesso = async (req: Request, res: Response) => {
     ? normalizeLowercase(datajud_tipo_justica)
     : null;
   const datajudAliasValue = columnInfo.hasDatajudAlias
-    ? normalizeDatajudAliasValue(datajud_alias)
+    ? canonicalizeDatajudAlias(datajud_alias)
+
     : null;
 
   const missingDatajudFields: string[] = [];
@@ -517,7 +520,8 @@ export const updateProcesso = async (req: Request, res: Response) => {
     ? normalizeLowercase(datajud_tipo_justica)
     : null;
   const datajudAliasValue = columnInfo.hasDatajudAlias
-    ? normalizeDatajudAliasValue(datajud_alias)
+    ? canonicalizeDatajudAlias(datajud_alias)
+
     : null;
 
   const missingDatajudFields: string[] = [];
@@ -657,7 +661,8 @@ export const getProcessoMovimentacoes = async (req: Request, res: Response) => {
     const row = result.rows[0] as { numero: string | null; datajud_alias: string | null };
 
     const numeroProcesso = normalizeString(row.numero);
-    const datajudAlias = normalizeDatajudAliasValue(row.datajud_alias);
+    const datajudAlias = canonicalizeDatajudAlias(row.datajud_alias);
+
 
     if (!numeroProcesso || !datajudAlias) {
       return res.json([]);
