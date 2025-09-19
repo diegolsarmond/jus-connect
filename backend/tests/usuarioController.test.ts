@@ -1,80 +1,137 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Request, Response } from 'express';
+import { Pool } from 'pg';
 
-import { listUsuarios } from '../src/controllers/usuarioController';
-import pool from '../src/services/db';
+process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
+
 
 type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
 
-type MockResponse = {
-  statusCode: number;
-  payload: unknown;
-  status(code: number): MockResponse;
-  json(data: unknown): MockResponse;
+let getUsuarioById: typeof import('../src/controllers/usuarioController')['getUsuarioById'];
+
+test.before(async () => {
+  ({ getUsuarioById } = await import('../src/controllers/usuarioController'));
+});
+
+const createMockResponse = () => {
+  const response: Partial<Response> & { statusCode: number; body: unknown } = {
+    statusCode: 200,
+    body: undefined,
+    status(code: number) {
+      this.statusCode = code;
+      return this as Response;
+    },
+    json(payload: unknown) {
+      this.body = payload;
+      return this as Response;
+    },
+  };
+
+  return response as Response & { statusCode: number; body: unknown };
 };
 
-const createMockResponse = (): MockResponse => ({
-  statusCode: 200,
-  payload: undefined,
-  status(code) {
-    this.statusCode = code;
-    return this;
-  },
-  json(data) {
-    this.payload = data;
-    return this;
+const setupQueryMock = (responses: QueryResponse[]) => {
+  const calls: QueryCall[] = [];
+  const mock = test.mock.method(
+    Pool.prototype,
+    'query',
+    async function (this: Pool, text: string, values?: unknown[]) {
+      calls.push({ text, values });
+
+      if (responses.length === 0) {
+        throw new Error('Unexpected query invocation');
+      }
+
+      return responses.shift()!;
+    }
+  );
+
+  const restore = () => {
+    mock.mock.restore();
+  };
+
+  return { calls, restore };
+};
+
+const createAuth = (userId: number) => ({
+  userId,
+  payload: {
+    sub: userId,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
   },
 });
 
-test('listUsuarios limita os resultados à empresa do usuário autenticado', async (t) => {
-  const responses: QueryResponse[] = [
-    { rows: [{ empresa: 7 }], rowCount: 1 },
-    { rows: [{ id: 1 }, { id: 2 }], rowCount: 2 },
-  ];
-  const queries: QueryCall[] = [];
+test('getUsuarioById returns user when it belongs to the same company', async () => {
+  const userRow = {
+    id: 123,
+    nome_completo: 'Maria Silva',
+    cpf: '12345678901',
+    email: 'maria@example.com',
+    perfil: 'admin',
+    empresa: 42,
+    setor: 7,
+    oab: '12345',
+    status: true,
+    senha: '$hashed',
+    telefone: '(11) 99999-0000',
+    ultimo_login: '2024-01-01T12:00:00.000Z',
+    observacoes: null,
+    datacriacao: '2023-01-01T12:00:00.000Z',
+  };
 
-  t.mock.method(pool, 'query', async (text: string, values?: unknown[]) => {
-    queries.push({ text, values });
-    const response = responses.shift();
-    if (!response) {
-      throw new Error('Unexpected query execution');
-    }
-    return response;
-  });
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 42 }], rowCount: 1 },
+    { rows: [userRow], rowCount: 1 },
+  ]);
 
-  const req = { auth: { userId: 42 } } as unknown as Request;
+  const req = {
+    params: { id: '123' },
+    auth: createAuth(10),
+  } as unknown as Request;
+
   const res = createMockResponse();
 
-  await listUsuarios(req, res as unknown as Response);
+  try {
+    await getUsuarioById(req, res);
+  } finally {
+    restore();
+  }
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.payload, [{ id: 1 }, { id: 2 }]);
-  assert.equal(queries.length, 2);
-  assert.match(queries[1]?.text ?? '', /WHERE u\.empresa = \$1/);
-  assert.deepEqual(queries[1]?.values, [7]);
+  assert.deepEqual(res.body, userRow);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /JOIN public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /u\.empresa IS NOT DISTINCT FROM \$2::INT/);
+  assert.deepEqual(calls[1]?.values, ['123', 42]);
 });
 
-test('listUsuarios retorna lista vazia quando usuário autenticado não possui empresa', async (t) => {
-  const responses: QueryResponse[] = [{ rows: [{ empresa: null }], rowCount: 1 }];
-  const queries: QueryCall[] = [];
+test('getUsuarioById returns 404 when user belongs to another company', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 42 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
 
-  t.mock.method(pool, 'query', async (text: string, values?: unknown[]) => {
-    queries.push({ text, values });
-    const response = responses.shift();
-    if (!response) {
-      throw new Error('Unexpected query execution');
-    }
-    return response;
-  });
+  const req = {
+    params: { id: '999' },
+    auth: createAuth(10),
+  } as unknown as Request;
 
-  const req = { auth: { userId: 84 } } as unknown as Request;
   const res = createMockResponse();
 
-  await listUsuarios(req, res as unknown as Response);
+  try {
+    await getUsuarioById(req, res);
+  } finally {
+    restore();
+  }
 
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.payload, []);
-  assert.equal(queries.length, 1, 'should not query usuarios view without empresa vinculada');
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Usuário não encontrado' });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1]?.values, ['999', 42]);
 });
+
+

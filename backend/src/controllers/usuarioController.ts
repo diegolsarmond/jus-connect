@@ -93,7 +93,44 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
 };
 
 const baseUsuarioSelect =
-  'SELECT vu.id, vu.nome_completo, vu.cpf, vu.email, vu.perfil, vu.empresa, vu.setor, vu.oab, vu.status, vu.senha, vu.telefone, vu.ultimo_login, vu.observacoes, vu.datacriacao FROM public.vw_usuarios vu JOIN public.usuarios u ON u.id = vu.id';
+  'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao FROM public.vw_usuarios vu';
+
+type EmpresaLookupResult =
+  | { success: true; empresaId: number | null }
+  | { success: false; status: number; message: string };
+
+const fetchAuthenticatedUserEmpresa = async (userId: number): Promise<EmpresaLookupResult> => {
+  const empresaUsuarioResult = await pool.query(
+    'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+    [userId]
+  );
+
+  if (empresaUsuarioResult.rowCount === 0) {
+    return {
+      success: false,
+      status: 404,
+      message: 'Usuário autenticado não encontrado',
+    };
+  }
+
+  const empresaAtualResult = parseOptionalId(
+    (empresaUsuarioResult.rows[0] as { empresa: unknown }).empresa
+  );
+
+  if (empresaAtualResult === 'invalid') {
+    return {
+      success: false,
+      status: 500,
+      message: 'Não foi possível identificar a empresa do usuário autenticado.',
+    };
+  }
+
+  return {
+    success: true,
+    empresaId: empresaAtualResult,
+  };
+};
+
 
 export const listUsuarios = async (req: Request, res: Response) => {
   try {
@@ -137,7 +174,23 @@ export const listUsuarios = async (req: Request, res: Response) => {
 export const getUsuarioById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const result = await pool.query(`${baseUsuarioSelect} WHERE vu.id = $1`, [id]);
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    const result = await pool.query(
+      `${baseUsuarioSelect} INNER JOIN public.usuarios u ON u.id = vu.id WHERE vu.id = $1 AND u.empresa IS NOT DISTINCT FROM $2::INT`,
+      [id, empresaId]
+    );
+
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -179,24 +232,13 @@ export const createUsuario = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'ID de empresa inválido' });
     }
 
-    const empresaUsuarioResult = await pool.query(
-      'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
-      [req.auth.userId]
-    );
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
 
-    if (empresaUsuarioResult.rowCount === 0) {
-      return res.status(404).json({ error: 'Usuário autenticado não encontrado' });
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
     }
 
-    const empresaAtualResult = parseOptionalId(
-      (empresaUsuarioResult.rows[0] as { empresa: unknown }).empresa
-    );
-
-    if (empresaAtualResult === 'invalid') {
-      return res
-        .status(500)
-        .json({ error: 'Não foi possível identificar a empresa do usuário autenticado.' });
-    }
+    const empresaAtualResult = empresaLookup.empresaId;
 
     if (empresaIdResult !== null && empresaAtualResult !== null && empresaIdResult !== empresaAtualResult) {
       return res
