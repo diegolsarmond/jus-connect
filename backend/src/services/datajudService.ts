@@ -131,6 +131,8 @@ export const fetchDatajudMovimentacoes = async (
 
   const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
 
+  const numeroForQuery = numeroProcesso.replace(/\D+/g, '');
+  const numeroNormalizado = numeroForQuery.length > 0 ? numeroForQuery : numeroProcesso;
 
   const fetchImpl = resolveFetch();
   const controller = new AbortController();
@@ -145,7 +147,7 @@ export const fetchDatajudMovimentacoes = async (
         Authorization: `APIKey ${apiKey}`,
       },
       body: JSON.stringify({
-        query: { match: { numeroProcesso: numeroForQuery } },
+        query: { match: { numeroProcesso: numeroNormalizado } },
         size: 1,
       }),
       signal: controller.signal,
