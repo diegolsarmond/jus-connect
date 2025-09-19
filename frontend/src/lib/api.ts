@@ -3,6 +3,8 @@ const envApiUrlCandidates = [
   import.meta.env.VITE_API_BASE_URL as string | undefined,
 ];
 
+const PRODUCTION_DEFAULT_API_URL = 'https://jusconnec.quantumtecnologia.com.br';
+
 const rawEnvApiUrl = envApiUrlCandidates
   .map((value) => value?.trim())
   .find((value): value is string => Boolean(value?.length));
@@ -35,7 +37,7 @@ function resolveFallbackBaseUrl(): string {
     return normalizeBaseUrl(window.location.origin);
   }
 
-  return 'http://localhost:3001';
+  return PRODUCTION_DEFAULT_API_URL;
 }
 
 let cachedApiBaseUrl: string | undefined;

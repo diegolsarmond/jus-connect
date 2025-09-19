@@ -38,7 +38,7 @@ npm run dev
 
 ## Documentos Padrão
 
-O módulo de templates de documentos consome a API disponível em `http://localhost:3001/api`. Caso o backend esteja em outra URL, defina a variável de ambiente `VITE_API_URL` antes de iniciar o projeto. Caso contrário, o frontend utilizará automaticamente o mesmo domínio em que estiver publicado.
+O módulo de templates de documentos consome a API disponível em `http://localhost:3001/api`. Caso o backend esteja em outra URL, defina a variável de ambiente `VITE_API_URL` antes de iniciar o projeto. Caso contrário, o frontend utilizará automaticamente o mesmo domínio em que estiver publicado ou, se essa informação não estiver disponível (por exemplo, durante o build em ambientes de homologação/produção), recorrerá ao endpoint público `https://jusconnec.quantumtecnologia.com.br`.
 
 Para facilitar o desenvolvimento utilizando a API de produção, o projeto inclui um arquivo `.env.development` com `VITE_API_URL=https://jusconnec.quantumtecnologia.com.br`. Assim, ao executar `npm run dev`, o frontend apontará automaticamente para os endpoints em produção.
 
