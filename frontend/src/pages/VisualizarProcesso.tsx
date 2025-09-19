@@ -1129,11 +1129,6 @@ export default function VisualizarProcesso() {
           >
             Editar processo
           </Button>
-          <Button onClick={handleGerarContrato} disabled={!clienteIdParam}>
-            Gerar contrato
-          </Button>
-          <Button variant="outline">Gerar termo de hipossuficiência</Button>
-          <Button variant="outline">Anexar documentos</Button>
         </div>
       </div>
 
