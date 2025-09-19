@@ -234,6 +234,27 @@ export const DeviceLinkContent = ({
         className,
       )}
     >
+      <div className={styles.instructions}>
+        <h2>Como conectar</h2>
+        <p>
+          Após a leitura do QR Code, o WAHA mantém a sessão ativa e sincroniza automaticamente as
+          mensagens com o painel de conversas.
+        </p>
+        <ol className={styles.steps}>
+          {steps.map((step, index) => (
+            <li key={step.title} className={styles.stepItem}>
+              <span className={styles.stepBadge}>{index + 1}</span>
+              <div className={styles.stepContent}>
+                <h3>
+                  <span className={styles.stepIcon}>{step.icon}</span>
+                  {step.title}
+                </h3>
+                <p>{step.description}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
       <section className={styles.integrationPanel} aria-labelledby="waha-integration-title">
         <header className={styles.integrationHeader}>
           <h2 id="waha-integration-title">Conecte o WhatsApp Web</h2>
@@ -362,27 +383,6 @@ export const DeviceLinkContent = ({
         </div>
 
       </section>
-      <div className={styles.instructions}>
-        <h2>Como conectar</h2>
-        <p>
-          Após a leitura do QR Code, o WAHA mantém a sessão ativa e sincroniza automaticamente as
-          mensagens com o painel de conversas.
-        </p>
-        <ol className={styles.steps}>
-          {steps.map((step, index) => (
-            <li key={step.title} className={styles.stepItem}>
-              <span className={styles.stepBadge}>{index + 1}</span>
-              <div className={styles.stepContent}>
-                <h3>
-                  <span className={styles.stepIcon}>{step.icon}</span>
-                  {step.title}
-                </h3>
-                <p>{step.description}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
     </div>
   );
 };
