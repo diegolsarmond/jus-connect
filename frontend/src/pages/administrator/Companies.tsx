@@ -1,54 +1,277 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Plus, Search, Building2, Users, Calendar, Activity, Phone } from "lucide-react";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mockCompanies, mockPlans } from "@/data/mockData";
 import { routes } from "@/config/routes";
-import { Plus, Search, Building2, Users, Calendar, Activity } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { getApiUrl } from "@/lib/api";
+
+type CompanyStatus = "active" | "inactive" | "trial";
+
+interface ApiCompany {
+  id: number;
+  nome_empresa?: string | null;
+  cnpj?: string | null;
+  telefone?: string | null;
+  email?: string | null;
+  plano?: number | string | null;
+  responsavel?: number | string | null;
+  ativo?: boolean | null;
+  datacadastro?: string | Date | null;
+  atualizacao?: string | Date | null;
+}
+
+interface ApiPlan {
+  id?: number;
+  nome?: string | null;
+  valor?: number | null;
+}
+
+interface Company {
+  id: number;
+  name: string;
+  email: string;
+  cnpj: string;
+  phone: string;
+  planId: string | null;
+  planName: string;
+  planValue?: number | null;
+  status: CompanyStatus;
+  manager: string;
+  createdAt: string | null;
+  lastActivity: string | null;
+}
+
+const parseDataArray = <T,>(payload: unknown): T[] => {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+
+  if (payload && typeof payload === "object") {
+    const rows = (payload as { rows?: unknown }).rows;
+    if (Array.isArray(rows)) {
+      return rows as T[];
+    }
+
+    const data = (payload as { data?: unknown }).data;
+    if (Array.isArray(data)) {
+      return data as T[];
+    }
+
+    if (data && typeof data === "object") {
+      const nestedRows = (data as { rows?: unknown }).rows;
+      if (Array.isArray(nestedRows)) {
+        return nestedRows as T[];
+      }
+    }
+  }
+
+  return [];
+};
+
+const toIsoString = (value: unknown): string | null => {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return null;
+};
+
+const resolveCompanyStatus = (status: boolean | null | undefined, planId: string | null): CompanyStatus => {
+  if (status === false) {
+    return "inactive";
+  }
+
+  if (planId) {
+    return "active";
+  }
+
+  return "trial";
+};
+
+const mapApiCompanyToCompany = (company: ApiCompany, plansIndex: Map<string, ApiPlan>): Company => {
+  const planId = company.plano != null ? String(company.plano) : null;
+  const plan = planId ? plansIndex.get(planId) : undefined;
+
+  return {
+    id: company.id,
+    name: company.nome_empresa?.trim() || `Empresa #${company.id}`,
+    email: company.email?.trim() || "",
+    cnpj: company.cnpj?.trim() || "",
+    phone: company.telefone?.trim() || "",
+    planId,
+    planName: plan?.nome?.trim() || (planId ? `Plano ${planId}` : "Sem plano"),
+    planValue: typeof plan?.valor === "number" ? plan.valor : null,
+    status: resolveCompanyStatus(company.ativo ?? null, planId),
+    manager: company.responsavel != null ? String(company.responsavel) : "",
+    createdAt: toIsoString(company.datacadastro),
+    lastActivity: toIsoString(company.atualizacao) ?? toIsoString(company.datacadastro),
+  };
+};
+
+const formatDate = (value: string | null) => {
+  if (!value) {
+    return "--";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return date.toLocaleDateString("pt-BR");
+};
+
+const formatCurrency = (value?: number | null) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "0";
+  }
+
+  return value.toLocaleString("pt-BR");
+};
+
+const getStatusBadge = (status: CompanyStatus) => {
+  const variants = {
+    active: "default",
+    trial: "secondary",
+    inactive: "destructive",
+  } as const;
+
+  const labels = {
+    active: "Ativo",
+    trial: "Trial",
+    inactive: "Inativo",
+  } as const;
+
+  return (
+    <Badge variant={variants[status]}>
+      {labels[status]}
+    </Badge>
+  );
+};
 
 export default function Companies() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredCompanies = mockCompanies.filter(company =>
-    company.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    company.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    const controller = new AbortController();
+    let isMounted = true;
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      active: "default",
-      trial: "secondary",
-      inactive: "destructive"
-    } as const;
-    
-    const labels = {
-      active: "Ativo",
-      trial: "Trial",
-      inactive: "Inativo"
+    const loadCompanies = async () => {
+      setIsLoading(true);
+      try {
+        const companiesResponse = await fetch(getApiUrl("empresas"), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        if (!companiesResponse.ok) {
+          throw new Error(`Falha ao carregar empresas: ${companiesResponse.status}`);
+        }
+
+        const companiesPayload = await companiesResponse.json();
+        const apiCompanies = parseDataArray<ApiCompany>(companiesPayload);
+
+        const plansIndex = new Map<string, ApiPlan>();
+        try {
+          const plansResponse = await fetch(getApiUrl("planos"), {
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          });
+
+          if (plansResponse.ok) {
+            const plansPayload = await plansResponse.json();
+            const apiPlans = parseDataArray<ApiPlan>(plansPayload);
+            apiPlans.forEach((plan) => {
+              if (plan?.id != null) {
+                plansIndex.set(String(plan.id), plan);
+              }
+            });
+          } else {
+            console.warn("Falha ao carregar planos:", plansResponse.status);
+          }
+        } catch (planError) {
+          if (planError instanceof DOMException && planError.name === "AbortError") {
+            return;
+          }
+          console.warn("Erro ao carregar planos:", planError);
+        }
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCompanies(apiCompanies.map((company) => mapApiCompanyToCompany(company, plansIndex)));
+        setError(null);
+      } catch (fetchError) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+          return;
+        }
+
+        console.error("Erro ao carregar empresas:", fetchError);
+        setCompanies([]);
+        setError("Não foi possível carregar as empresas.");
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     };
 
-    return (
-      <Badge variant={variants[status as keyof typeof variants]}>
-        {labels[status as keyof typeof labels]}
-      </Badge>
-    );
-  };
+    void loadCompanies();
 
-  const getPlanName = (planId: string) => {
-    const plan = mockPlans.find(p => p.id === planId);
-    return plan?.name || "Sem plano";
-  };
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, []);
 
-  const formatCurrency = (value?: number) => {
-    if (value === undefined || value === null) {
-      return "0";
+  const filteredCompanies = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return companies;
     }
 
-    return value.toLocaleString("pt-BR");
-  };
+    return companies.filter((company) => {
+      const values = [
+        company.name,
+        company.email,
+        company.cnpj,
+        company.manager,
+        company.phone,
+        company.planName,
+      ];
+
+      return values.some((value) => value && value.toLowerCase().includes(query));
+    });
+  }, [companies, searchTerm]);
+
+  const totalCompanies = companies.length;
+  const activeCompanies = useMemo(
+    () => companies.filter((company) => company.status === "active").length,
+    [companies],
+  );
+  const trialCompanies = useMemo(
+    () => companies.filter((company) => company.status === "trial").length,
+    [companies],
+  );
+  const activePercentage = totalCompanies > 0 ? ((activeCompanies / totalCompanies) * 100).toFixed(1) : "0.0";
+
 
   return (
     <div className="space-y-6">
@@ -73,7 +296,7 @@ export default function Companies() {
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockCompanies.length}</div>
+            <div className="text-2xl font-bold">{totalCompanies}</div>
             <p className="text-xs text-muted-foreground">+2 este mês</p>
           </CardContent>
         </Card>
@@ -85,10 +308,10 @@ export default function Companies() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockCompanies.filter(c => c.status === 'active').length}
+              {activeCompanies}
             </div>
             <p className="text-xs text-muted-foreground">
-              {((mockCompanies.filter(c => c.status === 'active').length / mockCompanies.length) * 100).toFixed(1)}% do total
+              {activePercentage}% do total
             </p>
           </CardContent>
         </Card>
@@ -100,7 +323,7 @@ export default function Companies() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockCompanies.filter(c => c.status === 'trial').length}
+              {trialCompanies}
             </div>
             <p className="text-xs text-muted-foreground">Potenciais conversões</p>
           </CardContent>
@@ -133,7 +356,8 @@ export default function Companies() {
                   <TableHead>Empresa</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Plano</TableHead>
-                  <TableHead>Usuários</TableHead>
+                  <TableHead>Responsável</TableHead>
+                  <TableHead>Telefone</TableHead>
                   <TableHead>Cadastro</TableHead>
                   <TableHead>Última Atividade</TableHead>
                   <TableHead>MRR</TableHead>
@@ -141,43 +365,65 @@ export default function Companies() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCompanies.map((company) => (
-                  <TableRow key={company.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{company.name}</div>
-                        <div className="text-sm text-muted-foreground">{company.email}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(company.status)}</TableCell>
-                    <TableCell>
-                      {company.subscription ? getPlanName(company.subscription.planId) : "Sem plano"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        {company.users.length}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        {new Date(company.createdAt).toLocaleDateString('pt-BR')}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(company.lastActivity).toLocaleDateString('pt-BR')}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">R$ {formatCurrency(company.subscription?.mrr)}</div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        Ver Detalhes
-                      </Button>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-6 text-center text-sm text-muted-foreground">
+                      Carregando empresas...
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : error ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-6 text-center text-sm text-muted-foreground">
+                      {error}
+                    </TableCell>
+                  </TableRow>
+                ) : filteredCompanies.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="py-6 text-center text-sm text-muted-foreground">
+                      Nenhuma empresa encontrada.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredCompanies.map((company) => (
+                    <TableRow key={company.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{company.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {company.email || "Sem e-mail"}
+                          </div>
+                          {company.cnpj ? (
+                            <div className="text-xs text-muted-foreground">CNPJ: {company.cnpj}</div>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(company.status)}</TableCell>
+                      <TableCell>{company.planName}</TableCell>
+                      <TableCell>{company.manager || "--"}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          {company.phone || "--"}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          {formatDate(company.createdAt)}
+                        </div>
+                      </TableCell>
+                      <TableCell>{formatDate(company.lastActivity)}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">R$ {formatCurrency(company.planValue)}</div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" disabled>
+                          Ver Detalhes
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
