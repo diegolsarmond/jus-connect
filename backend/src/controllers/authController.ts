@@ -27,7 +27,7 @@ export const login = async (req: Request, res: Response) => {
               u.perfil,
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
-              u.escritorio AS setor_id,
+              u.setor AS setor_id,
               esc.nome AS setor_nome
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
@@ -115,11 +115,11 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               u.status,
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
-              u.escritorio AS setor_id,
+              u.setor AS setor_id,
               esc.nome AS setor_nome
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
-         LEFT JOIN public.escritorios esc ON esc.id = u.escritorio
+         LEFT JOIN public.escritorios esc ON esc.id = u.setor
         WHERE u.id = $1
         LIMIT 1`,
       [req.auth.userId]
