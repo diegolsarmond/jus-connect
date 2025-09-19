@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { routes } from "@/config/routes";
+import { adminRelativePath, routes } from "@/config/routes";
 import Landing from "./pages/Landing";
 import Clientes from "./pages/Clientes";
 import NovoCliente from "./pages/NovoCliente";
@@ -62,11 +62,27 @@ import NotFound from "./pages/NotFound";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 import { RequireModule } from "@/features/auth/RequireModule";
+import { RequireAdminUser } from "@/features/auth/RequireAdminUser";
 
 const CRMLayout = lazy(() =>
   import("@/components/layout/CRMLayout").then((module) => ({ default: module.CRMLayout })),
 );
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const AdminLayout = lazy(() => import("@/components/layout/DashboardLayout"));
+const AdminDashboard = lazy(() => import("./pages/administrator/Dashboard"));
+const AdminCompanies = lazy(() => import("./pages/administrator/Companies"));
+const AdminNewCompany = lazy(() => import("./pages/administrator/NewCompany"));
+const AdminPlans = lazy(() => import("./pages/administrator/Plans"));
+const AdminNewPlan = lazy(() => import("./pages/administrator/NewPlan"));
+const AdminSubscriptions = lazy(() => import("./pages/administrator/Subscriptions"));
+const AdminNewSubscription = lazy(() => import("./pages/administrator/NewSubscription"));
+const AdminUsers = lazy(() => import("./pages/administrator/Users"));
+const AdminNewUser = lazy(() => import("./pages/administrator/NewUser"));
+const AdminAnalytics = lazy(() => import("./pages/administrator/Analytics"));
+const AdminSupport = lazy(() => import("./pages/administrator/Support"));
+const AdminLogs = lazy(() => import("./pages/administrator/Logs"));
+const AdminSettings = lazy(() => import("./pages/administrator/Settings"));
+const AdminNotFound = lazy(() => import("./pages/administrator/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -247,7 +263,34 @@ const App = () => (
                 )}
               />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
+              <Route path="*" element={<NotFound />} />
+              </Route>
+              <Route
+                path={`${routes.admin.root}/*`}
+                element={(
+                  <ProtectedRoute>
+                    <RequireAdminUser>
+                      <Suspense fallback={<AdminAreaFallback />}>
+                        <AdminLayout />
+                      </Suspense>
+                    </RequireAdminUser>
+                  </ProtectedRoute>
+                )}
+              >
+                <Route index element={<AdminDashboard />} />
+                <Route path={adminRelativePath.companies} element={<AdminCompanies />} />
+                <Route path={adminRelativePath.newCompany} element={<AdminNewCompany />} />
+                <Route path={adminRelativePath.plans} element={<AdminPlans />} />
+                <Route path={adminRelativePath.newPlan} element={<AdminNewPlan />} />
+                <Route path={adminRelativePath.subscriptions} element={<AdminSubscriptions />} />
+                <Route path={adminRelativePath.newSubscription} element={<AdminNewSubscription />} />
+                <Route path={adminRelativePath.users} element={<AdminUsers />} />
+                <Route path={adminRelativePath.newUser} element={<AdminNewUser />} />
+                <Route path={adminRelativePath.analytics} element={<AdminAnalytics />} />
+                <Route path={adminRelativePath.support} element={<AdminSupport />} />
+                <Route path={adminRelativePath.logs} element={<AdminLogs />} />
+                <Route path={adminRelativePath.settings} element={<AdminSettings />} />
+                <Route path="*" element={<AdminNotFound />} />
               </Route>
             </Routes>
           </Suspense>
@@ -255,6 +298,13 @@ const App = () => (
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
+);
+
+const AdminAreaFallback = () => (
+  <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center" role="status" aria-live="polite">
+    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+    <p className="text-sm font-medium text-muted-foreground">Carregando painel administrativo...</p>
+  </div>
 );
 
 const LandingFallback = () => (
