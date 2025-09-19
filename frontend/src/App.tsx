@@ -71,6 +71,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const AdminLayout = lazy(() => import("@/components/layout/DashboardLayout"));
 const AdminDashboard = lazy(() => import("./pages/administrator/Dashboard"));
 const AdminCompanies = lazy(() => import("./pages/administrator/Companies"));
+const AdminCompanyDetails = lazy(() => import("./pages/administrator/CompanyDetails"));
 const AdminNewCompany = lazy(() => import("./pages/administrator/NewCompany"));
 const AdminPlans = lazy(() => import("./pages/administrator/Plans"));
 const AdminNewPlan = lazy(() => import("./pages/administrator/NewPlan"));
@@ -280,6 +281,7 @@ const App = () => (
               >
                 <Route index element={<AdminDashboard />} />
                 <Route path={adminRelativePath.companies} element={<AdminCompanies />} />
+                <Route path={adminRelativePath.companyDetails} element={<AdminCompanyDetails />} />
                 <Route path={adminRelativePath.newCompany} element={<AdminNewCompany />} />
                 <Route path={adminRelativePath.plans} element={<AdminPlans />} />
                 <Route path={adminRelativePath.newPlan} element={<AdminNewPlan />} />

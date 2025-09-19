@@ -4,9 +4,29 @@ import pool from '../services/db';
 export const listEmpresas = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro 	FROM public."vw.empresas";'
+      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, atualizacao FROM public."vw.empresas";'
     );
     res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getEmpresaById = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, atualizacao FROM public."vw.empresas" WHERE id = $1',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Empresa não encontrada' });
+    }
+
+    res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
