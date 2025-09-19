@@ -42,6 +42,14 @@ export default function Companies() {
     return plan?.name || "Sem plano";
   };
 
+  const formatCurrency = (value?: number) => {
+    if (value === undefined || value === null) {
+      return "0";
+    }
+
+    return value.toLocaleString("pt-BR");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -161,9 +169,7 @@ export default function Companies() {
                       {new Date(company.lastActivity).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">
-                        R$ {company.subscription?.mrr.toLocaleString() || '0'}
-                      </div>
+                      <div className="font-medium">R$ {formatCurrency(company.subscription?.mrr)}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm">
