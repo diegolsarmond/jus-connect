@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+
 import { ArrowLeftRight, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,7 @@ const getInitials = (name: string | undefined) => {
 export function HeaderActions() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const { user, logout } = useAuth();
   const canAccessConfiguracoes =
     user?.modulos?.some((moduleId) => moduleId === "configuracoes" || moduleId.startsWith("configuracoes-")) ?? false;
@@ -107,6 +109,7 @@ export function HeaderActions() {
             >
               <ArrowLeftRight className="mr-2 h-4 w-4" />
               {profileToggleLabel}
+
             </DropdownMenuItem>
           )}
           {/*{canAccessConfiguracoes && (*/}
