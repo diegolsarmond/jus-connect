@@ -38,7 +38,7 @@ function resolveFallbackBaseUrl(): string {
   return 'http://localhost:3001';
 }
 
-const API_BASE_URL = resolveFallbackBaseUrl();
+let cachedApiBaseUrl: string | undefined;
 
 function joinPaths(base: string, path?: string): string {
   const normalizedBase = base.replace(/\/+$/, '');
@@ -56,12 +56,20 @@ function joinPaths(base: string, path?: string): string {
   return `${normalizedBase}/${normalizedPath}`;
 }
 
+function resolveApiBaseUrl(): string {
+  if (!cachedApiBaseUrl) {
+    cachedApiBaseUrl = resolveFallbackBaseUrl();
+  }
+
+  return cachedApiBaseUrl;
+}
+
 export function getApiBaseUrl(): string {
-  return API_BASE_URL;
+  return resolveApiBaseUrl();
 }
 
 export function getApiUrl(path = ''): string {
-  const apiRoot = joinPaths(API_BASE_URL, 'api');
+  const apiRoot = joinPaths(resolveApiBaseUrl(), 'api');
   return path ? joinPaths(apiRoot, path) : apiRoot;
 }
 
