@@ -74,8 +74,12 @@ const fetchDatajudMovimentacoes = async (alias, numeroProcesso) => {
         throw new Error('Alias do Datajud inválido para consulta');
     }
     const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
-    const numeroForQuery = numeroProcesso.replace(/\D+/g, '');
-    const numeroNormalizado = numeroForQuery.length > 0 ? numeroForQuery : numeroProcesso;
+    const numeroForQueryDigits = numeroProcesso.replace(/\D/g, '').trim();
+    const numeroForQuery = numeroForQueryDigits || numeroProcesso.trim();
+    if (!numeroForQuery) {
+        throw new Error('Número do processo inválido para consulta');
+    }
+
     const fetchImpl = resolveFetch();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DATAJUD_TIMEOUT_MS);
@@ -88,7 +92,8 @@ const fetchDatajudMovimentacoes = async (alias, numeroProcesso) => {
                 Authorization: `APIKey ${apiKey}`,
             },
             body: JSON.stringify({
-                query: { match: { numeroProcesso: numeroNormalizado } },
+                query: { match: { numeroProcesso: numeroForQuery } },
+
                 size: 1,
             }),
             signal: controller.signal,
