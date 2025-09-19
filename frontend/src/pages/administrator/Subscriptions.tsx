@@ -1,55 +1,424 @@
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { Link } from "react-router-dom";
+import { Plus, Search, CreditCard, TrendingUp, Calendar, AlertTriangle } from "lucide-react";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mockSubscriptions, mockCompanies, mockPlans } from "@/data/mockData";
 import { routes } from "@/config/routes";
-import { Plus, Search, CreditCard, TrendingUp, Calendar, AlertTriangle } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { getApiUrl } from "@/lib/api";
+
+type SubscriptionStatus = "active" | "trial" | "inactive";
+type PlanRecurrence = "mensal" | "anual" | "nenhuma" | null;
+
+interface ApiCompany {
+  id: number;
+  nome_empresa?: string | null;
+  email?: string | null;
+  plano?: number | string | null;
+  ativo?: boolean | string | number | null;
+  datacadastro?: string | Date | null;
+}
+
+interface ApiPlan {
+  id?: number;
+  nome?: string | null;
+  valor?: number | null;
+  recorrencia?: string | null;
+}
+
+interface Subscription {
+  id: string;
+  companyId: number;
+  companyName: string;
+  companyEmail: string;
+  planId: string | null;
+  planName: string;
+  planPrice: number | null;
+  planRecurrence: PlanRecurrence;
+  status: SubscriptionStatus;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  nextCharge: string | null;
+  trialEnd: string | null;
+  mrr: number;
+}
+
+const STATUS_LABELS: Record<SubscriptionStatus, string> = {
+  active: "Ativa",
+  trial: "Trial",
+  inactive: "Inativa",
+};
+
+const parseDataArray = <T,>(payload: unknown): T[] => {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+
+  if (payload && typeof payload === "object") {
+    const rows = (payload as { rows?: unknown }).rows;
+    if (Array.isArray(rows)) {
+      return rows as T[];
+    }
+
+    const data = (payload as { data?: unknown }).data;
+    if (Array.isArray(data)) {
+      return data as T[];
+    }
+
+    if (data && typeof data === "object") {
+      const nestedRows = (data as { rows?: unknown }).rows;
+      if (Array.isArray(nestedRows)) {
+        return nestedRows as T[];
+      }
+    }
+  }
+
+  return [];
+};
+
+const toIsoString = (value: unknown): string | null => {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return null;
+};
+
+const parseBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "t", "1", "yes", "y", "s", "sim"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "f", "0", "no", "n", "nao", "não"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const parseRecurrence = (value: unknown): PlanRecurrence => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "mensal" || normalized === "anual" || normalized === "nenhuma") {
+    return normalized;
+  }
+
+  return null;
+};
+
+const addDuration = (start: string | null, recurrence: PlanRecurrence): string | null => {
+  if (!start || !recurrence || recurrence === "nenhuma") {
+    return null;
+  }
+
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) {
+    return null;
+  }
+
+  const endDate = new Date(startDate);
+  if (recurrence === "anual") {
+    endDate.setFullYear(endDate.getFullYear() + 1);
+  } else {
+    endDate.setMonth(endDate.getMonth() + 1);
+  }
+
+  return endDate.toISOString();
+};
+
+const TRIAL_DURATION_DAYS = 14;
+
+const calculateTrialEnd = (start: string | null): string | null => {
+  if (!start) {
+    return null;
+  }
+
+  const startDate = new Date(start);
+  if (Number.isNaN(startDate.getTime())) {
+    return null;
+  }
+
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + TRIAL_DURATION_DAYS);
+  return endDate.toISOString();
+};
+
+const resolveStatus = (isActive: boolean | null, planId: string | null): SubscriptionStatus => {
+  if (isActive === false) {
+    return "inactive";
+  }
+
+  if (planId) {
+    return "active";
+  }
+
+  return "trial";
+};
+
+const roundToTwo = (value: number): number => Math.round(value * 100) / 100;
+
+const calculateMrr = (price: number | null, recurrence: PlanRecurrence): number => {
+  if (typeof price !== "number" || Number.isNaN(price)) {
+    return 0;
+  }
+
+  if (recurrence === "anual") {
+    return roundToTwo(price / 12);
+  }
+
+  return roundToTwo(price);
+};
+
+const formatCurrency = (value: number): string =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+const formatDate = (value: string | null): string => {
+  if (!value) {
+    return "--";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return date.toLocaleDateString("pt-BR");
+};
+
+const formatPeriodRange = (start: string | null, end: string | null): string => {
+  const startLabel = formatDate(start);
+  const endLabel = formatDate(end);
+
+  if (startLabel === "--" && endLabel === "--") {
+    return "--";
+  }
+
+  if (endLabel === "--") {
+    return startLabel;
+  }
+
+  if (startLabel === "--") {
+    return endLabel;
+  }
+
+  return `${startLabel} - ${endLabel}`;
+};
+
+const formatPlanPrice = (price: number | null, recurrence: PlanRecurrence): string => {
+  if (typeof price !== "number" || Number.isNaN(price)) {
+    return "Sem valor definido";
+  }
+
+  const suffix = recurrence === "anual" ? "/ano" : recurrence === "mensal" ? "/mês" : "";
+  return `${formatCurrency(price)}${suffix}`;
+};
+
+const formatTrialInfo = (trialEnd: string | null): string => {
+  if (!trialEnd) {
+    return "--";
+  }
+
+  const label = formatDate(trialEnd);
+  return label === "--" ? "--" : `Trial até ${label}`;
+};
+
+const mapApiCompanyToSubscription = (company: ApiCompany, plansIndex: Map<string, ApiPlan>): Subscription => {
+  const planId = company.plano != null ? String(company.plano) : null;
+  const plan = planId ? plansIndex.get(planId) : undefined;
+
+  const planName = plan?.nome?.trim() || (planId ? `Plano ${planId}` : "Sem plano");
+  const planPrice = typeof plan?.valor === "number" ? plan.valor : null;
+  const recurrence = parseRecurrence(plan?.recorrencia);
+  const currentPeriodStart = toIsoString(company.datacadastro);
+  const currentPeriodEnd = addDuration(currentPeriodStart, recurrence);
+  const isActive = parseBoolean(company.ativo ?? null);
+  const status = resolveStatus(isActive, planId);
+  const trialEnd = status === "trial" ? calculateTrialEnd(currentPeriodStart) : null;
+  const nextCharge = status === "trial"
+    ? trialEnd
+    : recurrence && recurrence !== "nenhuma"
+      ? currentPeriodEnd
+      : null;
+
+  return {
+    id: `subscription-${company.id}`,
+    companyId: company.id,
+    companyName: company.nome_empresa?.trim() || `Empresa #${company.id}`,
+    companyEmail: company.email?.trim() || "",
+    planId,
+    planName,
+    planPrice,
+    planRecurrence: recurrence,
+    status,
+    currentPeriodStart,
+    currentPeriodEnd,
+    nextCharge,
+    trialEnd,
+    mrr: calculateMrr(planPrice, recurrence),
+  };
+};
+
+const getStatusBadge = (status: SubscriptionStatus) => {
+  const variants: Record<SubscriptionStatus, ComponentProps<typeof Badge>["variant"]> = {
+    active: "default",
+    trial: "secondary",
+    inactive: "destructive",
+  };
+
+  return (
+    <Badge variant={variants[status]}>
+      {STATUS_LABELS[status]}
+    </Badge>
+  );
+};
 
 export default function Subscriptions() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const subscriptionsWithDetails = mockSubscriptions.map(sub => {
-    const company = mockCompanies.find(c => c.id === sub.companyId);
-    const plan = mockPlans.find(p => p.id === sub.planId);
-    return { ...sub, company, plan };
-  });
+  useEffect(() => {
+    const controller = new AbortController();
+    let isMounted = true;
 
-  const filteredSubscriptions = subscriptionsWithDetails.filter(sub =>
-    sub.company?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    sub.plan?.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    const loadSubscriptions = async () => {
+      setIsLoading(true);
+      try {
+        const companiesResponse = await fetch(getApiUrl("empresas"), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      active: "default",
-      trialing: "secondary",
-      past_due: "destructive",
-      canceled: "destructive",
-      suspended: "outline"
-    } as const;
-    
-    const labels = {
-      active: "Ativo",
-      trialing: "Trial",
-      past_due: "Em Atraso",
-      canceled: "Cancelado",
-      suspended: "Suspenso"
+        if (!companiesResponse.ok) {
+          throw new Error(`Falha ao carregar empresas: ${companiesResponse.status}`);
+        }
+
+        const companiesPayload = await companiesResponse.json();
+        const apiCompanies = parseDataArray<ApiCompany>(companiesPayload);
+
+        const plansIndex = new Map<string, ApiPlan>();
+        try {
+          const plansResponse = await fetch(getApiUrl("planos"), {
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          });
+
+          if (plansResponse.ok) {
+            const plansPayload = await plansResponse.json();
+            const apiPlans = parseDataArray<ApiPlan>(plansPayload);
+            apiPlans.forEach((plan) => {
+              if (plan?.id != null) {
+                plansIndex.set(String(plan.id), plan);
+              }
+            });
+          } else {
+            console.warn("Falha ao carregar planos:", plansResponse.status);
+          }
+        } catch (planError) {
+          if (planError instanceof DOMException && planError.name === "AbortError") {
+            return;
+          }
+          console.warn("Erro ao carregar planos:", planError);
+        }
+
+        if (!isMounted) {
+          return;
+        }
+
+        setSubscriptions(apiCompanies.map((company) => mapApiCompanyToSubscription(company, plansIndex)));
+        setError(null);
+      } catch (fetchError) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+          return;
+        }
+
+        console.error("Erro ao carregar assinaturas:", fetchError);
+        setSubscriptions([]);
+        setError("Não foi possível carregar as assinaturas.");
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     };
 
-    return (
-      <Badge variant={variants[status as keyof typeof variants]}>
-        {labels[status as keyof typeof labels]}
-      </Badge>
-    );
-  };
+    void loadSubscriptions();
 
-  const totalMRR = mockSubscriptions.reduce((acc, sub) => acc + sub.mrr, 0);
-  const activeSubscriptions = mockSubscriptions.filter(sub => sub.status === 'active').length;
-  const trialSubscriptions = mockSubscriptions.filter(sub => sub.status === 'trialing').length;
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, []);
+
+  const filteredSubscriptions = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return subscriptions;
+    }
+
+    return subscriptions.filter((subscription) => {
+      const values = [
+        subscription.companyName,
+        subscription.companyEmail,
+        subscription.planName,
+        STATUS_LABELS[subscription.status],
+      ];
+
+      return values.some((value) => value && value.toLowerCase().includes(query));
+    });
+  }, [subscriptions, searchTerm]);
+
+  const metrics = useMemo(() => {
+    return subscriptions.reduce(
+      (acc, subscription) => {
+        acc.totalMRR += subscription.mrr;
+
+        if (subscription.status === "active") {
+          acc.activeSubscriptions += 1;
+        }
+
+        if (subscription.status === "trial") {
+          acc.trialSubscriptions += 1;
+        }
+
+        return acc;
+      },
+      { totalMRR: 0, activeSubscriptions: 0, trialSubscriptions: 0 },
+    );
+  }, [subscriptions]);
+
+  const { totalMRR, activeSubscriptions, trialSubscriptions } = metrics;
+  const arpu = activeSubscriptions > 0 ? totalMRR / activeSubscriptions : 0;
 
   return (
     <div className="space-y-6">
@@ -74,7 +443,7 @@ export default function Subscriptions() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ {totalMRR.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalMRR)}</div>
             <p className="text-xs text-muted-foreground">Receita mensal recorrente</p>
           </CardContent>
         </Card>
@@ -107,9 +476,7 @@ export default function Subscriptions() {
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {activeSubscriptions > 0 ? (totalMRR / activeSubscriptions).toFixed(0) : '0'}
-            </div>
+            <div className="text-2xl font-bold">{formatCurrency(arpu)}</div>
             <p className="text-xs text-muted-foreground">Receita média por usuário</p>
           </CardContent>
         </Card>
@@ -148,48 +515,66 @@ export default function Subscriptions() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredSubscriptions.map((subscription) => (
-                  <TableRow key={subscription.id}>
-                    <TableCell>
-                      <div className="font-medium">{subscription.company?.name}</div>
-                      <div className="text-sm text-muted-foreground">{subscription.company?.email}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{subscription.plan?.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        R$ {subscription.plan?.price}/mês
-                      </div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(subscription.status)}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">R$ {subscription.mrr.toLocaleString()}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {new Date(subscription.currentPeriodStart).toLocaleDateString('pt-BR')} - {' '}
-                        {new Date(subscription.currentPeriodEnd).toLocaleDateString('pt-BR')}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {subscription.status === 'trialing' && subscription.trialEnd
-                          ? `Trial até ${new Date(subscription.trialEnd).toLocaleDateString('pt-BR')}`
-                          : new Date(subscription.currentPeriodEnd).toLocaleDateString('pt-BR')
-                        }
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex gap-2 justify-end">
-                        <Button variant="ghost" size="sm">
-                          Ver Detalhes
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          Gerenciar
-                        </Button>
-                      </div>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                      Carregando assinaturas...
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : error ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                      {error}
+                    </TableCell>
+                  </TableRow>
+                ) : filteredSubscriptions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                      Nenhuma assinatura encontrada.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredSubscriptions.map((subscription) => (
+                    <TableRow key={subscription.id}>
+                      <TableCell>
+                        <div className="font-medium">{subscription.companyName}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {subscription.companyEmail || "Sem e-mail"}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{subscription.planName}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {subscription.planId ? formatPlanPrice(subscription.planPrice, subscription.planRecurrence) : "Sem plano"}
+                        </div>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(subscription.status)}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{formatCurrency(subscription.mrr)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">{formatPeriodRange(subscription.currentPeriodStart, subscription.currentPeriodEnd)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {subscription.status === "trial"
+                            ? formatTrialInfo(subscription.trialEnd)
+                            : formatDate(subscription.nextCharge)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="ghost" size="sm" disabled>
+                            Ver Detalhes
+                          </Button>
+                          <Button variant="outline" size="sm" disabled>
+                            Gerenciar
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
