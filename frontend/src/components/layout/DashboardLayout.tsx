@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -17,49 +18,51 @@ import {
   Users,
   BarChart3,
   HeadphonesIcon,
+  Loader2,
   Settings,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { isActiveRoute, routes } from "@/config/routes";
 
 const navigation = [
   {
     name: "Dashboard",
-    href: "/",
+    href: routes.admin.dashboard,
     icon: LayoutDashboard,
   },
   {
     name: "Empresas",
-    href: "/companies",
+    href: routes.admin.companies,
     icon: Building2,
   },
   {
     name: "Planos",
-    href: "/plans",
+    href: routes.admin.plans,
     icon: Package,
   },
   {
     name: "Assinaturas",
-    href: "/subscriptions",
+    href: routes.admin.subscriptions,
     icon: CreditCard,
   },
   {
     name: "Usuários",
-    href: "/users",
+    href: routes.admin.users,
     icon: Users,
   },
   {
     name: "Relatórios",
-    href: "/analytics",
+    href: routes.admin.analytics,
     icon: BarChart3,
   },
   {
     name: "Suporte",
-    href: "/support",
+    href: routes.admin.support,
     icon: HeadphonesIcon,
   },
   {
     name: "Configurações",
-    href: "/settings",
+    href: routes.admin.settings,
     icon: Settings,
   },
 ];
@@ -85,7 +88,7 @@ export default function DashboardLayout() {
                 <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location.pathname === item.href}
+                    isActive={isActiveRoute(location.pathname, item.href)}
                   >
                     <Link to={item.href} className="flex items-center gap-3">
                       <item.icon className="h-4 w-4" />
@@ -110,10 +113,19 @@ export default function DashboardLayout() {
           </header>
 
           <main className="flex-1 space-y-4 p-6">
-            <Outlet />
+            <Suspense fallback={<AdminContentFallback />}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
       </div>
     </SidebarProvider>
   );
 }
+
+const AdminContentFallback = () => (
+  <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center" role="status" aria-live="polite">
+    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
+    <p className="text-sm text-muted-foreground">Carregando conteúdo administrativo...</p>
+  </div>
+);
