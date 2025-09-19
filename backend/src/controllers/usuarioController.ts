@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { isAdminUserId } from '../constants/admin';
 
 const parseOptionalId = (value: unknown): number | null | 'invalid' => {
   if (value === undefined || value === null) {
@@ -161,12 +162,36 @@ export const listUsuarios = async (req: Request, res: Response) => {
       return res.json([]);
     }
 
-    const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
-      empresaAtualResult,
-    ]);
+    const result = await pool.query(
+      `${baseUsuarioSelect} INNER JOIN public.usuarios u ON u.id = vu.id WHERE u.empresa = $1`,
+      [empresaAtualResult]
+    );
     res.json(result.rows);
   } catch (error) {
     console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const listAllUsuarios = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    if (!isAdminUserId(req.auth.userId)) {
+      return res
+        .status(403)
+        .json({ error: 'Acesso restrito ao ambiente administrativo.' });
+    }
+
+    const result = await pool.query(
+      `${baseUsuarioSelect} ORDER BY vu.nome_completo ASC, vu.id ASC`
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Falha ao listar usuários administrativos', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
