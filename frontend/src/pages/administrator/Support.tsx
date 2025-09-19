@@ -1,86 +1,203 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mockSupportTickets, mockCompanies } from "@/data/mockData";
-import { Plus, Search, Headphones, Clock, CheckCircle, AlertCircle, XCircle } from "lucide-react";
-import { useState } from "react";
+import { getApiBaseUrl } from "@/lib/api";
+import { AlertCircle, CheckCircle, Clock, Headphones, Plus, Search, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+type SupportRequestStatus = "open" | "in_progress" | "resolved" | "closed";
+
+interface SupportRequest {
+  id: number;
+  subject: string;
+  description: string | null;
+  status: SupportRequestStatus;
+  requesterName: string | null;
+  requesterEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface SupportRequestListResponse {
+  items?: SupportRequest[];
+  total?: number;
+}
+
+const statusLabels: Record<SupportRequestStatus, string> = {
+  open: "Aberto",
+  in_progress: "Em andamento",
+  resolved: "Resolvido",
+  closed: "Fechado",
+};
+
+const statusVariants: Record<SupportRequestStatus, "destructive" | "secondary" | "default" | "outline"> = {
+  open: "destructive",
+  in_progress: "secondary",
+  resolved: "default",
+  closed: "outline",
+};
+
+const statusIcons: Record<SupportRequestStatus, typeof AlertCircle> = {
+  open: AlertCircle,
+  in_progress: Clock,
+  resolved: CheckCircle,
+  closed: XCircle,
+};
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleDateString("pt-BR");
+}
+
+function formatAverageHandlingTime(requests: SupportRequest[]): string | null {
+  const differences = requests
+    .map((request) => {
+      const created = new Date(request.createdAt).getTime();
+      const updated = new Date(request.updatedAt).getTime();
+
+      if (!Number.isFinite(created) || !Number.isFinite(updated) || updated <= created) {
+        return null;
+      }
+
+      return updated - created;
+    })
+    .filter((value): value is number => value !== null && value > 0);
+
+  if (differences.length === 0) {
+    return null;
+  }
+
+  const averageMs = differences.reduce((total, value) => total + value, 0) / differences.length;
+
+  if (!Number.isFinite(averageMs) || averageMs <= 0) {
+    return null;
+  }
+
+  const averageHours = averageMs / 3_600_000;
+
+  if (averageHours < 1) {
+    const minutes = Math.max(1, Math.round(averageMs / 60_000));
+    return `${minutes} min`;
+  }
+
+  if (averageHours < 24) {
+    return `${averageHours.toFixed(1)} h`;
+  }
+
+  const days = averageHours / 24;
+  return `${days.toFixed(1)} dias`;
+}
 
 export default function Support() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [requests, setRequests] = useState<SupportRequest[]>([]);
+  const [totalRequests, setTotalRequests] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const ticketsWithCompany = mockSupportTickets.map(ticket => {
-    const company = mockCompanies.find(c => c.id === ticket.companyId);
-    return { ...ticket, companyName: company?.name || 'Empresa não encontrada' };
-  });
+  const apiUrl = getApiBaseUrl();
 
-  const filteredTickets = ticketsWithCompany.filter(ticket =>
-    ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ticket.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ticket.description.toLowerCase().includes(searchTerm.toLowerCase())
+  const fetchRequests = useCallback(
+    async (signal?: AbortSignal) => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(`${apiUrl}/api/support`, { signal });
+
+        if (!response.ok) {
+          throw new Error("Falha ao carregar solicitações de suporte");
+        }
+
+        const payload = (await response.json()) as SupportRequestListResponse;
+        const items = Array.isArray(payload.items) ? payload.items : [];
+
+        setRequests(items);
+        setTotalRequests(typeof payload.total === "number" ? payload.total : items.length);
+      } catch (requestError) {
+        if ((requestError as { name?: string })?.name === "AbortError" || signal?.aborted) {
+          return;
+        }
+
+        console.error("Erro ao carregar solicitações de suporte:", requestError);
+        setError("Não foi possível carregar as solicitações de suporte. Tente novamente.");
+      } finally {
+        if (!signal?.aborted) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [apiUrl],
   );
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      open: "destructive",
-      in_progress: "secondary",
-      resolved: "default",
-      closed: "outline"
-    } as const;
-    
-    const labels = {
-      open: "Aberto",
-      in_progress: "Em Andamento",
-      resolved: "Resolvido",
-      closed: "Fechado"
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetchRequests(controller.signal);
+
+    return () => {
+      controller.abort();
     };
+  }, [fetchRequests]);
 
-    return (
-      <Badge variant={variants[status as keyof typeof variants]}>
-        {labels[status as keyof typeof labels]}
-      </Badge>
-    );
-  };
+  const filteredRequests = useMemo(() => {
+    const normalizedTerm = searchTerm.trim().toLowerCase();
 
-  const getPriorityBadge = (priority: string) => {
-    const variants = {
-      low: "outline",
-      medium: "secondary",
-      high: "default",
-      urgent: "destructive"
-    } as const;
-    
-    const labels = {
-      low: "Baixa",
-      medium: "Média",
-      high: "Alta",
-      urgent: "Urgente"
-    };
+    if (!normalizedTerm) {
+      return requests;
+    }
 
-    return (
-      <Badge variant={variants[priority as keyof typeof variants]}>
-        {labels[priority as keyof typeof labels]}
-      </Badge>
-    );
-  };
+    return requests.filter((request) => {
+      const subject = request.subject?.toLowerCase() ?? "";
+      const description = request.description?.toLowerCase() ?? "";
+      const requesterName = request.requesterName?.toLowerCase() ?? "";
+      const requesterEmail = request.requesterEmail?.toLowerCase() ?? "";
 
-  const getStatusIcon = (status: string) => {
-    const icons = {
-      open: AlertCircle,
-      in_progress: Clock,
-      resolved: CheckCircle,
-      closed: XCircle
-    };
-    
-    const Icon = icons[status as keyof typeof icons];
+      return (
+        subject.includes(normalizedTerm) ||
+        description.includes(normalizedTerm) ||
+        requesterName.includes(normalizedTerm) ||
+        requesterEmail.includes(normalizedTerm)
+      );
+    });
+  }, [requests, searchTerm]);
+
+  const openTickets = useMemo(
+    () => requests.filter((request) => request.status === "open").length,
+    [requests],
+  );
+  const inProgressTickets = useMemo(
+    () => requests.filter((request) => request.status === "in_progress").length,
+    [requests],
+  );
+  const resolvedTickets = useMemo(
+    () => requests.filter((request) => request.status === "resolved").length,
+    [requests],
+  );
+
+  const distributionTotal = requests.length || 1;
+  const averageHandlingTime = useMemo(() => formatAverageHandlingTime(requests), [requests]);
+
+  const getStatusBadge = (status: SupportRequestStatus) => (
+    <Badge variant={statusVariants[status]}>{statusLabels[status]}</Badge>
+  );
+
+  const getStatusIcon = (status: SupportRequestStatus) => {
+    const Icon = statusIcons[status];
     return Icon ? <Icon className="h-4 w-4" /> : null;
   };
-
-  const openTickets = mockSupportTickets.filter(t => t.status === 'open').length;
-  const inProgressTickets = mockSupportTickets.filter(t => t.status === 'in_progress').length;
-  const resolvedTickets = mockSupportTickets.filter(t => t.status === 'resolved').length;
-  const avgResponseTime = "2.4 horas"; // Mock data
 
   return (
     <div className="space-y-6">
@@ -95,7 +212,14 @@ export default function Support() {
         </Button>
       </div>
 
-      {/* Summary Cards */}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Erro ao carregar solicitações</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -136,7 +260,7 @@ export default function Support() {
             <Headphones className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{avgResponseTime}</div>
+            <div className="text-2xl font-bold">{averageHandlingTime ?? "—"}</div>
             <p className="text-xs text-muted-foreground">Primeira resposta</p>
           </CardContent>
         </Card>
@@ -146,7 +270,10 @@ export default function Support() {
       <Card>
         <CardHeader>
           <CardTitle>Tickets de Suporte</CardTitle>
-          <CardDescription>Visualize e gerencie todas as solicitações de suporte</CardDescription>
+          <CardDescription>
+            Visualize e gerencie todas as solicitações de suporte
+            {totalRequests > 0 ? ` (${totalRequests})` : ""}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center space-x-2 mb-4">
@@ -159,55 +286,69 @@ export default function Support() {
                 className="pl-8"
               />
             </div>
+            <Button variant="outline" size="sm" onClick={() => void fetchRequests()} disabled={isLoading}>
+              Atualizar
+            </Button>
           </div>
 
           <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ticket</TableHead>
-                  <TableHead>Empresa</TableHead>
+                  <TableHead>Assunto</TableHead>
+                  <TableHead>Solicitante</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Prioridade</TableHead>
                   <TableHead>Criado</TableHead>
                   <TableHead>Atualizado</TableHead>
-                  <TableHead>Responsável</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTickets.map((ticket) => (
-                  <TableRow key={ticket.id}>
+                {isLoading && requests.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                      Carregando solicitações de suporte...
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {!isLoading && filteredRequests.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                      {searchTerm
+                        ? "Nenhuma solicitação encontrada para o termo informado."
+                        : "Nenhuma solicitação de suporte registrada."}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {filteredRequests.map((request) => (
+                  <TableRow key={request.id}>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{ticket.title}</div>
-                        <div className="text-sm text-muted-foreground line-clamp-1">
-                          {ticket.description}
-                        </div>
+                        <div className="font-medium">{request.subject}</div>
+                        {request.description ? (
+                          <div className="text-sm text-muted-foreground line-clamp-1">
+                            {request.description}
+                          </div>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{ticket.companyName}</div>
+                      <div className="font-medium">{request.requesterName ?? "—"}</div>
+                      {request.requesterEmail ? (
+                        <div className="text-sm text-muted-foreground">{request.requesterEmail}</div>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {getStatusIcon(ticket.status)}
-                        {getStatusBadge(ticket.status)}
-                      </div>
-                    </TableCell>
-                    <TableCell>{getPriorityBadge(ticket.priority)}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}
+                        {getStatusIcon(request.status)}
+                        {getStatusBadge(request.status)}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">
-                        {new Date(ticket.updatedAt).toLocaleDateString('pt-BR')}
-                      </div>
+                      <div className="text-sm">{formatDate(request.createdAt)}</div>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">{ticket.assignedTo || 'Não atribuído'}</div>
+                      <div className="text-sm">{formatDate(request.updatedAt)}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
@@ -243,9 +384,9 @@ export default function Support() {
               <div className="flex items-center gap-2">
                 <span className="font-medium">{openTickets}</span>
                 <div className="w-16 bg-muted rounded-full h-2">
-                  <div 
-                    className="bg-destructive h-2 rounded-full" 
-                    style={{ width: `${(openTickets / mockSupportTickets.length) * 100}%` }}
+                  <div
+                    className="bg-destructive h-2 rounded-full"
+                    style={{ width: `${(openTickets / distributionTotal) * 100}%` }}
                   />
                 </div>
               </div>
@@ -258,9 +399,9 @@ export default function Support() {
               <div className="flex items-center gap-2">
                 <span className="font-medium">{inProgressTickets}</span>
                 <div className="w-16 bg-muted rounded-full h-2">
-                  <div 
-                    className="bg-secondary h-2 rounded-full" 
-                    style={{ width: `${(inProgressTickets / mockSupportTickets.length) * 100}%` }}
+                  <div
+                    className="bg-secondary h-2 rounded-full"
+                    style={{ width: `${(inProgressTickets / distributionTotal) * 100}%` }}
                   />
                 </div>
               </div>
@@ -273,9 +414,9 @@ export default function Support() {
               <div className="flex items-center gap-2">
                 <span className="font-medium">{resolvedTickets}</span>
                 <div className="w-16 bg-muted rounded-full h-2">
-                  <div 
-                    className="bg-green-600 h-2 rounded-full" 
-                    style={{ width: `${(resolvedTickets / mockSupportTickets.length) * 100}%` }}
+                  <div
+                    className="bg-green-600 h-2 rounded-full"
+                    style={{ width: `${(resolvedTickets / distributionTotal) * 100}%` }}
                   />
                 </div>
               </div>
@@ -299,7 +440,7 @@ export default function Support() {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm">Tempo Primeira Resposta</span>
-              <span className="font-medium">{avgResponseTime}</span>
+              <span className="font-medium">{averageHandlingTime ?? "—"}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm">Tempo Resolução</span>
