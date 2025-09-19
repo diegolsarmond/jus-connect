@@ -21,6 +21,56 @@ const normalizePerfilId = (value) => {
     }
     return null;
 };
+const parsePerfilIdValue = (value) => {
+    if (typeof value === 'number' && Number.isInteger(value)) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isFinite(parsed)) {
+            return parsed;
+        }
+    }
+    return null;
+};
+const normalizePerfilName = (value) => {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\bperfil\b/gi, ' ')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .toLowerCase();
+};
+const findPerfilIdByName = async (name) => {
+    const directResult = await db_1.default.query('SELECT id FROM public.perfis WHERE LOWER(nome) = LOWER($1) LIMIT 1', [name]);
+    const directRowCount = typeof directResult.rowCount === 'number' ? directResult.rowCount : 0;
+    if (directRowCount > 0) {
+        const candidate = parsePerfilIdValue(directResult.rows[0]?.id);
+        if (candidate != null) {
+            return candidate;
+        }
+    }
+    const normalizedTarget = normalizePerfilName(name);
+    if (!normalizedTarget) {
+        return null;
+    }
+    const fallbackResult = await db_1.default.query('SELECT id, nome FROM public.perfis');
+    for (const row of fallbackResult.rows) {
+        const normalizedRowName = normalizePerfilName(row.nome);
+        if (!normalizedRowName || normalizedRowName !== normalizedTarget) {
+            continue;
+        }
+        const candidate = parsePerfilIdValue(row.id);
+        if (candidate != null) {
+            return candidate;
+        }
+    }
+    return null;
+};
 const resolvePerfilId = async (perfil) => {
     const normalizedId = normalizePerfilId(perfil);
     if (normalizedId != null) {
@@ -33,19 +83,7 @@ const resolvePerfilId = async (perfil) => {
     if (!trimmedPerfil) {
         return null;
     }
-    const result = await db_1.default.query('SELECT id FROM public.perfis WHERE LOWER(nome) = LOWER($1) LIMIT 1', [trimmedPerfil]);
-    if (result.rowCount === 0) {
-        return null;
-    }
-    const value = result.rows[0]?.id;
-    if (typeof value === 'number' && Number.isInteger(value)) {
-        return value;
-    }
-    if (value == null) {
-        return null;
-    }
-    const parsed = Number.parseInt(String(value), 10);
-    return Number.isFinite(parsed) ? parsed : null;
+    return findPerfilIdByName(trimmedPerfil);
 };
 const fetchPerfilModules = async (perfil) => {
     const perfilId = await resolvePerfilId(perfil);

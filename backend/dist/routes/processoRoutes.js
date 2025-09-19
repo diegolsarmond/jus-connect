@@ -40,12 +40,6 @@ const router = (0, express_1.Router)();
  *         data_distribuicao:
  *           type: string
  *           format: date
- *         datajud_tipo_justica:
- *           type: string
- *           nullable: true
- *         datajud_alias:
- *           type: string
- *           nullable: true
  *         criado_em:
  *           type: string
  *           format: date-time
@@ -161,10 +155,6 @@ router.get('/processos/:id', processoController_1.getProcessoById);
  *                 type: string
  *               orgao_julgador:
  *                 type: string
- *               datajud_tipo_justica:
- *                 type: string
- *               datajud_alias:
- *                 type: string
  *               tipo:
  *                 type: string
  *               status:
@@ -193,47 +183,6 @@ router.get('/processos/:id', processoController_1.getProcessoById);
  *         description: Número de processo já cadastrado
  */
 router.post('/processos', processoController_1.createProcesso);
-/**
- * @swagger
- * /api/processos/{id}/movimentacoes:
- *   get:
- *     summary: Lista as movimentações do processo via Datajud
- *     tags: [Processos]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: integer
- *         required: true
- *     responses:
- *       200:
- *         description: Movimentações obtidas com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   codigo:
- *                     type: integer
- *                     nullable: true
- *                   nome:
- *                     type: string
- *                   descricao:
- *                     type: string
- *                   dataHora:
- *                     type: string
- *                     format: date-time
- *                     nullable: true
- *       400:
- *         description: Identificador inválido
- *       404:
- *         description: Processo não encontrado
- *       502:
- *         description: Erro ao consultar a API pública do Datajud
- */
-router.get('/processos/:id/movimentacoes', processoController_1.getProcessoMovimentacoes);
 /**
  * @swagger
  * /api/processos/{id}:

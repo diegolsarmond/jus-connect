@@ -47,18 +47,11 @@ import {
   Users as UsersIcon,
   Eye,
 } from "lucide-react";
-import {
-  DATAJUD_CATEGORIAS,
-  DATAJUD_TRIBUNAIS_BY_CATEGORIA,
-  getDatajudCategoriaLabel,
-  getDatajudTribunalLabel,
-  normalizeDatajudAlias,
-} from "@/data/datajud";
 
 interface ProcessoCliente {
-  id?: number;
+  id: number;
   nome: string;
-  cpf: string;
+  documento: string;
   papel: string;
 }
 
@@ -74,16 +67,6 @@ interface Processo {
   assunto: string;
   jurisdicao: string;
   orgaoJulgador: string;
-  datajudTipoJustica: string | null;
-  datajudAlias: string | null;
-  datajudTribunal: string | null;
-  movimentacoes: {
-    data: string;
-    descricao: string;
-    codigo?: number | null;
-    nome?: string;
-    dataIso?: string | null;
-  }[];
 }
 
 interface Uf {
@@ -131,34 +114,18 @@ interface ApiProcesso {
   jurisdicao: string | null;
   advogado_responsavel: string | null;
   data_distribuicao: string | null;
-  criado_em: string;
-  atualizado_em: string;
+  criado_em: string | null;
+  atualizado_em: string | null;
   cliente?: ApiProcessoCliente | null;
-  datajud_tipo_justica?: string | null;
-  datajud_alias?: string | null;
 }
 
-interface ApiProcessoMovimentacao {
-  codigo?: number | null;
-  nome?: string | null;
-  dataHora?: string | null;
-  descricao?: string | null;
-}
-
-const isApiProcessoMovimentacao = (
-  value: unknown,
-): value is ApiProcessoMovimentacao =>
-  value !== null && typeof value === "object";
-
-type ProcessFormState = {
+interface ProcessFormState {
   numero: string;
   uf: string;
   municipio: string;
   orgaoJulgador: string;
   clienteId: string;
-  datajudTipoJustica: string;
-  datajudAlias: string;
-};
+}
 
 const formatProcessNumber = (value: string) => {
   const digits = value.replace(/\D/g, "").slice(0, 20);
@@ -186,25 +153,6 @@ const formatDateToPtBR = (value: string | null | undefined): string => {
   }
 
   return date.toLocaleDateString("pt-BR");
-};
-
-const formatDateTimeToPtBR = (value: string | null | undefined): string => {
-  if (!value) {
-    return "Data não informada";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Data não informada";
-  }
-
-  return date.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 };
 
 const normalizeClienteTipo = (value: string | null | undefined): string => {
@@ -245,8 +193,6 @@ const createEmptyProcessForm = (): ProcessFormState => ({
   municipio: "",
   orgaoJulgador: "",
   clienteId: "",
-  datajudTipoJustica: "",
-  datajudAlias: "",
 });
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
@@ -256,10 +202,6 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     processo.jurisdicao ||
     [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
     "Não informado";
-  const rawCategoria = processo.datajud_tipo_justica?.trim() || null;
-  const categoriaLabel = getDatajudCategoriaLabel(rawCategoria);
-  const datajudAlias = normalizeDatajudAlias(processo.datajud_alias);
-  const datajudTribunal = getDatajudTribunalLabel(datajudAlias);
 
   return {
     id: processo.id,
@@ -271,7 +213,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     cliente: {
       id: clienteResumo?.id ?? processo.cliente_id,
       nome: clienteResumo?.nome ?? "Cliente não informado",
-      cpf: documento,
+      documento: documento,
       papel: resolveClientePapel(clienteResumo?.tipo),
     },
     advogadoResponsavel:
@@ -280,43 +222,6 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     assunto: processo.assunto?.trim() || "Não informado",
     jurisdicao,
     orgaoJulgador: processo.orgao_julgador?.trim() || "Não informado",
-    datajudTipoJustica: categoriaLabel ?? rawCategoria,
-    datajudAlias,
-    datajudTribunal,
-    movimentacoes: [],
-  };
-};
-
-const mapApiMovimentacaoToLocal = (
-  movimentacao: ApiProcessoMovimentacao,
-): Processo["movimentacoes"][number] => {
-  const rawCodigo = movimentacao.codigo;
-  let codigo: number | null = null;
-
-  if (typeof rawCodigo === "number" && Number.isFinite(rawCodigo)) {
-    codigo = rawCodigo;
-  } else if (typeof rawCodigo === "string") {
-    const parsed = Number.parseInt(rawCodigo, 10);
-    codigo = Number.isNaN(parsed) ? null : parsed;
-  }
-
-  const nome =
-    typeof movimentacao.nome === "string" && movimentacao.nome.trim()
-      ? movimentacao.nome.trim()
-      : "Movimentação";
-
-  const descricao =
-    typeof movimentacao.descricao === "string" &&
-    movimentacao.descricao.trim()
-      ? movimentacao.descricao.trim()
-      : nome;
-
-  return {
-    codigo,
-    nome,
-    descricao,
-    data: formatDateTimeToPtBR(movimentacao.dataHora ?? null),
-    dataIso: movimentacao.dataHora ?? null,
   };
 };
 
@@ -366,111 +271,6 @@ export default function Processos() {
   const [processosError, setProcessosError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingProcess, setCreatingProcess] = useState(false);
-
-  const fetchProcessMovimentacoes = useCallback(
-    async (processo: Processo): Promise<Processo["movimentacoes"]> => {
-      if (!processo.datajudAlias) {
-        return [];
-      }
-
-      try {
-        const res = await fetch(
-          getApiUrl(`processos/${processo.id}/movimentacoes`),
-          {
-            headers: { Accept: "application/json" },
-          },
-        );
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-
-        let json: unknown = null;
-        try {
-          json = await res.json();
-        } catch (error) {
-          console.error(
-            `Não foi possível interpretar as movimentações do processo ${processo.id}`,
-            error,
-          );
-          return [];
-        }
-
-        const movimentos = Array.isArray(json)
-          ? json.filter(isApiProcessoMovimentacao)
-          : [];
-
-        return movimentos
-          .map(mapApiMovimentacaoToLocal)
-          .sort((a, b) => {
-            const dateA = a.dataIso ? new Date(a.dataIso).getTime() : 0;
-            const dateB = b.dataIso ? new Date(b.dataIso).getTime() : 0;
-            return dateB - dateA;
-          });
-      } catch (error) {
-        console.error(
-          `Erro ao carregar movimentações do processo ${processo.id}`,
-          error,
-        );
-        return [];
-      }
-    },
-    [],
-  );
-
-  const statusOptions = useMemo(() => {
-    const values = Array.from(
-      new Set(
-        processos
-          .map((processo) => processo.status?.trim())
-          .filter((status): status is string => Boolean(status) && status !== "Não informado"),
-      ),
-    ).sort((a, b) => a.localeCompare(b));
-
-    return values;
-  }, [processos]);
-
-  const tipoOptions = useMemo(() => {
-    const values = Array.from(
-      new Set(
-        processos
-          .map((processo) => processo.tipo?.trim())
-          .filter((tipo): tipo is string => Boolean(tipo) && tipo !== "Não informado"),
-      ),
-    ).sort((a, b) => a.localeCompare(b));
-
-    return values;
-  }, [processos]);
-
-  const totalProcessos = useMemo(() => processos.length, [processos]);
-
-  const availableTribunais = useMemo(() => {
-    if (!processForm.datajudTipoJustica) {
-      return [];
-    }
-
-    const key = processForm.datajudTipoJustica as keyof typeof DATAJUD_TRIBUNAIS_BY_CATEGORIA;
-    return DATAJUD_TRIBUNAIS_BY_CATEGORIA[key] ?? [];
-  }, [processForm.datajudTipoJustica]);
-
-  const processosEmAndamento = useMemo(
-    () =>
-      processos.filter((processo) =>
-        processo.status.toLowerCase().includes("andamento") ||
-        processo.status.toLowerCase().includes("ativo"),
-      ).length,
-    [processos],
-  );
-
-  const processosArquivados = useMemo(
-    () => processos.filter((processo) => processo.status.toLowerCase().includes("arquiv")).length,
-    [processos],
-  );
-
-  const clientesAtivos = useMemo(
-    () => new Set(processos.map((processo) => processo.cliente.id)).size,
-    [processos],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -551,18 +351,6 @@ export default function Processos() {
     };
   }, []);
 
-  useEffect(() => {
-    if (statusFilter !== "todos" && !statusOptions.includes(statusFilter)) {
-      setStatusFilter("todos");
-    }
-  }, [statusFilter, statusOptions]);
-
-  useEffect(() => {
-    if (tipoFilter !== "todos" && !tipoOptions.includes(tipoFilter)) {
-      setTipoFilter("todos");
-    }
-  }, [tipoFilter, tipoOptions]);
-
   const loadProcessos = useCallback(async () => {
     const res = await fetch(getApiUrl("processos"), {
       headers: { Accept: "application/json" },
@@ -595,17 +383,8 @@ export default function Processos() {
             ? ((json as { data: ApiProcesso[] }).data)
             : [];
 
-    const mapped = data.map(mapApiProcessoToProcesso);
-
-    const movimentacoes = await Promise.all(
-      mapped.map((processo) => fetchProcessMovimentacoes(processo)),
-    );
-
-    return mapped.map((processo, index) => ({
-      ...processo,
-      movimentacoes: movimentacoes[index] ?? [],
-    }));
-  }, [fetchProcessMovimentacoes]);
+    return data.map(mapApiProcessoToProcesso);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -655,7 +434,6 @@ export default function Processos() {
   }, [clientes, processForm.clienteId]);
 
   useEffect(() => {
-
     if (!processForm.uf) {
       setMunicipios([]);
       setMunicipiosLoading(false);
@@ -688,32 +466,78 @@ export default function Processos() {
     };
   }, [processForm.uf]);
 
-  const resetProcessForm = () => {
-    setProcessForm(createEmptyProcessForm());
-    setMunicipios([]);
-    setMunicipiosLoading(false);
-    setCreateError(null);
-  };
+  const statusOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        processos
+          .map((processo) => processo.status?.trim())
+          .filter((status): status is string => Boolean(status) && status !== "Não informado"),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
 
-  const handleDialogOpenChange = (open: boolean) => {
+    return values;
+  }, [processos]);
+
+  const tipoOptions = useMemo(() => {
+    const values = Array.from(
+      new Set(
+        processos
+          .map((processo) => processo.tipo?.trim())
+          .filter((tipo): tipo is string => Boolean(tipo) && tipo !== "Não informado"),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return values;
+  }, [processos]);
+
+  useEffect(() => {
+    if (statusFilter !== "todos" && !statusOptions.includes(statusFilter)) {
+      setStatusFilter("todos");
+    }
+  }, [statusFilter, statusOptions]);
+
+  useEffect(() => {
+    if (tipoFilter !== "todos" && !tipoOptions.includes(tipoFilter)) {
+      setTipoFilter("todos");
+    }
+  }, [tipoFilter, tipoOptions]);
+
+  const totalProcessos = useMemo(() => processos.length, [processos]);
+
+  const processosEmAndamento = useMemo(
+    () =>
+      processos.filter((processo) =>
+        processo.status.toLowerCase().includes("andamento") ||
+        processo.status.toLowerCase().includes("ativo"),
+      ).length,
+    [processos],
+  );
+
+  const processosArquivados = useMemo(
+    () => processos.filter((processo) => processo.status.toLowerCase().includes("arquiv")).length,
+    [processos],
+  );
+
+  const clientesAtivos = useMemo(
+    () => new Set(processos.map((processo) => processo.cliente.id)).size,
+    [processos],
+  );
+
+  const handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
-      resetProcessForm();
-    } else {
+      setProcessForm(createEmptyProcessForm());
       setCreateError(null);
     }
-  };
+  }, []);
 
   const handleProcessCreate = async () => {
-    if (
-      !processForm.numero ||
-      !processForm.uf ||
-      !processForm.municipio ||
-      !processForm.orgaoJulgador ||
-      !processForm.clienteId ||
-      !processForm.datajudTipoJustica ||
-      !processForm.datajudAlias
-    ) {
+    if (creatingProcess) {
+      return;
+    }
+
+    if (!processForm.clienteId) {
+      setCreateError("Selecione o cliente responsável pelo processo.");
       return;
     }
 
@@ -742,8 +566,6 @@ export default function Processos() {
           municipio: processForm.municipio,
           orgao_julgador: processForm.orgaoJulgador,
           jurisdicao: `${processForm.municipio} - ${processForm.uf}`,
-          datajud_tipo_justica: processForm.datajudTipoJustica,
-          datajud_alias: processForm.datajudAlias,
         }),
       });
 
@@ -769,11 +591,7 @@ export default function Processos() {
       }
 
       const mapped = mapApiProcessoToProcesso(json as ApiProcesso);
-      const movimentacoes = await fetchProcessMovimentacoes(mapped);
-      setProcessos((prev) => [
-        { ...mapped, movimentacoes },
-        ...prev.filter((p) => p.id !== mapped.id),
-      ]);
+      setProcessos((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
       toast({ title: "Processo cadastrado com sucesso" });
       handleDialogOpenChange(false);
     } catch (error) {
@@ -799,8 +617,6 @@ export default function Processos() {
     !processForm.municipio ||
     !processForm.orgaoJulgador ||
     !processForm.clienteId ||
-    !processForm.datajudTipoJustica ||
-    !processForm.datajudAlias ||
     creatingProcess;
 
   const filteredProcessos = useMemo(() => {
@@ -826,8 +642,6 @@ export default function Processos() {
         processo.advogadoResponsavel,
         processo.status,
         processo.tipo,
-        processo.datajudTribunal ?? undefined,
-        processo.datajudTipoJustica ?? undefined,
         processo.orgaoJulgador,
       ];
 
@@ -836,7 +650,7 @@ export default function Processos() {
         return value.toLowerCase().includes(normalizedSearch);
       });
 
-      const documento = processo.cliente?.cpf ?? "";
+      const documento = processo.cliente?.documento ?? "";
       const hasDocumentoMatch =
         numericSearch.length > 0 && documento
           ? documento.replace(/\D/g, "").includes(numericSearch)
@@ -852,7 +666,7 @@ export default function Processos() {
         <div className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">Processos</h1>
           <p className="text-sm text-muted-foreground">
-            Monitore os processos em andamento, acompanhe movimentações recentes e identifique prioridades com mais clareza.
+            Monitore os processos em andamento, acompanhe movimentações internas e identifique prioridades com mais clareza.
           </p>
         </div>
         <Button onClick={() => setIsDialogOpen(true)} className="self-start">
@@ -977,27 +791,40 @@ export default function Processos() {
 
       {processosLoading ? (
         <Card className="border-border/60 bg-card/60 shadow-sm">
-          <CardContent className="space-y-4 pt-6">
-            <Skeleton className="h-6 w-1/3" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-24 w-full" />
+          <CardHeader>
+            <CardTitle className="text-lg">Processos</CardTitle>
+            <CardDescription>Carregando dados...</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ))}
           </CardContent>
         </Card>
       ) : processosError ? (
-        <Card className="border-destructive/40 bg-destructive/10">
-          <CardContent className="pt-6">
-            <p className="text-sm text-destructive-foreground">{processosError}</p>
-          </CardContent>
+        <Card className="border-destructive/40 bg-destructive/5 text-destructive">
+          <CardHeader>
+            <CardTitle>Não foi possível carregar os processos</CardTitle>
+            <CardDescription className="text-destructive/80">
+              {processosError}
+            </CardDescription>
+          </CardHeader>
         </Card>
       ) : filteredProcessos.length === 0 ? (
         <Card className="border-border/60 bg-card/60 shadow-sm">
-          <CardContent className="space-y-2 pt-6 text-center">
-            <p className="text-base font-medium text-foreground">
-              Nenhum processo encontrado
-            </p>
-            <p className="text-sm text-muted-foreground">
+          <CardHeader>
+            <CardTitle>Nenhum processo encontrado</CardTitle>
+            <CardDescription>
               Ajuste os filtros ou refine a busca para visualizar outros resultados.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Você pode cadastrar um novo processo clicando no botão acima.
             </p>
           </CardContent>
         </Card>
@@ -1025,14 +852,6 @@ export default function Processos() {
                       >
                         {processo.tipo}
                       </Badge>
-                      {processo.datajudTipoJustica ? (
-                        <Badge
-                          variant="outline"
-                          className="text-xs border-violet-200 bg-violet-500/10 text-violet-600"
-                        >
-                          {processo.datajudTipoJustica}
-                        </Badge>
-                      ) : null}
                     </div>
                     <CardDescription className="flex flex-wrap items-center gap-3 text-sm">
                       <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -1091,7 +910,7 @@ export default function Processos() {
                             {processo.cliente.nome}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {processo.cliente.cpf || "Documento não informado"}
+                            {processo.cliente.documento || "Documento não informado"}
                           </p>
                         </div>
                         <Badge
@@ -1120,24 +939,6 @@ export default function Processos() {
                         <span>{processo.orgaoJulgador}</span>
                       </div>
                     </div>
-                    {processo.datajudTribunal ? (
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Tribunal (DataJud)
-                        </p>
-                        <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                          <Archive className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <div className="flex flex-col gap-1">
-                            <span>{processo.datajudTribunal}</span>
-                            {processo.datajudAlias ? (
-                              <span className="text-xs text-muted-foreground">
-                                Alias: {processo.datajudAlias}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
                     <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Classe judicial
@@ -1157,37 +958,13 @@ export default function Processos() {
                       </div>
                     </div>
                   </div>
-
-                  <div className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-foreground">
-                        Últimas movimentações
-                      </h4>
-                      <Badge variant="outline" className="text-xs text-muted-foreground">
-                        {processo.movimentacoes.length} registros
-                      </Badge>
-                    </div>
-                    {processo.movimentacoes.length > 0 ? (
-                      <ul className="space-y-3 text-sm">
-                        {processo.movimentacoes.map((movimentacao, index) => (
-                          <li key={`${processo.id}-mov-${index}`} className="flex items-start gap-3">
-                            <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
-                            <div className="space-y-1">
-                              <p className="font-medium text-foreground">{movimentacao.descricao}</p>
-                              <p className="text-xs text-muted-foreground">{movimentacao.data}</p>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : processo.datajudAlias ? (
-                      <p className="text-sm text-muted-foreground">
-                        Nenhuma movimentação foi retornada pela API pública para este processo até o momento.
-                      </p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Informe o tribunal do processo ao cadastrar para carregar as movimentações automaticamente.
-                      </p>
-                    )}
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Movimentações
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      As movimentações automáticas estão indisponíveis porque a integração com o CNJ foi desativada.
+                    </p>
                   </div>
                 </div>
               </AccordionContent>
@@ -1240,67 +1017,6 @@ export default function Processos() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="process-justica">Tipo de Justiça (DataJud)</Label>
-              <Select
-                value={processForm.datajudTipoJustica}
-                onValueChange={(value) =>
-                  setProcessForm((prev) => ({
-                    ...prev,
-                    datajudTipoJustica: value,
-                    datajudAlias: "",
-                  }))
-                }
-              >
-                <SelectTrigger id="process-justica">
-                  <SelectValue placeholder="Selecione o tipo de justiça" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DATAJUD_CATEGORIAS.map((categoria) => (
-                    <SelectItem key={categoria.id} value={categoria.id}>
-                      {categoria.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="process-tribunal">Tribunal (DataJud)</Label>
-              <Select
-                value={processForm.datajudAlias}
-                onValueChange={(value) =>
-                  setProcessForm((prev) => ({
-                    ...prev,
-                    datajudAlias: value,
-                  }))
-                }
-              >
-                <SelectTrigger
-                  id="process-tribunal"
-                  disabled={!processForm.datajudTipoJustica}
-                >
-                  <SelectValue
-                    placeholder={
-                      !processForm.datajudTipoJustica
-                        ? "Selecione o tipo de justiça"
-                        : availableTribunais.length > 0
-                          ? "Selecione o tribunal"
-                          : "Nenhum tribunal disponível"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTribunais.map((tribunal) => (
-                    <SelectItem key={tribunal.alias} value={tribunal.alias}>
-                      {tribunal.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="process-uf">UF</Label>
               <Select
@@ -1342,10 +1058,10 @@ export default function Processos() {
                       !processForm.uf
                         ? "Selecione a UF primeiro"
                         : municipiosLoading
-                        ? "Carregando municípios..."
-                        : municipios.length > 0
-                        ? "Selecione o município"
-                        : "Nenhum município encontrado"
+                          ? "Carregando municípios..."
+                          : municipios.length > 0
+                            ? "Selecione o município"
+                            : "Nenhum município encontrado"
                     }
                   />
                 </SelectTrigger>

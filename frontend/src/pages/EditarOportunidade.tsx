@@ -38,7 +38,6 @@ const formSchema = z.object({
   area_atuacao: z.string().optional(),
   responsavel_interno: z.string().optional(),
   processo_distribuido: z.string().optional(),
-  numero_processo_cnj: z.string().optional(),
   numero_protocolo: z.string().optional(),
   vara_ou_orgao: z.string().optional(),
   comarca: z.string().optional(),
@@ -140,7 +139,6 @@ export default function EditarOportunidade() {
       area_atuacao: "",
       responsavel_interno: "",
       processo_distribuido: "",
-      numero_processo_cnj: "",
       numero_protocolo: "",
       vara_ou_orgao: "",
       comarca: "",
@@ -269,17 +267,13 @@ export default function EditarOportunidade() {
         if (!res.ok) throw new Error();
         const data = await res.json();
         const hasProcessDistribution = Boolean(
-          data.numero_processo_cnj ||
-            data.numero_protocolo ||
-            data.vara_ou_orgao ||
-            data.comarca
+          data.numero_protocolo || data.vara_ou_orgao || data.comarca
         );
         form.reset({
           tipo_processo: data.tipo_processo_id ? String(data.tipo_processo_id) : "",
           area_atuacao: data.area_atuacao_id ? String(data.area_atuacao_id) : "",
           responsavel_interno: data.responsavel_id ? String(data.responsavel_id) : "",
           processo_distribuido: hasProcessDistribution ? "sim" : "nao",
-          numero_processo_cnj: data.numero_processo_cnj || "",
           numero_protocolo: data.numero_protocolo || "",
           vara_ou_orgao: data.vara_ou_orgao || "",
           comarca: data.comarca || "",
@@ -414,11 +408,10 @@ export default function EditarOportunidade() {
     if (processoDistribuido === "sim") return;
 
     const fieldsToClear: Array<
-      | "numero_processo_cnj"
       | "numero_protocolo"
       | "vara_ou_orgao"
       | "comarca"
-    > = ["numero_processo_cnj", "numero_protocolo", "vara_ou_orgao", "comarca"];
+    > = ["numero_protocolo", "vara_ou_orgao", "comarca"];
 
     fieldsToClear.forEach((fieldName) => {
       if (form.getValues(fieldName)) {
@@ -457,9 +450,6 @@ export default function EditarOportunidade() {
         area_atuacao_id: values.area_atuacao ? Number(values.area_atuacao) : null,
         responsavel_id: values.responsavel_interno
           ? Number(values.responsavel_interno)
-          : null,
-        numero_processo_cnj: isProcessoDistribuido
-          ? values.numero_processo_cnj || null
           : null,
         numero_protocolo: isProcessoDistribuido
           ? values.numero_protocolo || null
@@ -1005,23 +995,6 @@ export default function EditarOportunidade() {
 
                       {processoDistribuido === "sim" && (
                         <>
-                          <FormField
-                            control={form.control}
-                            name="numero_processo_cnj"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Número do Processo (CNJ)</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    placeholder="0000000-00.0000.0.00.0000"
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
                           <FormField
                             control={form.control}
                             name="numero_protocolo"
