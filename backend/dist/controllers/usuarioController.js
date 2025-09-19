@@ -75,9 +75,10 @@ const parseStatus = (value) => {
     }
     return 'invalid';
 };
+const baseUsuarioSelect = 'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao FROM public.vw_usuarios';
 const listUsuarios = async (_req, res) => {
     try {
-        const result = await db_1.default.query('SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"');
+        const result = await db_1.default.query(baseUsuarioSelect);
         res.json(result.rows);
     }
     catch (error) {
@@ -89,7 +90,7 @@ exports.listUsuarios = listUsuarios;
 const getUsuarioById = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db_1.default.query('SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao  FROM public."vw.usuarios" WHERE id = $1', [id]);
+        const result = await db_1.default.query(`${baseUsuarioSelect} WHERE id = $1`, [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
         }

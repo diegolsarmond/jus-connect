@@ -92,10 +92,12 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
   return 'invalid';
 };
 
+const baseUsuarioSelect =
+  'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao FROM public.vw_usuarios';
+
 export const listUsuarios = async (_req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"'    );
+    const result = await pool.query(baseUsuarioSelect);
     res.json(result.rows);
   } catch (error) {
     console.error(error);
@@ -106,10 +108,7 @@ export const listUsuarios = async (_req: Request, res: Response) => {
 export const getUsuarioById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao  FROM public."vw.usuarios" WHERE id = $1',
-      [id]
-    );
+    const result = await pool.query(`${baseUsuarioSelect} WHERE id = $1`, [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }

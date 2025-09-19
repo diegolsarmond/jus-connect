@@ -719,7 +719,7 @@ export default class ChatService {
     avatar: string;
   } | null> {
     const result = await this.query(
-      'SELECT id, nome_completo, perfil FROM public."vw.usuarios" WHERE id = $1',
+      'SELECT id, nome_completo, perfil FROM public.vw_usuarios WHERE id = $1',
       [userId],
     );
 
