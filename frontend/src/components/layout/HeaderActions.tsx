@@ -1,5 +1,6 @@
-import { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+
 import { ArrowLeftRight, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,9 +38,27 @@ const getInitials = (name: string | undefined) => {
 
 export function HeaderActions() {
   const navigate = useNavigate();
+  const location = useLocation();
+
   const { user, logout } = useAuth();
   const canAccessConfiguracoes =
     user?.modulos?.some((moduleId) => moduleId === "configuracoes" || moduleId.startsWith("configuracoes-")) ?? false;
+
+  const isOnAdminArea = useMemo(() => {
+    const adminRoot = routes.admin.root;
+    return location.pathname === adminRoot || location.pathname.startsWith(`${adminRoot}/`);
+  }, [location.pathname]);
+
+  const profileToggleLabel = isOnAdminArea ? "Alternar para CRM" : "Alternar para admin";
+
+  const handleProfileToggle = useCallback(() => {
+    if (isOnAdminArea) {
+      navigate(routes.home, { replace: true });
+      return;
+    }
+
+    navigate(routes.admin.dashboard, { replace: true });
+  }, [isOnAdminArea, navigate]);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -85,11 +104,12 @@ export function HeaderActions() {
             <DropdownMenuItem
               onSelect={(event) => {
                 event.preventDefault();
-                navigate(routes.admin.dashboard);
+                handleProfileToggle();
               }}
             >
               <ArrowLeftRight className="mr-2 h-4 w-4" />
-              Alternar perfil
+              {profileToggleLabel}
+
             </DropdownMenuItem>
           )}
           {/*{canAccessConfiguracoes && (*/}

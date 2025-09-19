@@ -1,5 +1,5 @@
-import { Suspense } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Suspense, useCallback } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -22,7 +22,7 @@ import {
   Settings,
 } from "lucide-react";
 import { HeaderActions } from "@/components/layout/HeaderActions";
-import { Link } from "react-router-dom";
+
 import { isActiveRoute, routes } from "@/config/routes";
 
 const navigation = [
@@ -70,6 +70,14 @@ const navigation = [
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleNavigate = useCallback(
+    (target: string) => {
+      navigate(target);
+    },
+    [navigate],
+  );
 
   return (
     <SidebarProvider>
@@ -88,13 +96,12 @@ export default function DashboardLayout() {
               {navigation.map((item) => (
                 <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton
-                    asChild
                     isActive={isActiveRoute(location.pathname, item.href)}
+                    onClick={() => handleNavigate(item.href)}
+                    className="flex items-center gap-3"
                   >
-                    <Link to={item.href} className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.name}</span>
-                    </Link>
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.name}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
