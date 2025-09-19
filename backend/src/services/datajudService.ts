@@ -135,12 +135,9 @@ export const fetchDatajudMovimentacoes = async (
   const numeroNormalizado =
     numeroProcessoSomenteDigitos.length > 0
       ? numeroProcessoSomenteDigitos
-      : numeroProcesso;
+      : numeroProcesso.trim();
 
-  const numeroForQueryDigits = numeroProcesso.replace(/\D/g, '').trim();
-  const numeroForQuery = numeroForQueryDigits || numeroProcesso.trim();
-
-  if (!numeroForQuery) {
+  if (!numeroNormalizado) {
     throw new Error('Número do processo inválido para consulta');
   }
 
@@ -148,7 +145,6 @@ export const fetchDatajudMovimentacoes = async (
   const fetchImpl = resolveFetch();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DATAJUD_TIMEOUT_MS);
-  const numeroForQuery = numeroProcesso;
 
   try {
     const response = await fetchImpl(url, {
