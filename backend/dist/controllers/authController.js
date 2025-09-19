@@ -18,7 +18,21 @@ const login = async (req, res) => {
     }
     try {
         const normalizedEmail = normalizeEmail(email);
-        const userResult = await db_1.default.query('SELECT id, nome_completo, email, senha, status, perfil FROM public.usuarios WHERE LOWER(email) = $1 LIMIT 1', [normalizedEmail]);
+        const userResult = await db_1.default.query(`SELECT u.id,
+              u.nome_completo,
+              u.email,
+              u.senha,
+              u.status,
+              u.perfil,
+              u.empresa AS empresa_id,
+              emp.nome_empresa AS empresa_nome,
+              u.setor AS setor_id,
+              esc.nome AS setor_nome
+         FROM public.usuarios u
+         LEFT JOIN public.empresas emp ON emp.id = u.empresa
+         LEFT JOIN public.escritorios esc ON esc.id = u.setor
+        WHERE LOWER(u.email) = $1
+        LIMIT 1`, [normalizedEmail]);
         if (userResult.rowCount === 0) {
             res.status(401).json({ error: 'E-mail ou senha incorretos.' });
             return;
@@ -48,6 +62,10 @@ const login = async (req, res) => {
                 email: user.email,
                 perfil: user.perfil,
                 modulos,
+                empresa_id: user.empresa_id,
+                empresa_nome: user.empresa_nome,
+                setor_id: user.setor_id,
+                setor_nome: user.setor_nome,
             },
         });
     }
@@ -63,7 +81,20 @@ const getCurrentUser = async (req, res) => {
         return;
     }
     try {
-        const result = await db_1.default.query('SELECT id, nome_completo, email, perfil, status FROM public."vw.usuarios" WHERE id = $1', [req.auth.userId]);
+        const result = await db_1.default.query(`SELECT u.id,
+              u.nome_completo,
+              u.email,
+              u.perfil,
+              u.status,
+              u.empresa AS empresa_id,
+              emp.nome_empresa AS empresa_nome,
+              u.setor AS setor_id,
+              esc.nome AS setor_nome
+         FROM public.usuarios u
+         LEFT JOIN public.empresas emp ON emp.id = u.empresa
+         LEFT JOIN public.escritorios esc ON esc.id = u.setor
+        WHERE u.id = $1
+        LIMIT 1`, [req.auth.userId]);
         if (result.rowCount === 0) {
             res.status(404).json({ error: 'Usuário não encontrado.' });
             return;
@@ -76,6 +107,10 @@ const getCurrentUser = async (req, res) => {
             email: user.email,
             perfil: user.perfil,
             status: user.status,
+            empresa_id: user.empresa_id,
+            empresa_nome: user.empresa_nome,
+            setor_id: user.setor_id,
+            setor_nome: user.setor_nome,
             modulos,
         });
     }

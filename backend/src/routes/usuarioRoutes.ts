@@ -31,7 +31,7 @@ const router = Router();
  *           type: string
  *         empresa:
  *           type: string
- *         escritorio:
+ *         setor:
  *           type: string
  *         oab:
  *           type: string
@@ -116,7 +116,7 @@ router.get(['/usuarios/:id', '/users/:id'], getUsuarioById);
  *                 type: integer
  *               empresa:
  *                 type: integer
- *               escritorio:
+ *               setor:
  *                 type: integer
  *               oab:
  *                 type: string
@@ -170,7 +170,7 @@ router.post(['/usuarios', '/users'], createUsuario);
  *                 type: integer
  *               empresa:
  *                 type: integer
- *               escritorio:
+ *               setor:
  *                 type: integer
  *               oab:
  *                 type: string
