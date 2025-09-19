@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/use-toast";
 import { getApiBaseUrl } from "@/lib/api";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 const apiUrl = getApiBaseUrl();
 
@@ -65,6 +66,7 @@ export default function NovoUsuario() {
   const navigate = useNavigate();
   const [perfis, setPerfis] = useState<ApiPerfil[]>([]);
   const [setores, setSetores] = useState<ApiSetor[]>([]);
+  const { user } = useAuth();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -124,6 +126,11 @@ export default function NovoUsuario() {
   }, []);
 
   const onSubmit = async (data: FormValues) => {
+    if (!user) {
+      toast({ title: "Sessão expirada", description: "Faça login novamente.", variant: "destructive" });
+      return;
+    }
+
     let password = data.password;
     if (!password) {
       password = Math.random().toString(36).slice(-8);
@@ -131,14 +138,15 @@ export default function NovoUsuario() {
 
     const perfilId = Number(data.perfilId);
     const setorId = Number(data.setorId);
+    const empresaId = user.empresa_id ?? null;
 
     const payload = {
       nome_completo: data.name,
       cpf: "",
       email: data.email,
       perfil: Number.isNaN(perfilId) ? null : perfilId,
-      empresa: 1,
-      escritorio: Number.isNaN(setorId) ? null : setorId,
+      empresa: empresaId,
+      setor: Number.isNaN(setorId) ? null : setorId,
       oab: null,
       status: true,
       senha: password,
