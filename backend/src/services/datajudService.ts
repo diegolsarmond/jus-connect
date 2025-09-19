@@ -135,6 +135,7 @@ export const fetchDatajudMovimentacoes = async (
   const fetchImpl = resolveFetch();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DATAJUD_TIMEOUT_MS);
+  const numeroForQuery = numeroProcesso;
 
   try {
     const response = await fetchImpl(url, {
