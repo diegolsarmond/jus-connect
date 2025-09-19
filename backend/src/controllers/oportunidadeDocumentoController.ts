@@ -433,7 +433,7 @@ async function fetchOpportunityData(id: number) {
   let responsavel: ResponsavelRow | null = null;
   if (opportunity.responsavel_id) {
     const responsavelResult = await pool.query<ResponsavelRow>(
-      'SELECT id, nome_completo, email, telefone, oab, perfil FROM public."vw.usuarios" WHERE id = $1',
+      'SELECT id, nome_completo, email, telefone, oab, perfil FROM public.vw_usuarios WHERE id = $1',
       [opportunity.responsavel_id],
     );
     responsavel = (responsavelResult.rowCount ?? 0) > 0 ? responsavelResult.rows[0] : null;

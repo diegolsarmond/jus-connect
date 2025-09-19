@@ -448,7 +448,7 @@ class ChatService {
         return this.db.query(text, params);
     }
     async loadResponsibleSnapshot(userId) {
-        const result = await this.query('SELECT id, nome_completo, perfil FROM public."vw.usuarios" WHERE id = $1', [userId]);
+        const result = await this.query('SELECT id, nome_completo, perfil FROM public.vw_usuarios WHERE id = $1', [userId]);
         if (result.rowCount === 0) {
             return null;
         }

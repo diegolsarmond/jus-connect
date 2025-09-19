@@ -279,7 +279,7 @@ async function fetchOpportunityData(id) {
     }
     let responsavel = null;
     if (opportunity.responsavel_id) {
-        const responsavelResult = await db_1.default.query('SELECT id, nome_completo, email, telefone, oab, perfil FROM public."vw.usuarios" WHERE id = $1', [opportunity.responsavel_id]);
+        const responsavelResult = await db_1.default.query('SELECT id, nome_completo, email, telefone, oab, perfil FROM public.vw_usuarios WHERE id = $1', [opportunity.responsavel_id]);
         responsavel = (responsavelResult.rowCount ?? 0) > 0 ? responsavelResult.rows[0] : null;
     }
     const empresaResult = await db_1.default.query('SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel FROM public."vw.empresas" ORDER BY id LIMIT 1');
