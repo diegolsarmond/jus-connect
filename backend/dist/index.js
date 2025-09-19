@@ -48,7 +48,7 @@ const chatSchema_1 = require("./services/chatSchema");
 const authMiddleware_1 = require("./middlewares/authMiddleware");
 const moduleAuthorization_1 = require("./middlewares/moduleAuthorization");
 const app = (0, express_1.default)();
-const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 app.use(express_1.default.json({ limit: '50mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
 const defaultAllowedOrigins = [

@@ -275,6 +275,7 @@ const App = () => (
                       </Suspense>
                     </RequireAdminUser>
                   </ProtectedRoute>
+
                 )}
               >
                 <Route index element={<AdminDashboard />} />
