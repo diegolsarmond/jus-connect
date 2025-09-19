@@ -131,9 +131,39 @@ const fetchAuthenticatedUserEmpresa = async (userId: number): Promise<EmpresaLoo
   };
 };
 
-export const listUsuarios = async (_req: Request, res: Response) => {
+
+export const listUsuarios = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(baseUsuarioSelect);
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaUsuarioResult = await pool.query(
+      'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+      [req.auth.userId]
+    );
+
+    if (empresaUsuarioResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuário autenticado não encontrado' });
+    }
+
+    const empresaAtualResult = parseOptionalId(
+      (empresaUsuarioResult.rows[0] as { empresa: unknown }).empresa
+    );
+
+    if (empresaAtualResult === 'invalid') {
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível identificar a empresa do usuário autenticado.' });
+    }
+
+    if (empresaAtualResult === null) {
+      return res.json([]);
+    }
+
+    const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
+      empresaAtualResult,
+    ]);
     res.json(result.rows);
   } catch (error) {
     console.error(error);
@@ -160,6 +190,7 @@ export const getUsuarioById = async (req: Request, res: Response) => {
       `${baseUsuarioSelect} INNER JOIN public.usuarios u ON u.id = vu.id WHERE vu.id = $1 AND u.empresa IS NOT DISTINCT FROM $2::INT`,
       [id, empresaId]
     );
+
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }

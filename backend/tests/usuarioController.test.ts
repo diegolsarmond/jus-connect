@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 
 process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
+
 type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
 
@@ -132,4 +133,5 @@ test('getUsuarioById returns 404 when user belongs to another company', async ()
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1]?.values, ['999', 42]);
 });
+
 

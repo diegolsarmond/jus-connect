@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -17,6 +18,7 @@ import {
   Users,
   BarChart3,
   HeadphonesIcon,
+  Loader2,
   Settings,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -111,10 +113,19 @@ export default function DashboardLayout() {
           </header>
 
           <main className="flex-1 space-y-4 p-6">
-            <Outlet />
+            <Suspense fallback={<AdminContentFallback />}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
       </div>
     </SidebarProvider>
   );
 }
+
+const AdminContentFallback = () => (
+  <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center" role="status" aria-live="polite">
+    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
+    <p className="text-sm text-muted-foreground">Carregando conteúdo administrativo...</p>
+  </div>
+);

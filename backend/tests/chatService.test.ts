@@ -253,6 +253,7 @@ test('ChatService.updateConversation updates metadata fields', async () => {
 
   assert.equal(pool.calls.length, 2);
   assert.match(pool.calls[0]!.text ?? '', /FROM public\.vw_usuarios/);
+
   assert.match(pool.calls[1]!.text ?? '', /UPDATE chat_conversations/);
   assert.equal(updated?.responsible?.id, '7');
   assert.deepEqual(updated?.tags, ['Lead', 'VIP']);
