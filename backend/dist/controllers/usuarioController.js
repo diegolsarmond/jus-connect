@@ -77,7 +77,7 @@ const parseStatus = (value) => {
 };
 const listUsuarios = async (_req, res) => {
     try {
-        const result = await db_1.default.query('SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"');
+        const result = await db_1.default.query('SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"');
         res.json(result.rows);
     }
     catch (error) {
@@ -89,7 +89,7 @@ exports.listUsuarios = listUsuarios;
 const getUsuarioById = async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await db_1.default.query('SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao  FROM public."vw.usuarios" WHERE id = $1', [id]);
+        const result = await db_1.default.query('SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao  FROM public."vw.usuarios" WHERE id = $1', [id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
         }
@@ -102,7 +102,7 @@ const getUsuarioById = async (req, res) => {
 };
 exports.getUsuarioById = getUsuarioById;
 const createUsuario = async (req, res) => {
-    const { nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
+    const { nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
     try {
         if (!req.auth) {
             return res.status(401).json({ error: 'Token inválido.' });
@@ -142,26 +142,26 @@ const createUsuario = async (req, res) => {
                 return res.status(400).json({ error: 'Empresa informada não existe' });
             }
         }
-        const escritorioIdResult = parseOptionalId(escritorio);
-        if (escritorioIdResult === 'invalid') {
-            return res.status(400).json({ error: 'ID de escritório inválido' });
+        const setorIdResult = parseOptionalId(setor);
+        if (setorIdResult === 'invalid') {
+            return res.status(400).json({ error: 'ID de setor inválido' });
         }
-        const escritorioId = escritorioIdResult;
-        if (escritorioId !== null) {
-            const escritorioExists = await db_1.default.query('SELECT 1 FROM public.escritorios WHERE id = $1', [escritorioId]);
-            if (escritorioExists.rowCount === 0) {
+        const setorId = setorIdResult;
+        if (setorId !== null) {
+            const setorExists = await db_1.default.query('SELECT 1 FROM public.escritorios WHERE id = $1', [setorId]);
+            if (setorExists.rowCount === 0) {
                 return res
                     .status(400)
-                    .json({ error: 'Escritório informado não existe' });
+                    .json({ error: 'Setor informado não existe' });
             }
         }
-        const result = await db_1.default.query('INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao', [
+        const result = await db_1.default.query('INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao', [
             nome_completo,
             cpf,
             email,
             perfil,
             empresaId,
-            escritorioId,
+            setorId,
             oab,
             parsedStatus,
             senha,
@@ -179,7 +179,7 @@ const createUsuario = async (req, res) => {
 exports.createUsuario = createUsuario;
 const updateUsuario = async (req, res) => {
     const { id } = req.params;
-    const { nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
+    const { nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
     try {
         const parsedStatus = parseStatus(status);
         if (parsedStatus === 'invalid') {
@@ -196,26 +196,26 @@ const updateUsuario = async (req, res) => {
                 return res.status(400).json({ error: 'Empresa informada não existe' });
             }
         }
-        const escritorioIdResult = parseOptionalId(escritorio);
-        if (escritorioIdResult === 'invalid') {
-            return res.status(400).json({ error: 'ID de escritório inválido' });
+        const setorIdResult = parseOptionalId(setor);
+        if (setorIdResult === 'invalid') {
+            return res.status(400).json({ error: 'ID de setor inválido' });
         }
-        const escritorioId = escritorioIdResult;
-        if (escritorioId !== null) {
-            const escritorioExists = await db_1.default.query('SELECT 1 FROM public.escritorios WHERE id = $1', [escritorioId]);
-            if (escritorioExists.rowCount === 0) {
+        const setorId = setorIdResult;
+        if (setorId !== null) {
+            const setorExists = await db_1.default.query('SELECT 1 FROM public.escritorios WHERE id = $1', [setorId]);
+            if (setorExists.rowCount === 0) {
                 return res
                     .status(400)
-                    .json({ error: 'Escritório informado não existe' });
+                    .json({ error: 'Setor informado não existe' });
             }
         }
-        const result = await db_1.default.query('UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, escritorio = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao', [
+        const result = await db_1.default.query('UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao', [
             nome_completo,
             cpf,
             email,
             perfil,
             empresaId,
-            escritorioId,
+            setorId,
             oab,
             parsedStatus,
             senha,

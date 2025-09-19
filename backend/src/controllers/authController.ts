@@ -31,7 +31,7 @@ export const login = async (req: Request, res: Response) => {
               esc.nome AS setor_nome
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
-         LEFT JOIN public.escritorios esc ON esc.id = u.escritorio
+         LEFT JOIN public.escritorios esc ON esc.id = u.setor
         WHERE LOWER(u.email) = $1
         LIMIT 1`,
       [normalizedEmail]

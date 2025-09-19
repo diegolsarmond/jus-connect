@@ -95,7 +95,7 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
 export const listUsuarios = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"'    );
+      'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao 	FROM public."vw.usuarios"'    );
     res.json(result.rows);
   } catch (error) {
     console.error(error);
@@ -107,7 +107,7 @@ export const getUsuarioById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'SELECT id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao  FROM public."vw.usuarios" WHERE id = $1',
+      'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao  FROM public."vw.usuarios" WHERE id = $1',
       [id]
     );
     if (result.rowCount === 0) {
@@ -127,7 +127,7 @@ export const createUsuario = async (req: Request, res: Response) => {
     email,
     perfil,
     empresa,
-    escritorio,
+    setor,
     oab,
     status,
     senha,
@@ -194,33 +194,33 @@ export const createUsuario = async (req: Request, res: Response) => {
       }
     }
 
-    const escritorioIdResult = parseOptionalId(escritorio);
-    if (escritorioIdResult === 'invalid') {
-      return res.status(400).json({ error: 'ID de escritório inválido' });
+    const setorIdResult = parseOptionalId(setor);
+    if (setorIdResult === 'invalid') {
+      return res.status(400).json({ error: 'ID de setor inválido' });
     }
-    const escritorioId = escritorioIdResult;
+    const setorId = setorIdResult;
 
-    if (escritorioId !== null) {
-      const escritorioExists = await pool.query(
+    if (setorId !== null) {
+      const setorExists = await pool.query(
         'SELECT 1 FROM public.escritorios WHERE id = $1',
-        [escritorioId]
+        [setorId]
       );
-      if (escritorioExists.rowCount === 0) {
+      if (setorExists.rowCount === 0) {
         return res
           .status(400)
-          .json({ error: 'Escritório informado não existe' });
+          .json({ error: 'Setor informado não existe' });
       }
     }
 
     const result = await pool.query(
-      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
+      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
         cpf,
         email,
         perfil,
         empresaId,
-        escritorioId,
+        setorId,
         oab,
         parsedStatus,
         senha,
@@ -244,7 +244,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
     email,
     perfil,
     empresa,
-    escritorio,
+    setor,
     oab,
     status,
     senha,
@@ -275,33 +275,33 @@ export const updateUsuario = async (req: Request, res: Response) => {
       }
     }
 
-    const escritorioIdResult = parseOptionalId(escritorio);
-    if (escritorioIdResult === 'invalid') {
-      return res.status(400).json({ error: 'ID de escritório inválido' });
+    const setorIdResult = parseOptionalId(setor);
+    if (setorIdResult === 'invalid') {
+      return res.status(400).json({ error: 'ID de setor inválido' });
     }
-    const escritorioId = escritorioIdResult;
+    const setorId = setorIdResult;
 
-    if (escritorioId !== null) {
-      const escritorioExists = await pool.query(
+    if (setorId !== null) {
+      const setorExists = await pool.query(
         'SELECT 1 FROM public.escritorios WHERE id = $1',
-        [escritorioId]
+        [setorId]
       );
-      if (escritorioExists.rowCount === 0) {
+      if (setorExists.rowCount === 0) {
         return res
           .status(400)
-          .json({ error: 'Escritório informado não existe' });
+          .json({ error: 'Setor informado não existe' });
       }
     }
 
     const result = await pool.query(
-      'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, escritorio = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, escritorio, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
+      'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
         cpf,
         email,
         perfil,
         empresaId,
-        escritorioId,
+        setorId,
         oab,
         parsedStatus,
         senha,
