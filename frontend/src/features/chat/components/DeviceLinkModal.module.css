@@ -86,6 +86,21 @@
   color: hsl(var(--destructive));
 }
 
+:global(.dark) :local(.statusBadgeConnected) {
+  background: hsl(var(--success) / 0.25);
+  color: hsl(var(--success-foreground));
+}
+
+:global(.dark) :local(.statusBadgePending) {
+  background: hsl(var(--warning) / 0.25);
+  color: hsl(var(--warning-foreground));
+}
+
+:global(.dark) :local(.statusBadgeError) {
+  background: hsl(var(--destructive) / 0.25);
+  color: hsl(var(--destructive-foreground));
+}
+
 .sessionActions {
   display: flex;
   flex-wrap: wrap;
@@ -106,6 +121,11 @@
 .sessionWarning strong {
   font-weight: 700;
   color: inherit;
+}
+
+:global(.dark) :local(.sessionWarning) {
+  background: hsl(var(--warning) / 0.25);
+  color: hsl(var(--warning-foreground));
 }
 
 .sessionFeedback {
@@ -146,6 +166,11 @@
   color: hsl(var(--destructive));
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+:global(.dark) :local(.sessionError) {
+  background: hsl(var(--destructive) / 0.25);
+  color: hsl(var(--destructive-foreground));
 }
 
 .sessionMetaRow {
