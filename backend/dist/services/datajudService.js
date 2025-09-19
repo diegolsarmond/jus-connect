@@ -79,6 +79,7 @@ const fetchDatajudMovimentacoes = async (alias, numeroProcesso) => {
     if (!numeroForQuery) {
         throw new Error('Número do processo inválido para consulta');
     }
+
     const fetchImpl = resolveFetch();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DATAJUD_TIMEOUT_MS);
@@ -92,6 +93,7 @@ const fetchDatajudMovimentacoes = async (alias, numeroProcesso) => {
             },
             body: JSON.stringify({
                 query: { match: { numeroProcesso: numeroForQuery } },
+
                 size: 1,
             }),
             signal: controller.signal,
