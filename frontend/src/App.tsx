@@ -268,13 +268,14 @@ const App = () => (
               <Route
                 path={`${routes.admin.root}/*`}
                 element={(
-                  <Suspense fallback={<LandingFallback />}>
-                    <ProtectedRoute>
-                      <RequireAdminUser>
+                  <ProtectedRoute>
+                    <RequireAdminUser>
+                      <Suspense fallback={<AdminAreaFallback />}>
                         <AdminLayout />
-                      </RequireAdminUser>
-                    </ProtectedRoute>
-                  </Suspense>
+                      </Suspense>
+                    </RequireAdminUser>
+                  </ProtectedRoute>
+
                 )}
               >
                 <Route index element={<AdminDashboard />} />
@@ -298,6 +299,13 @@ const App = () => (
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
+);
+
+const AdminAreaFallback = () => (
+  <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center" role="status" aria-live="polite">
+    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+    <p className="text-sm font-medium text-muted-foreground">Carregando painel administrativo...</p>
+  </div>
 );
 
 const LandingFallback = () => (
