@@ -89,7 +89,7 @@ export default function UsersPage() {
     setError(null);
 
     try {
-      const response = await fetch(getApiUrl("admin/usuarios"), {
+      const response = await fetch(getApiUrl("usuarios"), {
         signal,
         headers: { Accept: "application/json" },
       });
