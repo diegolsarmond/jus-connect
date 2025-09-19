@@ -2,10 +2,21 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { getApiBaseUrl } from "@/lib/api";
-import { AlertCircle, CheckCircle, Clock, Headphones, Plus, Search, XCircle } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { AlertCircle, CheckCircle, Clock, Headphones, Loader2, Plus, Search, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SupportRequestStatus = "open" | "in_progress" | "resolved" | "closed";
@@ -106,6 +117,9 @@ export default function Support() {
   const [totalRequests, setTotalRequests] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [responseDialogRequest, setResponseDialogRequest] = useState<SupportRequest | null>(null);
+  const [responseMessage, setResponseMessage] = useState("");
+  const [isSendingResponse, setIsSendingResponse] = useState(false);
 
   const apiUrl = getApiBaseUrl();
 
@@ -197,6 +211,71 @@ export default function Support() {
   const getStatusIcon = (status: SupportRequestStatus) => {
     const Icon = statusIcons[status];
     return Icon ? <Icon className="h-4 w-4" /> : null;
+  };
+
+  const handleOpenResponseDialog = (request: SupportRequest) => {
+    setResponseDialogRequest(request);
+    setResponseMessage("");
+  };
+
+  const handleResponseDialogOpenChange = (open: boolean) => {
+    if (!open) {
+      setResponseDialogRequest(null);
+      setResponseMessage("");
+      setIsSendingResponse(false);
+    }
+  };
+
+  const handleSendResponse = async () => {
+    if (!responseDialogRequest) {
+      return;
+    }
+
+    const trimmedMessage = responseMessage.trim();
+
+    if (!trimmedMessage) {
+      toast({
+        title: "Digite uma mensagem para responder",
+        description: "Adicione algum conteúdo para enviar ao cliente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingResponse(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/api/support/${responseDialogRequest.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: trimmedMessage,
+          sender: "support",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to send support response");
+      }
+
+      toast({
+        title: "Resposta enviada",
+        description: "O solicitante será notificado sobre a mensagem.",
+      });
+
+      setResponseDialogRequest(null);
+      setResponseMessage("");
+      void fetchRequests();
+    } catch (sendError) {
+      console.error("Erro ao enviar resposta do ticket de suporte:", sendError);
+      toast({
+        title: "Não foi possível enviar a resposta",
+        description: "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingResponse(false);
+    }
   };
 
   return (
@@ -355,7 +434,7 @@ export default function Support() {
                         <Button variant="ghost" size="sm">
                           Ver Detalhes
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleOpenResponseDialog(request)}>
                           Responder
                         </Button>
                       </div>
@@ -453,6 +532,73 @@ export default function Support() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={responseDialogRequest !== null} onOpenChange={handleResponseDialogOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Responder ticket</DialogTitle>
+            <DialogDescription>
+              Envie uma resposta ao solicitante para manter o acompanhamento do ticket.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {responseDialogRequest ? (
+              <div className="rounded-md border bg-muted/40 p-3 text-left text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <div className="font-medium text-foreground">{responseDialogRequest.subject}</div>
+                    {responseDialogRequest.requesterName || responseDialogRequest.requesterEmail ? (
+                      <p className="text-xs text-muted-foreground">
+                        {responseDialogRequest.requesterName ?? responseDialogRequest.requesterEmail}
+                        {responseDialogRequest.requesterEmail && responseDialogRequest.requesterName
+                          ? ` • ${responseDialogRequest.requesterEmail}`
+                          : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0">{getStatusBadge(responseDialogRequest.status)}</div>
+                </div>
+                {responseDialogRequest.description ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {responseDialogRequest.description}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="support-response-message">Mensagem</Label>
+              <Textarea
+                id="support-response-message"
+                value={responseMessage}
+                onChange={(event) => setResponseMessage(event.target.value)}
+                placeholder="Escreva sua resposta ao cliente"
+                rows={5}
+                disabled={isSendingResponse}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleResponseDialogOpenChange(false)}
+              disabled={isSendingResponse}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleSendResponse} disabled={isSendingResponse}>
+              {isSendingResponse ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Enviando
+                </>
+              ) : (
+                "Enviar resposta"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
