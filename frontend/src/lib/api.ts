@@ -1,4 +1,11 @@
-const rawEnvApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const envApiUrlCandidates = [
+  import.meta.env.VITE_API_URL as string | undefined,
+  import.meta.env.VITE_API_BASE_URL as string | undefined,
+];
+
+const rawEnvApiUrl = envApiUrlCandidates
+  .map((value) => value?.trim())
+  .find((value): value is string => Boolean(value?.length));
 const isDevEnvironment = Boolean(import.meta.env.DEV);
 
 function normalizeBaseUrl(url: string): string {
@@ -31,7 +38,7 @@ function resolveFallbackBaseUrl(): string {
   return 'http://localhost:3001';
 }
 
-const API_BASE_URL = resolveFallbackBaseUrl();
+let cachedApiBaseUrl: string | undefined;
 
 function joinPaths(base: string, path?: string): string {
   const normalizedBase = base.replace(/\/+$/, '');
@@ -49,12 +56,20 @@ function joinPaths(base: string, path?: string): string {
   return `${normalizedBase}/${normalizedPath}`;
 }
 
+function resolveApiBaseUrl(): string {
+  if (!cachedApiBaseUrl) {
+    cachedApiBaseUrl = resolveFallbackBaseUrl();
+  }
+
+  return cachedApiBaseUrl;
+}
+
 export function getApiBaseUrl(): string {
-  return API_BASE_URL;
+  return resolveApiBaseUrl();
 }
 
 export function getApiUrl(path = ''): string {
-  const apiRoot = joinPaths(API_BASE_URL, 'api');
+  const apiRoot = joinPaths(resolveApiBaseUrl(), 'api');
   return path ? joinPaths(apiRoot, path) : apiRoot;
 }
 
