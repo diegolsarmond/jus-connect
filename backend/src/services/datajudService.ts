@@ -131,8 +131,11 @@ export const fetchDatajudMovimentacoes = async (
 
   const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
 
-  const numeroForQuery = numeroProcesso.replace(/\D+/g, '');
-  const numeroNormalizado = numeroForQuery.length > 0 ? numeroForQuery : numeroProcesso;
+  const numeroProcessoSomenteDigitos = numeroProcesso.replace(/\D+/g, '');
+  const numeroNormalizado =
+    numeroProcessoSomenteDigitos.length > 0
+      ? numeroProcessoSomenteDigitos
+      : numeroProcesso;
 
   const numeroForQueryDigits = numeroProcesso.replace(/\D/g, '').trim();
   const numeroForQuery = numeroForQueryDigits || numeroProcesso.trim();
