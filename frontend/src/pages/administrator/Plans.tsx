@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardContent,
@@ -8,10 +8,40 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getApiUrl } from "@/lib/api";
 import { routes } from "@/config/routes";
 import { Plus, Check, Package, Users, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 type BillingCadence = "monthly" | "annual" | "none" | "custom";
 
@@ -29,6 +59,19 @@ type Plan = {
   createdAt: Date | null;
 };
 
+type EditableBillingCadence = "monthly" | "annual" | "none";
+
+type PlanFormState = {
+  name: string;
+  description: string;
+  price: string;
+  billingCycle: EditableBillingCadence;
+  maxUsers: string;
+  maxCases: string;
+  features: string;
+  isActive: boolean;
+};
+
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -40,6 +83,29 @@ const billingCycleDescriptions: Record<BillingCadence, { short: string; descript
   annual: { short: "ano", description: "Cobrança anual" },
   none: { short: "período", description: "Cobrança única" },
   custom: { short: "ciclo", description: "Ciclo personalizado" },
+};
+
+const editableBillingCycleLabels: Record<EditableBillingCadence, string> = {
+  monthly: "Mensal",
+  annual: "Anual",
+  none: "Pagamento único",
+};
+
+const editableBillingCycleApiMap: Record<EditableBillingCadence, "mensal" | "anual" | "nenhuma"> = {
+  monthly: "mensal",
+  annual: "anual",
+  none: "nenhuma",
+};
+
+const initialFormState: PlanFormState = {
+  name: "",
+  description: "",
+  price: "",
+  billingCycle: "monthly",
+  maxUsers: "",
+  maxCases: "",
+  features: "",
+  isActive: true,
 };
 
 function normalizeApiRows(data: unknown): unknown[] {
@@ -394,11 +460,95 @@ function parsePlan(row: unknown): Plan | null {
   };
 }
 
+const toEditableBillingCycle = (billingCycle: BillingCadence): EditableBillingCadence => {
+  if (billingCycle === "annual" || billingCycle === "monthly") {
+    return billingCycle;
+  }
+
+  return "none";
+};
+
+const parseNumberFromInput = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = Number(trimmed.replace(",", "."));
+  return Number.isFinite(normalized) ? normalized : null;
+};
+
+const parseIntegerFromInput = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = Number(trimmed);
+  return Number.isFinite(normalized) ? Math.trunc(normalized) : null;
+};
+
+const extractFeaturesFromText = (text: string): string[] => {
+  if (!text.trim()) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      text
+        .split(/\r?\n/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    )
+  );
+};
+
+const createFormStateFromPlan = (plan: Plan): PlanFormState => ({
+  name: plan.name,
+  description: plan.description,
+  price: plan.price !== null ? String(plan.price) : "",
+  billingCycle: toEditableBillingCycle(plan.billingCycle),
+  maxUsers: plan.maxUsers !== null ? String(plan.maxUsers) : "",
+  maxCases: plan.maxCases !== null ? String(plan.maxCases) : "",
+  features: plan.features.join("\n"),
+  isActive: plan.isActive,
+});
+
 export default function Plans() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editFormState, setEditFormState] = useState<PlanFormState>(initialFormState);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [planPendingToggle, setPlanPendingToggle] = useState<Plan | null>(null);
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+  const handleEditDialogOpenChange = (open: boolean) => {
+    setIsEditDialogOpen(open);
+    if (!open) {
+      setEditingPlan(null);
+      setEditError(null);
+      setEditFormState(initialFormState);
+    }
+  };
+
+  const handleToggleDialogOpenChange = (open: boolean) => {
+    if (!open && !isTogglingStatus) {
+      setPlanPendingToggle(null);
+    }
+  };
+
+  useEffect(() => {
+    if (editingPlan) {
+      setEditFormState(createFormStateFromPlan(editingPlan));
+      setEditError(null);
+    }
+  }, [editingPlan]);
 
   useEffect(() => {
     let disposed = false;
@@ -455,6 +605,181 @@ export default function Plans() {
     };
   }, []);
 
+  const updateEditForm = <K extends keyof PlanFormState>(field: K, value: PlanFormState[K]) => {
+    setEditFormState((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+  };
+
+  const applyUpdatedPlan = (updatedPlan: Plan) => {
+    setPlans((previousPlans) =>
+      previousPlans.map((plan) => (plan.id === updatedPlan.id ? updatedPlan : plan))
+    );
+
+    if (editingPlan && editingPlan.id === updatedPlan.id) {
+      setEditingPlan(updatedPlan);
+      setEditFormState(createFormStateFromPlan(updatedPlan));
+    }
+  };
+
+  const updatePlanOnServer = async (
+    planId: number,
+    payload: Record<string, unknown>
+  ): Promise<Plan> => {
+    const response = await fetch(getApiUrl(`planos/${planId}`), {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      let errorMessage: string | null = null;
+
+      if (responseText) {
+        try {
+          const parsed = JSON.parse(responseText) as { error?: unknown };
+          if (parsed && typeof parsed === "object" && "error" in parsed) {
+            const value = parsed.error;
+            errorMessage = value !== undefined && value !== null ? String(value) : null;
+          } else {
+            errorMessage = responseText;
+          }
+        } catch {
+          errorMessage = responseText;
+        }
+      }
+
+      throw new Error(
+        errorMessage
+          ? `Falha ao atualizar plano (HTTP ${response.status}): ${errorMessage}`
+          : `Falha ao atualizar plano (HTTP ${response.status}).`
+      );
+    }
+
+    const data = await response.json();
+    const parsedPlan = parsePlan(data);
+    if (!parsedPlan) {
+      throw new Error("Resposta inválida do servidor ao atualizar o plano.");
+    }
+
+    return parsedPlan;
+  };
+
+  const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!editingPlan) {
+      return;
+    }
+
+    const trimmedName = editFormState.name.trim();
+    if (!trimmedName) {
+      setEditError("Informe um nome para o plano.");
+      return;
+    }
+
+    const priceValue = parseNumberFromInput(editFormState.price);
+    if (editFormState.price.trim() && priceValue === null) {
+      setEditError("Informe um valor mensal válido ou deixe o campo em branco.");
+      return;
+    }
+
+    const maxUsersValue = parseIntegerFromInput(editFormState.maxUsers);
+    if (editFormState.maxUsers.trim() && maxUsersValue === null) {
+      setEditError("Informe um limite de usuários válido.");
+      return;
+    }
+
+    const maxCasesValue = parseIntegerFromInput(editFormState.maxCases);
+    if (editFormState.maxCases.trim() && maxCasesValue === null) {
+      setEditError("Informe um limite de casos válido.");
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditError(null);
+
+    const features = extractFeaturesFromText(editFormState.features);
+
+    try {
+      const updatedPlan = await updatePlanOnServer(editingPlan.id, {
+        nome: trimmedName,
+        descricao: editFormState.description.trim(),
+        valor: priceValue,
+        ativo: editFormState.isActive,
+        recorrencia: editableBillingCycleApiMap[editFormState.billingCycle],
+        qtde_usuarios: maxUsersValue,
+        max_casos: maxCasesValue,
+        recursos: features,
+      });
+
+      applyUpdatedPlan(updatedPlan);
+      toast({
+        title: "Plano atualizado",
+        description: `O plano ${updatedPlan.name} foi atualizado com sucesso.`,
+      });
+      handleEditDialogOpenChange(false);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Não foi possível atualizar o plano.";
+      setEditError(message);
+      toast({
+        title: "Erro ao atualizar plano",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleEditClick = (plan: Plan) => {
+    setEditingPlan(plan);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleTogglePlanStatus = (plan: Plan) => {
+    setPlanPendingToggle(plan);
+  };
+
+  const handleConfirmToggleStatus = async () => {
+    if (!planPendingToggle) {
+      return;
+    }
+
+    setIsTogglingStatus(true);
+
+    try {
+      const updatedPlan = await updatePlanOnServer(planPendingToggle.id, {
+        ativo: !planPendingToggle.isActive,
+      });
+
+      applyUpdatedPlan(updatedPlan);
+      toast({
+        title: updatedPlan.isActive ? "Plano ativado" : "Plano desativado",
+        description: `O plano ${updatedPlan.name} foi ${updatedPlan.isActive ? "ativado" : "desativado"}.`,
+      });
+      setPlanPendingToggle(null);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Não foi possível atualizar o status do plano.";
+      toast({
+        title: "Erro ao atualizar plano",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsTogglingStatus(false);
+    }
+  };
+
   const stats = useMemo(() => {
     if (plans.length === 0) {
       return {
@@ -502,6 +827,14 @@ export default function Plans() {
   }, [plans]);
 
   const showEmptyState = !loading && plans.length === 0;
+  const toggleDialogMessage = planPendingToggle
+    ? [
+        `Tem certeza de que deseja ${planPendingToggle.isActive ? "desativar" : "ativar"} o plano ${planPendingToggle.name}?`,
+        planPendingToggle.isActive
+          ? "Clientes atuais permanecerão associados ao plano, mas ele ficará indisponível para novos contratos."
+          : "O plano ficará disponível para novos contratos imediatamente.",
+      ].join(" ")
+    : "";
 
   return (
     <div className="space-y-6">
@@ -651,13 +984,20 @@ export default function Plans() {
                   </div>
 
                   <div className="flex gap-2 pt-4">
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleEditClick(plan)}
+                    >
                       Editar
                     </Button>
                     <Button
                       variant={plan.isActive ? "destructive" : "default"}
                       size="sm"
                       className="flex-1"
+                      onClick={() => handleTogglePlanStatus(plan)}
+                      disabled={isTogglingStatus && planPendingToggle?.id === plan.id}
                     >
                       {plan.isActive ? "Desativar" : "Ativar"}
                     </Button>
@@ -770,6 +1110,169 @@ export default function Plans() {
           )}
         </CardContent>
       </Card>
+      <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar plano</DialogTitle>
+            <DialogDescription>
+              Ajuste as informações e salve para atualizar o plano selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-6">
+            {editError && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {editError}
+              </div>
+            )}
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="plan-name">Nome do plano</Label>
+                <Input
+                  id="plan-name"
+                  value={editFormState.name}
+                  onChange={(event) => updateEditForm("name", event.target.value)}
+                  placeholder="Ex.: Plano Essencial"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-description">Descrição</Label>
+                <Textarea
+                  id="plan-description"
+                  value={editFormState.description}
+                  onChange={(event) => updateEditForm("description", event.target.value)}
+                  placeholder="Descrição resumida do plano"
+                  rows={3}
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="plan-price">Valor mensal (R$)</Label>
+                  <Input
+                    id="plan-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editFormState.price}
+                    onChange={(event) => updateEditForm("price", event.target.value)}
+                    placeholder="Ex.: 199.90"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Deixe em branco para manter o plano como "Sob consulta".
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="plan-billing">Ciclo de cobrança</Label>
+                  <Select
+                    value={editFormState.billingCycle}
+                    onValueChange={(value) =>
+                      updateEditForm("billingCycle", value as EditableBillingCadence)
+                    }
+                  >
+                    <SelectTrigger id="plan-billing">
+                      <SelectValue placeholder="Selecione o ciclo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(editableBillingCycleLabels).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="plan-max-users">Limite de usuários</Label>
+                  <Input
+                    id="plan-max-users"
+                    type="number"
+                    value={editFormState.maxUsers}
+                    onChange={(event) => updateEditForm("maxUsers", event.target.value)}
+                    placeholder="Ex.: 10"
+                  />
+                  <p className="text-xs text-muted-foreground">Use -1 para ilimitado.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="plan-max-cases">Limite de casos</Label>
+                  <Input
+                    id="plan-max-cases"
+                    type="number"
+                    value={editFormState.maxCases}
+                    onChange={(event) => updateEditForm("maxCases", event.target.value)}
+                    placeholder="Ex.: 50"
+                  />
+                  <p className="text-xs text-muted-foreground">Use -1 para ilimitado.</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-features">Recursos</Label>
+                <Textarea
+                  id="plan-features"
+                  value={editFormState.features}
+                  onChange={(event) => updateEditForm("features", event.target.value)}
+                  placeholder="Liste um recurso por linha"
+                  rows={5}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Linhas vazias e duplicadas serão ignoradas automaticamente.
+                </p>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <Label htmlFor="plan-active" className="text-base">
+                    Plano ativo
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {editFormState.isActive
+                      ? "Clientes podem contratar este plano."
+                      : "O plano ficará indisponível para novos contratos."}
+                  </p>
+                </div>
+                <Switch
+                  id="plan-active"
+                  checked={editFormState.isActive}
+                  onCheckedChange={(checked) => updateEditForm("isActive", checked)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleEditDialogOpenChange(false)}
+                disabled={isSavingEdit}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSavingEdit}>
+                {isSavingEdit ? "Salvando..." : "Salvar alterações"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={planPendingToggle !== null} onOpenChange={handleToggleDialogOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {planPendingToggle?.isActive ? "Desativar plano" : "Ativar plano"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{toggleDialogMessage}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isTogglingStatus}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmToggleStatus} disabled={isTogglingStatus}>
+              {isTogglingStatus
+                ? "Processando..."
+                : planPendingToggle?.isActive
+                  ? "Desativar"
+                  : "Ativar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
