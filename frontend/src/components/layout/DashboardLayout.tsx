@@ -21,6 +21,7 @@ import {
   Loader2,
   Settings,
 } from "lucide-react";
+import { HeaderActions } from "@/components/layout/HeaderActions";
 import { Link } from "react-router-dom";
 import { isActiveRoute, routes } from "@/config/routes";
 
@@ -106,9 +107,8 @@ export default function DashboardLayout() {
             <div className="flex h-14 items-center gap-4 px-4">
               <SidebarTrigger />
               <div className="flex-1" />
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground">Admin CRM SaaS</span>
-              </div>
+              <span className="text-sm text-muted-foreground">Admin CRM SaaS</span>
+              <HeaderActions />
             </div>
           </header>
 
