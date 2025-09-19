@@ -697,19 +697,17 @@
   background: hsl(var(--primary-hover));
 }
 
-.placeholder {
+.deviceLinkPlaceholder {
   flex: 1;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  color: hsl(var(--muted-foreground));
-  padding: 2rem;
-  gap: 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: auto;
+  padding: clamp(1.5rem, 4vw, 3rem);
 }
 
-.placeholder h3 {
-  font-size: 1.5rem;
-  font-weight: 700;
+.deviceLinkContent {
+  width: 100%;
 }
 
 .loadingOverlay {

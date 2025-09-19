@@ -14,6 +14,15 @@ import type {
 import { teamMembers } from "@/features/chat/data/teamMembers";
 import type { ChatOverview, ChatParticipant, Message as WAHAMessage } from "@/types/waha";
 import WAHAService from "@/services/waha";
+import { useToast } from "@/hooks/use-toast";
+import { DeviceLinkModal } from "@/features/chat/components/DeviceLinkModal";
+import {
+  deriveSessionName,
+  ensureDeviceSession,
+  fetchPreferredCompany,
+  logoutDeviceSession,
+} from "@/features/chat/services/deviceLinkingApi";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 const ensureIsoTimestamp = (value?: number): string => {
   if (!value) {
@@ -271,8 +280,25 @@ export const WhatsAppLayout = ({
   const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
   const [hasStartedLoading, setHasStartedLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const wahaState = useWAHA();
+  const lastSessionStatusRef = useRef<string | null>(null);
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const companyNameFromAuth = useMemo(() => {
+    const value = user?.empresa_nome;
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }, [user?.empresa_nome]);
+  const sessionNameOverride = useMemo(
+    () => deriveSessionName(companyNameFromAuth),
+    [companyNameFromAuth],
+  );
+  const wahaState = useWAHA(sessionNameOverride);
   const {
     chats: rawChats,
     messages: messageMap,
@@ -468,6 +494,69 @@ export const WhatsAppLayout = ({
     }
   }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
 
+  useEffect(() => {
+    const currentStatus = wahaState.sessionStatus?.status ?? null;
+    const previousStatus = lastSessionStatusRef.current;
+    if (currentStatus === "WORKING" && previousStatus !== "WORKING") {
+      handleReload();
+    }
+    lastSessionStatusRef.current = currentStatus;
+  }, [wahaState.sessionStatus?.status, handleReload]);
+
+  const handleDisconnect = useCallback(async () => {
+    if (isDisconnecting) {
+      return;
+    }
+    setIsDisconnecting(true);
+
+    try {
+      let companyName = companyNameFromAuth;
+      if (!companyName) {
+        try {
+          const company = await fetchPreferredCompany();
+          companyName = company?.name;
+        } catch (error) {
+          console.warn("Falha ao carregar empresa preferencial", error);
+        }
+      }
+
+      const sessionName = deriveSessionName(companyName);
+      const sessionInfo = await ensureDeviceSession(sessionName, companyName);
+
+      if (sessionInfo.status !== "SCAN_QR_CODE") {
+        await logoutDeviceSession(sessionInfo.name);
+      }
+
+      toast({
+        title: "Dispositivo desconectado",
+        description: "Geramos um novo QR Code para autenticar o WhatsApp novamente.",
+      });
+
+      setIsDeviceModalOpen(true);
+
+      await checkSessionStatus();
+      await loadChats({ reset: true });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Não foi possível desconectar o dispositivo.";
+      toast({
+        title: "Falha ao desconectar",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
+  }, [
+    isDisconnecting,
+    toast,
+    checkSessionStatus,
+    loadChats,
+    companyNameFromAuth,
+  ]);
+
   const isInitialLoading = loading && !hasLoadedOnce;
   const shouldShowOverlayLoading = loading && hasLoadedOnce;
 
@@ -475,10 +564,20 @@ export const WhatsAppLayout = ({
   if (isInitialLoading) {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-        <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
+        <SessionStatus
+          status={wahaState.sessionStatus}
+          onRefresh={handleReload}
+          onDisconnect={handleDisconnect}
+          isDisconnecting={isDisconnecting}
+          onManageDevice={() => setIsDeviceModalOpen(true)}
+        />
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
           <ConversationLoadingScreen />
         </div>
+        <DeviceLinkModal
+          open={isDeviceModalOpen}
+          onClose={() => setIsDeviceModalOpen(false)}
+        />
       </div>
     );
   }
@@ -486,7 +585,13 @@ export const WhatsAppLayout = ({
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 
-      <SessionStatus status={wahaState.sessionStatus} onRefresh={handleReload} />
+      <SessionStatus
+        status={wahaState.sessionStatus}
+        onRefresh={handleReload}
+        onDisconnect={handleDisconnect}
+        isDisconnecting={isDisconnecting}
+        onManageDevice={() => setIsDeviceModalOpen(true)}
+      />
 
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
         <div className="flex h-full min-h-0 w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-b border-border/40 bg-sidebar/90 shadow-[0_12px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm lg:w-[34%] lg:min-w-[300px] lg:max-w-md lg:border-b-0 lg:border-r">
@@ -530,6 +635,7 @@ export const WhatsAppLayout = ({
             }}
             onUpdateConversation={handleUpdateConversation}
             isUpdatingConversation={false}
+            onOpenDeviceLinkModal={() => setIsDeviceModalOpen(true)}
           />
         </div>
       </div>
@@ -543,6 +649,11 @@ export const WhatsAppLayout = ({
         }}
         onCreateConversation={async () => null}
         allowCreate={false}
+      />
+
+      <DeviceLinkModal
+        open={isDeviceModalOpen}
+        onClose={() => setIsDeviceModalOpen(false)}
       />
 
       {shouldShowOverlayLoading ? (

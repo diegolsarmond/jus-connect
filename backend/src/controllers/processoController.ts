@@ -23,6 +23,25 @@ const normalizeLowercase = (value: unknown): string | null => {
   return normalized ? normalized.toLowerCase() : null;
 };
 
+const normalizeDatajudAliasValue = (value: unknown): string | null => {
+  const normalized = normalizeLowercase(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const sanitized = normalized.replace(/^\/+/g, '').replace(/\/+$/g, '').replace(/\s+/g, '_');
+  if (!sanitized) {
+    return null;
+  }
+
+  if (sanitized.startsWith('api_publica_')) {
+    return sanitized;
+  }
+
+  const withoutPrefix = sanitized.replace(/^api_publica_/, '');
+  return `api_publica_${withoutPrefix}`;
+};
+
 const normalizeDate = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -148,6 +167,7 @@ const mapProcessoRow = (row: any): Processo => ({
   data_distribuicao: row.data_distribuicao,
   datajud_tipo_justica: row.datajud_tipo_justica ?? null,
   datajud_alias: canonicalizeDatajudAlias(row.datajud_alias),
+
   criado_em: row.criado_em,
   atualizado_em: row.atualizado_em,
   cliente: row.cliente_id
@@ -347,6 +367,7 @@ export const createProcesso = async (req: Request, res: Response) => {
     : null;
   const datajudAliasValue = columnInfo.hasDatajudAlias
     ? canonicalizeDatajudAlias(datajud_alias)
+
     : null;
 
   const missingDatajudFields: string[] = [];
@@ -500,6 +521,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
     : null;
   const datajudAliasValue = columnInfo.hasDatajudAlias
     ? canonicalizeDatajudAlias(datajud_alias)
+
     : null;
 
   const missingDatajudFields: string[] = [];
@@ -640,6 +662,7 @@ export const getProcessoMovimentacoes = async (req: Request, res: Response) => {
 
     const numeroProcesso = normalizeString(row.numero);
     const datajudAlias = canonicalizeDatajudAlias(row.datajud_alias);
+
 
     if (!numeroProcesso || !datajudAlias) {
       return res.json([]);

@@ -1,16 +1,35 @@
-import { RefreshCw, Wifi, WifiOff, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import {
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  LogOut,
+  QrCode,
+  Loader2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SessionStatus as SessionStatusType } from '@/types/waha';
 
 interface SessionStatusProps {
   status: SessionStatusType | null;
   onRefresh: () => void;
+  onDisconnect?: () => void;
+  isDisconnecting?: boolean;
+  onManageDevice?: () => void;
 }
 
-export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
+export const SessionStatus = ({
+  status,
+  onRefresh,
+  onDisconnect,
+  isDisconnecting = false,
+  onManageDevice,
+}: SessionStatusProps) => {
   const getStatusIcon = () => {
     if (!status) return <WifiOff className="w-4 h-4" />;
-    
+
     switch (status.status) {
       case 'WORKING':
         return <CheckCircle className="w-4 h-4 text-success" />;
@@ -62,21 +81,52 @@ export const SessionStatus = ({ status, onRefresh }: SessionStatusProps) => {
   };
 
   return (
-    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 bg-whatsapp px-4 py-2 text-foreground shadow-soft dark:text-white">
+    <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 bg-whatsapp px-4 py-2 text-foreground shadow-soft dark:text-white">
       <div className="flex items-center gap-2 text-sm">
         {getStatusIcon()}
         <span className={`font-semibold tracking-wide ${getStatusColor()}`}>{getStatusText()}</span>
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onRefresh}
-        className="h-8 px-3 text-foreground hover:bg-accent/60 hover:text-foreground dark:text-white dark:hover:bg-white/10 dark:hover:text-white"
-      >
-        <RefreshCw className="h-4 w-4" />
-        <span className="text-xs font-medium sm:text-sm">sincronizar conversas</span>
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {/*{onManageDevice && (*/}
+        {/*  <Button*/}
+        {/*    variant="outline"*/}
+        {/*    size="sm"*/}
+        {/*    onClick={onManageDevice}*/}
+        {/*    className="h-8 px-3 text-foreground hover:bg-accent/60 hover:text-foreground dark:border-white/30 dark:text-white dark:hover:bg-white/10"*/}
+        {/*  >*/}
+        {/*    <QrCode className="h-4 w-4" />*/}
+        {/*    <span className="text-xs font-medium sm:text-sm">ver QR Code</span>*/}
+        {/*  </Button>*/}
+        {/*)}*/}
+
+        {onDisconnect && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onDisconnect}
+            disabled={isDisconnecting}
+            className="h-8 px-3 text-foreground hover:bg-accent/60 hover:text-foreground dark:border-white/30 dark:text-white dark:hover:bg-white/10"
+          >
+            {isDisconnecting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4" />
+            )}
+            <span className="text-xs font-medium sm:text-sm">desconectar</span>
+          </Button>
+        )}
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRefresh}
+          className="h-8 px-3 text-foreground hover:bg-accent/60 hover:text-foreground dark:text-white dark:hover:bg-white/10 dark:hover:text-white"
+        >
+          <RefreshCw className="h-4 w-4" />
+          <span className="text-xs font-medium sm:text-sm">sincronizar conversas</span>
+        </Button>
+      </div>
     </div>
   );
 };

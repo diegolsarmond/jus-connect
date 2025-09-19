@@ -24,10 +24,31 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 import {
+  DATAJUD_CATEGORIAS,
+  DATAJUD_TRIBUNAIS_BY_CATEGORIA,
+  DATAJUD_TRIBUNAL_MAP,
+  type DatajudCategoriaId,
+  type DatajudTribunal,
   getDatajudCategoriaLabel,
   getDatajudTribunalLabel,
   normalizeDatajudAlias,
@@ -68,6 +89,74 @@ interface ApiProcessoMovimentacao {
   dataHora?: string | null;
 }
 
+interface DatajudProcessoClasse {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoSistema {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoFormato {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoOrgaoJulgador {
+  codigoMunicipioIBGE?: number | null;
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudProcessoAssunto {
+  codigo?: number | null;
+  nome?: string | null;
+}
+
+interface DatajudMovimentoComplemento {
+  codigo?: number | null;
+  valor?: number | null;
+  nome?: string | null;
+  descricao?: string | null;
+}
+
+interface DatajudMovimento {
+  codigo?: number | string | null;
+  nome?: string | null;
+  dataHora?: string | null;
+  descricao?: string | null;
+  complementosTabelados?: DatajudMovimentoComplemento[] | null;
+}
+
+interface DatajudProcessoSource {
+  numeroProcesso?: string | null;
+  classe?: DatajudProcessoClasse | null;
+  sistema?: DatajudProcessoSistema | null;
+  formato?: DatajudProcessoFormato | null;
+  tribunal?: string | null;
+  dataHoraUltimaAtualizacao?: string | null;
+  grau?: string | null;
+  "@timestamp"?: string | null;
+  dataAjuizamento?: string | null;
+  movimentos?: DatajudMovimento[] | null;
+  orgaoJulgador?: DatajudProcessoOrgaoJulgador | null;
+  assuntos?: DatajudProcessoAssunto[] | null;
+}
+
+interface DatajudProcessoHit {
+  _id?: string | number | null;
+  _index?: string | null;
+  _source?: DatajudProcessoSource | null;
+}
+
+interface DatajudApiResponse {
+  hits?: { hits?: DatajudProcessoHit[] | null } | null;
+}
+
+type ProcessoApiResponse = ApiProcessoResponse | DatajudApiResponse;
+
 type ProcessoDetalhes = {
   id: number;
   numero: string;
@@ -101,6 +190,11 @@ type ProcessoMovimentacao = {
   descricao: string;
   data: string;
   dataIso: string | null;
+};
+
+type EditProcessoFormState = {
+  datajudTipoJustica: string;
+  datajudAlias: string;
 };
 
 const normalizeString = (value: string | null | undefined): string => {
@@ -210,70 +304,240 @@ const getTipoBadgeClassName = (tipo: string) => {
   return "border-blue-200 bg-blue-500/10 text-blue-600";
 };
 
-const mapApiProcessoToDetalhes = (processo: ApiProcessoResponse): ProcessoDetalhes => {
-  const rawNumero = normalizeString(processo.numero);
-  const rawStatus = normalizeString(processo.status) || "Não informado";
-  const rawTipo = normalizeString(processo.tipo) || "Não informado";
-  const rawClasse = normalizeString(processo.classe_judicial) || "Não informada";
-  const rawAssunto = normalizeString(processo.assunto) || "Não informado";
-  const rawOrgao = normalizeString(processo.orgao_julgador) || "Não informado";
+const normalizeToNull = (value: string | null | undefined): string | null => {
+  const normalized = normalizeString(value);
+  return normalized || null;
+};
+
+const isDatajudResponse = (value: unknown): value is DatajudApiResponse => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  if (!("hits" in value)) {
+    return false;
+  }
+
+  const container = (value as DatajudApiResponse).hits;
+  if (!container || typeof container !== "object") {
+    return false;
+  }
+
+  if (!("hits" in container)) {
+    return false;
+  }
+
+  const hits = container.hits;
+  return Array.isArray(hits);
+};
+
+const isApiProcessoResponse = (value: unknown): value is ApiProcessoResponse => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return (
+    "id" in (value as Record<string, unknown>) &&
+    "cliente_id" in (value as Record<string, unknown>)
+  );
+};
+
+const formatDatajudComplemento = (
+  complemento: DatajudMovimentoComplemento,
+): string | null => {
+  const nome = normalizeString(complemento?.nome);
+  const descricao = normalizeString(complemento?.descricao);
+
+  if (nome && descricao) {
+    return `${nome} (${descricao})`;
+  }
+
+  if (nome) {
+    return nome;
+  }
+
+  if (descricao) {
+    return descricao;
+  }
+
+  return null;
+};
+
+const mapDatajudMovimentoToLocal = (
+  movimento: DatajudMovimento,
+): ProcessoMovimentacao => {
+  const nome = normalizeString(movimento?.nome) || "Movimentação";
+  const descricaoPreferida = normalizeString(movimento?.descricao);
+  const complementos = Array.isArray(movimento?.complementosTabelados)
+    ? movimento.complementosTabelados
+        .map((item) => formatDatajudComplemento(item))
+        .filter((item): item is string => Boolean(item))
+    : [];
+  const descricao =
+    descricaoPreferida ||
+    (complementos.length > 0 ? `${nome} · ${complementos.join(", ")}` : nome);
+
+  return mapApiMovimentacaoToLocal({
+    codigo: movimento?.codigo ?? null,
+    nome,
+    descricao,
+    dataHora: normalizeToNull(movimento?.dataHora),
+  });
+};
+
+type ProcessoMappingResult = {
+  detalhes: ProcessoDetalhes;
+  movimentacoes: ProcessoMovimentacao[];
+};
+
+const mapApiProcessoToDetalhes = (
+  processo: ProcessoApiResponse,
+  fallbackId?: string | number,
+): ProcessoMappingResult => {
+  if (isDatajudResponse(processo)) {
+    const hits = processo.hits?.hits ?? [];
+    const firstHit = hits.find((hit) => hit && typeof hit === "object" && hit?._source) ?? null;
+
+    if (!firstHit || !firstHit._source) {
+      throw new Error("Processo não encontrado na API do CNJ");
+    }
+
+    const source = firstHit._source;
+    const numero = normalizeString(source.numeroProcesso) || "Não informado";
+    const classeJudicial = normalizeString(source.classe?.nome) || "Não informada";
+    const assuntos = Array.isArray(source.assuntos)
+      ? source.assuntos
+          .map((assunto) => normalizeString(assunto?.nome))
+          .filter(Boolean)
+          .join(", ")
+      : "";
+    const assunto = assuntos || "Não informado";
+    const orgaoJulgador = normalizeString(source.orgaoJulgador?.nome) || "Não informado";
+    const tribunal = normalizeString(source.tribunal);
+    const graus = normalizeString(source.grau);
+    const formato = normalizeString(source.formato?.nome);
+    const sistema = normalizeString(source.sistema?.nome);
+    const dataDistribuicao = normalizeToNull(source.dataAjuizamento);
+    const atualizadoEm =
+      normalizeToNull(source.dataHoraUltimaAtualizacao) || normalizeToNull(source["@timestamp"]);
+    const alias = normalizeDatajudAlias(
+      typeof firstHit._index === "string" ? firstHit._index : null,
+    );
+    const tribunalLabel = getDatajudTribunalLabel(alias) ?? (tribunal || null);
+    const categoriaId = alias ? DATAJUD_TRIBUNAL_MAP.get(alias)?.categoriaId ?? null : null;
+    const categoriaLabel = categoriaId ? getDatajudCategoriaLabel(categoriaId) : null;
+    const tipoBadgeParts = [formato, sistema, graus ? `Grau ${graus}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    const fallbackNumericId =
+      fallbackId !== undefined ? Number.parseInt(String(fallbackId), 10) : Number.NaN;
+    const id = Number.isInteger(fallbackNumericId) && fallbackNumericId > 0 ? fallbackNumericId : 0;
+
+    const mappedMovimentacoes = Array.isArray(source.movimentos)
+      ? source.movimentos
+          .map((movimento) => mapDatajudMovimentoToLocal(movimento))
+          .sort((a, b) => {
+            const dateA = a.dataIso ? new Date(a.dataIso).getTime() : 0;
+            const dateB = b.dataIso ? new Date(b.dataIso).getTime() : 0;
+            return dateB - dateA;
+          })
+      : [];
+
+    return {
+      detalhes: {
+        id,
+        numero,
+        status: (tribunalLabel ?? tribunal) || "Não informado",
+        tipo: tipoBadgeParts || "Não informado",
+        classeJudicial,
+        assunto,
+        jurisdicao: (tribunalLabel ?? tribunal) || "Não informado",
+        orgaoJulgador,
+        advogadoResponsavel: "Não informado",
+        dataDistribuicao,
+        dataDistribuicaoFormatada: formatDateToPtBR(dataDistribuicao),
+        criadoEm: dataDistribuicao,
+        atualizadoEm,
+        datajudTipoJustica: categoriaLabel,
+        datajudAlias: alias,
+        datajudTribunal: tribunalLabel ?? (tribunal || null),
+        uf: "",
+        municipio: "",
+        cliente: null,
+      },
+      movimentacoes: mappedMovimentacoes,
+    };
+  }
+
+  const rawNumero = normalizeString((processo as ApiProcessoResponse).numero);
+  const rawStatus = normalizeString((processo as ApiProcessoResponse).status) || "Não informado";
+  const rawTipo = normalizeString((processo as ApiProcessoResponse).tipo) || "Não informado";
+  const rawClasse =
+    normalizeString((processo as ApiProcessoResponse).classe_judicial) || "Não informada";
+  const rawAssunto = normalizeString((processo as ApiProcessoResponse).assunto) || "Não informado";
+  const rawOrgao =
+    normalizeString((processo as ApiProcessoResponse).orgao_julgador) || "Não informado";
   const rawAdvogado =
-    normalizeString(processo.advogado_responsavel) || "Não informado";
-  const rawMunicipio = normalizeString(processo.municipio);
-  const rawUf = normalizeString(processo.uf);
+    normalizeString((processo as ApiProcessoResponse).advogado_responsavel) || "Não informado";
+  const rawMunicipio = normalizeString((processo as ApiProcessoResponse).municipio);
+  const rawUf = normalizeString((processo as ApiProcessoResponse).uf);
   const jurisdicao =
-    normalizeString(processo.jurisdicao) ||
+    normalizeString((processo as ApiProcessoResponse).jurisdicao) ||
     [rawMunicipio, rawUf].filter(Boolean).join(" - ") ||
     "Não informado";
   const dataDistribuicao = normalizeString(processo.data_distribuicao) || null;
   const datajudTipoJustica = normalizeString(processo.datajud_tipo_justica) || null;
   const datajudAlias = normalizeDatajudAlias(processo.datajud_alias);
+
   const datajudCategoriaLabel = getDatajudCategoriaLabel(datajudTipoJustica);
   const datajudTribunal = getDatajudTribunalLabel(datajudAlias);
-  const clienteResumo = processo.cliente ?? null;
+  const clienteResumo = (processo as ApiProcessoResponse).cliente ?? null;
   const clienteId =
     typeof clienteResumo?.id === "number"
       ? clienteResumo.id
-      : typeof processo.cliente_id === "number"
-        ? processo.cliente_id
+      : typeof (processo as ApiProcessoResponse).cliente_id === "number"
+        ? (processo as ApiProcessoResponse).cliente_id
         : null;
-  const clienteNome = normalizeString(clienteResumo?.nome) || "Cliente não informado";
+  const clienteNome =
+    normalizeString(clienteResumo?.nome) || "Cliente não informado";
   const clienteDocumento = normalizeString(clienteResumo?.documento);
   const clientePapel = resolveClientePapel(clienteResumo?.tipo);
 
   return {
-    id:
-      typeof processo.id === "number"
-        ? processo.id
-        : Number.parseInt(String(processo.id ?? 0), 10) || 0,
-    numero: rawNumero || "Não informado",
-    status: rawStatus,
-    tipo: rawTipo,
-    classeJudicial: rawClasse,
-    assunto: rawAssunto,
-    jurisdicao,
-    orgaoJulgador: rawOrgao,
-    advogadoResponsavel: rawAdvogado,
-    dataDistribuicao,
-    dataDistribuicaoFormatada: formatDateToPtBR(dataDistribuicao),
-    criadoEm: processo.criado_em ?? null,
-    atualizadoEm: processo.atualizado_em ?? null,
-    datajudTipoJustica: datajudCategoriaLabel ?? datajudTipoJustica,
-    datajudAlias,
-    datajudTribunal,
-    uf: rawUf,
-    municipio: rawMunicipio,
-    cliente: clienteResumo
-      ? {
-          id: clienteId,
-          nome: clienteNome,
-          documento: clienteDocumento,
-          papel: clientePapel,
-        }
-      : null,
+    detalhes: {
+      id:
+        typeof (processo as ApiProcessoResponse).id === "number"
+          ? (processo as ApiProcessoResponse).id
+          : Number.parseInt(String((processo as ApiProcessoResponse).id ?? 0), 10) || 0,
+      numero: rawNumero || "Não informado",
+      status: rawStatus,
+      tipo: rawTipo,
+      classeJudicial: rawClasse,
+      assunto: rawAssunto,
+      jurisdicao,
+      orgaoJulgador: rawOrgao,
+      advogadoResponsavel: rawAdvogado,
+      dataDistribuicao,
+      dataDistribuicaoFormatada: formatDateToPtBR(dataDistribuicao),
+      criadoEm: (processo as ApiProcessoResponse).criado_em ?? null,
+      atualizadoEm: (processo as ApiProcessoResponse).atualizado_em ?? null,
+      datajudTipoJustica: datajudCategoriaLabel ?? datajudTipoJustica,
+      datajudAlias,
+      datajudTribunal,
+      uf: rawUf,
+      municipio: rawMunicipio,
+      cliente: clienteResumo
+        ? {
+            id: clienteId,
+            nome: clienteNome,
+            documento: clienteDocumento,
+            papel: clientePapel,
+          }
+        : null,
+    },
+    movimentacoes: [],
   };
 };
-
 const mapApiMovimentacaoToLocal = (
   movimentacao: ApiProcessoMovimentacao,
 ): ProcessoMovimentacao => {
@@ -335,12 +599,32 @@ export default function VisualizarProcesso() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [processo, setProcesso] = useState<ProcessoDetalhes | null>(null);
+  const [processoRaw, setProcessoRaw] = useState<ApiProcessoResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [movimentacoes, setMovimentacoes] = useState<ProcessoMovimentacao[]>([]);
   const [movimentacoesLoading, setMovimentacoesLoading] = useState(false);
   const [movimentacoesError, setMovimentacoesError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
+  const [isEditDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState<EditProcessoFormState>({
+    datajudTipoJustica: "",
+    datajudAlias: "",
+  });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  useEffect(() => {
+    setMovimentacoes([]);
+    setMovimentacoesError(null);
+    setMovimentacoesLoading(false);
+    setLastSync(null);
+    setAutoSyncAttempted(false);
+    setProcessoRaw(null);
+    setEditDialogOpen(false);
+    setEditError(null);
+    setEditForm({ datajudTipoJustica: "", datajudAlias: "" });
+  }, [processoId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -388,9 +672,20 @@ export default function VisualizarProcesso() {
           throw new Error("Resposta inválida do servidor ao carregar o processo");
         }
 
-        const mapped = mapApiProcessoToDetalhes(json as ApiProcessoResponse);
+        const processoResponse = json as ProcessoApiResponse;
+        const { detalhes, movimentacoes: initialMovimentacoes } = mapApiProcessoToDetalhes(
+          processoResponse,
+          processoId,
+        );
+        const apiProcesso = isApiProcessoResponse(processoResponse)
+          ? (processoResponse as ApiProcessoResponse)
+          : null;
         if (!cancelled) {
-          setProcesso(mapped);
+          setProcesso(detalhes);
+          setProcessoRaw(apiProcesso);
+          if (initialMovimentacoes.length > 0) {
+            setMovimentacoes(initialMovimentacoes);
+          }
         }
       } catch (fetchError) {
         const message =
@@ -523,7 +818,188 @@ export default function VisualizarProcesso() {
     [processoId, toast],
   );
 
+  const availableTribunais = useMemo<DatajudTribunal[]>(() => {
+    if (!editForm.datajudTipoJustica) {
+      return [];
+    }
+
+    const key = editForm.datajudTipoJustica as DatajudCategoriaId;
+    return DATAJUD_TRIBUNAIS_BY_CATEGORIA[key] ?? [];
+  }, [editForm.datajudTipoJustica]);
+
   const canSync = Boolean(processo?.datajudAlias);
+  const canEditProcesso = Boolean(processoRaw?.id);
+
+  const handleEditDialogChange = useCallback((open: boolean) => {
+    setEditDialogOpen(open);
+    if (!open) {
+      setEditError(null);
+    }
+  }, []);
+
+  const handleOpenEditDialog = useCallback(() => {
+    if (!processoRaw) {
+      return;
+    }
+
+    const alias = normalizeDatajudAlias(processoRaw.datajud_alias);
+    const categoria =
+      processoRaw.datajud_tipo_justica ??
+      (alias ? DATAJUD_TRIBUNAL_MAP.get(alias)?.categoriaId ?? null : null);
+
+    setEditForm({
+      datajudTipoJustica: categoria ?? "",
+      datajudAlias: alias ?? "",
+    });
+    setEditError(null);
+    setEditDialogOpen(true);
+  }, [processoRaw]);
+
+  const handleEditSubmit = useCallback(async () => {
+    if (!processo || !processoRaw) {
+      return;
+    }
+
+    if (!editForm.datajudTipoJustica || !editForm.datajudAlias) {
+      setEditError("Selecione o tipo de justiça e o tribunal do processo.");
+      return;
+    }
+
+    const normalizedAlias = normalizeDatajudAlias(editForm.datajudAlias);
+    if (!normalizedAlias) {
+      setEditError("Tribunal selecionado é inválido.");
+      return;
+    }
+
+    const numero = processoRaw.numero ?? processo.numero ?? "";
+    const uf = processoRaw.uf ?? processo.uf ?? "";
+    const municipio = processoRaw.municipio ?? processo.municipio ?? "";
+    const orgao = processoRaw.orgao_julgador ?? processo.orgaoJulgador ?? "";
+
+    const requiredFields = [
+      { label: "número do processo", value: numero },
+      { label: "UF", value: uf },
+      { label: "município", value: municipio },
+      { label: "órgão julgador", value: orgao },
+    ];
+
+    const missingField = requiredFields.find(
+      (field) => !field.value || field.value.trim() === "",
+    );
+
+    if (missingField) {
+      setEditError(
+        `O campo ${missingField.label} é obrigatório para atualizar o processo.`,
+      );
+      return;
+    }
+
+    const parsedClienteId =
+      typeof processoRaw.cliente_id === "number" && processoRaw.cliente_id > 0
+        ? processoRaw.cliente_id
+        : processo.cliente?.id ??
+          (clienteIdParam ? Number.parseInt(clienteIdParam, 10) : Number.NaN);
+
+    if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
+      setEditError("Cliente do processo não foi encontrado.");
+      return;
+    }
+
+    const payload = {
+      cliente_id: parsedClienteId,
+      numero,
+      uf,
+      municipio,
+      orgao_julgador: orgao,
+      tipo: processoRaw.tipo ?? null,
+      status: processoRaw.status ?? null,
+      classe_judicial: processoRaw.classe_judicial ?? null,
+      assunto: processoRaw.assunto ?? null,
+      jurisdicao: processoRaw.jurisdicao ?? null,
+      advogado_responsavel: processoRaw.advogado_responsavel ?? null,
+      data_distribuicao:
+        processoRaw.data_distribuicao ?? processo.dataDistribuicao ?? null,
+      datajud_tipo_justica: editForm.datajudTipoJustica,
+      datajud_alias: normalizedAlias,
+    };
+
+    setEditSaving(true);
+    setEditError(null);
+
+    try {
+      const res = await fetch(getApiUrl(`processos/${processoRaw.id}`), {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text();
+      let json: unknown = null;
+
+      if (text) {
+        try {
+          json = JSON.parse(text);
+        } catch (parseError) {
+          console.error("Não foi possível interpretar os dados do processo", parseError);
+        }
+      }
+
+      if (!res.ok) {
+        const message =
+          json && typeof json === "object" &&
+          "error" in json &&
+          typeof (json as { error: unknown }).error === "string"
+            ? (json as { error: string }).error
+            : `Não foi possível atualizar o processo (HTTP ${res.status})`;
+        throw new Error(message);
+      }
+
+      if (!json || typeof json !== "object") {
+        throw new Error("Resposta inválida do servidor ao atualizar o processo");
+      }
+
+      const processoAtualizado = json as ProcessoApiResponse;
+      const { detalhes } = mapApiProcessoToDetalhes(
+        processoAtualizado,
+        processoRaw.id,
+      );
+      setProcesso(detalhes);
+      setProcessoRaw(
+        isApiProcessoResponse(processoAtualizado)
+          ? (processoAtualizado as ApiProcessoResponse)
+          : processoRaw,
+      );
+      setAutoSyncAttempted(false);
+      setEditDialogOpen(false);
+      toast({
+        title: "Processo atualizado",
+        description: "Dados do tribunal foram atualizados com sucesso.",
+      });
+    } catch (updateError) {
+      const message =
+        updateError instanceof Error
+          ? updateError.message
+          : "Erro ao atualizar o processo";
+      setEditError(message);
+      toast({
+        title: "Erro ao atualizar processo",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setEditSaving(false);
+    }
+  }, [
+    clienteIdParam,
+    editForm.datajudAlias,
+    editForm.datajudTipoJustica,
+    processo,
+    processoRaw,
+    toast,
+  ]);
 
   useEffect(() => {
     if (!autoSyncAttempted && canSync) {
@@ -640,11 +1116,18 @@ export default function VisualizarProcesso() {
             )}
             {movimentacoesLoading ? "Sincronizando..." : "Sincronizar"}
           </Button>
-          <Button onClick={handleGerarContrato} disabled={!clienteIdParam}>
-            Gerar contrato
+          <Button
+            variant="outline"
+            onClick={handleOpenEditDialog}
+            disabled={!canEditProcesso}
+            title={
+              !canEditProcesso
+                ? "Este processo foi importado do CNJ e não pode ser editado."
+                : undefined
+            }
+          >
+            Editar processo
           </Button>
-          <Button variant="outline">Gerar termo de hipossuficiência</Button>
-          <Button variant="outline">Anexar documentos</Button>
         </div>
       </div>
 
@@ -841,6 +1324,86 @@ export default function VisualizarProcesso() {
           )}
         </CardContent>
       </Card>
+      <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar processo</DialogTitle>
+            <DialogDescription>
+              Atualize o tribunal do processo para habilitar a consulta ao CNJ.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-process-justica">Tipo de Justiça (DataJud)</Label>
+              <Select
+                value={editForm.datajudTipoJustica}
+                onValueChange={(value) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    datajudTipoJustica: value,
+                    datajudAlias: "",
+                  }))
+                }
+              >
+                <SelectTrigger id="edit-process-justica">
+                  <SelectValue placeholder="Selecione o tipo de justiça" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATAJUD_CATEGORIAS.map((categoria) => (
+                    <SelectItem key={categoria.id} value={categoria.id}>
+                      {categoria.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-process-tribunal">Tribunal (DataJud)</Label>
+              <Select
+                value={editForm.datajudAlias}
+                onValueChange={(value) =>
+                  setEditForm((prev) => ({ ...prev, datajudAlias: value }))
+                }
+                disabled={!editForm.datajudTipoJustica}
+              >
+                <SelectTrigger id="edit-process-tribunal">
+                  <SelectValue
+                    placeholder={
+                      !editForm.datajudTipoJustica
+                        ? "Selecione o tipo de justiça"
+                        : availableTribunais.length > 0
+                          ? "Selecione o tribunal"
+                          : "Nenhum tribunal disponível"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableTribunais.map((tribunal) => (
+                    <SelectItem key={tribunal.alias} value={tribunal.alias}>
+                      {tribunal.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {editError ? (
+              <p className="text-sm text-destructive">{editError}</p>
+            ) : null}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleEditDialogChange(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleEditSubmit} disabled={editSaving}>
+              {editSaving ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

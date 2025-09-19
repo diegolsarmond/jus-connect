@@ -140,6 +140,7 @@ export const DATAJUD_CATEGORIA_MAP = new Map(
 
 const DATAJUD_ALIAS_PATTERN = /api_publica_[a-z0-9_-]+/;
 
+
 export const normalizeDatajudAlias = (
   alias: string | null | undefined,
 ): string | null => {
@@ -191,6 +192,7 @@ export const normalizeDatajudAlias = (
   if (!withoutPrefix) {
     return null;
   }
+
 
   return `api_publica_${withoutPrefix}`;
 };

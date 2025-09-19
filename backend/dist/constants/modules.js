@@ -55,6 +55,15 @@ function normalizeModuleId(value) {
     if (exports.SYSTEM_MODULE_SET.has(lowerCased)) {
         return lowerCased;
     }
+    const sanitized = trimmed
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}]+/gu, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+    if (sanitized && exports.SYSTEM_MODULE_SET.has(sanitized)) {
+        return sanitized;
+    }
     return null;
 }
 function sanitizeModuleIds(values) {

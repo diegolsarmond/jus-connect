@@ -22,6 +22,21 @@ const normalizeLowercase = (value) => {
     const normalized = normalizeString(value);
     return normalized ? normalized.toLowerCase() : null;
 };
+const normalizeDatajudAliasValue = (value) => {
+    const normalized = normalizeLowercase(value);
+    if (!normalized) {
+        return null;
+    }
+    const sanitized = normalized.replace(/^\/+/g, '').replace(/\/+$/g, '').replace(/\s+/g, '_');
+    if (!sanitized) {
+        return null;
+    }
+    if (sanitized.startsWith('api_publica_')) {
+        return sanitized;
+    }
+    const withoutPrefix = sanitized.replace(/^api_publica_/, '');
+    return `api_publica_${withoutPrefix}`;
+};
 const normalizeDate = (value) => {
     if (value === null || value === undefined) {
         return null;
@@ -120,6 +135,7 @@ const mapProcessoRow = (row) => ({
     data_distribuicao: row.data_distribuicao,
     datajud_tipo_justica: row.datajud_tipo_justica ?? null,
     datajud_alias: (0, datajud_1.canonicalizeDatajudAlias)(row.datajud_alias),
+
     criado_em: row.criado_em,
     atualizado_em: row.atualizado_em,
     cliente: row.cliente_id
@@ -280,6 +296,7 @@ const createProcesso = async (req, res) => {
         : null;
     const datajudAliasValue = columnInfo.hasDatajudAlias
         ? (0, datajud_1.canonicalizeDatajudAlias)(datajud_alias)
+
         : null;
     const missingDatajudFields = [];
     if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
@@ -392,6 +409,7 @@ const updateProcesso = async (req, res) => {
         : null;
     const datajudAliasValue = columnInfo.hasDatajudAlias
         ? (0, datajud_1.canonicalizeDatajudAlias)(datajud_alias)
+
         : null;
     const missingDatajudFields = [];
     if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
@@ -498,6 +516,7 @@ const getProcessoMovimentacoes = async (req, res) => {
         const row = result.rows[0];
         const numeroProcesso = normalizeString(row.numero);
         const datajudAlias = (0, datajud_1.canonicalizeDatajudAlias)(row.datajud_alias);
+
         if (!numeroProcesso || !datajudAlias) {
             return res.json([]);
         }

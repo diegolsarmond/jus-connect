@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import clsx from "clsx";
 import { Smartphone, QrCode, ShieldCheck, RefreshCw, LogOut } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -6,6 +6,7 @@ import { Modal } from "./Modal";
 import { WhatsAppWebEmbed } from "../../../components/waha";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/features/auth/AuthProvider";
 import {
   deriveSessionName,
   ensureDeviceSession,
@@ -15,11 +16,6 @@ import {
   type DeviceSessionInfo,
 } from "../services/deviceLinkingApi";
 import styles from "./DeviceLinkModal.module.css";
-
-interface DeviceLinkModalProps {
-  open: boolean;
-  onClose: () => void;
-}
 
 type SessionStatusTone = "connected" | "pending" | "error" | "unknown";
 
@@ -63,8 +59,19 @@ const timeFormatter = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
+interface DeviceLinkContentProps {
+  isActive: boolean;
+  layout?: "modal" | "inline";
+  className?: string;
+}
+
+export const DeviceLinkContent = ({
+  isActive,
+  layout = "modal",
+  className,
+}: DeviceLinkContentProps) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const steps = useMemo(
     () => [
       {
@@ -75,14 +82,12 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
       },
       {
         title: "Escaneie o QR Code",
-        description:
-          "Utilize a câmera do aparelho para ler o código exibido no painel do WAHA.",
+        description: "Utilize a câmera do aparelho para ler o código exibido no painel do WAHA.",
         icon: <QrCode size={18} aria-hidden="true" />,
       },
       {
         title: "Sincronização automática",
-        description:
-          "Aguarde alguns instantes até que o WAHA sincronize as conversas com o JusConnect.",
+        description: "Aguarde alguns instantes até que o WAHA sincronize as conversas com o JusConnect.",
         icon: <ShieldCheck size={18} aria-hidden="true" />,
       },
       {
@@ -95,19 +100,28 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
     [],
   );
 
+  const companyNameFromAuth = useMemo(() => {
+    const value = user?.empresa_nome;
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }, [user?.empresa_nome]);
+
   const companyQuery = useQuery({
     queryKey: ["companies", "primary"],
     queryFn: fetchPreferredCompany,
-    enabled: open,
+    enabled: isActive && !companyNameFromAuth,
   });
 
-  const companyName = companyQuery.data?.name;
+  const companyName = companyNameFromAuth ?? companyQuery.data?.name ?? null;
   const sessionName = useMemo(() => deriveSessionName(companyName), [companyName]);
 
   const sessionQuery = useQuery<DeviceSessionInfo>({
     queryKey: ["waha", "session", sessionName],
     queryFn: () => ensureDeviceSession(sessionName, companyName),
-    enabled: open && !companyQuery.isLoading,
+    enabled: isActive && !companyQuery.isLoading,
     retry: false,
   });
 
@@ -117,7 +131,7 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
     isError: isQrError,
     error: qrError,
     refetch: refetchQr,
-    remove: clearQr,
+    remove: removeQr,
     dataUpdatedAt: qrUpdatedAt,
   } = useQuery({
     queryKey: ["waha", "session", sessionName, "qr"],
@@ -126,6 +140,12 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
     staleTime: 0,
     gcTime: 0,
   });
+
+  const clearQr = useCallback(() => {
+    if (typeof removeQr === "function") {
+      removeQr();
+    }
+  }, [removeQr]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -153,7 +173,7 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
   });
 
   useEffect(() => {
-    if (!open) {
+    if (!isActive) {
       clearQr();
       return;
     }
@@ -163,7 +183,13 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
     } else if (qrCode) {
       clearQr();
     }
-  }, [open, sessionQuery.data?.status, refetchQr, clearQr, qrCode]);
+  }, [isActive, sessionQuery.data?.status, refetchQr, clearQr, qrCode]);
+
+  useEffect(() => {
+    return () => {
+      clearQr();
+    };
+  }, [clearQr]);
 
   const handleRefreshStatus = async () => {
     const result = await sessionQuery.refetch();
@@ -201,173 +227,180 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
       : "O QR Code será exibido aqui quando a sessão estiver aguardando uma nova autenticação.";
 
   return (
-    <Modal open={open} onClose={onClose} ariaLabel="Conectar um novo dispositivo">
-      <div className={styles.container}>
-        <section className={styles.integrationPanel} aria-labelledby="waha-integration-title">
-          <header className={styles.integrationHeader}>
-            <h2 id="waha-integration-title">Conecte o WhatsApp Web</h2>
-            <p>
-              Use o painel integrado do WAHA para autenticar sua conta do WhatsApp Business. O QR Code
-              é atualizado automaticamente para garantir uma conexão segura.
-            </p>
-          </header>
-          <div className={styles.statusCard}>
-            <div className={styles.statusHeader}>
-              <div>
-                <p className={styles.sessionLabel}>
-                  Sessão vinculada: <span className={styles.sessionName}>{sessionName}</span>
-                </p>
-                <span className={statusBadgeClass}>{statusInfo.label}</span>
-              </div>
-              <div className={styles.sessionActions}>
-                <Button
-                  size="sm"
-                  onClick={handleLogout}
-                  disabled={
-                    sessionQuery.isLoading ||
-                    sessionQuery.isFetching ||
-                    logoutMutation.isPending ||
-                    !sessionName
-                  }
-                >
-                  {logoutMutation.isPending ? (
-                    <span className={styles.buttonSpinner} aria-hidden="true" />
-                  ) : (
-                    <LogOut size={16} aria-hidden="true" />
-                  )}
-                  Desconectar dispositivo
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleRefreshStatus}
-                  disabled={sessionQuery.isLoading || sessionQuery.isFetching}
-                >
-                  <RefreshCw
-                    size={16}
-                    aria-hidden="true"
-                    className={sessionQuery.isFetching ? styles.refreshIconSpinning : undefined}
-                  />
-                  Atualizar status
-                </Button>
-              </div>
-            </div>
-
-            {companyQuery.isError && (
-              <p className={styles.sessionWarning}>
-                Não foi possível carregar as informações da empresa. Utilizando a sessão padrão
-                <strong> {sessionName}</strong>.
+    <div
+      className={clsx(
+        styles.container,
+        layout === "inline" && styles.inlineContainer,
+        className,
+      )}
+    >
+      <section className={styles.integrationPanel} aria-labelledby="waha-integration-title">
+        <header className={styles.integrationHeader}>
+          <h2 id="waha-integration-title">Conecte o WhatsApp Web</h2>
+        </header>
+        <div className={styles.statusCard}>
+          <div className={styles.statusHeader}>
+            <div>
+              <p className={styles.sessionLabel}>
+                Sessão vinculada: <span className={styles.sessionName}>{sessionName}</span>
               </p>
-            )}
+              <span className={statusBadgeClass}>{statusInfo.label}</span>
+            </div>
+            <div className={styles.sessionActions}>
+              <Button
+                size="sm"
+                onClick={handleLogout}
+                disabled={
+                  sessionQuery.isLoading ||
+                  sessionQuery.isFetching ||
+                  logoutMutation.isPending ||
+                  !sessionName
+                }
+              >
+                {logoutMutation.isPending ? (
+                  <span className={styles.buttonSpinner} aria-hidden="true" />
+                ) : (
+                  <LogOut size={16} aria-hidden="true" />
+                )}
+                Desconectar dispositivo
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRefreshStatus}
+                disabled={sessionQuery.isLoading || sessionQuery.isFetching}
+              >
+                <RefreshCw
+                  size={16}
+                  aria-hidden="true"
+                  className={sessionQuery.isFetching ? styles.refreshIconSpinning : undefined}
+                />
+                Atualizar status
+              </Button>
+            </div>
+          </div>
 
-            {sessionQuery.isLoading ? (
+          {!companyNameFromAuth && companyQuery.isError && (
+            <p className={styles.sessionWarning}>
+              Não foi possível carregar as informações da empresa. Utilizando a sessão padrão
+              <strong> {sessionName}</strong>.
+
+            </p>
+          )}
+
+          {sessionQuery.isLoading ? (
+            <div className={styles.sessionFeedback}>
+              <span className={styles.statusSpinner} aria-hidden="true" />
+              Carregando status da sessão...
+            </div>
+          ) : sessionQuery.isError ? (
+            <div className={styles.sessionError} role="alert">
+              Não foi possível carregar o status da sessão. Tente atualizar novamente ou verifique as
+              credenciais do WAHA.
+            </div>
+          ) : (
+            <p className={styles.statusDescription}>{statusInfo.description}</p>
+          )}
+
+          <div className={styles.sessionMetaRow}>
+            <span>
+              Empresa:{" "}
+              <span className={styles.sessionMetaHighlight}>{companyName ?? "Não informada"}</span>
+            </span>
+            {sessionUpdatedAt && (
+              <span>
+                Atualizado às <span className={styles.sessionMetaHighlight}>{sessionUpdatedAt}</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className={styles.qrSection}>
+          <div className={styles.qrHeader}>
+            <h3>QR Code de autenticação</h3>
+            <div className={styles.qrActions}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void refetchQr()}
+                disabled={isFetchingQr || sessionQuery.isLoading || sessionQuery.isFetching}
+              >
+                <QrCode size={16} aria-hidden="true" />
+                Atualizar QR Code
+              </Button>
+            </div>
+          </div>
+          <div className={styles.qrContent}>
+            {isFetchingQr ? (
               <div className={styles.sessionFeedback}>
                 <span className={styles.statusSpinner} aria-hidden="true" />
-                Carregando status da sessão...
+                Gerando QR Code...
               </div>
-            ) : sessionQuery.isError ? (
+            ) : qrCode ? (
+              <img
+                src={qrCode}
+                alt="QR Code do WhatsApp"
+                className={styles.qrImage}
+                loading="lazy"
+              />
+            ) : isQrError ? (
               <div className={styles.sessionError} role="alert">
-                Não foi possível carregar o status da sessão. Tente atualizar novamente ou verifique as
-                credenciais do WAHA.
+                {qrError instanceof Error
+                  ? qrError.message
+                  : "Não foi possível carregar o QR Code. Tente novamente."}
               </div>
             ) : (
-              <p className={styles.statusDescription}>{statusInfo.description}</p>
-            )}
-
-            <div className={styles.sessionMetaRow}>
-              <span>
-                Empresa:{" "}
-                <span className={styles.sessionMetaHighlight}>{companyName ?? "Não informada"}</span>
-              </span>
-              {sessionUpdatedAt && (
-                <span>
-                  Atualizado às <span className={styles.sessionMetaHighlight}>{sessionUpdatedAt}</span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className={styles.qrSection}>
-            <div className={styles.qrHeader}>
-              <h3>QR Code de autenticação</h3>
-              <div className={styles.qrActions}>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void refetchQr()}
-                  disabled={isFetchingQr || sessionQuery.isLoading || sessionQuery.isFetching}
-                >
-                  <QrCode size={16} aria-hidden="true" />
-                  Atualizar QR Code
-                </Button>
-              </div>
-            </div>
-            <div className={styles.qrContent}>
-              {isFetchingQr ? (
-                <div className={styles.sessionFeedback}>
-                  <span className={styles.statusSpinner} aria-hidden="true" />
-                  Gerando QR Code...
-                </div>
-              ) : qrCode ? (
-                <img
-                  src={qrCode}
-                  alt="QR Code do WhatsApp"
-                  className={styles.qrImage}
-                  loading="lazy"
-                />
-              ) : isQrError ? (
-                <div className={styles.sessionError} role="alert">
-                  {qrError instanceof Error
-                    ? qrError.message
-                    : "Não foi possível carregar o QR Code. Tente novamente."}
-                </div>
-              ) : (
-                <p className={styles.qrPlaceholder}>{qrPlaceholderMessage}</p>
-              )}
-            </div>
-            {qrUpdatedAtLabel && (
-              <p className={styles.sessionMetaRow}>
-                Última geração às
-                <span className={styles.sessionMetaHighlight}> {qrUpdatedAtLabel}</span>
-              </p>
+              <p className={styles.qrPlaceholder}>{qrPlaceholderMessage}</p>
             )}
           </div>
-          <WhatsAppWebEmbed
-            className={styles.embedWrapper}
-            fallback={
-              <div className={styles.fallbackMessage}>
-                <h3>Configuração necessária</h3>
-                <p>
-                  Defina <code>VITE_WAHA_WHATSAPP_WEB_URL</code> ou combine{' '}
-                  <code>VITE_WAHA_BASE_URL</code> com <code>VITE_WAHA_WHATSAPP_WEB_PATH</code> para carregar
-                  o WhatsApp Web integrado.
-                </p>
-              </div>
-            }
-          />
-        </section>
-        <div className={styles.instructions}>
-          <h2>Como conectar</h2>
-          <p>
-            Após a leitura do QR Code, o WAHA mantém a sessão ativa e sincroniza automaticamente as
-            mensagens com o painel de conversas.
-          </p>
-          <ol className={styles.steps}>
-            {steps.map((step, index) => (
-              <li key={step.title} className={styles.stepItem}>
-                <span className={styles.stepBadge}>{index + 1}</span>
-                <div className={styles.stepContent}>
-                  <h3>
-                    <span className={styles.stepIcon}>{step.icon}</span>
-                    {step.title}
-                  </h3>
-                  <p>{step.description}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
+          {qrUpdatedAtLabel && (
+            <p className={styles.sessionMetaRow}>
+              Última geração às
+              <span className={styles.sessionMetaHighlight}> {qrUpdatedAtLabel}</span>
+            </p>
+          )}
         </div>
+
+      </section>
+      <div className={styles.instructions}>
+        <h2>Como conectar</h2>
+        <p>
+          Após a leitura do QR Code, o WAHA mantém a sessão ativa e sincroniza automaticamente as
+          mensagens com o painel de conversas.
+        </p>
+        <ol className={styles.steps}>
+          {steps.map((step, index) => (
+            <li key={step.title} className={styles.stepItem}>
+              <span className={styles.stepBadge}>{index + 1}</span>
+              <div className={styles.stepContent}>
+                <h3>
+                  <span className={styles.stepIcon}>{step.icon}</span>
+                  {step.title}
+                </h3>
+                <p>{step.description}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </div>
+    </div>
+  );
+};
+
+interface DeviceLinkModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      ariaLabel="Conectar um novo dispositivo"
+      contentClassName={styles.modalContent}
+    >
+      <DeviceLinkContent isActive={open} layout="modal" />
     </Modal>
   );
 };

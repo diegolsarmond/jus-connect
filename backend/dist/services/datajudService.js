@@ -74,6 +74,7 @@ const fetchDatajudMovimentacoes = async (alias, numeroProcesso) => {
         throw new Error('Alias do Datajud inválido para consulta');
     }
     const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
+
     const fetchImpl = resolveFetch();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DATAJUD_TIMEOUT_MS);

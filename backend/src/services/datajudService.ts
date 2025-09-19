@@ -124,11 +124,13 @@ export const fetchDatajudMovimentacoes = async (
 
   const normalizedAlias = canonicalizeDatajudAlias(alias);
 
+
   if (!normalizedAlias) {
     throw new Error('Alias do Datajud inválido para consulta');
   }
 
   const url = `${DATAJUD_BASE_URL}/${normalizedAlias}/_search`;
+
 
   const fetchImpl = resolveFetch();
   const controller = new AbortController();
@@ -143,7 +145,7 @@ export const fetchDatajudMovimentacoes = async (
         Authorization: `APIKey ${apiKey}`,
       },
       body: JSON.stringify({
-        query: { match: { numeroProcesso } },
+        query: { match: { numeroProcesso: numeroForQuery } },
         size: 1,
       }),
       signal: controller.signal,
