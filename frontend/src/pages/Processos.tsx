@@ -52,6 +52,7 @@ import {
   DATAJUD_TRIBUNAIS_BY_CATEGORIA,
   getDatajudCategoriaLabel,
   getDatajudTribunalLabel,
+  normalizeDatajudAlias,
 } from "@/data/datajud";
 
 interface ProcessoCliente {
@@ -257,7 +258,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     "Não informado";
   const rawCategoria = processo.datajud_tipo_justica?.trim() || null;
   const categoriaLabel = getDatajudCategoriaLabel(rawCategoria);
-  const datajudAlias = processo.datajud_alias?.trim() || null;
+  const datajudAlias = normalizeDatajudAlias(processo.datajud_alias);
   const datajudTribunal = getDatajudTribunalLabel(datajudAlias);
 
   return {
