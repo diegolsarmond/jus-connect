@@ -3,160 +3,21 @@ import { Link } from "react-router-dom";
 import { Plus, Search, Building2, Users, Calendar, Activity, Phone } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { routes } from "@/config/routes";
 import { getApiUrl } from "@/lib/api";
-
-type CompanyStatus = "active" | "inactive" | "trial";
-
-interface ApiCompany {
-  id: number;
-  nome_empresa?: string | null;
-  cnpj?: string | null;
-  telefone?: string | null;
-  email?: string | null;
-  plano?: number | string | null;
-  responsavel?: number | string | null;
-  ativo?: boolean | null;
-  datacadastro?: string | Date | null;
-  atualizacao?: string | Date | null;
-}
-
-interface ApiPlan {
-  id?: number;
-  nome?: string | null;
-  valor?: number | null;
-}
-
-interface Company {
-  id: number;
-  name: string;
-  email: string;
-  cnpj: string;
-  phone: string;
-  planId: string | null;
-  planName: string;
-  planValue?: number | null;
-  status: CompanyStatus;
-  manager: string;
-  createdAt: string | null;
-  lastActivity: string | null;
-}
-
-const parseDataArray = <T,>(payload: unknown): T[] => {
-  if (Array.isArray(payload)) {
-    return payload as T[];
-  }
-
-  if (payload && typeof payload === "object") {
-    const rows = (payload as { rows?: unknown }).rows;
-    if (Array.isArray(rows)) {
-      return rows as T[];
-    }
-
-    const data = (payload as { data?: unknown }).data;
-    if (Array.isArray(data)) {
-      return data as T[];
-    }
-
-    if (data && typeof data === "object") {
-      const nestedRows = (data as { rows?: unknown }).rows;
-      if (Array.isArray(nestedRows)) {
-        return nestedRows as T[];
-      }
-    }
-  }
-
-  return [];
-};
-
-const toIsoString = (value: unknown): string | null => {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  return null;
-};
-
-const resolveCompanyStatus = (status: boolean | null | undefined, planId: string | null): CompanyStatus => {
-  if (status === false) {
-    return "inactive";
-  }
-
-  if (planId) {
-    return "active";
-  }
-
-  return "trial";
-};
-
-const mapApiCompanyToCompany = (company: ApiCompany, plansIndex: Map<string, ApiPlan>): Company => {
-  const planId = company.plano != null ? String(company.plano) : null;
-  const plan = planId ? plansIndex.get(planId) : undefined;
-
-  return {
-    id: company.id,
-    name: company.nome_empresa?.trim() || `Empresa #${company.id}`,
-    email: company.email?.trim() || "",
-    cnpj: company.cnpj?.trim() || "",
-    phone: company.telefone?.trim() || "",
-    planId,
-    planName: plan?.nome?.trim() || (planId ? `Plano ${planId}` : "Sem plano"),
-    planValue: typeof plan?.valor === "number" ? plan.valor : null,
-    status: resolveCompanyStatus(company.ativo ?? null, planId),
-    manager: company.responsavel != null ? String(company.responsavel) : "",
-    createdAt: toIsoString(company.datacadastro),
-    lastActivity: toIsoString(company.atualizacao) ?? toIsoString(company.datacadastro),
-  };
-};
-
-const formatDate = (value: string | null) => {
-  if (!value) {
-    return "--";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "--";
-  }
-
-  return date.toLocaleDateString("pt-BR");
-};
-
-const formatCurrency = (value?: number | null) => {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "0";
-  }
-
-  return value.toLocaleString("pt-BR");
-};
-
-const getStatusBadge = (status: CompanyStatus) => {
-  const variants = {
-    active: "default",
-    trial: "secondary",
-    inactive: "destructive",
-  } as const;
-
-  const labels = {
-    active: "Ativo",
-    trial: "Trial",
-    inactive: "Inativo",
-  } as const;
-
-  return (
-    <Badge variant={variants[status]}>
-      {labels[status]}
-    </Badge>
-  );
-};
+import {
+  ApiCompany,
+  ApiPlan,
+  Company,
+  CompanyStatusBadge,
+  formatCurrency,
+  formatDate,
+  mapApiCompanyToCompany,
+  parseDataArray,
+} from "./companies-data";
 
 export default function Companies() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -397,7 +258,9 @@ export default function Companies() {
                           ) : null}
                         </div>
                       </TableCell>
-                      <TableCell>{getStatusBadge(company.status)}</TableCell>
+                      <TableCell>
+                        <CompanyStatusBadge status={company.status} />
+                      </TableCell>
                       <TableCell>{company.planName}</TableCell>
                       <TableCell>{company.manager || "--"}</TableCell>
                       <TableCell>
@@ -417,8 +280,10 @@ export default function Companies() {
                         <div className="font-medium">R$ {formatCurrency(company.planValue)}</div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" disabled>
-                          Ver Detalhes
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link to={routes.admin.companyDetails(company.id)}>
+                            Ver Detalhes
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>

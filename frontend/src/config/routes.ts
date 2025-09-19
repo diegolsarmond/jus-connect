@@ -11,6 +11,7 @@ export const routes = {
     root: route(appConfig.adminBasePath),
     dashboard: route(appConfig.adminBasePath),
     companies: route(buildAdminPath("companies")),
+    companyDetails: (companyId: string | number) => route(buildAdminPath("companies", String(companyId))),
     newCompany: route(buildAdminPath("companies", "new")),
     plans: route(buildAdminPath("plans")),
     newPlan: route(buildAdminPath("plans", "new")),
@@ -38,6 +39,7 @@ export const isActiveRoute = (currentPathname: string, targetPath: string) => {
 
 export const adminRelativePath = {
   companies: "companies",
+  companyDetails: "companies/:companyId",
   newCompany: "companies/new",
   plans: "plans",
   newPlan: "plans/new",
