@@ -7,15 +7,23 @@ export const mockAnalytics = {
   totalClientes: 105,
   taxaConversao: 75,
   crescimentoMensal: 5.2,
+  mrr: 19800,
+  arr: 237600,
+  churnRate: 3.2,
+  conversionRate: 22,
+  activeSubscriptions: 80,
+  trialSubscriptions: 25,
+  totalCompanies: 105,
+  monthlyGrowth: 5.2,
 };
 
 export const mockMonthlyData = [
-  { month: "Jan", processos: 20, encerrados: 5, clientes: 90 },
-  { month: "Feb", processos: 25, encerrados: 4, clientes: 94 },
-  { month: "Mar", processos: 30, encerrados: 3, clientes: 98 },
-  { month: "Apr", processos: 28, encerrados: 6, clientes: 100 },
-  { month: "May", processos: 32, encerrados: 2, clientes: 103 },
-  { month: "Jun", processos: 35, encerrados: 4, clientes: 105 },
+  { month: "Jan", processos: 20, encerrados: 5, clientes: 90, customers: 90, mrr: 18000, churn: 3.5 },
+  { month: "Feb", processos: 25, encerrados: 4, clientes: 94, customers: 94, mrr: 18600, churn: 3.2 },
+  { month: "Mar", processos: 30, encerrados: 3, clientes: 98, customers: 98, mrr: 19500, churn: 2.9 },
+  { month: "Apr", processos: 28, encerrados: 6, clientes: 100, customers: 100, mrr: 20500, churn: 2.6 },
+  { month: "May", processos: 32, encerrados: 2, clientes: 103, customers: 103, mrr: 22150, churn: 2.3 },
+  { month: "Jun", processos: 35, encerrados: 4, clientes: 105, customers: 105, mrr: 22800, churn: 2.1 },
 ];
 
 export const mockCohortData = [
@@ -31,6 +39,12 @@ export const mockRevenueByPlan = [
   { name: "Básico", revenue: 990, customers: 10 },
   { name: "Profissional", revenue: 1592, customers: 8 },
   { name: "Enterprise", revenue: 2793, customers: 7 },
+];
+
+export const mockPlanDistribution = [
+  { name: "Básico", value: 45 },
+  { name: "Profissional", value: 35 },
+  { name: "Enterprise", value: 20 },
 ];
 
 export const mockMonthlyFinancials = [
