@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -54,7 +54,7 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
-  const { user } = useAuth();
+  const { user, logout: authLogout } = useAuth();
   const allowedModules = useMemo(() => new Set(user?.modulos ?? []), [user?.modulos]);
   const [pipelineMenus, setPipelineMenus] = useState<NavItem[]>([]);
   const hasPipelineAccess = allowedModules.has("pipeline");
@@ -254,12 +254,13 @@ export function Sidebar() {
       );
     });
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
+    authLogout();
     navigate("/login");
     if (isMobile) {
       setOpenMobile(false);
     }
-  };
+  }, [authLogout, isMobile, navigate, setOpenMobile]);
 
   return (
     <SidebarUI>
