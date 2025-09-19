@@ -3,10 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteProcesso = exports.getProcessoMovimentacoes = exports.updateProcesso = exports.createProcesso = exports.getProcessoById = exports.listProcessosByCliente = exports.listProcessos = void 0;
+exports.deleteProcesso = exports.updateProcesso = exports.createProcesso = exports.getProcessoById = exports.listProcessosByCliente = exports.listProcessos = void 0;
 const db_1 = __importDefault(require("../services/db"));
-const datajudService_1 = require("../services/datajudService");
-const datajud_1 = require("../utils/datajud");
 const normalizeString = (value) => {
     if (typeof value !== 'string') {
         return null;
@@ -18,33 +16,12 @@ const normalizeUppercase = (value) => {
     const normalized = normalizeString(value);
     return normalized ? normalized.toUpperCase() : null;
 };
-const normalizeLowercase = (value) => {
-    const normalized = normalizeString(value);
-    return normalized ? normalized.toLowerCase() : null;
-};
-const normalizeDatajudAliasValue = (value) => {
-    const normalized = normalizeLowercase(value);
-    if (!normalized) {
-        return null;
-    }
-    const sanitized = normalized.replace(/^\/+/g, '').replace(/\/+$/g, '').replace(/\s+/g, '_');
-    if (!sanitized) {
-        return null;
-    }
-    if (sanitized.startsWith('api_publica_')) {
-        return sanitized;
-    }
-    const withoutPrefix = sanitized.replace(/^api_publica_/, '');
-    return `api_publica_${withoutPrefix}`;
-};
 const normalizeDate = (value) => {
     if (value === null || value === undefined) {
         return null;
     }
     if (value instanceof Date) {
-        return Number.isNaN(value.getTime())
-            ? null
-            : value.toISOString().slice(0, 10);
+        return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
     }
     if (typeof value === 'number') {
         const date = new Date(value);
@@ -71,54 +48,6 @@ const normalizeDate = (value) => {
     }
     return null;
 };
-const getProcessosColumnInfo = async () => {
-    try {
-        const result = await db_1.default.query(`SELECT column_name
-         FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'processos'
-          AND column_name IN ('datajud_tipo_justica', 'datajud_alias')`);
-        const columnNames = new Set();
-        for (const row of result.rows) {
-            if (typeof row.column_name === 'string') {
-                columnNames.add(row.column_name);
-            }
-        }
-        return {
-            hasDatajudTipoJustica: columnNames.has('datajud_tipo_justica'),
-            hasDatajudAlias: columnNames.has('datajud_alias'),
-        };
-    }
-    catch (error) {
-        console.error('Erro ao verificar colunas da tabela processos', error);
-        return {
-            hasDatajudTipoJustica: false,
-            hasDatajudAlias: false,
-        };
-    }
-};
-const buildDatajudSelectExpressions = (alias, info) => [
-    info.hasDatajudTipoJustica
-        ? `${alias}.datajud_tipo_justica AS datajud_tipo_justica`
-        : 'NULL AS datajud_tipo_justica',
-    info.hasDatajudAlias
-        ? `${alias}.datajud_alias AS datajud_alias`
-        : 'NULL AS datajud_alias',
-];
-const formatRequiredFieldsMessage = (fields) => {
-    if (fields.length === 0) {
-        return 'Os campos obrigatórios não foram informados';
-    }
-    if (fields.length === 1) {
-        return `O campo ${fields[0]} é obrigatório`;
-    }
-    const fieldsCopy = [...fields];
-    const lastField = fieldsCopy.pop();
-    if (!lastField) {
-        return 'Os campos obrigatórios não foram informados';
-    }
-    return `Os campos ${fieldsCopy.join(', ')} e ${lastField} são obrigatórios`;
-};
 const mapProcessoRow = (row) => ({
     id: row.id,
     cliente_id: row.cliente_id,
@@ -133,9 +62,6 @@ const mapProcessoRow = (row) => ({
     jurisdicao: row.jurisdicao,
     advogado_responsavel: row.advogado_responsavel,
     data_distribuicao: row.data_distribuicao,
-    datajud_tipo_justica: row.datajud_tipo_justica ?? null,
-    datajud_alias: (0, datajud_1.canonicalizeDatajudAlias)(row.datajud_alias),
-
     criado_em: row.criado_em,
     atualizado_em: row.atualizado_em,
     cliente: row.cliente_id
@@ -151,8 +77,6 @@ const mapProcessoRow = (row) => ({
 });
 const listProcessos = async (_req, res) => {
     try {
-        const columnInfo = await getProcessosColumnInfo();
-        const datajudSelect = buildDatajudSelectExpressions('p', columnInfo).join(',\n        ');
         const result = await db_1.default.query(`SELECT
          p.id,
          p.cliente_id,
@@ -162,17 +86,16 @@ const listProcessos = async (_req, res) => {
          p.orgao_julgador,
          p.tipo,
          p.status,
-       p.classe_judicial,
-       p.assunto,
-       p.jurisdicao,
-       p.advogado_responsavel,
-       p.data_distribuicao,
-        ${datajudSelect},
-       p.criado_em,
-       p.atualizado_em,
-        c.nome AS cliente_nome,
-        c.documento AS cliente_documento,
-        c.tipo AS cliente_tipo
+         p.classe_judicial,
+         p.assunto,
+         p.jurisdicao,
+         p.advogado_responsavel,
+         p.data_distribuicao,
+         p.criado_em,
+         p.atualizado_em,
+         c.nome AS cliente_nome,
+         c.documento AS cliente_documento,
+         c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        ORDER BY p.criado_em DESC`);
@@ -191,8 +114,6 @@ const listProcessosByCliente = async (req, res) => {
         return res.status(400).json({ error: 'clienteId inválido' });
     }
     try {
-        const columnInfo = await getProcessosColumnInfo();
-        const datajudSelect = buildDatajudSelectExpressions('p', columnInfo).join(',\n        ');
         const result = await db_1.default.query(`SELECT
          p.id,
          p.cliente_id,
@@ -202,17 +123,16 @@ const listProcessosByCliente = async (req, res) => {
          p.orgao_julgador,
          p.tipo,
          p.status,
-        p.classe_judicial,
-        p.assunto,
-        p.jurisdicao,
-        p.advogado_responsavel,
-        p.data_distribuicao,
-        ${datajudSelect},
-        p.criado_em,
-        p.atualizado_em,
-        c.nome AS cliente_nome,
-        c.documento AS cliente_documento,
-        c.tipo AS cliente_tipo
+         p.classe_judicial,
+         p.assunto,
+         p.jurisdicao,
+         p.advogado_responsavel,
+         p.data_distribuicao,
+         p.criado_em,
+         p.atualizado_em,
+         c.nome AS cliente_nome,
+         c.documento AS cliente_documento,
+         c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        WHERE p.cliente_id = $1
@@ -232,8 +152,6 @@ const getProcessoById = async (req, res) => {
         return res.status(400).json({ error: 'ID inválido' });
     }
     try {
-        const columnInfo = await getProcessosColumnInfo();
-        const datajudSelect = buildDatajudSelectExpressions('p', columnInfo).join(',\n        ');
         const result = await db_1.default.query(`SELECT
          p.id,
          p.cliente_id,
@@ -243,17 +161,16 @@ const getProcessoById = async (req, res) => {
          p.orgao_julgador,
          p.tipo,
          p.status,
-        p.classe_judicial,
-        p.assunto,
-        p.jurisdicao,
-        p.advogado_responsavel,
-        p.data_distribuicao,
-        ${datajudSelect},
-        p.criado_em,
-        p.atualizado_em,
-        c.nome AS cliente_nome,
-        c.documento AS cliente_documento,
-        c.tipo AS cliente_tipo
+         p.classe_judicial,
+         p.assunto,
+         p.jurisdicao,
+         p.advogado_responsavel,
+         p.data_distribuicao,
+         p.criado_em,
+         p.atualizado_em,
+         c.nome AS cliente_nome,
+         c.documento AS cliente_documento,
+         c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        WHERE p.id = $1`, [parsedId]);
@@ -269,7 +186,7 @@ const getProcessoById = async (req, res) => {
 };
 exports.getProcessoById = getProcessoById;
 const createProcesso = async (req, res) => {
-    const { cliente_id, numero, uf, municipio, orgao_julgador, tipo, status, classe_judicial, assunto, jurisdicao, advogado_responsavel, data_distribuicao, datajud_tipo_justica, datajud_alias, } = req.body;
+    const { cliente_id, numero, uf, municipio, orgao_julgador, tipo, status, classe_judicial, assunto, jurisdicao, advogado_responsavel, data_distribuicao, } = req.body;
     const parsedClienteId = Number(cliente_id);
     if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
         return res.status(400).json({ error: 'cliente_id inválido' });
@@ -290,24 +207,6 @@ const createProcesso = async (req, res) => {
     const jurisdicaoValue = normalizeString(jurisdicao);
     const advogadoValue = normalizeString(advogado_responsavel);
     const dataDistribuicaoValue = normalizeDate(data_distribuicao);
-    const columnInfo = await getProcessosColumnInfo();
-    const datajudTipoJusticaValue = columnInfo.hasDatajudTipoJustica
-        ? normalizeLowercase(datajud_tipo_justica)
-        : null;
-    const datajudAliasValue = columnInfo.hasDatajudAlias
-        ? (0, datajud_1.canonicalizeDatajudAlias)(datajud_alias)
-
-        : null;
-    const missingDatajudFields = [];
-    if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
-        missingDatajudFields.push('datajud_tipo_justica');
-    }
-    if (columnInfo.hasDatajudAlias && !datajudAliasValue) {
-        missingDatajudFields.push('datajud_alias');
-    }
-    if (missingDatajudFields.length > 0) {
-        return res.status(400).json({ error: formatRequiredFieldsMessage(missingDatajudFields) });
-    }
     try {
         const clienteExists = await db_1.default.query('SELECT 1 FROM public.clientes WHERE id = $1', [parsedClienteId]);
         if (clienteExists.rowCount === 0) {
@@ -327,16 +226,9 @@ const createProcesso = async (req, res) => {
             { name: 'advogado_responsavel', value: advogadoValue },
             { name: 'data_distribuicao', value: dataDistribuicaoValue },
         ];
-        if (columnInfo.hasDatajudTipoJustica) {
-            columnsAndValues.push({ name: 'datajud_tipo_justica', value: datajudTipoJusticaValue });
-        }
-        if (columnInfo.hasDatajudAlias) {
-            columnsAndValues.push({ name: 'datajud_alias', value: datajudAliasValue });
-        }
         const columnNames = columnsAndValues.map((item) => item.name).join(',\n           ');
         const placeholders = columnsAndValues.map((_, index) => `$${index + 1}`).join(', ');
         const values = columnsAndValues.map((item) => item.value);
-        const insertedDatajudSelect = buildDatajudSelectExpressions('inserted', columnInfo).join(',\n         ');
         const result = await db_1.default.query(`WITH inserted AS (
          INSERT INTO public.processos (
            ${columnNames}
@@ -357,7 +249,6 @@ const createProcesso = async (req, res) => {
          inserted.jurisdicao,
          inserted.advogado_responsavel,
          inserted.data_distribuicao,
-         ${insertedDatajudSelect},
          inserted.criado_em,
          inserted.atualizado_em,
          c.nome AS cliente_nome,
@@ -382,7 +273,7 @@ const updateProcesso = async (req, res) => {
     if (!Number.isInteger(parsedId) || parsedId <= 0) {
         return res.status(400).json({ error: 'ID inválido' });
     }
-    const { cliente_id, numero, uf, municipio, orgao_julgador, tipo, status, classe_judicial, assunto, jurisdicao, advogado_responsavel, data_distribuicao, datajud_tipo_justica, datajud_alias, } = req.body;
+    const { cliente_id, numero, uf, municipio, orgao_julgador, tipo, status, classe_judicial, assunto, jurisdicao, advogado_responsavel, data_distribuicao, } = req.body;
     const parsedClienteId = Number(cliente_id);
     if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
         return res.status(400).json({ error: 'cliente_id inválido' });
@@ -403,24 +294,6 @@ const updateProcesso = async (req, res) => {
     const jurisdicaoValue = normalizeString(jurisdicao);
     const advogadoValue = normalizeString(advogado_responsavel);
     const dataDistribuicaoValue = normalizeDate(data_distribuicao);
-    const columnInfo = await getProcessosColumnInfo();
-    const datajudTipoJusticaValue = columnInfo.hasDatajudTipoJustica
-        ? normalizeLowercase(datajud_tipo_justica)
-        : null;
-    const datajudAliasValue = columnInfo.hasDatajudAlias
-        ? (0, datajud_1.canonicalizeDatajudAlias)(datajud_alias)
-
-        : null;
-    const missingDatajudFields = [];
-    if (columnInfo.hasDatajudTipoJustica && !datajudTipoJusticaValue) {
-        missingDatajudFields.push('datajud_tipo_justica');
-    }
-    if (columnInfo.hasDatajudAlias && !datajudAliasValue) {
-        missingDatajudFields.push('datajud_alias');
-    }
-    if (missingDatajudFields.length > 0) {
-        return res.status(400).json({ error: formatRequiredFieldsMessage(missingDatajudFields) });
-    }
     try {
         const existingProcess = await db_1.default.query('SELECT id FROM public.processos WHERE id = $1', [parsedId]);
         if (existingProcess.rowCount === 0) {
@@ -448,17 +321,10 @@ const updateProcesso = async (req, res) => {
         pushAssignment('jurisdicao', jurisdicaoValue);
         pushAssignment('advogado_responsavel', advogadoValue);
         pushAssignment('data_distribuicao', dataDistribuicaoValue);
-        if (columnInfo.hasDatajudTipoJustica) {
-            pushAssignment('datajud_tipo_justica', datajudTipoJusticaValue);
-        }
-        if (columnInfo.hasDatajudAlias) {
-            pushAssignment('datajud_alias', datajudAliasValue);
-        }
         assignments.push('atualizado_em = NOW()');
         values.push(parsedId);
         const whereParam = `$${values.length}`;
         const assignmentClause = assignments.join(',\n           ');
-        const updatedDatajudSelect = buildDatajudSelectExpressions('updated', columnInfo).join(',\n         ');
         const result = await db_1.default.query(`WITH updated AS (
          UPDATE public.processos SET
            ${assignmentClause}
@@ -475,18 +341,17 @@ const updateProcesso = async (req, res) => {
          updated.tipo,
          updated.status,
          updated.classe_judicial,
-        updated.assunto,
-        updated.jurisdicao,
-        updated.advogado_responsavel,
-        updated.data_distribuicao,
-        ${updatedDatajudSelect},
-        updated.criado_em,
-        updated.atualizado_em,
-        c.nome AS cliente_nome,
-        c.documento AS cliente_documento,
-        c.tipo AS cliente_tipo
+         updated.assunto,
+         updated.jurisdicao,
+         updated.advogado_responsavel,
+         updated.data_distribuicao,
+         updated.criado_em,
+         updated.atualizado_em,
+         c.nome AS cliente_nome,
+         c.documento AS cliente_documento,
+         c.tipo AS cliente_tipo
        FROM updated
-      LEFT JOIN public.clientes c ON c.id = updated.cliente_id`, values);
+       LEFT JOIN public.clientes c ON c.id = updated.cliente_id`, values);
         res.json(mapProcessoRow(result.rows[0]));
     }
     catch (error) {
@@ -498,58 +363,6 @@ const updateProcesso = async (req, res) => {
     }
 };
 exports.updateProcesso = updateProcesso;
-const getProcessoMovimentacoes = async (req, res) => {
-    const { id } = req.params;
-    const parsedId = Number(id);
-    if (!Number.isInteger(parsedId) || parsedId <= 0) {
-        return res.status(400).json({ error: 'ID inválido' });
-    }
-    try {
-        const columnInfo = await getProcessosColumnInfo();
-        const datajudAliasSelect = columnInfo.hasDatajudAlias
-            ? 'datajud_alias AS datajud_alias'
-            : 'NULL AS datajud_alias';
-        const result = await db_1.default.query(`SELECT numero, ${datajudAliasSelect} FROM public.processos WHERE id = $1`, [parsedId]);
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Processo não encontrado' });
-        }
-        const row = result.rows[0];
-        const numeroProcesso = normalizeString(row.numero);
-        const datajudAlias = (0, datajud_1.canonicalizeDatajudAlias)(row.datajud_alias);
-
-        if (!numeroProcesso || !datajudAlias) {
-            return res.json([]);
-        }
-        try {
-            const movimentacoes = await (0, datajudService_1.fetchDatajudMovimentacoes)(datajudAlias, numeroProcesso);
-            return res.json(movimentacoes);
-        }
-        catch (error) {
-            console.error(error);
-            if (error instanceof Error) {
-                if (error.message.includes('DATAJUD_API_KEY')) {
-                    return res.status(503).json({
-                        error: 'Integração com o Datajud não está configurada',
-                    });
-                }
-                if (error.message.toLowerCase().includes('tempo excedido')) {
-                    return res.status(504).json({ error: error.message });
-                }
-                return res
-                    .status(502)
-                    .json({ error: error.message || 'Erro ao consultar movimentações do Datajud' });
-            }
-            return res
-                .status(502)
-                .json({ error: 'Erro ao consultar movimentações do Datajud' });
-        }
-    }
-    catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-};
-exports.getProcessoMovimentacoes = getProcessoMovimentacoes;
 const deleteProcesso = async (req, res) => {
     const { id } = req.params;
     const parsedId = Number(id);
