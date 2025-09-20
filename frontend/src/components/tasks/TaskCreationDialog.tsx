@@ -26,9 +26,13 @@ import {
 import { Check, ChevronsUpDown, Star } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api";
 
+const NONE_PROPOSAL_VALUE = "__none__";
+
 const formSchema = z
   .object({
-    process: z.string().min(1, "Processo ou caso é obrigatório"),
+    process: z
+      .union([z.string().min(1, "Processo ou caso é obrigatório"), z.literal(NONE_PROPOSAL_VALUE)])
+      .transform((value) => (value === NONE_PROPOSAL_VALUE ? null : value)),
     responsibles: z.array(z.string()).min(1, "Adicionar responsável"),
     title: z.string().min(1, "Tarefa é obrigatória"),
     date: z.string().min(1, "Data é obrigatória"),
@@ -126,7 +130,7 @@ function joinUrl(base: string, path = "") {
 }
 
 const defaultValues: TaskFormValues = {
-  process: "",
+  process: NONE_PROPOSAL_VALUE,
   responsibles: [],
   title: "",
   date: new Date().toISOString().slice(0, 10),
@@ -254,9 +258,11 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
   }, []);
 
   const defaultsWithPrefill = useMemo(() => {
+    const processPrefill =
+      prefill?.process && prefill.process !== NONE_PROPOSAL_VALUE ? prefill.process : NONE_PROPOSAL_VALUE;
     return {
       ...defaultValues,
-      process: prefill?.process ?? "",
+      process: processPrefill,
       responsibles: prefill?.responsibles ?? [],
       title: prefill?.title ?? "",
       date: prefill?.date ?? defaultValues.date,
@@ -291,17 +297,23 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
       }
     }
 
-    const selectedOpportunity = opportunities.find((o) => String(o.id) === data.process);
+    const selectedOpportunityId = data.process ?? null;
+    const selectedOpportunity =
+      selectedOpportunityId !== null
+        ? opportunities.find((o) => String(o.id) === selectedOpportunityId)
+        : undefined;
     const year =
       (selectedOpportunity?.data_criacao && new Date(selectedOpportunity.data_criacao).getFullYear()) ||
       new Date().getFullYear();
 
     const processText = selectedOpportunity
       ? formatProposal(selectedOpportunity)
-      : prefill?.processLabel ?? data.process;
+      : selectedOpportunityId === null
+      ? "Nenhuma"
+      : prefill?.processLabel ?? selectedOpportunityId;
 
     const payload = {
-      id_oportunidades: Number(data.process),
+      id_oportunidades: selectedOpportunityId ? Number(selectedOpportunityId) : null,
       titulo: data.title,
       descricao: data.description,
       data: data.date,
@@ -395,7 +407,10 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
   const watchedTitle = watch("title") ?? "";
 
   const selectedProposal = useMemo(
-    () => opportunities.find((o) => String(o.id) === selectedProposalId),
+    () =>
+      selectedProposalId && selectedProposalId !== NONE_PROPOSAL_VALUE
+        ? opportunities.find((o) => String(o.id) === selectedProposalId)
+        : undefined,
     [opportunities, selectedProposalId],
   );
 
@@ -409,6 +424,8 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
 
   const processButtonLabel = selectedProposal
     ? formatProposal(selectedProposal)
+    : selectedProposalId === NONE_PROPOSAL_VALUE
+    ? prefill?.processLabel ?? "Nenhuma"
     : prefill?.processLabel || "Selecione";
 
   return (
@@ -480,25 +497,35 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
                 <PopoverContent className="w-full p-0">
                   <Command>
                     <CommandInput placeholder="Buscar proposta..." />
-                    <CommandList>
-                      <CommandEmpty>Nenhuma proposta encontrada.</CommandEmpty>
-                      <CommandGroup>
-                        {opportunities.map((o) => {
-                          const label = formatProposal(o);
-                          return (
-                            <CommandItem
-                              key={o.id}
-                              value={label}
-                              onSelect={() => {
-                                setValue("process", String(o.id));
-                                setOpenProposal(false);
-                              }}
-                            >
-                              {label}
-                              {selectedProposalId === String(o.id) && <Check className="ml-auto h-4 w-4" />}
-                            </CommandItem>
-                          );
-                        })}
+                      <CommandList>
+                        <CommandEmpty>Nenhuma proposta encontrada.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="Nenhuma"
+                            onSelect={() => {
+                              setValue("process", NONE_PROPOSAL_VALUE);
+                              setOpenProposal(false);
+                            }}
+                          >
+                            Nenhuma
+                            {selectedProposalId === NONE_PROPOSAL_VALUE && <Check className="ml-auto h-4 w-4" />}
+                          </CommandItem>
+                          {opportunities.map((o) => {
+                            const label = formatProposal(o);
+                            return (
+                              <CommandItem
+                                key={o.id}
+                                value={label}
+                                onSelect={() => {
+                                  setValue("process", String(o.id));
+                                  setOpenProposal(false);
+                                }}
+                              >
+                                {label}
+                                {selectedProposalId === String(o.id) && <Check className="ml-auto h-4 w-4" />}
+                              </CommandItem>
+                            );
+                          })}
                       </CommandGroup>
                     </CommandList>
                   </Command>
