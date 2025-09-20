@@ -10,9 +10,18 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/api';
-import { Info } from 'lucide-react';
+import { Info, AlertCircle } from 'lucide-react';
 import { AsaasChargeDialog } from '@/components/financial/AsaasChargeDialog';
 import type { CustomerOption } from '@/components/financial/AsaasChargeDialog';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 function normalizeCustomerOption(entry: unknown): CustomerOption | null {
   if (!entry || typeof entry !== 'object') {
@@ -74,7 +83,13 @@ async function fetchCustomersForFlows(): Promise<CustomerOption[]> {
 const FinancialFlows = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: flows = [] } = useQuery({ queryKey: ['flows'], queryFn: fetchFlows });
+  const {
+    data: flows = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({ queryKey: ['flows'], queryFn: fetchFlows });
   const {
     data: customers = [],
     isLoading: customersLoading,
@@ -127,6 +142,10 @@ const FinancialFlows = () => {
   };
 
   const [activePeriod, setActivePeriod] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | DerivedStatus>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | Flow['tipo']>('all');
+  const [onlyOpenCharges, setOnlyOpenCharges] = useState(false);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }),
@@ -153,21 +172,19 @@ const FinancialFlows = () => {
     vencido: 'destructive',
   };
 
-  const deriveMonthLabel = (date: Date) => {
+  const deriveMonthLabel = useCallback((date: Date) => {
     const label = format(date, "MMMM 'de' yyyy", { locale: ptBR });
     return label.charAt(0).toUpperCase() + label.slice(1);
-  };
+  }, []);
 
   const formatDayDate = (date: Date | null, fallback?: string) => {
     if (!date || !isValid(date)) return fallback ?? '-';
     return format(date, 'dd/MM/yyyy');
   };
 
-  const periods = useMemo<PeriodGroup[]>(() => {
+  const detailedFlows = useMemo<FlowWithDetails[]>(() => {
     const today = startOfDay(new Date());
-    const accumulator = new Map<string, { key: string; label: string; sortValue: number; flows: FlowWithDetails[] }>();
-
-    flows.forEach((flow) => {
+    return flows.map((flow) => {
       const parsedDueDate = flow.vencimento ? parseISO(flow.vencimento) : null;
       const dueDate = parsedDueDate && isValid(parsedDueDate) ? parsedDueDate : null;
       const parsedPaymentDate = flow.pagamento ? parseISO(flow.pagamento) : null;
@@ -180,20 +197,43 @@ const FinancialFlows = () => {
             ? 'vencido'
             : 'pendente';
 
-      const key = dueDate ? format(dueDate, 'yyyy-MM') : 'sem-data';
-      const sortValue = dueDate ? startOfMonth(dueDate).getTime() : Number.NEGATIVE_INFINITY;
-      const label = dueDate ? deriveMonthLabel(dueDate) : 'Sem vencimento';
+      return {
+        ...flow,
+        computedStatus,
+        dueDate,
+        pagamentoDate,
+      };
+    });
+  }, [flows]);
+
+  const filteredFlows = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return detailedFlows.filter((flow) => {
+      const matchesSearch =
+        term.length === 0 || flow.descricao.toLowerCase().includes(term);
+      const matchesStatus =
+        statusFilter === 'all' || flow.computedStatus === statusFilter;
+      const matchesType = typeFilter === 'all' || flow.tipo === typeFilter;
+      const matchesOnlyOpen =
+        !onlyOpenCharges || (flow.computedStatus === 'pendente' || flow.computedStatus === 'vencido');
+
+      return matchesSearch && matchesStatus && matchesType && matchesOnlyOpen;
+    });
+  }, [detailedFlows, onlyOpenCharges, searchTerm, statusFilter, typeFilter]);
+
+  const periods = useMemo<PeriodGroup[]>(() => {
+    const accumulator = new Map<string, { key: string; label: string; sortValue: number; flows: FlowWithDetails[] }>();
+
+    filteredFlows.forEach((flow) => {
+      const key = flow.dueDate ? format(flow.dueDate, 'yyyy-MM') : 'sem-data';
+      const sortValue = flow.dueDate ? startOfMonth(flow.dueDate).getTime() : Number.NEGATIVE_INFINITY;
+      const label = flow.dueDate ? deriveMonthLabel(flow.dueDate) : 'Sem vencimento';
 
       if (!accumulator.has(key)) {
         accumulator.set(key, { key, label, sortValue, flows: [] });
       }
 
-      accumulator.get(key)!.flows.push({
-        ...flow,
-        computedStatus,
-        dueDate,
-        pagamentoDate,
-      });
+      accumulator.get(key)!.flows.push(flow);
     });
 
     return Array.from(accumulator.values())
@@ -228,7 +268,36 @@ const FinancialFlows = () => {
         };
       })
       .sort((a, b) => b.sortValue - a.sortValue);
-  }, [flows]);
+  }, [filteredFlows, deriveMonthLabel]);
+
+  const globalTotals = useMemo(() => {
+    const totals = filteredFlows.reduce<PeriodTotals>(
+      (acc, flow) => {
+        if (flow.tipo === 'receita') {
+          acc.receitas += flow.valor;
+        } else {
+          acc.despesas += flow.valor;
+        }
+        acc.status[flow.computedStatus].count += 1;
+        acc.status[flow.computedStatus].value += flow.valor;
+        return acc;
+      },
+      {
+        receitas: 0,
+        despesas: 0,
+        saldo: 0,
+        status: {
+          pendente: { count: 0, value: 0 },
+          pago: { count: 0, value: 0 },
+          vencido: { count: 0, value: 0 },
+        },
+      },
+    );
+    totals.saldo = totals.receitas - totals.despesas;
+    return totals;
+  }, [filteredFlows]);
+
+  const hasAnyFlow = detailedFlows.length > 0;
 
   const safePeriodKey =
     activePeriod && periods.some((period) => period.key === activePeriod)
@@ -272,9 +341,141 @@ const FinancialFlows = () => {
 
   const statusOrder: DerivedStatus[] = ['pendente', 'vencido', 'pago'];
 
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div>
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="mt-2 h-5 w-80" />
+        </div>
+        <Card className="p-6 space-y-4">
+          <Skeleton className="h-6 w-48" />
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-24 w-full" />
+            ))}
+          </div>
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive">
+          <AlertCircle className="h-6 w-6" />
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold">Não foi possível carregar os lançamentos financeiros</h1>
+            <p className="text-sm text-destructive/80">
+              {(error as Error)?.message || 'Ocorreu um erro inesperado ao comunicar com o servidor.'}
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => refetch()}>
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Lançamentos Financeiros</h1>
+      <div>
+        <h1 className="text-3xl font-bold">Lançamentos Financeiros</h1>
+        <p className="mt-2 text-muted-foreground">
+          Visualize todas as cobranças emitidas para os clientes, acompanhe a situação de pagamento e mantenha o controle do
+          fluxo de caixa da empresa.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Saldo filtrado</p>
+          <p className="text-2xl font-bold">{formatCurrency(globalTotals.saldo)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Receitas</p>
+          <p className="text-2xl font-bold">{formatCurrency(globalTotals.receitas)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Despesas</p>
+          <p className="text-2xl font-bold">{formatCurrency(globalTotals.despesas)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Cobranças em aberto</p>
+          <p className="text-2xl font-bold">
+            {formatCurrency(globalTotals.status.pendente.value + globalTotals.status.vencido.value)}
+          </p>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {statusOrder.map((status) => (
+          <Card key={status} className="p-4 space-y-1">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>{statusLabels[status]}</span>
+              <Badge variant="outline">{globalTotals.status[status].count}</Badge>
+            </div>
+            <p className="text-lg font-semibold">{formatCurrency(globalTotals.status[status].value)}</p>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="p-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Buscar cobranças</label>
+            <Input
+              placeholder="Busque por descrição ou palavra-chave"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Situação</label>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | DerivedStatus)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todas as situações" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="pendente">Pendentes</SelectItem>
+                <SelectItem value="vencido">Vencidos</SelectItem>
+                <SelectItem value="pago">Pagos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Tipo de lançamento</label>
+            <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as 'all' | Flow['tipo'])}>
+              <SelectTrigger>
+                <SelectValue placeholder="Todos os tipos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="receita">Receitas</SelectItem>
+                <SelectItem value="despesa">Despesas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Apenas cobranças em aberto</label>
+            <div className="flex h-10 items-center gap-3 rounded-md border border-input px-3">
+              <Checkbox
+                id="only-open"
+                checked={onlyOpenCharges}
+                onCheckedChange={(checked) => setOnlyOpenCharges(Boolean(checked))}
+              />
+              <label htmlFor="only-open" className="text-sm text-muted-foreground">
+                Mostrar pendentes e vencidas
+              </label>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <form
         onSubmit={(e) => {
@@ -438,7 +639,9 @@ const FinancialFlows = () => {
         </Tabs>
       ) : (
         <Card className="p-6 text-center text-muted-foreground">
-          Nenhum lançamento financeiro cadastrado até o momento.
+          {hasAnyFlow
+            ? 'Nenhum lançamento atende aos filtros selecionados. Ajuste os filtros para visualizar outras cobranças.'
+            : 'Nenhum lançamento financeiro cadastrado até o momento.'}
         </Card>
       )}
 
