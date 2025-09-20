@@ -27,7 +27,9 @@ type ApiUser = {
   nome_completo?: string | null;
   email?: string | null;
   perfil?: string | null;
-  empresa?: string | null;
+  empresa?: number | string | null;
+  empresa_id?: number | string | null;
+  empresa_nome?: string | null;
   status?: boolean | number | string | null;
   ultimo_login?: string | null;
 };
@@ -106,6 +108,167 @@ const resolveRoleBadgeVariant = (role: string): BadgeProps["variant"] => {
   return "secondary";
 };
 
+type ApiCompany = {
+  id?: number | string | null;
+  nome_empresa?: string | null;
+  nome?: string | null;
+  razao_social?: string | null;
+  nome_fantasia?: string | null;
+  empresa_nome?: string | null;
+};
+
+const isNonEmptyString = (value: unknown): value is string => {
+  return typeof value === "string" && value.trim().length > 0;
+};
+
+const isAllDigits = (value: string) => /^\d+$/.test(value);
+
+const extractCompanyIdFromValue = (
+  value: ApiUser["empresa"] | ApiUser["empresa_id"],
+): string | null => {
+  if (typeof value === "number") {
+    if (Number.isFinite(value)) {
+      return String(value);
+    }
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (isAllDigits(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  return null;
+};
+
+const extractCompanyIdFromUser = (user: ApiUser | undefined): string | null => {
+  if (!user) {
+    return null;
+  }
+
+  return (
+    extractCompanyIdFromValue(user.empresa_id) ??
+    extractCompanyIdFromValue(user.empresa)
+  );
+};
+
+const parseCompanyPayload = (payload: unknown): ApiCompany | null => {
+  if (payload == null) {
+    return null;
+  }
+
+  if (Array.isArray(payload)) {
+    const first = payload.find((item) => item && typeof item === "object");
+    return (first as ApiCompany) ?? null;
+  }
+
+  if (typeof payload === "object") {
+    if ("rows" in payload) {
+      const rows = (payload as { rows?: unknown }).rows;
+      if (Array.isArray(rows)) {
+        const first = rows.find((item) => item && typeof item === "object");
+        if (first) {
+          return first as ApiCompany;
+        }
+      }
+    }
+
+    if ("data" in payload) {
+      const data = (payload as { data?: unknown }).data;
+      if (Array.isArray(data)) {
+        const first = data.find((item) => item && typeof item === "object");
+        if (first) {
+          return first as ApiCompany;
+        }
+      }
+
+      if (data && typeof data === "object" && "rows" in data) {
+        const nestedRows = (data as { rows?: unknown }).rows;
+        if (Array.isArray(nestedRows)) {
+          const first = nestedRows.find((item) => item && typeof item === "object");
+          if (first) {
+            return first as ApiCompany;
+          }
+        }
+      }
+    }
+
+    return payload as ApiCompany;
+  }
+
+  return null;
+};
+
+const resolveCompanyNameFromData = (company: ApiCompany | null): string | null => {
+  if (!company) {
+    return null;
+  }
+
+  const candidates: Array<unknown> = [
+    company.nome_empresa,
+    company.empresa_nome,
+    company.nome,
+    company.razao_social,
+    company.nome_fantasia,
+  ];
+
+  for (const candidate of candidates) {
+    if (isNonEmptyString(candidate)) {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+
+  return null;
+};
+
+const resolveCompanyNameFromUser = (
+  user: ApiUser | undefined,
+  companyNames: Record<string, string>,
+): { id: string | null; name: string } => {
+  const companyId = extractCompanyIdFromUser(user);
+
+  if (companyId) {
+    const mappedName = companyNames[companyId];
+    if (isNonEmptyString(mappedName)) {
+      return { id: companyId, name: mappedName.trim() };
+    }
+  }
+
+  const nameCandidates: Array<unknown> = [];
+
+  if (isNonEmptyString(user?.empresa_nome)) {
+    nameCandidates.push(user?.empresa_nome);
+  }
+
+  if (typeof user?.empresa === "string") {
+    nameCandidates.push(user?.empresa);
+  }
+
+  for (const candidate of nameCandidates) {
+    if (isNonEmptyString(candidate)) {
+      const trimmed = candidate.trim();
+      if (!companyId || trimmed !== companyId) {
+        return { id: companyId, name: trimmed };
+      }
+    }
+  }
+
+  if (companyId) {
+    return { id: companyId, name: `Empresa ${companyId}` };
+  }
+
+  return { id: null, name: "Sem empresa" };
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -120,6 +283,7 @@ export default function UsersPage() {
     role: "",
     isActive: true,
   });
+  const [companyNames, setCompanyNames] = useState<Record<string, string>>({});
 
   const { toast } = useToast();
 
@@ -184,6 +348,90 @@ export default function UsersPage() {
     };
   }, [fetchUsers]);
 
+  const companyIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    users.forEach((user) => {
+      const companyId = extractCompanyIdFromUser(user);
+      if (companyId) {
+        ids.add(companyId);
+      }
+    });
+
+    return Array.from(ids);
+  }, [users]);
+
+  useEffect(() => {
+    const missingIds = companyIds.filter((id) => !companyNames[id]);
+
+    if (missingIds.length === 0) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let isActive = true;
+
+    const loadCompanies = async () => {
+      const entries = await Promise.all(
+        missingIds.map(async (companyId) => {
+          try {
+            const response = await fetch(getApiUrl(`empresas/${companyId}`), {
+              headers: { Accept: "application/json" },
+              signal: controller.signal,
+            });
+
+            if (!response.ok) {
+              if (response.status === 404) {
+                return [companyId, `Empresa ${companyId}`] as const;
+              }
+              throw new Error(`Falha ao carregar empresa ${companyId} (${response.status}).`);
+            }
+
+            const payload = await response.json();
+            const companyData = parseCompanyPayload(payload);
+            const resolvedName =
+              resolveCompanyNameFromData(companyData) ?? `Empresa ${companyId}`;
+
+            return [companyId, resolvedName] as const;
+          } catch (fetchError) {
+            if (controller.signal.aborted) {
+              return null;
+            }
+
+            console.error(`Erro ao carregar empresa ${companyId}:`, fetchError);
+            return [companyId, `Empresa ${companyId}`] as const;
+          }
+        }),
+      );
+
+      if (!isActive) {
+        return;
+      }
+
+      setCompanyNames((previous) => {
+        const next = { ...previous };
+
+        entries.forEach((entry) => {
+          if (!entry) {
+            return;
+          }
+
+          const [companyId, companyName] = entry;
+          next[companyId] = companyName;
+        });
+
+        return next;
+      });
+    };
+
+    void loadCompanies();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [companyIds, companyNames]);
+
   const normalizedUsers = useMemo<DisplayUser[]>(() => {
     return users.map((user, index) => {
       const id = getNormalizedId(user, index);
@@ -198,10 +446,7 @@ export default function UsersPage() {
           : undefined;
       const displayName = nameCandidate ?? emailCandidate ?? `Usuário ${index + 1}`;
 
-      const companyName =
-        typeof user.empresa === "string" && user.empresa.trim().length > 0
-          ? user.empresa.trim()
-          : "Sem empresa";
+      const { name: companyName } = resolveCompanyNameFromUser(user, companyNames);
 
       const role =
         typeof user.perfil === "string" && user.perfil.trim().length > 0
@@ -230,7 +475,7 @@ export default function UsersPage() {
         searchText,
       } satisfies DisplayUser;
     });
-  }, [users]);
+  }, [companyNames, users]);
 
   const usersById = useMemo(() => {
     return new Map(
@@ -269,6 +514,10 @@ export default function UsersPage() {
     }
 
     const rawUser = usersById.get(editUser.id);
+    const { name: resolvedCompanyName } = resolveCompanyNameFromUser(
+      rawUser,
+      companyNames,
+    );
 
     const name =
       typeof rawUser?.nome_completo === "string" && rawUser.nome_completo.trim().length > 0
@@ -279,11 +528,9 @@ export default function UsersPage() {
         ? rawUser.email.trim()
         : editUser.email;
     const company =
-      typeof rawUser?.empresa === "string" && rawUser.empresa.trim().length > 0
-        ? rawUser.empresa.trim()
-        : editUser.companyName === "Sem empresa"
-          ? ""
-          : editUser.companyName;
+      resolvedCompanyName === "Sem empresa"
+        ? ""
+        : resolvedCompanyName;
     const role =
       typeof rawUser?.perfil === "string" && rawUser.perfil.trim().length > 0
         ? rawUser.perfil.trim()
@@ -299,7 +546,7 @@ export default function UsersPage() {
       role,
       isActive,
     });
-  }, [editUser, usersById]);
+  }, [companyNames, editUser, usersById]);
 
   const filteredUsers = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
