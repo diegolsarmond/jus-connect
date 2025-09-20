@@ -239,6 +239,7 @@ app.use('/api/v1', authenticateRequest, usuarioRoutes);
 
 // Background jobs
 cronJobs.startProjudiSyncJob();
+cronJobs.startAsaasChargeSyncJob();
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);
