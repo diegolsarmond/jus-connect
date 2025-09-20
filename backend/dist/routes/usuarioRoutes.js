@@ -63,6 +63,23 @@ const router = (0, express_1.Router)();
 router.get(['/usuarios', '/users'], usuarioController_1.listUsuarios);
 /**
  * @swagger
+ * /api/usuarios/empresa:
+ *   get:
+ *     summary: Lista usuários da empresa do usuário autenticado
+ *     tags: [Usuarios]
+ *     responses:
+ *       200:
+ *         description: Lista de usuários filtrados por empresa
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Usuario'
+ */
+router.get(['/usuarios/empresa', '/users/company'], usuarioController_1.listUsuariosByEmpresa);
+/**
+ * @swagger
  * /api/usuarios/{id}:
  *   get:
  *     summary: Obtém um usuário pelo ID
@@ -205,9 +222,12 @@ router.put(['/usuarios/:id', '/users/:id'], usuarioController_1.updateUsuario);
  *         description: Usuário não encontrado
  */
 router.delete(['/usuarios/:id', '/users/:id'], usuarioController_1.deleteUsuario);
+router.post(['/usuarios/:id/reset-password', '/users/:id/reset-password'], usuarioController_1.resetUsuarioSenha);
 router.get('/users', usuarioController_1.listUsuarios);
+router.get('/users/company', usuarioController_1.listUsuariosByEmpresa);
 router.get('/users/:id', usuarioController_1.getUsuarioById);
 router.post('/users', usuarioController_1.createUsuario);
 router.put('/users/:id', usuarioController_1.updateUsuario);
 router.delete('/users/:id', usuarioController_1.deleteUsuario);
+router.post('/users/:id/reset-password', usuarioController_1.resetUsuarioSenha);
 exports.default = router;
