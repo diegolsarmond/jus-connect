@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { wahaService } from '@/services/waha';
-import WAHAService from '@/services/waha';
+import WAHAService, {
+  wahaService,
+  WAHARequestError,
+  WAHA_SESSION_RECOVERY_MESSAGE,
+} from '@/services/waha';
 import { ChatOverview, ChatParticipant, Message, SessionStatus } from '@/types/waha';
 import { useToast } from '@/hooks/use-toast';
 
@@ -444,7 +447,7 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         const response = await wahaService.getChatsOverview(CHAT_PAGE_SIZE, offset);
 
         if (response.error) {
-          throw new Error(response.error);
+          throw new WAHARequestError(response.error, response.status);
         }
 
         const rawChats = response.data ?? [];
@@ -480,14 +483,47 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         hasMoreChatsRef.current = nextHasMore;
         setHasMoreChats(nextHasMore);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load chats';
         console.error('❌ Erro ao carregar chats:', err);
+
+        let status: number | undefined;
+        let errorMessage = 'Não foi possível carregar as conversas. Tente novamente.';
+
+        if (err instanceof WAHARequestError) {
+          status = err.status;
+          if (err.message?.trim()) {
+            errorMessage = err.message;
+          }
+        } else if (err instanceof Error && err.message.trim()) {
+          errorMessage = err.message;
+        }
+
+        let resolvedSessionName: string | undefined;
+
+        if (status === 422) {
+          errorMessage = WAHA_SESSION_RECOVERY_MESSAGE;
+          try {
+            const config = await wahaService.getResolvedConfig();
+            resolvedSessionName = config.session;
+          } catch (configError) {
+            console.error('Failed to resolve WAHA session after 422 response:', configError);
+          }
+
+          if (isMountedRef.current) {
+            const sessionName = resolvedSessionName;
+            setSessionStatus((previous) => ({
+              name: previous?.name ?? sessionName ?? 'WAHA',
+              status: 'FAILED',
+            }));
+          }
+        }
+
         if (isMountedRef.current) {
           setError(errorMessage);
         }
+
         if (!silent) {
           toast({
-            title: 'Error',
+            title: status === 422 ? 'Sessão desconectada' : 'Erro',
             description: errorMessage,
             variant: 'destructive',
           });
@@ -605,7 +641,7 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         });
 
         if (response.error) {
-          throw new Error(response.error);
+          throw new WAHARequestError(response.error, response.status);
         }
 
         const batch = response.data ?? [];
@@ -659,13 +695,30 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
 
         return shouldReset ? mergedResult : sortedInserted;
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load messages';
         updateMessagePaginationState(chatId, { isLoading: false });
+
+        let status: number | undefined;
+        let errorMessage = 'Não foi possível carregar as mensagens. Tente novamente.';
+
+        if (err instanceof WAHARequestError) {
+          status = err.status;
+          if (err.message?.trim()) {
+            errorMessage = err.message;
+          }
+        } else if (err instanceof Error && err.message.trim()) {
+          errorMessage = err.message;
+        }
+
+        if (status === 422) {
+          errorMessage = WAHA_SESSION_RECOVERY_MESSAGE;
+        }
+
         toast({
-          title: 'Error',
+          title: status === 422 ? 'Sessão desconectada' : 'Erro',
           description: errorMessage,
           variant: 'destructive',
         });
+
         return [];
       }
     },
@@ -689,9 +742,9 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         text,
         linkPreview: true,
       });
-      
+
       if (response.error) {
-        throw new Error(response.error);
+        throw new WAHARequestError(response.error, response.status);
       }
 
       if (response.data && isMountedRef.current) {
@@ -726,9 +779,24 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         });
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+      let status: number | undefined;
+      let errorMessage = 'Não foi possível enviar a mensagem. Tente novamente.';
+
+      if (err instanceof WAHARequestError) {
+        status = err.status;
+        if (err.message?.trim()) {
+          errorMessage = err.message;
+        }
+      } else if (err instanceof Error && err.message.trim()) {
+        errorMessage = err.message;
+      }
+
+      if (status === 422) {
+        errorMessage = WAHA_SESSION_RECOVERY_MESSAGE;
+      }
+
       toast({
-        title: 'Error',
+        title: status === 422 ? 'Sessão desconectada' : 'Erro',
         description: errorMessage,
         variant: 'destructive',
       });
@@ -751,7 +819,10 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
   // Mark messages as read
   const markAsRead = useCallback(async (chatId: string) => {
     try {
-      await wahaService.markAsRead(chatId);
+      const response = await wahaService.markAsRead(chatId);
+      if (response.error) {
+        throw new WAHARequestError(response.error, response.status);
+      }
 
       // Update unread count in local state
       if (isMountedRef.current) {
