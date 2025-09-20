@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import type { Flow } from '../models/flow';
 import AsaasChargeService, {
   ChargeConflictError,
   ValidationError as AsaasValidationError,
@@ -8,21 +9,223 @@ import AsaasChargeService, {
 const asaasChargeService = new AsaasChargeService();
 
 export const listFlows = async (req: Request, res: Response) => {
-  const { page = '1', limit = '10' } = req.query;
-  const pageNum = parseInt(page as string, 10);
-  const limitNum = parseInt(limit as string, 10);
-  const offset = (pageNum - 1) * limitNum;
+  const { page = '1', limit = '10', clienteId } = req.query;
+  const pageValue = Array.isArray(page) ? page[0] : page;
+  const limitValue = Array.isArray(limit) ? limit[0] : limit;
+  const pageNum = Number.parseInt(pageValue as string, 10);
+  const limitNum = Number.parseInt(limitValue as string, 10);
+  const effectivePage = Number.isNaN(pageNum) || pageNum <= 0 ? 1 : pageNum;
+  const effectiveLimit = Number.isNaN(limitNum) || limitNum <= 0 ? 10 : limitNum;
+  const offset = (effectivePage - 1) * effectiveLimit;
+
+  const clienteParam = Array.isArray(clienteId) ? clienteId[0] : clienteId;
+  const parsedClienteId =
+    typeof clienteParam === 'string' && clienteParam.trim().length > 0
+      ? Number.parseInt(clienteParam, 10)
+      : Number.isFinite(clienteParam as number)
+        ? Number(clienteParam)
+        : null;
+
   try {
-    const items = await pool.query(
-      'SELECT * FROM financial_flows ORDER BY vencimento DESC LIMIT $1 OFFSET $2',
-      [limitNum, offset],
-    );
-    const totalResult = await pool.query('SELECT COUNT(*) FROM financial_flows');
+    const filters: number[] = [];
+    let filterClause = '';
+    if (parsedClienteId !== null && Number.isFinite(parsedClienteId)) {
+      filters.push(Number(parsedClienteId));
+      filterClause = `WHERE combined_flows.cliente_id = $${filters.length}`;
+    }
+
+    const combinedCte = `
+      WITH oportunidade_parcelas_enriched AS (
+        SELECT
+          p.id,
+          p.oportunidade_id,
+          p.numero_parcela,
+          p.valor,
+          p.data_prevista,
+          p.status,
+          p.quitado_em,
+          p.faturamento_id,
+          o.sequencial_empresa,
+          o.qtde_parcelas,
+          o.solicitante_id,
+          c.nome AS cliente_nome,
+          f.valor AS faturamento_valor,
+          f.parcelas AS faturamento_parcelas,
+          f.data_faturamento
+        FROM public.oportunidade_parcelas p
+        JOIN public.oportunidades o ON o.id = p.oportunidade_id
+        LEFT JOIN public.clientes c ON c.id = o.solicitante_id
+        LEFT JOIN public.oportunidade_faturamentos f ON f.id = p.faturamento_id
+      ),
+      combined_flows AS (
+        SELECT
+          ff.id AS id,
+          ff.tipo AS tipo,
+          ff.descricao AS descricao,
+          ff.valor::numeric AS valor,
+          ff.vencimento::date AS vencimento,
+          ff.pagamento::date AS pagamento,
+          ff.status AS status,
+          NULL::INTEGER AS cliente_id
+        FROM financial_flows ff
+        UNION ALL
+        SELECT
+          -p.id AS id,
+          'receita' AS tipo,
+          TRIM(BOTH FROM CONCAT(
+            'Oportunidade ',
+            COALESCE(p.sequencial_empresa::text, p.oportunidade_id::text),
+            CASE WHEN p.cliente_nome IS NOT NULL THEN ' - ' || p.cliente_nome ELSE '' END,
+            CASE
+              WHEN p.numero_parcela IS NOT NULL THEN
+                ' - Parcela ' || p.numero_parcela::text ||
+                CASE
+                  WHEN NULLIF(COALESCE(p.faturamento_parcelas, p.qtde_parcelas), 0) IS NOT NULL AND NULLIF(COALESCE(p.faturamento_parcelas, p.qtde_parcelas), 0) > 1 THEN
+                    '/' || NULLIF(COALESCE(p.faturamento_parcelas, p.qtde_parcelas), 0)::text
+                  ELSE ''
+                END
+              ELSE ''
+            END
+          )) AS descricao,
+          COALESCE(
+            p.valor,
+            CASE
+              WHEN NULLIF(COALESCE(p.faturamento_parcelas, p.qtde_parcelas), 0) IS NOT NULL THEN
+                p.faturamento_valor / NULLIF(COALESCE(p.faturamento_parcelas, p.qtde_parcelas), 0)
+              ELSE p.faturamento_valor
+            END,
+            0
+          )::numeric AS valor,
+          COALESCE(p.data_prevista, p.data_faturamento::date, CURRENT_DATE) AS vencimento,
+          CASE
+            WHEN LOWER(p.status) IN ('quitado','quitada','pago','paga') THEN COALESCE(p.quitado_em::date, p.data_faturamento::date)
+            ELSE NULL
+          END AS pagamento,
+          CASE
+            WHEN LOWER(p.status) IN ('quitado','quitada','pago','paga') THEN 'pago'
+            ELSE 'pendente'
+          END AS status,
+          p.solicitante_id AS cliente_id
+        FROM oportunidade_parcelas_enriched p
+      )
+    `;
+
+    const limitParamIndex = filters.length + 1;
+    const offsetParamIndex = filters.length + 2;
+
+    const dataQuery = `
+      ${combinedCte}
+      SELECT id, tipo, descricao, valor, vencimento, pagamento, status
+      FROM combined_flows
+      ${filterClause}
+      ORDER BY vencimento DESC, id DESC
+      LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
+    `;
+
+    const dataValues = [...filters, effectiveLimit, offset];
+
+    const countQuery = `
+      ${combinedCte}
+      SELECT COUNT(*)::INTEGER AS total
+      FROM combined_flows
+      ${filterClause}
+    `;
+
+    const countValues = [...filters];
+
+    const itemsResult = await pool.query(dataQuery, dataValues);
+    const totalResult = await pool.query(countQuery, countValues);
+
+    const normalizeDate = (value: unknown): string | null => {
+      if (!value) {
+        return null;
+      }
+      if (value instanceof Date) {
+        return value.toISOString().slice(0, 10);
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+          return null;
+        }
+        if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+          return trimmed.slice(0, 10);
+        }
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) {
+          return parsed.toISOString().slice(0, 10);
+        }
+        return null;
+      }
+      const coerced = new Date(value as string);
+      if (!Number.isNaN(coerced.getTime())) {
+        return coerced.toISOString().slice(0, 10);
+      }
+      return null;
+    };
+
+    const normalizeNumber = (value: unknown): number => {
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+      }
+      if (typeof value === 'string') {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      if (value === null || value === undefined) {
+        return 0;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const normalizeDescricao = (value: unknown): string => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : 'Fluxo financeiro';
+      }
+      if (value === null || value === undefined) {
+        return 'Fluxo financeiro';
+      }
+      const stringValue = String(value).trim();
+      return stringValue.length > 0 ? stringValue : 'Fluxo financeiro';
+    };
+
+    const normalizeStatus = (value: unknown): 'pendente' | 'pago' => {
+      if (typeof value === 'string' && value.trim().toLowerCase() === 'pago') {
+        return 'pago';
+      }
+      return 'pendente';
+    };
+
+    const normalizeTipo = (value: unknown): Flow['tipo'] => {
+      if (typeof value === 'string' && value.trim().toLowerCase() === 'despesa') {
+        return 'despesa';
+      }
+      return 'receita';
+    };
+
+    const items: Flow[] = itemsResult.rows.map((row) => {
+      const vencimento = normalizeDate(row.vencimento) ?? new Date().toISOString().slice(0, 10);
+      const pagamento = normalizeDate(row.pagamento);
+
+      return {
+        id: Number(row.id),
+        tipo: normalizeTipo(row.tipo),
+        descricao: normalizeDescricao(row.descricao),
+        valor: normalizeNumber(row.valor),
+        vencimento,
+        pagamento,
+        status: normalizeStatus(row.status),
+      };
+    });
+
+    const total = Number(totalResult.rows[0]?.total ?? 0);
     res.json({
-      items: items.rows,
-      total: parseInt(totalResult.rows[0].count, 10),
-      page: pageNum,
-      limit: limitNum,
+      items,
+      total: Number.isFinite(total) ? total : 0,
+      page: effectivePage,
+      limit: effectiveLimit,
     });
   } catch (err) {
     console.error(err);
