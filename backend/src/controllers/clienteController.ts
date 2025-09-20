@@ -1,12 +1,97 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 
-export const listClientes = async (_req: Request, res: Response) => {
+type EmpresaLookupResult =
+  | { success: true; empresaId: number | null }
+  | { success: false; status: number; message: string };
+
+const parseOptionalId = (value: unknown): number | null | 'invalid' => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+      return 'invalid';
+    }
+
+    return parsed;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+      return 'invalid';
+    }
+
+    return value;
+  }
+
+  return 'invalid';
+};
+
+const fetchAuthenticatedUserEmpresa = async (
+  userId: number
+): Promise<EmpresaLookupResult> => {
+  const empresaUsuarioResult = await pool.query(
+    'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+    [userId]
+  );
+
+  if (empresaUsuarioResult.rowCount === 0) {
+    return {
+      success: false,
+      status: 404,
+      message: 'Usuário autenticado não encontrado',
+    };
+  }
+
+  const empresaAtualResult = parseOptionalId(
+    (empresaUsuarioResult.rows[0] as { empresa: unknown }).empresa
+  );
+
+  if (empresaAtualResult === 'invalid') {
+    return {
+      success: false,
+      status: 500,
+      message: 'Não foi possível identificar a empresa do usuário autenticado.',
+    };
+  }
+
+  return {
+    success: true,
+    empresaId: empresaAtualResult,
+  };
+};
+
+export const listClientes = async (req: Request, res: Response) => {
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
     const result = await pool.query(
-      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro FROM public.clientes'
+      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro FROM public.clientes WHERE idempresa = $1',
+      [empresaId]
     );
-    res.json(result.rows);
+    return res.json(result.rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -16,9 +101,19 @@ export const listClientes = async (_req: Request, res: Response) => {
 export const getClienteById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
     const result = await pool.query(
-      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro FROM public.clientes WHERE id = $1',
-      [id]
+      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro FROM public.clientes WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      [id, empresaLookup.empresaId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
@@ -30,10 +125,27 @@ export const getClienteById = async (req: Request, res: Response) => {
   }
 };
 
-export const countClientesAtivos = async (_req: Request, res: Response) => {
+export const countClientesAtivos = async (req: Request, res: Response) => {
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json({ total_clientes_ativos: 0 });
+    }
+
     const result = await pool.query(
-      'SELECT COUNT(*) AS total_clientes_ativos FROM public.clientes WHERE ativo = TRUE'
+      'SELECT COUNT(*) AS total_clientes_ativos FROM public.clientes WHERE ativo = TRUE AND idempresa = $1',
+      [empresaId]
     );
     res.json({
       total_clientes_ativos: parseInt(result.rows[0].total_clientes_ativos, 10),
@@ -59,15 +171,32 @@ export const createCliente = async (req: Request, res: Response) => {
     cidade,
     uf,
     ativo,
-    foto,
   } = req.body;
 
   const documentoLimpo = documento ? documento.replace(/\D/g, '') : null;
   const telefoneLimpo = telefone ? telefone.replace(/\D/g, '') : null;
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
     const result = await pool.query(
-      'INSERT INTO public.clientes (nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()) RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro',
+      'INSERT INTO public.clientes (nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()) RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro',
       [
         nome,
         tipo,
@@ -82,7 +211,7 @@ export const createCliente = async (req: Request, res: Response) => {
         cidade,
         uf,
         ativo,
-        foto,
+        empresaId,
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -108,15 +237,32 @@ export const updateCliente = async (req: Request, res: Response) => {
     cidade,
     uf,
     ativo,
-    foto,
   } = req.body;
 
   const documentoLimpo = documento ? documento.replace(/\D/g, '') : null;
   const telefoneLimpo = telefone ? telefone.replace(/\D/g, '') : null;
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
     const result = await pool.query(
-      'UPDATE public.clientes SET nome = $1, tipo = $2, documento = $3, email = $4, telefone = $5, cep = $6, rua = $7, numero = $8, complemento = $9, bairro = $10, cidade = $11, uf = $12, ativo = $13, foto = $14 WHERE id = $15 RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, foto, datacadastro',
+      'UPDATE public.clientes SET nome = $1, tipo = $2, documento = $3, email = $4, telefone = $5, cep = $6, rua = $7, numero = $8, complemento = $9, bairro = $10, cidade = $11, uf = $12, ativo = $13, idempresa = $14 WHERE id = $15 AND idempresa IS NOT DISTINCT FROM $16 RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro',
       [
         nome,
         tipo,
@@ -131,8 +277,9 @@ export const updateCliente = async (req: Request, res: Response) => {
         cidade,
         uf,
         ativo,
-        foto,
+        empresaId,
         id,
+        empresaId,
       ]
     );
     if (result.rowCount === 0) {
@@ -148,9 +295,27 @@ export const updateCliente = async (req: Request, res: Response) => {
 export const deleteCliente = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
     const result = await pool.query(
-      'UPDATE public.clientes SET ativo = NOT ativo WHERE id = $1 RETURNING ativo',
-      [id]
+      'UPDATE public.clientes SET ativo = NOT ativo WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2 RETURNING ativo',
+      [id, empresaId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
@@ -161,4 +326,6 @@ export const deleteCliente = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+
 
