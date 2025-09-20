@@ -148,6 +148,20 @@ const MAX_PAGE_SIZE = 100;
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
 const MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024;
 
+const SUPPORT_REQUEST_RETURNING_FIELDS = [
+  'id',
+  'subject',
+  'description',
+  'status',
+  'requester_id',
+  'requester_name',
+  'requester_email',
+  'support_agent_id',
+  'support_agent_name',
+  'created_at',
+  'updated_at',
+];
+
 function normalizeText(value: string | null | undefined): string | null {
   if (value === null || value === undefined) {
     return null;
@@ -277,10 +291,11 @@ export class SupportService {
     }
 
     const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+    const returningFields = SUPPORT_REQUEST_RETURNING_FIELDS.join(', ');
     const result = await this.db.query(
       `INSERT INTO support_requests (${columns.join(', ')})
        VALUES (${placeholders})
-       RETURNING id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at`,
+       RETURNING ${returningFields}`,
       values
     );
 
@@ -660,7 +675,7 @@ export class SupportService {
     const query = `UPDATE support_requests
       SET ${fields.join(', ')}, updated_at = NOW()
       WHERE id = $${index}
-      RETURNING id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at`;
+      RETURNING ${SUPPORT_REQUEST_RETURNING_FIELDS.join(', ')}`;
 
     values.push(id);
 
