@@ -29,7 +29,7 @@ import { getApiBaseUrl } from "@/lib/api";
 const formSchema = z
   .object({
     process: z.string().min(1, "Processo ou caso é obrigatório"),
-    responsibles: z.array(z.string()).min(1, "Adicionar responsáveis"),
+    responsibles: z.array(z.string()).min(1, "Adicionar responsável"),
     title: z.string().min(1, "Tarefa é obrigatória"),
     date: z.string().min(1, "Data é obrigatória"),
     time: z.string().optional(),
@@ -86,6 +86,11 @@ export interface CreatedTaskSummary {
 interface ApiUsuario {
   id: number;
   nome_completo: string;
+}
+
+interface ApiEventType {
+  id: number;
+  nome: string;
 }
 
 interface ApiOpportunity {
@@ -150,8 +155,11 @@ interface TaskCreationDialogProps {
 
 export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: TaskCreationDialogProps) {
   const [users, setUsers] = useState<ApiUsuario[]>([]);
+  const [eventTypes, setEventTypes] = useState<ApiEventType[]>([]);
   const [opportunities, setOpportunities] = useState<ApiOpportunity[]>([]);
   const [openProposal, setOpenProposal] = useState(false);
+  const [openResponsible, setOpenResponsible] = useState(false);
+  const [titleDropdownOpen, setTitleDropdownOpen] = useState(false);
 
   const {
     register,
@@ -169,7 +177,7 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const url = joinUrl(apiUrl, "/api/usuarios");
+        const url = joinUrl(apiUrl, "/api/usuarios/empresa");
         const response = await fetch(url, { headers: { Accept: "application/json" } });
         if (!response.ok) throw new Error("Failed to fetch users");
         const json = await response.json();
@@ -185,6 +193,27 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
         setUsers(data);
       } catch (err) {
         console.error("Erro ao buscar usuários:", err);
+      }
+    };
+
+    const fetchEventTypes = async () => {
+      try {
+        const url = joinUrl(apiUrl, "/api/tipo-eventos");
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error("Failed to fetch event types");
+        const json = await response.json();
+        const data: ApiEventType[] = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.rows)
+          ? json.rows
+          : Array.isArray(json?.data?.rows)
+          ? json.data.rows
+          : Array.isArray(json?.data)
+          ? json.data
+          : [];
+        setEventTypes(data);
+      } catch (err) {
+        console.error("Erro ao buscar tipos de evento:", err);
       }
     };
 
@@ -214,6 +243,7 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
     };
 
     fetchUsers();
+    fetchEventTypes();
     fetchOpportunities();
   }, []);
 
@@ -235,6 +265,9 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
       reset(defaultsWithPrefill);
     } else {
       reset(defaultValues);
+      setOpenResponsible(false);
+      setOpenProposal(false);
+      setTitleDropdownOpen(false);
     }
   }, [open, defaultsWithPrefill, reset]);
 
@@ -347,11 +380,20 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
   const recurring = watch("recurring");
   const priority = watch("priority");
   const selectedProposalId = watch("process");
+  const watchedTitle = watch("title") ?? "";
 
   const selectedProposal = useMemo(
     () => opportunities.find((o) => String(o.id) === selectedProposalId),
     [opportunities, selectedProposalId],
   );
+
+  const filteredEventTypes = useMemo(() => {
+    const query = watchedTitle.trim().toLowerCase();
+    if (!query) {
+      return eventTypes;
+    }
+    return eventTypes.filter((type) => type.nome.toLowerCase().includes(query));
+  }, [eventTypes, watchedTitle]);
 
   const processButtonLabel = selectedProposal
     ? formatProposal(selectedProposal)
@@ -364,6 +406,49 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
           <DialogTitle>Criar nova tarefa</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <Controller
+            name="title"
+            control={control}
+            render={({ field }) => (
+              <div className="relative">
+                <Label htmlFor="title">Título da Tarefa</Label>
+                <Input
+                  id="title"
+                  autoComplete="off"
+                  {...field}
+                  onChange={(event) => {
+                    field.onChange(event.target.value);
+                    setTitleDropdownOpen(true);
+                  }}
+                  onFocus={() => setTitleDropdownOpen(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setTitleDropdownOpen(false), 150);
+                  }}
+                />
+                {titleDropdownOpen && filteredEventTypes.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
+                    <ul className="max-h-48 overflow-y-auto py-1 text-sm">
+                      {filteredEventTypes.map((type) => (
+                        <li
+                          key={type.id}
+                          className="cursor-pointer px-3 py-2 hover:bg-accent"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            field.onChange(type.nome);
+                            setTitleDropdownOpen(false);
+                          }}
+                        >
+                          {type.nome}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
+              </div>
+            )}
+          />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="process">Proposta:</Label>
@@ -409,28 +494,60 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
               </Popover>
               {errors.process && <p className="text-sm text-destructive">{errors.process.message}</p>}
             </div>
-            <div>
-              <Label htmlFor="responsibles">Adicionar responsáveis</Label>
-              <select
-                id="responsibles"
-                multiple
-                className="w-full border rounded-md h-32 px-2"
-                {...register("responsibles")}
-              >
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.nome_completo}
-                  </option>
-                ))}
-              </select>
-              {errors.responsibles && <p className="text-sm text-destructive">{errors.responsibles.message}</p>}
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="title">Título da Tarefa</Label>
-            <Input id="title" {...register("title")} />
-            {errors.title && <p className="text-sm text-destructive">{errors.title.message}</p>}
+            <Controller
+              name="responsibles"
+              control={control}
+              render={({ field }) => {
+                const value = Array.isArray(field.value) ? field.value : [];
+                const currentId = value[0] ?? "";
+                const currentResponsible = users.find((u) => String(u.id) === currentId);
+                return (
+                  <div>
+                    <Label htmlFor="responsibles">Adicionar responsável</Label>
+                    <Popover open={openResponsible} onOpenChange={setOpenResponsible}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openResponsible}
+                          className="w-full justify-between"
+                        >
+                          {currentResponsible ? currentResponsible.nome_completo : "Selecione"}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0">
+                        <Command>
+                          <CommandInput placeholder="Buscar responsável..." />
+                          <CommandList>
+                            <CommandEmpty>Nenhum responsável encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              {users.map((u) => (
+                                <CommandItem
+                                  key={u.id}
+                                  value={u.nome_completo}
+                                  onSelect={() => {
+                                    field.onChange([String(u.id)]);
+                                    setOpenResponsible(false);
+                                  }}
+                                >
+                                  {u.nome_completo}
+                                  {currentId === String(u.id) && <Check className="ml-auto h-4 w-4" />}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    {errors.responsibles && (
+                      <p className="text-sm text-destructive">{errors.responsibles.message}</p>
+                    )}
+                  </div>
+                );
+              }}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
