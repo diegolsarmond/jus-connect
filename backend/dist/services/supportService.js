@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SupportService = exports.ValidationError = exports.SUPPORT_STATUS_VALUES = void 0;
 const db_1 = __importDefault(require("./db"));
 const node_buffer_1 = require("node:buffer");
-exports.SUPPORT_STATUS_VALUES = ['open', 'in_progress', 'resolved', 'closed'];
+exports.SUPPORT_STATUS_VALUES = ['open', 'in_progress', 'resolved', 'closed', 'cancelled'];
 class ValidationError extends Error {
     constructor(message) {
         super(message);
@@ -25,6 +25,16 @@ function normalizeText(value) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
 }
+function normalizeEmail(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
+    }
+    return trimmed.toLowerCase();
+}
 function assertValidStatus(status) {
     if (!exports.SUPPORT_STATUS_VALUES.includes(status)) {
         throw new ValidationError('Invalid status provided');
@@ -42,8 +52,11 @@ function mapRow(row) {
         subject: row.subject,
         description: row.description,
         status: row.status,
+        requesterId: row.requester_id ?? null,
         requesterName: row.requester_name,
         requesterEmail: row.requester_email,
+        supportAgentId: row.support_agent_id ?? null,
+        supportAgentName: row.support_agent_name,
         createdAt: formatDate(row.created_at),
         updatedAt: formatDate(row.updated_at),
     };
@@ -91,11 +104,29 @@ class SupportService {
         }
         const status = input.status ?? 'open';
         assertValidStatus(status);
+        const requesterId = typeof input.requesterId === 'number' && Number.isInteger(input.requesterId) && input.requesterId > 0
+            ? input.requesterId
+            : null;
         const requesterName = normalizeText(input.requesterName);
-        const requesterEmail = normalizeText(input.requesterEmail);
-        const result = await this.db.query(`INSERT INTO support_requests (subject, description, status, requester_name, requester_email)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, subject, description, status, requester_name, requester_email, created_at, updated_at`, [subject, description, status, requesterName, requesterEmail]);
+        const requesterEmail = normalizeEmail(input.requesterEmail);
+        const columns = ['subject', 'description', 'status'];
+        const values = [subject, description, status];
+        if (requesterId != null) {
+            columns.push('requester_id');
+            values.push(requesterId);
+        }
+        if (requesterName !== null) {
+            columns.push('requester_name');
+            values.push(requesterName);
+        }
+        if (requesterEmail !== null) {
+            columns.push('requester_email');
+            values.push(requesterEmail);
+        }
+        const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+        const result = await this.db.query(`INSERT INTO support_requests (${columns.join(', ')})
+       VALUES (${placeholders})
+       RETURNING id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at`, values);
         return mapRow(result.rows[0]);
     }
     async list(options = {}) {
@@ -110,13 +141,28 @@ class SupportService {
             values.push(options.status);
             conditions.push(`status = $${values.length}`);
         }
+        const requesterEmail = normalizeEmail(options.requesterEmail);
+        if (options.requesterId != null || requesterEmail) {
+            const requesterConditions = [];
+            if (options.requesterId != null) {
+                values.push(options.requesterId);
+                requesterConditions.push(`requester_id = $${values.length}`);
+            }
+            if (requesterEmail) {
+                values.push(requesterEmail);
+                requesterConditions.push(`LOWER(requester_email) = $${values.length}`);
+            }
+            if (requesterConditions.length > 0) {
+                conditions.push(`(${requesterConditions.join(' OR ')})`);
+            }
+        }
         if (options.search) {
             const searchValue = `%${options.search.trim()}%`;
             values.push(searchValue);
             conditions.push(`(subject ILIKE $${values.length} OR description ILIKE $${values.length})`);
         }
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-        const baseQuery = `SELECT id, subject, description, status, requester_name, requester_email, created_at, updated_at
+        const baseQuery = `SELECT id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at
       FROM support_requests
       ${whereClause}
       ORDER BY created_at DESC`;
@@ -136,7 +182,7 @@ class SupportService {
         };
     }
     async findById(id) {
-        const result = await this.db.query(`SELECT id, subject, description, status, requester_name, requester_email, created_at, updated_at
+        const result = await this.db.query(`SELECT id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at
        FROM support_requests
        WHERE id = $1`, [id]);
         if (result.rowCount === 0) {
@@ -176,7 +222,7 @@ class SupportService {
         }
         return messageRows.map((row) => mapMessageRow(row, attachmentsByMessageId));
     }
-    async createMessage(requestId, input) {
+    async createMessage(requestId, input, context) {
         const exists = await this.supportRequestExists(requestId);
         if (!exists) {
             return null;
@@ -233,15 +279,44 @@ class SupportService {
                 throw error;
             }
         }
-        await this.db.query('UPDATE support_requests SET updated_at = NOW() WHERE id = $1', [requestId]);
         const attachmentsByMessageId = new Map();
         attachmentsByMessageId.set(messageRow.id, attachmentRows);
+        let hasSupportAgentUpdate = false;
+        if (sender === 'support' && context) {
+            const hasAgentId = Object.prototype.hasOwnProperty.call(context, 'supportAgentId');
+            const hasAgentName = Object.prototype.hasOwnProperty.call(context, 'supportAgentName');
+            if (hasAgentId || hasAgentName) {
+                const updatePayload = {};
+                if (hasAgentId) {
+                    updatePayload.supportAgentId = context.supportAgentId ?? null;
+                }
+                if (hasAgentName) {
+                    updatePayload.supportAgentName = context.supportAgentName ?? null;
+                }
+                await this.update(requestId, updatePayload);
+                hasSupportAgentUpdate = true;
+            }
+        }
+        if (!hasSupportAgentUpdate) {
+            await this.db.query('UPDATE support_requests SET updated_at = NOW() WHERE id = $1', [requestId]);
+        }
         return mapMessageRow(messageRow, attachmentsByMessageId);
     }
     async getAttachment(messageId, attachmentId) {
-        const result = await this.db.query(`SELECT id, message_id, filename, content_type, file_size, created_at, data
-         FROM support_request_attachments
-         WHERE id = $1 AND message_id = $2`, [attachmentId, messageId]);
+        const result = await this.db.query(`SELECT a.id,
+              a.message_id,
+              a.filename,
+              a.content_type,
+              a.file_size,
+              a.created_at,
+              a.data,
+              m.support_request_id,
+              r.requester_id,
+              r.requester_email
+         FROM support_request_attachments a
+         JOIN support_request_messages m ON m.id = a.message_id
+         JOIN support_requests r ON r.id = m.support_request_id
+         WHERE a.id = $1 AND a.message_id = $2`, [attachmentId, messageId]);
         if (result.rowCount === 0) {
             return null;
         }
@@ -250,6 +325,9 @@ class SupportService {
         return {
             id: row.id,
             messageId: row.message_id,
+            supportRequestId: row.support_request_id,
+            requesterId: row.requester_id ?? null,
+            requesterEmail: row.requester_email ?? null,
             filename: row.filename,
             contentType: row.content_type ?? null,
             fileSize: row.file_size ?? content.length,
@@ -292,9 +370,29 @@ class SupportService {
             index += 1;
         }
         if (updates.requesterEmail !== undefined) {
-            const email = normalizeText(updates.requesterEmail);
+            const email = normalizeEmail(updates.requesterEmail);
             fields.push(`requester_email = $${index}`);
             values.push(email);
+            index += 1;
+        }
+        if (updates.supportAgentId !== undefined) {
+            const agentId = updates.supportAgentId;
+            if (agentId === null) {
+                fields.push('support_agent_id = NULL');
+            }
+            else if (typeof agentId === 'number' && Number.isInteger(agentId) && agentId > 0) {
+                fields.push(`support_agent_id = $${index}`);
+                values.push(agentId);
+                index += 1;
+            }
+            else {
+                throw new ValidationError('Support agent id must be a positive integer');
+            }
+        }
+        if (updates.supportAgentName !== undefined) {
+            const agentName = normalizeText(updates.supportAgentName);
+            fields.push(`support_agent_name = $${index}`);
+            values.push(agentName);
             index += 1;
         }
         if (fields.length === 0) {
@@ -303,7 +401,7 @@ class SupportService {
         const query = `UPDATE support_requests
       SET ${fields.join(', ')}, updated_at = NOW()
       WHERE id = $${index}
-      RETURNING id, subject, description, status, requester_name, requester_email, created_at, updated_at`;
+      RETURNING id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at`;
         values.push(id);
         const result = await this.db.query(query, values);
         if (result.rowCount === 0) {

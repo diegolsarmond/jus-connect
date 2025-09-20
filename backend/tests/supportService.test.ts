@@ -30,8 +30,11 @@ test('SupportService.create normalizes payload and returns persisted request', a
     subject: 'Test subject',
     description: 'Detailed description',
     status: 'open' as SupportStatus,
+    requester_id: null,
     requester_name: 'Maria',
     requester_email: 'maria@example.com',
+    support_agent_id: null,
+    support_agent_name: null,
     created_at: '2024-01-01T00:00:00.000Z',
     updated_at: '2024-01-01T00:00:00.000Z',
   };
@@ -67,8 +70,11 @@ test('SupportService.create normalizes payload and returns persisted request', a
     subject: 'Test subject',
     description: 'Detailed description',
     status: 'open',
+    requesterId: null,
     requesterName: 'Maria',
     requesterEmail: 'maria@example.com',
+    supportAgentId: null,
+    supportAgentName: null,
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
   };
