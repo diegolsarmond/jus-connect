@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { queryEmpresas } from '../services/empresaQueries';
 import { replaceVariables } from '../services/templateService';
 
 type Primitive = string | number | boolean | null | undefined;
@@ -79,6 +80,9 @@ type EmpresaRow = {
   email: string | null;
   plano?: string | null;
   responsavel?: string | null;
+  ativo?: boolean | null;
+  datacadastro?: string | null;
+  atualizacao?: string | null;
 };
 
 type EnvolvidoRow = {
@@ -439,9 +443,7 @@ async function fetchOpportunityData(id: number) {
     responsavel = (responsavelResult.rowCount ?? 0) > 0 ? responsavelResult.rows[0] : null;
   }
 
-  const empresaResult = await pool.query<EmpresaRow>(
-    'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel FROM public."vw.empresas" ORDER BY id LIMIT 1',
-  );
+  const empresaResult = await queryEmpresas<EmpresaRow>('ORDER BY id LIMIT 1');
   const empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
 
   return { opportunity, solicitante, envolvidos: envolvidosResult.rows, responsavel, empresa };

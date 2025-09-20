@@ -1,11 +1,10 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { queryEmpresas } from '../services/empresaQueries';
 
 export const listEmpresas = async (_req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, atualizacao FROM public."vw.empresas";'
-    );
+    const result = await queryEmpresas();
     res.json(result.rows);
   } catch (error) {
     console.error(error);
@@ -17,10 +16,7 @@ export const getEmpresaById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const result = await pool.query(
-      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, atualizacao FROM public."vw.empresas" WHERE id = $1',
-      [id]
-    );
+    const result = await queryEmpresas('WHERE id = $1', [id]);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Empresa não encontrada' });

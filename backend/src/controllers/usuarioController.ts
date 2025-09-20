@@ -160,6 +160,7 @@ export const listUsuariosByEmpresa = async (req: Request, res: Response) => {
 
     const { empresaId } = empresaLookup;
 
+
     if (empresaId === null) {
       return res.json([]);
     }
