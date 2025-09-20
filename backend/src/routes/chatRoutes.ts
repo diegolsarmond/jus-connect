@@ -4,7 +4,9 @@ import {
   getConversationMessagesHandler,
   listConversationsHandler,
   markConversationReadHandler,
+  streamConversationEventsHandler,
   sendConversationMessageHandler,
+  updateTypingStateHandler,
   updateConversationHandler,
 } from '../controllers/chatController';
 
@@ -192,6 +194,24 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+
+/**
+ * @swagger
+ * /api/conversations/stream:
+ *   get:
+ *     summary: Abre uma conexão de eventos em tempo real das conversas
+ *     tags: [Conversas]
+ *     description: |
+ *       Retorna uma conexão usando Server-Sent Events (SSE) para enviar notificações de
+ *       mensagens, atualizações de conversa e indicadores de digitação. É necessário
+ *       incluir o token de autenticação via cabeçalho Authorization.
+ *     responses:
+ *       200:
+ *         description: Conexão estabelecida com sucesso.
+ *       401:
+ *         description: Token inválido ou ausente.
+ */
+router.get('/conversations/stream', streamConversationEventsHandler);
 
 router.get('/conversations', listConversationsHandler);
 
@@ -435,5 +455,39 @@ router.post('/conversations/:conversationId/messages', sendConversationMessageHa
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/conversations/:conversationId/read', markConversationReadHandler);
+
+/**
+ * @swagger
+ * /api/conversations/{conversationId}/typing:
+ *   post:
+ *     summary: Atualiza o estado de digitação do operador para a conversa
+ *     tags: [Conversas]
+ *     parameters:
+ *       - in: path
+ *         name: conversationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Identificador da conversa
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               isTyping:
+ *                 type: boolean
+ *                 description: Indica se o usuário está digitando (true) ou não (false)
+ *             required: [isTyping]
+ *     responses:
+ *       202:
+ *         description: Estado de digitação registrado com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       401:
+ *         description: Token inválido ou ausente
+ */
+router.post('/conversations/:conversationId/typing', updateTypingStateHandler);
 
 export default router;

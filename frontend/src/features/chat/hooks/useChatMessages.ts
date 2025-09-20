@@ -3,7 +3,7 @@ import {
   fetchConversationMessages,
   sendConversationMessage,
 } from "../services/chatApi";
-import type { Message, MessagePage, SendMessageInput } from "../types";
+import type { Message, MessagePage, MessageStatus, SendMessageInput } from "../types";
 
 interface UseChatMessagesResult {
   messages: Message[];
@@ -14,6 +14,8 @@ interface UseChatMessagesResult {
   reload: () => Promise<void>;
   sendMessage: (payload: SendMessageInput) => Promise<Message | null>;
   reset: () => void;
+  mergeMessage: (message: Message) => void;
+  updateMessageStatus: (messageId: string, status: MessageStatus) => void;
 }
 
 // Carregamos blocos pequenos para combinar com a janela virtualizada da área de mensagens.
@@ -74,16 +76,54 @@ export const useChatMessages = (
     }
   }, [applyPage, conversationId, cursor, isLoadingMore, pageSize]);
 
+  const insertMessage = useCallback((list: Message[], incoming: Message) => {
+    const existingIndex = list.findIndex((item) => item.id === incoming.id);
+    if (existingIndex >= 0) {
+      const next = list.slice();
+      next[existingIndex] = incoming;
+      return next;
+    }
+
+    const incomingTime = new Date(incoming.timestamp).getTime();
+    const next = list.slice();
+    const insertIndex = next.findIndex(
+      (item) => new Date(item.timestamp).getTime() > incomingTime,
+    );
+    if (insertIndex === -1) {
+      next.push(incoming);
+    } else {
+      next.splice(insertIndex, 0, incoming);
+    }
+    return next;
+  }, []);
+
+  const mergeMessage = useCallback(
+    (incoming: Message) => {
+      setMessages((current) => insertMessage(current, incoming));
+    },
+    [insertMessage],
+  );
+
+  const updateMessageStatus = useCallback((messageId: string, status: MessageStatus) => {
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === messageId
+          ? { ...item, status }
+          : item,
+      ),
+    );
+  }, []);
+
   const sendMessage = useCallback(
     async (payload: SendMessageInput) => {
       if (!conversationId) return null;
       const message = await sendConversationMessage(conversationId, payload);
       if (activeConversationRef.current !== conversationId) return null;
-      setMessages((current) => [...current, message]);
+      setMessages((current) => insertMessage(current, message));
       setHasMore((currentHasMore) => currentHasMore);
       return message;
     },
-    [conversationId],
+    [conversationId, insertMessage],
   );
 
   const reset = useCallback(() => {
@@ -112,5 +152,7 @@ export const useChatMessages = (
     reload,
     sendMessage,
     reset,
+    mergeMessage,
+    updateMessageStatus,
   };
 };

@@ -1,17 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/features/auth/AuthProvider";
 import {
   fetchConversations,
   createConversation,
   markConversationRead,
+  setTypingState,
   updateConversation as updateConversationRequest,
 } from "./services/chatApi";
-import type { ConversationSummary, SendMessageInput, UpdateConversationPayload } from "./types";
+import type {
+  ConversationSummary,
+  Message,
+  MessageStatus,
+  SendMessageInput,
+  UpdateConversationPayload,
+} from "./types";
 import { ChatSidebar } from "./components/ChatSidebar";
 import { ChatWindow } from "./components/ChatWindow";
 import { NewConversationModal } from "./components/NewConversationModal";
 import { useChatMessages } from "./hooks/useChatMessages";
+import { useChatRealtime } from "./hooks/useChatRealtime";
 import styles from "./ChatPage.module.css";
 
 type PendingConversation = {
@@ -19,6 +28,8 @@ type PendingConversation = {
   description?: string;
   hasAttemptedCreate: boolean;
 };
+
+type TypingUser = { id: string; name?: string };
 
 export const ChatPage = () => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
@@ -30,9 +41,20 @@ export const ChatPage = () => {
   );
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastContactQueryRef = useRef<string | null>(null);
+  const typingActivityRef = useRef<{ conversationId?: string; isTyping: boolean; lastSentAt: number }>({
+    conversationId: undefined,
+    isTyping: false,
+    lastSentAt: 0,
+  });
+  const previousTypingConversationRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const currentUserId = user ? String(user.id) : null;
+  const [typingUsersByConversation, setTypingUsersByConversation] = useState<
+    Record<string, TypingUser[]>
+  >({});
 
   useEffect(() => {
     const state = (location.state ?? null) as
@@ -152,6 +174,19 @@ export const ChatPage = () => {
     },
   });
 
+  const applyConversationUpdate = useCallback(
+    (conversation: ConversationSummary) => {
+      queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
+        if (!old) {
+          return [conversation];
+        }
+        const filtered = old.filter((item) => item.id !== conversation.id);
+        return [conversation, ...filtered];
+      });
+    },
+    [queryClient],
+  );
+
   const {
     messages,
     hasMore,
@@ -159,6 +194,8 @@ export const ChatPage = () => {
     isLoadingMore,
     loadOlder,
     sendMessage,
+    mergeMessage,
+    updateMessageStatus,
   } = useChatMessages(selectedConversationId);
 
   const updateConversationMutation = useMutation({
@@ -171,6 +208,157 @@ export const ChatPage = () => {
       });
     },
   });
+
+  const handleConversationReadEvent = useCallback(
+    (conversationId: string) => {
+      queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
+        if (!old) return old;
+        return old.map((item) =>
+          item.id === conversationId
+            ? { ...item, unreadCount: 0 }
+            : item,
+        );
+      });
+    },
+    [queryClient],
+  );
+
+  const handleRealtimeTyping = useCallback(
+    ({ conversationId, userId, userName, isTyping }: { conversationId: string; userId: string; userName?: string; isTyping: boolean }) => {
+      if (currentUserId && userId === currentUserId) {
+        return;
+      }
+
+      setTypingUsersByConversation((current) => {
+        const existing = current[conversationId] ?? [];
+        const filtered = existing.filter((entry) => entry.id !== userId);
+
+        if (isTyping) {
+          return {
+            ...current,
+            [conversationId]: [...filtered, { id: userId, name: userName }],
+          };
+        }
+
+        if (filtered.length === 0) {
+          const { [conversationId]: _removed, ...rest } = current;
+          return rest;
+        }
+
+        return {
+          ...current,
+          [conversationId]: filtered,
+        };
+      });
+    },
+    [currentUserId],
+  );
+
+  const handleRealtimeMessageCreated = useCallback(
+    ({ conversationId, message }: { conversationId: string; message: Message }) => {
+      if (conversationId === selectedConversationId) {
+        mergeMessage(message);
+      }
+    },
+    [mergeMessage, selectedConversationId],
+  );
+
+  const handleRealtimeMessageStatus = useCallback(
+    ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: MessageStatus }) => {
+      if (conversationId === selectedConversationId) {
+        updateMessageStatus(messageId, status);
+      }
+    },
+    [selectedConversationId, updateMessageStatus],
+  );
+
+  const handleRealtimeConversationReadEvent = useCallback(
+    ({ conversationId }: { conversationId: string }) => {
+      if (conversationId) {
+        handleConversationReadEvent(conversationId);
+      }
+    },
+    [handleConversationReadEvent],
+  );
+
+  useChatRealtime({
+    onConversationUpdated: applyConversationUpdate,
+    onConversationRead: handleRealtimeConversationReadEvent,
+    onMessageCreated: handleRealtimeMessageCreated,
+    onMessageStatusUpdated: handleRealtimeMessageStatus,
+    onTyping: handleRealtimeTyping,
+    onConnectionChange: (connected) => {
+      if (!connected) {
+        setTypingUsersByConversation({});
+      }
+    },
+  });
+
+  const emitTypingState = useCallback(async (conversationId: string, isTyping: boolean) => {
+    try {
+      await setTypingState(conversationId, isTyping);
+    } catch (error) {
+      console.warn("Falha ao atualizar estado de digitação", error);
+    }
+  }, []);
+
+  const handleTypingActivity = useCallback(
+    (isTyping: boolean) => {
+      if (!selectedConversationId) {
+        return;
+      }
+
+      const state = typingActivityRef.current;
+      const now = Date.now();
+
+      if (state.conversationId && state.conversationId !== selectedConversationId) {
+        void emitTypingState(state.conversationId, false);
+      }
+
+      if (state.conversationId !== selectedConversationId) {
+        state.conversationId = selectedConversationId;
+        state.isTyping = false;
+        state.lastSentAt = 0;
+      }
+
+      if (isTyping) {
+        const shouldSend = !state.isTyping || now - state.lastSentAt > 1500;
+        if (!shouldSend) {
+          state.isTyping = true;
+          return;
+        }
+      } else if (!state.isTyping) {
+        return;
+      }
+
+      state.isTyping = isTyping;
+      state.lastSentAt = now;
+      void emitTypingState(selectedConversationId, isTyping);
+    },
+    [emitTypingState, selectedConversationId],
+  );
+
+  useEffect(() => {
+    const previous = previousTypingConversationRef.current;
+    if (previous && previous !== selectedConversationId) {
+      void emitTypingState(previous, false);
+    }
+    previousTypingConversationRef.current = selectedConversationId ?? null;
+    typingActivityRef.current = {
+      conversationId: selectedConversationId,
+      isTyping: false,
+      lastSentAt: 0,
+    };
+  }, [emitTypingState, selectedConversationId]);
+
+  useEffect(() => {
+    return () => {
+      const previous = typingActivityRef.current.conversationId;
+      if (previous) {
+        void emitTypingState(previous, false);
+      }
+    };
+  }, [emitTypingState]);
 
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
@@ -205,6 +393,13 @@ export const ChatPage = () => {
     window.addEventListener("keydown", handleShortcuts);
     return () => window.removeEventListener("keydown", handleShortcuts);
   }, []);
+
+  const activeTypingUsers = useMemo(() => {
+    if (!selectedConversationId) {
+      return [] as TypingUser[];
+    }
+    return typingUsersByConversation[selectedConversationId] ?? [];
+  }, [selectedConversationId, typingUsersByConversation]);
 
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedConversationId),
@@ -274,6 +469,8 @@ export const ChatPage = () => {
           onLoadOlder={loadOlder}
           onUpdateConversation={handleUpdateConversation}
           isUpdatingConversation={updateConversationMutation.isPending}
+          typingUsers={activeTypingUsers}
+          onTypingActivity={handleTypingActivity}
         />
       </div>
       <NewConversationModal

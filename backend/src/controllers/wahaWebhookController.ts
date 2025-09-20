@@ -4,6 +4,11 @@ import ChatService, {
   MessageAttachment,
 
 } from '../services/chatService';
+import {
+  publishConversationUpdate,
+  publishMessageCreated,
+  publishMessageStatusUpdate,
+} from '../realtime';
 
 const chatService = new ChatService();
 
@@ -936,10 +941,14 @@ async function handleMessageEvent(event: WahaWebhookEvent): Promise<number> {
 
       };
 
-      if (parsed.fromMe) {
-        await chatService.recordOutgoingMessage(recordInput);
-      } else {
-        await chatService.recordIncomingMessage(recordInput);
+      const message = parsed.fromMe
+        ? await chatService.recordOutgoingMessage(recordInput)
+        : await chatService.recordIncomingMessage(recordInput);
+
+      const conversation = await chatService.getConversationDetails(parsed.conversationId);
+      publishMessageCreated(message);
+      if (conversation) {
+        publishConversationUpdate(conversation);
       }
 
       processed += 1;
@@ -989,9 +998,12 @@ async function handleStatusEvent(event: WahaWebhookEvent): Promise<number> {
     }
 
     try {
-      const updated = await chatService.updateMessageStatusByExternalId(externalId, status);
-      if (updated) {
-        processed += 1;
+      const updates = await chatService.updateMessageStatusByExternalId(externalId, status);
+      if (updates.length > 0) {
+        processed += updates.length;
+        for (const entry of updates) {
+          publishMessageStatusUpdate(entry);
+        }
       }
     } catch (error) {
       console.error('Failed to update WAHA message status', error, { update });
