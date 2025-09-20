@@ -97,6 +97,49 @@ export const listAgendas = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Token inválido.' });
     }
 
+    const result = await pool.query(
+      `SELECT a.id,
+              a.titulo,
+              a.tipo,
+              te.nome AS tipo_evento,
+              a.descricao,
+              a.data,
+              a.hora_inicio,
+              a.hora_fim,
+              CASE
+                WHEN c.nome IS NOT NULL THEN c.nome
+                WHEN a.cliente IS NOT NULL THEN a.cliente::text
+                ELSE NULL
+              END AS cliente,
+              c.email AS cliente_email,
+              c.telefone AS cliente_telefone,
+              a.tipo_local,
+              a.local,
+              a.lembrete,
+              a.status,
+              a.datacadastro,
+              a.dataatualizacao
+         FROM public.agenda a
+         LEFT JOIN public.tipo_evento te ON te.id = a.tipo
+         LEFT JOIN public.clientes c ON c.id = a.cliente
+        WHERE a.idusuario = $1
+        ORDER BY a.data, a.hora_inicio`,
+      [req.auth.userId]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const listAgendasByEmpresa = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
     const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
 
     if (!empresaLookup.success) {
@@ -135,9 +178,8 @@ export const listAgendas = async (req: Request, res: Response) => {
          LEFT JOIN public.tipo_evento te ON te.id = a.tipo
          LEFT JOIN public.clientes c ON c.id = a.cliente
         WHERE a.idempresa IS NOT DISTINCT FROM $1
-          AND a.idusuario = $2
         ORDER BY a.data, a.hora_inicio`,
-      [empresaId, req.auth.userId]
+      [empresaId]
     );
 
     res.json(result.rows);
@@ -153,26 +195,13 @@ export const getTotalCompromissosHoje = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res.json({ total_compromissos_hoje: 0 });
-    }
-
     const result = await pool.query(
       `SELECT COUNT(*) AS total_compromissos_hoje
          FROM public.agenda
         WHERE "data" = CURRENT_DATE
           AND status <> 0
-          AND idempresa IS NOT DISTINCT FROM $1
-          AND idusuario = $2`,
-      [empresaId, req.auth.userId]
+          AND idusuario = $1`,
+      [req.auth.userId]
     );
 
     res.json({
