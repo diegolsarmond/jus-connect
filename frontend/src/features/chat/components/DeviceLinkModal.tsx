@@ -82,12 +82,12 @@ export const DeviceLinkContent = ({
       },
       {
         title: "Escaneie o QR Code",
-        description: "Utilize a câmera do aparelho para ler o código exibido no painel do WAHA.",
+        description: "Utilize a câmera do aparelho para ler o código exibido no painel do sistema.",
         icon: <QrCode size={18} aria-hidden="true" />,
       },
       {
         title: "Sincronização automática",
-        description: "Aguarde alguns instantes até que o WAHA sincronize as conversas com o JusConnect.",
+        description: "Aguarde alguns instantes até que o WhatsApp sincronize as conversas com o QuantumJus.",
         icon: <ShieldCheck size={18} aria-hidden="true" />,
       },
       {
@@ -237,7 +237,7 @@ export const DeviceLinkContent = ({
       <div className={styles.instructions}>
         <h2>Como conectar</h2>
         <p>
-          Após a leitura do QR Code, o WAHA mantém a sessão ativa e sincroniza automaticamente as
+          Após a leitura do QR Code, o WhatsApp mantém a sessão ativa e sincroniza automaticamente as
           mensagens com o painel de conversas.
         </p>
         <ol className={styles.steps}>
@@ -316,8 +316,7 @@ export const DeviceLinkContent = ({
             </div>
           ) : sessionQuery.isError ? (
             <div className={styles.sessionError} role="alert">
-              Não foi possível carregar o status da sessão. Tente atualizar novamente ou verifique as
-              credenciais do WAHA.
+              Não foi possível carregar o status da sessão. Tente atualizar novamente ou entre em contato com o suporte.
             </div>
           ) : (
             <p className={styles.statusDescription}>{statusInfo.description}</p>
