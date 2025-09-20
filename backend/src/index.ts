@@ -178,7 +178,23 @@ cronJobs.startProjudiSyncJob();
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
+const swaggerUiOptions = {
+  explorer: true,
+  swaggerOptions: {
+    url: '/api-docs/swagger.json',
+  },
+};
+
+app.get('/api-docs/swagger.json', (_req, res) => {
+  res.json(specs);
+});
+
+app.use(
+  '/api-docs',
+  swaggerUi.serveFiles(undefined, swaggerUiOptions),
+  swaggerUi.setup(undefined, swaggerUiOptions)
+);
 
 // Static frontend (when available)
 const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
