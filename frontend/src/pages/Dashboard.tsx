@@ -15,6 +15,12 @@ type ProcessoDashboardMetrics = {
   closingRate: number;
 };
 
+type ClienteDashboardMetrics = {
+  total: number;
+  active: number;
+  prospects: number;
+};
+
 type ProcessoApiSummary = {
   status?: string | null;
 };
@@ -50,13 +56,77 @@ const isConcludedStatus = (status: unknown): boolean => {
   return CLOSED_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword));
 };
 
+type ClienteApiSummary = {
+  ativo?: unknown;
+  status?: unknown;
+  situacao?: unknown;
+  situacao_cliente?: unknown;
+};
+
+const isClienteAtivo = (cliente: ClienteApiSummary): boolean => {
+  const { ativo } = cliente;
+
+  if (typeof ativo === "boolean") {
+    return ativo;
+  }
+
+  if (typeof ativo === "number") {
+    return ativo > 0;
+  }
+
+  if (typeof ativo === "string") {
+    const normalized = normalizeStatus(ativo);
+
+    if (!normalized) {
+      // Continua a avaliação com base em outros campos
+    } else if (["true", "1", "sim", "s", "yes", "y"].includes(normalized)) {
+      return true;
+    } else if (["false", "0", "nao", "não", "n"].includes(normalized)) {
+      return false;
+    } else if (normalized.includes("inativ") || normalized.includes("desativ")) {
+      return false;
+    } else if (normalized.startsWith("ativo")) {
+      return true;
+    }
+  }
+
+  const statusCandidates = [cliente.status, cliente.situacao, cliente.situacao_cliente];
+
+  for (const candidate of statusCandidates) {
+    const normalized = normalizeStatus(candidate);
+
+    if (!normalized) {
+      continue;
+    }
+
+    if (normalized.includes("prospec")) {
+      return false;
+    }
+
+    if (normalized.includes("inativ") || normalized.includes("desativ")) {
+      return false;
+    }
+
+    if (normalized.startsWith("ativo")) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 export default function Dashboard() {
-  const { clientesAtivos, clientesProspecto, totalClientes, taxaConversao, crescimentoMensal } = mockAnalytics;
+  const { taxaConversao, crescimentoMensal } = mockAnalytics;
   const [processMetrics, setProcessMetrics] = useState<ProcessoDashboardMetrics>({
     total: mockAnalytics.processosAtivos + mockAnalytics.processosConcluidos,
     active: mockAnalytics.processosAtivos,
     concluded: mockAnalytics.processosConcluidos,
     closingRate: mockAnalytics.indiceEncerramento,
+  });
+  const [clientMetrics, setClientMetrics] = useState<ClienteDashboardMetrics>({
+    total: mockAnalytics.totalClientes,
+    active: mockAnalytics.clientesAtivos,
+    prospects: mockAnalytics.clientesProspecto,
   });
 
   useEffect(() => {
@@ -119,8 +189,87 @@ export default function Dashboard() {
     };
   }, []);
 
-  const processosPorCliente = clientesAtivos > 0
-    ? (processMetrics.active / clientesAtivos).toFixed(1)
+  useEffect(() => {
+    const abortController = new AbortController();
+    let isMounted = true;
+
+    const extractClientes = (payload: unknown): ClienteApiSummary[] => {
+      if (Array.isArray(payload)) {
+        return payload as ClienteApiSummary[];
+      }
+
+      if (payload && typeof payload === "object") {
+        const maybeRows = (payload as { rows?: unknown }).rows;
+
+        if (Array.isArray(maybeRows)) {
+          return maybeRows as ClienteApiSummary[];
+        }
+
+        const maybeData = (payload as { data?: unknown }).data;
+
+        if (Array.isArray(maybeData)) {
+          return maybeData as ClienteApiSummary[];
+        }
+
+        if (maybeData && typeof maybeData === "object") {
+          const nestedRows = (maybeData as { rows?: unknown }).rows;
+
+          if (Array.isArray(nestedRows)) {
+            return nestedRows as ClienteApiSummary[];
+          }
+        }
+      }
+
+      return [];
+    };
+
+    const loadClientMetrics = async () => {
+      try {
+        const response = await fetch(getApiUrl("clientes"), {
+          headers: { Accept: "application/json" },
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) {
+          console.error(`Falha ao carregar clientes para o dashboard (HTTP ${response.status})`);
+          return;
+        }
+
+        const payload = (await response.json()) as unknown;
+        const clientes = extractClientes(payload);
+
+        const total = clientes.length;
+        const active = clientes.reduce((count, cliente) => (isClienteAtivo(cliente) ? count + 1 : count), 0);
+        const prospects = Math.max(total - active, 0);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setClientMetrics({
+          total,
+          active,
+          prospects,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        console.error("Erro ao carregar clientes para o dashboard", error);
+      }
+    };
+
+    void loadClientMetrics();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, []);
+
+  const processosPorCliente = clientMetrics.active > 0
+    ? (processMetrics.active / clientMetrics.active).toFixed(1)
     : "0.0";
 
   return (
@@ -174,10 +323,10 @@ export default function Dashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalClientes}</div>
+            <div className="text-2xl font-bold">{clientMetrics.total}</div>
             <div className="flex gap-2 text-xs">
-              <Badge variant="secondary">{clientesAtivos} ativos</Badge>
-              <Badge variant="outline">{clientesProspecto} prospectos</Badge>
+              <Badge variant="secondary">{clientMetrics.active} ativos</Badge>
+              <Badge variant="outline">{clientMetrics.prospects} prospectos</Badge>
             </div>
           </CardContent>
         </Card>
@@ -301,7 +450,7 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">Índice de Encerramento</p>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{clientesAtivos}</div>
+              <div className="text-2xl font-bold text-primary">{clientMetrics.active}</div>
               <p className="text-sm text-muted-foreground">Clientes Ativos</p>
             </div>
           </div>
