@@ -152,7 +152,7 @@ export function Sidebar() {
                 href: "/configuracoes/parametros/area-de-atuacao",
                 moduleId: "configuracoes-parametros-area-atuacao",
               },
-              {
+              //{
               //  name: "Situação do Processo",
               //  href: "/configuracoes/parametros/situacao-processo",
               //  moduleId: "configuracoes-parametros-situacao-processo",
