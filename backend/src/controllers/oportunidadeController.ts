@@ -436,8 +436,15 @@ export const createOportunidade = async (req: Request, res: Response) => {
 
   try {
     client = await pool.connect();
-    await client.query('BEGIN');
-    const sequenceResult = await client.query(
+
+    if (!client) {
+      throw new Error('Não foi possível obter conexão com o banco de dados.');
+    }
+
+    const dbClient = client;
+
+    await dbClient.query('BEGIN');
+    const sequenceResult = await dbClient.query(
       `INSERT INTO public.oportunidade_sequence (empresa_id, atual)
        VALUES ($1, 1)
        ON CONFLICT (empresa_id)
@@ -452,7 +459,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
 
     const sequencialEmpresa: number = sequenceResult.rows[0].atual;
 
-    const result = await client.query(
+    const result = await dbClient.query(
       `INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
@@ -492,7 +499,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
     const oportunidade = result.rows[0];
     if (Array.isArray(envolvidos) && envolvidos.length > 0) {
       const queries = envolvidos.map((env: any) =>
-        client.query(
+        dbClient.query(
           `INSERT INTO public.oportunidade_envolvidos
            (oportunidade_id, nome, documento, telefone, endereco, relacao)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -509,7 +516,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
       await Promise.all(queries);
     }
     await createOrReplaceOpportunityInstallments(
-      client,
+      dbClient,
       oportunidade.id,
       valor_honorarios,
       forma_pagamento,
