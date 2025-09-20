@@ -369,13 +369,32 @@ export default function NovaOportunidade() {
   }, [processoDistribuido, form]);
 
   useEffect(() => {
-    if (user?.nome_completo) {
-      form.setValue("criado_por", user.nome_completo, {
+    if (typeof user?.id === "number") {
+      form.setValue("criado_por", String(user.id), {
         shouldDirty: false,
         shouldTouch: false,
       });
     }
   }, [user, form]);
+
+  const parseOptionalInteger = (value: string | null | undefined) => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+
+    const normalized = Math.trunc(parsed);
+    return normalized > 0 ? normalized : null;
+  };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -436,7 +455,10 @@ export default function NovaOportunidade() {
         contingenciamento: values.contingenciamento || null,
         detalhes: values.detalhes || null,
         documentos_anexados: null,
-        criado_por: user?.nome_completo || values.criado_por || null,
+        criado_por:
+          typeof user?.id === "number"
+            ? user.id
+            : parseOptionalInteger(values.criado_por),
         envolvidos: envolvidosFiltrados,
       };
 
