@@ -1,11 +1,45 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
-export const listSituacoesProposta = async (_req: Request, res: Response) => {
+const getAuthenticatedUser = (
+  req: Request,
+  res: Response
+): NonNullable<Request['auth']> | null => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  return req.auth;
+};
+
+export const listSituacoesProposta = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      'SELECT id, nome, ativo, datacriacao FROM public.situacao_proposta ORDER BY nome ASC'
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
 
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res
+        .status(empresaLookup.status)
+        .json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res.json([]);
+      return;
+    }
+
+    const result = await pool.query(
+      'SELECT id, nome, ativo, datacriacao FROM public.situacao_proposta WHERE idempresa = $1 ORDER BY nome ASC',
+      [empresaId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -17,9 +51,32 @@ export const listSituacoesProposta = async (_req: Request, res: Response) => {
 export const createSituacaoProposta = async (req: Request, res: Response) => {
   const { nome, ativo } = req.body;
   try {
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res
+        .status(empresaLookup.status)
+        .json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return;
+    }
+
     const result = await pool.query(
-      'INSERT INTO public.situacao_proposta (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao',
-      [nome, ativo]
+      'INSERT INTO public.situacao_proposta (nome, ativo, datacriacao, idempresa) VALUES ($1, $2, NOW(), $3) RETURNING id, nome, ativo, datacriacao',
+      [nome, ativo, empresaId]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
