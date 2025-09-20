@@ -26,12 +26,20 @@ type ApiUser = {
   id?: number | string;
   nome_completo?: string | null;
   email?: string | null;
-  perfil?: string | null;
+  perfil?: string | number | null;
+  idperfil?: string | number | null;
+  perfil_nome?: string | null;
   empresa?: number | string | null;
   empresa_id?: number | string | null;
   empresa_nome?: string | null;
   status?: boolean | number | string | null;
   ultimo_login?: string | null;
+};
+
+type ApiProfile = {
+  id?: number | string | null;
+  nome?: string | null;
+  ativo?: boolean | number | string | null;
 };
 
 type DisplayUser = {
@@ -123,18 +131,18 @@ const isNonEmptyString = (value: unknown): value is string => {
 
 const isAllDigits = (value: string) => /^\d+$/.test(value);
 
-const extractCompanyIdFromValue = (
-  value: ApiUser["empresa"] | ApiUser["empresa_id"],
-): string | null => {
+const extractIdLikeValue = (value: unknown): string | null => {
   if (typeof value === "number") {
     if (Number.isFinite(value)) {
       return String(value);
     }
+
     return null;
   }
 
   if (typeof value === "string") {
     const trimmed = value.trim();
+
     if (!trimmed) {
       return null;
     }
@@ -147,6 +155,12 @@ const extractCompanyIdFromValue = (
   return null;
 };
 
+const extractCompanyIdFromValue = (
+  value: ApiUser["empresa"] | ApiUser["empresa_id"],
+): string | null => {
+  return extractIdLikeValue(value);
+};
+
 const extractCompanyIdFromUser = (user: ApiUser | undefined): string | null => {
   if (!user) {
     return null;
@@ -156,6 +170,80 @@ const extractCompanyIdFromUser = (user: ApiUser | undefined): string | null => {
     extractCompanyIdFromValue(user.empresa_id) ??
     extractCompanyIdFromValue(user.empresa)
   );
+};
+
+const extractProfileIdFromValue = (
+  value: ApiUser["idperfil"] | ApiUser["perfil"],
+): string | null => {
+  return extractIdLikeValue(value);
+};
+
+const extractProfileIdFromUser = (user: ApiUser | undefined): string | null => {
+  if (!user) {
+    return null;
+  }
+
+  return (
+    extractProfileIdFromValue(user.idperfil) ?? extractProfileIdFromValue(user.perfil)
+  );
+};
+
+const extractProfileNameCandidate = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (isAllDigits(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const resolveProfileNameFromUser = (
+  user: ApiUser | undefined,
+  profileNames: Record<string, string>,
+): { id: string | null; name: string } => {
+  const profileId = extractProfileIdFromUser(user);
+
+  if (profileId) {
+    const mappedName = profileNames[profileId];
+
+    if (isNonEmptyString(mappedName)) {
+      return { id: profileId, name: mappedName.trim() };
+    }
+  }
+
+  const nameCandidates: Array<unknown> = [];
+  const perfilNome = (user as { perfil_nome?: unknown })?.perfil_nome;
+
+  if (isNonEmptyString(perfilNome)) {
+    nameCandidates.push(perfilNome);
+  }
+
+  if (typeof user?.perfil === "string") {
+    nameCandidates.push(user.perfil);
+  }
+
+  for (const candidate of nameCandidates) {
+    const name = extractProfileNameCandidate(candidate);
+
+    if (name && (!profileId || name !== profileId)) {
+      return { id: profileId, name };
+    }
+  }
+
+  if (profileId) {
+    return { id: profileId, name: `Perfil ${profileId}` };
+  }
+
+  return { id: null, name: "Sem perfil" };
 };
 
 const parseCompanyPayload = (payload: unknown): ApiCompany | null => {
@@ -203,6 +291,34 @@ const parseCompanyPayload = (payload: unknown): ApiCompany | null => {
   }
 
   return null;
+};
+
+const extractProfilesFromPayload = (payload: unknown): ApiProfile[] => {
+  if (Array.isArray(payload)) {
+    return payload as ApiProfile[];
+  }
+
+  if (payload && typeof payload === "object") {
+    const record = payload as { rows?: unknown; data?: unknown };
+
+    if (Array.isArray(record.rows)) {
+      return record.rows as ApiProfile[];
+    }
+
+    if (Array.isArray(record.data)) {
+      return record.data as ApiProfile[];
+    }
+
+    if (record.data && typeof record.data === "object") {
+      const nested = record.data as { rows?: unknown };
+
+      if (Array.isArray(nested.rows)) {
+        return nested.rows as ApiProfile[];
+      }
+    }
+  }
+
+  return [];
 };
 
 const resolveCompanyNameFromData = (company: ApiCompany | null): string | null => {
@@ -284,6 +400,7 @@ export default function UsersPage() {
     isActive: true,
   });
   const [companyNames, setCompanyNames] = useState<Record<string, string>>({});
+  const [profileNames, setProfileNames] = useState<Record<string, string>>({});
 
   const { toast } = useToast();
 
@@ -347,6 +464,66 @@ export default function UsersPage() {
       controller.abort();
     };
   }, [fetchUsers]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let isActive = true;
+
+    const loadProfiles = async () => {
+      try {
+        const response = await fetch(getApiUrl("perfis"), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Falha ao carregar perfis (${response.status}).`);
+        }
+
+        const payload = await response.json();
+
+        if (!isActive) {
+          return;
+        }
+
+        const profiles = extractProfilesFromPayload(payload);
+        const nextProfiles: Record<string, string> = {};
+
+        profiles.forEach((profile) => {
+          const profileId = extractIdLikeValue(profile.id);
+
+          if (!profileId) {
+            return;
+          }
+
+          const name = typeof profile.nome === "string" ? profile.nome.trim() : "";
+
+          if (name) {
+            nextProfiles[profileId] = name;
+          }
+        });
+
+        setProfileNames(nextProfiles);
+      } catch (fetchError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+          return;
+        }
+
+        console.error("Erro ao carregar perfis:", fetchError);
+      }
+    };
+
+    void loadProfiles();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, []);
 
   const companyIds = useMemo(() => {
     const ids = new Set<string>();
@@ -447,11 +624,8 @@ export default function UsersPage() {
       const displayName = nameCandidate ?? emailCandidate ?? `Usuário ${index + 1}`;
 
       const { name: companyName } = resolveCompanyNameFromUser(user, companyNames);
-
-      const role =
-        typeof user.perfil === "string" && user.perfil.trim().length > 0
-          ? user.perfil.trim()
-          : "Sem perfil";
+      const { name: profileName } = resolveProfileNameFromUser(user, profileNames);
+      const role = profileName;
       const roleNormalized = role.toLowerCase();
 
       const lastLogin =
@@ -475,7 +649,7 @@ export default function UsersPage() {
         searchText,
       } satisfies DisplayUser;
     });
-  }, [companyNames, users]);
+  }, [companyNames, profileNames, users]);
 
   const usersById = useMemo(() => {
     return new Map(
@@ -531,9 +705,15 @@ export default function UsersPage() {
       resolvedCompanyName === "Sem empresa"
         ? ""
         : resolvedCompanyName;
+    const { name: resolvedProfileName } = resolveProfileNameFromUser(
+      rawUser,
+      profileNames,
+    );
+    const normalizedRole =
+      resolvedProfileName === "Sem perfil" ? "" : resolvedProfileName;
     const role =
-      typeof rawUser?.perfil === "string" && rawUser.perfil.trim().length > 0
-        ? rawUser.perfil.trim()
+      normalizedRole.length > 0
+        ? normalizedRole
         : editUser.role === "Sem perfil"
           ? ""
           : editUser.role;
@@ -546,7 +726,7 @@ export default function UsersPage() {
       role,
       isActive,
     });
-  }, [companyNames, editUser, usersById]);
+  }, [companyNames, editUser, profileNames, usersById]);
 
   const filteredUsers = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
