@@ -369,13 +369,37 @@ export default function NovaOportunidade() {
   }, [processoDistribuido, form]);
 
   useEffect(() => {
-    if (user?.nome_completo) {
-      form.setValue("criado_por", user.nome_completo, {
+    if (typeof user?.id === "number") {
+      form.setValue("criado_por", String(user.id), {
+        shouldDirty: false,
+        shouldTouch: false,
+      });
+    } else {
+      form.setValue("criado_por", "", {
         shouldDirty: false,
         shouldTouch: false,
       });
     }
   }, [user, form]);
+
+  const parseOptionalInteger = (value: string | null | undefined) => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+
+    const normalized = Math.trunc(parsed);
+    return normalized > 0 ? normalized : null;
+  };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -436,7 +460,10 @@ export default function NovaOportunidade() {
         contingenciamento: values.contingenciamento || null,
         detalhes: values.detalhes || null,
         documentos_anexados: null,
-        criado_por: user?.nome_completo || values.criado_por || null,
+        criado_por:
+          typeof user?.id === "number"
+            ? user.id
+            : parseOptionalInteger(values.criado_por),
         envolvidos: envolvidosFiltrados,
       };
 
@@ -1221,22 +1248,34 @@ export default function NovaOportunidade() {
                   </AccordionContent>
                 </AccordionItem>
 
-                 <AccordionItem value="metadados">
+                <AccordionItem value="metadados">
                   <AccordionTrigger>SISTEMA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
                         control={form.control}
                         name="criado_por"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Criado por</FormLabel>
-                            <FormControl>
-                              <Input disabled {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const createdByName = user?.nome_completo?.trim() ?? "";
+
+                          return (
+                            <FormItem>
+                              <FormLabel>Criado por</FormLabel>
+                              <input
+                                type="hidden"
+                                name={field.name}
+                                value={field.value ?? ""}
+                                onBlur={field.onBlur}
+                                onChange={field.onChange}
+                                ref={field.ref}
+                              />
+                              <FormControl>
+                                <Input disabled value={createdByName} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
 
                       <FormField
