@@ -13,6 +13,43 @@
   overflow: auto;
 }
 
+.modalWrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: flex-end;
+  padding: 1.25rem 2rem 0;
+}
+
+.modalCloseButton {
+  border: none;
+  background: none;
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.modalCloseButton:hover,
+.modalCloseButton:focus-visible {
+  color: hsl(var(--foreground));
+  transform: translateY(-1px);
+}
+
+.modalCloseButton:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+.modalBody {
+  padding-top: 1.5rem;
+}
+
 .inlineContainer {
   width: min(1100px, 100%);
   margin: 0 auto;

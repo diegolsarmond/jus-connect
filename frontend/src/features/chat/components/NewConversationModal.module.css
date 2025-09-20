@@ -5,6 +5,32 @@
   gap: 1.5rem;
 }
 
+.closeRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.closeButton {
+  border: none;
+  background: none;
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.closeButton:hover,
+.closeButton:focus-visible {
+  color: hsl(var(--foreground));
+  transform: translateY(-1px);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
 .header {
   display: flex;
   flex-direction: column;

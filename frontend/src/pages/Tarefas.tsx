@@ -78,9 +78,13 @@ interface Task {
 
 const COLORS = ['#fbbf24', '#ef4444', '#22c55e'];
 
+const NONE_PROPOSAL_VALUE = '__none__';
+
 const formSchema = z
   .object({
-    process: z.string().min(1, 'Processo ou caso é obrigatório'),
+    process: z
+      .union([z.string().min(1, 'Processo ou caso é obrigatório'), z.literal(NONE_PROPOSAL_VALUE)])
+      .transform((value) => (value === NONE_PROPOSAL_VALUE ? null : value)),
     responsibles: z.array(z.string()).min(1, 'Adicionar responsável'),
     title: z.string().min(1, 'Tarefa é obrigatória'),
     date: z.string().min(1, 'Data é obrigatória'),
@@ -200,6 +204,7 @@ export default function Tarefas() {
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      process: NONE_PROPOSAL_VALUE,
       showOnAgenda: true,
       allDay: false,
       recurring: false,
@@ -379,9 +384,11 @@ export default function Tarefas() {
       }
     }
 
-    const selectedOpportunity = opportunities.find(
-      (o) => String(o.id) === data.process,
-    );
+    const selectedOpportunityId = data.process ?? null;
+    const selectedOpportunity =
+      selectedOpportunityId !== null
+        ? opportunities.find((o) => String(o.id) === selectedOpportunityId)
+        : undefined;
 
     const year =
       (selectedOpportunity?.data_criacao &&
@@ -390,10 +397,12 @@ export default function Tarefas() {
 
     const processText = selectedOpportunity
       ? formatOpportunityLabel(selectedOpportunity)
-      : formatOpportunityLabel(undefined, data.process, data.date);
+      : selectedOpportunityId === null
+      ? 'Nenhuma'
+      : formatOpportunityLabel(undefined, selectedOpportunityId, data.date);
 
     const payload = {
-      id_oportunidades: Number(data.process),
+      id_oportunidades: selectedOpportunityId ? Number(selectedOpportunityId) : null,
       titulo: data.title,
       descricao: data.description,
 
@@ -539,7 +548,7 @@ export default function Tarefas() {
   const handleEdit = (task: Task) => {
     setEditingTaskId(task.id);
     setOpen(true);
-    setValue('process', task.processId ? String(task.processId) : '');
+    setValue('process', task.processId ? String(task.processId) : NONE_PROPOSAL_VALUE);
     setValue('title', task.title);
     setValue('date', task.date.toISOString().slice(0, 10));
     setValue('time', task.time || '');
@@ -573,9 +582,10 @@ export default function Tarefas() {
     }
     return eventTypes.filter((type) => type.nome.toLowerCase().includes(query));
   }, [eventTypes, watchedTitle]);
-  const selectedProposal = opportunities.find(
-    (o) => String(o.id) === selectedProposalId,
-  );
+  const selectedProposal =
+    selectedProposalId && selectedProposalId !== NONE_PROPOSAL_VALUE
+      ? opportunities.find((o) => String(o.id) === selectedProposalId)
+      : undefined;
 
   // gera os dias com tarefas para o calendário
   const taskDates = useMemo(() => tasks.map((t) => startOfDay(t.date)), [tasks]);
@@ -801,7 +811,11 @@ export default function Tarefas() {
                       aria-expanded={openProposal}
                       className="w-full justify-between"
                     >
-                      {selectedProposal ? formatOpportunityLabel(selectedProposal) : 'Selecione'}
+                      {selectedProposal
+                        ? formatOpportunityLabel(selectedProposal)
+                        : selectedProposalId === NONE_PROPOSAL_VALUE
+                        ? 'Nenhuma'
+                        : 'Selecione'}
                       <ChevronsUpDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -811,6 +825,18 @@ export default function Tarefas() {
                       <CommandList>
                         <CommandEmpty>Nenhuma proposta encontrada.</CommandEmpty>
                         <CommandGroup>
+                          <CommandItem
+                            value="Nenhuma"
+                            onSelect={() => {
+                              setValue('process', NONE_PROPOSAL_VALUE);
+                              setOpenProposal(false);
+                            }}
+                          >
+                            Nenhuma
+                            {selectedProposalId === NONE_PROPOSAL_VALUE && (
+                              <Check className="ml-auto h-4 w-4" />
+                            )}
+                          </CommandItem>
                           {opportunities.map((o) => {
                             const label = formatOpportunityLabel(o);
                             return (

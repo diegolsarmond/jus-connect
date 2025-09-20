@@ -13,6 +13,7 @@ import { getApiUrl } from '@/lib/api';
 import { Info, AlertCircle } from 'lucide-react';
 import { AsaasChargeDialog } from '@/components/financial/AsaasChargeDialog';
 import type { CustomerOption } from '@/components/financial/AsaasChargeDialog';
+
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
@@ -83,6 +84,10 @@ async function fetchCustomersForFlows(): Promise<CustomerOption[]> {
 const FinancialFlows = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+import { AlertCircle } from 'lucide-react';
+
+const FinancialFlows = () => {
+  const queryClient = useQueryClient();
   const {
     data: flows = [],
     isLoading,
@@ -117,6 +122,7 @@ const FinancialFlows = () => {
   const handleStatusUpdated = useCallback((flowId: number, statuses: AsaasChargeStatus[]) => {
     setChargeStatusHistory((prev) => ({ ...prev, [flowId]: statuses }));
   }, []);
+
 
   type DerivedStatus = 'pendente' | 'pago' | 'vencido';
 
@@ -196,6 +202,32 @@ const FinancialFlows = () => {
           : dueDate && isBefore(dueDate, today)
             ? 'vencido'
             : 'pendente';
+      return {
+        ...flow,
+        computedStatus,
+        dueDate,
+        pagamentoDate,
+      };
+    });
+  }, [flows]);
+
+  const filteredFlows = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return detailedFlows.filter((flow) => {
+      const matchesSearch =
+        term.length === 0 ||
+        flow.descricao.toLowerCase().includes(term);
+      const matchesStatus =
+        statusFilter === 'all' ||
+        flow.computedStatus === statusFilter;
+      const matchesType = typeFilter === 'all' || flow.tipo === typeFilter;
+      const matchesOnlyOpen =
+        !onlyOpenCharges ||
+        (flow.computedStatus === 'pendente' || flow.computedStatus === 'vencido');
+
+      return matchesSearch && matchesStatus && matchesType && matchesOnlyOpen;
+    });
+  }, [detailedFlows, onlyOpenCharges, searchTerm, statusFilter, typeFilter]);
 
       return {
         ...flow,
@@ -220,6 +252,7 @@ const FinancialFlows = () => {
       return matchesSearch && matchesStatus && matchesType && matchesOnlyOpen;
     });
   }, [detailedFlows, onlyOpenCharges, searchTerm, statusFilter, typeFilter]);
+
 
   const periods = useMemo<PeriodGroup[]>(() => {
     const accumulator = new Map<string, { key: string; label: string; sortValue: number; flows: FlowWithDetails[] }>();
@@ -469,6 +502,7 @@ const FinancialFlows = () => {
                 checked={onlyOpenCharges}
                 onCheckedChange={(checked) => setOnlyOpenCharges(Boolean(checked))}
               />
+
               <label htmlFor="only-open" className="text-sm text-muted-foreground">
                 Mostrar pendentes e vencidas
               </label>

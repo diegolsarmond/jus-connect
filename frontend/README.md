@@ -42,6 +42,13 @@ O módulo de templates de documentos consome a API disponível em `http://localh
 
 Para facilitar o desenvolvimento utilizando a API de produção, o projeto inclui um arquivo `.env.development` com `VITE_API_URL=https://jusconnec.quantumtecnologia.com.br`. Assim, ao executar `npm run dev`, o frontend apontará automaticamente para os endpoints em produção.
 
+## Integração com cobranças Asaas
+
+- Garanta que as variáveis `ASAAS_API_URL`, `ASAAS_ACCESS_TOKEN` e `ASAAS_WEBHOOK_SECRET` estejam definidas no backend. Em ambientes locais você pode duplicar o arquivo [`../.env.example`](../.env.example).
+- No frontend, use `VITE_API_URL` para apontar para a API que expõe os endpoints `/api/asaas/*`.
+- Para validar o fluxo completo sem depender do Asaas, importe a coleção [`docs/asaas.postman_collection.json`](../docs/asaas.postman_collection.json) no Postman/Bruno e siga os passos sugeridos na documentação principal.
+- Ao receber `PAYMENT_CONFIRMED` o frontend deve exibir a linha da cobrança como quitada; use o webhook simulado (`/api/asaas/webhooks/mock`) quando estiver desenvolvendo offline.
+
 ## Conversas (Chat Omnichannel)
 
 Este projeto inclui uma área de conversas inspirada na experiência de mensageria profissional:

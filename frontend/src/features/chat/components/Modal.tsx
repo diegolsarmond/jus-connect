@@ -48,11 +48,6 @@ export const Modal = ({
   useEffect(() => {
     if (!open) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
       if (event.key === "Tab") {
         const focusable = containerRef.current?.querySelectorAll<HTMLElement>(
           focusableSelectors,
@@ -73,18 +68,19 @@ export const Modal = ({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
-  const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
+  const handleBackdropMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
-      onClose();
+      event.preventDefault();
+      event.stopPropagation();
     }
   };
 
   return createPortal(
-    <div className={styles.overlay} role="presentation" onMouseDown={handleBackdropClick}>
+    <div className={styles.overlay} role="presentation" onMouseDown={handleBackdropMouseDown}>
       <div
         ref={containerRef}
         className={clsx(styles.content, contentClassName)}

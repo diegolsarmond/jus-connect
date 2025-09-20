@@ -1,11 +1,12 @@
 import { getApiUrl } from './api';
 
-export const API_KEY_PROVIDERS = ['gemini', 'openai'] as const;
+export const API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas'] as const;
 export type ApiKeyProvider = (typeof API_KEY_PROVIDERS)[number];
 
 export const API_KEY_PROVIDER_LABELS: Record<ApiKeyProvider, string> = {
   gemini: 'Gemini',
   openai: 'OpenAI',
+  asaas: 'Asaas',
 };
 
 export const API_KEY_ENVIRONMENTS = ['producao', 'homologacao'] as const;
@@ -85,6 +86,7 @@ export interface GenerateAiTextResponse {
 }
 
 const API_KEYS_ENDPOINT = getApiUrl('integrations/api-keys');
+const ASAAS_VALIDATION_ENDPOINT = getApiUrl('integrations/providers/asaas/validate');
 
 async function parseErrorMessage(response: Response): Promise<string> {
   try {
@@ -167,6 +169,45 @@ export async function deleteIntegrationApiKey(id: number): Promise<void> {
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
   }
+}
+
+export interface ValidateAsaasIntegrationResponse {
+  success: boolean;
+  message?: string;
+}
+
+export async function validateAsaasIntegrationApiKey(
+  apiKeyId: number,
+): Promise<ValidateAsaasIntegrationResponse> {
+  const response = await fetch(ASAAS_VALIDATION_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ apiKeyId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response));
+  }
+
+  if (response.status === 204) {
+    return { success: true };
+  }
+
+  try {
+    const payload = (await response.json()) as Partial<ValidateAsaasIntegrationResponse> | null;
+    if (payload && typeof payload === 'object') {
+      const success = typeof payload.success === 'boolean' ? payload.success : true;
+      const message = typeof payload.message === 'string' ? payload.message : undefined;
+      return { success, message };
+    }
+  } catch (error) {
+    // ignore JSON parsing issues and fall back to success state
+  }
+
+  return { success: true };
 }
 
 export async function generateAiText(payload: GenerateAiTextPayload): Promise<GenerateAiTextResponse> {

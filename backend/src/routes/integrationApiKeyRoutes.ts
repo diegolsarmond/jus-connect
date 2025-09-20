@@ -5,8 +5,10 @@ import {
   getIntegrationApiKey,
   listIntegrationApiKeys,
   updateIntegrationApiKey,
+  validateAsaasIntegration,
 } from '../controllers/integrationApiKeyController';
 import { generateTextWithIntegration } from '../controllers/aiGenerationController';
+import { getAsaasWebhookSecret } from '../controllers/asaasIntegrationController';
 
 const router = Router();
 
@@ -68,7 +70,7 @@ router.get('/integrations/api-keys/:id', getIntegrationApiKey);
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai]
+ *                 enum: [gemini, openai, asaas]
  *               apiUrl:
  *                 type: string
  *                 format: uri
@@ -110,7 +112,7 @@ router.post('/integrations/api-keys', createIntegrationApiKey);
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai]
+ *                 enum: [gemini, openai, asaas]
  *               apiUrl:
  *                 type: string
  *                 format: uri
@@ -154,6 +156,31 @@ router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
 
 /**
  * @swagger
+ * /api/integrations/providers/asaas/validate:
+ *   post:
+ *     summary: Testa a conexão com o Asaas utilizando uma chave cadastrada
+ *     tags: [Integrações]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - apiKeyId
+ *             properties:
+ *               apiKeyId:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Resultado da validação da chave
+ *       400:
+ *         description: Requisição inválida ou chave inexistente
+ */
+router.post('/integrations/providers/asaas/validate', validateAsaasIntegration);
+
+/**
+ * @swagger
  * /api/integrations/ai/generate:
  *   post:
  *     summary: Gera um texto com IA utilizando uma integração cadastrada
@@ -184,5 +211,7 @@ router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
  *         description: Integração não encontrada ou inativa
  */
 router.post('/integrations/ai/generate', generateTextWithIntegration);
+
+router.get('/integrations/asaas/credentials/:credentialId/webhook-secret', getAsaasWebhookSecret);
 
 export default router;

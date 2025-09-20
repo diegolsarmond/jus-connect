@@ -3,10 +3,16 @@ import projudiNotificationService, {
   ProjudiConfigurationError,
   ProjudiNotificationService,
 } from './projudiNotificationService';
+import asaasChargeSyncService, {
+  AsaasChargeSyncService,
+  AsaasConfigurationError,
+  AsaasSyncResult,
+} from './asaasChargeSync';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 hours
 const DEFAULT_OVERLAP_MS = 60 * 1000; // 1 minute
+const DEFAULT_ASAAS_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface ProjudiSyncStatus {
   enabled: boolean;
@@ -19,6 +25,19 @@ export interface ProjudiSyncStatus {
   lastResult?: FetchIntimacoesResult;
   lastReferenceUsed: string | null;
   nextReference: string | null;
+  nextRunAt: string | null;
+  lastManualTriggerAt: string | null;
+}
+
+export interface AsaasSyncStatus {
+  enabled: boolean;
+  running: boolean;
+  intervalMs: number;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage?: string;
+  lastResult?: AsaasSyncResult;
   nextRunAt: string | null;
   lastManualTriggerAt: string | null;
 }
@@ -41,12 +60,30 @@ interface InternalProjudiState {
 
 export class CronJobsService {
   private readonly projudiService: ProjudiNotificationService;
+  private readonly asaasService: AsaasChargeSyncService;
   private projudiTimer: NodeJS.Timeout | null = null;
   private projudiRunning = false;
+  private asaasTimer: NodeJS.Timeout | null = null;
+  private asaasRunning = false;
   private projudiState: InternalProjudiState;
+  private asaasState: {
+    enabled: boolean;
+    intervalMs: number;
+    lastRunAt: Date | null;
+    lastSuccessAt: Date | null;
+    lastErrorAt: Date | null;
+    lastErrorMessage?: string;
+    lastResult?: AsaasSyncResult;
+    nextRunAt: Date | null;
+    lastManualTriggerAt: Date | null;
+  };
 
-  constructor(service: ProjudiNotificationService = projudiNotificationService) {
-    this.projudiService = service;
+  constructor(
+    projudiService: ProjudiNotificationService = projudiNotificationService,
+    asaasService: AsaasChargeSyncService = asaasChargeSyncService
+  ) {
+    this.projudiService = projudiService;
+    this.asaasService = asaasService;
 
     const intervalMs = this.resolveIntervalFromEnv();
     const lookbackMs = this.resolveLookbackFromEnv();
@@ -59,6 +96,18 @@ export class CronJobsService {
       overlapMs,
       nextReference: this.computeInitialReference(lookbackMs),
       lastReferenceUsed: null,
+      lastRunAt: null,
+      lastSuccessAt: null,
+      lastErrorAt: null,
+      lastErrorMessage: undefined,
+      lastResult: undefined,
+      nextRunAt: null,
+      lastManualTriggerAt: null,
+    };
+
+    this.asaasState = {
+      enabled: false,
+      intervalMs: this.resolveAsaasIntervalFromEnv(),
       lastRunAt: null,
       lastSuccessAt: null,
       lastErrorAt: null,
@@ -153,6 +202,82 @@ export class CronJobsService {
     };
   }
 
+  startAsaasChargeSyncJob(): void {
+    if (!this.asaasService.hasValidConfiguration()) {
+      this.stopAsaasChargeSyncJob();
+      return;
+    }
+
+    this.asaasState.intervalMs = this.resolveAsaasIntervalFromEnv();
+    this.asaasState.enabled = true;
+
+    if (this.asaasTimer) {
+      clearInterval(this.asaasTimer);
+    }
+
+    const scheduleNextRun = () => {
+      this.asaasState.nextRunAt = new Date(Date.now() + this.asaasState.intervalMs);
+    };
+
+    this.asaasTimer = setInterval(() => {
+      void this.runAsaasChargeSync(false).catch((error) => {
+        if (!(error instanceof AsaasConfigurationError)) {
+          console.error('[CronJobs] Falha ao executar sincronização automática do Asaas.', error);
+        }
+      });
+      scheduleNextRun();
+    }, this.asaasState.intervalMs);
+
+    scheduleNextRun();
+
+    void this.runAsaasChargeSync(false).catch((error) => {
+      if (!(error instanceof AsaasConfigurationError)) {
+        console.error('[CronJobs] Falha ao executar sincronização inicial do Asaas.', error);
+      }
+    });
+  }
+
+  stopAsaasChargeSyncJob(): void {
+    if (this.asaasTimer) {
+      clearInterval(this.asaasTimer);
+      this.asaasTimer = null;
+    }
+    this.asaasState.enabled = false;
+    this.asaasState.nextRunAt = null;
+  }
+
+  async triggerAsaasSyncNow(): Promise<{ status: AsaasSyncStatus; triggered: boolean }> {
+    if (!this.asaasService.hasValidConfiguration()) {
+      throw new AsaasConfigurationError(
+        'Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.',
+      );
+    }
+
+    const alreadyRunning = this.asaasRunning;
+
+    if (!alreadyRunning) {
+      await this.runAsaasChargeSync(true);
+      return { status: this.getAsaasSyncStatus(), triggered: true };
+    }
+
+    return { status: this.getAsaasSyncStatus(), triggered: false };
+  }
+
+  getAsaasSyncStatus(): AsaasSyncStatus {
+    return {
+      enabled: this.asaasState.enabled && this.asaasService.hasValidConfiguration(),
+      running: this.asaasRunning,
+      intervalMs: this.asaasState.intervalMs,
+      lastRunAt: formatOptionalDate(this.asaasState.lastRunAt),
+      lastSuccessAt: formatOptionalDate(this.asaasState.lastSuccessAt),
+      lastErrorAt: formatOptionalDate(this.asaasState.lastErrorAt),
+      lastErrorMessage: this.asaasState.lastErrorMessage,
+      lastResult: this.asaasState.lastResult,
+      nextRunAt: formatOptionalDate(this.asaasState.nextRunAt),
+      lastManualTriggerAt: formatOptionalDate(this.asaasState.lastManualTriggerAt),
+    };
+  }
+
   private async runProjudiSync(manual: boolean): Promise<void> {
     if (this.projudiRunning) {
       return;
@@ -188,6 +313,40 @@ export class CronJobsService {
       throw error;
     } finally {
       this.projudiRunning = false;
+    }
+  }
+
+  private async runAsaasChargeSync(manual: boolean): Promise<void> {
+    if (this.asaasRunning) {
+      return;
+    }
+
+    if (!this.asaasService.hasValidConfiguration()) {
+      this.stopAsaasChargeSyncJob();
+      throw new AsaasConfigurationError(
+        'Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.',
+      );
+    }
+
+    this.asaasRunning = true;
+    const runStartedAt = new Date();
+    this.asaasState.lastRunAt = runStartedAt;
+    if (manual) {
+      this.asaasState.lastManualTriggerAt = runStartedAt;
+    }
+
+    try {
+      const result = await this.asaasService.syncPendingCharges();
+      this.asaasState.lastResult = result;
+      this.asaasState.lastSuccessAt = new Date();
+      this.asaasState.lastErrorAt = null;
+      this.asaasState.lastErrorMessage = undefined;
+    } catch (error) {
+      this.asaasState.lastErrorAt = new Date();
+      this.asaasState.lastErrorMessage = error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      this.asaasRunning = false;
     }
   }
 
@@ -258,6 +417,15 @@ export class CronJobsService {
     }
 
     return DEFAULT_OVERLAP_MS;
+  }
+
+  private resolveAsaasIntervalFromEnv(): number {
+    const ms = parsePositiveNumber(process.env.ASAAS_SYNC_INTERVAL_MS);
+    if (ms) {
+      return ms;
+    }
+
+    return DEFAULT_ASAAS_INTERVAL_MS;
   }
 }
 
