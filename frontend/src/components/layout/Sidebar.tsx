@@ -153,11 +153,6 @@ export function Sidebar() {
                 moduleId: "configuracoes-parametros-area-atuacao",
               },
               {
-                name: "Situação do Processo",
-                href: "/configuracoes/parametros/situacao-processo",
-                moduleId: "configuracoes-parametros-situacao-processo",
-              },
-              {
                 name: "Tipo de Processo",
                 href: "/configuracoes/parametros/tipo-processo",
                 moduleId: "configuracoes-parametros-tipo-processo",
@@ -166,11 +161,6 @@ export function Sidebar() {
                 name: "Tipo de Evento",
                 href: "/configuracoes/parametros/tipo-evento",
                 moduleId: "configuracoes-parametros-tipo-evento",
-              },
-              {
-                name: "Situação da Proposta",
-                href: "/configuracoes/parametros/situacao-proposta",
-                moduleId: "configuracoes-parametros-situacao-proposta",
               },
               {
                 name: "Etiquetas",
