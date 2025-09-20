@@ -93,7 +93,7 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
 };
 
 const baseUsuarioSelect =
-  'SELECT id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao FROM public.vw_usuarios vu';
+  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, u.status, u.senha, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u';
 
 type EmpresaLookupResult =
   | { success: true; empresaId: number | null }
@@ -138,31 +138,34 @@ export const listUsuarios = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const empresaUsuarioResult = await pool.query(
-      'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
-      [req.auth.userId]
-    );
+    const result = await pool.query(baseUsuarioSelect);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
-    if (empresaUsuarioResult.rowCount === 0) {
-      return res.status(404).json({ error: 'Usuário autenticado não encontrado' });
+export const listUsuariosByEmpresa = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const empresaAtualResult = parseOptionalId(
-      (empresaUsuarioResult.rows[0] as { empresa: unknown }).empresa
-    );
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
 
-    if (empresaAtualResult === 'invalid') {
-      return res
-        .status(500)
-        .json({ error: 'Não foi possível identificar a empresa do usuário autenticado.' });
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
     }
 
-    if (empresaAtualResult === null) {
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
       return res.json([]);
     }
 
     const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
-      empresaAtualResult,
+      empresaId,
     ]);
     res.json(result.rows);
   } catch (error) {
@@ -187,7 +190,7 @@ export const getUsuarioById = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     const result = await pool.query(
-      `${baseUsuarioSelect} INNER JOIN public.usuarios u ON u.id = vu.id WHERE vu.id = $1 AND u.empresa IS NOT DISTINCT FROM $2::INT`,
+      `${baseUsuarioSelect} WHERE u.id = $1 AND u.empresa IS NOT DISTINCT FROM $2::INT`,
       [id, empresaId]
     );
 

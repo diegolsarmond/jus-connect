@@ -9,10 +9,14 @@ process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
 
+let listUsuarios: typeof import('../src/controllers/usuarioController')['listUsuarios'];
+let listUsuariosByEmpresa: typeof import('../src/controllers/usuarioController')['listUsuariosByEmpresa'];
 let getUsuarioById: typeof import('../src/controllers/usuarioController')['getUsuarioById'];
 
 test.before(async () => {
-  ({ getUsuarioById } = await import('../src/controllers/usuarioController'));
+  ({ listUsuarios, listUsuariosByEmpresa, getUsuarioById } = await import(
+    '../src/controllers/usuarioController'
+  ));
 });
 
 const createMockResponse = () => {
@@ -64,6 +68,94 @@ const createAuth = (userId: number) => ({
   },
 });
 
+test('listUsuarios returns all users', async () => {
+  const userRows = [
+    {
+      id: 1,
+      nome_completo: 'Maria Silva',
+      cpf: '12345678901',
+      email: 'maria@example.com',
+      perfil: 'admin',
+      empresa: 42,
+      setor: 7,
+      oab: '12345',
+      status: true,
+      senha: '$hashed',
+      telefone: '(11) 99999-0000',
+      ultimo_login: '2024-01-01T12:00:00.000Z',
+      observacoes: null,
+      datacriacao: '2023-01-01T12:00:00.000Z',
+    },
+  ];
+
+  const { calls, restore } = setupQueryMock([
+    { rows: userRows, rowCount: userRows.length },
+  ]);
+
+  const req = {
+    auth: createAuth(10),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await listUsuarios(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, userRows);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios u/);
+  assert.equal(calls[0]?.values, undefined);
+});
+
+test('listUsuariosByEmpresa returns users filtered by authenticated company', async () => {
+  const userRows = [
+    {
+      id: 2,
+      nome_completo: 'João Souza',
+      cpf: '98765432100',
+      email: 'joao@example.com',
+      perfil: 'user',
+      empresa: 55,
+      setor: 9,
+      oab: '54321',
+      status: true,
+      senha: '$hashed',
+      telefone: '(21) 98888-1111',
+      ultimo_login: '2024-02-02T15:00:00.000Z',
+      observacoes: null,
+      datacriacao: '2023-02-02T15:00:00.000Z',
+    },
+  ];
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 55 }], rowCount: 1 },
+    { rows: userRows, rowCount: userRows.length },
+  ]);
+
+  const req = {
+    auth: createAuth(20),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await listUsuariosByEmpresa(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, userRows);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /WHERE u\.empresa = \$1/);
+  assert.deepEqual(calls[1]?.values, [55]);
+});
+
 test('getUsuarioById returns user when it belongs to the same company', async () => {
   const userRow = {
     id: 123,
@@ -104,7 +196,7 @@ test('getUsuarioById returns user when it belongs to the same company', async ()
   assert.deepEqual(res.body, userRow);
   assert.equal(calls.length, 2);
   assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
-  assert.match(calls[1]?.text ?? '', /JOIN public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /FROM public\.usuarios u/);
   assert.match(calls[1]?.text ?? '', /u\.empresa IS NOT DISTINCT FROM \$2::INT/);
   assert.deepEqual(calls[1]?.values, ['123', 42]);
 });

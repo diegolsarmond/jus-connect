@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listUsuarios,
+  listUsuariosByEmpresa,
   getUsuarioById,
   createUsuario,
   updateUsuario,
@@ -68,6 +69,24 @@ const router = Router();
  *                 $ref: '#/components/schemas/Usuario'
  */
 router.get(['/usuarios', '/users'], listUsuarios);
+
+/**
+ * @swagger
+ * /api/usuarios/empresa:
+ *   get:
+ *     summary: Lista usuários da empresa do usuário autenticado
+ *     tags: [Usuarios]
+ *     responses:
+ *       200:
+ *         description: Lista de usuários filtrados por empresa
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Usuario'
+ */
+router.get(['/usuarios/empresa', '/users/company'], listUsuariosByEmpresa);
 
 /**
  * @swagger
@@ -218,6 +237,7 @@ router.put(['/usuarios/:id', '/users/:id'], updateUsuario);
 router.delete(['/usuarios/:id', '/users/:id'], deleteUsuario);
 
 router.get('/users', listUsuarios);
+router.get('/users/company', listUsuariosByEmpresa);
 router.get('/users/:id', getUsuarioById);
 router.post('/users', createUsuario);
 router.put('/users/:id', updateUsuario);
