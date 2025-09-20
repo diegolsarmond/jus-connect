@@ -4,8 +4,10 @@ import IntegrationApiKeyService, {
   UpdateIntegrationApiKeyInput,
   ValidationError,
 } from '../services/integrationApiKeyService';
+import IntegrationApiKeyValidationService from '../services/integrationApiKeyValidationService';
 
 const service = new IntegrationApiKeyService();
+const validationService = new IntegrationApiKeyValidationService();
 
 function parseIdParam(param: string): number | null {
   const value = Number(param);
@@ -198,6 +200,29 @@ export async function deleteIntegrationApiKey(req: Request, res: Response) {
     return res.status(204).send();
   } catch (error) {
     console.error('Failed to delete integration API key:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function validateAsaasIntegration(req: Request, res: Response) {
+  const { apiKeyId } = req.body as { apiKeyId?: unknown };
+
+  const parsedId =
+    typeof apiKeyId === 'number'
+      ? apiKeyId
+      : typeof apiKeyId === 'string'
+        ? Number(apiKeyId)
+        : Number.NaN;
+
+  try {
+    const result = await validationService.validateAsaas(parsedId);
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.error('Failed to validate Asaas integration API key:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

@@ -1,14 +1,26 @@
 -- Estrutura para armazenamento de chaves de API das integrações
 CREATE TABLE IF NOT EXISTS integration_api_keys (
   id BIGSERIAL PRIMARY KEY,
-  provider TEXT NOT NULL CHECK (provider IN ('gemini', 'openai')),
+  provider TEXT NOT NULL CHECK (provider IN ('gemini', 'openai', 'asaas')),
+  url_api TEXT,
   key_value TEXT NOT NULL,
+  url_api TEXT NULL,
   environment TEXT NOT NULL CHECK (environment IN ('producao', 'homologacao')),
   active BOOLEAN NOT NULL DEFAULT TRUE,
   last_used TIMESTAMPTZ NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE integration_api_keys
+  ADD COLUMN IF NOT EXISTS url_api TEXT;
+
+ALTER TABLE integration_api_keys
+  DROP CONSTRAINT IF EXISTS integration_api_keys_provider_check;
+
+ALTER TABLE integration_api_keys
+  ADD CONSTRAINT integration_api_keys_provider_check
+  CHECK (provider IN ('gemini', 'openai', 'asaas'));
 
 CREATE INDEX IF NOT EXISTS idx_integration_api_keys_provider
   ON integration_api_keys (provider);

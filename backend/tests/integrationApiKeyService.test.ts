@@ -72,6 +72,90 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   assert.deepEqual(result, expected);
 });
 
+test('IntegrationApiKeyService.create assigns default API URL for Asaas in produção', async () => {
+  const insertedRow = {
+    id: 2,
+    provider: 'asaas',
+    url_api: 'https://api.asaas.com/api/v3',
+    key_value: 'asaas_prod_token',
+    environment: 'producao',
+    active: true,
+    last_used: null,
+    created_at: '2024-01-02T00:00:00.000Z',
+    updated_at: '2024-01-02T00:00:00.000Z',
+  };
+
+  const pool = new FakePool([
+    { rows: [insertedRow], rowCount: 1 },
+  ]);
+
+  const service = new IntegrationApiKeyService(pool as any);
+
+  const payload: CreateIntegrationApiKeyInput = {
+    provider: 'Asaas',
+    apiUrl: '   ',
+    key: '  asaas_prod_token  ',
+    environment: 'producao',
+  };
+
+  const result = await service.create(payload);
+
+  assert.deepEqual(pool.calls[0].values, [
+    'asaas',
+    'https://api.asaas.com/api/v3',
+    'asaas_prod_token',
+    'producao',
+    true,
+    null,
+  ]);
+
+  assert.equal(result.provider, 'asaas');
+  assert.equal(result.apiUrl, 'https://api.asaas.com/api/v3');
+  assert.equal(result.environment, 'producao');
+});
+
+test('IntegrationApiKeyService.create assigns sandbox URL for Asaas in homologação when apiUrl omitted', async () => {
+  const insertedRow = {
+    id: 3,
+    provider: 'asaas',
+    url_api: 'https://sandbox.asaas.com/api/v3',
+    key_value: 'asaas_sbx_token',
+    environment: 'homologacao',
+    active: false,
+    last_used: null,
+    created_at: '2024-01-03T00:00:00.000Z',
+    updated_at: '2024-01-03T00:00:00.000Z',
+  };
+
+  const pool = new FakePool([
+    { rows: [insertedRow], rowCount: 1 },
+  ]);
+
+  const service = new IntegrationApiKeyService(pool as any);
+
+  const payload: CreateIntegrationApiKeyInput = {
+    provider: 'asaas',
+    key: 'asaas_sbx_token',
+    environment: 'homologacao',
+    active: false,
+  };
+
+  const result = await service.create(payload);
+
+  assert.deepEqual(pool.calls[0].values, [
+    'asaas',
+    'https://sandbox.asaas.com/api/v3',
+    'asaas_sbx_token',
+    'homologacao',
+    false,
+    null,
+  ]);
+
+  assert.equal(result.provider, 'asaas');
+  assert.equal(result.apiUrl, 'https://sandbox.asaas.com/api/v3');
+  assert.equal(result.active, false);
+});
+
 test('IntegrationApiKeyService.create validates provider and key', async () => {
   const pool = new FakePool([]);
   const service = new IntegrationApiKeyService(pool as any);
@@ -117,6 +201,36 @@ test('IntegrationApiKeyService.list retrieves keys ordered by creation date', as
   assert.equal(result[0].provider, 'openai');
   assert.equal(result[0].apiUrl, 'https://sandbox.openai.com');
   assert.equal(result[0].lastUsed, '2024-02-10T12:00:00.000Z');
+});
+
+test('IntegrationApiKeyService.list includes Asaas entries with inactive status', async () => {
+  const rows = [
+    {
+      id: 11,
+      provider: 'asaas',
+      url_api: 'https://sandbox.asaas.com/api/v3',
+      key_value: 'asaas_key_value',
+      environment: 'homologacao',
+      active: false,
+      last_used: null,
+      created_at: '2024-02-12T10:00:00.000Z',
+      updated_at: '2024-02-12T11:00:00.000Z',
+    },
+  ];
+
+  const pool = new FakePool([
+    { rows, rowCount: rows.length },
+  ]);
+
+  const service = new IntegrationApiKeyService(pool as any);
+
+  const result = await service.list();
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].provider, 'asaas');
+  assert.equal(result[0].apiUrl, 'https://sandbox.asaas.com/api/v3');
+  assert.equal(result[0].environment, 'homologacao');
+  assert.equal(result[0].active, false);
 });
 
 test('IntegrationApiKeyService.list tolerates unexpected provider and environment values', async () => {
@@ -181,9 +295,9 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
   assert.ok(pool.calls[0].text.startsWith('UPDATE integration_api_keys'));
   assert.deepEqual(pool.calls[0].values?.slice(0, 5), [
     'openai',
+    'homologacao',
     'https://new.api.openai.com',
     'sk_new_value',
-    'homologacao',
     false,
   ]);
   const lastUsedValue = pool.calls[0].values?.[5];
