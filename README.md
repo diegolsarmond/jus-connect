@@ -42,6 +42,25 @@ O serviço executa uma rotina periódica para autenticar, consultar novas
 intimações e gravá-las na tabela `intimacoes`. É possível monitorar ou
 acionar a sincronização manualmente via `GET /api/notificacoes/projudi/sync`.
 
+### Integração com Asaas
+
+Para consumir a API de cobranças do Asaas por meio das credenciais gerenciadas
+em `integration_api_keys`:
+
+1. Execute novamente o script `psql -f sql/integration_api_keys.sql` para
+   garantir a presença da coluna `url_api` e do provedor `asaas` no `CHECK`.
+2. Cadastre uma chave com `provider` igual a `asaas` (via API ou tela de
+   configurações) informando o token de acesso do Asaas.
+3. Se o campo `url_api` não for preenchido, o backend assumirá automaticamente
+   os endpoints padrão:
+   - Produção: `https://api.asaas.com/api/v3`
+   - Homologação: `https://sandbox.asaas.com/api/v3`
+4. Utilize o endpoint `POST /api/integrations/providers/asaas/validate` para
+   testar a conexão após o cadastro da chave.
+
+Não são necessárias variáveis de ambiente adicionais além das credenciais
+registradas na tabela.
+
 ## Frontend
 
 ```bash

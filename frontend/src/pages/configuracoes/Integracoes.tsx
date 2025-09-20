@@ -10,6 +10,7 @@ import {
   Loader2,
   PencilLine,
   Webhook as WebhookIcon,
+  Info,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   API_KEY_ENVIRONMENT_LABELS,
@@ -57,6 +59,7 @@ import {
   updateIntegrationApiKey,
   getApiKeyProviderLabel,
   getApiKeyEnvironmentLabel,
+  validateAsaasIntegrationApiKey,
 } from "@/lib/integrationApiKeys";
 
 const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -155,6 +158,49 @@ const resolveEnvironmentLabel = (environment: string) =>
 
 const environmentOptions = Object.keys(API_KEY_ENVIRONMENT_LABELS) as ApiEnvironment[];
 
+const ASAAS_DEFAULT_ENDPOINTS: Record<ApiEnvironment, string> = {
+  producao: "https://api.asaas.com/api/v3",
+  homologacao: "https://sandbox.asaas.com/api/v3",
+};
+
+const AsaasEndpointTooltip = ({ selectedEnvironment }: { selectedEnvironment: ApiEnvironment }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span
+        className="inline-flex h-6 w-6 cursor-help items-center justify-center rounded-full border border-dashed border-muted-foreground/60 text-muted-foreground transition hover:text-foreground"
+        aria-label="Ver endpoints padrão do Asaas"
+        role="button"
+        tabIndex={0}
+      >
+        <Info className="h-3.5 w-3.5" />
+      </span>
+    </TooltipTrigger>
+    <TooltipContent className="max-w-xs space-y-2 text-xs">
+      <p className="font-medium text-foreground">Endpoints padrão Asaas</p>
+      <ul className="space-y-1 text-left">
+        {environmentOptions.map((environment) => {
+          const isSelected = environment === selectedEnvironment;
+          return (
+            <li key={environment} className="space-y-0.5">
+              <p className="font-medium text-foreground">
+                {API_KEY_ENVIRONMENT_LABELS[environment]}
+              </p>
+              <p
+                className={`font-mono ${
+                  isSelected ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {ASAAS_DEFAULT_ENDPOINTS[environment]}
+                {isSelected ? " • selecionado" : ""}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </TooltipContent>
+  </Tooltip>
+);
+
 const normalizeProviderValue = (
   value: string | null | undefined,
   fallback: ApiKeyProvider,
@@ -234,6 +280,7 @@ export default function Integracoes() {
   const [editingApiKeyId, setEditingApiKeyId] = useState<number | null>(null);
   const [isLoadingEditApiKey, setIsLoadingEditApiKey] = useState(false);
   const [isUpdatingApiKey, setIsUpdatingApiKey] = useState(false);
+  const [testingConnectionId, setTestingConnectionId] = useState<number | null>(null);
   const [editApiKeyForm, setEditApiKeyForm] = useState<EditApiKeyForm>({
     provider: fallbackProvider,
     environment: fallbackEnvironment,
@@ -527,6 +574,46 @@ export default function Integracoes() {
     }
   };
 
+  const testIntegrationConnection = async (apiKey: ApiKey) => {
+    if (apiKey.provider !== "asaas") {
+      return;
+    }
+
+    const providerLabel = resolveProviderLabel(apiKey.provider);
+    const environmentLabel = resolveEnvironmentLabel(apiKey.environment);
+    setTestingConnectionId(apiKey.id);
+
+    try {
+      const result = await validateAsaasIntegrationApiKey(apiKey.id);
+      if (result.success === false) {
+        throw new Error(
+          result.message?.trim() ||
+            `Não foi possível validar ${providerLabel} (${environmentLabel}).`,
+        );
+      }
+
+      const successDescription = result.message?.trim()
+        ? result.message
+        : `Conexão com ${providerLabel} (${environmentLabel}) validada com sucesso.`;
+
+      toast({
+        title: "Conexão validada",
+        description: successDescription,
+      });
+    } catch (error) {
+      toast({
+        title: "Falha ao testar conexão",
+        description:
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : `Não foi possível validar ${providerLabel} (${environmentLabel}).`,
+        variant: "destructive",
+      });
+    } finally {
+      setTestingConnectionId(null);
+    }
+  };
+
   const removeApiKey = async (id: number) => {
     const current = apiKeys.find((item) => item.id === id);
     if (!current) {
@@ -768,11 +855,20 @@ export default function Integracoes() {
               </div>
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto]">
-                <div className="space-y-2">
-                  <Label htmlFor="api-key-url">Endpoint da API</Label>
+              <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="api-key-url">Endpoint da API</Label>
+                    {newApiKey.provider === "asaas" && (
+                      <AsaasEndpointTooltip selectedEnvironment={newApiKey.environment} />
+                    )}
+                  </div>
                   <Input
                     id="api-key-url"
-                    placeholder="https://api.quantumtecnologia.com/v1"
+                    placeholder={
+                      newApiKey.provider === "asaas"
+                        ? ASAAS_DEFAULT_ENDPOINTS[newApiKey.environment]
+                        : "https://api.quantumtecnologia.com/v1"
+                    }
                     value={newApiKey.apiUrl}
                     onChange={(event) =>
                       setNewApiKey((prev) => ({ ...prev, apiUrl: event.target.value }))
@@ -814,7 +910,7 @@ export default function Integracoes() {
                   <TableHead>Criada em</TableHead>
                   <TableHead>Último uso</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-[150px]">Ações</TableHead>
+                  <TableHead className="w-[220px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -869,7 +965,24 @@ export default function Integracoes() {
                               />
                             </div>
                           </TableCell>
-                          <TableCell className="flex items-center gap-2">
+                          <TableCell className="flex flex-wrap items-center gap-2">
+                            {item.provider === "asaas" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void testIntegrationConnection(item)}
+                                disabled={testingConnectionId === item.id}
+                                className="h-8 gap-1"
+                              >
+                                {testingConnectionId === item.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <ShieldCheck className="h-4 w-4" />
+                                )}
+                                <span className="whitespace-nowrap">Testar conexão</span>
+                              </Button>
+                            )}
                             <Button
                               type="button"
                               size="icon"
@@ -1410,10 +1523,19 @@ export default function Integracoes() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-api-key-url">Endpoint da API</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="edit-api-key-url">Endpoint da API</Label>
+                  {editApiKeyForm.provider === "asaas" && (
+                    <AsaasEndpointTooltip selectedEnvironment={editApiKeyForm.environment} />
+                  )}
+                </div>
                 <Input
                   id="edit-api-key-url"
-                  placeholder="https://api.seuprovedor.com/v1"
+                  placeholder={
+                    editApiKeyForm.provider === "asaas"
+                      ? ASAAS_DEFAULT_ENDPOINTS[editApiKeyForm.environment]
+                      : "https://api.seuprovedor.com/v1"
+                  }
                   value={editApiKeyForm.apiUrl}
                   onChange={(event) =>
                     setEditApiKeyForm((prev) => ({ ...prev, apiUrl: event.target.value }))
