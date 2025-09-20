@@ -1,17 +1,107 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, isBefore, isValid, parseISO, startOfDay, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { fetchFlows, createFlow, settleFlow, Flow } from '@/lib/flows';
+import { fetchFlows, createFlow, settleFlow, Flow, AsaasCharge, AsaasChargeStatus } from '@/lib/flows';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { getApiUrl } from '@/lib/api';
+import { Info } from 'lucide-react';
+import { AsaasChargeDialog } from '@/components/financial/AsaasChargeDialog';
+import type { CustomerOption } from '@/components/financial/AsaasChargeDialog';
+
+function normalizeCustomerOption(entry: unknown): CustomerOption | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const record = entry as Record<string, unknown>;
+  const idCandidate =
+    record.id ??
+    record.clienteId ??
+    record.cliente_id ??
+    record.customerId ??
+    record.customer_id ??
+    record.externalId ??
+    record.external_id;
+
+  if (idCandidate === undefined || idCandidate === null) {
+    return null;
+  }
+
+  const id = String(idCandidate);
+  const nameCandidate =
+    record.nome ??
+    record.name ??
+    record.razaoSocial ??
+    record['razao_social'] ??
+    record.companyName ??
+    record.fantasia ??
+    record.legalName;
+
+  const emailCandidate = record.email ?? record.emailPrincipal ?? record.primaryEmail ?? record.contatoEmail;
+  const documentCandidate = record.cpfCnpj ?? record.documento ?? record.document ?? record.cnpj ?? record.cpf;
+
+  return {
+    id,
+    label: typeof nameCandidate === 'string' && nameCandidate.length > 0 ? nameCandidate : `Cliente ${id}`,
+    email: typeof emailCandidate === 'string' ? emailCandidate : undefined,
+    document: typeof documentCandidate === 'string' ? documentCandidate : undefined,
+    raw: entry,
+  };
+}
+
+async function fetchCustomersForFlows(): Promise<CustomerOption[]> {
+  const response = await fetch(getApiUrl('clientes'));
+  if (!response.ok) {
+    throw new Error(`Falha ao carregar clientes (HTTP ${response.status})`);
+  }
+
+  const payload = await response.json();
+  const listCandidates = Array.isArray(payload)
+    ? payload
+    : (payload?.items as unknown[]) ?? (payload?.data as unknown[]) ?? (payload?.results as unknown[]) ?? [];
+
+  return listCandidates
+    .map((entry) => normalizeCustomerOption(entry))
+    .filter((customer): customer is CustomerOption => Boolean(customer));
+}
 
 const FinancialFlows = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: flows = [] } = useQuery({ queryKey: ['flows'], queryFn: fetchFlows });
+  const {
+    data: customers = [],
+    isLoading: customersLoading,
+    error: customersError,
+  } = useQuery({ queryKey: ['flows-customers'], queryFn: fetchCustomersForFlows, staleTime: 1000 * 60 * 5 });
+
+  const [chargeDialogFlow, setChargeDialogFlow] = useState<Flow | null>(null);
+  const [chargeSummaries, setChargeSummaries] = useState<Record<number, AsaasCharge | null>>({});
+  const [chargeStatusHistory, setChargeStatusHistory] = useState<Record<number, AsaasChargeStatus[]>>({});
+
+  useEffect(() => {
+    if (customersError instanceof Error) {
+      toast({
+        title: 'Erro ao carregar clientes',
+        description: customersError.message,
+        variant: 'destructive',
+      });
+    }
+  }, [customersError, toast]);
+
+  const handleChargeSaved = useCallback((flowId: number, charge: AsaasCharge) => {
+    setChargeSummaries((prev) => ({ ...prev, [flowId]: charge }));
+  }, []);
+
+  const handleStatusUpdated = useCallback((flowId: number, statuses: AsaasChargeStatus[]) => {
+    setChargeStatusHistory((prev) => ({ ...prev, [flowId]: statuses }));
+  }, []);
 
   type DerivedStatus = 'pendente' | 'pago' | 'vencido';
 
@@ -305,19 +395,38 @@ const FinancialFlows = () => {
                             {statusSingleLabels[flow.computedStatus]}
                           </Badge>
                         </td>
-                        <td className="p-3 text-right">
-                          {flow.computedStatus !== 'pago' ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleSettleFlow(flow.id)}
-                              disabled={settleMutation.isPending}
-                            >
-                              {settleMutation.isPending ? 'Atualizando...' : 'Marcar como pago'}
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                        <td className="p-3">
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {flow.computedStatus !== 'pago' ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleSettleFlow(flow.id)}
+                                  disabled={settleMutation.isPending}
+                                >
+                                  {settleMutation.isPending ? 'Atualizando...' : 'Marcar como pago'}
+                                </Button>
+                              ) : (
+                                <span className="self-center text-xs text-muted-foreground">Pago</span>
+                              )}
+                              <Button
+                                size="sm"
+                                variant={chargeSummaries[flow.id] ? 'default' : 'secondary'}
+                                onClick={() => setChargeDialogFlow(flow)}
+                              >
+                                {chargeSummaries[flow.id] ? 'Gerenciar cobrança' : 'Gerar cobrança'}
+                              </Button>
+                            </div>
+                            {chargeSummaries[flow.id] ? (
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <Info className="h-3 w-3" aria-hidden="true" />
+                                {chargeSummaries[flow.id]?.status
+                                  ? `Último status: ${chargeSummaries[flow.id]?.status}`
+                                  : 'Cobrança gerada'}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -332,6 +441,22 @@ const FinancialFlows = () => {
           Nenhum lançamento financeiro cadastrado até o momento.
         </Card>
       )}
+
+      <AsaasChargeDialog
+        flow={chargeDialogFlow}
+        open={Boolean(chargeDialogFlow)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setChargeDialogFlow(null);
+          }
+        }}
+        customers={customers}
+        customersLoading={customersLoading}
+        onChargeCreated={handleChargeSaved}
+        onStatusUpdated={handleStatusUpdated}
+        persistedCharge={chargeDialogFlow ? chargeSummaries[chargeDialogFlow.id] ?? null : null}
+        persistedStatuses={chargeDialogFlow ? chargeStatusHistory[chargeDialogFlow.id] ?? [] : []}
+      />
     </div>
   );
 };
