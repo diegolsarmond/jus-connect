@@ -6,6 +6,7 @@ import {
   createUsuario,
   updateUsuario,
   deleteUsuario,
+  resetUsuarioSenha,
 } from '../controllers/usuarioController';
 
 const router = Router();
@@ -236,12 +237,15 @@ router.put(['/usuarios/:id', '/users/:id'], updateUsuario);
  */
 router.delete(['/usuarios/:id', '/users/:id'], deleteUsuario);
 
+router.post(['/usuarios/:id/reset-password', '/users/:id/reset-password'], resetUsuarioSenha);
+
 router.get('/users', listUsuarios);
 router.get('/users/company', listUsuariosByEmpresa);
 router.get('/users/:id', getUsuarioById);
 router.post('/users', createUsuario);
 router.put('/users/:id', updateUsuario);
 router.delete('/users/:id', deleteUsuario);
+router.post('/users/:id/reset-password', resetUsuarioSenha);
 
 export default router;
 

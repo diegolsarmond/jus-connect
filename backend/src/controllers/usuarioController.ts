@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { createPasswordResetRequest } from '../services/passwordResetService';
 
 const parseOptionalId = (value: unknown): number | null | 'invalid' => {
   if (value === undefined || value === null) {
@@ -409,6 +410,86 @@ export const deleteUsuario = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const resetUsuarioSenha = async (req: Request, res: Response) => {
+  if (!req.auth) {
+    return res.status(401).json({ error: 'Token inválido.' });
+  }
+
+  const { id } = req.params;
+
+  const targetUserId = Number.parseInt(id, 10);
+
+  if (!Number.isFinite(targetUserId)) {
+    return res.status(400).json({ error: 'ID de usuário inválido.' });
+  }
+
+  try {
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const targetUserResult = await pool.query(
+      'SELECT id, nome_completo, email, empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+      [targetUserId]
+    );
+
+    if (targetUserResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const targetUserRow = targetUserResult.rows[0] as {
+      id: number;
+      nome_completo: unknown;
+      email: unknown;
+      empresa: unknown;
+    };
+
+    const targetUserEmail = typeof targetUserRow.email === 'string' ? targetUserRow.email.trim() : '';
+
+    if (!targetUserEmail) {
+      return res.status(400).json({ error: 'Usuário não possui e-mail cadastrado.' });
+    }
+
+    const targetEmpresaIdResult = parseOptionalId(targetUserRow.empresa);
+
+    if (targetEmpresaIdResult === 'invalid') {
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível validar a empresa associada ao usuário informado.' });
+    }
+
+    const requesterEmpresaId = empresaLookup.empresaId;
+
+    if (
+      requesterEmpresaId !== null &&
+      targetEmpresaIdResult !== null &&
+      requesterEmpresaId !== targetEmpresaIdResult
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário não possui permissão para resetar a senha deste colaborador.' });
+    }
+
+    await createPasswordResetRequest({
+      id: targetUserRow.id,
+      nome_completo:
+        typeof targetUserRow.nome_completo === 'string'
+          ? targetUserRow.nome_completo
+          : 'Usuário',
+      email: targetUserEmail,
+    });
+
+    return res.status(200).json({
+      message: 'Senha redefinida com sucesso. Enviamos as instruções para o e-mail cadastrado.',
+    });
+  } catch (error) {
+    console.error('Erro ao resetar senha do usuário', error);
+    return res.status(500).json({ error: 'Não foi possível redefinir a senha do usuário.' });
   }
 };
 
