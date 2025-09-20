@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
-import { verifyPassword } from '../utils/passwordUtils';
+import { hashPassword, isPasswordHashed, verifyPassword } from '../utils/passwordUtils';
 import { signToken } from '../utils/tokenUtils';
 import { authConfig } from '../constants/auth';
 import { fetchPerfilModules } from '../services/moduleService';
@@ -65,6 +65,14 @@ export const login = async (req: Request, res: Response) => {
     if (!passwordMatches) {
       res.status(401).json({ error: 'E-mail ou senha incorretos.' });
       return;
+    }
+
+    if (!isPasswordHashed(user.senha)) {
+      const hashedPassword = await hashPassword(senha);
+      await pool.query('UPDATE public.usuarios SET senha = $1 WHERE id = $2', [
+        hashedPassword,
+        user.id,
+      ]);
     }
 
     const token = signToken(
