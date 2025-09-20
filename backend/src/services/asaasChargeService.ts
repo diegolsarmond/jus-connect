@@ -43,6 +43,10 @@ export interface AsaasClientChargeResponse {
   [key: string]: unknown;
 }
 
+type CreditCardResponse = NonNullable<
+  AsaasClientChargeResponse['creditCard'] | AsaasClientChargeResponse['creditCardData']
+>;
+
 export interface AsaasChargeRecord {
   id: number;
   financialFlowId: number;
@@ -314,6 +318,46 @@ function extractBoletoUrl(response: AsaasClientChargeResponse): string | null {
   return null;
 }
 
+function hasCreditCardNumberLast4(
+  card: CreditCardResponse,
+): card is CreditCardResponse & { creditCardNumberLast4?: string | null } {
+  return 'creditCardNumberLast4' in card;
+}
+
+function hasBrandProperty(card: CreditCardResponse): card is CreditCardResponse & { brand?: string | null } {
+  return 'brand' in card;
+}
+
+function resolveCardNumber(card: CreditCardResponse): string | null {
+  if (typeof card.creditCardNumber === 'string' && card.creditCardNumber.trim()) {
+    return card.creditCardNumber;
+  }
+
+  if (hasCreditCardNumberLast4(card)) {
+    const { creditCardNumberLast4 } = card;
+    if (typeof creditCardNumberLast4 === 'string' && creditCardNumberLast4.trim()) {
+      return creditCardNumberLast4;
+    }
+  }
+
+  return null;
+}
+
+function resolveCardBrand(card: CreditCardResponse): string | null {
+  if (typeof card.creditCardBrand === 'string' && card.creditCardBrand.trim()) {
+    return card.creditCardBrand;
+  }
+
+  if (hasBrandProperty(card)) {
+    const { brand } = card;
+    if (typeof brand === 'string' && brand.trim()) {
+      return brand;
+    }
+  }
+
+  return null;
+}
+
 function extractCardInfo(response: AsaasClientChargeResponse): {
   last4: string | null;
   brand: string | null;
@@ -323,22 +367,12 @@ function extractCardInfo(response: AsaasClientChargeResponse): {
   let brand: string | null = null;
 
   if (creditCard) {
-    const rawNumber =
-      typeof creditCard.creditCardNumber === 'string'
-        ? creditCard.creditCardNumber
-        : typeof creditCard.creditCardNumberLast4 === 'string'
-          ? creditCard.creditCardNumberLast4
-          : null;
+    const rawNumber = resolveCardNumber(creditCard);
     if (rawNumber && rawNumber.length >= 4) {
       last4 = rawNumber.slice(-4);
     }
 
-    const rawBrand =
-      typeof creditCard.creditCardBrand === 'string'
-        ? creditCard.creditCardBrand
-        : typeof creditCard.brand === 'string'
-          ? creditCard.brand
-          : null;
+    const rawBrand = resolveCardBrand(creditCard);
     if (rawBrand) {
       brand = rawBrand;
     }
