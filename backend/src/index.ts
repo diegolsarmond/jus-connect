@@ -102,8 +102,72 @@ app.use((req, res, next) => {
 const protectedApiRouter = express.Router();
 protectedApiRouter.use(authenticateRequest);
 
+type RouterLayer = {
+  match?: (path: string) => boolean;
+  name?: string;
+  handle?: Router;
+};
+
+const createRouterPathMatcher = (router: Router) => {
+  const visitedRouters = new Set<Router>();
+  const matchers: Array<(path: string) => boolean> = [];
+
+  const collectMatchers = (target: Router) => {
+    if (visitedRouters.has(target)) {
+      return;
+    }
+
+    visitedRouters.add(target);
+
+    const stack = (target as unknown as { stack?: RouterLayer[] }).stack;
+    if (!Array.isArray(stack)) {
+      return;
+    }
+
+    for (const layer of stack) {
+      if (typeof layer?.match === 'function') {
+        matchers.push(layer.match.bind(layer));
+      }
+
+      if (layer?.name === 'router' && layer.handle) {
+        collectMatchers(layer.handle);
+      }
+    }
+  };
+
+  collectMatchers(router);
+
+  if (matchers.length === 0) {
+    return () => true;
+  }
+
+  return (path: string) =>
+    matchers.some((match) => {
+      try {
+        return match(path);
+      } catch (error) {
+        console.warn('Falha ao avaliar rota protegida', error);
+        return false;
+      }
+    });
+};
+
 const registerModuleRoutes = (modules: string | string[], router: Router) => {
-  protectedApiRouter.use(authorizeModules(modules), router);
+  const matchesPath = createRouterPathMatcher(router);
+  const moduleGuard = authorizeModules(modules);
+
+  protectedApiRouter.use((req, res, next) => {
+    const path = typeof req.path === 'string' ? req.path : req.url ?? '';
+
+    if (!matchesPath(path)) {
+      next();
+      return;
+    }
+
+    moduleGuard(req, res, next);
+  });
+
+  protectedApiRouter.use(router);
 };
 
 registerModuleRoutes(
