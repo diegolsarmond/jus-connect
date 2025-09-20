@@ -84,10 +84,6 @@ async function fetchCustomersForFlows(): Promise<CustomerOption[]> {
 const FinancialFlows = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-import { AlertCircle } from 'lucide-react';
-
-const FinancialFlows = () => {
-  const queryClient = useQueryClient();
   const {
     data: flows = [],
     isLoading,
@@ -228,31 +224,6 @@ const FinancialFlows = () => {
       return matchesSearch && matchesStatus && matchesType && matchesOnlyOpen;
     });
   }, [detailedFlows, onlyOpenCharges, searchTerm, statusFilter, typeFilter]);
-
-      return {
-        ...flow,
-        computedStatus,
-        dueDate,
-        pagamentoDate,
-      };
-    });
-  }, [flows]);
-
-  const filteredFlows = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return detailedFlows.filter((flow) => {
-      const matchesSearch =
-        term.length === 0 || flow.descricao.toLowerCase().includes(term);
-      const matchesStatus =
-        statusFilter === 'all' || flow.computedStatus === statusFilter;
-      const matchesType = typeFilter === 'all' || flow.tipo === typeFilter;
-      const matchesOnlyOpen =
-        !onlyOpenCharges || (flow.computedStatus === 'pendente' || flow.computedStatus === 'vencido');
-
-      return matchesSearch && matchesStatus && matchesType && matchesOnlyOpen;
-    });
-  }, [detailedFlows, onlyOpenCharges, searchTerm, statusFilter, typeFilter]);
-
 
   const periods = useMemo<PeriodGroup[]>(() => {
     const accumulator = new Map<string, { key: string; label: string; sortValue: number; flows: FlowWithDetails[] }>();
