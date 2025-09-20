@@ -24,6 +24,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { User } from "@/types/user";
 import { getApiBaseUrl } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const apiUrl = getApiBaseUrl();
 
@@ -102,7 +103,9 @@ export default function Usuarios() {
   const [roleFilter, setRoleFilter] = useState<string>("todos");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -167,6 +170,67 @@ export default function Usuarios() {
       hour: '2-digit',
       minute: '2-digit'
     }).format(date);
+  };
+
+  const handleResetPassword = async (user: User) => {
+    const confirmed = window.confirm(
+      `Deseja realmente resetar a senha de ${user.name}? Um e-mail com a senha temporária será enviado para ${user.email}.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setResettingUserId(user.id);
+
+    try {
+      const response = await fetch(
+        joinUrl(apiUrl, `/api/usuarios/${user.id}/reset-password`),
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      let payload: unknown = null;
+
+      try {
+        payload = await response.json();
+      } catch (error) {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const message =
+          typeof payload === "object" && payload && "error" in payload && typeof (payload as { error?: unknown }).error === "string"
+            ? (payload as { error: string }).error
+            : "Não foi possível redefinir a senha.";
+
+        throw new Error(message);
+      }
+
+      const successMessage =
+        typeof payload === "object" && payload && "message" in payload && typeof (payload as { message?: unknown }).message === "string"
+          ? (payload as { message: string }).message
+          : `Enviamos as instruções de acesso para ${user.email}.`;
+
+      toast({
+        title: "Senha redefinida",
+        description: successMessage,
+      });
+    } catch (error) {
+      console.error("Erro ao resetar senha", error);
+      toast({
+        title: "Erro ao resetar senha",
+        description: error instanceof Error ? error.message : "Não foi possível redefinir a senha do usuário.",
+        variant: "destructive",
+      });
+    } finally {
+      setResettingUserId(null);
+    }
   };
 
   return (
@@ -325,7 +389,13 @@ export default function Usuarios() {
                           Ver Perfil
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={resettingUserId === user.id}
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            void handleResetPassword(user);
+                          }}
+                        >
                           Reset Senha
                         </DropdownMenuItem>
                         <DropdownMenuItem>

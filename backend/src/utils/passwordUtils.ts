@@ -44,3 +44,13 @@ export const verifyPassword = async (
 
   return safeCompare(providedPassword, storedValue);
 };
+
+export const hashPassword = (password: string): string => {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const digest = crypto
+    .createHash('sha256')
+    .update(`${salt}:${password}`)
+    .digest('hex');
+
+  return `${SHA256_PREFIX}${salt}:${digest}`;
+};
