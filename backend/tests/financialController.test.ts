@@ -209,8 +209,8 @@ test('listFlows applies cliente filter when provided', async () => {
   );
   assert.equal(calls[0]?.values, undefined);
   assert.match(calls[1]?.text ?? '', /WHERE combined_flows\.cliente_id = \$1/);
-  assert.deepEqual(calls[1]?.values, [42, 10, 0]);
-  assert.deepEqual(calls[2]?.values, [42]);
+  assert.deepEqual(calls[1]?.values, ['42', 10, 0]);
+  assert.deepEqual(calls[2]?.values, ['42']);
 });
 
 test('listFlows returns only financial flows when opportunity tables are absent', async () => {

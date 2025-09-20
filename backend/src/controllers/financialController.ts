@@ -155,7 +155,7 @@ export const listFlows = async (req: Request, res: Response) => {
 
     const baseFinancialFlowsSelect = `
         SELECT
-          ff.id AS id,
+          ff.id::TEXT AS id,
           ff.tipo AS tipo,
           ff.descricao AS descricao,
           ff.valor::numeric AS valor,
@@ -204,7 +204,7 @@ ${baseFinancialFlowsSelect}
 ${baseFinancialFlowsSelect}
         UNION ALL
         SELECT
-          -p.id AS id,
+          (-p.id)::TEXT AS id,
           'receita' AS tipo,
           TRIM(BOTH FROM CONCAT(
             'Oportunidade ',
@@ -372,12 +372,31 @@ ${baseFinancialFlowsSelect}
       return 'receita';
     };
 
+    const normalizeId = (value: unknown): number => {
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+          return 0;
+        }
+        const parsed = Number(trimmed);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      if (value === null || value === undefined) {
+        return 0;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
     const items: Flow[] = itemsResult.rows.map((row) => {
       const vencimento = normalizeDate(row.vencimento) ?? new Date().toISOString().slice(0, 10);
       const pagamento = normalizeDate(row.pagamento);
 
       return {
-        id: Number(row.id),
+        id: normalizeId(row.id),
         tipo: normalizeTipo(row.tipo),
         conta_id:
           row.conta_id === null || row.conta_id === undefined
