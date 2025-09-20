@@ -2,7 +2,7 @@ import pool from './db';
 import { QueryResultRow } from 'pg';
 import { Buffer } from 'node:buffer';
 
-export const SUPPORT_STATUS_VALUES = ['open', 'in_progress', 'resolved', 'closed'] as const;
+export const SUPPORT_STATUS_VALUES = ['open', 'in_progress', 'resolved', 'closed', 'cancelled'] as const;
 export type SupportStatus = (typeof SUPPORT_STATUS_VALUES)[number];
 
 export class ValidationError extends Error {
@@ -21,8 +21,11 @@ export interface SupportRequest {
   subject: string;
   description: string;
   status: SupportStatus;
+  requesterId: number | null;
   requesterName: string | null;
   requesterEmail: string | null;
+  supportAgentId: number | null;
+  supportAgentName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +33,7 @@ export interface SupportRequest {
 export interface CreateSupportRequestInput {
   subject: string;
   description: string;
+  requesterId?: number | null;
   requesterName?: string | null;
   requesterEmail?: string | null;
   status?: SupportStatus;
@@ -41,6 +45,8 @@ export interface UpdateSupportRequestInput {
   status?: SupportStatus;
   requesterName?: string | null;
   requesterEmail?: string | null;
+  supportAgentId?: number | null;
+  supportAgentName?: string | null;
 }
 
 export interface ListSupportRequestsOptions {
@@ -48,6 +54,8 @@ export interface ListSupportRequestsOptions {
   search?: string;
   page?: number;
   pageSize?: number;
+  requesterId?: number | null;
+  requesterEmail?: string | null;
 }
 
 export interface SupportRequestList {
@@ -80,6 +88,9 @@ export interface SupportMessage {
 export interface SupportAttachmentFile {
   id: number;
   messageId: number;
+  supportRequestId: number;
+  requesterId: number | null;
+  requesterEmail: string | null;
   filename: string;
   contentType: string | null;
   fileSize: number | null;
@@ -105,8 +116,11 @@ interface SupportRequestRow extends QueryResultRow {
   subject: string;
   description: string;
   status: SupportStatus;
+  requester_id: number | null;
   requester_name: string | null;
   requester_email: string | null;
+  support_agent_id: number | null;
+  support_agent_name: string | null;
   created_at: string | Date;
   updated_at: string | Date;
 }
@@ -142,6 +156,19 @@ function normalizeText(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeEmail(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
+}
+
 function assertValidStatus(status: string): asserts status is SupportStatus {
   if (!SUPPORT_STATUS_VALUES.includes(status as SupportStatus)) {
     throw new ValidationError('Invalid status provided');
@@ -161,8 +188,11 @@ function mapRow(row: SupportRequestRow): SupportRequest {
     subject: row.subject,
     description: row.description,
     status: row.status,
+    requesterId: row.requester_id ?? null,
     requesterName: row.requester_name,
     requesterEmail: row.requester_email,
+    supportAgentId: row.support_agent_id ?? null,
+    supportAgentName: row.support_agent_name,
     createdAt: formatDate(row.created_at),
     updatedAt: formatDate(row.updated_at),
   };
@@ -221,14 +251,18 @@ export class SupportService {
     const status = input.status ?? 'open';
     assertValidStatus(status);
 
+    const requesterId =
+      typeof input.requesterId === 'number' && Number.isInteger(input.requesterId) && input.requesterId > 0
+        ? input.requesterId
+        : null;
     const requesterName = normalizeText(input.requesterName);
-    const requesterEmail = normalizeText(input.requesterEmail);
+    const requesterEmail = normalizeEmail(input.requesterEmail);
 
     const result = await this.db.query(
-      `INSERT INTO support_requests (subject, description, status, requester_name, requester_email)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, subject, description, status, requester_name, requester_email, created_at, updated_at`,
-      [subject, description, status, requesterName, requesterEmail]
+      `INSERT INTO support_requests (subject, description, status, requester_id, requester_name, requester_email)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at`,
+      [subject, description, status, requesterId, requesterName, requesterEmail]
     );
 
     return mapRow(result.rows[0] as SupportRequestRow);
@@ -249,6 +283,25 @@ export class SupportService {
       conditions.push(`status = $${values.length}`);
     }
 
+    const requesterEmail = normalizeEmail(options.requesterEmail);
+    if (options.requesterId != null || requesterEmail) {
+      const requesterConditions: string[] = [];
+
+      if (options.requesterId != null) {
+        values.push(options.requesterId);
+        requesterConditions.push(`requester_id = $${values.length}`);
+      }
+
+      if (requesterEmail) {
+        values.push(requesterEmail);
+        requesterConditions.push(`LOWER(requester_email) = $${values.length}`);
+      }
+
+      if (requesterConditions.length > 0) {
+        conditions.push(`(${requesterConditions.join(' OR ')})`);
+      }
+    }
+
     if (options.search) {
       const searchValue = `%${options.search.trim()}%`;
       values.push(searchValue);
@@ -256,7 +309,7 @@ export class SupportService {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const baseQuery = `SELECT id, subject, description, status, requester_name, requester_email, created_at, updated_at
+    const baseQuery = `SELECT id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at
       FROM support_requests
       ${whereClause}
       ORDER BY created_at DESC`;
@@ -286,7 +339,7 @@ export class SupportService {
 
   async findById(id: number): Promise<SupportRequest | null> {
     const result = await this.db.query(
-      `SELECT id, subject, description, status, requester_name, requester_email, created_at, updated_at
+      `SELECT id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at
        FROM support_requests
        WHERE id = $1`,
       [id]
@@ -347,6 +400,7 @@ export class SupportService {
   async createMessage(
     requestId: number,
     input: CreateSupportMessageInput,
+    context?: { supportAgentId?: number | null; supportAgentName?: string | null },
   ): Promise<SupportMessage | null> {
     const exists = await this.supportRequestExists(requestId);
     if (!exists) {
@@ -433,10 +487,34 @@ export class SupportService {
       }
     }
 
-    await this.db.query('UPDATE support_requests SET updated_at = NOW() WHERE id = $1', [requestId]);
-
     const attachmentsByMessageId = new Map<number, SupportRequestAttachmentRow[]>();
     attachmentsByMessageId.set(messageRow.id, attachmentRows);
+
+    let hasSupportAgentUpdate = false;
+
+    if (sender === 'support' && context) {
+      const hasAgentId = Object.prototype.hasOwnProperty.call(context, 'supportAgentId');
+      const hasAgentName = Object.prototype.hasOwnProperty.call(context, 'supportAgentName');
+
+      if (hasAgentId || hasAgentName) {
+        const updatePayload: UpdateSupportRequestInput = {};
+
+        if (hasAgentId) {
+          updatePayload.supportAgentId = context.supportAgentId ?? null;
+        }
+
+        if (hasAgentName) {
+          updatePayload.supportAgentName = context.supportAgentName ?? null;
+        }
+
+        await this.update(requestId, updatePayload);
+        hasSupportAgentUpdate = true;
+      }
+    }
+
+    if (!hasSupportAgentUpdate) {
+      await this.db.query('UPDATE support_requests SET updated_at = NOW() WHERE id = $1', [requestId]);
+    }
 
     return mapMessageRow(messageRow, attachmentsByMessageId);
   }
@@ -446,9 +524,20 @@ export class SupportService {
     attachmentId: number,
   ): Promise<SupportAttachmentFile | null> {
     const result = await this.db.query(
-      `SELECT id, message_id, filename, content_type, file_size, created_at, data
-         FROM support_request_attachments
-         WHERE id = $1 AND message_id = $2`,
+      `SELECT a.id,
+              a.message_id,
+              a.filename,
+              a.content_type,
+              a.file_size,
+              a.created_at,
+              a.data,
+              m.support_request_id,
+              r.requester_id,
+              r.requester_email
+         FROM support_request_attachments a
+         JOIN support_request_messages m ON m.id = a.message_id
+         JOIN support_requests r ON r.id = m.support_request_id
+         WHERE a.id = $1 AND a.message_id = $2`,
       [attachmentId, messageId],
     );
 
@@ -456,13 +545,21 @@ export class SupportService {
       return null;
     }
 
-    const row = result.rows[0] as SupportRequestAttachmentRow & { data: Buffer };
+    const row = result.rows[0] as SupportRequestAttachmentRow & {
+      data: Buffer;
+      support_request_id: number;
+      requester_id: number | null;
+      requester_email: string | null;
+    };
 
     const content = row.data ?? Buffer.alloc(0);
 
     return {
       id: row.id,
       messageId: row.message_id,
+      supportRequestId: row.support_request_id,
+      requesterId: row.requester_id ?? null,
+      requesterEmail: row.requester_email ?? null,
       filename: row.filename,
       contentType: row.content_type ?? null,
       fileSize: row.file_size ?? content.length,
@@ -511,9 +608,29 @@ export class SupportService {
     }
 
     if (updates.requesterEmail !== undefined) {
-      const email = normalizeText(updates.requesterEmail);
+      const email = normalizeEmail(updates.requesterEmail);
       fields.push(`requester_email = $${index}`);
       values.push(email);
+      index += 1;
+    }
+
+    if (updates.supportAgentId !== undefined) {
+      const agentId = updates.supportAgentId;
+      if (agentId === null) {
+        fields.push('support_agent_id = NULL');
+      } else if (typeof agentId === 'number' && Number.isInteger(agentId) && agentId > 0) {
+        fields.push(`support_agent_id = $${index}`);
+        values.push(agentId);
+        index += 1;
+      } else {
+        throw new ValidationError('Support agent id must be a positive integer');
+      }
+    }
+
+    if (updates.supportAgentName !== undefined) {
+      const agentName = normalizeText(updates.supportAgentName);
+      fields.push(`support_agent_name = $${index}`);
+      values.push(agentName);
       index += 1;
     }
 
@@ -524,7 +641,7 @@ export class SupportService {
     const query = `UPDATE support_requests
       SET ${fields.join(', ')}, updated_at = NOW()
       WHERE id = $${index}
-      RETURNING id, subject, description, status, requester_name, requester_email, created_at, updated_at`;
+      RETURNING id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at`;
 
     values.push(id);
 
