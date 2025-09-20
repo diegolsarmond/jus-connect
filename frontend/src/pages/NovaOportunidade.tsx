@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/accordion";
 import { toast } from "@/components/ui/use-toast";
 import { getApiBaseUrl } from "@/lib/api";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 const formSchema = z.object({
   tipo_processo: z.string().min(1, "Tipo de Processo é obrigatório"),
@@ -90,6 +91,59 @@ interface ClientOption extends Option {
   tipo?: string;
 }
 
+const extractDigits = (value: string): string => value.replace(/\D/g, "");
+
+const formatCpfCnpj = (value: string): string => {
+  const digits = extractDigits(value).slice(0, 14);
+
+  if (digits.length <= 3) {
+    return digits;
+  }
+
+  if (digits.length <= 6) {
+    return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  }
+
+  if (digits.length <= 9) {
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  }
+
+  if (digits.length <= 11) {
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
+
+  if (digits.length <= 12) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  }
+
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
+const formatPhone = (value: string): string => {
+  const digits = extractDigits(value).slice(0, 11);
+
+  if (digits.length === 0) {
+    return "";
+  }
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+
+  const ddd = digits.slice(0, 2);
+  const remainder = digits.slice(2);
+
+  if (remainder.length <= 4) {
+    return `(${ddd}) ${remainder}`;
+  }
+
+  if (digits.length === 11) {
+    return `(${ddd}) ${remainder.slice(0, 5)}-${remainder.slice(5)}`;
+  }
+
+  return `(${ddd}) ${remainder.slice(0, 4)}-${remainder.slice(4)}`;
+};
+
 const parseSituacaoOptions = (data: unknown[]): Option[] => {
   const byId = new Map<string, Option>();
 
@@ -119,6 +173,7 @@ const parseSituacaoOptions = (data: unknown[]): Option[] => {
 export default function NovaOportunidade() {
   const apiUrl = getApiBaseUrl();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [users, setUsers] = useState<Option[]>([]);
@@ -162,7 +217,7 @@ export default function NovaOportunidade() {
       contingenciamento: "",
       detalhes: "",
       documentos_anexados: undefined,
-      criado_por: "Sistema",
+      criado_por: "",
       data_criacao: new Date().toISOString().split("T")[0],
       ultima_atualizacao: new Date().toISOString().split("T")[0],
     },
@@ -199,9 +254,9 @@ export default function NovaOportunidade() {
             return {
               id: String(item.id),
               name: item.nome,
-              cpf_cnpj: item.documento,
+              cpf_cnpj: extractDigits(item.documento ?? ""),
               email: item.email,
-              telefone: item.telefone,
+              telefone: extractDigits(item.telefone ?? ""),
               tipo:
                 item.tipo === 1 || item.tipo === "1"
                   ? "Pessoa Física"
@@ -212,7 +267,7 @@ export default function NovaOportunidade() {
           })
         );
 
-        const usersData = await fetchJson(`${apiUrl}/api/usuarios`);
+        const usersData = await fetchJson(`${apiUrl}/api/usuarios/empresa`);
         setUsers(
           usersData.map((u) => {
             const item = u as any;
@@ -313,6 +368,15 @@ export default function NovaOportunidade() {
     });
   }, [processoDistribuido, form]);
 
+  useEffect(() => {
+    if (user?.nome_completo) {
+      form.setValue("criado_por", user.nome_completo, {
+        shouldDirty: false,
+        shouldTouch: false,
+      });
+    }
+  }, [user, form]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       const isProcessoDistribuido = values.processo_distribuido === "sim";
@@ -321,6 +385,32 @@ export default function NovaOportunidade() {
         solicitanteIdRaw && !Number.isNaN(Number(solicitanteIdRaw))
           ? Number(solicitanteIdRaw)
           : null;
+
+      const envolvidosLimpos =
+        values.envolvidos?.map((envolvido) => {
+          const nome = envolvido.nome?.trim() || "";
+          const cpfCnpjDigits = extractDigits(envolvido.cpf_cnpj || "");
+          const telefoneDigits = extractDigits(envolvido.telefone || "");
+          const endereco = envolvido.endereco?.trim() || "";
+          const relacao = envolvido.relacao || "";
+
+          return {
+            nome,
+            cpf_cnpj: cpfCnpjDigits,
+            telefone: telefoneDigits,
+            endereco,
+            relacao,
+          };
+        }) || [];
+
+      const envolvidosFiltrados = envolvidosLimpos.filter(
+        (envolvido) =>
+          envolvido.nome ||
+          envolvido.cpf_cnpj ||
+          envolvido.telefone ||
+          envolvido.endereco ||
+          envolvido.relacao
+      );
 
       const payload = {
         tipo_processo_id: Number(values.tipo_processo),
@@ -346,12 +436,8 @@ export default function NovaOportunidade() {
         contingenciamento: values.contingenciamento || null,
         detalhes: values.detalhes || null,
         documentos_anexados: null,
-        criado_por: null,
-        envolvidos:
-          values.envolvidos?.filter(
-            (e) =>
-              e.nome || e.cpf_cnpj || e.telefone || e.endereco || e.relacao
-          ) || [],
+        criado_por: user?.nome_completo || values.criado_por || null,
+        envolvidos: envolvidosFiltrados,
       };
 
       const res = await fetch(`${apiUrl}/api/oportunidades`, {
@@ -378,9 +464,9 @@ export default function NovaOportunidade() {
         shouldDirty: true,
         shouldTouch: true,
       });
-      form.setValue("solicitante_cpf_cnpj", client.cpf_cnpj || "");
+      form.setValue("solicitante_cpf_cnpj", extractDigits(client.cpf_cnpj || ""));
       form.setValue("solicitante_email", client.email || "");
-      form.setValue("solicitante_telefone", client.telefone || "");
+      form.setValue("solicitante_telefone", extractDigits(client.telefone || ""));
       form.setValue("cliente_tipo", client.tipo || "");
       form.setValue("solicitante_nome", client.name, {
         shouldDirty: true,
@@ -569,7 +655,14 @@ export default function NovaOportunidade() {
                           <FormItem>
                             <FormLabel>CPF/CNPJ</FormLabel>
                             <FormControl>
-                              <Input disabled {...field} />
+                              <Input
+                                name={field.name}
+                                value={formatCpfCnpj(field.value || "")}
+                                onBlur={field.onBlur}
+                                ref={field.ref}
+                                disabled
+                                readOnly
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -597,7 +690,14 @@ export default function NovaOportunidade() {
                           <FormItem>
                             <FormLabel>Telefone</FormLabel>
                             <FormControl>
-                              <Input disabled {...field} />
+                              <Input
+                                name={field.name}
+                                value={formatPhone(field.value || "")}
+                                onBlur={field.onBlur}
+                                ref={field.ref}
+                                disabled
+                                readOnly
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -968,7 +1068,18 @@ export default function NovaOportunidade() {
                             <FormItem>
                               <FormLabel>CPF/CNPJ</FormLabel>
                               <FormControl>
-                                <Input {...field} />
+                                <Input
+                                  name={field.name}
+                                  value={formatCpfCnpj(field.value || "")}
+                                  onChange={(event) =>
+                                    field.onChange(
+                                      extractDigits(event.target.value)
+                                    )
+                                  }
+                                  onBlur={field.onBlur}
+                                  ref={field.ref}
+                                  inputMode="numeric"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -982,7 +1093,18 @@ export default function NovaOportunidade() {
                             <FormItem>
                               <FormLabel>Telefone</FormLabel>
                               <FormControl>
-                                <Input {...field} />
+                                <Input
+                                  name={field.name}
+                                  value={formatPhone(field.value || "")}
+                                  onChange={(event) =>
+                                    field.onChange(
+                                      extractDigits(event.target.value)
+                                    )
+                                  }
+                                  onBlur={field.onBlur}
+                                  ref={field.ref}
+                                  inputMode="tel"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -1015,11 +1137,11 @@ export default function NovaOportunidade() {
                                     <SelectValue placeholder="Selecione" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent>
-                                          <SelectItem value="Réu">Réu</SelectItem>
-                                          <SelectItem value="Réu">Autor</SelectItem>
-                                          <SelectItem value="Réu">Promovente</SelectItem>
-                                          <SelectItem value="Réu">Promovido</SelectItem>
+                              <SelectContent>
+                                  <SelectItem value="Réu">Réu</SelectItem>
+                                  <SelectItem value="Autor">Autor</SelectItem>
+                                  <SelectItem value="Promovente">Promovente</SelectItem>
+                                  <SelectItem value="Promovido">Promovido</SelectItem>
                                   <SelectItem value="Reclamante">Reclamante</SelectItem>
                                   <SelectItem value="Exequente">Exequente</SelectItem>
                                   <SelectItem value="Outro">Outro</SelectItem>
