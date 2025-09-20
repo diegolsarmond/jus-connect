@@ -1,10 +1,43 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
-export const listEtiquetas = async (_req: Request, res: Response) => {
+const getAuthenticatedUser = (
+  req: Request,
+  res: Response
+): NonNullable<Request['auth']> | null => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  return req.auth;
+};
+
+export const listEtiquetas = async (req: Request, res: Response) => {
   try {
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res.status(empresaLookup.status).json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res.json([]);
+      return;
+    }
+
     const result = await pool.query(
-      'SELECT id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho FROM public.etiquetas'
+      'SELECT id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho, idempresa FROM public.etiquetas WHERE idempresa IS NOT DISTINCT FROM $1',
+      [empresaId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -30,9 +63,30 @@ export const listEtiquetasByFluxoTrabalho = async (req: Request, res: Response) 
 export const createEtiqueta = async (req: Request, res: Response) => {
   const { nome, ativo, exibe_pipeline = true, ordem, id_fluxo_trabalho } = req.body;
   try {
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res.status(empresaLookup.status).json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return;
+    }
+
     const result = await pool.query(
-      'INSERT INTO public.etiquetas (nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho) VALUES ($1, $2, NOW(), $3, $4, $5) RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho',
-      [nome, ativo, exibe_pipeline, ordem, id_fluxo_trabalho]
+      'INSERT INTO public.etiquetas (nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho, idempresa) VALUES ($1, $2, NOW(), $3, $4, $5, $6) RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho, idempresa',
+      [nome, ativo, exibe_pipeline, ordem, id_fluxo_trabalho, empresaId]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
