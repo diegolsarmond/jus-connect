@@ -48,8 +48,8 @@ const router = Router();
  *           type: string
  *         ativo:
  *           type: boolean
- *         foto:
- *           type: string
+ *         idempresa:
+ *           type: integer
  *         datacadastro:
  *           type: string
  *           format: date-time
@@ -155,8 +155,6 @@ router.get('/clientes/:id', getClienteById);
  *                 type: string
  *               ativo:
  *                 type: boolean
- *               foto:
- *                 type: string
  *     responses:
  *       201:
  *         description: Cliente criado
@@ -212,8 +210,6 @@ router.post('/clientes', createCliente);
  *                 type: string
  *               ativo:
  *                 type: boolean
- *               foto:
- *                 type: string
  *     responses:
  *       200:
  *         description: Cliente atualizado
