@@ -2,7 +2,7 @@ import { QueryResultRow } from 'pg';
 import { URL } from 'url';
 import pool from './db';
 
-export const API_KEY_PROVIDERS = ['gemini', 'openai'] as const;
+export const API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas'] as const;
 export type ApiKeyProvider = (typeof API_KEY_PROVIDERS)[number];
 
 export const API_KEY_ENVIRONMENTS = ['producao', 'homologacao'] as const;
@@ -70,7 +70,7 @@ function normalizeProvider(value: string | undefined): ApiKeyProvider {
     throw new ValidationError('Provider is required');
   }
   if (!API_KEY_PROVIDERS.includes(normalized as ApiKeyProvider)) {
-    throw new ValidationError('Provider must be Gemini or OpenAI');
+    throw new ValidationError('Provider must be Gemini, OpenAI or Asaas');
   }
   return normalized as ApiKeyProvider;
 }
