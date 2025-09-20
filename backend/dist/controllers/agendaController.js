@@ -6,6 +6,54 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteAgenda = exports.updateAgenda = exports.createAgenda = exports.getTotalCompromissosHoje = exports.listAgendas = void 0;
 const db_1 = __importDefault(require("../services/db"));
 const authUser_1 = require("../utils/authUser");
+const VALID_STATUS_NUMBERS = new Set([0, 1, 2, 3]);
+const STATUS_TEXT_TO_NUMBER = new Map([
+    ['cancelado', 0],
+    ['cancelada', 0],
+    ['agendado', 1],
+    ['agendada', 1],
+    ['em_curso', 2],
+    ['emcurso', 2],
+    ['em_andamento', 2],
+    ['emandamento', 2],
+    ['concluido', 3],
+    ['concluida', 3],
+]);
+const normalizeAgendaStatus = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const parsed = Math.trunc(value);
+        if (VALID_STATUS_NUMBERS.has(parsed)) {
+            return parsed;
+        }
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed === '') {
+            return 1;
+        }
+        const numeric = Number(trimmed);
+        if (Number.isFinite(numeric)) {
+            const parsed = Math.trunc(numeric);
+            if (VALID_STATUS_NUMBERS.has(parsed)) {
+                return parsed;
+            }
+        }
+        const normalized = trimmed
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        const mapped = (STATUS_TEXT_TO_NUMBER.get(normalized) || STATUS_TEXT_TO_NUMBER.get(normalized.replace(/_/g, '')));
+        if (mapped !== undefined) {
+            return mapped;
+        }
+    }
+    if (typeof value === 'boolean') {
+        return value ? 1 : 0;
+    }
+    return 1;
+};
 const buildAgendaSelect = (cteName) => `
   SELECT
     ${cteName}.id,
@@ -112,6 +160,7 @@ const getTotalCompromissosHoje = async (req, res) => {
 exports.getTotalCompromissosHoje = getTotalCompromissosHoje;
 const createAgenda = async (req, res) => {
     const { titulo, tipo, descricao, data, hora_inicio, hora_fim, cliente, tipo_local, local, lembrete, status, } = req.body;
+    const normalizedStatus = normalizeAgendaStatus(status);
     try {
         if (!req.auth) {
             return res.status(401).json({ error: 'Token inválido.' });
@@ -161,7 +210,7 @@ const createAgenda = async (req, res) => {
             tipo_local,
             local,
             lembrete,
-            status,
+            normalizedStatus,
             empresaId,
             req.auth.userId,
         ]);
@@ -176,6 +225,7 @@ exports.createAgenda = createAgenda;
 const updateAgenda = async (req, res) => {
     const { id } = req.params;
     const { titulo, tipo, descricao, data, hora_inicio, hora_fim, cliente, tipo_local, local, lembrete, status, } = req.body;
+    const normalizedStatus = normalizeAgendaStatus(status);
     try {
         if (!req.auth) {
             return res.status(401).json({ error: 'Token inválido.' });
@@ -220,7 +270,7 @@ const updateAgenda = async (req, res) => {
             tipo_local,
             local,
             lembrete,
-            status,
+            normalizedStatus,
             id,
             empresaId,
             req.auth.userId,
