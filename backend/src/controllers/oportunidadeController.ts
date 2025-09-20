@@ -1,6 +1,19 @@
 import { Request, Response } from 'express';
 import type { PoolClient } from 'pg';
 import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+
+const getAuthenticatedUser = (
+  req: Request,
+  res: Response
+): NonNullable<Request['auth']> | null => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  return req.auth;
+};
 
 const normalizeDecimal = (input: unknown): number | null => {
   if (typeof input === 'number' && Number.isFinite(input)) {
@@ -161,14 +174,34 @@ const ensureOpportunityInstallments = async (
   );
 };
 
-export const listOportunidades = async (_req: Request, res: Response) => {
+export const listOportunidades = async (req: Request, res: Response) => {
   try {
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res.status(empresaLookup.status).json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res.json([]);
+      return;
+    }
+
     const result = await pool.query(
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
-       FROM public.oportunidades`
+              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao, idempresa
+       FROM public.oportunidades WHERE idempresa = $1`,
+      [empresaId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -275,21 +308,43 @@ export const createOportunidade = async (req: Request, res: Response) => {
     envolvidos,
   } = req.body;
 
-  const client = await pool.connect();
+  const auth = getAuthenticatedUser(req, res);
+  if (!auth) {
+    return;
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return;
+  }
+
+  const { empresaId } = empresaLookup;
+
+  if (empresaId === null) {
+    res
+      .status(400)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    return;
+  }
+
+  let client: PoolClient | null = null;
 
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     const result = await client.query(
       `INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
         valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-        detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),NOW())
+        detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao, idempresa)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),NOW(),$22)
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
                  valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-                 detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao`,
+                 detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao, idempresa`,
       [
         tipo_processo_id,
         area_atuacao_id,
@@ -303,15 +358,16 @@ export const createOportunidade = async (req: Request, res: Response) => {
         prazo_proximo,
         status_id,
         solicitante_id,
-          valor_causa,
-          valor_honorarios,
-          percentual_honorarios,
-          forma_pagamento,
-          qtde_parcelas,
-          contingenciamento,
+        valor_causa,
+        valor_honorarios,
+        percentual_honorarios,
+        forma_pagamento,
+        qtde_parcelas,
+        contingenciamento,
         detalhes,
         documentos_anexados,
         criado_por,
+        empresaId,
       ]
     );
     const oportunidade = result.rows[0];
@@ -343,11 +399,17 @@ export const createOportunidade = async (req: Request, res: Response) => {
     await client.query('COMMIT');
     res.status(201).json(oportunidade);
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Erro ao reverter transação de oportunidade:', rollbackError);
+      }
+    }
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
-    client.release();
+    client?.release();
   }
 };
 
