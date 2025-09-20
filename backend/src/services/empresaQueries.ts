@@ -1,4 +1,4 @@
-import type { QueryResult } from 'pg';
+import type { QueryResult, QueryResultRow } from 'pg';
 import pool from './db';
 
 type PostgresError = Error & { code?: string };
@@ -26,7 +26,7 @@ const isRecoverableEmpresasError = (error: unknown): error is PostgresError => {
   return code === '42P01' || code === '42703';
 };
 
-export const queryEmpresas = async <T = Record<string, unknown>>(
+export const queryEmpresas = async <T extends QueryResultRow = QueryResultRow>(
   whereClause = '',
   params: ReadonlyArray<unknown> = []
 ): Promise<QueryResult<T>> => {
@@ -35,7 +35,8 @@ export const queryEmpresas = async <T = Record<string, unknown>>(
   for (const { label, text } of EMPRESA_QUERY_SOURCES) {
     try {
       const sql = whereClause ? `${text} ${whereClause}` : text;
-      return await pool.query<T>(sql, params);
+      const queryParams = Array.from(params);
+      return await pool.query<T>(sql, queryParams);
     } catch (error) {
       if (!isRecoverableEmpresasError(error)) {
         throw error;
