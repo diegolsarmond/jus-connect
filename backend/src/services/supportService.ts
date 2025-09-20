@@ -258,11 +258,30 @@ export class SupportService {
     const requesterName = normalizeText(input.requesterName);
     const requesterEmail = normalizeEmail(input.requesterEmail);
 
+    const columns = ['subject', 'description', 'status'];
+    const values: unknown[] = [subject, description, status];
+
+    if (requesterId != null) {
+      columns.push('requester_id');
+      values.push(requesterId);
+    }
+
+    if (requesterName !== null) {
+      columns.push('requester_name');
+      values.push(requesterName);
+    }
+
+    if (requesterEmail !== null) {
+      columns.push('requester_email');
+      values.push(requesterEmail);
+    }
+
+    const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
     const result = await this.db.query(
-      `INSERT INTO support_requests (subject, description, status, requester_id, requester_name, requester_email)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO support_requests (${columns.join(', ')})
+       VALUES (${placeholders})
        RETURNING id, subject, description, status, requester_id, requester_name, requester_email, support_agent_id, support_agent_name, created_at, updated_at`,
-      [subject, description, status, requesterId, requesterName, requesterEmail]
+      values
     );
 
     return mapRow(result.rows[0] as SupportRequestRow);
