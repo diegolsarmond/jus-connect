@@ -2,7 +2,7 @@ import { QueryResultRow } from 'pg';
 import { URL } from 'url';
 import pool from './db';
 
-export const API_KEY_PROVIDERS = ['gemini', 'openai'] as const;
+export const API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas'] as const;
 export type ApiKeyProvider = (typeof API_KEY_PROVIDERS)[number];
 
 export const API_KEY_ENVIRONMENTS = ['producao', 'homologacao'] as const;
@@ -61,6 +61,22 @@ interface IntegrationApiKeyRow extends QueryResultRow {
   updated_at: string | Date;
 }
 
+const ASAAS_DEFAULT_API_URLS: Record<ApiKeyEnvironment, string> = {
+  producao: 'https://api.asaas.com/api/v3',
+  homologacao: 'https://sandbox.asaas.com/api/v3',
+};
+
+function getDefaultApiUrl(
+  provider: ApiKeyProvider,
+  environment: ApiKeyEnvironment,
+): string | null {
+  if (provider !== 'asaas') {
+    return null;
+  }
+
+  return ASAAS_DEFAULT_API_URLS[environment] ?? null;
+}
+
 function normalizeProvider(value: string | undefined): ApiKeyProvider {
   if (typeof value !== 'string') {
     throw new ValidationError('Provider is required');
@@ -70,7 +86,7 @@ function normalizeProvider(value: string | undefined): ApiKeyProvider {
     throw new ValidationError('Provider is required');
   }
   if (!API_KEY_PROVIDERS.includes(normalized as ApiKeyProvider)) {
-    throw new ValidationError('Provider must be Gemini or OpenAI');
+    throw new ValidationError('Provider must be Gemini, OpenAI or Asaas');
   }
   return normalized as ApiKeyProvider;
 }
@@ -123,6 +139,19 @@ function normalizeOptionalApiUrl(value: string | null | undefined): string | nul
     throw new ValidationError('API URL must be a valid URL');
   }
   return normalized;
+}
+
+function resolveApiUrl(
+  provider: ApiKeyProvider,
+  environment: ApiKeyEnvironment,
+  value: string | null | undefined,
+): string | null {
+  const normalized = normalizeOptionalApiUrl(value);
+  if (normalized) {
+    return normalized;
+  }
+
+  return getDefaultApiUrl(provider, environment);
 }
 
 function normalizeLastUsed(value: unknown): Date | null {
@@ -236,8 +265,8 @@ export default class IntegrationApiKeyService {
 
   async create(input: CreateIntegrationApiKeyInput): Promise<IntegrationApiKey> {
     const provider = normalizeProvider(input.provider);
-    const apiUrl = normalizeOptionalApiUrl(input.apiUrl);
     const environment = normalizeEnvironment(input.environment);
+    const apiUrl = resolveApiUrl(provider, environment, input.apiUrl);
     const key = normalizeKey(input.key);
     const active = input.active ?? true;
     const lastUsed = normalizeLastUsed(input.lastUsed);
@@ -257,15 +286,55 @@ export default class IntegrationApiKeyService {
     const values: unknown[] = [];
     let index = 1;
 
+    let provider: ApiKeyProvider | undefined;
     if (updates.provider !== undefined) {
-      const provider = normalizeProvider(updates.provider);
+      provider = normalizeProvider(updates.provider);
       fields.push(`provider = $${index}`);
       values.push(provider);
       index += 1;
     }
 
+    let environment: ApiKeyEnvironment | undefined;
+    if (updates.environment !== undefined) {
+      environment = normalizeEnvironment(updates.environment);
+      fields.push(`environment = $${index}`);
+      values.push(environment);
+      index += 1;
+    }
+
     if (updates.apiUrl !== undefined) {
-      const apiUrl = normalizeOptionalApiUrl(updates.apiUrl);
+      let resolvedProvider = provider;
+      let resolvedEnvironment = environment;
+
+      if (!resolvedProvider || !resolvedEnvironment) {
+        const currentResult = await this.db.query(
+          'SELECT provider, environment FROM integration_api_keys WHERE id = $1',
+          [id],
+        );
+
+        if (currentResult.rowCount === 0) {
+          return null;
+        }
+
+        const currentRow = currentResult.rows[0] as {
+          provider: string;
+          environment: string;
+        };
+
+        if (!resolvedProvider) {
+          resolvedProvider = normalizeProvider(currentRow.provider);
+        }
+
+        if (!resolvedEnvironment) {
+          resolvedEnvironment = normalizeEnvironment(currentRow.environment);
+        }
+      }
+
+      if (!resolvedProvider || !resolvedEnvironment) {
+        throw new ValidationError('Unable to resolve provider and environment for API URL');
+      }
+
+      const apiUrl = resolveApiUrl(resolvedProvider, resolvedEnvironment, updates.apiUrl);
       fields.push(`url_api = $${index}`);
       values.push(apiUrl);
       index += 1;
@@ -275,13 +344,6 @@ export default class IntegrationApiKeyService {
       const key = normalizeKey(updates.key);
       fields.push(`key_value = $${index}`);
       values.push(key);
-      index += 1;
-    }
-
-    if (updates.environment !== undefined) {
-      const environment = normalizeEnvironment(updates.environment);
-      fields.push(`environment = $${index}`);
-      values.push(environment);
       index += 1;
     }
 
