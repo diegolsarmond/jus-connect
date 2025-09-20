@@ -7,6 +7,7 @@ import {
   updateIntegrationApiKey,
 } from '../controllers/integrationApiKeyController';
 import { generateTextWithIntegration } from '../controllers/aiGenerationController';
+import { getAsaasWebhookSecret } from '../controllers/asaasIntegrationController';
 
 const router = Router();
 
@@ -184,5 +185,7 @@ router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
  *         description: Integração não encontrada ou inativa
  */
 router.post('/integrations/ai/generate', generateTextWithIntegration);
+
+router.get('/integrations/asaas/credentials/:credentialId/webhook-secret', getAsaasWebhookSecret);
 
 export default router;
