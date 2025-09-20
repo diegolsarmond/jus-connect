@@ -26,6 +26,7 @@ Estrutura inicial do backend usando Express e TypeScript.
 
    Caso prefira outra instância local, substitua a string acima pela conexão
    desejada.
+
 2. Instale as dependências do backend:
 
    ```bash

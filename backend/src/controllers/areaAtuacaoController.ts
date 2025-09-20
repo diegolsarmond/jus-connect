@@ -1,10 +1,45 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
-export const listAreas = async (_req: Request, res: Response) => {
+const getAuthenticatedUser = (
+  req: Request,
+  res: Response
+): NonNullable<Request['auth']> | null => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  return req.auth;
+};
+
+export const listAreas = async (req: Request, res: Response) => {
   try {
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res
+        .status(empresaLookup.status)
+        .json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res.json([]);
+      return;
+    }
+
     const result = await pool.query(
-      'SELECT id, nome, ativo, datacriacao FROM public.area_atuacao'
+      'SELECT id, nome, ativo, datacriacao FROM public.area_atuacao WHERE idempresa = $1',
+      [empresaId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -32,10 +67,34 @@ export const getAreaById = async (req: Request, res: Response) => {
 
 export const createArea = async (req: Request, res: Response) => {
   const { nome, ativo } = req.body;
+  const ativoValue = typeof ativo === 'boolean' ? ativo : true;
   try {
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res
+        .status(empresaLookup.status)
+        .json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      return;
+    }
+
     const result = await pool.query(
-      'INSERT INTO public.area_atuacao (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao',
-      [nome, ativo]
+      'INSERT INTO public.area_atuacao (nome, ativo, datacriacao, idempresa) VALUES ($1, $2, NOW(), $3) RETURNING id, nome, ativo, datacriacao',
+      [nome, ativoValue, empresaId]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
