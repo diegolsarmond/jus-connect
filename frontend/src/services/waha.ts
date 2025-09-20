@@ -1,6 +1,64 @@
 import { getApiUrl } from '@/lib/api';
 import { WAHAConfig, ChatOverview, Message, SendTextRequest, WAHAResponse, SessionStatus } from '@/types/waha';
 
+const JSON_CONTENT_TYPE_REGEX = /application\/json|\+json/i;
+
+const SESSION_RECOVERY_MESSAGE =
+  'A sessão do WhatsApp ficou inválida. Desconecte o dispositivo e gere um novo QR Code para restabelecer a conexão.';
+
+export const WAHA_SESSION_RECOVERY_MESSAGE = SESSION_RECOVERY_MESSAGE;
+
+const extractWahaErrorMessage = (rawBody: string, status: number): string => {
+  const trimmed = rawBody.trim();
+
+  if (!trimmed) {
+    return `WAHA respondeu com status ${status}.`;
+  }
+
+  if (trimmed.startsWith('<')) {
+    return SESSION_RECOVERY_MESSAGE;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown> | string;
+    if (typeof parsed === 'string') {
+      return parsed;
+    }
+
+    const messageCandidate = parsed?.message ?? parsed?.error ?? parsed?.detail;
+    if (typeof messageCandidate === 'string' && messageCandidate.trim().length > 0) {
+      return messageCandidate.trim();
+    }
+  } catch (error) {
+    // Ignore JSON parse errors and fall back to returning the trimmed text below.
+  }
+
+  return trimmed;
+};
+
+const buildWahaErrorMessage = (status: number, rawBody: string): string => {
+  const extracted = extractWahaErrorMessage(rawBody, status);
+
+  if (status === 422) {
+    if (!extracted || extracted === SESSION_RECOVERY_MESSAGE) {
+      return SESSION_RECOVERY_MESSAGE;
+    }
+    return `${SESSION_RECOVERY_MESSAGE} Detalhes: ${extracted}`;
+  }
+
+  return extracted;
+};
+
+export class WAHARequestError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'WAHARequestError';
+    this.status = status;
+  }
+}
+
 const resolveIntegrationId = (): number => {
   const rawValue = (import.meta.env.VITE_WAHA_INTEGRATION_ID as string | undefined)?.trim();
   if (!rawValue) {
@@ -407,14 +465,13 @@ class WAHAService {
     };
   }
 
-  private async makeRequest<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<WAHAResponse<T>> {
+  private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<WAHAResponse<T>> {
+    let response: Response | null = null;
+
     try {
       const config = await this.getResolvedConfig();
       const url = `${config.baseUrl}${endpoint}`;
-      const response = await fetch(url, {
+      response = await fetch(url, {
         ...options,
         headers: {
           Accept: 'application/json',
@@ -424,17 +481,48 @@ class WAHAService {
         },
       });
 
+      const contentType = response.headers.get('content-type') ?? '';
+      const isJson = JSON_CONTENT_TYPE_REGEX.test(contentType);
+      const bodyText = await response.text();
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const message = buildWahaErrorMessage(response.status, bodyText);
+        return { error: message, status: response.status };
       }
 
-      const data = await response.json();
-      return { data, status: response.status };
+      if (response.status === 204 || bodyText.trim().length === 0) {
+        return { status: response.status };
+      }
+
+      if (!isJson) {
+        return {
+          error: 'Resposta inválida do WAHA: conteúdo inesperado recebido.',
+          status: response.status,
+        };
+      }
+
+      try {
+        const data = JSON.parse(bodyText) as T;
+        return { data, status: response.status };
+      } catch (error) {
+        return {
+          error: 'Não foi possível interpretar a resposta do WAHA.',
+          status: response.status,
+        };
+      }
     } catch (error) {
       console.error('WAHA API Error:', error);
+      const status = response?.status ?? 500;
+      const message =
+        status === 422
+          ? SESSION_RECOVERY_MESSAGE
+          : error instanceof Error
+            ? error.message
+            : 'Unknown error';
+
       return {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        status: 500,
+        error: message,
+        status,
       };
     }
   }

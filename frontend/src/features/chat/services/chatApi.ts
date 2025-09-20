@@ -7,15 +7,58 @@ import type {
   UpdateConversationPayload,
 } from "../types";
 
-const parseJson = async <T>(response: Response): Promise<T> => {
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Erro de rede (${response.status})`);
+const extractErrorMessage = (rawBody: string, status: number): string => {
+  const trimmed = rawBody.trim();
+  if (!trimmed) {
+    return `Erro de rede (${status})`;
   }
-  if (response.status === 204) {
+
+  if (trimmed.startsWith("<")) {
+    return "O servidor retornou uma página HTML em vez de dados JSON. Faça login novamente ou recarregue a página.";
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown> | string;
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    const message = parsed?.message ?? parsed?.error;
+    if (typeof message === "string" && message.trim().length > 0) {
+      return message.trim();
+    }
+  } catch (error) {
+    // Ignore JSON parse errors and fall back to returning the raw text below.
+  }
+
+  return trimmed;
+};
+
+const parseJson = async <T>(response: Response): Promise<T> => {
+  const contentType = response.headers.get("content-type") ?? "";
+  const isJson = /application\/json|\+json/i.test(contentType);
+  const bodyText = await response.text();
+
+  if (!response.ok) {
+    throw new Error(extractErrorMessage(bodyText, response.status));
+  }
+
+  if (response.status === 204 || bodyText.trim().length === 0) {
     return {} as T;
   }
-  return (await response.json()) as T;
+
+  if (!isJson) {
+    throw new Error(
+      "Resposta inválida do servidor: conteúdo inesperado recebido. Recarregue a página e tente novamente.",
+    );
+  }
+
+  try {
+    return JSON.parse(bodyText) as T;
+  } catch (error) {
+    throw new Error(
+      "Não foi possível interpretar a resposta do servidor. Recarregue a página e tente novamente.",
+    );
+  }
 };
 
 export const fetchConversations = async (): Promise<ConversationSummary[]> => {

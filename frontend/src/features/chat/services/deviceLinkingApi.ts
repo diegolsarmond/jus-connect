@@ -1,5 +1,5 @@
 import { sanitizeSessionName } from "@/lib/sessionName";
-import { wahaService } from "@/services/waha";
+import { wahaService, WAHA_SESSION_RECOVERY_MESSAGE } from "@/services/waha";
 
 export interface DeviceSessionEngineInfo {
   grpc?: { client?: string | null; stream?: string | null } | null;
@@ -94,6 +94,9 @@ const parseErrorResponse = async (response: Response): Promise<string> => {
     const data = (await response.clone().json()) as Record<string, unknown>;
     const errorMessage = normalizeString(data?.error) ?? normalizeString(data?.message);
     if (errorMessage) {
+      if (response.status === 422) {
+        return `${WAHA_SESSION_RECOVERY_MESSAGE} Detalhes: ${errorMessage}`;
+      }
       return errorMessage;
     }
   } catch (error) {
@@ -103,14 +106,30 @@ const parseErrorResponse = async (response: Response): Promise<string> => {
   try {
     const text = await response.text();
     const normalized = text.trim();
-    if (normalized) {
-      return normalized;
+    if (!normalized) {
+      return response.status === 422
+        ? WAHA_SESSION_RECOVERY_MESSAGE
+        : `WAHA API respondeu com status ${response.status}`;
     }
+
+    if (normalized.startsWith("<")) {
+      return response.status === 422
+        ? WAHA_SESSION_RECOVERY_MESSAGE
+        : "O servidor WAHA retornou uma página HTML inesperada.";
+    }
+
+    if (response.status === 422) {
+      return `${WAHA_SESSION_RECOVERY_MESSAGE} Detalhes: ${normalized}`;
+    }
+
+    return normalized;
   } catch (error) {
     // Ignore text parse errors.
   }
 
-  return `WAHA API respondeu com status ${response.status}`;
+  return response.status === 422
+    ? WAHA_SESSION_RECOVERY_MESSAGE
+    : `WAHA API respondeu com status ${response.status}`;
 };
 
 const buildWahaUrl = (baseUrl: string, path: string): string => {
