@@ -61,7 +61,7 @@ interface IntegrationApiKeyRow extends QueryResultRow {
   updated_at: string | Date;
 }
 
-const ASAAS_DEFAULT_API_URLS: Record<ApiKeyEnvironment, string> = {
+export const ASAAS_DEFAULT_API_URLS: Record<ApiKeyEnvironment, string> = {
   producao: 'https://api.asaas.com/api/v3',
   homologacao: 'https://sandbox.asaas.com/api/v3',
 };
