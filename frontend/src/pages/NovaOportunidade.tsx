@@ -376,6 +376,7 @@ export default function NovaOportunidade() {
       });
     } else {
       form.setValue("criado_por", "", {
+
         shouldDirty: false,
         shouldTouch: false,
       });
