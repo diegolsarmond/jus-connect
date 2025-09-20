@@ -559,8 +559,13 @@ export const updateOportunidade = async (req: Request, res: Response) => {
     envolvidos,
   } = req.body;
 
+  let client: PoolClient | null = null;
+
   try {
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `UPDATE public.oportunidades SET
          tipo_processo_id = $1,
          area_atuacao_id = $2,
@@ -612,18 +617,23 @@ export const updateOportunidade = async (req: Request, res: Response) => {
         documentos_anexados,
         criado_por,
         id,
-      ]
+      ],
     );
+
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Oportunidade não encontrada' });
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: 'Oportunidade não encontrada' });
+      return;
     }
+
     if (Array.isArray(envolvidos)) {
-      await pool.query(
+      await client.query(
         'DELETE FROM public.oportunidade_envolvidos WHERE oportunidade_id = $1',
-        [id]
+        [id],
       );
+
       const queries = envolvidos.map((env: any) =>
-        pool.query(
+        client!.query(
           `INSERT INTO public.oportunidade_envolvidos
            (oportunidade_id, nome, documento, telefone, endereco, relacao)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -634,15 +644,36 @@ export const updateOportunidade = async (req: Request, res: Response) => {
             env.telefone || null,
             env.endereco || null,
             env.relacao || null,
-          ]
-        )
+          ],
+        ),
       );
       await Promise.all(queries);
     }
-    res.json(result.rows[0]);
+
+    const oportunidade = result.rows[0];
+
+    await createOrReplaceOpportunityInstallments(
+      client,
+      oportunidade.id,
+      valor_honorarios,
+      forma_pagamento,
+      qtde_parcelas,
+    );
+
+    await client.query('COMMIT');
+    res.json(oportunidade);
   } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Erro ao reverter transação de oportunidade:', rollbackError);
+      }
+    }
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client?.release();
   }
 };
 
@@ -783,6 +814,10 @@ export const listOportunidadeParcelas = async (req: Request, res: Response) => {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+export const __test__ = {
+  createOrReplaceOpportunityInstallments,
 };
 
 export const createOportunidadeFaturamento = async (
