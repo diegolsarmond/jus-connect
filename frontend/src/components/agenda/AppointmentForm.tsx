@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -75,7 +75,7 @@ export function AppointmentForm({
     date: initialValues?.date ?? initialDate ?? new Date(),
     startTime: initialValues?.startTime ?? '',
     endTime: initialValues?.endTime ?? '',
-    clientId: initialValues?.clientId ?? '',
+    clientId: initialValues?.clientId ? String(initialValues.clientId) : '',
     clientName: initialValues?.clientName ?? '',
     clientPhone: initialValues?.clientPhone ?? '',
     clientEmail: initialValues?.clientEmail ?? '',
@@ -95,33 +95,82 @@ export function AppointmentForm({
 
   const formTitle = initialValues ? 'Editar Agendamento' : 'Novo Agendamento';
 
+  type ClienteOption = {
+    id: number;
+    nome: string;
+    telefone?: string | null;
+    email?: string | null;
+  };
+
   const [tiposEvento, setTiposEvento] = useState<AppointmentType[]>(() => [...APPOINTMENT_TYPE_VALUES]);
-  const [clientes, setClientes] = useState<
-    { id: number; nome: string; telefone?: string; email?: string }[]
-  >([]);
+  const [clientes, setClientes] = useState<ClienteOption[]>([]);
+  const [clientesLoading, setClientesLoading] = useState(false);
+  const [clientesError, setClientesError] = useState<string | null>(null);
+  const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
+  const [highlightedClienteIndex, setHighlightedClienteIndex] = useState(-1);
+  const clientFieldRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchClientes = async () => {
       try {
+        setClientesLoading(true);
+        setClientesError(null);
         const url = joinUrl(apiUrl, '/api/clientes');
         const response = await fetch(url, { headers: { Accept: 'application/json' } });
         if (!response.ok) {
           throw new Error('Failed to load clientes');
         }
         const json = await response.json();
-        const rows: { id: number; nome: string; telefone?: string; email?: string }[] = Array.isArray(json)
+        const rows: ClienteOption[] = Array.isArray(json)
           ? json
           : Array.isArray(json?.data)
             ? json.data
             : [];
-        setClientes(rows);
+        const uniqueClientes = new Map<number, ClienteOption>();
+        rows.forEach((cliente) => {
+          if (cliente && typeof cliente.id === 'number') {
+            uniqueClientes.set(cliente.id, {
+              id: cliente.id,
+              nome: cliente.nome ?? '',
+              telefone: cliente.telefone ?? null,
+              email: cliente.email ?? null,
+            });
+          }
+        });
+
+        const orderedClientes = Array.from(uniqueClientes.values()).sort((a, b) =>
+          a.nome.localeCompare(b.nome, 'pt-BR')
+        );
+
+        setClientes(orderedClientes);
       } catch (error) {
         console.error('Erro ao carregar clientes:', error);
+        setClientesError('Não foi possível carregar os clientes.');
+      } finally {
+        setClientesLoading(false);
       }
     };
 
     fetchClientes();
   }, []);
+
+  useEffect(() => {
+    if (!isClientDropdownOpen) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clientFieldRef.current && !clientFieldRef.current.contains(event.target as Node)) {
+        setIsClientDropdownOpen(false);
+        setHighlightedClienteIndex(-1);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isClientDropdownOpen]);
 
   useEffect(() => {
     const fetchTiposEvento = async () => {
@@ -195,12 +244,111 @@ export function AppointmentForm({
   };
 
   const clientName = form.watch('clientName') || '';
-  const filteredClientes =
-    clientName.length >= 3
-      ? clientes.filter((c) =>
-          c.nome.toLowerCase().includes(clientName.toLowerCase())
-        )
-      : [];
+
+  useEffect(() => {
+    if (highlightedClienteIndex >= clientes.length) {
+      setHighlightedClienteIndex(clientes.length > 0 ? clientes.length - 1 : -1);
+    }
+  }, [clientes.length, highlightedClienteIndex]);
+
+  const filteredClientes = useMemo(() => {
+    const searchTerm = clientName.trim().toLowerCase();
+    if (!searchTerm) {
+      return clientes;
+    }
+
+    return clientes.filter((cliente) =>
+      cliente.nome.toLowerCase().includes(searchTerm)
+    );
+  }, [clientName, clientes]);
+
+  useEffect(() => {
+    if (highlightedClienteIndex >= filteredClientes.length) {
+      setHighlightedClienteIndex(filteredClientes.length > 0 ? 0 : -1);
+    }
+  }, [filteredClientes, highlightedClienteIndex]);
+
+  const handleSelectCliente = useCallback(
+    (cliente: ClienteOption) => {
+      form.setValue('clientId', String(cliente.id));
+      form.setValue('clientName', cliente.nome);
+      form.setValue('clientPhone', cliente.telefone ?? '');
+      form.setValue('clientEmail', cliente.email ?? '');
+      setIsClientDropdownOpen(false);
+      setHighlightedClienteIndex(-1);
+    },
+    [form],
+  );
+
+  const handleClientInputChange = useCallback(
+    (value: string) => {
+      form.setValue('clientName', value);
+      const match = clientes.find((cliente) => cliente.nome === value);
+      if (match) {
+        form.setValue('clientId', String(match.id));
+        form.setValue('clientPhone', match.telefone ?? '');
+        form.setValue('clientEmail', match.email ?? '');
+      } else {
+        form.setValue('clientId', '');
+        form.setValue('clientPhone', '');
+        form.setValue('clientEmail', '');
+      }
+      setHighlightedClienteIndex(-1);
+    },
+    [clientes, form],
+  );
+
+  const handleClientInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setIsClientDropdownOpen(true);
+      setHighlightedClienteIndex((prev) => {
+        const nextIndex = prev + 1;
+        if (nextIndex >= filteredClientes.length) {
+          return filteredClientes.length > 0 ? 0 : -1;
+        }
+        return nextIndex;
+      });
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setIsClientDropdownOpen(true);
+      setHighlightedClienteIndex((prev) => {
+        if (filteredClientes.length === 0) {
+          return -1;
+        }
+        if (prev <= 0) {
+          return filteredClientes.length - 1;
+        }
+        return prev - 1;
+      });
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      if (isClientDropdownOpen && highlightedClienteIndex >= 0 && highlightedClienteIndex < filteredClientes.length) {
+        event.preventDefault();
+        handleSelectCliente(filteredClientes[highlightedClienteIndex]);
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      if (isClientDropdownOpen) {
+        event.preventDefault();
+        setIsClientDropdownOpen(false);
+        setHighlightedClienteIndex(-1);
+      }
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      setIsClientDropdownOpen(false);
+      setHighlightedClienteIndex(-1);
+    }
+  };
 
   return (
     <Card className="w-full max-w-2xl">
@@ -316,34 +464,70 @@ export function AppointmentForm({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2" ref={clientFieldRef}>
               <Label htmlFor="clientName">Cliente</Label>
-              <Input
-                id="clientName"
-                {...form.register('clientName')}
-                value={clientName}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  form.setValue('clientName', value);
-                  const cliente = clientes.find((c) => c.nome === value);
-                  if (cliente) {
-                    form.setValue('clientId', String(cliente.id));
-                    form.setValue('clientPhone', cliente.telefone || '');
-                    form.setValue('clientEmail', cliente.email || '');
-                  } else {
-                    form.setValue('clientId', '');
-                    form.setValue('clientPhone', '');
-                    form.setValue('clientEmail', '');
-                  }
-                }}
-                placeholder="Nome do cliente (opcional)"
-                list="client-suggestions"
-              />
-              <datalist id="client-suggestions">
-                {filteredClientes.map((c) => (
-                  <option key={c.id} value={c.nome} />
-                ))}
-              </datalist>
+              <div className="relative">
+                <Input
+                  id="clientName"
+                  autoComplete="off"
+                  {...form.register('clientName')}
+                  value={clientName}
+                  onFocus={() => {
+                    setIsClientDropdownOpen(true);
+                  }}
+                  onChange={(event) => {
+                    handleClientInputChange(event.target.value);
+                    setIsClientDropdownOpen(true);
+                  }}
+                  onKeyDown={handleClientInputKeyDown}
+                  placeholder="Nome do cliente (opcional)"
+                />
+                {isClientDropdownOpen && (
+                  <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-lg">
+                    {clientesLoading ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">Carregando clientes...</p>
+                    ) : clientesError ? (
+                      <p className="px-3 py-2 text-sm text-destructive">{clientesError}</p>
+                    ) : filteredClientes.length > 0 ? (
+                      filteredClientes.map((cliente, index) => {
+                        const detailParts: string[] = [];
+                        if (typeof cliente.email === 'string' && cliente.email.trim().length > 0) {
+                          detailParts.push(cliente.email.trim());
+                        }
+                        if (typeof cliente.telefone === 'string' && cliente.telefone.trim().length > 0) {
+                          detailParts.push(cliente.telefone.trim());
+                        }
+
+                        return (
+                          <button
+                            key={cliente.id}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              handleSelectCliente(cliente);
+                            }}
+                            className={cn(
+                              'flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent',
+                              index === highlightedClienteIndex && 'bg-accent text-accent-foreground',
+                            )}
+                          >
+                            <span className="font-medium leading-snug">{cliente.nome}</span>
+                            {detailParts.length > 0 && (
+                              <span className="text-xs text-muted-foreground">{detailParts.join(' • ')}</span>
+                            )}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">
+                        {clientName.trim().length > 0
+                          ? 'Nenhum cliente encontrado'
+                          : 'Nenhum cliente disponível'}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
