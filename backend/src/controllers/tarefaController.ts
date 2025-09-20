@@ -38,9 +38,15 @@ export const listTarefas = async (req: Request, res: Response) => {
        LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
        WHERE t.ativo IS TRUE
          AND t.idempresa IS NOT DISTINCT FROM $1
+         AND EXISTS (
+           SELECT 1
+             FROM public.tarefas_responsaveis trf
+            WHERE trf.id_tarefa = t.id
+              AND trf.id_usuario = $2
+         )
        GROUP BY t.id
 ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`,
-      [empresaId]
+      [empresaId, req.auth.userId]
     );
     res.json(result.rows);
   } catch (error) {
