@@ -5,15 +5,42 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteEscritorio = exports.updateEscritorio = exports.createEscritorio = exports.listEscritorios = void 0;
 const db_1 = __importDefault(require("../services/db"));
-const parseEmpresaId = (value) => {
-    if (value === undefined || value === null || value === '') {
-        return null;
+const authUser_1 = require("../utils/authUser");
+const getAuthenticatedEmpresaId = async (req, res) => {
+    if (!req.auth) {
+        res.status(401).json({ error: 'Token inválido.' });
+        return undefined;
     }
-    const parsed = Number(value);
-    return Number.isNaN(parsed) ? null : parsed;
+    const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(req.auth.userId);
+    if (!empresaLookup.success) {
+        res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        return undefined;
+    }
+    return empresaLookup.empresaId;
 };
-const listEscritorios = async (_req, res) => {
+const ensureAuthenticatedEmpresaId = async (req, res) => {
+    const empresaId = await getAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+        return undefined;
+    }
+    if (empresaId === null) {
+        res
+            .status(400)
+            .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+        return undefined;
+    }
+    return empresaId;
+};
+const listEscritorios = async (req, res) => {
     try {
+        const empresaId = await getAuthenticatedEmpresaId(req, res);
+        if (empresaId === undefined) {
+            return;
+        }
+        if (empresaId === null) {
+            res.json([]);
+            return;
+        }
         const result = await db_1.default.query(`SELECT e.id,
               e.nome,
               e.empresa,
@@ -22,7 +49,8 @@ const listEscritorios = async (_req, res) => {
               e.datacriacao
          FROM public.escritorios e
          LEFT JOIN public.empresas emp ON emp.id = e.empresa
-         ORDER BY e.nome`);
+        WHERE e.empresa IS NOT DISTINCT FROM $1
+         ORDER BY e.nome`, [empresaId]);
         res.json(result.rows);
     }
     catch (error) {
@@ -32,12 +60,15 @@ const listEscritorios = async (_req, res) => {
 };
 exports.listEscritorios = listEscritorios;
 const createEscritorio = async (req, res) => {
-    const { nome, empresa, ativo } = req.body;
+    const { nome, ativo } = req.body;
     const nomeTrimmed = typeof nome === 'string' ? nome.trim() : '';
     if (!nomeTrimmed) {
         return res.status(400).json({ error: 'Nome é obrigatório' });
     }
-    const empresaId = parseEmpresaId(empresa);
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+        return;
+    }
     const ativoValue = typeof ativo === 'boolean' ? ativo : true;
     try {
         const result = await db_1.default.query(`WITH inserted AS (
@@ -63,12 +94,15 @@ const createEscritorio = async (req, res) => {
 exports.createEscritorio = createEscritorio;
 const updateEscritorio = async (req, res) => {
     const { id } = req.params;
-    const { nome, empresa, ativo } = req.body;
+    const { nome, ativo } = req.body;
     const nomeTrimmed = typeof nome === 'string' ? nome.trim() : '';
     if (!nomeTrimmed) {
         return res.status(400).json({ error: 'Nome é obrigatório' });
     }
-    const empresaId = parseEmpresaId(empresa);
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+        return;
+    }
     const ativoValue = typeof ativo === 'boolean' ? ativo : true;
     try {
         const result = await db_1.default.query(`WITH updated AS (
@@ -77,6 +111,7 @@ const updateEscritorio = async (req, res) => {
                 empresa = $2,
                 ativo = $3
           WHERE id = $4
+            AND empresa IS NOT DISTINCT FROM $2
           RETURNING id, nome, empresa, ativo, datacriacao
        )
        SELECT u.id,
@@ -100,8 +135,12 @@ const updateEscritorio = async (req, res) => {
 exports.updateEscritorio = updateEscritorio;
 const deleteEscritorio = async (req, res) => {
     const { id } = req.params;
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+        return;
+    }
     try {
-        const result = await db_1.default.query('DELETE FROM public.escritorios WHERE id = $1', [id]);
+        const result = await db_1.default.query('DELETE FROM public.escritorios WHERE id = $1 AND empresa IS NOT DISTINCT FROM $2', [id, empresaId]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Setor não encontrado' });
         }

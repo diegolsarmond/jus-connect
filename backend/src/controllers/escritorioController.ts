@@ -1,16 +1,57 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
-const parseEmpresaId = (value: unknown): number | null => {
-  if (value === undefined || value === null || value === '') {
-    return null;
+const getAuthenticatedEmpresaId = async (
+  req: Request,
+  res: Response
+): Promise<number | null | undefined> => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return undefined;
   }
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? null : parsed;
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return undefined;
+  }
+
+  return empresaLookup.empresaId;
 };
 
-export const listEscritorios = async (_req: Request, res: Response) => {
+const ensureAuthenticatedEmpresaId = async (
+  req: Request,
+  res: Response
+): Promise<number | undefined> => {
+  const empresaId = await getAuthenticatedEmpresaId(req, res);
+  if (empresaId === undefined) {
+    return undefined;
+  }
+
+  if (empresaId === null) {
+    res
+      .status(400)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    return undefined;
+  }
+
+  return empresaId;
+};
+
+export const listEscritorios = async (req: Request, res: Response) => {
   try {
+    const empresaId = await getAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
+    }
+
+    if (empresaId === null) {
+      res.json([]);
+      return;
+    }
+
     const result = await pool.query(
       `SELECT e.id,
               e.nome,
@@ -20,7 +61,9 @@ export const listEscritorios = async (_req: Request, res: Response) => {
               e.datacriacao
          FROM public.escritorios e
          LEFT JOIN public.empresas emp ON emp.id = e.empresa
-         ORDER BY e.nome`
+        WHERE e.empresa IS NOT DISTINCT FROM $1
+         ORDER BY e.nome`,
+      [empresaId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -30,13 +73,17 @@ export const listEscritorios = async (_req: Request, res: Response) => {
 };
 
 export const createEscritorio = async (req: Request, res: Response) => {
-  const { nome, empresa, ativo } = req.body;
+  const { nome, ativo } = req.body;
   const nomeTrimmed = typeof nome === 'string' ? nome.trim() : '';
   if (!nomeTrimmed) {
     return res.status(400).json({ error: 'Nome é obrigatório' });
   }
 
-  const empresaId = parseEmpresaId(empresa);
+  const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+  if (empresaId === undefined) {
+    return;
+  }
+
   const ativoValue = typeof ativo === 'boolean' ? ativo : true;
 
   try {
@@ -65,13 +112,17 @@ export const createEscritorio = async (req: Request, res: Response) => {
 
 export const updateEscritorio = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { nome, empresa, ativo } = req.body;
+  const { nome, ativo } = req.body;
   const nomeTrimmed = typeof nome === 'string' ? nome.trim() : '';
   if (!nomeTrimmed) {
     return res.status(400).json({ error: 'Nome é obrigatório' });
   }
 
-  const empresaId = parseEmpresaId(empresa);
+  const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+  if (empresaId === undefined) {
+    return;
+  }
+
   const ativoValue = typeof ativo === 'boolean' ? ativo : true;
 
   try {
@@ -82,6 +133,7 @@ export const updateEscritorio = async (req: Request, res: Response) => {
                 empresa = $2,
                 ativo = $3
           WHERE id = $4
+            AND empresa IS NOT DISTINCT FROM $2
           RETURNING id, nome, empresa, ativo, datacriacao
        )
        SELECT u.id,
@@ -106,10 +158,14 @@ export const updateEscritorio = async (req: Request, res: Response) => {
 
 export const deleteEscritorio = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+  if (empresaId === undefined) {
+    return;
+  }
   try {
     const result = await pool.query(
-      'DELETE FROM public.escritorios WHERE id = $1',
-      [id]
+      'DELETE FROM public.escritorios WHERE id = $1 AND empresa IS NOT DISTINCT FROM $2',
+      [id, empresaId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Setor não encontrado' });
