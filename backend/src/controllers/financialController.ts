@@ -6,6 +6,87 @@ import AsaasChargeService, {
   ValidationError as AsaasValidationError,
 } from '../services/asaasChargeService';
 
+const POSTGRES_UNDEFINED_TABLE = '42P01';
+const POSTGRES_UNDEFINED_COLUMN = '42703';
+const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let opportunityTablesAvailability: boolean | null = null;
+let opportunityTablesAvailabilityCheckedAt: number | null = null;
+let opportunityTablesCheckPromise: Promise<boolean> | null = null;
+
+const updateOpportunityTablesAvailability = (value: boolean) => {
+  opportunityTablesAvailability = value;
+  opportunityTablesAvailabilityCheckedAt = Date.now();
+};
+
+const resetOpportunityTablesAvailabilityCache = () => {
+  opportunityTablesAvailability = null;
+  opportunityTablesAvailabilityCheckedAt = null;
+  opportunityTablesCheckPromise = null;
+};
+
+const determineOpportunityTablesAvailability = async (): Promise<boolean> => {
+  const cachedValue = opportunityTablesAvailability;
+  const checkedAt = opportunityTablesAvailabilityCheckedAt;
+  if (
+    cachedValue !== null &&
+    checkedAt !== null &&
+    Date.now() - checkedAt < OPPORTUNITY_TABLES_CACHE_TTL_MS
+  ) {
+    return cachedValue;
+  }
+
+  if (opportunityTablesCheckPromise) {
+    return opportunityTablesCheckPromise;
+  }
+
+  opportunityTablesCheckPromise = pool
+    .query(
+      `
+        SELECT
+          to_regclass('public.oportunidade_parcelas') AS parcelas,
+          to_regclass('public.oportunidades') AS oportunidades,
+          to_regclass('public.clientes') AS clientes,
+          to_regclass('public.oportunidade_faturamentos') AS faturamentos
+      `,
+    )
+    .then((result) => {
+      const row = result.rows[0] ?? {};
+      const available =
+        Boolean(row?.parcelas) &&
+        Boolean(row?.oportunidades) &&
+        Boolean(row?.clientes) &&
+        Boolean(row?.faturamentos);
+      updateOpportunityTablesAvailability(available);
+      return available;
+    })
+    .catch(() => {
+      updateOpportunityTablesAvailability(false);
+      return false;
+    })
+    .finally(() => {
+      opportunityTablesCheckPromise = null;
+    });
+
+  return opportunityTablesCheckPromise;
+};
+
+const markOpportunityTablesUnavailable = () => {
+  updateOpportunityTablesAvailability(false);
+};
+
+const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const code = (error as { code?: string }).code;
+  return code === POSTGRES_UNDEFINED_TABLE || code === POSTGRES_UNDEFINED_COLUMN;
+};
+
+export const __internal = {
+  resetOpportunityTablesAvailabilityCache,
+};
+
 const asaasChargeService = new AsaasChargeService();
 
 export const listFlows = async (req: Request, res: Response) => {
@@ -41,7 +122,31 @@ export const listFlows = async (req: Request, res: Response) => {
       filterClause = `WHERE combined_flows.cliente_id = $${filters.length}`;
     }
 
-    const combinedCte = `
+    const baseFinancialFlowsSelect = `
+        SELECT
+          ff.id AS id,
+          ff.tipo AS tipo,
+          ff.descricao AS descricao,
+          ff.valor::numeric AS valor,
+          ff.vencimento::date AS vencimento,
+          ff.pagamento::date AS pagamento,
+          ff.status AS status,
+          ff.conta_id AS conta_id,
+          ff.categoria_id AS categoria_id,
+          NULL::INTEGER AS cliente_id
+        FROM financial_flows ff
+      `;
+
+    const buildCombinedCte = (includeOpportunities: boolean): string => {
+      if (!includeOpportunities) {
+        return `
+      WITH combined_flows AS (
+${baseFinancialFlowsSelect}
+      )
+    `;
+      }
+
+      return `
       WITH oportunidade_parcelas_enriched AS (
         SELECT
           p.id,
@@ -65,18 +170,7 @@ export const listFlows = async (req: Request, res: Response) => {
         LEFT JOIN public.oportunidade_faturamentos f ON f.id = p.faturamento_id
       ),
       combined_flows AS (
-        SELECT
-          ff.id AS id,
-          ff.tipo AS tipo,
-          ff.descricao AS descricao,
-          ff.valor::numeric AS valor,
-          ff.vencimento::date AS vencimento,
-          ff.pagamento::date AS pagamento,
-          ff.status AS status,
-          ff.conta_id AS conta_id,
-          ff.categoria_id AS categoria_id,
-          NULL::INTEGER AS cliente_id
-        FROM financial_flows ff
+${baseFinancialFlowsSelect}
         UNION ALL
         SELECT
           -p.id AS id,
@@ -120,11 +214,19 @@ export const listFlows = async (req: Request, res: Response) => {
         FROM oportunidade_parcelas_enriched p
       )
     `;
+    };
 
-    const limitParamIndex = filters.length + 1;
-    const offsetParamIndex = filters.length + 2;
+    const runListFlowsQuery = async (
+      includeOpportunities: boolean,
+    ): Promise<{
+      items: Awaited<ReturnType<typeof pool.query>>;
+      total: Awaited<ReturnType<typeof pool.query>>;
+    }> => {
+      const combinedCte = buildCombinedCte(includeOpportunities);
+      const limitParamIndex = filters.length + 1;
+      const offsetParamIndex = filters.length + 2;
 
-    const dataQuery = `
+      const dataQuery = `
       ${combinedCte}
       SELECT id, tipo, descricao, valor, vencimento, pagamento, status, conta_id, categoria_id
       FROM combined_flows
@@ -133,19 +235,42 @@ export const listFlows = async (req: Request, res: Response) => {
       LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
     `;
 
-    const dataValues = [...filters, effectiveLimit, offset];
+      const dataValues = [...filters, effectiveLimit, offset];
 
-    const countQuery = `
+      const countQuery = `
       ${combinedCte}
       SELECT COUNT(*)::INTEGER AS total
       FROM combined_flows
       ${filterClause}
     `;
 
-    const countValues = [...filters];
+      const countValues = [...filters];
 
-    const itemsResult = await pool.query(dataQuery, dataValues);
-    const totalResult = await pool.query(countQuery, countValues);
+      const items = await pool.query(dataQuery, dataValues);
+      const total = await pool.query(countQuery, countValues);
+
+      return { items, total };
+    };
+
+    const includeOpportunityFlows = await determineOpportunityTablesAvailability();
+
+    let queryResult: {
+      items: Awaited<ReturnType<typeof pool.query>>;
+      total: Awaited<ReturnType<typeof pool.query>>;
+    };
+
+    try {
+      queryResult = await runListFlowsQuery(includeOpportunityFlows);
+    } catch (queryError) {
+      if (includeOpportunityFlows && shouldFallbackToFinancialFlowsOnly(queryError)) {
+        markOpportunityTablesUnavailable();
+        queryResult = await runListFlowsQuery(false);
+      } else {
+        throw queryError;
+      }
+    }
+
+    const { items: itemsResult, total: totalResult } = queryResult;
 
     const normalizeDate = (value: unknown): string | null => {
       if (!value) {
