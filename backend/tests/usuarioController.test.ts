@@ -104,7 +104,7 @@ test('getUsuarioById returns user when it belongs to the same company', async ()
   assert.deepEqual(res.body, userRow);
   assert.equal(calls.length, 2);
   assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
-  assert.match(calls[1]?.text ?? '', /JOIN public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /FROM public\.usuarios u/);
   assert.match(calls[1]?.text ?? '', /u\.empresa IS NOT DISTINCT FROM \$2::INT/);
   assert.deepEqual(calls[1]?.values, ['123', 42]);
 });
