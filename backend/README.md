@@ -18,7 +18,15 @@ Estrutura inicial do backend usando Express e TypeScript.
    **PostgreSQL** acessível. O projeto já inclui um `appsettings.json`
    configurado para a stack de desenvolvimento utilizada no Docker Compose da
    Quantum, mas você pode sobrescrever a conexão usando a variável
-   `DATABASE_URL` se preferir outro servidor.
+   `DATABASE_URL`. Para o ambiente de testes/homologação padrão utilize:
+
+   ```bash
+   export DATABASE_URL="postgres://postgres:C@104rm0nd1994@easypanel02.quantumtecnologia.com.br:5438/quantumtecnologia?sslmode=disable"
+   ```
+
+   Caso prefira outra instância local, substitua a string acima pela conexão
+   desejada.
+
 2. Instale as dependências do backend:
 
    ```bash
@@ -108,7 +116,7 @@ Para gerar o build e executar o servidor em produção:
 
 ```bash
 npm run build
-DATABASE_URL="postgres://user:pass@host:port/db" npm start
+DATABASE_URL="postgres://postgres:C@104rm0nd1994@base-de-dados_postgres:5432/quantumtecnologia?sslmode=disable" npm start
 ```
 
 Se `DATABASE_URL` não estiver definida, o servidor tentará utilizar a conexão
