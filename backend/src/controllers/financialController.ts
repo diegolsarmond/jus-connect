@@ -142,16 +142,14 @@ export const listFlows = async (req: Request, res: Response) => {
   const offset = (effectivePage - 1) * effectiveLimit;
 
   const clienteValue = pickStringQueryValue(clienteId);
-  const parsedClienteId =
-    clienteValue && clienteValue.trim().length > 0
-      ? Number.parseInt(clienteValue.trim(), 10)
-      : null;
+  const trimmedClienteId =
+    clienteValue && clienteValue.trim().length > 0 ? clienteValue.trim() : null;
 
   try {
-    const filters: number[] = [];
+    const filters: (string | number)[] = [];
     let filterClause = '';
-    if (parsedClienteId !== null && Number.isFinite(parsedClienteId)) {
-      filters.push(Number(parsedClienteId));
+    if (trimmedClienteId) {
+      filters.push(trimmedClienteId);
       filterClause = `WHERE combined_flows.cliente_id = $${filters.length}`;
     }
 
@@ -166,7 +164,7 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.status AS status,
           ff.conta_id AS conta_id,
           ff.categoria_id AS categoria_id,
-          NULL::INTEGER AS cliente_id
+          NULL::TEXT AS cliente_id
         FROM financial_flows ff
       `;
 
@@ -243,7 +241,7 @@ ${baseFinancialFlowsSelect}
           END AS status,
           NULL::INTEGER AS conta_id,
           NULL::INTEGER AS categoria_id,
-          p.solicitante_id AS cliente_id
+          p.solicitante_id::TEXT AS cliente_id
         FROM oportunidade_parcelas_enriched p
       )
     `;
