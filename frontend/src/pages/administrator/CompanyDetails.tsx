@@ -11,13 +11,16 @@ import { getApiUrl } from "@/lib/api";
 import {
   ApiCompany,
   ApiPlan,
+  ApiUser,
   Company,
   CompanyStatusBadge,
+  buildUsersIndex,
   formatCurrency,
   formatDate,
   mapApiCompanyToCompany,
   parseDataArray,
   parseDataItem,
+  getPlanIndex,
 } from "./companies-data";
 
 interface SummaryCardProps {
@@ -102,7 +105,7 @@ export default function CompanyDetails() {
 
         const companyPayload = await companyResponse.json();
 
-        const plansIndex = new Map<string, ApiPlan>();
+        let plansIndex = new Map<string, ApiPlan>();
         try {
           const plansResponse = await fetch(getApiUrl("planos"), {
             headers: { Accept: "application/json" },
@@ -112,11 +115,7 @@ export default function CompanyDetails() {
           if (plansResponse.ok) {
             const plansPayload = await plansResponse.json();
             const apiPlans = parseDataArray<ApiPlan>(plansPayload);
-            apiPlans.forEach((plan) => {
-              if (plan?.id != null) {
-                plansIndex.set(String(plan.id), plan);
-              }
-            });
+            plansIndex = getPlanIndex(apiPlans);
           } else {
             console.warn("Falha ao carregar planos:", plansResponse.status);
           }
@@ -125,6 +124,34 @@ export default function CompanyDetails() {
             return;
           }
           console.warn("Erro ao carregar planos:", plansError);
+        }
+
+        let usersIndex: Map<string, ApiUser> | undefined;
+        try {
+          const usersResponse = await fetch(getApiUrl("usuarios"), {
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          });
+
+          if (usersResponse.ok) {
+            const usersPayload = await usersResponse.json();
+            const usersData = Array.isArray(usersPayload)
+              ? (usersPayload as ApiUser[])
+              : parseDataArray<ApiUser>(usersPayload);
+
+            if (usersData.length > 0) {
+              usersIndex = buildUsersIndex(usersData);
+            } else {
+              console.warn("Resposta inesperada ao carregar usuários.");
+            }
+          } else {
+            console.warn("Falha ao carregar usuários:", usersResponse.status);
+          }
+        } catch (usersError) {
+          if (usersError instanceof DOMException && usersError.name === "AbortError") {
+            return;
+          }
+          console.warn("Erro ao carregar usuários:", usersError);
         }
 
         if (!isMounted) {
@@ -138,7 +165,7 @@ export default function CompanyDetails() {
           return;
         }
 
-        setCompany(mapApiCompanyToCompany(apiCompany, plansIndex));
+        setCompany(mapApiCompanyToCompany(apiCompany, plansIndex, usersIndex));
         setError(null);
       } catch (fetchError) {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
@@ -171,13 +198,18 @@ export default function CompanyDetails() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link to={routes.admin.companies}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Voltar para empresas
           </Link>
         </Button>
+        {company ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link to={routes.admin.editCompany(company.id)}>Editar empresa</Link>
+          </Button>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -244,7 +276,7 @@ export default function CompanyDetails() {
                 <InfoItem
                   icon={User}
                   label="Responsável"
-                  value={company.manager || "--"}
+                  value={company.managerName || "Não informado"}
                   description="Usuário responsável pelo contrato"
                 />
                 <InfoItem icon={IdCard} label="CNPJ" value={company.cnpj || "--"} />

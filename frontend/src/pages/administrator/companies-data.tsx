@@ -21,6 +21,12 @@ export interface ApiPlan {
   valor?: number | null;
 }
 
+export interface ApiUser {
+  id?: number | string | null;
+  nome_completo?: string | null;
+  email?: string | null;
+}
+
 export interface Company {
   id: number;
   name: string;
@@ -31,7 +37,9 @@ export interface Company {
   planName: string;
   planValue?: number | null;
   status: CompanyStatus;
-  manager: string;
+  managerId: string | null;
+  managerName: string;
+  isActive: boolean;
   createdAt: string | null;
   lastActivity: string | null;
 }
@@ -108,6 +116,34 @@ const toIsoString = (value: unknown): string | null => {
   return null;
 };
 
+const normalizeBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    if (!normalized) {
+      return null;
+    }
+
+    if (["false", "0", "inativo", "inactive", "nao", "não", "no", "n"].includes(normalized)) {
+      return false;
+    }
+
+    if (["true", "1", "ativo", "active", "sim", "yes", "y", "s"].includes(normalized)) {
+      return true;
+    }
+  }
+
+  return null;
+};
+
 export const resolveCompanyStatus = (
   status: boolean | null | undefined,
   planId: string | null,
@@ -123,12 +159,78 @@ export const resolveCompanyStatus = (
   return "trial";
 };
 
+const buildPlansIndex = (plans: ApiPlan[]): Map<string, ApiPlan> => {
+  const index = new Map<string, ApiPlan>();
+
+  plans.forEach((plan) => {
+    if (plan?.id != null) {
+      index.set(String(plan.id), plan);
+    }
+  });
+
+  return index;
+};
+
+export const buildUsersIndex = (users: ApiUser[]): Map<string, ApiUser> => {
+  const index = new Map<string, ApiUser>();
+
+  users.forEach((user) => {
+    if (user?.id == null) {
+      return;
+    }
+
+    const id = String(user.id);
+    if (!id) {
+      return;
+    }
+
+    index.set(id, user);
+  });
+
+  return index;
+};
+
+export const getPlanIndex = (plans: ApiPlan[]): Map<string, ApiPlan> => buildPlansIndex(plans);
+
+const getUserDisplayName = (user: ApiUser | undefined, fallbackId: string | null): string => {
+  const fallbackLabel = fallbackId ? `Usuário ${fallbackId}` : "";
+
+  if (!user) {
+    return fallbackLabel;
+  }
+
+  const name = typeof user.nome_completo === "string" ? user.nome_completo.trim() : "";
+  if (name) {
+    return name;
+  }
+
+  const email = typeof user.email === "string" ? user.email.trim() : "";
+  if (email) {
+    return email;
+  }
+
+  return fallbackLabel;
+};
+
 export const mapApiCompanyToCompany = (
   company: ApiCompany,
   plansIndex: Map<string, ApiPlan>,
+  usersIndex?: Map<string, ApiUser>,
 ): Company => {
   const planId = company.plano != null ? String(company.plano) : null;
   const plan = planId ? plansIndex.get(planId) : undefined;
+  const managerId = company.responsavel != null ? String(company.responsavel) : null;
+  const normalizedActive = normalizeBoolean(company.ativo);
+  const status = resolveCompanyStatus(normalizedActive, planId);
+
+  const managerNameFromApi =
+    typeof company.responsavel === "string" && company.responsavel.trim().length > 0
+      ? company.responsavel.trim()
+      : "";
+  const managerName =
+    managerId && usersIndex
+      ? getUserDisplayName(usersIndex.get(managerId), managerId)
+      : managerNameFromApi || (managerId ? `Usuário ${managerId}` : "");
 
   return {
     id: company.id,
@@ -139,8 +241,10 @@ export const mapApiCompanyToCompany = (
     planId,
     planName: plan?.nome?.trim() || (planId ? `Plano ${planId}` : "Sem plano"),
     planValue: typeof plan?.valor === "number" ? plan.valor : null,
-    status: resolveCompanyStatus(company.ativo ?? null, planId),
-    manager: company.responsavel != null ? String(company.responsavel) : "",
+    status,
+    managerId,
+    managerName,
+    isActive: normalizedActive ?? status !== "inactive",
     createdAt: toIsoString(company.datacadastro),
     lastActivity: toIsoString(company.atualizacao) ?? toIsoString(company.datacadastro),
   };

@@ -12,183 +12,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-
-type FormData = {
-  name: string;
-  email: string;
-  cnpj: string;
-  phone: string;
-  planId: string;
-  managerId: string;
-  isActive: boolean;
-};
-
-type ApiPlan = {
-  id?: number | string | null;
-  nome?: string | null;
-  ativo?: boolean | number | string | null;
-};
-
-type PlanOption = {
-  id: string;
-  label: string;
-  isActive: boolean;
-};
-
-type ApiUser = {
-  id?: number | string | null;
-  nome_completo?: string | null;
-  email?: string | null;
-};
-
-type UserOption = {
-  id: string;
-  label: string;
-};
-
-const parseDataArray = <T,>(payload: unknown): T[] => {
-  if (Array.isArray(payload)) {
-    return payload as T[];
-  }
-
-  if (payload && typeof payload === "object") {
-    const rows = (payload as { rows?: unknown }).rows;
-    if (Array.isArray(rows)) {
-      return rows as T[];
-    }
-
-    const data = (payload as { data?: unknown }).data;
-    if (Array.isArray(data)) {
-      return data as T[];
-    }
-
-    if (data && typeof data === "object") {
-      const nestedRows = (data as { rows?: unknown }).rows;
-      if (Array.isArray(nestedRows)) {
-        return nestedRows as T[];
-      }
-    }
-  }
-
-  return [];
-};
-
-const normalizeBoolean = (value: unknown): boolean => {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    return value !== 0;
-  }
-
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-
-    if (["false", "0", "inativo", "inactive", "nao", "não", "no", "n"].includes(normalized)) {
-      return false;
-    }
-
-    if (["true", "1", "ativo", "active", "sim", "yes", "y", "s"].includes(normalized)) {
-      return true;
-    }
-  }
-
-  return Boolean(value);
-};
-
-const resolveNumericId = (value: unknown): string | null => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const parsed = Number(trimmed);
-    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
-      return String(parsed);
-    }
-  }
-
-  return null;
-};
-
-const mapPlanToOption = (plan: ApiPlan, index: number): PlanOption | null => {
-  const id = resolveNumericId(plan.id);
-  if (!id) {
-    return null;
-  }
-
-  const name =
-    typeof plan.nome === "string" && plan.nome.trim().length > 0
-      ? plan.nome.trim()
-      : `Plano ${index + 1}`;
-
-  return {
-    id,
-    label: name,
-    isActive: normalizeBoolean(plan.ativo),
-  } satisfies PlanOption;
-};
-
-const mapUserToOption = (user: ApiUser, index: number): UserOption | null => {
-  const id = resolveNumericId(user.id);
-  if (!id) {
-    return null;
-  }
-
-  const name =
-    typeof user.nome_completo === "string" && user.nome_completo.trim().length > 0
-      ? user.nome_completo.trim()
-      : null;
-  const email =
-    typeof user.email === "string" && user.email.trim().length > 0
-      ? user.email.trim()
-      : null;
-
-  const label =
-    name && email
-      ? `${name} — ${email}`
-      : name ?? email ?? `Usuário ${index + 1}`;
-
-  return {
-    id,
-    label,
-  } satisfies UserOption;
-};
-
-const sanitizeDigits = (value: string): string => value.replace(/[^0-9]/g, "");
-
-const parseOptionalNumber = (value: string): number | null => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const parsed = Number(trimmed);
-  if (Number.isNaN(parsed) || !Number.isFinite(parsed)) {
-    return null;
-  }
-
-  return parsed;
-};
-
-const initialFormData: FormData = {
-  name: "",
-  email: "",
-  cnpj: "",
-  phone: "",
-  planId: "",
-  managerId: "",
-  isActive: true,
-};
+import {
+  CompanyFormApiPlan as ApiPlan,
+  CompanyFormApiUser as ApiUser,
+  CompanyFormData,
+  PlanOption,
+  UserOption,
+  initialCompanyFormData,
+  mapPlanToOption,
+  mapUserToOption,
+  parseDataArray,
+  parseOptionalNumber,
+  sanitizeDigits,
+} from "./company-form-utils";
 
 export default function NewCompany() {
-  const [formData, setFormData] = useState<FormData>(initialFormData);
+  const [formData, setFormData] = useState<CompanyFormData>(initialCompanyFormData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [planOptions, setPlanOptions] = useState<PlanOption[]>([]);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
