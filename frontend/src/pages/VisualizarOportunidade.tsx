@@ -943,12 +943,40 @@ export default function VisualizarOportunidade() {
   };
 
   const parseToNumber = (value: unknown): number | null => {
-    if (typeof value === "number" && !Number.isNaN(value)) return value;
-    if (typeof value === "string" && value.trim().length > 0) {
-      const normalized = value.replace(/\./g, "").replace(",", ".");
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length === 0) return null;
+
+      const sanitized = trimmed.replace(/[^0-9,.-]/g, "");
+      if (sanitized.length === 0) return null;
+
+      const hasComma = sanitized.includes(",");
+      const hasDot = sanitized.includes(".");
+      let normalized = sanitized;
+
+      if (hasComma && hasDot) {
+        if (sanitized.lastIndexOf(",") > sanitized.lastIndexOf(".")) {
+          normalized = sanitized.replace(/\./g, "").replace(/,/g, ".");
+        } else {
+          normalized = sanitized.replace(/,/g, "");
+        }
+      } else if (hasComma) {
+        normalized = sanitized.replace(/\./g, "").replace(/,/g, ".");
+      } else if (hasDot) {
+        const parts = sanitized.split(".");
+        if (parts.length > 2) {
+          normalized = parts.join("");
+        }
+      }
+
       const parsed = Number(normalized);
       return Number.isNaN(parsed) ? null : parsed;
     }
+
     return null;
   };
 
