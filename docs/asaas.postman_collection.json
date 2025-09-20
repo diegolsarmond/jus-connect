@@ -1,0 +1,73 @@
+{
+  "info": {
+    "name": "Jus Connect - Integração Asaas",
+    "description": "Fluxo completo de cobrança com cliente, pagamento PIX e simulação de webhook.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "f63f3871-2e1f-4c3f-b8d5-asaas"
+  },
+  "item": [
+    {
+      "name": "Criar/atualizar cliente Asaas",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{backend_url}}/api/asaas/customers",
+          "host": ["{{backend_url}}"],
+          "path": ["api", "asaas", "customers"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"externalId\": \"cliente-123\",\n  \"name\": \"Cliente Teste\",\n  \"email\": \"cliente@example.com\",\n  \"cpfCnpj\": \"00000000191\",\n  \"phone\": \"48999999999\"\n}"
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Gerar cobrança PIX",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{backend_url}}/api/asaas/payments",
+          "host": ["{{backend_url}}"],
+          "path": ["api", "asaas", "payments"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerExternalId\": \"cliente-123\",\n  \"billingType\": \"PIX\",\n  \"value\": 150.5,\n  \"description\": \"Mensalidade plano premium\"\n}"
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Webhook simulado - pagamento confirmado",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-asaas-signature", "value": "{{webhook_signature}}" }
+        ],
+        "url": {
+          "raw": "{{backend_url}}/api/asaas/webhooks/mock",
+          "host": ["{{backend_url}}"],
+          "path": ["api", "asaas", "webhooks", "mock"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"PAYMENT_CONFIRMED\",\n  \"payment\": {\n    \"id\": \"pay_0001\",\n    \"value\": 150.5,\n    \"status\": \"RECEIVED\",\n    \"customer\": \"cus_0001\",\n    \"externalReference\": \"cliente-123\"\n  }\n}"
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [],
+  "variable": [
+    { "key": "backend_url", "value": "http://localhost:3001" },
+    { "key": "webhook_signature", "value": "assine-com-o-segredo" }
+  ]
+}
