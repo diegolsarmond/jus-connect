@@ -138,6 +138,20 @@ export const listUsuarios = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Token inválido.' });
     }
 
+    const result = await pool.query(baseUsuarioSelect);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const listUsuariosByEmpresa = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
     const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
 
     if (!empresaLookup.success) {
@@ -145,6 +159,7 @@ export const listUsuarios = async (req: Request, res: Response) => {
     }
 
     const { empresaId } = empresaLookup;
+
 
     if (empresaId === null) {
       return res.json([]);
