@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { format as formatDateFn } from 'date-fns';
 import { Calendar, Plus } from 'lucide-react';
 import { getApiBaseUrl } from '@/lib/api';
 
@@ -30,10 +31,238 @@ import {
 
 const apiUrl = getApiBaseUrl();
 
+interface AgendaResponse {
+  id: number | string;
+  titulo: string;
+  id_evento?: number | string | null;
+  tipo?: number | string | null;
+  tipo_evento?: string | null;
+  descricao?: string | null;
+  data: string;
+  hora_inicio: string;
+  hora_fim?: string | null;
+  cliente?: string | null;
+  cliente_email?: string | null;
+  cliente_telefone?: string | null;
+  tipo_local?: string | null;
+  local?: string | null;
+  lembrete?: boolean | number | string | null;
+  status: number | string;
+  datacadastro?: string | null;
+  dataatualizacao?: string | null;
+}
+
+type TipoEventoOption = {
+  id: number;
+  nome?: string | null;
+  normalizedType?: AppointmentType;
+};
+
+type AgendaMappingContext = {
+  typeById: Map<number, AppointmentType>;
+  typeNameById: Map<number, string>;
+  idByType: Map<AppointmentType, number>;
+};
+
 function joinUrl(base: string, path = '') {
   const b = base.replace(/\/+$/, '');
   const p = path ? (path.startsWith('/') ? path : `/${path}`) : '';
   return `${b}${p}`;
+}
+
+function toNumericId(value: unknown): number | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function mapAgendaStatus(statusAgenda: unknown): AppointmentStatus {
+  const numeric = Number(statusAgenda);
+  if (!Number.isNaN(numeric)) {
+    if (numeric === 0) return 'cancelado';
+    if (numeric === 1) return 'agendado';
+    if (numeric === 2) return 'em_curso';
+    if (numeric === 3) return 'concluido';
+  }
+
+  if (
+    statusAgenda === 'agendado' ||
+    statusAgenda === 'em_curso' ||
+    statusAgenda === 'concluido' ||
+    statusAgenda === 'cancelado'
+  ) {
+    return statusAgenda;
+  }
+
+  return 'agendado';
+}
+
+function parseAgendaDate(value: string | Date | undefined | null): Date {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed) {
+      const iso = trimmed.length === 10 ? `${trimmed}T00:00:00` : trimmed;
+      const parsed = new Date(iso);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+  }
+
+  return new Date();
+}
+
+function buildAgendaMappingContext(options: TipoEventoOption[]): AgendaMappingContext {
+  const typeById = new Map<number, AppointmentType>();
+  const typeNameById = new Map<number, string>();
+  const idByType = new Map<AppointmentType, number>();
+
+  options.forEach((option) => {
+    const id = option.id;
+    if (!Number.isFinite(id)) {
+      return;
+    }
+
+    if (option.normalizedType && !typeById.has(id)) {
+      typeById.set(id, option.normalizedType);
+      if (!idByType.has(option.normalizedType)) {
+        idByType.set(option.normalizedType, id);
+      }
+    }
+
+    if (typeof option.nome === 'string' && option.nome.trim().length > 0) {
+      typeNameById.set(id, option.nome.trim());
+    }
+  });
+
+  return { typeById, typeNameById, idByType };
+}
+
+function mapAgendaResponseToAppointment(
+  row: AgendaResponse,
+  context: AgendaMappingContext,
+  fallback: Partial<Appointment> = {},
+): Appointment {
+  const resolveTypeById = (rawId: unknown) => {
+    const numericId = toNumericId(rawId);
+    if (numericId === undefined) {
+      return undefined;
+    }
+
+    return context.typeById.get(numericId);
+  };
+
+  const resolveTypeNameById = (rawId: unknown) => {
+    const numericId = toNumericId(rawId);
+    if (numericId === undefined) {
+      return undefined;
+    }
+
+    return context.typeNameById.get(numericId);
+  };
+
+  const resolvedType =
+    resolveTypeById(row.id_evento) ??
+    resolveTypeById(row.tipo) ??
+    normalizeAppointmentType(row.tipo_evento) ??
+    fallback.type ??
+    'outro';
+
+  const resolvedTypeName =
+    resolveTypeNameById(row.id_evento ?? row.tipo) ??
+    (typeof row.tipo_evento === 'string' && row.tipo_evento.trim().length > 0
+      ? row.tipo_evento.trim()
+      : undefined) ??
+    fallback.typeName;
+
+  const resolvedDate =
+    typeof row.data === 'string' && row.data.trim().length > 0
+      ? parseAgendaDate(row.data)
+      : fallback.date ?? new Date();
+
+  const fallbackStartTime = fallback.startTime ?? undefined;
+  const fallbackEndTime = fallback.endTime ?? undefined;
+
+  const resolvedStartTime = ensureTimeString(row.hora_inicio ?? fallbackStartTime);
+  const resolvedEndTime =
+    normalizeTimeString(row.hora_fim ?? fallbackEndTime) ??
+    (fallbackEndTime ? ensureTimeString(fallbackEndTime) : undefined);
+
+  const resolvedReminders =
+    row.lembrete !== undefined && row.lembrete !== null
+      ? String(row.lembrete) === 'true' || Number(row.lembrete) === 1
+      : fallback.reminders ?? true;
+
+  const resolvedStatus = mapAgendaStatus(row.status ?? fallback.status ?? 'agendado');
+
+  const createdAt =
+    typeof row.datacadastro === 'string' && row.datacadastro.trim().length > 0
+      ? parseAgendaDate(row.datacadastro)
+      : fallback.createdAt ?? new Date();
+
+  const updatedAt =
+    typeof row.dataatualizacao === 'string' && row.dataatualizacao.trim().length > 0
+      ? parseAgendaDate(row.dataatualizacao)
+      : typeof row.datacadastro === 'string' && row.datacadastro.trim().length > 0
+        ? parseAgendaDate(row.datacadastro)
+        : fallback.updatedAt ?? createdAt;
+
+  const numericId = toNumericId(row.id);
+  const finalId = numericId ?? fallback.id ?? Date.now();
+
+  return {
+    id: finalId,
+    title: row.titulo ?? fallback.title ?? '(sem título)',
+    description: row.descricao ?? fallback.description ?? undefined,
+    type: resolvedType,
+    typeName: resolvedTypeName,
+    status: resolvedStatus,
+    date: resolvedDate,
+    startTime: resolvedStartTime,
+    endTime: resolvedEndTime,
+    clientId: fallback.clientId,
+    clientName: row.cliente ?? fallback.clientName ?? undefined,
+    clientPhone: row.cliente_telefone ?? fallback.clientPhone ?? undefined,
+    clientEmail: row.cliente_email ?? fallback.clientEmail ?? undefined,
+    location: row.local ?? fallback.location ?? undefined,
+    reminders: resolvedReminders,
+    notifyClient: fallback.notifyClient ?? false,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function sortAppointments(items: Appointment[]): Appointment[] {
+  return [...items].sort((a, b) => {
+    const dateDiff = a.date.getTime() - b.date.getTime();
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+
+    return ensureTimeString(a.startTime).localeCompare(ensureTimeString(b.startTime));
+  });
 }
 
 function normalizeTimeString(time?: string | null): string | undefined {
@@ -96,6 +325,12 @@ export default function Agenda() {
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const [tipoEventoContext, setTipoEventoContext] = useState<AgendaMappingContext>(() => ({
+    typeById: new Map<number, AppointmentType>(),
+    typeNameById: new Map<number, string>(),
+    idByType: new Map<AppointmentType, number>(),
+  }));
+  const [isSavingAppointment, setIsSavingAppointment] = useState(false);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -109,30 +344,17 @@ export default function Agenda() {
 
         // aceita array direto ou objetos { data: [...] } / { rows: [...] } / { agendas: [...] }
         const rows: unknown[] =
-          Array.isArray(json) ? json :
-          Array.isArray(json?.data) ? json.data :
-          Array.isArray(json?.rows) ? json.rows :
-          Array.isArray(json?.agendas) ? json.agendas : [];
+          Array.isArray(json)
+            ? json
+            : Array.isArray(json?.data)
+              ? json.data
+              : Array.isArray(json?.rows)
+                ? json.rows
+                : Array.isArray(json?.agendas)
+                  ? json.agendas
+                  : [];
 
-        interface AgendaResponse {
-          id: number | string;
-          titulo: string;
-          id_evento?: number;        // id do tipo (se houver)
-          tipo?: number;             // compat
-          tipo_evento?: string;      // nome do tipo (se houver)
-          descricao?: string;
-          data: string;              // "YYYY-MM-DD" ou ISO
-          hora_inicio: string;
-          hora_fim?: string;
-          cliente:  string;
-          local?: string;
-          lembrete: boolean | number | string;
-          status: number | string;   // 0..3 ou string
-          datacadastro?: string;
-        }
-
-        // Mapa de id->nome do tipo (AppointmentType)
-        const typeMap = new Map<number, AppointmentType>();
+        let tipoEventoOptions: TipoEventoOption[] = [];
         try {
           const tiposRes = await fetch(joinUrl(apiUrl, '/api/tipo-eventos'), {
             headers: { Accept: 'application/json' },
@@ -144,61 +366,35 @@ export default function Agenda() {
               : Array.isArray(tipoJson?.data)
                 ? tipoJson.data
                 : [];
-            tipoRows.forEach((t: { id: number; nome: string }) => {
-              const normalized = normalizeAppointmentType(t?.nome);
-              if (normalized) typeMap.set(t.id, normalized);
-            });
+
+            tipoEventoOptions = (tipoRows as Array<{ id?: unknown; nome?: unknown }>).
+              reduce<TipoEventoOption[]>((acc, raw) => {
+                const numericId = toNumericId(raw?.id);
+                if (numericId === undefined) {
+                  return acc;
+                }
+
+                const nome = typeof raw?.nome === 'string' ? raw.nome : undefined;
+                acc.push({
+                  id: numericId,
+                  nome,
+                  normalizedType: normalizeAppointmentType(nome),
+                });
+                return acc;
+              }, []);
           }
         } catch (error) {
           console.error('Erro ao carregar tipos de evento:', error);
         }
 
-        const mapStatus = (statusAgenda: unknown): AppointmentStatus => {
-          const n = Number(statusAgenda);
-          if (!Number.isNaN(n)) {
-            if (n === 0) return 'cancelado';
-            if (n === 1) return 'agendado';
-            if (n === 2) return 'em_curso';
-            if (n === 3) return 'concluido';
-          }
-          if (
-            statusAgenda === 'agendado' ||
-            statusAgenda === 'em_curso' ||
-            statusAgenda === 'concluido' ||
-            statusAgenda === 'cancelado'
-          ) {
-            return statusAgenda;
-          }
-          return 'agendado';
-        };
+        const mappingContext = buildAgendaMappingContext(tipoEventoOptions);
+        setTipoEventoContext(mappingContext);
 
-        const toDateOnly = (d: string) =>
-          d && d.length === 10 ? new Date(`${d}T00:00:00`) : new Date(d);
+        const data: Appointment[] = (rows as AgendaResponse[])
+          .filter((row) => row && typeof row === 'object')
+          .map((row) => mapAgendaResponseToAppointment(row, mappingContext));
 
-        const data: Appointment[] = (rows as AgendaResponse[]).map((r) => {
-          // Resolve o tipo: por id_evento/tipo → map, senão por tipo_evento (string), senão 'outro'
-          const typeById = typeMap.get((r.id_evento ?? r.tipo) as number);
-          const typeByName = normalizeAppointmentType(r.tipo_evento);
-
-          return {
-            id: Number(r.id), // padroniza como number
-            title: r.titulo ?? '(sem título)',
-            description: r.descricao ?? undefined,
-            type: typeById || typeByName || 'outro',
-            typeName: r.tipo_evento ?? undefined,
-            status: mapStatus(r.status),
-            date: toDateOnly(r.data),
-            startTime: ensureTimeString(r.hora_inicio),
-            endTime: normalizeTimeString(r.hora_fim) ?? undefined,
-            clientName: r.cliente ?? undefined,
-            location: r.local ?? undefined,
-            reminders: String(r.lembrete) === 'true' || Number(r.lembrete) === 1,
-            createdAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
-            updatedAt: r.datacadastro ? new Date(r.datacadastro) : new Date(),
-          };
-        });
-
-        setAppointments(data);
+        setAppointments(sortAppointments(data));
       } catch (error) {
         console.error('Erro ao carregar agendas:', error);
         toast({
@@ -212,7 +408,7 @@ export default function Agenda() {
       }
     };
 
-    fetchAppointments();
+    void fetchAppointments();
   }, [toast]);
 
   const handleCreateAppointment = (date?: Date) => {
@@ -221,54 +417,131 @@ export default function Agenda() {
     setIsFormOpen(true);
   };
 
-  // cria/atualiza localmente (exibição); a persistência no backend pode ser adicionada depois
-  const handleFormSubmit = (
-    appointmentData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>
+  const handleFormSubmit = async (
+    appointmentData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
   ) => {
-    const normalizedData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'> = {
-      ...appointmentData,
-      startTime: ensureTimeString(appointmentData.startTime),
-      endTime: appointmentData.endTime ? ensureTimeString(appointmentData.endTime) : undefined,
-    };
-
-    if (editingAppointment) {
-      const updatedAppointment: Appointment = {
-        ...editingAppointment,
-        ...normalizedData,
-        status: editingAppointment.status,
-        updatedAt: new Date(),
-      };
-
-      setAppointments((prev) =>
-        prev.map((apt) => (apt.id === editingAppointment.id ? updatedAppointment : apt))
-      );
-      setViewingAppointment((current) =>
-        current && current.id === editingAppointment.id ? updatedAppointment : current
-      );
-      toast({
-        title: 'Agendamento atualizado',
-        description: `${updatedAppointment.title} foi atualizado com sucesso.`,
-      });
-    } else {
-      const newAppointment: Appointment = {
-        ...normalizedData,
-        id: Date.now(),
-        status: 'agendado',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      setAppointments((prev) => [...prev, newAppointment]);
-      toast({
-        title: 'Agendamento criado!',
-        description: `${newAppointment.title} foi agendado com sucesso.`,
-      });
+    if (isSavingAppointment) {
+      return;
     }
 
-    setSelectedDate(appointmentData.date);
-    setIsFormOpen(false);
-    setEditingAppointment(null);
-    setFormInitialDate(undefined);
+    const toOptionalString = (value?: string | null) => {
+      if (typeof value !== 'string') {
+        return undefined;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
+
+    const normalizedStartTime = ensureTimeString(appointmentData.startTime);
+    const normalizedEndTime = appointmentData.endTime
+      ? ensureTimeString(appointmentData.endTime)
+      : undefined;
+
+    const normalizedData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'> = {
+      ...appointmentData,
+      title: appointmentData.title.trim(),
+      description: toOptionalString(appointmentData.description),
+      startTime: normalizedStartTime,
+      endTime: normalizedEndTime,
+      clientId: toOptionalString(appointmentData.clientId),
+      clientName: toOptionalString(appointmentData.clientName),
+      clientPhone: toOptionalString(appointmentData.clientPhone),
+      clientEmail: toOptionalString(appointmentData.clientEmail),
+      location: toOptionalString(appointmentData.location),
+    };
+
+    setIsSavingAppointment(true);
+
+    try {
+      if (editingAppointment) {
+        const updatedAppointment: Appointment = {
+          ...editingAppointment,
+          ...normalizedData,
+          status: editingAppointment.status,
+          updatedAt: new Date(),
+        };
+
+        setAppointments((prev) => {
+          const updatedList = prev.map((apt) =>
+            apt.id === editingAppointment.id ? updatedAppointment : apt
+          );
+          return sortAppointments(updatedList);
+        });
+        setViewingAppointment((current) =>
+          current && current.id === editingAppointment.id ? updatedAppointment : current,
+        );
+        toast({
+          title: 'Agendamento atualizado',
+          description: `${updatedAppointment.title} foi atualizado com sucesso.`,
+        });
+      } else {
+        const typeId = tipoEventoContext.idByType.get(normalizedData.type);
+        const parsedClientId =
+          normalizedData.clientId && Number.isFinite(Number(normalizedData.clientId))
+            ? Number(normalizedData.clientId)
+            : undefined;
+
+        const payload = {
+          titulo: normalizedData.title,
+          tipo: typeId ?? null,
+          descricao: normalizedData.description ?? null,
+          data: formatDateFn(normalizedData.date, 'yyyy-MM-dd'),
+          hora_inicio: normalizedData.startTime,
+          hora_fim: normalizedData.endTime ?? null,
+          cliente: parsedClientId ?? null,
+          tipo_local: null,
+          local: normalizedData.location ?? null,
+          lembrete: normalizedData.reminders,
+          status: 1,
+        };
+
+        const response = await fetch(joinUrl(apiUrl, '/api/agendas'), {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to create agenda (${response.status})`);
+        }
+
+        const createdRow: AgendaResponse = await response.json();
+        const fallbackAppointment: Partial<Appointment> = {
+          ...normalizedData,
+          status: 'agendado',
+        };
+        const createdAppointment = mapAgendaResponseToAppointment(
+          createdRow,
+          tipoEventoContext,
+          fallbackAppointment,
+        );
+
+        setAppointments((prev) => sortAppointments([...prev, createdAppointment]));
+        toast({
+          title: 'Agendamento criado!',
+          description: `${createdAppointment.title} foi agendado com sucesso.`,
+        });
+      }
+
+      setSelectedDate(normalizedData.date);
+      setIsFormOpen(false);
+      setEditingAppointment(null);
+      setFormInitialDate(undefined);
+    } catch (error) {
+      console.error('Erro ao salvar agendamento:', error);
+      toast({
+        title: 'Erro ao salvar agendamento',
+        description: 'Não foi possível salvar o agendamento. Tente novamente.',
+        variant: 'destructive',
+      });
+      return;
+    } finally {
+      setIsSavingAppointment(false);
+    }
   };
 
   const handleEditAppointment = (appointment: Appointment) => {
@@ -591,6 +864,7 @@ export default function Agenda() {
             initialDate={editingAppointment ? undefined : formInitialDate}
             initialValues={editingAppointment ?? undefined}
             submitLabel={editingAppointment ? 'Salvar alterações' : 'Criar Agendamento'}
+            isSubmitting={isSavingAppointment}
           />
         </DialogContent>
       </Dialog>
