@@ -43,16 +43,20 @@ import {
 } from "@/components/ui/form";
 import { toast } from "@/components/ui/use-toast";
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 const apiUrl = getApiBaseUrl();
 
-type SupportRequestStatus = "open" | "in_progress" | "resolved" | "closed";
+type SupportRequestStatus = "open" | "in_progress" | "resolved" | "closed" | "cancelled";
 
 interface SupportRequest {
   id: number;
   subject: string;
   description: string;
   status: SupportRequestStatus;
+  supportAgentId: number | null;
+  supportAgentName: string | null;
+  requesterId: number | null;
   requesterName: string | null;
   requesterEmail: string | null;
   createdAt: string;
@@ -101,6 +105,7 @@ const statusLabels: Record<SupportRequestStatus, string> = {
   in_progress: "Em andamento",
   resolved: "Resolvida",
   closed: "Encerrada",
+  cancelled: "Cancelada",
 };
 
 const statusStyles: Record<SupportRequestStatus, string> = {
@@ -108,9 +113,11 @@ const statusStyles: Record<SupportRequestStatus, string> = {
   in_progress: "border-amber-200 bg-amber-50 text-amber-700",
   resolved: "border-emerald-200 bg-emerald-50 text-emerald-700",
   closed: "border-slate-200 bg-slate-100 text-slate-700",
+  cancelled: "border-red-200 bg-red-50 text-red-700",
 };
 
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+const completedStatuses: SupportRequestStatus[] = ["resolved", "closed", "cancelled"];
 
 function formatDateTime(isoString: string): string {
   if (!isoString) {
@@ -197,6 +204,10 @@ function getMessageSenderLabel(
   request?: SupportRequest | null,
 ): string {
   if (sender === "support") {
+    if (request?.supportAgentName) {
+      return request.supportAgentName;
+    }
+
     return "Equipe de suporte";
   }
 
@@ -230,15 +241,48 @@ export default function Suporte() {
   const [newMessage, setNewMessage] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [cancellingRequestId, setCancellingRequestId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { user } = useAuth();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { subject: "", message: "" },
   });
 
+  const canCancelRequest = (request: SupportRequest) => !completedStatuses.includes(request.status);
+
+  const handleDialogChange = useCallback(
+    (open: boolean) => {
+      setIsDialogOpen(open);
+      if (!open) {
+        setSelectedRequest(null);
+        setMessages([]);
+        setMessagesError(null);
+        setNewMessage("");
+        setSelectedFiles([]);
+        setIsSendingMessage(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    },
+    [],
+  );
+
   const fetchRequests = useCallback(
     async (signal?: AbortSignal) => {
+      if (!user) {
+        if (!signal?.aborted) {
+          setError(null);
+          setIsLoading(false);
+          setRequests([]);
+          setTotalRequests(0);
+          handleDialogChange(false);
+        }
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
@@ -255,14 +299,44 @@ export default function Suporte() {
           throw new Error("Resposta inválida do servidor");
         }
 
-        setRequests(data.items);
+        const normalizedUserEmail = user.email?.trim().toLowerCase() ?? "";
 
-        const total =
-          typeof data.total === "number"
-            ? data.total
-            : data.items.length;
+        const filteredItems = data.items.filter((item) => {
+          if (typeof item.requesterId === "number" && Number.isFinite(item.requesterId)) {
+            return item.requesterId === user.id;
+          }
 
-        setTotalRequests(total);
+          if (normalizedUserEmail && typeof item.requesterEmail === "string") {
+            return item.requesterEmail.trim().toLowerCase() === normalizedUserEmail;
+          }
+
+          return false;
+        });
+
+        setRequests(filteredItems);
+
+        let shouldCloseDialog = false;
+
+        setSelectedRequest((current) => {
+          if (!current) {
+            return current;
+          }
+
+          const updatedMatch = filteredItems.find((item) => item.id === current.id);
+
+          if (updatedMatch) {
+            return updatedMatch;
+          }
+
+          shouldCloseDialog = true;
+          return null;
+        });
+
+        if (shouldCloseDialog) {
+          handleDialogChange(false);
+        }
+
+        setTotalRequests(filteredItems.length);
       } catch (requestError) {
         if (signal?.aborted) {
           return;
@@ -276,7 +350,7 @@ export default function Suporte() {
         }
       }
     },
-    [],
+    [handleDialogChange, user],
   );
 
   const fetchRequestMessages = useCallback(
@@ -346,21 +420,6 @@ export default function Suporte() {
     fetchRequestMessages(selectedRequest.id);
   }, [fetchRequestMessages, isDialogOpen, selectedRequest?.id]);
 
-  const handleDialogChange = (open: boolean) => {
-    setIsDialogOpen(open);
-    if (!open) {
-      setSelectedRequest(null);
-      setMessages([]);
-      setMessagesError(null);
-      setNewMessage("");
-      setSelectedFiles([]);
-      setIsSendingMessage(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
   const handleOpenRequest = (request: SupportRequest) => {
     setSelectedRequest(request);
     setMessages([]);
@@ -400,8 +459,60 @@ export default function Suporte() {
     setSelectedFiles((previous) => previous.filter((_, fileIndex) => fileIndex !== index));
   };
 
+  const handleCancelRequest = async (request: SupportRequest) => {
+    if (!canCancelRequest(request)) {
+      return;
+    }
+
+    setCancellingRequestId(request.id);
+
+    try {
+      const response = await fetch(`${apiUrl}/api/support/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to cancel support request");
+      }
+
+      const updatedRequest = (await response.json()) as SupportRequest;
+
+      setRequests((previous) =>
+        previous.map((item) => (item.id === updatedRequest.id ? updatedRequest : item)),
+      );
+
+      setSelectedRequest((current) =>
+        current && current.id === updatedRequest.id ? updatedRequest : current,
+      );
+
+      toast({ title: "Solicitação cancelada" });
+
+      await fetchRequests();
+    } catch (cancelError) {
+      console.error("Erro ao cancelar solicitação de suporte:", cancelError);
+      toast({
+        title: "Não foi possível cancelar a solicitação",
+        description: "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setCancellingRequestId(null);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!selectedRequest) {
+      return;
+    }
+
+    if (!canCancelRequest(selectedRequest)) {
+      toast({
+        title: "Solicitação finalizada",
+        description: "Não é possível enviar novas mensagens para esta solicitação.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -482,6 +593,9 @@ export default function Suporte() {
       toast({ title: "Erro ao enviar solicitação", variant: "destructive" });
     }
   };
+
+  const isSelectedRequestActive =
+    selectedRequest != null && canCancelRequest(selectedRequest);
 
   return (
     <div className="p-6 space-y-6">
@@ -604,16 +718,38 @@ export default function Suporte() {
                       {formatRequesterInfo(request)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="inline-flex items-center gap-2"
-                        onClick={() => handleOpenRequest(request)}
-                      >
-                        <Eye className="h-4 w-4" />
-                        Visualizar
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="inline-flex items-center gap-2"
+                          onClick={() => handleOpenRequest(request)}
+                        >
+                          <Eye className="h-4 w-4" />
+                          Visualizar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="inline-flex items-center gap-2 text-destructive"
+                          onClick={() => handleCancelRequest(request)}
+                          disabled={!canCancelRequest(request) || cancellingRequestId === request.id}
+                        >
+                          {cancellingRequestId === request.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Cancelando
+                            </>
+                          ) : (
+                            <>
+                              <X className="h-4 w-4" />
+                              Cancelar
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -647,9 +783,31 @@ export default function Suporte() {
                       Criada em {formatDateTime(selectedRequest.createdAt)}
                     </p>
                   </div>
-                  <Badge variant="outline" className={statusStyles[selectedRequest.status]}>
-                    {statusLabels[selectedRequest.status]}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                    <Badge variant="outline" className={statusStyles[selectedRequest.status]}>
+                      {statusLabels[selectedRequest.status]}
+                    </Badge>
+                    {canCancelRequest(selectedRequest) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="inline-flex items-center gap-2 text-destructive"
+                        onClick={() => handleCancelRequest(selectedRequest)}
+                        disabled={cancellingRequestId === selectedRequest.id}
+                      >
+                        {cancellingRequestId === selectedRequest.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Cancelando
+                          </>
+                        ) : (
+                          <>
+                            <X className="h-4 w-4" /> Cancelar solicitação
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="grid gap-1">
                   <Label className="text-xs font-medium uppercase text-muted-foreground">
@@ -664,6 +822,14 @@ export default function Suporte() {
                     Solicitante
                   </Label>
                   <p className="text-sm text-foreground">{formatRequesterInfo(selectedRequest)}</p>
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs font-medium uppercase text-muted-foreground">
+                    Responsável pelo suporte
+                  </Label>
+                  <p className="text-sm text-foreground">
+                    {selectedRequest.supportAgentName ?? "Aguardando atribuição"}
+                  </p>
                 </div>
                 <div className="grid gap-1">
                   <Label className="text-xs font-medium uppercase text-muted-foreground">
@@ -762,13 +928,18 @@ export default function Suporte() {
                 <Label htmlFor="support-new-message" className="text-sm font-medium text-foreground">
                   Enviar nova mensagem
                 </Label>
+                {!isSelectedRequestActive && (
+                  <p className="text-sm text-muted-foreground">
+                    Esta solicitação foi encerrada e não aceita novas mensagens.
+                  </p>
+                )}
                 <Textarea
                   id="support-new-message"
                   placeholder="Escreva sua mensagem para a equipe de suporte"
                   value={newMessage}
                   onChange={(event) => setNewMessage(event.target.value)}
                   className="min-h-[120px]"
-                  disabled={isSendingMessage}
+                  disabled={isSendingMessage || !isSelectedRequestActive}
                 />
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-3">
@@ -779,7 +950,9 @@ export default function Suporte() {
                         size="sm"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={
-                          isSendingMessage || selectedFiles.length >= MAX_ATTACHMENTS_PER_MESSAGE
+                          isSendingMessage ||
+                          !isSelectedRequestActive ||
+                          selectedFiles.length >= MAX_ATTACHMENTS_PER_MESSAGE
                         }
                         className="inline-flex items-center gap-2"
                       >
@@ -828,6 +1001,7 @@ export default function Suporte() {
                       onClick={handleSendMessage}
                       disabled={
                         isSendingMessage ||
+                        !isSelectedRequestActive ||
                         (newMessage.trim().length === 0 && selectedFiles.length === 0)
                       }
                       className="min-w-[160px]"

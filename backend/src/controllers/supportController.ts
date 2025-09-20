@@ -6,6 +6,7 @@ import SupportService, {
   CreateSupportRequestInput,
   ListSupportRequestsOptions,
   SupportAttachmentFile,
+  SupportRequest,
   SupportStatus,
   UpdateSupportRequestInput,
   ValidationError,
@@ -111,6 +112,82 @@ function sendAttachmentResponse(res: Response, attachment: SupportAttachmentFile
   return res.status(200).send(attachment.content);
 }
 
+function normalizeEmailValue(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.toLowerCase();
+}
+
+function doesRequestBelongToUser(
+  req: Request,
+  owner: { requesterId: number | null; requesterEmail: string | null },
+): boolean {
+  if (!req.auth) {
+    return false;
+  }
+
+  if (owner.requesterId != null && owner.requesterId === req.auth.userId) {
+    return true;
+  }
+
+  const authEmail = normalizeEmailValue(req.auth.email);
+  const ownerEmail = normalizeEmailValue(owner.requesterEmail);
+
+  return authEmail !== null && ownerEmail !== null && authEmail === ownerEmail;
+}
+
+function isSupportManager(req: Request): boolean {
+  if (!req.auth) {
+    return false;
+  }
+
+  if (req.auth.userId === 3) {
+    return true;
+  }
+
+  const modules = req.auth.modules ?? [];
+  return modules.includes('suporte-admin');
+}
+
+function resolveAuthDisplayName(req: Request): string | null {
+  const tokenName = req.auth?.payload && typeof req.auth.payload.name === 'string'
+    ? req.auth.payload.name.trim()
+    : '';
+
+  if (tokenName) {
+    return tokenName;
+  }
+
+  const email = typeof req.auth?.email === 'string' ? req.auth.email.trim() : '';
+  return email || null;
+}
+
+async function loadRequestOrFail(
+  req: Request,
+  res: Response,
+  requestId: number,
+): Promise<SupportRequest | null> {
+  const request = await supportService.findById(requestId);
+  if (!request) {
+    res.status(404).json({ error: 'Support request not found' });
+    return null;
+  }
+
+  if (!isSupportManager(req) && !doesRequestBelongToUser(req, request)) {
+    res.status(403).json({ error: 'Acesso negado à solicitação de suporte.' });
+    return null;
+  }
+
+  return request;
+}
+
 export async function createSupportRequest(req: Request, res: Response) {
   const { subject, description, requesterName, requesterEmail, status } = req.body as {
     subject?: string;
@@ -123,9 +200,32 @@ export async function createSupportRequest(req: Request, res: Response) {
   const input: CreateSupportRequestInput = {
     subject: subject ?? '',
     description: description ?? '',
-    requesterName: requesterName ?? undefined,
-    requesterEmail: requesterEmail ?? undefined,
   };
+
+  if (req.auth) {
+    input.requesterId = req.auth.userId;
+
+    const displayName = resolveAuthDisplayName(req);
+    if (displayName) {
+      input.requesterName = displayName;
+    } else if (typeof requesterName === 'string') {
+      input.requesterName = requesterName;
+    }
+
+    const emailFromAuth = typeof req.auth.email === 'string' ? req.auth.email.trim() : '';
+    if (emailFromAuth) {
+      input.requesterEmail = emailFromAuth;
+    } else if (typeof requesterEmail === 'string') {
+      input.requesterEmail = requesterEmail;
+    }
+  } else {
+    if (typeof requesterName === 'string') {
+      input.requesterName = requesterName;
+    }
+    if (typeof requesterEmail === 'string') {
+      input.requesterEmail = requesterEmail;
+    }
+  }
 
   if (typeof status === 'string' && status.trim()) {
     input.status = status.trim().toLowerCase() as SupportStatus;
@@ -176,6 +276,13 @@ export async function listSupportRequests(req: Request, res: Response) {
     options.search = req.query.search;
   }
 
+  if (!isSupportManager(req) && req.auth) {
+    options.requesterId = req.auth.userId;
+    if (typeof req.auth.email === 'string') {
+      options.requesterEmail = req.auth.email;
+    }
+  }
+
   try {
     const result = await supportService.list(options);
     return res.json(result);
@@ -196,9 +303,9 @@ export async function getSupportRequest(req: Request, res: Response) {
   }
 
   try {
-    const request = await supportService.findById(requestId);
+    const request = await loadRequestOrFail(req, res, requestId);
     if (!request) {
-      return res.status(404).json({ error: 'Support request not found' });
+      return;
     }
     return res.json(request);
   } catch (error) {
@@ -215,6 +322,10 @@ export async function listSupportRequestMessages(req: Request, res: Response) {
   }
 
   try {
+    if (!(await loadRequestOrFail(req, res, requestId))) {
+      return;
+    }
+
     const messages = await supportService.listMessagesForRequest(requestId);
     if (messages === null) {
       return res.status(404).json({ error: 'Support request not found' });
@@ -232,6 +343,12 @@ export async function createSupportRequestMessage(req: Request, res: Response) {
   if (!requestId) {
     return res.status(400).json({ error: 'Invalid support request id' });
   }
+
+  if (!(await loadRequestOrFail(req, res, requestId))) {
+    return;
+  }
+
+  const manager = isSupportManager(req);
 
   const { message, sender } = req.body as { message?: string; sender?: string };
 
@@ -255,8 +372,22 @@ export async function createSupportRequestMessage(req: Request, res: Response) {
     input.sender = sender.trim().toLowerCase() as CreateSupportMessageInput['sender'];
   }
 
+  if (input.sender === 'support' && !manager) {
+    return res.status(403).json({ error: 'Apenas a equipe de suporte pode enviar mensagens internas.' });
+  }
+
   try {
-    const created = await supportService.createMessage(requestId, input);
+    let context: { supportAgentId?: number | null; supportAgentName?: string | null } | undefined;
+
+    if (input.sender === 'support' && req.auth) {
+      context = { supportAgentId: req.auth.userId };
+      const agentName = resolveAuthDisplayName(req);
+      if (agentName) {
+        context.supportAgentName = agentName;
+      }
+    }
+
+    const created = await supportService.createMessage(requestId, input, context);
     if (!created) {
       return res.status(404).json({ error: 'Support request not found' });
     }
@@ -282,6 +413,10 @@ export async function downloadSupportRequestAttachment(req: Request, res: Respon
     const attachment = await supportService.getAttachment(messageId, attachmentId);
     if (!attachment) {
       return res.status(404).json({ error: 'Attachment not found' });
+    }
+
+    if (!isSupportManager(req) && !doesRequestBelongToUser(req, attachment)) {
+      return res.status(403).json({ error: 'Acesso negado ao anexo solicitado.' });
     }
     return sendAttachmentResponse(res, attachment);
   } catch (error) {
@@ -320,6 +455,43 @@ export async function updateSupportRequest(req: Request, res: Response) {
   }
 
   try {
+    const existingRequest = await loadRequestOrFail(req, res, requestId);
+    if (!existingRequest) {
+      return;
+    }
+
+    const manager = isSupportManager(req);
+
+    if (!manager) {
+      const unauthorizedFieldPresent =
+        updates.subject !== undefined ||
+        updates.description !== undefined ||
+        updates.requesterName !== undefined ||
+        updates.requesterEmail !== undefined ||
+        updates.supportAgentId !== undefined ||
+        updates.supportAgentName !== undefined;
+
+      if (unauthorizedFieldPresent) {
+        return res.status(403).json({ error: 'Você não tem permissão para atualizar esta solicitação.' });
+      }
+
+      if (updates.status === undefined) {
+        return res.status(400).json({ error: 'Status é obrigatório para atualizar a solicitação.' });
+      }
+
+      if (updates.status !== 'cancelled') {
+        return res.status(400).json({ error: 'Somente é possível cancelar a solicitação.' });
+      }
+    } else if (updates.status && req.auth) {
+      if (updates.status === 'in_progress' || updates.status === 'resolved') {
+        updates.supportAgentId = req.auth.userId;
+        const agentName = resolveAuthDisplayName(req);
+        if (agentName) {
+          updates.supportAgentName = agentName;
+        }
+      }
+    }
+
     const updated = await supportService.update(requestId, updates);
     if (!updated) {
       return res.status(404).json({ error: 'Support request not found' });

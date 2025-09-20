@@ -19,13 +19,15 @@ import { toast } from "@/components/ui/use-toast";
 import { AlertCircle, CheckCircle, Clock, Headphones, Loader2, Plus, Search, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type SupportRequestStatus = "open" | "in_progress" | "resolved" | "closed";
+type SupportRequestStatus = "open" | "in_progress" | "resolved" | "closed" | "cancelled";
 
 interface SupportRequest {
   id: number;
   subject: string;
   description: string | null;
   status: SupportRequestStatus;
+  supportAgentId: number | null;
+  supportAgentName: string | null;
   requesterName: string | null;
   requesterEmail: string | null;
   createdAt: string;
@@ -42,6 +44,7 @@ const statusLabels: Record<SupportRequestStatus, string> = {
   in_progress: "Em andamento",
   resolved: "Resolvido",
   closed: "Fechado",
+  cancelled: "Cancelado",
 };
 
 const statusVariants: Record<SupportRequestStatus, "destructive" | "secondary" | "default" | "outline"> = {
@@ -49,6 +52,7 @@ const statusVariants: Record<SupportRequestStatus, "destructive" | "secondary" |
   in_progress: "secondary",
   resolved: "default",
   closed: "outline",
+  cancelled: "destructive",
 };
 
 const statusIcons: Record<SupportRequestStatus, typeof AlertCircle> = {
@@ -56,6 +60,7 @@ const statusIcons: Record<SupportRequestStatus, typeof AlertCircle> = {
   in_progress: Clock,
   resolved: CheckCircle,
   closed: XCircle,
+  cancelled: XCircle,
 };
 
 function formatDate(value: string | null | undefined): string {
@@ -120,6 +125,7 @@ export default function Support() {
   const [responseDialogRequest, setResponseDialogRequest] = useState<SupportRequest | null>(null);
   const [responseMessage, setResponseMessage] = useState("");
   const [isSendingResponse, setIsSendingResponse] = useState(false);
+  const [resolvingRequestId, setResolvingRequestId] = useState<number | null>(null);
 
   const apiUrl = getApiBaseUrl();
 
@@ -213,6 +219,9 @@ export default function Support() {
     return Icon ? <Icon className="h-4 w-4" /> : null;
   };
 
+  const canResolveRequest = (request: SupportRequest) =>
+    request.status !== "resolved" && request.status !== "closed" && request.status !== "cancelled";
+
   const handleOpenResponseDialog = (request: SupportRequest) => {
     setResponseDialogRequest(request);
     setResponseMessage("");
@@ -275,6 +284,42 @@ export default function Support() {
       });
     } finally {
       setIsSendingResponse(false);
+    }
+  };
+
+  const handleResolveRequest = async (request: SupportRequest) => {
+    if (!canResolveRequest(request)) {
+      return;
+    }
+
+    setResolvingRequestId(request.id);
+
+    try {
+      const response = await fetch(`${apiUrl}/api/support/${request.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "resolved" }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to resolve support request");
+      }
+
+      toast({
+        title: "Solicitação marcada como resolvida",
+        description: "O solicitante será notificado sobre a resolução.",
+      });
+
+      void fetchRequests();
+    } catch (resolveError) {
+      console.error("Erro ao resolver ticket de suporte:", resolveError);
+      toast({
+        title: "Não foi possível resolver o ticket",
+        description: "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setResolvingRequestId(null);
     }
   };
 
@@ -409,6 +454,11 @@ export default function Support() {
                             {request.description}
                           </div>
                         ) : null}
+                        {request.supportAgentName ? (
+                          <div className="text-xs text-muted-foreground">
+                            Responsável: {request.supportAgentName}
+                          </div>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -431,11 +481,25 @@ export default function Support() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
-                        <Button variant="ghost" size="sm">
-                          Ver Detalhes
-                        </Button>
                         <Button variant="outline" size="sm" onClick={() => handleOpenResponseDialog(request)}>
                           Responder
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-emerald-600"
+                          onClick={() => handleResolveRequest(request)}
+                          disabled={!canResolveRequest(request) || resolvingRequestId === request.id}
+                        >
+                          {resolvingRequestId === request.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" /> Resolvendo
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="h-4 w-4" /> Resolver
+                            </>
+                          )}
                         </Button>
                       </div>
                     </TableCell>
