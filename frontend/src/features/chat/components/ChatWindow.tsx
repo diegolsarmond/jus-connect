@@ -86,6 +86,7 @@ interface ChatWindowProps {
   typingUsers?: { id: string; name?: string }[];
   onTypingActivity?: (isTyping: boolean) => void;
   onCreateTask?: () => void;
+  onCreateAppointment?: () => void;
 }
 
 export const ChatWindow = ({
@@ -102,6 +103,7 @@ export const ChatWindow = ({
   typingUsers,
   onTypingActivity,
   onCreateTask,
+  onCreateAppointment,
 }: ChatWindowProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -552,7 +554,12 @@ export const ChatWindow = ({
             >
               <CheckSquare size={18} aria-hidden="true" />
             </button>
-            <button type="button" className={styles.actionButton} aria-label="Criar agendamento">
+            <button
+              type="button"
+              className={styles.actionButton}
+              aria-label="Criar agendamento"
+              onClick={onCreateAppointment}
+            >
               <CalendarPlus size={18} aria-hidden="true" />
             </button>
             <button
