@@ -5,6 +5,7 @@ import {
   sanitizeModuleIds,
   sortModules,
 } from '../constants/modules';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const formatPerfilRow = (row: {
   id: number;
@@ -39,8 +40,24 @@ const parsePerfilId = (value: string): number | null => {
   return id;
 };
 
-export const listPerfis = async (_req: Request, res: Response) => {
+export const listPerfis = async (req: Request, res: Response) => {
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
     const result = await pool.query(
       `SELECT p.id,
               p.nome,
@@ -52,8 +69,10 @@ export const listPerfis = async (_req: Request, res: Response) => {
               ) AS modulos
          FROM public.perfis p
     LEFT JOIN public.perfil_modulos pm ON pm.perfil_id = p.id
+        WHERE p.idempresa IS NOT DISTINCT FROM $1
      GROUP BY p.id, p.nome, p.ativo, p.datacriacao
-     ORDER BY p.nome`
+     ORDER BY p.nome`,
+      [empresaId]
     );
     res.json(result.rows.map(formatPerfilRow));
   } catch (error) {
@@ -71,6 +90,24 @@ export const createPerfil = async (req: Request, res: Response) => {
   const ativoValue = typeof req.body?.ativo === 'boolean' ? req.body.ativo : true;
   const parsedModules = parseModules(req.body?.modulos);
 
+  if (!req.auth) {
+    return res.status(401).json({ error: 'Token inválido.' });
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+  if (!empresaLookup.success) {
+    return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+  }
+
+  const { empresaId } = empresaLookup;
+
+  if (empresaId === null) {
+    return res
+      .status(400)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+  }
+
   if (!nomeValue) {
     return res.status(400).json({ error: 'O nome do perfil é obrigatório' });
   }
@@ -84,8 +121,8 @@ export const createPerfil = async (req: Request, res: Response) => {
     await client.query('BEGIN');
 
     const result = await client.query(
-      'INSERT INTO public.perfis (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao',
-      [nomeValue, ativoValue]
+      'INSERT INTO public.perfis (nome, ativo, datacriacao, idempresa) VALUES ($1, $2, NOW(), $3) RETURNING id, nome, ativo, datacriacao',
+      [nomeValue, ativoValue, empresaId]
     );
 
     const perfil = result.rows[0];
