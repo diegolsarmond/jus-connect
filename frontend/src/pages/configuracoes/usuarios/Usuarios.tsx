@@ -107,7 +107,7 @@ export default function Usuarios() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const url = joinUrl(apiUrl, "/api/usuarios");
+        const url = joinUrl(apiUrl, "/api/usuarios/empresa");
         const response = await fetch(url, { headers: { Accept: "application/json" } });
         if (!response.ok) {
           throw new Error("Failed to fetch users");
