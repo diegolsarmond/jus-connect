@@ -9,6 +9,7 @@ import AsaasChargeService, {
 const POSTGRES_UNDEFINED_TABLE = '42P01';
 const POSTGRES_UNDEFINED_COLUMN = '42703';
 const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
+
 const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
 
 let opportunityTablesAvailability: boolean | null = null;
@@ -69,6 +70,7 @@ const determineOpportunityTablesAvailability = async (): Promise<boolean> => {
             ELSE COALESCE(has_table_privilege(faturamentos, 'SELECT'), FALSE)
           END AS faturamentos
         FROM tables
+
       `,
     )
     .then((result) => {
@@ -108,6 +110,7 @@ const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
   }
   const code = (error as { code?: string }).code;
   return typeof code === 'string' && FALLBACK_ERROR_CODES.has(code);
+
 };
 
 export const __internal = {

@@ -94,6 +94,7 @@ test('listFlows combines financial and opportunity flows', async () => {
     oportunidades: true,
     clientes: true,
     faturamentos: true,
+
   };
 
   const { calls, restore } = setupQueryMock([
@@ -157,6 +158,7 @@ test('listFlows combines financial and opportunity flows', async () => {
     calls[0]?.text ?? '',
     /has_table_privilege\(parcelas, 'SELECT'\)/,
   );
+
   assert.equal(calls[0]?.values, undefined);
   assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
   assert.deepEqual(calls[1]?.values, [1, 1]);
@@ -169,6 +171,7 @@ test('listFlows applies cliente filter when provided', async () => {
     oportunidades: true,
     clientes: true,
     faturamentos: true,
+
   };
 
   const { calls, restore } = setupQueryMock([
@@ -216,6 +219,7 @@ test('listFlows returns only financial flows when opportunity tables are absent'
     oportunidades: false,
     clientes: false,
     faturamentos: false,
+
   };
 
   const financialRow = {
@@ -278,6 +282,7 @@ test('listFlows retries without opportunity tables when union query fails', asyn
     oportunidades: true,
     clientes: true,
     faturamentos: true,
+
   };
 
   const financialRow = {
@@ -408,4 +413,5 @@ test('listFlows retries without opportunity tables when privileges are missing',
   assert.doesNotMatch(calls[2]?.text ?? '', /UNION ALL/);
   assert.deepEqual(calls[2]?.values, [10, 0]);
   assert.deepEqual(calls[3]?.values, []);
+
 });
