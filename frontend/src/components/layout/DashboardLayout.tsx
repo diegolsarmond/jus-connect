@@ -114,7 +114,7 @@ export default function DashboardLayout() {
             <div className="flex h-14 items-center gap-4 px-4">
               <SidebarTrigger />
               <div className="flex-1" />
-              <span className="text-sm text-muted-foreground">Admin CRM SaaS</span>
+              
               <HeaderActions />
             </div>
           </header>
