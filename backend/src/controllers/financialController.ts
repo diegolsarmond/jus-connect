@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import type { QueryResult } from 'pg';
 import pool from '../services/db';
 import type { Flow } from '../models/flow';
 import AsaasChargeService, {
@@ -103,6 +104,8 @@ const FALLBACK_ERROR_CODES = new Set([
   POSTGRES_UNDEFINED_COLUMN,
   POSTGRES_INSUFFICIENT_PRIVILEGE,
 ]);
+
+type GenericQueryResult = QueryResult<Record<string, unknown>>;
 
 const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
   if (!error || typeof error !== 'object') {
@@ -249,8 +252,8 @@ ${baseFinancialFlowsSelect}
     const runListFlowsQuery = async (
       includeOpportunities: boolean,
     ): Promise<{
-      items: Awaited<ReturnType<typeof pool.query>>;
-      total: Awaited<ReturnType<typeof pool.query>>;
+      items: GenericQueryResult;
+      total: GenericQueryResult;
     }> => {
       const combinedCte = buildCombinedCte(includeOpportunities);
       const limitParamIndex = filters.length + 1;
@@ -276,8 +279,8 @@ ${baseFinancialFlowsSelect}
 
       const countValues = [...filters];
 
-      const items = await pool.query(dataQuery, dataValues);
-      const total = await pool.query(countQuery, countValues);
+      const items = await pool.query<Record<string, unknown>>(dataQuery, dataValues);
+      const total = await pool.query<Record<string, unknown>>(countQuery, countValues);
 
       return { items, total };
     };
@@ -285,8 +288,8 @@ ${baseFinancialFlowsSelect}
     const includeOpportunityFlows = await determineOpportunityTablesAvailability();
 
     let queryResult: {
-      items: Awaited<ReturnType<typeof pool.query>>;
-      total: Awaited<ReturnType<typeof pool.query>>;
+      items: GenericQueryResult;
+      total: GenericQueryResult;
     };
 
     try {
