@@ -11,12 +11,15 @@ import { getApiUrl } from "@/lib/api";
 import {
   ApiCompany,
   ApiPlan,
+  ApiUser,
   Company,
   CompanyStatusBadge,
+  buildUsersIndex,
   formatCurrency,
   formatDate,
   mapApiCompanyToCompany,
   parseDataArray,
+  getPlanIndex,
 } from "./companies-data";
 
 export default function Companies() {
@@ -44,7 +47,7 @@ export default function Companies() {
         const companiesPayload = await companiesResponse.json();
         const apiCompanies = parseDataArray<ApiCompany>(companiesPayload);
 
-        const plansIndex = new Map<string, ApiPlan>();
+        let plansIndex = new Map<string, ApiPlan>();
         try {
           const plansResponse = await fetch(getApiUrl("planos"), {
             headers: { Accept: "application/json" },
@@ -54,11 +57,7 @@ export default function Companies() {
           if (plansResponse.ok) {
             const plansPayload = await plansResponse.json();
             const apiPlans = parseDataArray<ApiPlan>(plansPayload);
-            apiPlans.forEach((plan) => {
-              if (plan?.id != null) {
-                plansIndex.set(String(plan.id), plan);
-              }
-            });
+            plansIndex = getPlanIndex(apiPlans);
           } else {
             console.warn("Falha ao carregar planos:", plansResponse.status);
           }
@@ -69,11 +68,41 @@ export default function Companies() {
           console.warn("Erro ao carregar planos:", planError);
         }
 
+        let usersIndex: Map<string, ApiUser> | undefined;
+        try {
+          const usersResponse = await fetch(getApiUrl("usuarios"), {
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          });
+
+          if (usersResponse.ok) {
+            const usersPayload = await usersResponse.json();
+            const usersData = Array.isArray(usersPayload)
+              ? (usersPayload as ApiUser[])
+              : parseDataArray<ApiUser>(usersPayload);
+
+            if (usersData.length > 0) {
+              usersIndex = buildUsersIndex(usersData);
+            } else {
+              console.warn("Resposta inesperada ao carregar usuários.");
+            }
+          } else {
+            console.warn("Falha ao carregar usuários:", usersResponse.status);
+          }
+        } catch (usersError) {
+          if (usersError instanceof DOMException && usersError.name === "AbortError") {
+            return;
+          }
+          console.warn("Erro ao carregar usuários:", usersError);
+        }
+
         if (!isMounted) {
           return;
         }
 
-        setCompanies(apiCompanies.map((company) => mapApiCompanyToCompany(company, plansIndex)));
+        setCompanies(
+          apiCompanies.map((company) => mapApiCompanyToCompany(company, plansIndex, usersIndex)),
+        );
         setError(null);
       } catch (fetchError) {
         if (!isMounted) {
@@ -113,7 +142,7 @@ export default function Companies() {
         company.name,
         company.email,
         company.cnpj,
-        company.manager,
+        company.managerName,
         company.phone,
         company.planName,
       ];
@@ -262,7 +291,7 @@ export default function Companies() {
                         <CompanyStatusBadge status={company.status} />
                       </TableCell>
                       <TableCell>{company.planName}</TableCell>
-                      <TableCell>{company.manager || "--"}</TableCell>
+                      <TableCell>{company.managerName || "--"}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Phone className="h-4 w-4 text-muted-foreground" />
@@ -280,11 +309,16 @@ export default function Companies() {
                         <div className="font-medium">R$ {formatCurrency(company.planValue)}</div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link to={routes.admin.companyDetails(company.id)}>
-                            Ver Detalhes
-                          </Link>
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link to={routes.admin.companyDetails(company.id)}>
+                              Ver Detalhes
+                            </Link>
+                          </Button>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to={routes.admin.editCompany(company.id)}>Editar</Link>
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
