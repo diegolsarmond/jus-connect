@@ -100,6 +100,34 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
+export const refreshToken = (req: Request, res: Response) => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return;
+  }
+
+  try {
+    const payload = (req.auth.payload ?? {}) as Record<string, unknown>;
+    const refreshedToken = signToken(
+      {
+        sub: req.auth.userId,
+        email: typeof payload.email === 'string' ? payload.email : undefined,
+        name: typeof payload.name === 'string' ? payload.name : undefined,
+      },
+      authConfig.secret,
+      authConfig.expirationSeconds
+    );
+
+    res.json({
+      token: refreshedToken,
+      expiresIn: authConfig.expirationSeconds,
+    });
+  } catch (error) {
+    console.error('Erro ao renovar token de autenticação', error);
+    res.status(500).json({ error: 'Não foi possível renovar o token de acesso.' });
+  }
+};
+
 export const getCurrentUser = async (req: Request, res: Response) => {
   if (!req.auth) {
     res.status(401).json({ error: 'Token inválido.' });

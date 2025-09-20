@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getCurrentUser, login } from '../controllers/authController';
+import { getCurrentUser, login, refreshToken } from '../controllers/authController';
 import { authenticateRequest } from '../middlewares/authMiddleware';
 
 const router = Router();
@@ -96,5 +96,31 @@ router.post('/auth/login', login);
  *         description: Usuário não encontrado
  */
 router.get('/auth/me', authenticateRequest, getCurrentUser);
+
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Renova o token de acesso do usuário autenticado
+ *     tags: [Autenticação]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Novo token de acesso gerado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                 expiresIn:
+ *                   type: integer
+ *                   description: Expiração do token em segundos
+ *       401:
+ *         description: Token ausente ou inválido
+ */
+router.post('/auth/refresh', authenticateRequest, refreshToken);
 
 export default router;

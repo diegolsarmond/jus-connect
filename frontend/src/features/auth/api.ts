@@ -98,3 +98,29 @@ export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
     modulos: parseModules(data.modulos),
   } satisfies AuthUser;
 };
+
+export const refreshTokenRequest = async (
+  token: string,
+): Promise<{ token: string; expiresIn?: number }> => {
+  const response = await fetch(getApiUrl("auth/refresh"), {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response);
+  }
+
+  const data = (await response.json()) as { token?: unknown; expiresIn?: unknown };
+  if (typeof data?.token !== "string" || data.token.trim().length === 0) {
+    throw new Error("Resposta de renovação inválida.");
+  }
+
+  return {
+    token: data.token,
+    expiresIn: typeof data.expiresIn === "number" ? data.expiresIn : undefined,
+  };
+};

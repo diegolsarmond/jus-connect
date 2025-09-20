@@ -9,7 +9,7 @@ const INACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
   "focus",
 ];
 
-const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutos
+export const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutos
 const LAST_ACTIVITY_STORAGE_KEY = "jus-connect:last-activity";
 const ACTIVITY_PERSISTENCE_INTERVAL_MS = 5_000;
 
