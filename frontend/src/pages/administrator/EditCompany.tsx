@@ -20,6 +20,8 @@ import {
   CompanyFormApiPlan as ApiPlan,
   CompanyFormApiUser as ApiUser,
   CompanyFormData,
+  NO_MANAGER_SELECTED_VALUE,
+  NO_PLAN_SELECTED_VALUE,
   PlanOption,
   UserOption,
   initialCompanyFormData,
@@ -386,8 +388,15 @@ export default function EditCompany() {
                 <div className="space-y-2">
                   <Label>Plano</Label>
                   <Select
-                    value={formData.planId}
-                    onValueChange={(value) => setFormData((previous) => ({ ...previous, planId: value }))}
+                    value={
+                      formData.planId === "" ? NO_PLAN_SELECTED_VALUE : formData.planId
+                    }
+                    onValueChange={(value) =>
+                      setFormData((previous) => ({
+                        ...previous,
+                        planId: value === NO_PLAN_SELECTED_VALUE ? "" : value,
+                      }))
+                    }
                     disabled={isLoadingAuxiliaryData}
                   >
                     <SelectTrigger>
@@ -396,7 +405,7 @@ export default function EditCompany() {
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Sem plano</SelectItem>
+                      <SelectItem value={NO_PLAN_SELECTED_VALUE}>Sem plano</SelectItem>
                       {planOptions.map((option) => (
                         <SelectItem key={option.id} value={option.id}>
                           {option.isActive ? option.label : `${option.label} (inativo)`}
@@ -408,8 +417,15 @@ export default function EditCompany() {
                 <div className="space-y-2">
                   <Label>Responsável</Label>
                   <Select
-                    value={formData.managerId}
-                    onValueChange={(value) => setFormData((previous) => ({ ...previous, managerId: value }))}
+                    value={
+                      formData.managerId === "" ? NO_MANAGER_SELECTED_VALUE : formData.managerId
+                    }
+                    onValueChange={(value) =>
+                      setFormData((previous) => ({
+                        ...previous,
+                        managerId: value === NO_MANAGER_SELECTED_VALUE ? "" : value,
+                      }))
+                    }
                     disabled={isLoadingAuxiliaryData}
                   >
                     <SelectTrigger>
@@ -420,7 +436,7 @@ export default function EditCompany() {
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Sem responsável</SelectItem>
+                      <SelectItem value={NO_MANAGER_SELECTED_VALUE}>Sem responsável</SelectItem>
                       {userOptions.map((option) => (
                         <SelectItem key={option.id} value={option.id}>
                           {option.label}

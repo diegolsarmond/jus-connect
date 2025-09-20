@@ -84,6 +84,8 @@ const emptyForm: SetorFormState = {
   ativo: true,
 };
 
+const NO_COMPANY_SELECTED_VALUE = "__no_company_selected__";
+
 function joinUrl(base: string, path = "") {
   const b = base.replace(/\/+$/, "");
   const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
@@ -374,14 +376,23 @@ export default function Setores() {
             <div className="space-y-2">
               <Label>Empresa</Label>
               <Select
-                value={formState.empresaId}
-                onValueChange={(value) => setFormState((prev) => ({ ...prev, empresaId: value }))}
+                value={
+                  formState.empresaId === ""
+                    ? NO_COMPANY_SELECTED_VALUE
+                    : formState.empresaId
+                }
+                onValueChange={(value) =>
+                  setFormState((prev) => ({
+                    ...prev,
+                    empresaId: value === NO_COMPANY_SELECTED_VALUE ? "" : value,
+                  }))
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma empresa" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sem empresa</SelectItem>
+                  <SelectItem value={NO_COMPANY_SELECTED_VALUE}>Sem empresa</SelectItem>
                   {empresas.map((empresa) => (
                     <SelectItem key={empresa.id} value={empresa.id.toString()}>
                       {empresa.nome || `Empresa #${empresa.id}`}

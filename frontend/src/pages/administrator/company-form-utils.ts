@@ -43,6 +43,9 @@ export const initialCompanyFormData: CompanyFormData = {
   isActive: true,
 };
 
+export const NO_PLAN_SELECTED_VALUE = "__no_plan_selected__";
+export const NO_MANAGER_SELECTED_VALUE = "__no_manager_selected__";
+
 export const parseDataArray = <T,>(payload: unknown): T[] => parseCompaniesDataArray<T>(payload);
 
 export const resolveBooleanFlag = (value: unknown): boolean | null => {

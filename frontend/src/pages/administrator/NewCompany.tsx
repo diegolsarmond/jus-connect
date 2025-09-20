@@ -16,6 +16,8 @@ import {
   CompanyFormApiPlan as ApiPlan,
   CompanyFormApiUser as ApiUser,
   CompanyFormData,
+  NO_MANAGER_SELECTED_VALUE,
+  NO_PLAN_SELECTED_VALUE,
   PlanOption,
   UserOption,
   initialCompanyFormData,
@@ -292,9 +294,14 @@ export default function NewCompany() {
               <div className="space-y-2">
                 <Label htmlFor="planId">Plano</Label>
                 <Select
-                  value={formData.planId}
+                  value={
+                    formData.planId === "" ? NO_PLAN_SELECTED_VALUE : formData.planId
+                  }
                   onValueChange={(value) =>
-                    setFormData((previous) => ({ ...previous, planId: value }))
+                    setFormData((previous) => ({
+                      ...previous,
+                      planId: value === NO_PLAN_SELECTED_VALUE ? "" : value,
+                    }))
                   }
                   disabled={isLoadingPlans}
                 >
@@ -306,11 +313,11 @@ export default function NewCompany() {
                           : "Selecione um plano (opcional)"
                       }
                     >
-                      {selectedPlanLabel}
+                      {selectedPlanLabel ?? undefined}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sem plano</SelectItem>
+                    <SelectItem value={NO_PLAN_SELECTED_VALUE}>Sem plano</SelectItem>
                     {planOptions.map((plan) => (
                       <SelectItem key={plan.id} value={plan.id}>
                         {plan.isActive ? plan.label : `${plan.label} (inativo)`}
@@ -322,9 +329,16 @@ export default function NewCompany() {
               <div className="space-y-2">
                 <Label htmlFor="managerId">Responsável</Label>
                 <Select
-                  value={formData.managerId}
+                  value={
+                    formData.managerId === ""
+                      ? NO_MANAGER_SELECTED_VALUE
+                      : formData.managerId
+                  }
                   onValueChange={(value) =>
-                    setFormData((previous) => ({ ...previous, managerId: value }))
+                    setFormData((previous) => ({
+                      ...previous,
+                      managerId: value === NO_MANAGER_SELECTED_VALUE ? "" : value,
+                    }))
                   }
                   disabled={isLoadingUsers}
                 >
@@ -338,7 +352,7 @@ export default function NewCompany() {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sem responsável</SelectItem>
+                    <SelectItem value={NO_MANAGER_SELECTED_VALUE}>Sem responsável</SelectItem>
                     {userOptions.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.label}
