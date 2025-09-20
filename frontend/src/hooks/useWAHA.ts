@@ -774,8 +774,8 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         );
 
         toast({
-          title: 'Message sent',
-          description: 'Your message has been sent successfully',
+          title: 'Mensagem enviada',
+            description: 'Sua mensagem foi enviada com sucesso.',
         });
       }
     } catch (err) {
