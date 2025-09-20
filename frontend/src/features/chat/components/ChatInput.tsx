@@ -6,6 +6,7 @@ import styles from "./ChatInput.module.css";
 interface ChatInputProps {
   onSend: (payload: SendMessageInput) => Promise<void> | void;
   disabled?: boolean;
+  onTypingActivity?: (isTyping: boolean) => void;
 }
 
 const EMOJI_SUGGESTIONS = [
@@ -35,7 +36,7 @@ const EMOJI_SUGGESTIONS = [
   "🛡️",
 ];
 
-export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
+export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatInputProps) => {
   const [value, setValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
@@ -51,6 +52,12 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
     textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
   }, [value]);
 
+  useEffect(() => {
+    if (disabled) {
+      onTypingActivity?.(false);
+    }
+  }, [disabled, onTypingActivity]);
+
   const canSend = value.trim().length > 0 && !isSending && !disabled;
 
   const sendTextMessage = async () => {
@@ -61,6 +68,7 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
       setValue("");
     } finally {
       setIsSending(false);
+      onTypingActivity?.(false);
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
       });
@@ -81,6 +89,7 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
       setShowAttachments(false);
     } finally {
       setIsSending(false);
+      onTypingActivity?.(false);
     }
   };
 
@@ -89,6 +98,16 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
       event.preventDefault();
       void sendTextMessage();
     }
+  };
+
+  const handleChange: React.ChangeEventHandler<HTMLTextAreaElement> = (event) => {
+    const nextValue = event.target.value;
+    setValue(nextValue);
+    onTypingActivity?.(nextValue.trim().length > 0);
+  };
+
+  const handleBlur: React.FocusEventHandler<HTMLTextAreaElement> = () => {
+    onTypingActivity?.(false);
   };
 
   const handlePaste: React.ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
@@ -202,9 +221,10 @@ export const ChatInput = ({ onSend, disabled = false }: ChatInputProps) => {
           ref={textareaRef}
           className={styles.textarea}
           value={value}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={handleChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
+          onBlur={handleBlur}
           placeholder="Escreva uma mensagem"
           aria-label="Campo para digitar mensagem"
           disabled={disabled}

@@ -80,6 +80,12 @@ export interface ConversationInternalNote {
   createdAt: string;
 }
 
+export interface MessageStatusRecord {
+  conversationId: string;
+  messageId: string;
+  status: ChatMessageStatus;
+}
+
 export interface MessagePage {
   messages: ChatMessage[];
   nextCursor: string | null;
@@ -1207,7 +1213,10 @@ export default class ChatService {
     return true;
   }
 
-  async updateMessageStatusByExternalId(externalId: string, status: ChatMessageStatus): Promise<boolean> {
+  async updateMessageStatusByExternalId(
+    externalId: string,
+    status: ChatMessageStatus
+  ): Promise<MessageStatusRecord[]> {
     const normalizedStatus = normalizeStatus(status);
     const result = await this.query(
       `UPDATE chat_messages
@@ -1218,8 +1227,16 @@ export default class ChatService {
     );
 
     if (result.rowCount === 0) {
-      return false;
+      return [];
     }
+
+    const updates = (result.rows as { conversation_id: string; id: string }[]).map(
+      (row) => ({
+        conversationId: row.conversation_id,
+        messageId: row.id,
+        status: normalizedStatus,
+      }) satisfies MessageStatusRecord
+    );
 
     for (const row of result.rows as { conversation_id: string; id: string }[]) {
       await this.query(
@@ -1230,6 +1247,6 @@ export default class ChatService {
       );
     }
 
-    return true;
+    return updates;
   }
 }

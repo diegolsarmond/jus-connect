@@ -83,6 +83,8 @@ interface ChatWindowProps {
   onUpdateConversation: (conversationId: string, changes: UpdateConversationPayload) => Promise<void>;
   isUpdatingConversation?: boolean;
   onOpenDeviceLinkModal?: () => void;
+  typingUsers?: { id: string; name?: string }[];
+  onTypingActivity?: (isTyping: boolean) => void;
 }
 
 export const ChatWindow = ({
@@ -96,6 +98,8 @@ export const ChatWindow = ({
   onUpdateConversation,
   isUpdatingConversation = false,
   onOpenDeviceLinkModal,
+  typingUsers,
+  onTypingActivity,
 }: ChatWindowProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -118,6 +122,31 @@ export const ChatWindow = ({
     [],
   );
   const tags = conversation?.tags ?? [];
+  const typingIndicatorText = useMemo(() => {
+    if (!typingUsers || typingUsers.length === 0) {
+      return null;
+    }
+
+    const names = typingUsers
+      .map((user) => user.name?.trim())
+      .filter((name): name is string => Boolean(name && name.length > 0));
+
+    if (names.length === 0) {
+      return typingUsers.length === 1
+        ? "Outro operador está digitando..."
+        : `${typingUsers.length} operadores estão digitando...`;
+    }
+
+    if (names.length === 1) {
+      return `${names[0]} está digitando...`;
+    }
+
+    if (names.length === 2) {
+      return `${names[0]} e ${names[1]} estão digitando...`;
+    }
+
+    return `${names[0]} e mais ${names.length - 1} pessoas estão digitando...`;
+  }, [typingUsers]);
   const customAttributes = conversation?.customAttributes ?? [];
   const internalNotes = conversation?.internalNotes ?? [];
   const participants = conversation?.participants ?? [];
@@ -585,7 +614,21 @@ export const ChatWindow = ({
           />
         </div>
         <div className={styles.inputContainer}>
-          <ChatInput onSend={handleSend} disabled={isLoading} />
+          {typingIndicatorText && (
+            <div className={styles.typingIndicator} role="status" aria-live="polite">
+              <span>{typingIndicatorText}</span>
+              <span className={styles.typingIndicatorDots} aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
+          )}
+          <ChatInput
+            onSend={handleSend}
+            disabled={isLoading}
+            onTypingActivity={onTypingActivity}
+          />
         </div>
       </div>
       <aside

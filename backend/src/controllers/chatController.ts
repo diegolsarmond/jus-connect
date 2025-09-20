@@ -7,6 +7,13 @@ import ChatService, {
   UpdateConversationInput,
   ValidationError as ChatValidationError,
 } from '../services/chatService';
+import {
+  publishConversationRead,
+  publishConversationUpdate,
+  publishMessageCreated,
+  streamConversations,
+  updateTypingState,
+} from '../realtime';
 
 const chatService = new ChatService();
 
@@ -175,6 +182,7 @@ export async function createConversationHandler(req: Request, res: Response) {
     const input = parseCreateConversationInput(req.body);
     const conversation = await chatService.createConversation(input);
     res.status(201).json(conversation);
+    publishConversationUpdate(conversation);
   } catch (error) {
     if (error instanceof ChatValidationError) {
       return res.status(400).json({ error: error.message });
@@ -210,7 +218,12 @@ export async function sendConversationMessageHandler(req: Request, res: Response
       type: payload.type,
       attachments: payload.attachments as RecordMessageInput['attachments'],
     });
+    const conversation = await chatService.getConversationDetails(conversationId);
     res.status(201).json(message);
+    publishMessageCreated(message);
+    if (conversation) {
+      publishConversationUpdate(conversation);
+    }
   } catch (error) {
     if (error instanceof ChatValidationError) {
       return res.status(400).json({ error: error.message });
@@ -229,6 +242,7 @@ export async function updateConversationHandler(req: Request, res: Response) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
     res.json(updated);
+    publishConversationUpdate(updated);
   } catch (error) {
     if (error instanceof ChatValidationError) {
       return res.status(400).json({ error: error.message });
@@ -246,8 +260,46 @@ export async function markConversationReadHandler(req: Request, res: Response) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
     res.status(204).send();
+    const conversation = await chatService.getConversationDetails(conversationId);
+    publishConversationRead(conversationId, req.auth?.userId);
+    if (conversation) {
+      publishConversationUpdate(conversation);
+    }
   } catch (error) {
     console.error('Failed to mark conversation as read', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+export function streamConversationEventsHandler(req: Request, res: Response) {
+  streamConversations(req, res);
+}
+
+export function updateTypingStateHandler(req: Request, res: Response) {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return;
+  }
+
+  const { conversationId } = req.params;
+  const isTyping = typeof req.body?.isTyping === 'boolean' ? req.body.isTyping : undefined;
+
+  if (typeof conversationId !== 'string' || !conversationId.trim()) {
+    res.status(400).json({ error: 'Conversation id is required.' });
+    return;
+  }
+
+  if (typeof isTyping !== 'boolean') {
+    res.status(400).json({ error: 'isTyping must be a boolean value.' });
+    return;
+  }
+
+  const payload = (req.auth.payload ?? {}) as Record<string, unknown>;
+  const userName =
+    typeof payload.name === 'string' && payload.name.trim().length > 0
+      ? payload.name.trim()
+      : undefined;
+
+  updateTypingState(conversationId, req.auth.userId, userName, isTyping);
+  res.status(202).json({ accepted: true });
 }

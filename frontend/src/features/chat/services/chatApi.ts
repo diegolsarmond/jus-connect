@@ -99,6 +99,15 @@ export const markConversationRead = async (conversationId: string) => {
   await parseJson(response);
 };
 
+export const setTypingState = async (conversationId: string, isTyping: boolean) => {
+  const response = await fetch(`/api/conversations/${conversationId}/typing`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isTyping }),
+  });
+  await parseJson(response);
+};
+
 export const createConversation = async (
   payload: NewConversationInput,
 ): Promise<ConversationSummary> => {
