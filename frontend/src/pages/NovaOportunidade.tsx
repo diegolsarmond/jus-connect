@@ -606,20 +606,6 @@ export default function NovaOportunidade() {
 
                       <FormField
                         control={form.control}
-                        name="prazo_proximo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Próximo Prazo</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
                         name="status"
                         render={({ field }) => (
                           <FormItem>
@@ -826,6 +812,20 @@ export default function NovaOportunidade() {
                                 <SelectItem value="Sucumbência">Sucumbência</SelectItem>
                               </SelectContent>
                             </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="prazo_proximo"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Data da Cobrança</FormLabel>
+                            <FormControl>
+                              <Input type="date" {...field} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
