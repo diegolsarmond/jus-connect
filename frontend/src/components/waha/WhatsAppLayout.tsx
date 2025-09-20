@@ -23,6 +23,7 @@ import {
   logoutDeviceSession,
 } from "@/features/chat/services/deviceLinkingApi";
 import { useAuth } from "@/features/auth/AuthProvider";
+import TaskCreationDialog, { TaskCreationPrefill } from "@/components/tasks/TaskCreationDialog";
 
 const ensureIsoTimestamp = (value?: number): string => {
   if (!value) {
@@ -282,6 +283,8 @@ export const WhatsAppLayout = ({
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [taskPrefill, setTaskPrefill] = useState<TaskCreationPrefill | undefined>(undefined);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSessionStatusRef = useRef<string | null>(null);
   const { toast } = useToast();
@@ -369,6 +372,25 @@ export const WhatsAppLayout = ({
     () => conversations.find((conversation) => conversation.id === activeConversationId),
     [conversations, activeConversationId],
   );
+
+  const handleOpenTaskDialog = useCallback(() => {
+    if (activeConversation) {
+      const descriptionParts = [
+        activeConversation.phoneNumber ? `Telefone: ${activeConversation.phoneNumber}` : undefined,
+        activeConversation.lastMessage?.content
+          ? `Última mensagem: ${activeConversation.lastMessage.content}`
+          : undefined,
+      ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+      setTaskPrefill({
+        title: activeConversation.name ? `Contato: ${activeConversation.name}` : undefined,
+        description: descriptionParts.length ? descriptionParts.join("\n") : undefined,
+      });
+    } else {
+      setTaskPrefill(undefined);
+    }
+    setIsTaskDialogOpen(true);
+  }, [activeConversation]);
 
   const rawMessages = useMemo(
     () => (activeConversationId ? messageMap[activeConversationId] ?? [] : []),
@@ -636,6 +658,7 @@ export const WhatsAppLayout = ({
             onUpdateConversation={handleUpdateConversation}
             isUpdatingConversation={false}
             onOpenDeviceLinkModal={() => setIsDeviceModalOpen(true)}
+            onCreateTask={handleOpenTaskDialog}
           />
         </div>
       </div>
@@ -654,6 +677,17 @@ export const WhatsAppLayout = ({
       <DeviceLinkModal
         open={isDeviceModalOpen}
         onClose={() => setIsDeviceModalOpen(false)}
+      />
+
+      <TaskCreationDialog
+        open={isTaskDialogOpen}
+        onOpenChange={(open) => {
+          setIsTaskDialogOpen(open);
+          if (!open) {
+            setTaskPrefill(undefined);
+          }
+        }}
+        prefill={taskPrefill}
       />
 
       {shouldShowOverlayLoading ? (
