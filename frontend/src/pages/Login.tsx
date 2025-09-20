@@ -167,17 +167,17 @@ const Login = () => {
         </Card>
 
         {/* Demo credentials */}
-        <Card className="mt-4 border-primary/20 bg-primary/5">
-          <CardContent className="pt-4">
-            <p className="text-sm text-center text-muted-foreground mb-2">
-              <strong>Credenciais de demonstração:</strong>
-            </p>
-            <p className="text-xs text-center text-muted-foreground">
-              Email: admin@quantumjud.com<br />
-              Senha: demo123
-            </p>
-          </CardContent>
-        </Card>
+        {/*<Card className="mt-4 border-primary/20 bg-primary/5">*/}
+        {/*  <CardContent className="pt-4">*/}
+        {/*    <p className="text-sm text-center text-muted-foreground mb-2">*/}
+        {/*      <strong>Credenciais de demonstração:</strong>*/}
+        {/*    </p>*/}
+        {/*    <p className="text-xs text-center text-muted-foreground">*/}
+        {/*      Email: admin@quantumjud.com<br />*/}
+        {/*      Senha: demo123*/}
+        {/*    </p>*/}
+        {/*  </CardContent>*/}
+        {/*</Card>*/}
       </div>
     </div>
   );
