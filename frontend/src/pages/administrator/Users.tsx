@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Search, Shield, UserCheck, UserX, Users } from "lucide-react";
 
@@ -10,6 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
 
 type ApiUser = {
   id?: number | string;
@@ -31,6 +42,23 @@ type DisplayUser = {
   isActive: boolean;
   lastLogin: string | null;
   searchText: string;
+};
+
+type EditFormState = {
+  displayName: string;
+  email: string;
+  companyName: string;
+  role: string;
+  isActive: boolean;
+};
+
+const getNormalizedId = (user: ApiUser, index: number) => {
+  const rawId = user.id;
+  if (typeof rawId === "number" || typeof rawId === "string") {
+    return String(rawId);
+  }
+
+  return `user-${index}`;
 };
 
 const normalizeStatus = (status: ApiUser["status"]): boolean => {
@@ -83,6 +111,17 @@ export default function UsersPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewUserId, setViewUserId] = useState<string | null>(null);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState>({
+    displayName: "",
+    email: "",
+    companyName: "",
+    role: "",
+    isActive: true,
+  });
+
+  const { toast } = useToast();
 
   const fetchUsers = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -147,12 +186,7 @@ export default function UsersPage() {
 
   const normalizedUsers = useMemo<DisplayUser[]>(() => {
     return users.map((user, index) => {
-      const rawId = user.id;
-      const fallbackId = `user-${index}`;
-      const id =
-        typeof rawId === "number" || typeof rawId === "string"
-          ? String(rawId)
-          : fallbackId;
+      const id = getNormalizedId(user, index);
 
       const nameCandidate =
         typeof user.nome_completo === "string" && user.nome_completo.trim().length > 0
@@ -167,7 +201,7 @@ export default function UsersPage() {
       const companyName =
         typeof user.empresa === "string" && user.empresa.trim().length > 0
           ? user.empresa.trim()
-          : "—";
+          : "Sem empresa";
 
       const role =
         typeof user.perfil === "string" && user.perfil.trim().length > 0
@@ -197,6 +231,75 @@ export default function UsersPage() {
       } satisfies DisplayUser;
     });
   }, [users]);
+
+  const usersById = useMemo(() => {
+    return new Map(
+      users.map((user, index) => {
+        return [getNormalizedId(user, index), user] as const;
+      })
+    );
+  }, [users]);
+
+  const viewUser = useMemo(() => {
+    if (!viewUserId) {
+      return null;
+    }
+
+    return normalizedUsers.find((user) => user.id === viewUserId) ?? null;
+  }, [normalizedUsers, viewUserId]);
+
+  const editUser = useMemo(() => {
+    if (!editUserId) {
+      return null;
+    }
+
+    return normalizedUsers.find((user) => user.id === editUserId) ?? null;
+  }, [normalizedUsers, editUserId]);
+
+  useEffect(() => {
+    if (!editUser) {
+      setEditForm({
+        displayName: "",
+        email: "",
+        companyName: "",
+        role: "",
+        isActive: true,
+      });
+      return;
+    }
+
+    const rawUser = usersById.get(editUser.id);
+
+    const name =
+      typeof rawUser?.nome_completo === "string" && rawUser.nome_completo.trim().length > 0
+        ? rawUser.nome_completo.trim()
+        : editUser.displayName;
+    const email =
+      typeof rawUser?.email === "string" && rawUser.email.trim().length > 0
+        ? rawUser.email.trim()
+        : editUser.email;
+    const company =
+      typeof rawUser?.empresa === "string" && rawUser.empresa.trim().length > 0
+        ? rawUser.empresa.trim()
+        : editUser.companyName === "Sem empresa"
+          ? ""
+          : editUser.companyName;
+    const role =
+      typeof rawUser?.perfil === "string" && rawUser.perfil.trim().length > 0
+        ? rawUser.perfil.trim()
+        : editUser.role === "Sem perfil"
+          ? ""
+          : editUser.role;
+    const isActive = editUser.isActive;
+
+    setEditForm({
+      displayName: name,
+      email,
+      companyName: company,
+      role,
+      isActive,
+    });
+  }, [editUser, usersById]);
 
   const filteredUsers = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -253,6 +356,61 @@ export default function UsersPage() {
   const handleRetry = useCallback(() => {
     void fetchUsers();
   }, [fetchUsers]);
+
+  const handleOpenViewUser = useCallback((userId: string) => {
+    setViewUserId(userId);
+  }, []);
+
+  const handleOpenEditUser = useCallback((userId: string) => {
+    setEditUserId(userId);
+  }, []);
+
+  const handleEditFormChange = useCallback(<Key extends keyof EditFormState>(key: Key, value: EditFormState[Key]) => {
+    setEditForm((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
+  }, []);
+
+  const handleSubmitEditForm = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      if (!editUserId) {
+        return;
+      }
+
+      const normalizedName = editForm.displayName.trim();
+      const normalizedEmail = editForm.email.trim();
+      const normalizedCompany = editForm.companyName.trim();
+      const normalizedRole = editForm.role.trim();
+
+      setUsers((previous) =>
+        previous.map((user, index) => {
+          if (getNormalizedId(user, index) !== editUserId) {
+            return user;
+          }
+
+          return {
+            ...user,
+            nome_completo: normalizedName.length > 0 ? normalizedName : null,
+            email: normalizedEmail.length > 0 ? normalizedEmail : null,
+            empresa: normalizedCompany.length > 0 ? normalizedCompany : null,
+            perfil: normalizedRole.length > 0 ? normalizedRole : null,
+            status: editForm.isActive,
+          } satisfies ApiUser;
+        })
+      );
+
+      toast({
+        title: "Usuário atualizado",
+        description: "As informações do usuário foram atualizadas localmente.",
+      });
+
+      setEditUserId(null);
+    },
+    [editForm, editUserId, toast]
+  );
 
   return (
     <div className="space-y-6">
@@ -355,7 +513,7 @@ export default function UsersPage() {
                 <TableRow>
                   <TableHead>Usuário</TableHead>
                   <TableHead>Empresa</TableHead>
-                  <TableHead>Função</TableHead>
+                  <TableHead>Perfil</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Último Login</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -424,10 +582,18 @@ export default function UsersPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenViewUser(user.id)}
+                            >
                               Ver Perfil
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenEditUser(user.id)}
+                            >
                               Editar
                             </Button>
                           </div>
@@ -489,6 +655,154 @@ export default function UsersPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={Boolean(viewUser)} onOpenChange={(open) => (!open ? setViewUserId(null) : undefined)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {viewUser ? `Perfil de ${viewUser.displayName}` : "Perfil do usuário"}
+            </DialogTitle>
+            <DialogDescription>
+              Visualize os dados cadastrais do usuário selecionado.
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewUser ? (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Nome completo</p>
+                <p className="font-medium">{viewUser.displayName}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">E-mail</p>
+                <p className="font-medium">{viewUser.email || "Não informado"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Empresa</p>
+                <p className="font-medium">{viewUser.companyName}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Perfil</p>
+                <Badge variant={resolveRoleBadgeVariant(viewUser.role)}>{viewUser.role}</Badge>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Status</p>
+                {viewUser.isActive ? (
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">Ativo</Badge>
+                ) : (
+                  <Badge variant="destructive">Inativo</Badge>
+                )}
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Último acesso</p>
+                {(() => {
+                  if (!viewUser.lastLogin) {
+                    return <p className="font-medium">Nunca acessou</p>;
+                  }
+
+                  const lastLoginDate = new Date(viewUser.lastLogin);
+                  if (Number.isNaN(lastLoginDate.getTime())) {
+                    return <p className="font-medium">Nunca acessou</p>;
+                  }
+
+                  return (
+                    <div>
+                      <p className="font-medium">{lastLoginDate.toLocaleDateString("pt-BR")}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {lastLoginDate.toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editUser)} onOpenChange={(open) => (!open ? setEditUserId(null) : undefined)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editUser ? `Editar ${editUser.displayName}` : "Editar usuário"}
+            </DialogTitle>
+            <DialogDescription>
+              Atualize as informações básicas do usuário. As alterações são aplicadas imediatamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editUser ? (
+            <form className="space-y-4" onSubmit={handleSubmitEditForm}>
+              <div className="space-y-2">
+                <Label htmlFor="edit-user-name">Nome completo</Label>
+                <Input
+                  id="edit-user-name"
+                  value={editForm.displayName}
+                  onChange={(event) => handleEditFormChange("displayName", event.target.value)}
+                  placeholder="Nome do usuário"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-user-email">E-mail</Label>
+                <Input
+                  id="edit-user-email"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(event) => handleEditFormChange("email", event.target.value)}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-user-company">Empresa</Label>
+                <Input
+                  id="edit-user-company"
+                  value={editForm.companyName}
+                  onChange={(event) => handleEditFormChange("companyName", event.target.value)}
+                  placeholder="Empresa do usuário"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-user-role">Perfil</Label>
+                <Input
+                  id="edit-user-role"
+                  value={editForm.role}
+                  onChange={(event) => handleEditFormChange("role", event.target.value)}
+                  placeholder="Perfil do usuário"
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="space-y-1">
+                  <Label className="m-0" htmlFor="edit-user-status">
+                    Usuário ativo
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Desative para impedir o acesso ao sistema.
+                  </p>
+                </div>
+                <Switch
+                  id="edit-user-status"
+                  checked={editForm.isActive}
+                  onCheckedChange={(checked) => handleEditFormChange("isActive", checked)}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditUserId(null)}>
+                  Cancelar
+                </Button>
+                <Button type="submit">Salvar alterações</Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
