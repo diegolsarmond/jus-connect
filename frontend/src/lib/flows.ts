@@ -67,10 +67,46 @@ export interface Flow {
 
 const FLOWS_ENDPOINT = getApiUrl('financial/flows');
 
+function extractFlowCollection(payload: unknown): Flow[] | null {
+  if (Array.isArray(payload)) {
+    return payload as Flow[];
+  }
+
+  if (payload && typeof payload === 'object') {
+    if (Array.isArray((payload as { [key: string]: unknown }).items)) {
+      return (payload as { [key: string]: unknown }).items as Flow[];
+    }
+
+    if (Array.isArray((payload as { [key: string]: unknown }).data)) {
+      return (payload as { [key: string]: unknown }).data as Flow[];
+    }
+
+    if (Array.isArray((payload as { [key: string]: unknown }).results)) {
+      return (payload as { [key: string]: unknown }).results as Flow[];
+    }
+  }
+
+  return null;
+}
+
 export async function fetchFlows(): Promise<Flow[]> {
   const res = await fetch(FLOWS_ENDPOINT);
-  const data = await res.json();
-  return data.items || data;
+  ensureOkResponse(res);
+
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch (error) {
+    throw new Error('Não foi possível interpretar a resposta do servidor.');
+  }
+
+  const collection = extractFlowCollection(data);
+
+  if (!collection) {
+    throw new Error('Resposta inválida do servidor ao carregar os lançamentos financeiros.');
+  }
+
+  return collection;
 }
 
 export async function createFlow(flow: Partial<Flow>): Promise<Flow> {
