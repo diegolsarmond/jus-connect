@@ -8,6 +8,8 @@ import AsaasChargeService, {
 
 const POSTGRES_UNDEFINED_TABLE = '42P01';
 const POSTGRES_UNDEFINED_COLUMN = '42703';
+const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
+
 const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
 
 let opportunityTablesAvailability: boolean | null = null;
@@ -43,11 +45,32 @@ const determineOpportunityTablesAvailability = async (): Promise<boolean> => {
   opportunityTablesCheckPromise = pool
     .query(
       `
+        WITH tables AS (
+          SELECT
+            to_regclass('public.oportunidade_parcelas') AS parcelas,
+            to_regclass('public.oportunidades') AS oportunidades,
+            to_regclass('public.clientes') AS clientes,
+            to_regclass('public.oportunidade_faturamentos') AS faturamentos
+        )
         SELECT
-          to_regclass('public.oportunidade_parcelas') AS parcelas,
-          to_regclass('public.oportunidades') AS oportunidades,
-          to_regclass('public.clientes') AS clientes,
-          to_regclass('public.oportunidade_faturamentos') AS faturamentos
+          CASE
+            WHEN parcelas IS NULL THEN FALSE
+            ELSE COALESCE(has_table_privilege(parcelas, 'SELECT'), FALSE)
+          END AS parcelas,
+          CASE
+            WHEN oportunidades IS NULL THEN FALSE
+            ELSE COALESCE(has_table_privilege(oportunidades, 'SELECT'), FALSE)
+          END AS oportunidades,
+          CASE
+            WHEN clientes IS NULL THEN FALSE
+            ELSE COALESCE(has_table_privilege(clientes, 'SELECT'), FALSE)
+          END AS clientes,
+          CASE
+            WHEN faturamentos IS NULL THEN FALSE
+            ELSE COALESCE(has_table_privilege(faturamentos, 'SELECT'), FALSE)
+          END AS faturamentos
+        FROM tables
+
       `,
     )
     .then((result) => {
@@ -75,12 +98,19 @@ const markOpportunityTablesUnavailable = () => {
   updateOpportunityTablesAvailability(false);
 };
 
+const FALLBACK_ERROR_CODES = new Set([
+  POSTGRES_UNDEFINED_TABLE,
+  POSTGRES_UNDEFINED_COLUMN,
+  POSTGRES_INSUFFICIENT_PRIVILEGE,
+]);
+
 const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
   if (!error || typeof error !== 'object') {
     return false;
   }
   const code = (error as { code?: string }).code;
-  return code === POSTGRES_UNDEFINED_TABLE || code === POSTGRES_UNDEFINED_COLUMN;
+  return typeof code === 'string' && FALLBACK_ERROR_CODES.has(code);
+
 };
 
 export const __internal = {

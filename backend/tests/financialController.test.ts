@@ -90,10 +90,11 @@ test('listFlows combines financial and opportunity flows', async () => {
   };
 
   const tablesRow = {
-    parcelas: 'public.oportunidade_parcelas',
-    oportunidades: 'public.oportunidades',
-    clientes: 'public.clientes',
-    faturamentos: 'public.oportunidade_faturamentos',
+    parcelas: true,
+    oportunidades: true,
+    clientes: true,
+    faturamentos: true,
+
   };
 
   const { calls, restore } = setupQueryMock([
@@ -153,6 +154,11 @@ test('listFlows combines financial and opportunity flows', async () => {
     calls[0]?.text ?? '',
     /to_regclass\('public\.oportunidade_parcelas'\)/,
   );
+  assert.match(
+    calls[0]?.text ?? '',
+    /has_table_privilege\(parcelas, 'SELECT'\)/,
+  );
+
   assert.equal(calls[0]?.values, undefined);
   assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
   assert.deepEqual(calls[1]?.values, [1, 1]);
@@ -161,10 +167,11 @@ test('listFlows combines financial and opportunity flows', async () => {
 
 test('listFlows applies cliente filter when provided', async () => {
   const tablesRow = {
-    parcelas: 'public.oportunidade_parcelas',
-    oportunidades: 'public.oportunidades',
-    clientes: 'public.clientes',
-    faturamentos: 'public.oportunidade_faturamentos',
+    parcelas: true,
+    oportunidades: true,
+    clientes: true,
+    faturamentos: true,
+
   };
 
   const { calls, restore } = setupQueryMock([
@@ -208,10 +215,11 @@ test('listFlows applies cliente filter when provided', async () => {
 
 test('listFlows returns only financial flows when opportunity tables are absent', async () => {
   const tablesRow = {
-    parcelas: null,
-    oportunidades: null,
-    clientes: null,
-    faturamentos: null,
+    parcelas: false,
+    oportunidades: false,
+    clientes: false,
+    faturamentos: false,
+
   };
 
   const financialRow = {
@@ -270,10 +278,11 @@ test('listFlows returns only financial flows when opportunity tables are absent'
 
 test('listFlows retries without opportunity tables when union query fails', async () => {
   const tablesRow = {
-    parcelas: 'public.oportunidade_parcelas',
-    oportunidades: 'public.oportunidades',
-    clientes: 'public.clientes',
-    faturamentos: 'public.oportunidade_faturamentos',
+    parcelas: true,
+    oportunidades: true,
+    clientes: true,
+    faturamentos: true,
+
   };
 
   const financialRow = {
@@ -335,4 +344,74 @@ test('listFlows retries without opportunity tables when union query fails', asyn
   assert.doesNotMatch(calls[2]?.text ?? '', /UNION ALL/);
   assert.deepEqual(calls[2]?.values, [10, 0]);
   assert.deepEqual(calls[3]?.values, []);
+});
+
+test('listFlows retries without opportunity tables when privileges are missing', async () => {
+  const tablesRow = {
+    parcelas: true,
+    oportunidades: true,
+    clientes: true,
+    faturamentos: true,
+  };
+
+  const financialRow = {
+    id: 31,
+    tipo: 'receita',
+    conta_id: null,
+    categoria_id: null,
+    descricao: 'Mensalidade',
+    valor: 80,
+    vencimento: '2024-04-01',
+    pagamento: '2024-04-05',
+    status: 'pago',
+  };
+
+  const insufficientPrivilegeError = Object.assign(
+    new Error('permission denied for table oportunidade_parcelas'),
+    { code: '42501' as const },
+  );
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [tablesRow], rowCount: 1 },
+    insufficientPrivilegeError,
+    { rows: [financialRow], rowCount: 1 },
+    { rows: [{ total: 1 }], rowCount: 1 },
+  ]);
+
+  const req = { query: {} } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await listFlows(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    items: [
+      {
+        id: 31,
+        tipo: 'receita',
+        conta_id: null,
+        categoria_id: null,
+        descricao: 'Mensalidade',
+        valor: 80,
+        vencimento: '2024-04-01',
+        pagamento: '2024-04-05',
+        status: 'pago',
+      },
+    ],
+    total: 1,
+    page: 1,
+    limit: 10,
+  });
+
+  assert.equal(calls.length, 4);
+  assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
+  assert.match(calls[2]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.doesNotMatch(calls[2]?.text ?? '', /UNION ALL/);
+  assert.deepEqual(calls[2]?.values, [10, 0]);
+  assert.deepEqual(calls[3]?.values, []);
+
 });
