@@ -1,4 +1,4 @@
-import express, { Router } from 'express';
+import express, { Request, Router } from 'express';
 import { AddressInfo } from 'net';
 import path from 'path';
 import { existsSync } from 'fs';
@@ -35,6 +35,7 @@ import integrationApiKeyRoutes from './routes/integrationApiKeyRoutes';
 import chatRoutes from './routes/chatRoutes';
 import userProfileRoutes from './routes/userProfileRoutes';
 import wahaWebhookRoutes from './routes/wahaWebhookRoutes';
+import asaasWebhookRoutes from './routes/asaasWebhookRoutes';
 import authRoutes from './routes/authRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
@@ -48,7 +49,16 @@ import { authorizeModules } from './middlewares/moduleAuthorization';
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
-app.use(express.json({ limit: '50mb' }));
+app.use(
+  express.json({
+    limit: '50mb',
+    verify: (req: Request & { rawBody?: string }, _res, buffer) => {
+      if (buffer?.length) {
+        req.rawBody = buffer.toString('utf-8');
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const defaultAllowedOrigins = [
@@ -233,12 +243,14 @@ registerModuleRoutes('configuracoes-integracoes', integrationApiKeyRoutes);
 registerModuleRoutes('conversas', chatRoutes);
 protectedApiRouter.use(userProfileRoutes);
 app.use('/api', wahaWebhookRoutes);
+app.use('/api', asaasWebhookRoutes);
 app.use('/api', authRoutes);
 app.use('/api', protectedApiRouter);
 app.use('/api/v1', authenticateRequest, usuarioRoutes);
 
 // Background jobs
 cronJobs.startProjudiSyncJob();
+cronJobs.startAsaasChargeSyncJob();
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);

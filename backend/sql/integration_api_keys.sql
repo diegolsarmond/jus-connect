@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS integration_api_keys (
   id BIGSERIAL PRIMARY KEY,
   provider TEXT NOT NULL CHECK (provider IN ('gemini', 'openai', 'asaas')),
+  url_api TEXT,
   key_value TEXT NOT NULL,
   url_api TEXT NULL,
   environment TEXT NOT NULL CHECK (environment IN ('producao', 'homologacao')),

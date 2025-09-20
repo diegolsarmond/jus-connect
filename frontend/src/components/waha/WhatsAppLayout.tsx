@@ -24,6 +24,9 @@ import {
 } from "@/features/chat/services/deviceLinkingApi";
 import { useAuth } from "@/features/auth/AuthProvider";
 import TaskCreationDialog, { TaskCreationPrefill } from "@/components/tasks/TaskCreationDialog";
+import AppointmentCreationDialog, {
+  AppointmentCreationPrefill,
+} from "@/components/agenda/AppointmentCreationDialog";
 
 const ensureIsoTimestamp = (value?: number): string => {
   if (!value) {
@@ -285,6 +288,10 @@ export const WhatsAppLayout = ({
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   const [taskPrefill, setTaskPrefill] = useState<TaskCreationPrefill | undefined>(undefined);
+  const [isAppointmentDialogOpen, setIsAppointmentDialogOpen] = useState(false);
+  const [appointmentPrefill, setAppointmentPrefill] = useState<
+    AppointmentCreationPrefill | undefined
+  >(undefined);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSessionStatusRef = useRef<string | null>(null);
   const { toast } = useToast();
@@ -390,6 +397,21 @@ export const WhatsAppLayout = ({
       setTaskPrefill(undefined);
     }
     setIsTaskDialogOpen(true);
+  }, [activeConversation]);
+
+  const handleOpenAppointmentDialog = useCallback(() => {
+    if (activeConversation) {
+      const prefill: AppointmentCreationPrefill = {
+        title: activeConversation.name ? `Contato: ${activeConversation.name}` : undefined,
+        description: activeConversation.lastMessage?.content,
+        clientName: activeConversation.clientName ?? activeConversation.name,
+        clientPhone: activeConversation.phoneNumber,
+      };
+      setAppointmentPrefill(prefill);
+    } else {
+      setAppointmentPrefill(undefined);
+    }
+    setIsAppointmentDialogOpen(true);
   }, [activeConversation]);
 
   const rawMessages = useMemo(
@@ -659,6 +681,7 @@ export const WhatsAppLayout = ({
             isUpdatingConversation={false}
             onOpenDeviceLinkModal={() => setIsDeviceModalOpen(true)}
             onCreateTask={handleOpenTaskDialog}
+            onCreateAppointment={handleOpenAppointmentDialog}
           />
         </div>
       </div>
@@ -688,6 +711,17 @@ export const WhatsAppLayout = ({
           }
         }}
         prefill={taskPrefill}
+      />
+
+      <AppointmentCreationDialog
+        open={isAppointmentDialogOpen}
+        onOpenChange={(open) => {
+          setIsAppointmentDialogOpen(open);
+          if (!open) {
+            setAppointmentPrefill(undefined);
+          }
+        }}
+        prefill={appointmentPrefill}
       />
 
       {shouldShowOverlayLoading ? (
