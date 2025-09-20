@@ -1,13 +1,33 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
-export const listTarefas = async (_req: Request, res: Response) => {
+export const listTarefas = async (req: Request, res: Response) => {
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res
+        .status(empresaLookup.status)
+        .json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
     const result = await pool.query(
       `SELECT t.id, t.id_oportunidades, t.titulo, t.descricao, t.data, t.hora,
               t.dia_inteiro, t.prioridade, t.mostrar_na_agenda, t.privada,
               t.recorrente, t.repetir_quantas_vezes, t.repetir_cada_unidade,
               t.repetir_intervalo, t.criado_em, t.atualizado_em, t.concluido,
+              t.idempresa, t.idusuario,
               COALESCE(
                 json_agg(json_build_object('id_usuario', tr.id_usuario, 'nome_responsavel', u.nome_completo))
                 FILTER (WHERE tr.id_usuario IS NOT NULL),
@@ -17,8 +37,10 @@ export const listTarefas = async (_req: Request, res: Response) => {
        LEFT JOIN public.tarefas_responsaveis tr ON tr.id_tarefa = t.id
        LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
        WHERE t.ativo IS TRUE
+         AND t.idempresa IS NOT DISTINCT FROM $1
        GROUP BY t.id
-ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`
+ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`,
+      [empresaId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -30,11 +52,24 @@ ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`
 export const getTarefaById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res
+        .status(empresaLookup.status)
+        .json({ error: empresaLookup.message });
+    }
+
     const result = await pool.query(
       `SELECT t.id, t.id_oportunidades, t.titulo, t.descricao, t.data, t.hora,
               t.dia_inteiro, t.prioridade, t.mostrar_na_agenda, t.privada,
               t.recorrente, t.repetir_quantas_vezes, t.repetir_cada_unidade,
               t.repetir_intervalo, t.criado_em, t.atualizado_em, t.concluido,
+              t.idempresa, t.idusuario,
               COALESCE(
                 json_agg(json_build_object('id_usuario', tr.id_usuario, 'nome_responsavel', u.nome_completo))
                 FILTER (WHERE tr.id_usuario IS NOT NULL),
@@ -44,8 +79,9 @@ export const getTarefaById = async (req: Request, res: Response) => {
        LEFT JOIN public.tarefas_responsaveis tr ON tr.id_tarefa = t.id
        LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
        WHERE t.id = $1
+         AND t.idempresa IS NOT DISTINCT FROM $2
        GROUP BY t.id`,
-      [id],
+      [id, empresaLookup.empresaId],
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
@@ -104,11 +140,31 @@ export const createTarefa = async (req: Request, res: Response) => {
 
   const client = await pool.connect();
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res
+        .status(empresaLookup.status)
+        .json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
     await client.query('BEGIN');
     const result = await client.query(
-      `INSERT INTO public.tarefas (id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), $14)
-       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido`,
+      `INSERT INTO public.tarefas (id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido, idempresa, idusuario)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), $14, $15, $16)
+       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido, idempresa, idusuario`,
       [
         id_oportunidades,
         titulo,
@@ -124,6 +180,8 @@ export const createTarefa = async (req: Request, res: Response) => {
         unidadeFormatada,
         repetir_intervalo,
         concluido,
+        empresaId,
+        req.auth.userId,
       ]
     );
 
