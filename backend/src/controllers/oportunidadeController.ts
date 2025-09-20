@@ -63,6 +63,62 @@ const normalizeText = (input: unknown): string | null => {
   return trimmed;
 };
 
+const parsePositiveIntegerParam = (input: unknown): number | null => {
+  if (typeof input !== 'string' && typeof input !== 'number') {
+    return null;
+  }
+
+  const parsed = Number(input);
+
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const normalized = Math.trunc(parsed);
+
+  return normalized > 0 ? normalized : null;
+};
+
+type EmpresaResolution = { ok: true; empresaId: number } | { ok: false };
+
+const resolveEmpresaIdFromRequest = async (
+  req: Request,
+  res: Response,
+): Promise<EmpresaResolution> => {
+  const auth = getAuthenticatedUser(req, res);
+  if (!auth) {
+    return { ok: false };
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return { ok: false };
+  }
+
+  const { empresaId } = empresaLookup;
+
+  if (empresaId === null) {
+    res.status(404).json({ error: 'Oportunidade não encontrada' });
+    return { ok: false };
+  }
+
+  return { ok: true, empresaId };
+};
+
+const ensureOpportunityAccess = async (
+  oportunidadeId: number,
+  empresaId: number,
+): Promise<boolean> => {
+  const result = await pool.query(
+    'SELECT 1 FROM public.oportunidades WHERE id = $1 AND idempresa = $2 LIMIT 1',
+    [oportunidadeId, empresaId],
+  );
+
+  return (result.rowCount ?? 0) > 0;
+};
+
 const normalizePaymentLabel = (input: unknown): string | null => {
   const text = normalizeText(input);
   if (!text) {
@@ -212,14 +268,28 @@ export const listOportunidades = async (req: Request, res: Response) => {
 
 export const listOportunidadesByFase = async (req: Request, res: Response) => {
   const { faseId } = req.params;
+  const parsedFaseId = parsePositiveIntegerParam(faseId);
+
+  if (parsedFaseId === null) {
+    res.status(400).json({ error: 'Fluxo de trabalho inválido' });
+    return;
+  }
+
   try {
+    const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+    if (!empresaResolution.ok) {
+      return;
+    }
+
+    const { empresaId } = empresaResolution;
+
     const result = await pool.query(
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
-       FROM public.oportunidades WHERE fase_id = $1`,
-      [faseId]
+       FROM public.oportunidades WHERE fase_id = $1 AND idempresa = $2`,
+      [parsedFaseId, empresaId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -231,13 +301,24 @@ export const listOportunidadesByFase = async (req: Request, res: Response) => {
 export const getOportunidadeById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+    if (!empresaResolution.ok) {
+      return;
+    }
+
+    const parsedId = parsePositiveIntegerParam(id);
+    if (parsedId === null) {
+      res.status(400).json({ error: 'Oportunidade inválida' });
+      return;
+    }
+
     const oportunidadeResult = await pool.query(
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
               detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
-       FROM public.oportunidades WHERE id = $1`,
-      [id]
+       FROM public.oportunidades WHERE id = $1 AND idempresa = $2`,
+      [parsedId, empresaResolution.empresaId]
     );
     if (oportunidadeResult.rowCount === 0) {
       return res.status(404).json({ error: 'Oportunidade não encontrada' });
@@ -246,7 +327,7 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
       `SELECT nome, documento, telefone, endereco, relacao
        FROM public.oportunidade_envolvidos
        WHERE oportunidade_id = $1`,
-      [id]
+      [parsedId]
     );
     const oportunidade = oportunidadeResult.rows[0];
     oportunidade.envolvidos = envolvidosResult.rows.map((env) => ({
@@ -268,12 +349,34 @@ export const listEnvolvidosByOportunidade = async (
   res: Response,
 ) => {
   const { id } = req.params;
+  const parsedId = parsePositiveIntegerParam(id);
+
+  if (parsedId === null) {
+    res.status(400).json({ error: 'Oportunidade inválida' });
+    return;
+  }
+
   try {
+    const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+    if (!empresaResolution.ok) {
+      return;
+    }
+
+    const hasAccess = await ensureOpportunityAccess(
+      parsedId,
+      empresaResolution.empresaId,
+    );
+
+    if (!hasAccess) {
+      res.status(404).json({ error: 'Oportunidade não encontrada' });
+      return;
+    }
+
     const result = await pool.query(
       `SELECT id, oportunidade_id, nome, documento, telefone, endereco, relacao
        FROM public.oportunidade_envolvidos
        WHERE oportunidade_id = $1`,
-      [id],
+      [parsedId],
     );
     res.json(result.rows);
   } catch (error) {
@@ -588,14 +691,36 @@ export const listOportunidadeFaturamentos = async (
   res: Response,
 ) => {
   const { id } = req.params;
+  const parsedId = parsePositiveIntegerParam(id);
+
+  if (parsedId === null) {
+    res.status(400).json({ error: 'Oportunidade inválida' });
+    return;
+  }
+
   try {
+    const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+    if (!empresaResolution.ok) {
+      return;
+    }
+
+    const hasAccess = await ensureOpportunityAccess(
+      parsedId,
+      empresaResolution.empresaId,
+    );
+
+    if (!hasAccess) {
+      res.status(404).json({ error: 'Oportunidade não encontrada' });
+      return;
+    }
+
     const result = await pool.query(
       `SELECT id, oportunidade_id, forma_pagamento, condicao_pagamento, valor, parcelas,
               observacoes, data_faturamento, criado_em
          FROM public.oportunidade_faturamentos
         WHERE oportunidade_id = $1
         ORDER BY data_faturamento DESC NULLS LAST, id DESC`,
-      [id],
+      [parsedId],
     );
     res.json(result.rows);
   } catch (error) {
@@ -606,14 +731,36 @@ export const listOportunidadeFaturamentos = async (
 
 export const listOportunidadeParcelas = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const parsedId = parsePositiveIntegerParam(id);
+
+  if (parsedId === null) {
+    res.status(400).json({ error: 'Oportunidade inválida' });
+    return;
+  }
+
   try {
+    const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+    if (!empresaResolution.ok) {
+      return;
+    }
+
+    const hasAccess = await ensureOpportunityAccess(
+      parsedId,
+      empresaResolution.empresaId,
+    );
+
+    if (!hasAccess) {
+      res.status(404).json({ error: 'Oportunidade não encontrada' });
+      return;
+    }
+
     const result = await pool.query(
       `SELECT id, oportunidade_id, numero_parcela, valor, valor_pago, status, data_prevista,
               quitado_em, faturamento_id, criado_em, atualizado_em
          FROM public.oportunidade_parcelas
         WHERE oportunidade_id = $1
         ORDER BY numero_parcela ASC`,
-      [id],
+      [parsedId],
     );
     res.json(result.rows);
   } catch (error) {
