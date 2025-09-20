@@ -63,12 +63,14 @@ interface DeviceLinkContentProps {
   isActive: boolean;
   layout?: "modal" | "inline";
   className?: string;
+  onClose?: () => void;
 }
 
 export const DeviceLinkContent = ({
   isActive,
   layout = "modal",
   className,
+  onClose,
 }: DeviceLinkContentProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -226,14 +228,15 @@ export const DeviceLinkContent = ({
       ? "A sessão está conectada. Gere um novo QR Code apenas se precisar autenticar outro dispositivo."
       : "O QR Code será exibido aqui quando a sessão estiver aguardando uma nova autenticação.";
 
-  return (
-    <div
-      className={clsx(
-        styles.container,
-        layout === "inline" && styles.inlineContainer,
-        className,
-      )}
-    >
+  const containerClassName = clsx(
+    styles.container,
+    layout === "inline" && styles.inlineContainer,
+    layout === "modal" && styles.modalBody,
+    className,
+  );
+
+  const content = (
+    <div className={containerClassName}>
       <div className={styles.instructions}>
         <h2>Como conectar</h2>
         <p>
@@ -384,6 +387,21 @@ export const DeviceLinkContent = ({
       </section>
     </div>
   );
+
+  if (layout === "modal" && typeof onClose === "function") {
+    return (
+      <div className={styles.modalWrapper}>
+        <div className={styles.modalHeader}>
+          <button type="button" className={styles.modalCloseButton} onClick={onClose}>
+            Fechar
+          </button>
+        </div>
+        {content}
+      </div>
+    );
+  }
+
+  return content;
 };
 
 interface DeviceLinkModalProps {
@@ -399,7 +417,7 @@ export const DeviceLinkModal = ({ open, onClose }: DeviceLinkModalProps) => {
       ariaLabel="Conectar um novo dispositivo"
       contentClassName={styles.modalContent}
     >
-      <DeviceLinkContent isActive={open} layout="modal" />
+      <DeviceLinkContent isActive={open} layout="modal" onClose={onClose} />
     </Modal>
   );
 };

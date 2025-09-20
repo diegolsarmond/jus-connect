@@ -77,6 +77,11 @@ export const NewConversationModal = ({
   return (
     <Modal open={open} onClose={onClose} ariaLabel="Iniciar nova conversa">
       <div className={styles.wrapper}>
+        <div className={styles.closeRow}>
+          <button type="button" className={styles.closeButton} onClick={onClose}>
+            Fechar
+          </button>
+        </div>
         <header className={styles.header}>
           <h2>Nova conversa</h2>
           <p>Pesquise um contato existente ou crie um novo canal de atendimento instantaneamente.</p>

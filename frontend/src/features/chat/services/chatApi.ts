@@ -6,6 +6,7 @@ import type {
   SendMessageInput,
   UpdateConversationPayload,
 } from "../types";
+import { getApiUrl } from "@/lib/api";
 
 const extractErrorMessage = (rawBody: string, status: number): string => {
   const trimmed = rawBody.trim();
@@ -59,6 +60,64 @@ const parseJson = async <T>(response: Response): Promise<T> => {
       "Não foi possível interpretar a resposta do servidor. Recarregue a página e tente novamente.",
     );
   }
+};
+
+const extractDataArray = <T,>(payload: unknown): T[] => {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+
+  if (payload && typeof payload === "object") {
+    const rows = (payload as { rows?: unknown }).rows;
+    if (Array.isArray(rows)) {
+      return rows as T[];
+    }
+
+    const data = (payload as { data?: unknown }).data;
+    if (Array.isArray(data)) {
+      return data as T[];
+    }
+
+    if (data && typeof data === "object") {
+      const nestedRows = (data as { rows?: unknown }).rows;
+      if (Array.isArray(nestedRows)) {
+        return nestedRows as T[];
+      }
+    }
+  }
+
+  return [];
+};
+
+const pickFirstNonEmptyString = (
+  ...values: Array<string | null | undefined>
+): string | undefined => {
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return undefined;
+};
+
+const getNameFromEmail = (value?: string | null): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const [localPart] = trimmed.split("@");
+  if (!localPart) {
+    return undefined;
+  }
+  const normalized = localPart.replace(/[._]+/g, " ").trim();
+  return normalized.length > 0 ? normalized : undefined;
 };
 
 export const fetchConversations = async (): Promise<ConversationSummary[]> => {
@@ -134,7 +193,15 @@ export const updateConversation = async (
 interface ApiUser {
   id: number | string;
   nome_completo?: string | null;
+  nome?: string | null;
+  nome_usuario?: string | null;
+  nomeusuario?: string | null;
+  email?: string | null;
   perfil?: string | number | null;
+  perfil_nome?: string | null;
+  perfil_nome_exibicao?: string | null;
+  funcao?: string | null;
+  cargo?: string | null;
 }
 
 export interface ChatResponsibleOption {
@@ -144,8 +211,11 @@ export interface ChatResponsibleOption {
 }
 
 export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> => {
-  const response = await fetch(`/api/usuarios`);
-  const data = await parseJson<ApiUser[]>(response);
+  const response = await fetch(getApiUrl("get_api_usuarios_empresa"), {
+    headers: { Accept: "application/json" },
+  });
+  const payload = await parseJson<unknown>(response);
+  const data = extractDataArray<ApiUser>(payload);
   const options: ChatResponsibleOption[] = [];
   const seen = new Set<string>();
 
@@ -157,21 +227,27 @@ export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> 
     if (!id || seen.has(id)) {
       continue;
     }
-    const name = typeof user.nome_completo === 'string' ? user.nome_completo.trim() : '';
+    const name =
+      pickFirstNonEmptyString(user.nome_completo, user.nome, user.nome_usuario, user.nomeusuario) ??
+      getNameFromEmail(user.email);
     if (!name) {
       continue;
     }
 
-    const roleValue = user.perfil;
-    const role =
-      typeof roleValue === 'string' && roleValue.trim()
-        ? roleValue.trim()
-        : typeof roleValue === 'number' && Number.isFinite(roleValue)
-          ? String(roleValue)
-          : undefined;
+    const roleValue =
+      pickFirstNonEmptyString(
+        typeof user.perfil === "string" ? user.perfil : undefined,
+        user.perfil_nome,
+        user.perfil_nome_exibicao,
+        user.funcao,
+        user.cargo,
+      ) ??
+      (typeof user.perfil === "number" && Number.isFinite(user.perfil)
+        ? String(user.perfil)
+        : undefined);
 
     seen.add(id);
-    options.push({ id, name, role });
+    options.push({ id, name, role: roleValue });
   }
 
   return options.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
@@ -180,18 +256,24 @@ export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> 
 interface ApiEtiqueta {
   id: number | string;
   nome?: string | null;
+  descricao?: string | null;
+  nome_etiqueta?: string | null;
+  etiqueta?: string | null;
 }
 
 export const fetchChatTags = async (): Promise<string[]> => {
-  const response = await fetch(`/api/etiquetas`);
-  const data = await parseJson<ApiEtiqueta[]>(response);
+  const response = await fetch(getApiUrl("get_api_etiquetas"), {
+    headers: { Accept: "application/json" },
+  });
+  const payload = await parseJson<unknown>(response);
+  const data = extractDataArray<ApiEtiqueta>(payload);
   const tags = new Set<string>();
 
   for (const item of data) {
     if (!item) {
       continue;
     }
-    const name = typeof item.nome === 'string' ? item.nome.trim() : '';
+    const name = pickFirstNonEmptyString(item.nome, item.descricao, item.nome_etiqueta, item.etiqueta);
     if (!name) {
       continue;
     }
