@@ -10,21 +10,28 @@ const asaasChargeService = new AsaasChargeService();
 
 export const listFlows = async (req: Request, res: Response) => {
   const { page = '1', limit = '10', clienteId } = req.query;
-  const pageValue = Array.isArray(page) ? page[0] : page;
-  const limitValue = Array.isArray(limit) ? limit[0] : limit;
-  const pageNum = Number.parseInt(pageValue as string, 10);
-  const limitNum = Number.parseInt(limitValue as string, 10);
+
+  const pickStringQueryValue = (value: unknown): string | undefined => {
+    if (Array.isArray(value)) {
+      const [first] = value;
+      return typeof first === 'string' ? first : undefined;
+    }
+    return typeof value === 'string' ? value : undefined;
+  };
+
+  const pageValue = pickStringQueryValue(page) ?? '1';
+  const limitValue = pickStringQueryValue(limit) ?? '10';
+  const pageNum = Number.parseInt(pageValue, 10);
+  const limitNum = Number.parseInt(limitValue, 10);
   const effectivePage = Number.isNaN(pageNum) || pageNum <= 0 ? 1 : pageNum;
   const effectiveLimit = Number.isNaN(limitNum) || limitNum <= 0 ? 10 : limitNum;
   const offset = (effectivePage - 1) * effectiveLimit;
 
-  const clienteParam = Array.isArray(clienteId) ? clienteId[0] : clienteId;
+  const clienteValue = pickStringQueryValue(clienteId);
   const parsedClienteId =
-    typeof clienteParam === 'string' && clienteParam.trim().length > 0
-      ? Number.parseInt(clienteParam, 10)
-      : Number.isFinite(clienteParam as number)
-        ? Number(clienteParam)
-        : null;
+    clienteValue && clienteValue.trim().length > 0
+      ? Number.parseInt(clienteValue.trim(), 10)
+      : null;
 
   try {
     const filters: number[] = [];
@@ -66,6 +73,8 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.vencimento::date AS vencimento,
           ff.pagamento::date AS pagamento,
           ff.status AS status,
+          ff.conta_id AS conta_id,
+          ff.categoria_id AS categoria_id,
           NULL::INTEGER AS cliente_id
         FROM financial_flows ff
         UNION ALL
@@ -105,6 +114,8 @@ export const listFlows = async (req: Request, res: Response) => {
             WHEN LOWER(p.status) IN ('quitado','quitada','pago','paga') THEN 'pago'
             ELSE 'pendente'
           END AS status,
+          NULL::INTEGER AS conta_id,
+          NULL::INTEGER AS categoria_id,
           p.solicitante_id AS cliente_id
         FROM oportunidade_parcelas_enriched p
       )
@@ -115,7 +126,7 @@ export const listFlows = async (req: Request, res: Response) => {
 
     const dataQuery = `
       ${combinedCte}
-      SELECT id, tipo, descricao, valor, vencimento, pagamento, status
+      SELECT id, tipo, descricao, valor, vencimento, pagamento, status, conta_id, categoria_id
       FROM combined_flows
       ${filterClause}
       ORDER BY vencimento DESC, id DESC
@@ -212,6 +223,18 @@ export const listFlows = async (req: Request, res: Response) => {
       return {
         id: Number(row.id),
         tipo: normalizeTipo(row.tipo),
+        conta_id:
+          row.conta_id === null || row.conta_id === undefined
+            ? null
+            : Number.isFinite(Number(row.conta_id))
+              ? Number(row.conta_id)
+              : null,
+        categoria_id:
+          row.categoria_id === null || row.categoria_id === undefined
+            ? null
+            : Number.isFinite(Number(row.categoria_id))
+              ? Number(row.categoria_id)
+              : null,
         descricao: normalizeDescricao(row.descricao),
         valor: normalizeNumber(row.valor),
         vencimento,

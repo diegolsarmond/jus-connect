@@ -58,6 +58,8 @@ test('listFlows combines financial and opportunity flows', async () => {
   const financialRow = {
     id: 10,
     tipo: 'despesa',
+    conta_id: 7,
+    categoria_id: 3,
     descricao: 'Conta de luz',
     valor: 100.5,
     vencimento: new Date('2024-01-10T00:00:00.000Z'),
@@ -68,6 +70,8 @@ test('listFlows combines financial and opportunity flows', async () => {
   const oportunidadeRow = {
     id: -20,
     tipo: 'receita',
+    conta_id: null,
+    categoria_id: null,
     descricao: 'Oportunidade 5 - Cliente Teste - Parcela 1/2',
     valor: '250.00',
     vencimento: '2024-02-15',
@@ -101,6 +105,8 @@ test('listFlows combines financial and opportunity flows', async () => {
       {
         id: 10,
         tipo: 'despesa',
+        conta_id: 7,
+        categoria_id: 3,
         descricao: 'Conta de luz',
         valor: 100.5,
         vencimento: '2024-01-10',
@@ -110,6 +116,8 @@ test('listFlows combines financial and opportunity flows', async () => {
       {
         id: -20,
         tipo: 'receita',
+        conta_id: null,
+        categoria_id: null,
         descricao: 'Oportunidade 5 - Cliente Teste - Parcela 1/2',
         valor: 250,
         vencimento: '2024-02-15',
