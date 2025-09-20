@@ -119,6 +119,7 @@ interface ApiEventType {
   id: number;
   nome: string;
   tarefa?: boolean;
+
 }
 
 interface ApiOpportunity {
@@ -224,6 +225,7 @@ export default function Tarefas() {
           : [];
         const tasksOnly = data.filter((type) => type.tarefa === true);
         setEventTypes(tasksOnly);
+
       } catch (err) {
         console.error('Erro ao buscar tipos de evento:', err);
       }
