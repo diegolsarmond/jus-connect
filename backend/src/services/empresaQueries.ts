@@ -3,17 +3,16 @@ import pool from './db';
 
 type PostgresError = Error & { code?: string };
 
-const EMPRESA_SELECT_FIELDS =
-  'id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, atualizacao';
-
 const EMPRESA_QUERY_SOURCES = [
   {
     label: 'view',
-    text: `SELECT ${EMPRESA_SELECT_FIELDS} FROM public."vw.empresas"`,
+    text:
+      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, atualizacao FROM public."vw.empresas"',
   },
   {
     label: 'table',
-    text: `SELECT ${EMPRESA_SELECT_FIELDS} FROM public.empresas`,
+    text:
+      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, NULL::timestamp AS atualizacao FROM public.empresas',
   },
 ] as const;
 
