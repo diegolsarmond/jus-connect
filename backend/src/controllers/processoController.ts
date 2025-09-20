@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { Processo } from '../models/processo';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -85,8 +86,24 @@ const mapProcessoRow = (row: any): Processo => ({
     : null,
 });
 
-export const listProcessos = async (_req: Request, res: Response) => {
+export const listProcessos = async (req: Request, res: Response) => {
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
     const result = await pool.query(
       `SELECT
          p.id,
@@ -109,10 +126,12 @@ export const listProcessos = async (_req: Request, res: Response) => {
          c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
-       ORDER BY p.criado_em DESC`
+       WHERE p.idempresa = $1
+       ORDER BY p.criado_em DESC`,
+      [empresaId]
     );
 
-    res.json(result.rows.map(mapProcessoRow));
+    return res.json(result.rows.map(mapProcessoRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -251,9 +270,27 @@ export const createProcesso = async (req: Request, res: Response) => {
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
     const clienteExists = await pool.query(
-      'SELECT 1 FROM public.clientes WHERE id = $1',
-      [parsedClienteId]
+      'SELECT 1 FROM public.clientes WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      [parsedClienteId, empresaId]
     );
 
     if (clienteExists.rowCount === 0) {
@@ -273,6 +310,7 @@ export const createProcesso = async (req: Request, res: Response) => {
       { name: 'jurisdicao', value: jurisdicaoValue },
       { name: 'advogado_responsavel', value: advogadoValue },
       { name: 'data_distribuicao', value: dataDistribuicaoValue },
+      { name: 'idempresa', value: empresaId },
     ];
 
     const columnNames = columnsAndValues.map((item) => item.name).join(',\n           ');
