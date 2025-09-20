@@ -2,6 +2,67 @@ import { Request, Response } from 'express';
 import pool from '../services/db';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
+const VALID_STATUS_NUMBERS = new Set([0, 1, 2, 3]);
+
+const STATUS_TEXT_TO_NUMBER = new Map<string, number>([
+  ['cancelado', 0],
+  ['cancelada', 0],
+  ['agendado', 1],
+  ['agendada', 1],
+  ['em_curso', 2],
+  ['emcurso', 2],
+  ['em_andamento', 2],
+  ['emandamento', 2],
+  ['concluido', 3],
+  ['concluida', 3],
+]);
+
+const normalizeAgendaStatus = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const parsed = Math.trunc(value);
+    if (VALID_STATUS_NUMBERS.has(parsed)) {
+      return parsed;
+    }
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (trimmed === '') {
+      return 1;
+    }
+
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      const parsed = Math.trunc(numeric);
+      if (VALID_STATUS_NUMBERS.has(parsed)) {
+        return parsed;
+      }
+    }
+
+    const normalized = trimmed
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const mapped =
+      STATUS_TEXT_TO_NUMBER.get(normalized) ??
+      STATUS_TEXT_TO_NUMBER.get(normalized.replace(/_/g, ''));
+
+    if (mapped !== undefined) {
+      return mapped;
+    }
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+
+  return 1;
+};
+
 const buildAgendaSelect = (cteName: string): string => `
   SELECT
     ${cteName}.id,
@@ -138,6 +199,8 @@ export const createAgenda = async (req: Request, res: Response) => {
     status,
   } = req.body;
 
+  const normalizedStatus = normalizeAgendaStatus(status);
+
   try {
     if (!req.auth) {
       return res.status(401).json({ error: 'Token inválido.' });
@@ -194,7 +257,7 @@ export const createAgenda = async (req: Request, res: Response) => {
         tipo_local,
         local,
         lembrete,
-        status,
+        normalizedStatus,
         empresaId,
         req.auth.userId,
       ]
@@ -222,6 +285,8 @@ export const updateAgenda = async (req: Request, res: Response) => {
     lembrete,
     status,
   } = req.body;
+
+  const normalizedStatus = normalizeAgendaStatus(status);
 
   try {
     if (!req.auth) {
@@ -274,7 +339,7 @@ export const updateAgenda = async (req: Request, res: Response) => {
         tipo_local,
         local,
         lembrete,
-        status,
+        normalizedStatus,
         id,
         empresaId,
         req.auth.userId,
