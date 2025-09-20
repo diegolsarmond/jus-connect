@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { getApiBaseUrl } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { AlertCircle, CheckCircle, Clock, Headphones, Loader2, Plus, Search, XCircle } from "lucide-react";
@@ -34,9 +35,33 @@ interface SupportRequest {
   updatedAt: string;
 }
 
+type SupportMessageSender = "requester" | "support";
+
+interface SupportMessageAttachment {
+  id: number;
+  messageId: number;
+  filename: string;
+  contentType: string | null;
+  fileSize: number | null;
+  createdAt: string;
+}
+
+interface SupportMessage {
+  id: number;
+  supportRequestId: number;
+  sender: SupportMessageSender;
+  message: string;
+  createdAt: string;
+  attachments: SupportMessageAttachment[];
+}
+
 interface SupportRequestListResponse {
   items?: SupportRequest[];
   total?: number;
+}
+
+interface SupportMessageListResponse {
+  items?: SupportMessage[];
 }
 
 const statusLabels: Record<SupportRequestStatus, string> = {
@@ -75,6 +100,26 @@ function formatDate(value: string | null | undefined): string {
   }
 
   return date.toLocaleDateString("pt-BR");
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatAverageHandlingTime(requests: SupportRequest[]): string | null {
@@ -126,6 +171,9 @@ export default function Support() {
   const [responseMessage, setResponseMessage] = useState("");
   const [isSendingResponse, setIsSendingResponse] = useState(false);
   const [resolvingRequestId, setResolvingRequestId] = useState<number | null>(null);
+  const [responseDialogMessages, setResponseDialogMessages] = useState<SupportMessage[]>([]);
+  const [isLoadingResponseMessages, setIsLoadingResponseMessages] = useState(false);
+  const [responseMessagesError, setResponseMessagesError] = useState<string | null>(null);
 
   const apiUrl = getApiBaseUrl();
 
@@ -171,6 +219,58 @@ export default function Support() {
       controller.abort();
     };
   }, [fetchRequests]);
+
+  useEffect(() => {
+    if (!responseDialogRequest) {
+      setResponseDialogMessages([]);
+      setResponseMessagesError(null);
+      setIsLoadingResponseMessages(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchMessages = async () => {
+      setIsLoadingResponseMessages(true);
+      setResponseMessagesError(null);
+      setResponseDialogMessages([]);
+
+      try {
+        const response = await fetch(
+          `${apiUrl}/api/support/${responseDialogRequest.id}/messages`,
+          { signal: controller.signal },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch support messages");
+        }
+
+        const payload = (await response.json()) as SupportMessageListResponse;
+        const items = Array.isArray(payload.items) ? payload.items : [];
+
+        if (!controller.signal.aborted) {
+          setResponseDialogMessages(items);
+        }
+      } catch (messagesError) {
+        if ((messagesError as { name?: string })?.name === "AbortError" || controller.signal.aborted) {
+          return;
+        }
+
+        console.error("Erro ao carregar histórico de mensagens de suporte:", messagesError);
+        setResponseMessagesError("Não foi possível carregar o histórico de mensagens. Tente novamente.");
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingResponseMessages(false);
+        }
+      }
+    };
+
+    void fetchMessages();
+
+    return () => {
+      controller.abort();
+    };
+  }, [apiUrl, responseDialogRequest]);
 
   const filteredRequests = useMemo(() => {
     const normalizedTerm = searchTerm.trim().toLowerCase();
@@ -225,6 +325,8 @@ export default function Support() {
   const handleOpenResponseDialog = (request: SupportRequest) => {
     setResponseDialogRequest(request);
     setResponseMessage("");
+    setResponseDialogMessages([]);
+    setResponseMessagesError(null);
   };
 
   const handleResponseDialogOpenChange = (open: boolean) => {
@@ -232,6 +334,9 @@ export default function Support() {
       setResponseDialogRequest(null);
       setResponseMessage("");
       setIsSendingResponse(false);
+      setResponseDialogMessages([]);
+      setResponseMessagesError(null);
+      setIsLoadingResponseMessages(false);
     }
   };
 
@@ -629,6 +734,61 @@ export default function Support() {
                 ) : null}
               </div>
             ) : null}
+            <div className="space-y-2">
+              <Label>Histórico de mensagens</Label>
+              <div className="rounded-md border bg-background">
+                {isLoadingResponseMessages ? (
+                  <div className="p-3 text-sm text-muted-foreground">Carregando histórico...</div>
+                ) : responseMessagesError ? (
+                  <div className="p-3 text-sm text-destructive">{responseMessagesError}</div>
+                ) : responseDialogMessages.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">
+                    Nenhuma mensagem registrada para este ticket.
+                  </div>
+                ) : (
+                  <ScrollArea className="h-64">
+                    <div className="space-y-3 p-3">
+                      {responseDialogMessages.map((message) => {
+                        const senderLabel =
+                          message.sender === "support" ? "Equipe de suporte" : "Solicitante";
+                        const senderClass =
+                          message.sender === "support" ? "text-emerald-600" : "text-sky-600";
+
+                        return (
+                          <div
+                            key={message.id}
+                            className="space-y-2 rounded-md border border-muted-foreground/20 bg-muted/40 p-3"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-xs font-semibold ${senderClass}`}>
+                                {senderLabel}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDateTime(message.createdAt)}
+                              </span>
+                            </div>
+                            {message.message ? (
+                              <p className="whitespace-pre-line text-sm text-foreground">
+                                {message.message}
+                              </p>
+                            ) : null}
+                            {message.attachments.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {message.attachments.map((attachment) => (
+                                  <Badge key={attachment.id} variant="outline" className="text-xs">
+                                    {attachment.filename}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="support-response-message">Mensagem</Label>
               <Textarea

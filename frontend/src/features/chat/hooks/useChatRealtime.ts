@@ -7,7 +7,7 @@ import type {
   MessageStatus,
 } from "../types";
 
-interface ConversationUpdatedPayload extends ConversationSummary {}
+type ConversationUpdatedPayload = ConversationSummary;
 
 interface MessageCreatedPayload {
   conversationId: string;
