@@ -54,11 +54,14 @@ const appointmentSchema = z.object({
 type AppointmentFormData = z.infer<typeof appointmentSchema>;
 
 interface AppointmentFormProps {
-  onSubmit: (appointment: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => void;
+  onSubmit: (
+    appointment: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
+  ) => void | Promise<void>;
   onCancel: () => void;
   initialDate?: Date;
   initialValues?: Appointment;
   submitLabel?: string;
+  isSubmitting?: boolean;
 }
 
 export function AppointmentForm({
@@ -67,6 +70,7 @@ export function AppointmentForm({
   initialDate,
   initialValues,
   submitLabel,
+  isSubmitting = false,
 }: AppointmentFormProps) {
   const defaultValues = useMemo<AppointmentFormData>(() => ({
     title: initialValues?.title ?? '',
@@ -224,7 +228,13 @@ export function AppointmentForm({
     fetchTiposEvento();
   }, [form, initialValues]);
 
+  const submitButtonLabel = isSubmitting ? 'Salvando...' : submitLabel ?? 'Criar Agendamento';
+
   const handleSubmit = (data: AppointmentFormData) => {
+    if (isSubmitting) {
+      return;
+    }
+
     const normalizedType = normalizeAppointmentType(data.type) ?? 'outro';
     onSubmit({
       title: data.title,
@@ -582,8 +592,8 @@ export function AppointmentForm({
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button type="submit" className="flex-1">
-              {submitLabel ?? 'Criar Agendamento'}
+            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+              {submitButtonLabel}
             </Button>
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancelar
