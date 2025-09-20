@@ -374,6 +374,12 @@ export default function NovaOportunidade() {
         shouldDirty: false,
         shouldTouch: false,
       });
+    } else {
+      form.setValue("criado_por", "", {
+
+        shouldDirty: false,
+        shouldTouch: false,
+      });
     }
   }, [user, form]);
 
@@ -1243,22 +1249,34 @@ export default function NovaOportunidade() {
                   </AccordionContent>
                 </AccordionItem>
 
-                 <AccordionItem value="metadados">
+                <AccordionItem value="metadados">
                   <AccordionTrigger>SISTEMA</AccordionTrigger>
                   <AccordionContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
                         control={form.control}
                         name="criado_por"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Criado por</FormLabel>
-                            <FormControl>
-                              <Input disabled {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const createdByName = user?.nome_completo?.trim() ?? "";
+
+                          return (
+                            <FormItem>
+                              <FormLabel>Criado por</FormLabel>
+                              <input
+                                type="hidden"
+                                name={field.name}
+                                value={field.value ?? ""}
+                                onBlur={field.onBlur}
+                                onChange={field.onChange}
+                                ref={field.ref}
+                              />
+                              <FormControl>
+                                <Input disabled value={createdByName} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
 
                       <FormField
