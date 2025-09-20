@@ -41,6 +41,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
 import cronJobs from './services/cronJobs';
 import { ensureChatSchema } from './services/chatSchema';
+import { ensureSupportSchema } from './services/supportSchema';
 import { authenticateRequest } from './middlewares/authMiddleware';
 import { authorizeModules } from './middlewares/moduleAuthorization';
 
@@ -213,9 +214,9 @@ if (!hasFrontendBuild) {
 
 async function startServer() {
   try {
-    await ensureChatSchema();
+    await Promise.all([ensureChatSchema(), ensureSupportSchema()]);
   } catch (error) {
-    console.error('Failed to initialize chat storage schema', error);
+    console.error('Failed to initialize application storage schema', error);
     process.exit(1);
   }
 
