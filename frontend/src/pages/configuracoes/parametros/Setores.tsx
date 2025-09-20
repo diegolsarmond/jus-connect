@@ -40,6 +40,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { getApiBaseUrl } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 interface ApiSetor {
   id: number | string;
@@ -78,12 +79,6 @@ interface SetorFormState {
 const apiUrl = getApiBaseUrl();
 const endpointBase = "/api/setores";
 
-const emptyForm: SetorFormState = {
-  nome: "",
-  empresaId: "",
-  ativo: true,
-};
-
 const NO_COMPANY_SELECTED_VALUE = "__no_company_selected__";
 
 function joinUrl(base: string, path = "") {
@@ -109,6 +104,7 @@ function parseArray<T>(raw: unknown): T[] {
 }
 
 export default function Setores() {
+  const { user, isLoading: authLoading } = useAuth();
   const [setores, setSetores] = useState<Setor[]>([]);
   const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,7 +112,11 @@ export default function Setores() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSetor, setEditingSetor] = useState<Setor | null>(null);
-  const [formState, setFormState] = useState<SetorFormState>(emptyForm);
+  const [formState, setFormState] = useState<SetorFormState>({
+    nome: "",
+    empresaId: "",
+    ativo: true,
+  });
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -132,6 +132,28 @@ export default function Setores() {
   }, [empresas]);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!user) {
+      setSetores([]);
+      setEmpresas([]);
+      setErrorMsg("Não foi possível identificar o usuário autenticado.");
+      setLoading(false);
+      return;
+    }
+
+    const userEmpresaId = user.empresa_id;
+
+    if (userEmpresaId == null) {
+      setSetores([]);
+      setEmpresas([]);
+      setErrorMsg("Sua conta não possui empresa vinculada.");
+      setLoading(false);
+      return;
+    }
+
     const fetchData = async () => {
       setLoading(true);
       setErrorMsg(null);
@@ -148,16 +170,29 @@ export default function Setores() {
           throw new Error(`HTTP ${setoresRes.status}: ${await setoresRes.text()}`);
         }
 
-        const empresasData = parseArray<ApiEmpresa>(await empresasRes.json()).map((empresa) => ({
+        const empresasDataRaw = parseArray<ApiEmpresa>(await empresasRes.json()).map((empresa) => ({
           id: Number(empresa.id),
           nome: empresa.nome_empresa ?? "",
         }));
+        let empresasData = empresasDataRaw.filter((empresa) => empresa.id === userEmpresaId);
+
+        if (empresasData.length === 0) {
+          empresasData = [
+            {
+              id: userEmpresaId,
+              nome: user.empresa_nome ?? `Empresa #${userEmpresaId}`,
+            },
+          ];
+        }
+
         setEmpresas(empresasData);
 
         const mapEmpresas = new Map<number, string>();
         empresasData.forEach((empresa) => mapEmpresas.set(empresa.id, empresa.nome));
 
-        const setoresData = parseArray<ApiSetor>(await setoresRes.json()).map((setor) => mapApiSetorToSetor(setor, mapEmpresas));
+        const setoresData = parseArray<ApiSetor>(await setoresRes.json())
+          .map((setor) => mapApiSetorToSetor(setor, mapEmpresas))
+          .filter((setor) => setor.empresaId === userEmpresaId);
         setSetores(sortSetores(setoresData));
       } catch (error) {
         console.error(error);
@@ -170,11 +205,15 @@ export default function Setores() {
     };
 
     fetchData();
-  }, []);
+  }, [authLoading, user]);
 
   const openCreateDialog = () => {
     setEditingSetor(null);
-    setFormState(emptyForm);
+    setFormState({
+      nome: "",
+      empresaId: user?.empresa_id != null ? String(user.empresa_id) : "",
+      ativo: true,
+    });
     setFormError(null);
     setDialogOpen(true);
   };
@@ -194,7 +233,7 @@ export default function Setores() {
     if (saving) return;
     setDialogOpen(false);
     setEditingSetor(null);
-    setFormState(emptyForm);
+    setFormState({ nome: "", empresaId: "", ativo: true });
     setFormError(null);
   };
 
@@ -205,7 +244,10 @@ export default function Setores() {
       return;
     }
 
-    const empresaId = formState.empresaId ? Number(formState.empresaId) : null;
+    let empresaId = formState.empresaId ? Number(formState.empresaId) : null;
+    if (empresaId === null && user?.empresa_id != null) {
+      empresaId = user.empresa_id;
+    }
     const payload = {
       nome,
       empresa: empresaId,
