@@ -35,6 +35,7 @@ type OpportunityRow = {
   detalhes: string | null;
   documentos_anexados: unknown;
   criado_por: number | string | null;
+  sequencial_empresa: number;
   data_criacao: string | null;
   ultima_atualizacao: string | null;
 };
@@ -384,7 +385,7 @@ async function fetchOpportunityData(id: number) {
     `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
-            contingenciamento, detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
+            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao
        FROM public.oportunidades WHERE id = $1`,
     [id],
   );

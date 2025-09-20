@@ -129,6 +129,7 @@ interface ApiOpportunity {
   solicitante?: {
     nome?: string;
   };
+  sequencial_empresa?: number;
 }
 
 interface ApiTask {
@@ -144,6 +145,27 @@ interface ApiTask {
 }
 
 const apiUrl = getApiBaseUrl();
+
+const formatOpportunityLabel = (
+  opp?: ApiOpportunity,
+  fallbackId?: number | string | null,
+  fallbackDate?: string | null,
+) => {
+  const solicitante = opp?.solicitante_nome || opp?.solicitante?.nome || '';
+  const yearSource = opp?.data_criacao ?? fallbackDate ?? '';
+  const year = yearSource ? new Date(yearSource).getFullYear() : new Date().getFullYear();
+  const numeroSource =
+    opp?.sequencial_empresa ??
+    (fallbackId !== undefined && fallbackId !== null ? fallbackId : opp?.id ?? null);
+  const numeroText =
+    numeroSource !== undefined && numeroSource !== null && numeroSource !== ''
+      ? String(numeroSource)
+      : '';
+  const suffix = solicitante ? ` - ${solicitante}` : '';
+  return numeroText
+    ? `Proposta #${numeroText}/${year}${suffix}`
+    : `Proposta /${year}${suffix}`;
+};
 
 function joinUrl(base: string, path = '') {
   const b = base.replace(/\/+$/, '');
@@ -318,13 +340,7 @@ export default function Tarefas() {
               console.error('Erro ao buscar responsáveis:', e);
             }
             const opp = opportunities.find((o) => o.id === t.id_oportunidades);
-            const processText = opp
-              ? `Proposta #${opp.id}/${new Date(opp.data_criacao || '').getFullYear()}${
-                  opp.solicitante_nome ? ` - ${opp.solicitante_nome}` : ''
-                }`
-              : t.id_oportunidades
-              ? `Proposta #${t.id_oportunidades}`
-              : '';
+            const processText = formatOpportunityLabel(opp, t.id_oportunidades, t.data);
             return {
               id: t.id,
               title: t.titulo,
@@ -373,10 +389,8 @@ export default function Tarefas() {
       new Date().getFullYear();
 
     const processText = selectedOpportunity
-      ? `Proposta #${selectedOpportunity.id}/${year}${
-          selectedOpportunity.solicitante_nome ? ` - ${selectedOpportunity.solicitante_nome}` : ''
-        }`
-      : data.process;
+      ? formatOpportunityLabel(selectedOpportunity)
+      : formatOpportunityLabel(undefined, data.process, data.date);
 
     const payload = {
       id_oportunidades: Number(data.process),
@@ -431,7 +445,9 @@ export default function Tarefas() {
           ? 'atrasada'
           : 'pendente';
         const opp = opportunities.find((o) => o.id === created.id_oportunidades);
-        const procText = opp ? formatProposal(opp) : processText;
+        const procText = opp
+          ? formatOpportunityLabel(opp)
+          : processText || formatOpportunityLabel(undefined, created.id_oportunidades, created.data);
         const newTask: Task = {
           id: created.id,
           title: created.titulo,
@@ -470,7 +486,9 @@ export default function Tarefas() {
           ? 'atrasada'
           : 'pendente';
         const opp = opportunities.find((o) => o.id === updated.id_oportunidades);
-        const procText = opp ? formatProposal(opp) : processText;
+        const procText = opp
+          ? formatOpportunityLabel(opp)
+          : processText || formatOpportunityLabel(undefined, updated.id_oportunidades, updated.data);
         setTasks((prev) =>
           prev.map((t) =>
             t.id === editingTaskId
@@ -558,10 +576,6 @@ export default function Tarefas() {
   const selectedProposal = opportunities.find(
     (o) => String(o.id) === selectedProposalId,
   );
-  const formatProposal = (o: ApiOpportunity) =>
-    `Proposta #${o.id}/${new Date(o.data_criacao || '').getFullYear()}${
-      o.solicitante_nome ? ` - ${o.solicitante_nome}` : ''
-    }`;
 
   // gera os dias com tarefas para o calendário
   const taskDates = useMemo(() => tasks.map((t) => startOfDay(t.date)), [tasks]);
@@ -787,7 +801,7 @@ export default function Tarefas() {
                       aria-expanded={openProposal}
                       className="w-full justify-between"
                     >
-                      {selectedProposal ? formatProposal(selectedProposal) : 'Selecione'}
+                      {selectedProposal ? formatOpportunityLabel(selectedProposal) : 'Selecione'}
                       <ChevronsUpDown className="h-4 w-4 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -798,7 +812,7 @@ export default function Tarefas() {
                         <CommandEmpty>Nenhuma proposta encontrada.</CommandEmpty>
                         <CommandGroup>
                           {opportunities.map((o) => {
-                            const label = formatProposal(o);
+                            const label = formatOpportunityLabel(o);
                             return (
                               <CommandItem
                                 key={o.id}
