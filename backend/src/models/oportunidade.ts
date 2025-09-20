@@ -23,6 +23,7 @@ export interface Oportunidade {
   detalhes: string | null;
   documentos_anexados: number | null;
   criado_por: number | null;
+  sequencial_empresa: number;
   data_criacao: string;
   ultima_atualizacao: string;
   envolvidos?: OportunidadeEnvolvido[];

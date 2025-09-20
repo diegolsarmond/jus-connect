@@ -255,7 +255,7 @@ export const listOportunidades = async (req: Request, res: Response) => {
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao, idempresa
+              detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa
        FROM public.oportunidades WHERE idempresa = $1`,
       [empresaId]
     );
@@ -287,7 +287,7 @@ export const listOportunidadesByFase = async (req: Request, res: Response) => {
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
+              detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao
        FROM public.oportunidades WHERE fase_id = $1 AND idempresa = $2`,
       [parsedFaseId, empresaId]
     );
@@ -316,7 +316,7 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
       `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
+              detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao
        FROM public.oportunidades WHERE id = $1 AND idempresa = $2`,
       [parsedId, empresaResolution.empresaId]
     );
@@ -437,17 +437,32 @@ export const createOportunidade = async (req: Request, res: Response) => {
   try {
     client = await pool.connect();
     await client.query('BEGIN');
+    const sequenceResult = await client.query(
+      `INSERT INTO public.oportunidade_sequence (empresa_id, atual)
+       VALUES ($1, 1)
+       ON CONFLICT (empresa_id)
+       DO UPDATE SET atual = public.oportunidade_sequence.atual + 1
+       RETURNING atual`,
+      [empresaId],
+    );
+
+    if (sequenceResult.rowCount === 0) {
+      throw new Error('Não foi possível gerar o sequencial da oportunidade.');
+    }
+
+    const sequencialEmpresa: number = sequenceResult.rows[0].atual;
+
     const result = await client.query(
       `INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
         valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-        detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao, idempresa)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),NOW(),$22)
+        detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW(),NOW(),$23)
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
                  valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-                 detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao, idempresa`,
+                 detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa`,
       [
         tipo_processo_id,
         area_atuacao_id,
@@ -470,6 +485,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
         detalhes,
         documentos_anexados,
         criado_por,
+        sequencialEmpresa,
         empresaId,
       ]
     );
@@ -572,7 +588,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
                  valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-                 detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao`,
+                 detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao`,
       [
         tipo_processo_id,
         area_atuacao_id,

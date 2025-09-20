@@ -62,6 +62,8 @@ interface OpportunityData {
   percentual_honorarios?: number | string | null;
   forma_pagamento?: string | null;
   qtde_parcelas?: number | string | null;
+  sequencial_empresa?: number;
+  data_criacao?: string | null;
   [key: string]: unknown;
 }
 
@@ -1875,6 +1877,12 @@ export default function VisualizarOportunidade() {
       : getStatusLabel(opportunity.status_id);
 
   const lastUpdateText = formatDate(opportunity.ultima_atualizacao);
+  const proposalNumber = opportunity.sequencial_empresa ?? opportunity.id;
+  const headerYearSource = opportunity.data_criacao ?? opportunity.ultima_atualizacao ?? null;
+  const headerYear = headerYearSource
+    ? new Date(headerYearSource).getFullYear()
+    : new Date().getFullYear();
+  const headerTitle = opportunity.title ?? `Proposta #${proposalNumber}`;
 
   return (
     <div className="p-6 space-y-6">
@@ -1940,7 +1948,7 @@ export default function VisualizarOportunidade() {
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
             <div className="flex flex-col gap-2">
               <CardTitle>
-                {opportunity.title ?? `Proposta #${opportunity.id}`}/{new Date().getFullYear()}
+                {headerTitle}/{headerYear}
               </CardTitle>
               <div className="flex flex-wrap items-center gap-2">
                 {typeof opportunity.fase === "string" && (

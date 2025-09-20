@@ -102,6 +102,7 @@ interface ApiOpportunity {
   solicitante?: {
     nome?: string;
   };
+  sequencial_empresa?: number;
 }
 
 interface ApiTask {
@@ -145,7 +146,8 @@ const defaultValues: TaskFormValues = {
 function formatProposal(o: ApiOpportunity) {
   const year = o.data_criacao ? new Date(o.data_criacao).getFullYear() : new Date().getFullYear();
   const solicitante = o.solicitante_nome || o.solicitante?.nome;
-  return `Proposta #${o.id}/${year}${solicitante ? ` - ${solicitante}` : ""}`;
+  const numero = o.sequencial_empresa ?? o.id;
+  return `Proposta #${numero}/${year}${solicitante ? ` - ${solicitante}` : ""}`;
 }
 
 interface TaskCreationDialogProps {
@@ -352,7 +354,13 @@ export function TaskCreationDialog({ open, onOpenChange, prefill, onCreated }: T
         : "pendente";
 
       const opp = opportunities.find((o) => o.id === created.id_oportunidades);
-      const procText = opp ? formatProposal(opp) : processText || `Proposta #${created.id_oportunidades}/${year}`;
+      const fallbackNumber =
+        opp?.sequencial_empresa ?? (created.id_oportunidades !== undefined ? created.id_oportunidades : null);
+      const fallbackLabel =
+        fallbackNumber !== null && fallbackNumber !== undefined
+          ? `Proposta #${fallbackNumber}/${year}`
+          : processText;
+      const procText = opp ? formatProposal(opp) : processText || fallbackLabel || "";
 
       const summary: CreatedTaskSummary = {
         id: created.id,
