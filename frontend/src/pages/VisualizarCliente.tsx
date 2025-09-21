@@ -57,6 +57,65 @@ function joinUrl(base: string, path = "") {
   return `${b}${p}`;
 }
 
+const pickFirstNonEmptyString = (
+  ...values: Array<string | null | undefined>
+): string | undefined => {
+  for (const value of values) {
+    if (!value || typeof value !== "string") {
+      continue;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+};
+
+const getNameFromEmail = (email: string | null | undefined): string | undefined => {
+  if (!email || typeof email !== "string") {
+    return undefined;
+  }
+
+  const trimmed = email.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const [localPart] = trimmed.split("@");
+  if (!localPart) {
+    return undefined;
+  }
+
+  return localPart
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+    .trim();
+};
+
+const parseApiInteger = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+};
+
 interface ApiClient {
   id: number;
   nome: string;
@@ -92,6 +151,21 @@ interface ApiProcess {
   assunto?: string | null;
   atualizado_em?: string | null;
   criado_em?: string | null;
+  advogados?: ApiProcessLawyer[] | null;
+  ultima_sincronizacao?: string | null;
+  consultas_api_count?: number | string | null;
+  movimentacoes_count?: number | string | null;
+}
+
+interface ApiProcessLawyer {
+  id?: number | string | null;
+  nome?: string | null;
+  name?: string | null;
+  funcao?: string | null;
+  cargo?: string | null;
+  perfil?: string | null;
+  perfil_nome?: string | null;
+  email?: string | null;
 }
 
 interface ApiFinancialFlow {
@@ -167,19 +241,69 @@ const mapApiClientToClient = (c: ApiClient): LocalClient => ({
   registrationDate: c.datacadastro,
 });
 
-const mapApiProcessToProcess = (process: ApiProcess): Process => ({
-  id: Number(process.id),
-  number: process.numero ?? "",
-  status: process.status ?? "",
-  tipo: process.tipo ?? undefined,
-  distributionDate: process.data_distribuicao ?? undefined,
-  subject: process.assunto ?? undefined,
-  responsibleLawyer: process.advogado_responsavel ?? undefined,
-  lastMovement:
-    process.atualizado_em ?? process.criado_em ?? undefined,
-  createdAt: process.criado_em ?? undefined,
-  updatedAt: process.atualizado_em ?? undefined,
-});
+const mapApiProcessToProcess = (process: ApiProcess): Process => {
+  const lawyers: Process["lawyers"] = [];
+  const seen = new Set<number>();
+
+  if (Array.isArray(process.advogados)) {
+    for (const lawyer of process.advogados) {
+      if (!lawyer) {
+        continue;
+      }
+
+      const idValue =
+        typeof lawyer.id === "number"
+          ? lawyer.id
+          : typeof lawyer.id === "string"
+            ? Number.parseInt(lawyer.id, 10)
+            : null;
+
+      if (!idValue || !Number.isFinite(idValue) || idValue <= 0 || seen.has(idValue)) {
+        continue;
+      }
+
+      const name =
+        pickFirstNonEmptyString(lawyer.nome, lawyer.name, lawyer.perfil_nome) ??
+        getNameFromEmail(lawyer.email) ??
+        `Advogado #${idValue}`;
+
+      const role = pickFirstNonEmptyString(
+        lawyer.funcao,
+        lawyer.cargo,
+        lawyer.perfil,
+        lawyer.perfil_nome,
+      );
+
+      lawyers.push({ id: idValue, name, role });
+      seen.add(idValue);
+    }
+  }
+
+  if (lawyers.length === 0 && process.advogado_responsavel) {
+    lawyers.push({ id: 0, name: process.advogado_responsavel });
+  }
+
+  return {
+    id: Number(process.id),
+    number: process.numero ?? "",
+    status: process.status ?? "",
+    tipo: process.tipo ?? undefined,
+    distributionDate: process.data_distribuicao ?? undefined,
+    subject: process.assunto ?? undefined,
+    responsibleLawyer:
+      lawyers.length > 0
+        ? lawyers[0].name
+        : process.advogado_responsavel ?? undefined,
+    lawyers,
+    lastMovement:
+      process.atualizado_em ?? process.criado_em ?? undefined,
+    createdAt: process.criado_em ?? undefined,
+    updatedAt: process.atualizado_em ?? undefined,
+    lastSync: process.ultima_sincronizacao ?? null,
+    syncCount: parseApiInteger(process.consultas_api_count),
+    movementsCount: parseApiInteger(process.movimentacoes_count),
+  };
+};
 
 const formatDateToPtBr = (value?: string | null) => {
   if (!value) {
@@ -197,6 +321,22 @@ const formatDateToPtBr = (value?: string | null) => {
 const formatDateOrFallback = (value?: string | null, fallback = "-") => {
   const formatted = formatDateToPtBr(value);
   return formatted || fallback;
+};
+
+const formatDateTimeOrFallback = (value?: string | null, fallback = "-") => {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback;
+  }
+
+  return parsed.toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 };
 
 export default function VisualizarCliente() {
@@ -433,10 +573,16 @@ export default function VisualizarCliente() {
           return true;
         }
 
+        const lawyerNames = (process.lawyers ?? [])
+          .map((lawyer) => lawyer?.name ?? "")
+          .filter(Boolean)
+          .join(" ");
+
         const searchableFields = [
           process.number ?? "",
           process.subject ?? "",
           process.responsibleLawyer ?? "",
+          lawyerNames,
         ];
 
         return searchableFields.some((field) =>
@@ -449,17 +595,29 @@ export default function VisualizarCliente() {
         const comp = numeroA.localeCompare(numeroB);
         return processSort === "asc" ? comp : -comp;
       })
-      .map((process) => ({
-        id: process.id,
-        numero: process.number || "",
-        dataDistribuicao: formatDateOrFallback(process.distributionDate),
-        assunto: process.subject || "",
-        advogado: process.responsibleLawyer || "",
-        ultimaMovimentacao: formatDateOrFallback(
-          process.lastMovement ?? process.updatedAt ?? process.createdAt ?? null,
-        ),
-        situacao: process.status || "",
-      }));
+      .map((process) => {
+        const lawyerNames = (process.lawyers ?? [])
+          .map((lawyer) => lawyer?.name ?? "")
+          .filter(Boolean);
+
+        return {
+          id: process.id,
+          numero: process.number || "",
+          dataDistribuicao: formatDateOrFallback(process.distributionDate),
+          assunto: process.subject || "",
+          advogados: lawyerNames,
+          ultimaMovimentacao: formatDateOrFallback(
+            process.lastMovement ?? process.updatedAt ?? process.createdAt ?? null,
+          ),
+          ultimaSincronizacao: formatDateTimeOrFallback(
+            process.lastSync ?? null,
+            "Nunca sincronizado",
+          ),
+          consultasApi: process.syncCount ?? 0,
+          movimentacoes: process.movementsCount ?? 0,
+          situacao: process.status || "",
+        };
+      });
   }, [client?.processes, processSearch, processSort]);
 
   const filteredHistory = useMemo(() => {
@@ -883,8 +1041,11 @@ export default function VisualizarCliente() {
                       <TableHead>Número do Processo</TableHead>
                       <TableHead>Data Distribuição</TableHead>
                       <TableHead>Assunto</TableHead>
-                      <TableHead>Advogado Responsável</TableHead>
-                      <TableHead>Data Última Movimentação</TableHead>
+                      <TableHead>Equipe jurídica</TableHead>
+                      <TableHead>Última movimentação</TableHead>
+                      <TableHead>Última sincronização</TableHead>
+                      <TableHead>Consultas API</TableHead>
+                      <TableHead>Movimentações</TableHead>
                       <TableHead>Situação</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
@@ -896,8 +1057,27 @@ export default function VisualizarCliente() {
                           <TableCell>{p.numero}</TableCell>
                           <TableCell>{p.dataDistribuicao || "-"}</TableCell>
                           <TableCell>{p.assunto || "-"}</TableCell>
-                          <TableCell>{p.advogado || "-"}</TableCell>
+                          <TableCell>
+                            {p.advogados && p.advogados.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {p.advogados.map((name) => (
+                                  <Badge
+                                    key={`${p.id}-${name}`}
+                                    variant="outline"
+                                    className="text-xs"
+                                  >
+                                    {name}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span>-</span>
+                            )}
+                          </TableCell>
                           <TableCell>{p.ultimaMovimentacao || "-"}</TableCell>
+                          <TableCell>{p.ultimaSincronizacao}</TableCell>
+                          <TableCell>{p.consultasApi}</TableCell>
+                          <TableCell>{p.movimentacoes}</TableCell>
                           <TableCell>{p.situacao || "-"}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
@@ -925,7 +1105,7 @@ export default function VisualizarCliente() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
+                        <TableCell colSpan={10} className="h-24 text-center">
                           Nenhum processo vinculado
                         </TableCell>
                       </TableRow>
