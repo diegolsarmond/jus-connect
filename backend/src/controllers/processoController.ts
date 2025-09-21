@@ -1255,6 +1255,7 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
             })
             .join(', ');
 
+
         await clientDb.query(
           `INSERT INTO public.processo_movimentacoes (
              id,

@@ -648,11 +648,7 @@ export default function VisualizarProcesso() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={handleGerarContrato} disabled={!clienteIdParam}>
-            Gerar contrato
-          </Button>
-        </div>
+
       </div>
 
       <Card>
