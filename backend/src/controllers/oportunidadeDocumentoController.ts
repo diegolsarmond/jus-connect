@@ -17,6 +17,7 @@ type OpportunityRow = {
   tipo_processo_id: number | null;
   area_atuacao_id: number | null;
   responsavel_id: number | null;
+  idempresa: number | null;
   numero_processo_cnj: string | null;
   numero_protocolo: string | null;
   vara_ou_orgao: string | null;
@@ -73,6 +74,24 @@ type ResponsavelRow = {
   perfil: string | null;
 };
 
+const EMPRESA_ADDRESS_COLUMNS = [
+  'cep',
+  'rua',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'municipio',
+  'estado',
+  'uf',
+  'endereco',
+] as const;
+
+type EmpresaAddressColumn = (typeof EMPRESA_ADDRESS_COLUMNS)[number];
+
+type EmpresaAddress = Partial<Record<EmpresaAddressColumn, string | null>>;
+
 type EmpresaRow = {
   id: number;
   nome_empresa: string | null;
@@ -84,7 +103,7 @@ type EmpresaRow = {
   ativo?: boolean | null;
   datacadastro?: string | null;
   atualizacao?: string | null;
-};
+} & EmpresaAddress;
 
 type EnvolvidoRow = {
   nome: string | null;
@@ -92,6 +111,21 @@ type EnvolvidoRow = {
   telefone: string | null;
   endereco: string | null;
   relacao: string | null;
+};
+
+type OpportunityAudience = {
+  data: string | null;
+  hora: string | null;
+  local: string | null;
+};
+
+type OpportunityData = {
+  opportunity: OpportunityDetails;
+  solicitante: ClienteRow | null;
+  envolvidos: EnvolvidoRow[];
+  responsavel: ResponsavelRow | null;
+  empresa: EmpresaRow | null;
+  audiencia: OpportunityAudience | null;
 };
 
 type TemplateRow = {
@@ -313,6 +347,49 @@ function formatTime(input: Date): string {
   }).format(input);
 }
 
+function formatAudienceTime(date: string | null, time: string | null): string | null {
+  if (!time) {
+    return null;
+  }
+
+  const trimmed = time.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const [hourPart, minutePart] = trimmed.split(':');
+  if (!hourPart || !minutePart) {
+    return null;
+  }
+
+  const hour = Number.parseInt(hourPart, 10);
+  const minute = Number.parseInt(minutePart, 10);
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return null;
+  }
+
+  const safeHour = Math.min(Math.max(hour, 0), 23);
+  const safeMinute = Math.min(Math.max(minute, 0), 59);
+
+  const baseDate = date ? new Date(date) : new Date();
+  if (Number.isNaN(baseDate.getTime())) {
+    baseDate.setHours(safeHour, safeMinute, 0, 0);
+    return formatTime(baseDate);
+  }
+
+  const isoDate = baseDate.toISOString().slice(0, 10);
+  const candidate = new Date(`${isoDate}T${String(safeHour).padStart(2, '0')}:${String(safeMinute).padStart(2, '0')}:00`);
+
+  if (!Number.isNaN(candidate.getTime())) {
+    return formatTime(candidate);
+  }
+
+  const fallback = new Date(baseDate);
+  fallback.setHours(safeHour, safeMinute, 0, 0);
+  return formatTime(fallback);
+}
+
 async function fetchNomeById(query: string, id: number | null): Promise<string | null> {
   if (id === null || id === undefined) return null;
   const result = await pool.query<{ nome: string | null }>(query, [id]);
@@ -326,19 +403,196 @@ async function fetchNomeById(query: string, id: number | null): Promise<string |
   return null;
 }
 
+const EMPRESA_ADDRESS_SOURCES = [
+  { schema: 'public', table: 'vw.empresas' },
+  { schema: 'public', table: 'empresas' },
+] as const;
+
+type PgError = { code?: string };
+
+const isPgMissingRelationError = (error: unknown): error is PgError => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const { code } = error as PgError;
+  return code === '42P01' || code === '42703';
+};
+
+async function fetchEmpresaEndereco(empresaId: number | null): Promise<EmpresaAddress | null> {
+  if (!empresaId) {
+    return null;
+  }
+
+  for (const source of EMPRESA_ADDRESS_SOURCES) {
+    const columnsResult = await pool
+      .query<{ column_name: string }>(
+        `SELECT column_name
+           FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2`,
+        [source.schema, source.table]
+      )
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (!columnsResult || columnsResult.rowCount === 0) {
+      continue;
+    }
+
+    const availableColumns = new Set(columnsResult.rows.map((row) => row.column_name));
+    const selectedColumns = EMPRESA_ADDRESS_COLUMNS.filter((column) => availableColumns.has(column));
+
+    if (selectedColumns.length === 0) {
+      continue;
+    }
+
+    const selectClause = selectedColumns.map((column) => `"${column}"`).join(', ');
+    const relation = `${source.schema}."${source.table}"`;
+    const query = `SELECT ${selectClause} FROM ${relation} WHERE id = $1 LIMIT 1`;
+
+    const result = await pool
+      .query<EmpresaAddress>(query, [empresaId])
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (result && result.rowCount > 0) {
+      return result.rows[0];
+    }
+  }
+
+  return null;
+}
+
+async function fetchOpportunityProcessId(opportunityId: number): Promise<number | null> {
+  const queries = [
+    `SELECT id FROM public.processos WHERE oportunidade_id = $1 ORDER BY atualizado_em DESC NULLS LAST, id DESC LIMIT 1`,
+    `SELECT id FROM public.processos WHERE oportunidade_id = $1 ORDER BY id DESC LIMIT 1`,
+  ];
+
+  for (const query of queries) {
+    const result = await pool
+      .query<{ id: number | null }>(query, [opportunityId])
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (!result || result.rowCount === 0) {
+      continue;
+    }
+
+    const rawId = result.rows[0]?.id;
+    if (rawId === null || rawId === undefined) {
+      continue;
+    }
+
+    const parsed = Number(rawId);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+type AudienceRow = {
+  data?: string | null;
+  hora?: string | null;
+  hora_inicio?: string | null;
+  local?: string | null;
+};
+
+const AUDIENCIA_FILTER = `
+  (
+    (te.nome IS NOT NULL AND LOWER(te.nome) LIKE '%audi%') OR
+    (a.titulo IS NOT NULL AND LOWER(a.titulo) LIKE '%audi%') OR
+    (a.descricao IS NOT NULL AND LOWER(a.descricao) LIKE '%audi%')
+  )
+`;
+
+const buildAgendaAudienceQuery = (column: string): string => `
+  SELECT a.data, a.hora_inicio AS hora, a.local
+    FROM public.agenda a
+    LEFT JOIN public.tipo_evento te ON te.id = a.tipo
+   WHERE a.${column} = $1
+     AND ${AUDIENCIA_FILTER}
+   ORDER BY a.data NULLS LAST, a.hora_inicio NULLS LAST, a.id DESC
+   LIMIT 1
+`;
+
+async function fetchOpportunityAudience(opportunity: OpportunityDetails): Promise<OpportunityAudience | null> {
+  const attempts: Array<{ query: string; params: unknown[] }> = [
+    { query: buildAgendaAudienceQuery('id_oportunidades'), params: [opportunity.id] },
+    { query: buildAgendaAudienceQuery('oportunidade_id'), params: [opportunity.id] },
+  ];
+
+  const processId = await fetchOpportunityProcessId(opportunity.id);
+  if (processId !== null) {
+    attempts.push({ query: buildAgendaAudienceQuery('processo_id'), params: [processId] });
+  }
+
+  attempts.push({
+    query: `
+      SELECT t.data, t.hora, NULL::text AS local
+        FROM public.tarefas t
+       WHERE t.id_oportunidades = $1
+         AND (
+           (t.titulo IS NOT NULL AND LOWER(t.titulo) LIKE '%audi%') OR
+           (t.descricao IS NOT NULL AND LOWER(t.descricao) LIKE '%audi%')
+         )
+       ORDER BY t.data NULLS LAST, t.hora NULLS LAST, t.id DESC
+       LIMIT 1
+    `,
+    params: [opportunity.id],
+  });
+
+  for (const attempt of attempts) {
+    const result = await pool
+      .query<AudienceRow>(attempt.query, attempt.params)
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (!result || result.rowCount === 0) {
+      continue;
+    }
+
+    const row = result.rows[0];
+    const data = coerceString(row?.data ?? null);
+    const hora = coerceString(row?.hora ?? row?.hora_inicio ?? null);
+    const local = coerceString(row?.local ?? null);
+
+    return {
+      data,
+      hora,
+      local,
+    };
+  }
+
+  return null;
+}
+
 function buildVariables({
   opportunity,
   solicitante,
   envolvidos,
   responsavel,
   empresa,
-}: {
-  opportunity: OpportunityDetails;
-  solicitante: ClienteRow | null;
-  envolvidos: EnvolvidoRow[];
-  responsavel: ResponsavelRow | null;
-  empresa: EmpresaRow | null;
-}): VariableMap {
+  audiencia,
+}: OpportunityData): VariableMap {
   const variables: VariableMap = {};
 
   const assign = (key: string, value: unknown) => {
@@ -372,6 +626,12 @@ function buildVariables({
   assign('processo.detalhes', opportunity.detalhes);
   assign('processo.prazo_proximo', formatDatePtBr(opportunity.prazo_proximo));
 
+  if (audiencia) {
+    assign('processo.audiencia.data', formatDatePtBr(audiencia.data));
+    assign('processo.audiencia.horario', formatAudienceTime(audiencia.data, audiencia.hora));
+    assign('processo.audiencia.local', audiencia.local);
+  }
+
   assign('oportunidade.id', opportunity.id);
   assign('oportunidade.data_criacao', formatDatePtBr(opportunity.data_criacao));
   assign('oportunidade.ultima_atualizacao', formatDatePtBr(opportunity.ultima_atualizacao));
@@ -398,6 +658,8 @@ function buildVariables({
         assign('cliente.documento.cpf', doc);
       } else if (doc.length === 14) {
         assign('cliente.documento.cnpj', doc);
+      } else {
+        assign('cliente.documento.rg', doc);
       }
     }
 
@@ -447,6 +709,13 @@ function buildVariables({
     assign('escritorio.email', empresa.email);
     assign('escritorio.responsavel', empresa.responsavel);
     assign('escritorio.plano', empresa.plano);
+    assign('escritorio.endereco.cep', normalizeDocument(empresa.cep ?? null));
+    assign('escritorio.endereco.rua', empresa.rua ?? empresa.logradouro ?? empresa.endereco);
+    assign('escritorio.endereco.numero', empresa.numero);
+    assign('escritorio.endereco.complemento', empresa.complemento);
+    assign('escritorio.endereco.bairro', empresa.bairro);
+    assign('escritorio.endereco.cidade', empresa.cidade ?? empresa.municipio);
+    assign('escritorio.endereco.estado', empresa.estado ?? empresa.uf);
   }
 
   const now = new Date();
@@ -457,9 +726,9 @@ function buildVariables({
   return variables;
 }
 
-async function fetchOpportunityData(id: number) {
+async function fetchOpportunityData(id: number): Promise<OpportunityData | null> {
   const opportunityResult = await pool.query<OpportunityRow>(
-    `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+    `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, idempresa, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
             contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao
@@ -521,10 +790,29 @@ async function fetchOpportunityData(id: number) {
     responsavel = (responsavelResult.rowCount ?? 0) > 0 ? responsavelResult.rows[0] : null;
   }
 
-  const empresaResult = await queryEmpresas<EmpresaRow>('ORDER BY id LIMIT 1');
-  const empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+  let empresa: EmpresaRow | null = null;
+  if (opportunity.idempresa !== null && opportunity.idempresa !== undefined) {
+    const empresaResult = await queryEmpresas<EmpresaRow>('WHERE id = $1 LIMIT 1', [opportunity.idempresa]);
+    empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+  }
 
-  return { opportunity, solicitante, envolvidos: envolvidosResult.rows, responsavel, empresa };
+  if (empresa) {
+    const endereco = await fetchEmpresaEndereco(empresa.id);
+    if (endereco) {
+      empresa = { ...empresa, ...endereco };
+    }
+  }
+
+  const audiencia = await fetchOpportunityAudience(opportunity);
+
+  return {
+    opportunity,
+    solicitante,
+    envolvidos: envolvidosResult.rows,
+    responsavel,
+    empresa,
+    audiencia,
+  };
 }
 
 export const createOpportunityDocumentFromTemplate = async (req: Request, res: Response) => {
@@ -679,4 +967,9 @@ export const deleteOpportunityDocument = async (req: Request, res: Response) => 
     console.error(error);
     return res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+export const __test__ = {
+  buildVariables,
+  fetchOpportunityData,
 };
