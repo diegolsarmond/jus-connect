@@ -372,7 +372,10 @@ ${baseFinancialFlowsSelect}
       return 'receita';
     };
 
-    const normalizeId = (value: unknown): number => {
+    const isNumericString = (value: string): boolean => /^-?\d+$/.test(value);
+
+    const normalizeId = (value: unknown): Flow['id'] => {
+
       if (typeof value === 'number') {
         return Number.isFinite(value) ? value : 0;
       }
@@ -381,14 +384,37 @@ ${baseFinancialFlowsSelect}
         if (trimmed.length === 0) {
           return 0;
         }
-        const parsed = Number(trimmed);
-        return Number.isFinite(parsed) ? parsed : 0;
+        if (isNumericString(trimmed)) {
+          const parsed = Number(trimmed);
+          if (Number.isFinite(parsed)) {
+            return parsed;
+          }
+        }
+        return trimmed;
+      }
+      if (typeof value === 'bigint') {
+        const text = value.toString();
+        if (isNumericString(text)) {
+          const parsed = Number(text);
+          if (Number.isFinite(parsed)) {
+            return parsed;
+          }
+        }
+        return text;
+
       }
       if (value === null || value === undefined) {
         return 0;
       }
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : 0;
+      const textValue = String(value);
+      if (isNumericString(textValue)) {
+        const parsed = Number(textValue);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+      return textValue;
+
     };
 
     const items: Flow[] = itemsResult.rows.map((row) => {

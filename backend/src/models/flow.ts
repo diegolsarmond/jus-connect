@@ -1,5 +1,5 @@
 export interface Flow {
-  id: number;
+  id: number | string;
   tipo: 'receita' | 'despesa';
   conta_id: number | null;
   categoria_id: number | null;

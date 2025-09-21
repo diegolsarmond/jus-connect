@@ -330,14 +330,14 @@ const FinancialFlows = () => {
   });
 
   const settleMutation = useMutation({
-    mutationFn: (flowId: number) =>
+    mutationFn: (flowId: number | string) =>
       settleFlow(flowId, format(startOfDay(new Date()), 'yyyy-MM-dd')),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows'] });
     },
   });
 
-  const handleSettleFlow = (id: number) => {
+  const handleSettleFlow = (id: number | string) => {
     if (!settleMutation.isPending) {
       settleMutation.mutate(id);
     }
