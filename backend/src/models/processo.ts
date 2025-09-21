@@ -8,6 +8,7 @@ export interface ProcessoClienteResumo {
 export interface Processo {
   id: number;
   cliente_id: number;
+  idempresa: number | null;
   numero: string;
   uf: string | null;
   municipio: string | null;

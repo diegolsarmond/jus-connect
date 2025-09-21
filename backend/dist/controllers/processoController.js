@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteProcesso = exports.updateProcesso = exports.createProcesso = exports.getProcessoById = exports.listProcessosByCliente = exports.listProcessos = void 0;
 const db_1 = __importDefault(require("../services/db"));
+const authUser_1 = require("../utils/authUser");
 const normalizeString = (value) => {
     if (typeof value !== 'string') {
         return null;
@@ -51,6 +52,7 @@ const normalizeDate = (value) => {
 const mapProcessoRow = (row) => ({
     id: row.id,
     cliente_id: row.cliente_id,
+    idempresa: row.idempresa ?? null,
     numero: row.numero,
     uf: row.uf,
     municipio: row.municipio,
@@ -75,11 +77,23 @@ const mapProcessoRow = (row) => ({
         }
         : null,
 });
-const listProcessos = async (_req, res) => {
+const listProcessos = async (req, res) => {
     try {
+        if (!req.auth) {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(req.auth.userId);
+        if (!empresaLookup.success) {
+            return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            return res.json([]);
+        }
         const result = await db_1.default.query(`SELECT
-         p.id,
-         p.cliente_id,
+        p.id,
+        p.cliente_id,
+        p.idempresa,
          p.numero,
          p.uf,
          p.municipio,
@@ -98,8 +112,9 @@ const listProcessos = async (_req, res) => {
          c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
-       ORDER BY p.criado_em DESC`);
-        res.json(result.rows.map(mapProcessoRow));
+      WHERE p.idempresa IS NOT DISTINCT FROM $1
+       ORDER BY p.criado_em DESC`, [empresaId]);
+        return res.json(result.rows.map(mapProcessoRow));
     }
     catch (error) {
         console.error(error);
@@ -114,9 +129,21 @@ const listProcessosByCliente = async (req, res) => {
         return res.status(400).json({ error: 'clienteId inválido' });
     }
     try {
+        if (!req.auth) {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(req.auth.userId);
+        if (!empresaLookup.success) {
+            return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            return res.json([]);
+        }
         const result = await db_1.default.query(`SELECT
          p.id,
          p.cliente_id,
+         p.idempresa,
          p.numero,
          p.uf,
          p.municipio,
@@ -136,7 +163,8 @@ const listProcessosByCliente = async (req, res) => {
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        WHERE p.cliente_id = $1
-       ORDER BY p.criado_em DESC`, [parsedClienteId]);
+         AND p.idempresa IS NOT DISTINCT FROM $2
+       ORDER BY p.criado_em DESC`, [parsedClienteId, empresaId]);
         res.json(result.rows.map(mapProcessoRow));
     }
     catch (error) {
@@ -152,9 +180,21 @@ const getProcessoById = async (req, res) => {
         return res.status(400).json({ error: 'ID inválido' });
     }
     try {
+        if (!req.auth) {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(req.auth.userId);
+        if (!empresaLookup.success) {
+            return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            return res.status(404).json({ error: 'Processo não encontrado' });
+        }
         const result = await db_1.default.query(`SELECT
          p.id,
          p.cliente_id,
+         p.idempresa,
          p.numero,
          p.uf,
          p.municipio,
@@ -173,7 +213,8 @@ const getProcessoById = async (req, res) => {
          c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
-       WHERE p.id = $1`, [parsedId]);
+       WHERE p.id = $1
+         AND p.idempresa IS NOT DISTINCT FROM $2`, [parsedId, empresaId]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Processo não encontrado' });
         }
@@ -208,7 +249,18 @@ const createProcesso = async (req, res) => {
     const advogadoValue = normalizeString(advogado_responsavel);
     const dataDistribuicaoValue = normalizeDate(data_distribuicao);
     try {
-        const clienteExists = await db_1.default.query('SELECT 1 FROM public.clientes WHERE id = $1', [parsedClienteId]);
+        if (!req.auth) {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(req.auth.userId);
+        if (!empresaLookup.success) {
+            return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            return res.status(400).json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+        }
+        const clienteExists = await db_1.default.query('SELECT 1 FROM public.clientes WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2', [parsedClienteId, empresaId]);
         if (clienteExists.rowCount === 0) {
             return res.status(400).json({ error: 'Cliente não encontrado' });
         }
@@ -225,6 +277,7 @@ const createProcesso = async (req, res) => {
             { name: 'jurisdicao', value: jurisdicaoValue },
             { name: 'advogado_responsavel', value: advogadoValue },
             { name: 'data_distribuicao', value: dataDistribuicaoValue },
+            { name: 'idempresa', value: empresaId },
         ];
         const columnNames = columnsAndValues.map((item) => item.name).join(',\n           ');
         const placeholders = columnsAndValues.map((_, index) => `$${index + 1}`).join(', ');
@@ -238,6 +291,7 @@ const createProcesso = async (req, res) => {
        SELECT
          inserted.id,
          inserted.cliente_id,
+         inserted.idempresa,
          inserted.numero,
          inserted.uf,
          inserted.municipio,
@@ -325,15 +379,16 @@ const updateProcesso = async (req, res) => {
         values.push(parsedId);
         const whereParam = `$${values.length}`;
         const assignmentClause = assignments.join(',\n           ');
-        const result = await db_1.default.query(`WITH updated AS (
-         UPDATE public.processos SET
-           ${assignmentClause}
-        WHERE id = ${whereParam}
-        RETURNING *
-      )
-       SELECT
-         updated.id,
-         updated.cliente_id,
+       const result = await db_1.default.query(`WITH updated AS (
+        UPDATE public.processos SET
+          ${assignmentClause}
+       WHERE id = ${whereParam}
+       RETURNING *
+     )
+      SELECT
+        updated.id,
+        updated.cliente_id,
+         updated.idempresa,
          updated.numero,
          updated.uf,
          updated.municipio,

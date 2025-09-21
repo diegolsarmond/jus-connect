@@ -12,10 +12,9 @@ CREATE TABLE IF NOT EXISTS public.processos (
   jurisdicao TEXT,
   advogado_responsavel TEXT,
   data_distribuicao TIMESTAMP WITHOUT TIME ZONE,
-  datajud_tipo_justica VARCHAR(100),
-  datajud_alias VARCHAR(100),
   criado_em TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-  atualizado_em TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+  atualizado_em TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  idempresa INTEGER REFERENCES public.empresas(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_processos_cliente_id ON public.processos(cliente_id);
