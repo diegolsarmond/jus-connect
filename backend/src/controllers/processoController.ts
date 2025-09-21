@@ -326,6 +326,181 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
   return movimentacoes;
 };
 
+type RawDocumentoPublico = {
+  id?: unknown;
+  titulo?: unknown;
+  descricao?: unknown;
+  data?: unknown;
+  data_publicacao?: unknown;
+  tipo?: unknown;
+  extensao?: unknown;
+  paginas?: unknown;
+  numero_paginas?: unknown;
+  key?: unknown;
+  chave?: unknown;
+  links?: unknown;
+  link?: unknown;
+  url?: unknown;
+};
+
+export type ProcessoDocumentoPublico = {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  data: string | null;
+  tipo: string | null;
+  extensao: string | null;
+  paginas: number | null;
+  key: string | null;
+  links: Record<string, string>;
+};
+
+const buildDocumentoLinkMap = (
+  primary: unknown,
+  ...fallbacks: unknown[]
+): Record<string, string> => {
+  const links: Record<string, string> = {};
+
+  const addLink = (keyHint: string, rawValue: unknown) => {
+    if (typeof rawValue !== 'string') {
+      return;
+    }
+
+    const trimmedValue = rawValue.trim();
+    if (!trimmedValue) {
+      return;
+    }
+
+    const baseKey = keyHint ? keyHint.trim().toLowerCase() : 'link';
+    let candidateKey = baseKey || 'link';
+    let counter = 1;
+
+    while (links[candidateKey] && links[candidateKey] !== trimmedValue) {
+      candidateKey = `${baseKey || 'link'}_${counter}`;
+      counter += 1;
+    }
+
+    if (!links[candidateKey]) {
+      links[candidateKey] = trimmedValue;
+    }
+  };
+
+  const processValue = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        if (typeof entry === 'string') {
+          addLink(`link_${index + 1}`, entry);
+          return;
+        }
+
+        if (!entry || typeof entry !== 'object') {
+          return;
+        }
+
+        const entryObj = entry as Record<string, unknown>;
+        const rel =
+          typeof entryObj.rel === 'string'
+            ? entryObj.rel
+            : typeof entryObj.tipo === 'string'
+              ? entryObj.tipo
+              : '';
+        const href =
+          typeof entryObj.href === 'string'
+            ? entryObj.href
+            : typeof entryObj.url === 'string'
+              ? entryObj.url
+              : typeof entryObj.link === 'string'
+                ? entryObj.link
+                : null;
+
+        addLink(rel || `link_${index + 1}`, href);
+      });
+      return;
+    }
+
+    if (value && typeof value === 'object') {
+      Object.entries(value as Record<string, unknown>).forEach(([rawKey, rawValue]) => {
+        const key = typeof rawKey === 'string' ? rawKey : String(rawKey);
+        addLink(key, rawValue);
+      });
+      return;
+    }
+
+    addLink('link', value);
+  };
+
+  processValue(primary);
+  fallbacks.forEach((fallback, index) => addLink(`fallback_${index + 1}`, fallback));
+
+  return links;
+};
+
+const mapDocumentosPublicos = (
+  value: unknown,
+): ProcessoDocumentoPublico[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const documentos: ProcessoDocumentoPublico[] = [];
+
+  value.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      return;
+    }
+
+    const raw = item as RawDocumentoPublico;
+
+    let id: string | null = null;
+    const idCandidates = [raw.id, raw.key, raw.chave, raw.titulo];
+
+    for (const candidate of idCandidates) {
+      if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+        id = String(Math.trunc(candidate));
+        break;
+      }
+
+      if (typeof candidate === 'string') {
+        const trimmed = candidate.trim();
+        if (trimmed) {
+          id = trimmed;
+          break;
+        }
+      }
+    }
+
+    if (!id) {
+      id = `documento_${index + 1}`;
+    }
+
+    const titulo = normalizeString(raw.titulo) ?? `Documento ${index + 1}`;
+    const descricao = normalizeString(raw.descricao);
+    const data =
+      normalizeDate(raw.data) ??
+      normalizeDate(raw.data_publicacao) ??
+      null;
+    const tipo = normalizeString(raw.tipo);
+    const extensao = normalizeUppercase(raw.extensao);
+    const paginas = parseOptionalInteger(raw.paginas ?? raw.numero_paginas);
+    const key = normalizeString(raw.key) ?? normalizeString(raw.chave);
+    const links = buildDocumentoLinkMap(raw.links, raw.link, raw.url);
+
+    documentos.push({
+      id,
+      titulo,
+      descricao,
+      data,
+      tipo,
+      extensao,
+      paginas,
+      key,
+      links,
+    });
+  });
+
+  return documentos;
+};
+
 const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 
 const MOVIMENTACOES_BASE_QUERY = `
@@ -1499,6 +1674,188 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
     return res
       .status(500)
       .json({ error: 'Não foi possível sincronizar o processo' });
+  }
+};
+
+export const listProcessoDocumentosPublicos = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const parsedId = Number(id);
+
+  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    const processoResult = await pool.query(
+      'SELECT numero FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      [parsedId, empresaId]
+    );
+
+    if (processoResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    const numeroProcesso = normalizeString(
+      (processoResult.rows[0] as { numero: unknown }).numero
+    );
+
+    if (!numeroProcesso) {
+      return res
+        .status(400)
+        .json({ error: 'Número do processo inválido para consulta de documentos.' });
+    }
+
+    const escavadorIntegration = await integrationApiKeyService.findById(
+      ESCAVADOR_INTEGRATION_ID,
+    );
+
+    if (!escavadorIntegration) {
+      return res.status(503).json({
+        error:
+          'Integração do Escavador não configurada. Cadastre a chave (ID 4) em Configurações > Integrações.',
+      });
+    }
+
+    if (escavadorIntegration.provider !== 'escavador') {
+      return res.status(503).json({
+        error: 'A integração configurada não corresponde ao provedor Escavador.',
+      });
+    }
+
+    if (!escavadorIntegration.active) {
+      return res.status(503).json({
+        error: 'Integração do Escavador desativada. Ative a chave para consultar documentos.',
+      });
+    }
+
+    const escavadorToken = normalizeString(escavadorIntegration.key);
+
+    if (!escavadorToken) {
+      return res.status(503).json({
+        error: 'Chave de API do Escavador não definida. Atualize a integração para continuar.',
+      });
+    }
+
+    const baseFromIntegration = normalizeString(escavadorIntegration.apiUrl);
+    const endpointBase = (baseFromIntegration ?? FALLBACK_ESCAVADOR_API_BASE_URL).replace(
+      /\/$/,
+      '',
+    );
+
+    const url = `${endpointBase}/processos/numero_cnj/${encodeURIComponent(numeroProcesso)}/documentos-publicos`;
+
+    let externalResponse: globalThis.Response;
+
+    try {
+      externalResponse = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${escavadorToken}`,
+          'X-Requested-With': 'XMLHttpRequest',
+          Accept: 'application/json',
+        },
+      });
+    } catch (fetchError) {
+      console.error('Erro ao consultar documentos públicos no Escavador', fetchError);
+      return res
+        .status(502)
+        .json({ error: 'Falha ao consultar a API de documentos públicos.' });
+    }
+
+    try {
+      await integrationApiKeyService.update(escavadorIntegration.id, {
+        lastUsed: new Date(),
+      });
+    } catch (updateError) {
+      console.error(
+        'Não foi possível atualizar a data de último uso da integração do Escavador',
+        updateError,
+      );
+    }
+
+    let payload: any = null;
+    try {
+      payload = await externalResponse.json();
+    } catch (parseError) {
+      console.error('Não foi possível interpretar a resposta de documentos públicos', parseError);
+    }
+
+    if (!externalResponse.ok) {
+      const detalheErro =
+        payload && typeof payload === 'object' && 'error' in payload
+          ? String((payload as { error: unknown }).error)
+          : `HTTP ${externalResponse.status}`;
+
+      const { status: responseStatus, message } = (() => {
+        switch (externalResponse.status) {
+          case 401:
+            return {
+              status: 503,
+              message:
+                'Credenciais inválidas para a integração do Escavador. Revise a chave configurada.',
+            };
+          case 402:
+            return {
+              status: 503,
+              message:
+                'Limite de consultas do Escavador atingido. Ajuste seu plano ou tente novamente mais tarde.',
+            };
+          case 404:
+            return {
+              status: 404,
+              message: 'Documentos públicos não encontrados para este processo.',
+            };
+          case 422:
+            return {
+              status: 400,
+              message: 'Número do processo inválido para consulta de documentos públicos.',
+            };
+          default:
+            return {
+              status: 502,
+              message: 'Não foi possível consultar os documentos públicos do processo.',
+            };
+        }
+      })();
+
+      console.warn('Falha ao consultar documentos públicos do Escavador', detalheErro);
+
+      return res.status(responseStatus).json({ error: message });
+    }
+
+    const items: unknown[] = Array.isArray(payload?.items)
+      ? (payload.items as unknown[])
+      : Array.isArray(payload?.documentos)
+        ? (payload.documentos as unknown[])
+        : Array.isArray(payload)
+          ? (payload as unknown[])
+          : [];
+
+    const documentos = mapDocumentosPublicos(items);
+
+    return res.json({ documentos });
+  } catch (error) {
+    console.error('Erro ao listar documentos públicos do processo', error);
+    return res.status(500).json({
+      error: 'Não foi possível consultar os documentos públicos do processo.',
+    });
   }
 };
 
