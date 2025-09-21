@@ -65,6 +65,7 @@ const NewSubscription = () => {
   const [planOptions, setPlanOptions] = useState<Option[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -74,7 +75,7 @@ const NewSubscription = () => {
     const loadCompanies = async () => {
       setIsLoadingCompanies(true);
       try {
-        const response = await fetch(getApiUrl("get_api_empresas"), {
+        const response = await fetch(getApiUrl("empresas"), {
           headers: { Accept: "application/json" },
           signal: controller.signal,
         });
@@ -116,7 +117,7 @@ const NewSubscription = () => {
     const loadPlans = async () => {
       setIsLoadingPlans(true);
       try {
-        const response = await fetch(getApiUrl("get_api_planos"), {
+        const response = await fetch(getApiUrl("planos"), {
           headers: { Accept: "application/json" },
           signal: controller.signal,
         });
@@ -175,8 +176,12 @@ const NewSubscription = () => {
     }
   }, [planOptions, planId]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isSubmitting) {
+      return;
+    }
 
     if (!companyId || !planId || !startDate) {
       toast({
@@ -187,12 +192,61 @@ const NewSubscription = () => {
       return;
     }
 
-    toast({
-      title: "Assinatura criada!",
-      description: "A nova assinatura foi registrada com sucesso.",
-    });
+    setIsSubmitting(true);
 
-    navigate(routes.admin.subscriptions);
+    const payload = {
+      companyId,
+      planId,
+      status,
+      startDate,
+    };
+
+    try {
+      const response = await fetch(getApiUrl("subscriptions"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Erro ao criar assinatura (código ${response.status}).`;
+
+        try {
+          const errorPayload = await response.json();
+          if (errorPayload && typeof errorPayload === "object") {
+            const message = (errorPayload as { error?: unknown }).error;
+            if (typeof message === "string" && message.trim().length > 0) {
+              errorMessage = message;
+            }
+          }
+        } catch (error) {
+          console.error("Erro ao ler resposta ao criar assinatura:", error);
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      toast({
+        title: "Assinatura criada!",
+        description: "A nova assinatura foi registrada com sucesso.",
+      });
+
+      navigate(routes.admin.subscriptions);
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "Não foi possível criar a assinatura.";
+
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -211,7 +265,11 @@ const NewSubscription = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label>Empresa</Label>
-              <Select value={companyId} onValueChange={setCompanyId} disabled={isLoadingCompanies}>
+              <Select
+                value={companyId}
+                onValueChange={setCompanyId}
+                disabled={isLoadingCompanies || isSubmitting}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a empresa" />
                 </SelectTrigger>
@@ -237,7 +295,11 @@ const NewSubscription = () => {
 
             <div className="space-y-2">
               <Label>Plano</Label>
-              <Select value={planId} onValueChange={setPlanId} disabled={isLoadingPlans}>
+              <Select
+                value={planId}
+                onValueChange={setPlanId}
+                disabled={isLoadingPlans || isSubmitting}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione o plano" />
                 </SelectTrigger>
@@ -263,7 +325,7 @@ const NewSubscription = () => {
 
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={setStatus} disabled={isSubmitting}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -282,11 +344,12 @@ const NewSubscription = () => {
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 required
+                disabled={isSubmitting}
               />
             </div>
 
-            <Button type="submit" className="w-full">
-              Salvar Assinatura
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Salvando..." : "Salvar Assinatura"}
             </Button>
           </form>
         </CardContent>
