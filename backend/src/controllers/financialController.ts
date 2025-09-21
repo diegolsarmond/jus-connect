@@ -375,6 +375,7 @@ ${baseFinancialFlowsSelect}
     const isNumericString = (value: string): boolean => /^-?\d+$/.test(value);
 
     const normalizeId = (value: unknown): Flow['id'] => {
+
       if (typeof value === 'number') {
         return Number.isFinite(value) ? value : 0;
       }
@@ -400,6 +401,7 @@ ${baseFinancialFlowsSelect}
           }
         }
         return text;
+
       }
       if (value === null || value === undefined) {
         return 0;
@@ -412,6 +414,7 @@ ${baseFinancialFlowsSelect}
         }
       }
       return textValue;
+
     };
 
     const items: Flow[] = itemsResult.rows.map((row) => {
