@@ -73,6 +73,24 @@ type ResponsavelRow = {
   perfil: string | null;
 };
 
+const EMPRESA_ADDRESS_COLUMNS = [
+  'cep',
+  'rua',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'municipio',
+  'estado',
+  'uf',
+  'endereco',
+] as const;
+
+type EmpresaAddressColumn = (typeof EMPRESA_ADDRESS_COLUMNS)[number];
+
+type EmpresaAddress = Partial<Record<EmpresaAddressColumn, string | null>>;
+
 type EmpresaRow = {
   id: number;
   nome_empresa: string | null;
@@ -84,7 +102,7 @@ type EmpresaRow = {
   ativo?: boolean | null;
   datacadastro?: string | null;
   atualizacao?: string | null;
-};
+} & EmpresaAddress;
 
 type EnvolvidoRow = {
   nome: string | null;
@@ -326,6 +344,74 @@ async function fetchNomeById(query: string, id: number | null): Promise<string |
   return null;
 }
 
+const EMPRESA_ADDRESS_SOURCES = [
+  { schema: 'public', table: 'vw.empresas' },
+  { schema: 'public', table: 'empresas' },
+] as const;
+
+type PgError = { code?: string };
+
+const isPgMissingRelationError = (error: unknown): error is PgError => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const { code } = error as PgError;
+  return code === '42P01' || code === '42703';
+};
+
+async function fetchEmpresaEndereco(empresaId: number | null): Promise<EmpresaAddress | null> {
+  if (!empresaId) {
+    return null;
+  }
+
+  for (const source of EMPRESA_ADDRESS_SOURCES) {
+    const columnsResult = await pool
+      .query<{ column_name: string }>(
+        `SELECT column_name
+           FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2`,
+        [source.schema, source.table]
+      )
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (!columnsResult || columnsResult.rowCount === 0) {
+      continue;
+    }
+
+    const availableColumns = new Set(columnsResult.rows.map((row) => row.column_name));
+    const selectedColumns = EMPRESA_ADDRESS_COLUMNS.filter((column) => availableColumns.has(column));
+
+    if (selectedColumns.length === 0) {
+      continue;
+    }
+
+    const selectClause = selectedColumns.map((column) => `"${column}"`).join(', ');
+    const relation = `${source.schema}."${source.table}"`;
+    const query = `SELECT ${selectClause} FROM ${relation} WHERE id = $1 LIMIT 1`;
+
+    const result = await pool
+      .query<EmpresaAddress>(query, [empresaId])
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (result && result.rowCount > 0) {
+      return result.rows[0];
+    }
+  }
+
+  return null;
+}
+
 function buildVariables({
   opportunity,
   solicitante,
@@ -398,6 +484,8 @@ function buildVariables({
         assign('cliente.documento.cpf', doc);
       } else if (doc.length === 14) {
         assign('cliente.documento.cnpj', doc);
+      } else {
+        assign('cliente.documento.rg', doc);
       }
     }
 
@@ -447,6 +535,13 @@ function buildVariables({
     assign('escritorio.email', empresa.email);
     assign('escritorio.responsavel', empresa.responsavel);
     assign('escritorio.plano', empresa.plano);
+    assign('escritorio.endereco.cep', normalizeDocument(empresa.cep ?? null));
+    assign('escritorio.endereco.rua', empresa.rua ?? empresa.logradouro ?? empresa.endereco);
+    assign('escritorio.endereco.numero', empresa.numero);
+    assign('escritorio.endereco.complemento', empresa.complemento);
+    assign('escritorio.endereco.bairro', empresa.bairro);
+    assign('escritorio.endereco.cidade', empresa.cidade ?? empresa.municipio);
+    assign('escritorio.endereco.estado', empresa.estado ?? empresa.uf);
   }
 
   const now = new Date();
@@ -522,7 +617,14 @@ async function fetchOpportunityData(id: number) {
   }
 
   const empresaResult = await queryEmpresas<EmpresaRow>('ORDER BY id LIMIT 1');
-  const empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+  let empresa: EmpresaRow | null = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+
+  if (empresa) {
+    const endereco = await fetchEmpresaEndereco(empresa.id);
+    if (endereco) {
+      empresa = { ...empresa, ...endereco };
+    }
+  }
 
   return { opportunity, solicitante, envolvidos: envolvidosResult.rows, responsavel, empresa };
 }
