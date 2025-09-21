@@ -56,7 +56,7 @@ export interface CardTokenResponse {
 }
 
 export interface Flow {
-  id: number;
+  id: number | string;
   tipo: 'receita' | 'despesa';
   descricao: string;
   vencimento: string;
@@ -119,7 +119,7 @@ export async function createFlow(flow: Partial<Flow>): Promise<Flow> {
   return data.flow;
 }
 
-export async function settleFlow(id: number, pagamentoData: string): Promise<Flow> {
+export async function settleFlow(id: number | string, pagamentoData: string): Promise<Flow> {
   const res = await fetch(joinUrl(FLOWS_ENDPOINT, `${id}/settle`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -161,7 +161,72 @@ test('listFlows combines financial and opportunity flows', async () => {
 
   assert.equal(calls[0]?.values, undefined);
   assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
+  assert.match(calls[1]?.text ?? '', /ff\.id::TEXT AS id/);
+  assert.match(calls[1]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
   assert.deepEqual(calls[1]?.values, [1, 1]);
+  assert.deepEqual(calls[2]?.values, []);
+});
+
+test('listFlows preserves textual identifiers returned by the database', async () => {
+  const tablesRow = {
+    parcelas: false,
+    oportunidades: false,
+    clientes: false,
+    faturamentos: false,
+  };
+
+  const textId = '550e8400-e29b-41d4-a716-446655440000';
+
+  const financialRow = {
+    id: textId,
+    tipo: 'despesa',
+    conta_id: 9,
+    categoria_id: 4,
+    descricao: 'Assinatura de software',
+    valor: '199.90',
+    vencimento: '2024-05-20',
+    pagamento: '2024-05-22',
+    status: 'pago',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [tablesRow], rowCount: 1 },
+    { rows: [financialRow], rowCount: 1 },
+    { rows: [{ total: 1 }], rowCount: 1 },
+  ]);
+
+  const req = { query: {} } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await listFlows(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    items: [
+      {
+        id: textId,
+        tipo: 'despesa',
+        conta_id: 9,
+        categoria_id: 4,
+        descricao: 'Assinatura de software',
+        valor: 199.9,
+        vencimento: '2024-05-20',
+        pagamento: '2024-05-22',
+        status: 'pago',
+      },
+    ],
+    total: 1,
+    page: 1,
+    limit: 10,
+  });
+
+  assert.equal(calls.length, 3);
+  assert.match(calls[1]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.deepEqual(calls[1]?.values, [10, 0]);
   assert.deepEqual(calls[2]?.values, []);
 });
 
@@ -209,8 +274,8 @@ test('listFlows applies cliente filter when provided', async () => {
   );
   assert.equal(calls[0]?.values, undefined);
   assert.match(calls[1]?.text ?? '', /WHERE combined_flows\.cliente_id = \$1/);
-  assert.deepEqual(calls[1]?.values, [42, 10, 0]);
-  assert.deepEqual(calls[2]?.values, [42]);
+  assert.deepEqual(calls[1]?.values, ['42', 10, 0]);
+  assert.deepEqual(calls[2]?.values, ['42']);
 });
 
 test('listFlows returns only financial flows when opportunity tables are absent', async () => {
