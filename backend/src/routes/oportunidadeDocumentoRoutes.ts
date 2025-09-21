@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { createOpportunityDocumentFromTemplate } from '../controllers/oportunidadeDocumentoController';
+import {
+  createOpportunityDocumentFromTemplate,
+  deleteOpportunityDocument,
+  getOpportunityDocument,
+  listOpportunityDocuments,
+} from '../controllers/oportunidadeDocumentoController';
 
 const router = Router();
 
@@ -33,7 +38,75 @@ const router = Router();
  *         description: Dados inválidos fornecidos
  *       404:
  *         description: Oportunidade ou template não encontrado
+ *   get:
+ *     summary: Lista os documentos gerados para a oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Lista de documentos da oportunidade
+ *       400:
+ *         description: Oportunidade inválida
  */
-router.post('/oportunidades/:id/documentos', createOpportunityDocumentFromTemplate);
+router
+  .route('/oportunidades/:id/documentos')
+  .post(createOpportunityDocumentFromTemplate)
+  .get(listOpportunityDocuments);
+
+/**
+ * @openapi
+ * /api/oportunidades/{id}/documentos/{documentId}:
+ *   get:
+ *     summary: Recupera um documento específico da oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Documento retornado com sucesso
+ *       400:
+ *         description: Parâmetros inválidos
+ *       404:
+ *         description: Documento não encontrado
+ *   delete:
+ *     summary: Remove um documento específico da oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       204:
+ *         description: Documento removido com sucesso
+ *       400:
+ *         description: Parâmetros inválidos
+ *       404:
+ *         description: Documento não encontrado
+ */
+router
+  .route('/oportunidades/:id/documentos/:documentId')
+  .get(getOpportunityDocument)
+  .delete(deleteOpportunityDocument);
 
 export default router;
