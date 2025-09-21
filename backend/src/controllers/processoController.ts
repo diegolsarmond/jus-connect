@@ -1238,24 +1238,23 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
       if (movimentacoesPreparadas.length > 0) {
         const values: unknown[] = [];
         const placeholders = movimentacoesPreparadas
-          .map((mov: PreparedMovimentacaoRecord, index: number) => {
-            const baseIndex = index * 9;
-            const classificacaoPlaceholder = `$${baseIndex + 6}`;
-            const fontePlaceholder = `$${baseIndex + 9}`;
-            values.push(
-              mov.id,
-              parsedId,
-              mov.data,
-              mov.tipo,
-              mov.tipo_publicacao,
-              mov.classificacao_predita,
-              mov.conteudo,
-              mov.texto_categoria,
-              mov.fonte
-            );
-            return `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, CASE WHEN ${classificacaoPlaceholder} IS NULL THEN NULL ELSE ${classificacaoPlaceholder}::jsonb END, $${baseIndex + 7}, $${baseIndex + 8}, CASE WHEN ${fontePlaceholder} IS NULL THEN NULL ELSE ${fontePlaceholder}::jsonb END)`;
-          })
-          .join(', ');
+            .map((mov: PreparedMovimentacaoRecord, index: number) => {
+              const baseIndex = index * 9;
+              values.push(
+                mov.id,
+                parsedId,
+                mov.data,
+                mov.tipo,
+                mov.tipo_publicacao,
+                mov.classificacao_predita,
+                mov.conteudo,
+                mov.texto_categoria,
+                mov.fonte
+              );
+              return `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}::jsonb, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}::jsonb)`;
+            })
+            .join(', ');
+
 
         await clientDb.query(
           `INSERT INTO public.processo_movimentacoes (
