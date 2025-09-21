@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Clock, MapPin, Bell } from 'lucide-react';
+import { CalendarIcon, Clock, MapPin, Bell, BellRing, Users } from 'lucide-react';
 import { getApiBaseUrl } from '@/lib/api';
 
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   appointmentTypes,
   AppointmentType,
@@ -113,6 +113,19 @@ export function AppointmentForm({
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [highlightedClienteIndex, setHighlightedClienteIndex] = useState(-1);
   const clientFieldRef = useRef<HTMLDivElement | null>(null);
+  const [isAllDay, setIsAllDay] = useState<boolean>(() => Boolean(initialValues ? !initialValues.endTime : false));
+  const defaultHasClient = useMemo(
+    () => Boolean(initialValues?.clientId || initialValues?.clientName),
+    [initialValues],
+  );
+  const [hasClient, setHasClient] = useState<boolean>(defaultHasClient);
+  const defaultMeetingFormat = useMemo<'presencial' | 'online'>(() => {
+    if (initialValues) {
+      return initialValues.location ? 'presencial' : 'online';
+    }
+    return 'presencial';
+  }, [initialValues]);
+  const [meetingFormat, setMeetingFormat] = useState<'presencial' | 'online'>(defaultMeetingFormat);
 
   useEffect(() => {
     const fetchClientes = async () => {
@@ -194,7 +207,7 @@ export function AppointmentForm({
 
         const data: AppointmentType[] = [];
         rows
-          .filter((t) => t.agenda !== false)
+          .filter((t) => t.agenda === true)
           .forEach((t) => {
             const normalized = normalizeAppointmentType(t.nome);
             if (normalized && !data.includes(normalized)) {
@@ -242,18 +255,30 @@ export function AppointmentForm({
       type: normalizedType,
       date: data.date,
       startTime: data.startTime,
-      endTime: data.endTime,
-      clientId: data.clientId || undefined,
-      clientName: data.clientName,
-      clientPhone: data.clientPhone,
-      clientEmail: data.clientEmail,
-      location: data.location,
+      endTime: isAllDay ? undefined : data.endTime || undefined,
+      clientId: hasClient && data.clientId ? data.clientId : undefined,
+      clientName: hasClient ? data.clientName : undefined,
+      clientPhone: hasClient ? data.clientPhone : undefined,
+      clientEmail: hasClient ? data.clientEmail : undefined,
+      location: meetingFormat === 'presencial' ? data.location : undefined,
       reminders: data.reminders,
-      notifyClient: data.notifyClient,
+      notifyClient: hasClient ? data.notifyClient : false,
     });
   };
 
   const clientName = form.watch('clientName') || '';
+
+  useEffect(() => {
+    setIsAllDay(Boolean(initialValues ? !initialValues.endTime : false));
+  }, [initialValues]);
+
+  useEffect(() => {
+    setHasClient(defaultHasClient);
+  }, [defaultHasClient]);
+
+  useEffect(() => {
+    setMeetingFormat(defaultMeetingFormat);
+  }, [defaultMeetingFormat]);
 
   useEffect(() => {
     if (highlightedClienteIndex >= clientes.length) {
@@ -413,8 +438,8 @@ export function AppointmentForm({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2 md:col-span-2">
               <Label>Data *</Label>
               <Popover>
                 <PopoverTrigger asChild>
@@ -459,122 +484,39 @@ export function AppointmentForm({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="endTime">Fim</Label>
-              <div className="relative">
-                <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="endTime"
-                  type="time"
-                  {...form.register('endTime')}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2" ref={clientFieldRef}>
-              <Label htmlFor="clientName">Cliente</Label>
-              <div className="relative">
-                <Input
-                  id="clientName"
-                  autoComplete="off"
-                  {...form.register('clientName')}
-                  value={clientName}
-                  onFocus={() => {
-                    setIsClientDropdownOpen(true);
-                  }}
-                  onChange={(event) => {
-                    handleClientInputChange(event.target.value);
-                    setIsClientDropdownOpen(true);
-                  }}
-                  onKeyDown={handleClientInputKeyDown}
-                  placeholder="Nome do cliente (opcional)"
-                />
-                {isClientDropdownOpen && (
-                  <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-lg">
-                    {clientesLoading ? (
-                      <p className="px-3 py-2 text-sm text-muted-foreground">Carregando clientes...</p>
-                    ) : clientesError ? (
-                      <p className="px-3 py-2 text-sm text-destructive">{clientesError}</p>
-                    ) : filteredClientes.length > 0 ? (
-                      filteredClientes.map((cliente, index) => {
-                        const detailParts: string[] = [];
-                        if (typeof cliente.email === 'string' && cliente.email.trim().length > 0) {
-                          detailParts.push(cliente.email.trim());
-                        }
-                        if (typeof cliente.telefone === 'string' && cliente.telefone.trim().length > 0) {
-                          detailParts.push(cliente.telefone.trim());
-                        }
-
-                        return (
-                          <button
-                            key={cliente.id}
-                            type="button"
-                            onMouseDown={(event) => {
-                              event.preventDefault();
-                              handleSelectCliente(cliente);
-                            }}
-                            className={cn(
-                              'flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent',
-                              index === highlightedClienteIndex && 'bg-accent text-accent-foreground',
-                            )}
-                          >
-                            <span className="font-medium leading-snug">{cliente.nome}</span>
-                            {detailParts.length > 0 && (
-                              <span className="text-xs text-muted-foreground">{detailParts.join(' • ')}</span>
-                            )}
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <p className="px-3 py-2 text-sm text-muted-foreground">
-                        {clientName.trim().length > 0
-                          ? 'Nenhum cliente encontrado'
-                          : 'Nenhum cliente disponível'}
-                      </p>
-                    )}
-                  </div>
-                )}
+            <div className="flex items-center gap-3 rounded-lg border border-dashed border-muted-foreground/30 px-4 py-3 md:self-end">
+              <Switch
+                id="allDay"
+                checked={isAllDay}
+                onCheckedChange={(checked) => {
+                  setIsAllDay(checked);
+                  if (checked) {
+                    form.setValue('endTime', '');
+                  }
+                }}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="allDay" className="text-sm font-medium">
+                  Dia todo
+                </Label>
+                <p className="text-xs text-muted-foreground">Ocupa o dia inteiro sem horário final</p>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="clientPhone">Telefone</Label>
-              <Input id="clientPhone" readOnly {...form.register('clientPhone')} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="clientEmail">E-mail</Label>
-              <Input id="clientEmail" readOnly {...form.register('clientEmail')} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="location">Local</Label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="location"
-                  {...form.register('location')}
-                  placeholder="Endereço ou local"
-                  className="pl-10"
-                />
+            {!isAllDay && (
+              <div className="space-y-2">
+                <Label htmlFor="endTime">Fim</Label>
+                <div className="relative">
+                  <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="endTime"
+                    type="time"
+                    {...form.register('endTime')}
+                    className="pl-10"
+                  />
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="notifyClient"
-              checked={form.watch('notifyClient')}
-              onCheckedChange={(checked) =>
-                form.setValue('notifyClient', checked === true)
-              }
-            />
-            <Label htmlFor="notifyClient" className="text-sm font-medium">
-              Notificar o cliente
-            </Label>
+            )}
           </div>
 
           <div className="flex items-center justify-between p-4 bg-accent rounded-lg">
@@ -589,6 +531,168 @@ export function AppointmentForm({
               checked={form.watch('reminders')}
               onCheckedChange={(checked) => form.setValue('reminders', checked)}
             />
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between rounded-lg bg-accent p-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-accent-foreground" />
+                <Label htmlFor="hasClient" className="text-sm font-medium">
+                  Com cliente
+                </Label>
+              </div>
+              <Switch
+                id="hasClient"
+                checked={hasClient}
+                onCheckedChange={(checked) => {
+                  setHasClient(checked);
+                  if (!checked) {
+                    form.setValue('clientId', '');
+                    form.setValue('clientName', '');
+                    form.setValue('clientPhone', '');
+                    form.setValue('clientEmail', '');
+                    form.setValue('notifyClient', false);
+                    setIsClientDropdownOpen(false);
+                    setHighlightedClienteIndex(-1);
+                  }
+                }}
+              />
+            </div>
+
+            {hasClient && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2" ref={clientFieldRef}>
+                  <Label htmlFor="clientName">Cliente</Label>
+                  <div className="relative">
+                    <Input
+                      id="clientName"
+                      autoComplete="off"
+                      {...form.register('clientName')}
+                      value={clientName}
+                      onFocus={() => {
+                        setIsClientDropdownOpen(true);
+                      }}
+                      onChange={(event) => {
+                        handleClientInputChange(event.target.value);
+                        setIsClientDropdownOpen(true);
+                      }}
+                      onKeyDown={handleClientInputKeyDown}
+                      placeholder="Nome do cliente (opcional)"
+                    />
+                    {isClientDropdownOpen && (
+                      <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-lg">
+                        {clientesLoading ? (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">Carregando clientes...</p>
+                        ) : clientesError ? (
+                          <p className="px-3 py-2 text-sm text-destructive">{clientesError}</p>
+                        ) : filteredClientes.length > 0 ? (
+                          filteredClientes.map((cliente, index) => {
+                            const detailParts: string[] = [];
+                            if (typeof cliente.email === 'string' && cliente.email.trim().length > 0) {
+                              detailParts.push(cliente.email.trim());
+                            }
+                            if (typeof cliente.telefone === 'string' && cliente.telefone.trim().length > 0) {
+                              detailParts.push(cliente.telefone.trim());
+                            }
+
+                            return (
+                              <button
+                                key={cliente.id}
+                                type="button"
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  handleSelectCliente(cliente);
+                                }}
+                                className={cn(
+                                  'flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent',
+                                  index === highlightedClienteIndex && 'bg-accent text-accent-foreground',
+                                )}
+                              >
+                                <span className="font-medium leading-snug">{cliente.nome}</span>
+                                {detailParts.length > 0 && (
+                                  <span className="text-xs text-muted-foreground">{detailParts.join(' • ')}</span>
+                                )}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">
+                            {clientName.trim().length > 0
+                              ? 'Nenhum cliente encontrado'
+                              : 'Nenhum cliente disponível'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="clientPhone">Telefone</Label>
+                  <Input id="clientPhone" readOnly {...form.register('clientPhone')} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="clientEmail">E-mail</Label>
+                  <Input id="clientEmail" readOnly {...form.register('clientEmail')} />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg bg-accent p-4 md:col-span-2">
+                  <div className="flex items-center gap-2">
+                    <BellRing className="h-4 w-4 text-accent-foreground" />
+                    <Label htmlFor="notifyClient" className="text-sm font-medium">
+                      Notificar o cliente
+                    </Label>
+                  </div>
+                  <Switch
+                    id="notifyClient"
+                    checked={form.watch('notifyClient')}
+                    onCheckedChange={(checked) => form.setValue('notifyClient', checked)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Formato do atendimento</Label>
+              <RadioGroup
+                value={meetingFormat}
+                onValueChange={(value) => {
+                  const normalized = value === 'online' ? 'online' : 'presencial';
+                  setMeetingFormat(normalized);
+                  if (normalized === 'online') {
+                    form.setValue('location', '');
+                  }
+                }}
+                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="presencial" id="presencial" />
+                  <Label htmlFor="presencial">Presencial</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="online" id="online" />
+                  <Label htmlFor="online">Online</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {meetingFormat === 'presencial' && (
+              <div className="space-y-2">
+                <Label htmlFor="location">Local</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="location"
+                    {...form.register('location')}
+                    placeholder="Endereço ou local"
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-4">
