@@ -131,33 +131,7 @@ export function MetadataModal({ open, onOpenChange, defaultValues, onConfirm, is
               </Select>
             </div>
           </div>
-          <div className="space-y-4 rounded-md border p-4">
-            <p className="text-sm font-medium">Ações automáticas</p>
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="template-auto-client"
-                checked={values.autoCreateClient}
-                onCheckedChange={checked =>
-                  setValues(prev => ({ ...prev, autoCreateClient: checked === true }))
-                }
-              />
-              <Label htmlFor="template-auto-client" className="text-sm font-normal">
-                Cadastrar cliente automaticamente ao utilizar o modelo
-              </Label>
-            </div>
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="template-auto-process"
-                checked={values.autoCreateProcess}
-                onCheckedChange={checked =>
-                  setValues(prev => ({ ...prev, autoCreateProcess: checked === true }))
-                }
-              />
-              <Label htmlFor="template-auto-process" className="text-sm font-normal">
-                Cadastrar processo automaticamente ao utilizar o modelo
-              </Label>
-            </div>
-          </div>
+          
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
