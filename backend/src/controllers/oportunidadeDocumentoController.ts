@@ -404,7 +404,7 @@ async function fetchEmpresaEndereco(empresaId: number | null): Promise<EmpresaAd
         throw error;
       });
 
-    if (result && result.rowCount > 0) {
+    if (result && (result.rowCount ?? 0) > 0) {
       return result.rows[0];
     }
   }
