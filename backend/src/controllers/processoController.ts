@@ -3,6 +3,7 @@ import { PoolClient } from 'pg';
 import IntegrationApiKeyService, {
   ESCAVADOR_DEFAULT_API_URL,
 } from '../services/integrationApiKeyService';
+
 import pool from '../services/db';
 import { Processo } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
@@ -746,6 +747,7 @@ export const createProcesso = async (req: Request, res: Response) => {
 
       await clientDb.query('COMMIT');
 
+
       if (finalResult.rowCount === 0) {
         throw new Error('Não foi possível localizar o processo recém-criado.');
       }
@@ -1107,6 +1109,7 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
       /\/$/,
       '',
     );
+
     const url = `${endpointBase}/processos/numero_cnj/${encodeURIComponent(numeroProcesso)}/movimentacoes`;
 
     let externalResponse: globalThis.Response;
@@ -1115,6 +1118,7 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
       externalResponse = await fetch(url, {
         headers: {
           Authorization: `Bearer ${escavadorToken}`,
+
           'X-Requested-With': 'XMLHttpRequest',
           Accept: 'application/json',
         },
