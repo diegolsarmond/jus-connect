@@ -31,6 +31,13 @@ export interface Process {
   lastSync?: string | null;
   syncCount?: number;
   movementsCount?: number;
+  proposal?: {
+    id: number;
+    label: string;
+    solicitante?: string | null;
+    dataCriacao?: string | null;
+    sequencial?: number | null;
+  } | null;
 }
 
 export interface Client {

@@ -78,6 +78,12 @@ interface ProcessoAdvogado {
   funcao?: string;
 }
 
+interface ProcessoProposta {
+  id: number;
+  label: string;
+  solicitante?: string | null;
+}
+
 interface Processo {
   id: number;
   numero: string;
@@ -90,6 +96,7 @@ interface Processo {
   assunto: string;
   jurisdicao: string;
   orgaoJulgador: string;
+  proposta: ProcessoProposta | null;
   ultimaSincronizacao: string | null;
   consultasApiCount: number;
   movimentacoesCount: number;
@@ -126,6 +133,16 @@ interface ApiProcessoCliente {
   tipo: string | null;
 }
 
+interface ApiProcessoOportunidade {
+  id?: number | string | null;
+  sequencial_empresa?: number | string | null;
+  data_criacao?: string | null;
+  numero_processo_cnj?: string | null;
+  numero_protocolo?: string | null;
+  solicitante_id?: number | string | null;
+  solicitante_nome?: string | null;
+}
+
 interface ApiProcesso {
   id: number;
   cliente_id: number;
@@ -143,6 +160,8 @@ interface ApiProcesso {
   criado_em: string | null;
   atualizado_em: string | null;
   cliente?: ApiProcessoCliente | null;
+  oportunidade_id?: number | string | null;
+  oportunidade?: ApiProcessoOportunidade | null;
   advogados?: ApiProcessoAdvogado[] | null;
   ultima_sincronizacao?: string | null;
   consultas_api_count?: number | string | null;
@@ -165,12 +184,30 @@ interface AdvogadoOption {
   descricao?: string;
 }
 
+interface ApiOportunidade {
+  id?: number | string | null;
+  sequencial_empresa?: number | string | null;
+  data_criacao?: string | null;
+  solicitante_nome?: string | null;
+  solicitante?: { nome?: string | null } | null;
+}
+
+interface PropostaOption {
+  id: string;
+  label: string;
+  solicitante?: string | null;
+  sequencial?: number | null;
+  dataCriacao?: string | null;
+}
+
 interface ProcessFormState {
   numero: string;
   uf: string;
   municipio: string;
   clienteId: string;
   advogados: string[];
+  propostaId: string;
+  dataDistribuicao: string;
 }
 
 const formatProcessNumber = (value: string) => {
@@ -276,6 +313,26 @@ const parseApiInteger = (value: unknown): number => {
   return 0;
 };
 
+const parseOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
 const normalizeClienteTipo = (value: string | null | undefined): string => {
   if (!value) {
     return "";
@@ -308,12 +365,38 @@ const resolveClientePapel = (tipo: string | null | undefined): string => {
   return "Parte";
 };
 
+const formatPropostaLabel = (
+  id: number,
+  sequencial: number | null,
+  dataCriacao: string | null,
+  solicitante?: string | null,
+): string => {
+  const numero = sequencial && sequencial > 0 ? sequencial : id;
+  let ano = new Date().getFullYear();
+
+  if (dataCriacao) {
+    const parsed = new Date(dataCriacao);
+    if (!Number.isNaN(parsed.getTime())) {
+      ano = parsed.getFullYear();
+    }
+  }
+
+  const solicitanteNome =
+    typeof solicitante === "string" && solicitante.trim().length > 0
+      ? solicitante.trim()
+      : "";
+
+  return `Proposta #${numero}/${ano}${solicitanteNome ? ` - ${solicitanteNome}` : ""}`;
+};
+
 const createEmptyProcessForm = (): ProcessFormState => ({
   numero: "",
   uf: "",
   municipio: "",
   clienteId: "",
   advogados: [],
+  propostaId: "",
+  dataDistribuicao: "",
 });
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
@@ -323,6 +406,22 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     processo.jurisdicao ||
     [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
     "Não informado";
+
+  const oportunidadeResumo = processo.oportunidade ?? null;
+  const oportunidadeId = parseOptionalInteger(
+    processo.oportunidade_id ?? oportunidadeResumo?.id ?? null,
+  );
+  const oportunidadeSequencial = parseOptionalInteger(
+    oportunidadeResumo?.sequencial_empresa,
+  );
+  const oportunidadeDataCriacao =
+    typeof oportunidadeResumo?.data_criacao === "string"
+      ? oportunidadeResumo?.data_criacao
+      : null;
+  const oportunidadeSolicitante =
+    typeof oportunidadeResumo?.solicitante_nome === "string"
+      ? oportunidadeResumo.solicitante_nome
+      : null;
 
   const advogados: ProcessoAdvogado[] = [];
   const seen = new Set<number>();
@@ -369,6 +468,20 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
 
   advogados.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
+  const proposta: ProcessoProposta | null =
+    oportunidadeId && oportunidadeId > 0
+      ? {
+          id: oportunidadeId,
+          label: formatPropostaLabel(
+            oportunidadeId,
+            oportunidadeSequencial,
+            oportunidadeDataCriacao,
+            oportunidadeSolicitante,
+          ),
+          solicitante: oportunidadeSolicitante ?? null,
+        }
+      : null;
+
   return {
     id: processo.id,
     numero: processo.numero,
@@ -387,6 +500,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     assunto: processo.assunto?.trim() || "Não informado",
     jurisdicao,
     orgaoJulgador: processo.orgao_julgador?.trim() || "Não informado",
+    proposta,
     ultimaSincronizacao: processo.ultima_sincronizacao ?? null,
     consultasApiCount: parseApiInteger(processo.consultas_api_count),
     movimentacoesCount: parseApiInteger(processo.movimentacoes_count),
@@ -434,6 +548,10 @@ export default function Processos() {
   const [advogadosLoading, setAdvogadosLoading] = useState(false);
   const [advogadosError, setAdvogadosError] = useState<string | null>(null);
   const [advogadosPopoverOpen, setAdvogadosPopoverOpen] = useState(false);
+  const [propostas, setPropostas] = useState<PropostaOption[]>([]);
+  const [propostasLoading, setPropostasLoading] = useState(false);
+  const [propostasError, setPropostasError] = useState<string | null>(null);
+  const [propostasPopoverOpen, setPropostasPopoverOpen] = useState(false);
   const [ufs, setUfs] = useState<Uf[]>([]);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [municipiosLoading, setMunicipiosLoading] = useState(false);
@@ -639,6 +757,122 @@ export default function Processos() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const fetchPropostas = async () => {
+      setPropostasLoading(true);
+      setPropostasError(null);
+
+      try {
+        const res = await fetch(getApiUrl("oportunidades"), {
+          headers: { Accept: "application/json" },
+        });
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error("Não foi possível interpretar a resposta de propostas", error);
+        }
+
+        if (!res.ok) {
+          const message =
+            json && typeof json === "object" && "error" in json &&
+            typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível carregar as propostas (HTTP ${res.status})`;
+          throw new Error(message);
+        }
+
+        const payloadArray: Record<string, unknown>[] = Array.isArray(json)
+          ? (json as Record<string, unknown>[])
+          : Array.isArray((json as { data?: unknown[] })?.data)
+            ? ((json as { data: unknown[] }).data as Record<string, unknown>[])
+            : Array.isArray((json as { rows?: unknown[] })?.rows)
+              ? ((json as { rows: unknown[] }).rows as Record<string, unknown>[])
+              : [];
+
+        const options: PropostaOption[] = [];
+        const seen = new Set<string>();
+
+        for (const item of payloadArray) {
+          if (!item) {
+            continue;
+          }
+
+          const idParsed = parseOptionalInteger(item["id"]);
+          if (!idParsed || idParsed <= 0) {
+            continue;
+          }
+
+          const sequencialValue = parseOptionalInteger(
+            item["sequencial_empresa"],
+          );
+          const dataCriacaoValue =
+            typeof item["data_criacao"] === "string"
+              ? (item["data_criacao"] as string)
+              : null;
+
+          const solicitanteNome =
+            pickFirstNonEmptyString(
+              typeof item["solicitante_nome"] === "string"
+                ? (item["solicitante_nome"] as string)
+                : undefined,
+              typeof (item["solicitante"] as { nome?: unknown })?.nome === "string"
+                ? ((item["solicitante"] as { nome?: string }).nome)
+                : undefined,
+            ) ?? null;
+
+          const idValue = String(idParsed);
+          if (seen.has(idValue)) {
+            continue;
+          }
+
+          options.push({
+            id: idValue,
+            label: formatPropostaLabel(
+              idParsed,
+              sequencialValue,
+              dataCriacaoValue,
+              solicitanteNome,
+            ),
+            solicitante: solicitanteNome,
+            sequencial: sequencialValue,
+            dataCriacao: dataCriacaoValue,
+          });
+          seen.add(idValue);
+        }
+
+        options.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+        if (!cancelled) {
+          setPropostas(options);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPropostas([]);
+          setPropostasError(
+            error instanceof Error
+              ? error.message
+              : "Erro ao carregar propostas",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setPropostasLoading(false);
+        }
+      }
+    };
+
+    fetchPropostas();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     setProcessForm((prev) => {
       const valid = prev.advogados.filter((id) =>
         advogadosOptions.some((option) => option.id === id)
@@ -652,6 +886,21 @@ export default function Processos() {
     });
   }, [advogadosOptions]);
 
+  useEffect(() => {
+    setProcessForm((prev) => {
+      if (!prev.propostaId) {
+        return prev;
+      }
+
+      const exists = propostas.some((option) => option.id === prev.propostaId);
+      if (exists) {
+        return prev;
+      }
+
+      return { ...prev, propostaId: "" };
+    });
+  }, [propostas]);
+
   const selectedAdvogados = useMemo(
     () =>
       processForm.advogados
@@ -659,6 +908,21 @@ export default function Processos() {
         .filter((option): option is AdvogadoOption => Boolean(option)),
     [processForm.advogados, advogadosOptions],
   );
+
+  const selectedProposta = useMemo(
+    () => propostas.find((option) => option.id === processForm.propostaId) ?? null,
+    [processForm.propostaId, propostas],
+  );
+
+  const propostaButtonLabel = selectedProposta
+    ? selectedProposta.label
+    : propostasLoading && propostas.length === 0
+      ? "Carregando propostas..."
+      : processForm.propostaId
+        ? `Proposta #${processForm.propostaId}`
+        : propostas.length === 0
+          ? "Nenhuma proposta disponível"
+          : "Selecione a proposta";
 
   const toggleAdvogadoSelection = useCallback((id: string) => {
     setProcessForm((prev) => {
@@ -847,6 +1111,7 @@ export default function Processos() {
     setIsDialogOpen(open);
     if (!open) {
       setAdvogadosPopoverOpen(false);
+      setPropostasPopoverOpen(false);
       setProcessForm(createEmptyProcessForm());
       setCreateError(null);
     }
@@ -883,20 +1148,32 @@ export default function Processos() {
         .filter((value) => value && value.length > 0)
         .join(" - ");
 
+      const payload: Record<string, unknown> = {
+        cliente_id: selectedCliente.id,
+        numero: processForm.numero,
+        uf: processForm.uf,
+        municipio: processForm.municipio,
+        ...(jurisdicaoPayload ? { jurisdicao: jurisdicaoPayload } : {}),
+        advogados: advogadosPayload,
+      };
+
+      const dataDistribuicaoPayload = processForm.dataDistribuicao.trim();
+      if (dataDistribuicaoPayload) {
+        payload.data_distribuicao = dataDistribuicaoPayload;
+      }
+
+      const propostaId = parseOptionalInteger(processForm.propostaId);
+      if (propostaId && propostaId > 0) {
+        payload.oportunidade_id = propostaId;
+      }
+
       const res = await fetch(getApiUrl("processos"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({
-          cliente_id: selectedCliente.id,
-          numero: processForm.numero,
-          uf: processForm.uf,
-          municipio: processForm.municipio,
-          ...(jurisdicaoPayload ? { jurisdicao: jurisdicaoPayload } : {}),
-          advogados: advogadosPayload,
-        }),
+        body: JSON.stringify(payload),
       });
 
       let json: unknown = null;
@@ -1058,6 +1335,8 @@ export default function Processos() {
         processo.orgaoJulgador,
         processo.classeJudicial,
         processo.advogados.map((adv) => adv.nome).join(" "),
+        processo.proposta?.label,
+        processo.proposta?.solicitante ?? null,
       ];
 
       const hasTextMatch = searchPool.some((value) => {
@@ -1066,9 +1345,14 @@ export default function Processos() {
       });
 
       const documento = processo.cliente?.documento ?? "";
+      const propostaNumero = processo.proposta?.label
+        ? processo.proposta.label.replace(/\D/g, "")
+        : "";
       const hasDocumentoMatch =
-        numericSearch.length > 0 && documento
-          ? documento.replace(/\D/g, "").includes(numericSearch)
+        numericSearch.length > 0
+          ? [documento.replace(/\D/g, ""), propostaNumero]
+              .filter((value) => value.length > 0)
+              .some((value) => value.includes(numericSearch))
           : false;
 
       return hasTextMatch || hasDocumentoMatch;
@@ -1244,19 +1528,116 @@ export default function Processos() {
           </CardContent>
         </Card>
       ) : (
-        <div className="relative">
-          <span
-            aria-hidden
-            className="pointer-events-none absolute left-8 top-8 bottom-8 w-px bg-gradient-to-b from-primary/20 via-border/40 to-transparent sm:left-12"
-          />
-          <Accordion type="multiple" className="space-y-10">
-            {filteredProcessos.map((processo) => (
-              <AccordionItem key={processo.id} value={String(processo.id)} className="group border-b-0">
-                <div className="relative ml-8 sm:ml-12">
-                  <div className="pointer-events-none absolute left-0 top-6 -translate-x-1/2">
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full border border-primary/40 bg-background shadow-sm ring-4 ring-primary/10 transition duration-300 group-data-[state=open]:scale-110 group-data-[state=open]:border-primary group-data-[state=open]:ring-primary/20">
-                      <span className="h-2 w-2 rounded-full bg-primary transition duration-300 group-data-[state=open]:scale-110" />
-                    </span>
+        <Accordion type="multiple" className="space-y-4">
+          {filteredProcessos.map((processo) => (
+            <AccordionItem
+              key={processo.id}
+              value={String(processo.id)}
+              className="overflow-hidden rounded-xl border border-border/60 bg-card/60 text-card-foreground shadow-sm transition hover:border-primary/40 hover:shadow-md data-[state=open]:shadow-md"
+            >
+              <AccordionTrigger className="items-start border-b border-border/40 px-6 py-6 text-left hover:no-underline">
+                <div className="flex w-full flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <CardTitle className="text-xl font-semibold">
+                        Processo {processo.numero}
+                      </CardTitle>
+                      <Badge className={`text-xs ${getStatusBadgeClassName(processo.status)}`}>
+                        {processo.status}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${getTipoBadgeClassName(processo.tipo)}`}
+                      >
+                        {processo.tipo}
+                      </Badge>
+                    </div>
+                    <CardDescription className="flex flex-wrap items-center gap-3 text-sm">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        Distribuído em {processo.dataDistribuicao}
+                      </span>
+                      <span className="hidden h-4 w-px bg-border/60 md:block" aria-hidden />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <FileText className="h-4 w-4" />
+                        {processo.classeJudicial}
+                      </span>
+                      <span className="hidden h-4 w-px bg-border/60 lg:block" aria-hidden />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        {processo.assunto}
+                      </span>
+                      <span className="hidden h-4 w-px bg-border/60 xl:block" aria-hidden />
+                      {processo.proposta ? (
+                        <>
+                          <span className="flex items-center gap-1.5 text-muted-foreground">
+                            <Archive className="h-4 w-4" />
+                            {processo.proposta.label}
+                          </span>
+                          <span className="hidden h-4 w-px bg-border/60 xl:block" aria-hidden />
+                        </>
+                      ) : null}
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <RefreshCw className="h-4 w-4" />
+                        {processo.movimentacoesCount} movimentações
+                      </span>
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground md:items-end">
+                    <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          navigate(`/clientes/${processo.cliente.id}/processos/${processo.id}`);
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                        Visualizar
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="gap-2"
+                        disabled={syncingProcessId === processo.id}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleSyncProcess(processo.id);
+                        }}
+                      >
+                        {syncingProcessId === processo.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Sincronizar
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-left md:justify-end">
+                      <UsersIcon className="h-4 w-4" />
+                      {processo.advogados.length === 0 ? (
+                        <span>Nenhum advogado vinculado</span>
+                      ) : (
+                        <span className="font-medium text-foreground">
+                          {processo.advogados.map((adv) => adv.nome).join(", ")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Landmark className="h-4 w-4" />
+                      <span>{processo.orgaoJulgador}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        Última sincronização: {formatDateTimeToPtBR(processo.ultimaSincronizacao)}
+                      </span>
+                    </div>
+
                   </div>
                   <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 text-card-foreground shadow-sm transition duration-300 hover:border-primary/40 hover:shadow-lg group-data-[state=open]:border-primary/50 group-data-[state=open]:shadow-lg">
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary/10 via-primary/40 to-primary/10 opacity-0 transition duration-300 group-data-[state=open]:opacity-100" />
@@ -1470,6 +1851,70 @@ export default function Processos() {
                             </p>
                           ) : null}
                         </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                        >
+                          {processo.cliente.papel}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Equipe jurídica
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-start gap-2 text-sm text-foreground">
+                        {processo.advogados.length === 0 ? (
+                          <span className="text-muted-foreground">Nenhum advogado vinculado</span>
+                        ) : (
+                          processo.advogados.map((adv) => (
+                            <Badge
+                              key={`${processo.id}-${adv.id}`}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {adv.nome}
+                              {adv.funcao ? ` · ${adv.funcao}` : ""}
+                            </Badge>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    {processo.proposta ? (
+                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Proposta vinculada
+                        </p>
+                        <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                          <Archive className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <span className="font-medium">{processo.proposta.label}</span>
+                            {processo.proposta.solicitante ? (
+                              <span className="block text-xs text-muted-foreground">
+                                Solicitante: {processo.proposta.solicitante}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Jurisdição
+                      </p>
+                      <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                        <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        <span>{processo.jurisdicao}</span>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Órgão julgador
+                      </p>
+                      <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                        <Landmark className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        <span>{processo.orgaoJulgador}</span>
+
                       </div>
                     </AccordionContent>
                   </div>
@@ -1523,6 +1968,96 @@ export default function Processos() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="process-proposta">Proposta vinculada</Label>
+              <Popover
+                open={propostasPopoverOpen}
+                onOpenChange={setPropostasPopoverOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    id="process-proposta"
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={propostasPopoverOpen}
+                    className="w-full justify-between"
+                    disabled={propostasLoading && propostas.length === 0}
+                  >
+                    <span className="truncate">{propostaButtonLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Buscar proposta..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {propostasLoading
+                          ? "Carregando propostas..."
+                          : propostasError ?? "Nenhuma proposta encontrada"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="Nenhuma proposta"
+                          onSelect={() => {
+                            setProcessForm((prev) => ({ ...prev, propostaId: "" }));
+                            setPropostasPopoverOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={`mr-2 h-4 w-4 ${processForm.propostaId === "" ? "opacity-100" : "opacity-0"}`}
+                          />
+                          Nenhuma proposta vinculada
+                        </CommandItem>
+                        {propostas.map((proposta) => {
+                          const selected = processForm.propostaId === proposta.id;
+                          return (
+                            <CommandItem
+                              key={proposta.id}
+                              value={proposta.label}
+                              onSelect={() => {
+                                setProcessForm((prev) => ({
+                                  ...prev,
+                                  propostaId: proposta.id,
+                                }));
+                                setPropostasPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${selected ? "opacity-100" : "opacity-0"}`}
+                              />
+                              <div className="flex flex-col">
+                                <span>{proposta.label}</span>
+                                {proposta.solicitante ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    Solicitante: {proposta.solicitante}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {propostasError ? (
+                <p className="text-xs text-destructive">{propostasError}</p>
+              ) : selectedProposta ? (
+                <p className="text-xs text-muted-foreground">
+                  Proposta selecionada{selectedProposta.solicitante ? ` para ${selectedProposta.solicitante}` : ""}.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Vincule uma proposta existente ao processo (opcional).
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="process-uf">UF</Label>
@@ -1678,7 +2213,7 @@ export default function Processos() {
                 </p>
               )}
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-number">Número do processo</Label>
               <Input
                 id="process-number"
@@ -1688,6 +2223,20 @@ export default function Processos() {
                   setProcessForm((prev) => ({
                     ...prev,
                     numero: formatProcessNumber(event.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2 md:col-span-1">
+              <Label htmlFor="process-distribution-date">Data da distribuição</Label>
+              <Input
+                id="process-distribution-date"
+                type="date"
+                value={processForm.dataDistribuicao}
+                onChange={(event) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    dataDistribuicao: event.target.value,
                   }))
                 }
               />

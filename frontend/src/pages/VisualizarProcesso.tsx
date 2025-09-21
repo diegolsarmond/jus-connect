@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
+  AlertCircle,
+  Archive,
   ArrowLeft,
   Calendar,
   Clock,
   FileText,
   Landmark,
   MapPin,
-  Users,
-  AlertCircle,
-  RefreshCw,
   Newspaper,
+  RefreshCw,
+  Users,
 } from "lucide-react";
 
 import {
@@ -46,6 +47,16 @@ interface ApiProcessoMovimentacao {
   atualizado_em?: string | null;
 }
 
+interface ApiProcessoOportunidade {
+  id?: number | string | null;
+  sequencial_empresa?: number | string | null;
+  data_criacao?: string | null;
+  numero_processo_cnj?: string | null;
+  numero_protocolo?: string | null;
+  solicitante_id?: number | string | null;
+  solicitante_nome?: string | null;
+}
+
 interface ApiProcessoResponse {
   id?: number | null;
   cliente_id?: number | null;
@@ -63,10 +74,20 @@ interface ApiProcessoResponse {
   criado_em?: string | null;
   atualizado_em?: string | null;
   cliente?: ApiProcessoCliente | null;
+  oportunidade_id?: number | string | null;
+  oportunidade?: ApiProcessoOportunidade | null;
   movimentacoes?: ApiProcessoMovimentacao[] | null;
   movimentacoes_count?: number | string | null;
   consultas_api_count?: number | string | null;
   ultima_sincronizacao?: string | null;
+}
+
+interface ProcessoPropostaDetalhe {
+  id: number;
+  label: string;
+  solicitante?: string | null;
+  dataCriacao?: string | null;
+  sequencial?: number | null;
 }
 
 interface ProcessoDetalhes {
@@ -91,6 +112,7 @@ interface ProcessoDetalhes {
     documento: string | null;
     papel: string;
   } | null;
+  proposta: ProcessoPropostaDetalhe | null;
   consultasApiCount: number;
   ultimaSincronizacao: string | null;
   movimentacoesCount: number;
@@ -202,6 +224,50 @@ const resolveClientePapel = (tipo: string | null | undefined): string => {
   }
 
   return "Parte";
+};
+
+const parseOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const formatPropostaLabel = (
+  id: number,
+  sequencial: number | null,
+  dataCriacao: string | null,
+  solicitante?: string | null,
+): string => {
+  const numero = sequencial && sequencial > 0 ? sequencial : id;
+  let ano = new Date().getFullYear();
+
+  if (dataCriacao) {
+    const parsed = new Date(dataCriacao);
+    if (!Number.isNaN(parsed.getTime())) {
+      ano = parsed.getFullYear();
+    }
+  }
+
+  const solicitanteNome =
+    typeof solicitante === "string" && solicitante.trim().length > 0
+      ? solicitante.trim()
+      : "";
+
+  return `Proposta #${numero}/${ano}${solicitanteNome ? ` - ${solicitanteNome}` : ""}`;
 };
 
 const parseInteger = (value: unknown): number => {
@@ -396,6 +462,19 @@ const mapApiProcessoToDetalhes = (
     [rawMunicipio, rawUf].filter(Boolean).join(" - ") ||
     "Não informado";
   const dataDistribuicao = normalizeString(processo.data_distribuicao) || null;
+  const oportunidadeResumo = processo.oportunidade ?? null;
+  const oportunidadeId = parseOptionalInteger(
+    processo.oportunidade_id ?? oportunidadeResumo?.id ?? null,
+  );
+  const oportunidadeSequencial = parseOptionalInteger(
+    oportunidadeResumo?.sequencial_empresa,
+  );
+  const oportunidadeDataCriacao =
+    typeof oportunidadeResumo?.data_criacao === "string"
+      ? oportunidadeResumo.data_criacao
+      : null;
+  const oportunidadeSolicitante =
+    normalizeString(oportunidadeResumo?.solicitante_nome) || null;
 
   const clienteResumo = processo.cliente ?? null;
   const clienteId =
@@ -414,6 +493,21 @@ const mapApiProcessoToDetalhes = (
     parseInteger(processo.movimentacoes_count),
     movimentacoes.length,
   );
+  const proposta =
+    oportunidadeId && oportunidadeId > 0
+      ? {
+          id: oportunidadeId,
+          label: formatPropostaLabel(
+            oportunidadeId,
+            oportunidadeSequencial,
+            oportunidadeDataCriacao,
+            oportunidadeSolicitante,
+          ),
+          solicitante: oportunidadeSolicitante,
+          dataCriacao: oportunidadeDataCriacao,
+          sequencial: oportunidadeSequencial,
+        }
+      : null;
 
   return {
     id:
@@ -442,6 +536,7 @@ const mapApiProcessoToDetalhes = (
           papel: clientePapel,
         }
       : null,
+    proposta,
     consultasApiCount,
     ultimaSincronizacao: processo.ultima_sincronizacao ?? null,
     movimentacoesCount,
@@ -671,6 +766,9 @@ export default function VisualizarProcesso() {
             {atualizadoEmLabel
               ? `Última atualização em ${atualizadoEmLabel}.`
               : "Dados conforme o cadastro do processo."}
+            {processo.proposta
+              ? ` Proposta vinculada: ${processo.proposta.label}.`
+              : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -698,6 +796,24 @@ export default function VisualizarProcesso() {
                 ) : null}
               </div>
             </div>
+            {processo.proposta ? (
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Proposta vinculada
+                </p>
+                <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                  <Archive className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground">{processo.proposta.label}</p>
+                    {processo.proposta.solicitante ? (
+                      <p className="text-xs text-muted-foreground">
+                        Solicitante: {processo.proposta.solicitante}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Jurisdição
