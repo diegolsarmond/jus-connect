@@ -294,6 +294,11 @@ router.get('/oportunidades/:id/faturamentos', oportunidadeController_1.listOport
  *                 type: number
  *               parcelas:
  *                 type: integer
+ *               parcelas_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 description: Lista opcional de IDs de parcelas pendentes para atualizar como quitadas.
  *               observacoes:
  *                 type: string
  *               data_faturamento:

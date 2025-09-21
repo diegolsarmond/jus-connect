@@ -425,7 +425,7 @@ const listOportunidadeParcelas = async (req, res) => {
 exports.listOportunidadeParcelas = listOportunidadeParcelas;
 const createOportunidadeFaturamento = async (req, res) => {
     const { id } = req.params;
-    const { forma_pagamento, condicao_pagamento, valor, parcelas, observacoes, data_faturamento, } = req.body;
+    const { forma_pagamento, condicao_pagamento, valor, parcelas, observacoes, data_faturamento, parcelas_ids, } = req.body;
     const formaValue = normalizeText(forma_pagamento);
     if (!formaValue) {
         return res
@@ -478,9 +478,38 @@ const createOportunidadeFaturamento = async (req, res) => {
             id: Number(row.id),
             valor: Number(row.valor),
         }));
+        const requestedInstallmentIds = (() => {
+            if (parcelas_ids === undefined || parcelas_ids === null) {
+                return [];
+            }
+            const base = Array.isArray(parcelas_ids) ? parcelas_ids : [parcelas_ids];
+            const normalized = [];
+            base.forEach((value) => {
+                const normalizedId = normalizeInteger(value);
+                if (normalizedId !== null && !normalized.includes(normalizedId)) {
+                    normalized.push(normalizedId);
+                }
+            });
+            return normalized;
+        })();
         let installmentsToClose = [];
         if (pendingInstallments.length > 0) {
-            if (isParcelado) {
+            if (requestedInstallmentIds.length > 0) {
+                const pendingById = new Map(pendingInstallments.map((item) => [item.id, item]));
+                const matched = [];
+                for (const requestedId of requestedInstallmentIds) {
+                    const match = pendingById.get(requestedId);
+                    if (!match) {
+                        await client.query('ROLLBACK');
+                        return res
+                            .status(400)
+                            .json({ error: 'Parcela selecionada indisponível para faturamento.' });
+                    }
+                    matched.push(match);
+                }
+                installmentsToClose = matched;
+            }
+            else if (isParcelado) {
                 const desiredCount = parsedParcelas ?? 1;
                 if (desiredCount > pendingInstallments.length) {
                     await client.query('ROLLBACK');
