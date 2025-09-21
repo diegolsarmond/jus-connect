@@ -162,8 +162,8 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.vencimento::date AS vencimento,
           ff.pagamento::date AS pagamento,
           ff.status AS status,
-          ff.conta_id AS conta_id,
-          ff.categoria_id AS categoria_id,
+          ff.conta_id::TEXT AS conta_id,
+          ff.categoria_id::TEXT AS categoria_id,
           NULL::TEXT AS cliente_id
         FROM financial_flows ff
       `;
@@ -239,8 +239,8 @@ ${baseFinancialFlowsSelect}
             WHEN LOWER(p.status) IN ('quitado','quitada','pago','paga') THEN 'pago'
             ELSE 'pendente'
           END AS status,
-          NULL::INTEGER AS conta_id,
-          NULL::INTEGER AS categoria_id,
+          NULL::TEXT AS conta_id,
+          NULL::TEXT AS categoria_id,
           p.solicitante_id::TEXT AS cliente_id
         FROM oportunidade_parcelas_enriched p
       )
