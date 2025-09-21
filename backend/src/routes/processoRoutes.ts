@@ -7,6 +7,7 @@ import {
   updateProcesso,
   deleteProcesso,
   syncProcessoMovimentacoes,
+  listProcessoDocumentosPublicos,
 } from '../controllers/processoController';
 
 const router = Router();
@@ -82,6 +83,37 @@ const router = Router();
  *               type: string
  *             tipo:
  *               type: string
+ *     ProcessoDocumentoPublico:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         titulo:
+ *           type: string
+ *         descricao:
+ *           type: string
+ *           nullable: true
+ *         data:
+ *           type: string
+ *           format: date
+ *           nullable: true
+ *         tipo:
+ *           type: string
+ *           nullable: true
+ *         extensao:
+ *           type: string
+ *           nullable: true
+ *         paginas:
+ *           type: integer
+ *           nullable: true
+ *         key:
+ *           type: string
+ *           nullable: true
+ *         links:
+ *           type: object
+ *           additionalProperties:
+ *             type: string
+ *           nullable: true
  */
 
 /**
@@ -153,6 +185,39 @@ router.get('/clientes/:clienteId/processos', listProcessosByCliente);
  *         description: Processo não encontrado
  */
 router.get('/processos/:id', getProcessoById);
+
+/**
+ * @swagger
+ * /api/processos/{id}/documentos-publicos:
+ *   get:
+ *     summary: Lista documentos públicos do processo via Escavador
+ *     tags: [Processos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Documentos públicos associados ao processo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 documentos:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/ProcessoDocumentoPublico'
+ *       400:
+ *         description: Identificador inválido ou número de processo ausente
+ *       404:
+ *         description: Processo não encontrado ou sem documentos públicos disponíveis
+ *       503:
+ *         description: Integração do Escavador não configurada ou indisponível
+ */
+router.get('/processos/:id/documentos-publicos', listProcessoDocumentosPublicos);
 
 /**
  * @swagger
