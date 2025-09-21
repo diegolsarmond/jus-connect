@@ -37,6 +37,10 @@ type OpportunityRow = {
   documentos_anexados: unknown;
   criado_por: number | string | null;
   sequencial_empresa: number;
+  idempresa: number | null;
+  audiencia_data: string | null;
+  audiencia_horario: string | null;
+  audiencia_local: string | null;
   data_criacao: string | null;
   ultima_atualizacao: string | null;
   idempresa: number | null;
@@ -348,47 +352,48 @@ function formatTime(input: Date): string {
   }).format(input);
 }
 
-function formatAudienceTime(date: string | null, time: string | null): string | null {
-  if (!time) {
-    return null;
+function formatTimeString(input: string | null, fallbackDate?: string | null): string | null {
+  const normalizeTime = (time: string) => {
+    const match = time.match(/^(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?$/);
+    if (!match) {
+      return null;
+    }
+
+    const hours = Number.parseInt(match[1] ?? '', 10);
+    const minutes = Number.parseInt(match[2] ?? '0', 10);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+      return null;
+    }
+
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return null;
+    }
+
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  const trimmed = input?.trim();
+  if (trimmed) {
+    const normalized = normalizeTime(trimmed);
+    if (normalized) {
+      return normalized;
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return formatTime(parsed);
+    }
   }
 
-  const trimmed = time.trim();
-  if (!trimmed) {
-    return null;
+  if (fallbackDate) {
+    const parsed = new Date(fallbackDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return formatTime(parsed);
+    }
   }
 
-  const [hourPart, minutePart] = trimmed.split(':');
-  if (!hourPart || !minutePart) {
-    return null;
-  }
+  return null;
 
-  const hour = Number.parseInt(hourPart, 10);
-  const minute = Number.parseInt(minutePart, 10);
-
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
-    return null;
-  }
-
-  const safeHour = Math.min(Math.max(hour, 0), 23);
-  const safeMinute = Math.min(Math.max(minute, 0), 59);
-
-  const baseDate = date ? new Date(date) : new Date();
-  if (Number.isNaN(baseDate.getTime())) {
-    baseDate.setHours(safeHour, safeMinute, 0, 0);
-    return formatTime(baseDate);
-  }
-
-  const isoDate = baseDate.toISOString().slice(0, 10);
-  const candidate = new Date(`${isoDate}T${String(safeHour).padStart(2, '0')}:${String(safeMinute).padStart(2, '0')}:00`);
-
-  if (!Number.isNaN(candidate.getTime())) {
-    return formatTime(candidate);
-  }
-
-  const fallback = new Date(baseDate);
-  fallback.setHours(safeHour, safeMinute, 0, 0);
-  return formatTime(fallback);
 }
 
 async function fetchNomeById(query: string, id: number | null): Promise<string | null> {
@@ -628,6 +633,12 @@ function buildVariables({
   assign('processo.contingenciamento', opportunity.contingenciamento);
   assign('processo.detalhes', opportunity.detalhes);
   assign('processo.prazo_proximo', formatDatePtBr(opportunity.prazo_proximo));
+  assign('processo.audiencia.data', formatDatePtBr(opportunity.audiencia_data));
+  assign(
+    'processo.audiencia.horario',
+    formatTimeString(opportunity.audiencia_horario, opportunity.audiencia_data),
+  );
+  assign('processo.audiencia.local', opportunity.audiencia_local ?? opportunity.vara_ou_orgao);
 
   if (audiencia) {
     assign('processo.audiencia.data', formatDatePtBr(audiencia.data));
@@ -734,8 +745,9 @@ async function fetchOpportunityData(id: number): Promise<OpportunityData | null>
     `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, idempresa, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
-            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao,
-            idempresa
+            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, idempresa,
+            audiencia_data, audiencia_horario, audiencia_local, data_criacao, ultima_atualizacao
+
        FROM public.oportunidades WHERE id = $1`,
     [id],
   );
@@ -796,7 +808,7 @@ async function fetchOpportunityData(id: number): Promise<OpportunityData | null>
 
   let empresa: EmpresaRow | null = null;
   if (opportunity.idempresa !== null && opportunity.idempresa !== undefined) {
-    const empresaResult = await queryEmpresas<EmpresaRow>('WHERE id = $1 LIMIT 1', [opportunity.idempresa]);
+    const empresaResult = await queryEmpresas<EmpresaRow>('WHERE id = $1', [opportunity.idempresa]);
     empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
 
   }

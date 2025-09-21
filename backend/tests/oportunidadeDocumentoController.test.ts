@@ -1,146 +1,134 @@
+import assert from 'node:assert/strict';
 import test from 'node:test';
-import assert from 'node:assert';
-import type { QueryResult } from 'pg';
-import pool from '../src/services/db';
-import { replaceVariables } from '../src/services/templateService';
-import { __test__ } from '../src/controllers/oportunidadeDocumentoController';
+import type { Request, Response } from 'express';
+import { Pool } from 'pg';
 
-const makeQueryResult = <T>(rows: T[], command = ''): QueryResult<T> => ({
-  command,
-  rowCount: rows.length,
-  oid: 0,
-  rows,
-  fields: [],
+process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
+
+type QueryCall = { text: string; values?: unknown[] };
+type QueryResponse = { rows: any[]; rowCount: number };
+
+let createOpportunityDocumentFromTemplate: typeof import('../src/controllers/oportunidadeDocumentoController')['createOpportunityDocumentFromTemplate'];
+
+test.before(async () => {
+  ({ createOpportunityDocumentFromTemplate } = await import(
+    '../src/controllers/oportunidadeDocumentoController'
+  ));
 });
 
-const buildOpportunity = (overrides: Record<string, unknown> = {}) => ({
-  id: 123,
-  tipo_processo_id: 10,
-  area_atuacao_id: null,
-  responsavel_id: null,
-  idempresa: 42,
-  numero_processo_cnj: '0001234-56.2024.8.26.0100',
-  numero_protocolo: null,
-  vara_ou_orgao: '1ª Vara Cível',
-  comarca: 'São Paulo',
-  fase_id: null,
-  etapa_id: null,
-  prazo_proximo: null,
-  status_id: null,
-  solicitante_id: null,
-  valor_causa: null,
-  valor_honorarios: null,
-  percentual_honorarios: null,
-  forma_pagamento: null,
-  qtde_parcelas: null,
-  contingenciamento: null,
-  detalhes: null,
-  documentos_anexados: null,
-  criado_por: null,
-  sequencial_empresa: 789,
-  data_criacao: '2024-01-01T00:00:00Z',
-  ultima_atualizacao: '2024-01-02T00:00:00Z',
-  tipo_processo_nome: 'Processo Civil',
-  area_atuacao_nome: null,
-  fase_nome: null,
-  etapa_nome: null,
-  status_nome: null,
-  ...overrides,
-});
-
-test('buildVariables preenche campos de audiência quando disponíveis', () => {
-  const variables = __test__.buildVariables({
-    opportunity: buildOpportunity(),
-    solicitante: null,
-    envolvidos: [],
-    responsavel: null,
-    empresa: null,
-    audiencia: {
-      data: '2025-01-20',
-      hora: '14:30:00',
-      local: 'Fórum Central',
+const createMockResponse = () => {
+  const response: Partial<Response> & { statusCode: number; body: unknown } = {
+    statusCode: 200,
+    body: undefined,
+    status(code: number) {
+      this.statusCode = code;
+      return this as Response;
     },
-  });
-
-  const template =
-    'Audiência em {{processo.audiencia.data}} às {{processo.audiencia.horario}} no {{processo.audiencia.local}}';
-  const filled = replaceVariables(template, variables);
-
-  assert.strictEqual(filled, 'Audiência em 20/01/2025 às 14:30 no Fórum Central');
-});
-
-test('buildVariables mantém placeholders sem audiência', () => {
-  const variables = __test__.buildVariables({
-    opportunity: buildOpportunity(),
-    solicitante: null,
-    envolvidos: [],
-    responsavel: null,
-    empresa: null,
-    audiencia: null,
-  });
-
-  const template = 'Próxima audiência: {{processo.audiencia.data}}';
-  const filled = replaceVariables(template, variables);
-
-  assert.strictEqual(filled, 'Próxima audiência: <processo.audiencia.data>');
-});
-
-test('fetchOpportunityData usa empresa vinculada e recupera audiência', async (t) => {
-  const opportunityRow = {
-    id: 777,
-    tipo_processo_id: 33,
-    area_atuacao_id: null,
-    responsavel_id: null,
-    idempresa: 88,
-    numero_processo_cnj: '0012345-67.2024.8.26.0100',
-    numero_protocolo: null,
-    vara_ou_orgao: null,
-    comarca: null,
-    fase_id: null,
-    etapa_id: null,
-    prazo_proximo: null,
-    status_id: null,
-    solicitante_id: null,
-    valor_causa: null,
-    valor_honorarios: null,
-    percentual_honorarios: null,
-    forma_pagamento: null,
-    qtde_parcelas: null,
-    contingenciamento: null,
-    detalhes: null,
-    documentos_anexados: null,
-    criado_por: null,
-    sequencial_empresa: 999,
-    data_criacao: '2024-01-10T10:00:00Z',
-    ultima_atualizacao: '2024-01-11T10:00:00Z',
+    json(payload: unknown) {
+      this.body = payload;
+      return this as Response;
+    },
   };
 
-  let empresaSelectSql: string | null = null;
-  let empresaSelectParams: unknown[] | null = null;
+  return response as Response & { statusCode: number; body: unknown };
+};
 
-  const queryMock = t.mock.method(pool, 'query', async (sql: string, params: unknown[]) => {
-    if (sql.includes('FROM public.oportunidades')) {
-      return makeQueryResult([opportunityRow]);
-    }
+const setupQueryMock = (
+  responses: (QueryResponse | ((text: string, values?: unknown[]) => QueryResponse))[],
+) => {
+  const calls: QueryCall[] = [];
+  const mock = test.mock.method(
+    Pool.prototype,
+    'query',
+    async function (this: Pool, text: string, values?: unknown[]) {
+      calls.push({ text, values });
 
-    if (sql.includes('public.tipo_processo')) {
-      return makeQueryResult([{ nome: 'Ação Trabalhista' }]);
-    }
-
-    if (sql.includes('public.fluxo_trabalho') || sql.includes('public.etiquetas') || sql.includes('public.situacao_proposta')) {
-      return makeQueryResult([]);
-    }
-
-    if (sql.includes('FROM public.oportunidade_envolvidos')) {
-      return makeQueryResult([]);
-    }
-
-    if (sql.includes('information_schema.columns')) {
-      const table = Array.isArray(params) ? params[1] : undefined;
-      if (table === 'vw.empresas') {
-        return makeQueryResult([]);
+      if (responses.length === 0) {
+        throw new Error(`Unexpected query: ${text}`);
       }
-      return makeQueryResult([
+
+      const next = responses.shift()!;
+      if (typeof next === 'function') {
+        return next(text, values);
+      }
+
+      return next;
+    },
+  );
+
+  const restore = () => {
+    mock.mock.restore();
+  };
+
+  return { calls, restore };
+};
+
+test('createOpportunityDocumentFromTemplate uses the opportunity empresa when filling variables', async () => {
+  const templateContent =
+    '{"content_html":"<p>{{escritorio.nome}}</p><p>{{processo.audiencia.data}}</p><p>{{processo.audiencia.horario}}</p><p>{{processo.audiencia.local}}</p>"}';
+
+  const insertedPayload: { content?: string; variables?: string } = {};
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ id: 7, title: 'Modelo', content: templateContent }], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 123,
+          tipo_processo_id: null,
+          area_atuacao_id: null,
+          responsavel_id: null,
+          numero_processo_cnj: '0000000-00.0000.0.00.0000',
+          numero_protocolo: null,
+          vara_ou_orgao: '1ª Vara Cível',
+          comarca: 'São Paulo',
+          fase_id: null,
+          etapa_id: null,
+          prazo_proximo: '2024-06-01',
+          status_id: null,
+          solicitante_id: null,
+          valor_causa: null,
+          valor_honorarios: null,
+          percentual_honorarios: null,
+          forma_pagamento: null,
+          qtde_parcelas: null,
+          contingenciamento: null,
+          detalhes: null,
+          documentos_anexados: null,
+          criado_por: null,
+          sequencial_empresa: 999,
+          idempresa: 55,
+          audiencia_data: '2024-06-10T13:45:00.000Z',
+          audiencia_horario: '13:45',
+          audiencia_local: 'Fórum Central',
+          data_criacao: '2024-01-01T00:00:00.000Z',
+          ultima_atualizacao: '2024-01-02T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 55,
+          nome_empresa: 'Empresa Correta',
+          cnpj: '12.345.678/0001-99',
+          telefone: '(11) 1234-5678',
+          email: 'contato@empresa.com',
+          plano: 'Premium',
+          responsavel: 'João',
+          ativo: true,
+          datacadastro: '2024-01-01T00:00:00.000Z',
+          atualizacao: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    {
+      rows: [
+        { column_name: 'id' },
+
         { column_name: 'cep' },
         { column_name: 'rua' },
         { column_name: 'numero' },
@@ -148,79 +136,100 @@ test('fetchOpportunityData usa empresa vinculada e recupera audiência', async (
         { column_name: 'bairro' },
         { column_name: 'cidade' },
         { column_name: 'estado' },
-      ]);
-    }
-
-    if (sql.includes('FROM public."vw.empresas"')) {
-      if (!empresaSelectSql) {
-        empresaSelectSql = sql;
-        empresaSelectParams = Array.isArray(params) ? [...params] : null;
-      }
-      return makeQueryResult([
+        { column_name: 'municipio' },
+        { column_name: 'uf' },
+        { column_name: 'logradouro' },
+        { column_name: 'endereco' },
+      ],
+      rowCount: 12,
+    },
+    {
+      rows: [
         {
-          id: 88,
-          nome_empresa: 'Escritório Central',
-          cnpj: '12345678000100',
-          telefone: '11999999999',
-          email: 'contato@central.test',
-          plano: null,
-          responsavel: null,
-          ativo: true,
-          datacadastro: null,
-          atualizacao: null,
-        },
-      ]);
-    }
-
-    if (sql.includes('FROM public."empresas"')) {
-      if (!empresaSelectSql) {
-        empresaSelectSql = sql;
-        empresaSelectParams = Array.isArray(params) ? [...params] : null;
-      }
-      return makeQueryResult([
-        {
-          cep: '01000000',
-          rua: 'Av. Central',
-          numero: '1000',
-          complemento: null,
+          cep: '12345678',
+          rua: 'Rua Principal',
+          numero: '100',
+          complemento: 'Sala 1',
           bairro: 'Centro',
           cidade: 'São Paulo',
           estado: 'SP',
+          municipio: 'São Paulo',
+          uf: 'SP',
+          logradouro: null,
+          endereco: null,
         },
-      ]);
-    }
+      ],
+      rowCount: 1,
+    },
+    (text: string, values?: unknown[]) => {
+      assert.match(text, /INSERT INTO public\.oportunidade_documentos/);
+      insertedPayload.content = values?.[3] as string;
+      insertedPayload.variables = values?.[4] as string;
+      return {
+        rows: [
+          {
+            id: 987,
+            oportunidade_id: values?.[0],
+            template_id: values?.[1],
+            title: values?.[2],
+            content: values?.[3],
+            variables: values?.[4],
+            created_at: '2024-06-01T12:00:00.000Z',
+          },
+        ],
+        rowCount: 1,
+      };
+    },
+  ]);
 
-    if (sql.includes('FROM public.agenda')) {
-      return makeQueryResult([
-        {
-          data: '2025-02-01',
-          hora: '15:00:00',
-          local: 'Fórum da Barra Funda',
-        },
-      ]);
-    }
+  const req = {
+    params: { id: '123' },
+    body: { templateId: 7 },
+  } as unknown as Request;
 
-    if (sql.includes('FROM public.processos')) {
-      return makeQueryResult([]);
-    }
+  const res = createMockResponse();
 
-    if (sql.includes('FROM public.tarefas')) {
-      return makeQueryResult([]);
-    }
+  try {
+    await createOpportunityDocumentFromTemplate(req, res);
+  } finally {
+    restore();
+  }
 
-    throw new Error(`Unexpected query: ${sql}`);
-  });
+  assert.equal(res.statusCode, 201);
+  assert.ok(res.body && typeof res.body === 'object');
 
-  const data = await __test__.fetchOpportunityData(opportunityRow.id);
+  const responseBody = res.body as {
+    content_html?: string;
+    variables?: unknown;
+  };
 
-  assert.ok(data);
-  assert.strictEqual(data?.empresa?.id, 88);
-  assert.strictEqual(data?.audiencia?.local, 'Fórum da Barra Funda');
-  assert.strictEqual(data?.audiencia?.hora, '15:00:00');
-  assert.ok(empresaSelectSql);
-  assert.ok(empresaSelectSql?.includes('WHERE id = $1'));
-  assert.ok(!empresaSelectSql?.toUpperCase().includes('ORDER BY'));
-  assert.deepStrictEqual(empresaSelectParams, [88]);
+  assert.match(responseBody.content_html ?? '', /Empresa Correta/);
+  assert.match(responseBody.content_html ?? '', /10\/06\/2024/);
+  assert.match(responseBody.content_html ?? '', /13:45/);
+  assert.match(responseBody.content_html ?? '', /Fórum Central/);
 
-  assert.strictEqual(queryMock.mock.calls.length > 0, true);
+  const storedContent = insertedPayload.content;
+  assert.ok(storedContent);
+  const storedVariables = insertedPayload.variables;
+  assert.ok(storedVariables);
+
+  const parsedStored = JSON.parse(storedContent!);
+  assert.equal(
+    parsedStored.content_html,
+    '<p>Empresa Correta</p><p>10/06/2024</p><p>13:45</p><p>Fórum Central</p>',
+  );
+
+  const parsedVariables = JSON.parse(storedVariables!);
+  assert.equal(parsedVariables['escritorio.nome'], 'Empresa Correta');
+  assert.equal(parsedVariables['processo.audiencia.data'], '10/06/2024');
+  assert.equal(parsedVariables['processo.audiencia.horario'], '13:45');
+  assert.equal(parsedVariables['processo.audiencia.local'], 'Fórum Central');
+
+  const empresaQuery = calls.find((call) =>
+    call.text.includes('FROM public."vw.empresas"') && call.text.includes('nome_empresa'),
+  );
+  assert.ok(empresaQuery, 'expected empresa query to be executed');
+  assert.match(empresaQuery!.text, /WHERE id = \$1/);
+  assert.deepEqual(empresaQuery!.values, [55]);
+
 });
