@@ -60,6 +60,7 @@ const normalizeDate = (value: unknown): string | null => {
 const mapProcessoRow = (row: any): Processo => ({
   id: row.id,
   cliente_id: row.cliente_id,
+  idempresa: row.idempresa ?? null,
   numero: row.numero,
   uf: row.uf,
   municipio: row.municipio,
@@ -106,8 +107,9 @@ export const listProcessos = async (req: Request, res: Response) => {
 
     const result = await pool.query(
       `SELECT
-         p.id,
-         p.cliente_id,
+        p.id,
+        p.cliente_id,
+        p.idempresa,
          p.numero,
          p.uf,
          p.municipio,
@@ -126,7 +128,7 @@ export const listProcessos = async (req: Request, res: Response) => {
          c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
-       WHERE p.idempresa = $1
+      WHERE p.idempresa IS NOT DISTINCT FROM $1
        ORDER BY p.criado_em DESC`,
       [empresaId]
     );
@@ -147,10 +149,27 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
   }
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
     const result = await pool.query(
       `SELECT
          p.id,
          p.cliente_id,
+         p.idempresa,
          p.numero,
          p.uf,
          p.municipio,
@@ -170,8 +189,9 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
        WHERE p.cliente_id = $1
+         AND p.idempresa IS NOT DISTINCT FROM $2
        ORDER BY p.criado_em DESC`,
-      [parsedClienteId]
+      [parsedClienteId, empresaId]
     );
 
     res.json(result.rows.map(mapProcessoRow));
@@ -190,10 +210,27 @@ export const getProcessoById = async (req: Request, res: Response) => {
   }
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
     const result = await pool.query(
       `SELECT
          p.id,
          p.cliente_id,
+         p.idempresa,
          p.numero,
          p.uf,
          p.municipio,
@@ -212,8 +249,9 @@ export const getProcessoById = async (req: Request, res: Response) => {
          c.tipo AS cliente_tipo
        FROM public.processos p
        LEFT JOIN public.clientes c ON c.id = p.cliente_id
-       WHERE p.id = $1`,
-      [parsedId]
+       WHERE p.id = $1
+         AND p.idempresa IS NOT DISTINCT FROM $2`,
+      [parsedId, empresaId]
     );
 
     if (result.rowCount === 0) {
@@ -319,14 +357,15 @@ export const createProcesso = async (req: Request, res: Response) => {
 
     const result = await pool.query(
       `WITH inserted AS (
-         INSERT INTO public.processos (
-           ${columnNames}
-         ) VALUES (${placeholders})
-         RETURNING *
-       )
-       SELECT
+       INSERT INTO public.processos (
+          ${columnNames}
+        ) VALUES (${placeholders})
+        RETURNING *
+      )
+      SELECT
          inserted.id,
          inserted.cliente_id,
+         inserted.idempresa,
          inserted.numero,
          inserted.uf,
          inserted.municipio,
@@ -463,6 +502,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
        SELECT
          updated.id,
          updated.cliente_id,
+         updated.idempresa,
          updated.numero,
          updated.uf,
          updated.municipio,
