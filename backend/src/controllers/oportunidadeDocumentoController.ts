@@ -36,6 +36,10 @@ type OpportunityRow = {
   documentos_anexados: unknown;
   criado_por: number | string | null;
   sequencial_empresa: number;
+  idempresa: number | null;
+  audiencia_data: string | null;
+  audiencia_horario: string | null;
+  audiencia_local: string | null;
   data_criacao: string | null;
   ultima_atualizacao: string | null;
 };
@@ -331,6 +335,49 @@ function formatTime(input: Date): string {
   }).format(input);
 }
 
+function formatTimeString(input: string | null, fallbackDate?: string | null): string | null {
+  const normalizeTime = (time: string) => {
+    const match = time.match(/^(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?$/);
+    if (!match) {
+      return null;
+    }
+
+    const hours = Number.parseInt(match[1] ?? '', 10);
+    const minutes = Number.parseInt(match[2] ?? '0', 10);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+      return null;
+    }
+
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      return null;
+    }
+
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  const trimmed = input?.trim();
+  if (trimmed) {
+    const normalized = normalizeTime(trimmed);
+    if (normalized) {
+      return normalized;
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return formatTime(parsed);
+    }
+  }
+
+  if (fallbackDate) {
+    const parsed = new Date(fallbackDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return formatTime(parsed);
+    }
+  }
+
+  return null;
+}
+
 async function fetchNomeById(query: string, id: number | null): Promise<string | null> {
   if (id === null || id === undefined) return null;
   const result = await pool.query<{ nome: string | null }>(query, [id]);
@@ -457,6 +504,12 @@ function buildVariables({
   assign('processo.contingenciamento', opportunity.contingenciamento);
   assign('processo.detalhes', opportunity.detalhes);
   assign('processo.prazo_proximo', formatDatePtBr(opportunity.prazo_proximo));
+  assign('processo.audiencia.data', formatDatePtBr(opportunity.audiencia_data));
+  assign(
+    'processo.audiencia.horario',
+    formatTimeString(opportunity.audiencia_horario, opportunity.audiencia_data),
+  );
+  assign('processo.audiencia.local', opportunity.audiencia_local ?? opportunity.vara_ou_orgao);
 
   assign('oportunidade.id', opportunity.id);
   assign('oportunidade.data_criacao', formatDatePtBr(opportunity.data_criacao));
@@ -557,7 +610,8 @@ async function fetchOpportunityData(id: number) {
     `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
-            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao
+            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, idempresa,
+            audiencia_data, audiencia_horario, audiencia_local, data_criacao, ultima_atualizacao
        FROM public.oportunidades WHERE id = $1`,
     [id],
   );
@@ -616,8 +670,11 @@ async function fetchOpportunityData(id: number) {
     responsavel = (responsavelResult.rowCount ?? 0) > 0 ? responsavelResult.rows[0] : null;
   }
 
-  const empresaResult = await queryEmpresas<EmpresaRow>('ORDER BY id LIMIT 1');
-  let empresa: EmpresaRow | null = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+  let empresa: EmpresaRow | null = null;
+  if (opportunity.idempresa !== null && opportunity.idempresa !== undefined) {
+    const empresaResult = await queryEmpresas<EmpresaRow>('WHERE id = $1', [opportunity.idempresa]);
+    empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+  }
 
   if (empresa) {
     const endereco = await fetchEmpresaEndereco(empresa.id);
