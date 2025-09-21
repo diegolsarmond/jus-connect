@@ -102,6 +102,16 @@ type TemplateRow = {
 
 type VariableMap = Record<string, string | number>;
 
+type OpportunityDocumentRow = {
+  id: number;
+  oportunidade_id: number;
+  template_id: number | null;
+  title: string;
+  content: string | null;
+  variables: unknown;
+  created_at: string;
+};
+
 function ensureEditorJsonContent(value: unknown): EditorJsonNode[] | null {
   if (!value) return null;
   if (Array.isArray(value)) {
@@ -159,6 +169,73 @@ function parseTemplateContent(raw: string | null): {
   }
 
   return { contentHtml, contentEditorJson, metadata };
+}
+
+function parseStoredDocumentContent(raw: string | null): {
+  contentHtml: string;
+  contentEditorJson: EditorJsonNode[] | null;
+  metadata: unknown;
+} {
+  if (!raw) {
+    return { contentHtml: '<p></p>', contentEditorJson: null, metadata: null };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      content_html?: unknown;
+      content_editor_json?: unknown;
+      metadata?: unknown;
+    };
+
+    const contentHtml =
+      typeof parsed?.content_html === 'string' && parsed.content_html.trim().length > 0
+        ? parsed.content_html
+        : '<p></p>';
+
+    return {
+      contentHtml,
+      contentEditorJson: ensureEditorJsonContent(parsed?.content_editor_json),
+      metadata: parsed?.metadata ?? null,
+    };
+  } catch {
+    const trimmed = raw.trim();
+    return { contentHtml: trimmed.length > 0 ? trimmed : '<p></p>', contentEditorJson: null, metadata: null };
+  }
+}
+
+function normalizeVariables(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Ignored: fallback to empty object below
+    }
+  }
+
+  return {};
+}
+
+function mapDocumentRow(row: OpportunityDocumentRow) {
+  const { contentHtml, contentEditorJson, metadata } = parseStoredDocumentContent(row.content);
+
+  return {
+    id: row.id,
+    oportunidade_id: row.oportunidade_id,
+    template_id: row.template_id,
+    title: row.title,
+    created_at: row.created_at,
+    variables: normalizeVariables(row.variables),
+    content_html: contentHtml,
+    content_editor_json: contentEditorJson,
+    metadata,
+  };
 }
 
 function replaceInString(value: string, variables: VariableMap): string {
@@ -516,6 +593,88 @@ export const createOpportunityDocumentFromTemplate = async (req: Request, res: R
       created_at: document.created_at,
       content_html: filledHtml,
     });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const listOpportunityDocuments = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const opportunityId = Number(id);
+  if (!Number.isFinite(opportunityId)) {
+    return res.status(400).json({ error: 'Oportunidade inválida' });
+  }
+
+  try {
+    const result = await pool.query<OpportunityDocumentRow>(
+      `SELECT id, oportunidade_id, template_id, title, content, variables, created_at
+       FROM public.oportunidade_documentos
+       WHERE oportunidade_id = $1
+       ORDER BY created_at DESC, id DESC`,
+      [opportunityId],
+    );
+
+    const documents = result.rows.map(mapDocumentRow);
+
+    return res.json({ documents });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getOpportunityDocument = async (req: Request, res: Response) => {
+  const { id, documentId } = req.params;
+
+  const opportunityId = Number(id);
+  const docId = Number(documentId);
+
+  if (!Number.isFinite(opportunityId) || !Number.isFinite(docId)) {
+    return res.status(400).json({ error: 'Parâmetros inválidos' });
+  }
+
+  try {
+    const result = await pool.query<OpportunityDocumentRow>(
+      `SELECT id, oportunidade_id, template_id, title, content, variables, created_at
+       FROM public.oportunidade_documentos
+       WHERE oportunidade_id = $1 AND id = $2`,
+      [opportunityId, docId],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Documento não encontrado' });
+    }
+
+    return res.json(mapDocumentRow(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const deleteOpportunityDocument = async (req: Request, res: Response) => {
+  const { id, documentId } = req.params;
+
+  const opportunityId = Number(id);
+  const docId = Number(documentId);
+
+  if (!Number.isFinite(opportunityId) || !Number.isFinite(docId)) {
+    return res.status(400).json({ error: 'Parâmetros inválidos' });
+  }
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM public.oportunidade_documentos WHERE oportunidade_id = $1 AND id = $2 RETURNING id',
+      [opportunityId, docId],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Documento não encontrado' });
+    }
+
+    return res.status(204).send();
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Internal server error' });

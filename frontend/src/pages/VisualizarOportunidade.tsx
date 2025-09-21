@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -267,6 +268,7 @@ interface BillingFormState {
   valor: string;
   dataFaturamento: string;
   observacoes: string;
+  selectedInstallmentId: number | null;
 }
 
 const coerceArray = (data: unknown): unknown[] => {
@@ -439,6 +441,7 @@ export default function VisualizarOportunidade() {
     valor: "",
     dataFaturamento: new Date().toISOString().slice(0, 10),
     observacoes: "",
+    selectedInstallmentId: null,
   }));
 
   const interactionStorageKey = useMemo(
@@ -1033,6 +1036,8 @@ export default function VisualizarOportunidade() {
     });
   }, [sortedInstallments]);
 
+  const hasPendingInstallments = pendingInstallments.length > 0;
+
   const calculateInstallmentTotal = useCallback(
     (count: number): number | null => {
       if (!Number.isFinite(count) || count <= 0) return null;
@@ -1309,6 +1314,33 @@ export default function VisualizarOportunidade() {
     setDocumentDialogOpen(true);
   };
 
+  useEffect(() => {
+    if (!billingDialogOpen) return;
+    if (!hasPendingInstallments) return;
+
+    setBillingForm((prev) => {
+      if (prev.selectedInstallmentId !== null) {
+        const exists = pendingInstallments.some(
+          (installment) => installment.id === prev.selectedInstallmentId,
+        );
+        if (exists) {
+          return prev;
+        }
+      }
+
+      const first = pendingInstallments[0];
+      if (!first) {
+        return prev;
+      }
+
+      if (prev.selectedInstallmentId === first.id) {
+        return prev;
+      }
+
+      return { ...prev, selectedInstallmentId: first.id };
+    });
+  }, [billingDialogOpen, hasPendingInstallments, pendingInstallments]);
+
   const openBillingDialog = () => {
     const registeredForma =
       typeof opportunity?.forma_pagamento === "string"
@@ -1323,14 +1355,26 @@ export default function VisualizarOportunidade() {
     const honorarios = parseToNumber(opportunity?.valor_honorarios);
     const parcelasRegistradas = parseToNumber(opportunity?.qtde_parcelas);
     const pendingCount = pendingInstallments.length;
-    const defaultCondition: BillingCondition =
-      pendingCount > 1 || (parcelasRegistradas && parcelasRegistradas > 1)
+    const defaultCondition: BillingCondition = hasPendingInstallments
+      ? "Parcelado"
+      : pendingCount > 1 || (parcelasRegistradas && parcelasRegistradas > 1)
         ? "Parcelado"
         : "À vista";
 
+    const selectedInstallment = hasPendingInstallments ? pendingInstallments[0] : undefined;
+    const selectedInstallmentValue = selectedInstallment
+      ? parseToNumber(selectedInstallment.valor)
+      : null;
+
     const parcelasBase =
       defaultCondition === "Parcelado"
-        ? 1
+        ? hasPendingInstallments
+          ? 1
+          : pendingCount > 0
+            ? pendingCount
+            : parcelasRegistradas && parcelasRegistradas > 0
+              ? Math.trunc(parcelasRegistradas)
+              : 1
         : pendingCount > 0
           ? pendingCount
           : parcelasRegistradas && parcelasRegistradas > 0
@@ -1339,8 +1383,9 @@ export default function VisualizarOportunidade() {
 
     const parcelasParaValor = Math.max(parcelasBase, 1);
 
-    const computedTotal =
-      defaultCondition === "Parcelado"
+    const computedTotal = hasPendingInstallments
+      ? selectedInstallmentValue ?? calculateInstallmentTotal(1)
+      : defaultCondition === "Parcelado"
         ? calculateInstallmentTotal(parcelasParaValor) ??
           (honorarios !== null && parcelasRegistradas && parcelasRegistradas > 0
             ? (honorarios / Math.max(Math.trunc(parcelasRegistradas), 1)) * parcelasParaValor
@@ -1354,10 +1399,14 @@ export default function VisualizarOportunidade() {
       formaPagamentoDescricao:
         matchedOption || registeredForma.length === 0 ? "" : registeredForma,
       condicaoPagamento: defaultCondition,
-      parcelas: defaultCondition === "Parcelado" ? String(parcelasParaValor) : "1",
+      parcelas:
+        defaultCondition === "Parcelado"
+          ? String(hasPendingInstallments ? 1 : parcelasParaValor)
+          : "1",
       valor: formatNumberForInput(computedTotal ?? null),
       dataFaturamento: new Date().toISOString().slice(0, 10),
       observacoes: "",
+      selectedInstallmentId: selectedInstallment ? selectedInstallment.id : null,
     });
     setBillingError(null);
     setBillingDialogOpen(true);
@@ -1368,6 +1417,17 @@ export default function VisualizarOportunidade() {
 
     const honorariosRegistrados = parseToNumber(opportunity?.valor_honorarios);
     const totalParcelasRegistradas = parseToNumber(opportunity?.qtde_parcelas);
+    const selectedInstallment =
+      hasPendingInstallments && billingForm.selectedInstallmentId !== null
+        ? pendingInstallments.find(
+            (installment) => installment.id === billingForm.selectedInstallmentId,
+          )
+        : undefined;
+
+    if (hasPendingInstallments && !selectedInstallment) {
+      setBillingError("Selecione a parcela que deseja faturar.");
+      return;
+    }
 
     const formaSelecionada =
       billingForm.formaPagamento === "Outro"
@@ -1397,29 +1457,34 @@ export default function VisualizarOportunidade() {
       return;
     }
 
-    const parcelasValor =
-      billingForm.condicaoPagamento === "Parcelado"
-        ? Number.parseInt(billingForm.parcelas, 10)
-        : null;
-    if (
-      billingForm.condicaoPagamento === "Parcelado" &&
-      (!parcelasValor || Number.isNaN(parcelasValor) || parcelasValor < 1)
-    ) {
-      setBillingError("Informe a quantidade de parcelas.");
-      return;
+    const selectedInstallmentIds = selectedInstallment ? [selectedInstallment.id] : [];
+    const selectedInstallmentValue = selectedInstallment
+      ? parseToNumber(selectedInstallment.valor)
+      : null;
+
+    let parcelasValor: number | null = null;
+    if (selectedInstallmentIds.length > 0) {
+      parcelasValor = selectedInstallmentIds.length;
+    } else if (billingForm.condicaoPagamento === "Parcelado") {
+      const parsedParcelas = Number.parseInt(billingForm.parcelas, 10);
+      if (!parsedParcelas || Number.isNaN(parsedParcelas) || parsedParcelas < 1) {
+        setBillingError("Informe a quantidade de parcelas.");
+        return;
+      }
+      if (pendingInstallments.length > 0 && parsedParcelas > pendingInstallments.length) {
+        setBillingError("Quantidade de parcelas excede as parcelas pendentes disponíveis.");
+        return;
+      }
+      parcelasValor = parsedParcelas;
     }
 
-    if (
-      billingForm.condicaoPagamento === "Parcelado" &&
-      parcelasValor &&
-      pendingInstallments.length > 0 &&
-      parcelasValor > pendingInstallments.length
-    ) {
-      setBillingError("Quantidade de parcelas excede as parcelas pendentes disponíveis.");
-      return;
-    }
-
-    if (billingForm.condicaoPagamento === "Parcelado") {
+    if (selectedInstallmentIds.length > 0) {
+      if (selectedInstallmentValue === null) {
+        setBillingError("Não foi possível identificar o valor da parcela selecionada.");
+        return;
+      }
+      valorNumero = selectedInstallmentValue;
+    } else if (billingForm.condicaoPagamento === "Parcelado") {
       if (parcelasValor) {
         const calculated = calculateInstallmentTotal(parcelasValor);
         if (calculated !== null) {
@@ -1452,9 +1517,10 @@ export default function VisualizarOportunidade() {
       parcelas:
         billingForm.condicaoPagamento === "Parcelado"
           ? parcelasValor ?? undefined
-          : pendingInstallments.length > 0
+          : hasPendingInstallments
             ? pendingInstallments.length
             : undefined,
+      parcelas_ids: selectedInstallmentIds.length > 0 ? selectedInstallmentIds : undefined,
       observacoes:
         billingForm.observacoes.trim().length > 0
           ? billingForm.observacoes.trim()
@@ -1501,6 +1567,25 @@ export default function VisualizarOportunidade() {
   useEffect(() => {
     if (!billingDialogOpen) return;
 
+    if (hasPendingInstallments) {
+      const selected =
+        billingForm.selectedInstallmentId !== null
+          ? pendingInstallments.find(
+              (installment) => installment.id === billingForm.selectedInstallmentId,
+            )
+          : pendingInstallments[0];
+      const computed = selected ? parseToNumber(selected.valor) : null;
+      if (computed !== null) {
+        const formatted = formatNumberForInput(computed);
+        setBillingForm((prev) =>
+          prev.valor === formatted && prev.parcelas === "1"
+            ? prev
+            : { ...prev, valor: formatted, parcelas: "1" },
+        );
+      }
+      return;
+    }
+
     if (billingForm.condicaoPagamento === "Parcelado") {
       const parcelasCount = Number.parseInt(billingForm.parcelas, 10);
       if (!Number.isFinite(parcelasCount) || parcelasCount <= 0) {
@@ -1542,9 +1627,11 @@ export default function VisualizarOportunidade() {
     billingDialogOpen,
     billingForm.condicaoPagamento,
     billingForm.parcelas,
+    billingForm.selectedInstallmentId,
     calculateInstallmentTotal,
     formatNumberForInput,
-    pendingInstallments.length,
+    hasPendingInstallments,
+    pendingInstallments,
     opportunity?.valor_honorarios,
     opportunity?.qtde_parcelas,
   ]);
@@ -2539,6 +2626,64 @@ export default function VisualizarOportunidade() {
                 )}
               </div>
 
+              {hasPendingInstallments && (
+                <div className="space-y-2 sm:col-span-2">
+                  <p className="text-sm font-medium text-foreground">Parcelas pendentes</p>
+                  <div className="space-y-3 rounded-md border border-border/70 bg-background p-3">
+                    <RadioGroup
+                      value={
+                        billingForm.selectedInstallmentId !== null
+                          ? String(billingForm.selectedInstallmentId)
+                          : ""
+                      }
+                      onValueChange={(value) => {
+                        if (!value) {
+                          setBillingForm((prev) => ({
+                            ...prev,
+                            selectedInstallmentId: null,
+                          }));
+                          return;
+                        }
+                        const parsed = Number(value);
+                        setBillingForm((prev) => ({
+                          ...prev,
+                          selectedInstallmentId: Number.isNaN(parsed) ? null : parsed,
+                        }));
+                      }}
+                    >
+                      {pendingInstallments.map((installment) => {
+                        const optionId = `billing-installment-${installment.id}`;
+                        const valorParcela = parseToNumber(installment.valor);
+                        return (
+                          <div
+                            key={installment.id}
+                            className="flex items-start gap-3 rounded-md border border-border/40 p-3"
+                          >
+                            <RadioGroupItem value={String(installment.id)} id={optionId} />
+                            <div className="flex flex-1 flex-col">
+                              <Label
+                                htmlFor={optionId}
+                                className="cursor-pointer font-medium leading-none"
+                              >
+                                {`Parcela ${installment.numero_parcela}`}
+                              </Label>
+                              <span className="text-xs text-muted-foreground">
+                                {valorParcela !== null
+                                  ? formatCurrency(valorParcela)
+                                  : "Valor não informado"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </RadioGroup>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    A parcela selecionada será atualizada como paga após o faturamento.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="billing-condicao">Condição de pagamento</Label>
                 <Select
@@ -2557,6 +2702,7 @@ export default function VisualizarOportunidade() {
                           : "1",
                     }))
                   }
+                  disabled={hasPendingInstallments}
                 >
                   <SelectTrigger id="billing-condicao">
                     <SelectValue placeholder="Selecione a condição" />
@@ -2594,7 +2740,7 @@ export default function VisualizarOportunidade() {
                   inputMode="decimal"
                   min="0"
                   step="0.01"
-                  readOnly={billingForm.condicaoPagamento === "Parcelado"}
+                  readOnly={hasPendingInstallments || billingForm.condicaoPagamento === "Parcelado"}
                   value={billingForm.valor}
                   onChange={(event) =>
                     setBillingForm((prev) => ({
@@ -2603,7 +2749,7 @@ export default function VisualizarOportunidade() {
                     }))
                   }
                 />
-                {billingForm.condicaoPagamento === "Parcelado" && (
+                {(billingForm.condicaoPagamento === "Parcelado" || hasPendingInstallments) && (
                   <p className="text-xs text-muted-foreground">
                     O valor é calculado automaticamente conforme as parcelas selecionadas.
                   </p>
@@ -2625,6 +2771,8 @@ export default function VisualizarOportunidade() {
                         parcelas: event.target.value,
                       }))
                     }
+                    readOnly={hasPendingInstallments}
+                    disabled={hasPendingInstallments}
                   />
                 </div>
               )}

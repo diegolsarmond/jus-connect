@@ -839,6 +839,7 @@ export const createOportunidadeFaturamento = async (
     parcelas,
     observacoes,
     data_faturamento,
+    parcelas_ids,
   } = req.body as {
     forma_pagamento?: unknown;
     condicao_pagamento?: unknown;
@@ -846,6 +847,7 @@ export const createOportunidadeFaturamento = async (
     parcelas?: unknown;
     observacoes?: unknown;
     data_faturamento?: unknown;
+    parcelas_ids?: unknown;
   };
 
   const formaValue = normalizeText(forma_pagamento);
@@ -927,9 +929,38 @@ export const createOportunidadeFaturamento = async (
       valor: Number(row.valor),
     }));
 
+    const requestedInstallmentIds = (() => {
+      if (parcelas_ids === undefined || parcelas_ids === null) {
+        return [] as number[];
+      }
+      const base = Array.isArray(parcelas_ids) ? parcelas_ids : [parcelas_ids];
+      const normalized: number[] = [];
+      base.forEach((value) => {
+        const normalizedId = normalizeInteger(value);
+        if (normalizedId !== null && !normalized.includes(normalizedId)) {
+          normalized.push(normalizedId);
+        }
+      });
+      return normalized;
+    })();
+
     let installmentsToClose: InstallmentRow[] = [];
     if (pendingInstallments.length > 0) {
-      if (isParcelado) {
+      if (requestedInstallmentIds.length > 0) {
+        const pendingById = new Map(pendingInstallments.map((item) => [item.id, item]));
+        const matched: InstallmentRow[] = [];
+        for (const requestedId of requestedInstallmentIds) {
+          const match = pendingById.get(requestedId);
+          if (!match) {
+            await client.query('ROLLBACK');
+            return res
+              .status(400)
+              .json({ error: 'Parcela selecionada indisponível para faturamento.' });
+          }
+          matched.push(match);
+        }
+        installmentsToClose = matched;
+      } else if (isParcelado) {
         const desiredCount = parsedParcelas ?? 1;
         if (desiredCount > pendingInstallments.length) {
           await client.query('ROLLBACK');

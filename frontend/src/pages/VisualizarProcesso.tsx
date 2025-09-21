@@ -899,19 +899,24 @@ export default function VisualizarProcesso() {
             Acompanhe as publicações e andamentos capturados automaticamente pelo Escavador.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           {processo.movimentacoes.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
               Nenhuma movimentação foi sincronizada até o momento. Utilize a ação de sincronização na listagem de processos para importar os dados do tribunal.
             </div>
           ) : (
-            <div className="space-y-4">
-              {processo.movimentacoes.map((movimentacao) => {
-                const fonteDescricao = movimentacao.fonte
-                  ? [
-                      movimentacao.fonte.sigla && movimentacao.fonte.nome
-                        ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
-                        : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
+            <div className="relative">
+              <div
+                className="pointer-events-none absolute left-3 top-3 bottom-3 w-px bg-border/60 sm:left-4"
+                aria-hidden
+              />
+              <div className="space-y-6">
+                {processo.movimentacoes.map((movimentacao, index) => {
+                  const fonteDescricao = movimentacao.fonte
+                    ? [
+                        movimentacao.fonte.sigla && movimentacao.fonte.nome
+                          ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
+                          : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
                       movimentacao.fonte.caderno,
                       movimentacao.fonte.grauFormatado ?? movimentacao.fonte.grau,
                       movimentacao.fonte.tipo,
@@ -919,89 +924,102 @@ export default function VisualizarProcesso() {
                       .filter(Boolean)
                       .join(" · ")
                   : null;
+                  const dataPrincipal =
+                    movimentacao.dataFormatada ??
+                    movimentacao.data ??
+                    "Data não informada";
+                  const isMostRecent = index === 0;
+                  const indicatorClasses = isMostRecent
+                    ? "border-primary bg-primary text-primary-foreground shadow-lg"
+                    : "border-border/60 bg-background text-primary shadow-sm";
+                  const indicatorDotClasses = isMostRecent
+                    ? "bg-primary-foreground"
+                    : "bg-primary";
 
-                return (
-                  <div
-                    key={movimentacao.id}
-                    className="rounded-lg border border-border/60 bg-muted/20 p-4 shadow-sm"
-                  >
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-foreground">
-                            {movimentacao.tipo}
-                          </p>
-                          {movimentacao.tipoPublicacao ? (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] uppercase tracking-wide"
-                            >
-                              {movimentacao.tipoPublicacao}
-                            </Badge>
-                          ) : null}
-                          {movimentacao.classificacao ? (
-                            <Badge
-                              variant="secondary"
-                              className="text-[10px] uppercase tracking-wide"
-                            >
-                              {movimentacao.classificacao.nome}
-                            </Badge>
-                          ) : null}
+                  return (
+                    <div
+                      key={movimentacao.id}
+                      className="relative pl-10 sm:pl-12"
+                    >
+                      <span
+                        className={`absolute left-3 top-6 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 ${indicatorClasses}`}
+                      >
+                        <span className={`h-2 w-2 rounded-full ${indicatorDotClasses}`} />
+                      </span>
+                      <div className="rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-base font-semibold text-foreground">
+                                {movimentacao.tipo}
+                              </p>
+                              {movimentacao.tipoPublicacao ? (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-full border-primary/30 bg-primary/5 px-2.5 text-[10px] uppercase tracking-wide text-primary"
+                                >
+                                  {movimentacao.tipoPublicacao}
+                                </Badge>
+                              ) : null}
+                              {movimentacao.classificacao ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                >
+                                  {movimentacao.classificacao.nome}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            {fonteDescricao ? (
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                <Newspaper className="h-3.5 w-3.5" />
+                                <span>{fonteDescricao}</span>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground sm:items-end">
+                            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                              <Calendar className="h-4 w-4 text-primary" />
+                              {dataPrincipal}
+                            </span>
+                            {movimentacao.criadoEm ? (
+                              <span>
+                                Registrado em {formatDateTimeToPtBR(movimentacao.criadoEm)}
+                              </span>
+                            ) : null}
+                            {movimentacao.atualizadoEm &&
+                            movimentacao.atualizadoEm !== movimentacao.criadoEm ? (
+                              <span>
+                                Atualizado em {formatDateTimeToPtBR(movimentacao.atualizadoEm)}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
-                        {fonteDescricao ? (
-                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                            <Newspaper className="h-3.5 w-3.5" />
-                            <span>{fonteDescricao}</span>
+                        {movimentacao.conteudo ? (
+                          <div className="mt-3 rounded-lg border border-border/40 bg-muted/30 p-3 text-sm text-foreground whitespace-pre-line">
+                            {movimentacao.conteudo}
                           </div>
                         ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {movimentacao.dataFormatada ?? movimentacao.data ?? "Data não informada"}
-                        </span>
-                        {movimentacao.criadoEm ? (
-                          <>
-                            <span aria-hidden className="hidden h-3 w-px bg-border/60 sm:block" />
-                            <span>
-                              Registrado em {formatDateTimeToPtBR(movimentacao.criadoEm)}
-                            </span>
-                          </>
+                        {movimentacao.textoCategoria ? (
+                          <div className="mt-3 rounded-lg border border-dashed border-border/40 bg-background/50 p-3 text-sm text-foreground whitespace-pre-line">
+                            {movimentacao.textoCategoria}
+                          </div>
                         ) : null}
-                        {movimentacao.atualizadoEm &&
-                        movimentacao.atualizadoEm !== movimentacao.criadoEm ? (
-                          <>
-                            <span aria-hidden className="hidden h-3 w-px bg-border/60 sm:block" />
-                            <span>
-                              Atualizado em {formatDateTimeToPtBR(movimentacao.atualizadoEm)}
-                            </span>
-                          </>
+                        {movimentacao.classificacao?.descricao ? (
+                          <p className="mt-3 text-xs text-muted-foreground whitespace-pre-line">
+                            {movimentacao.classificacao.descricao}
+                          </p>
+                        ) : null}
+                        {movimentacao.classificacao?.hierarquia ? (
+                          <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Hierarquia: {movimentacao.classificacao.hierarquia}
+                          </p>
                         ) : null}
                       </div>
                     </div>
-                    {movimentacao.conteudo ? (
-                      <div className="mt-3 rounded-md border border-border/40 bg-background/70 p-3 text-sm text-foreground whitespace-pre-line">
-                        {movimentacao.conteudo}
-                      </div>
-                    ) : null}
-                    {movimentacao.textoCategoria ? (
-                      <div className="mt-3 rounded-md border border-dashed border-border/40 bg-background/50 p-3 text-sm text-foreground whitespace-pre-line">
-                        {movimentacao.textoCategoria}
-                      </div>
-                    ) : null}
-                    {movimentacao.classificacao?.descricao ? (
-                      <p className="mt-3 text-xs text-muted-foreground whitespace-pre-line">
-                        {movimentacao.classificacao.descricao}
-                      </p>
-                    ) : null}
-                    {movimentacao.classificacao?.hierarquia ? (
-                      <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                        Hierarquia: {movimentacao.classificacao.hierarquia}
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
         </CardContent>
