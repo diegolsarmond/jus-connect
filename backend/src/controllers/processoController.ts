@@ -35,6 +35,37 @@ const normalizeUppercase = (value: unknown): string | null => {
   return normalized ? normalized.toUpperCase() : null;
 };
 
+const resolveNullablePositiveInteger = (
+  value: unknown,
+): { ok: true; value: number | null } | { ok: false } => {
+  if (value === undefined || value === null) {
+    return { ok: true, value: null };
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value > 0) {
+      return { ok: true, value };
+    }
+    return { ok: false };
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return { ok: true, value: null };
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return { ok: true, value: parsed };
+    }
+
+    return { ok: false };
+  }
+
+  return { ok: false };
+};
+
 const normalizeDate = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -124,6 +155,26 @@ const parseInteger = (value: unknown): number => {
   }
 
   return 0;
+};
+
+const parseOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 };
 
 type RawAdvogado = {
@@ -386,6 +437,13 @@ const baseProcessoSelect = `
     p.classe_judicial,
     p.assunto,
     p.jurisdicao,
+    p.oportunidade_id,
+    o.sequencial_empresa AS oportunidade_sequencial_empresa,
+    o.data_criacao AS oportunidade_data_criacao,
+    o.numero_processo_cnj AS oportunidade_numero_processo_cnj,
+    o.numero_protocolo AS oportunidade_numero_protocolo,
+    o.solicitante_id AS oportunidade_solicitante_id,
+    solicitante.nome AS oportunidade_solicitante_nome,
     p.advogado_responsavel,
     p.data_distribuicao,
     p.criado_em,
@@ -411,43 +469,67 @@ const baseProcessoSelect = `
       WHERE pm.processo_id = p.id
     ) AS movimentacoes_count
   FROM public.processos p
+  LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
   LEFT JOIN public.clientes c ON c.id = p.cliente_id
+  LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
 `;
 
-const mapProcessoRow = (row: any): Processo => ({
-  id: row.id,
-  cliente_id: row.cliente_id,
-  idempresa: row.idempresa ?? null,
-  numero: row.numero,
-  uf: row.uf,
-  municipio: row.municipio,
-  orgao_julgador: row.orgao_julgador,
-  tipo: row.tipo,
-  status: row.status,
-  classe_judicial: row.classe_judicial,
-  assunto: row.assunto,
-  jurisdicao: row.jurisdicao,
-  advogado_responsavel: row.advogado_responsavel,
-  data_distribuicao: row.data_distribuicao,
-  criado_em: row.criado_em,
-  atualizado_em: row.atualizado_em,
-  ultima_sincronizacao: normalizeTimestamp(row.ultima_sincronizacao),
-  consultas_api_count: parseInteger(row.consultas_api_count),
-  movimentacoes_count: parseInteger(row.movimentacoes_count),
-  cliente: row.cliente_id
-    ? {
-        id: row.cliente_id,
-        nome: row.cliente_nome ?? null,
-        documento: row.cliente_documento ?? null,
-        tipo:
-          row.cliente_tipo === null || row.cliente_tipo === undefined
-            ? null
-            : String(row.cliente_tipo),
-      }
-    : null,
-  advogados: parseAdvogados(row.advogados),
-  movimentacoes: parseMovimentacoes(row.movimentacoes),
-});
+const mapProcessoRow = (row: any): Processo => {
+  const oportunidadeId = parseOptionalInteger(row.oportunidade_id);
+  const sequencial = parseOptionalInteger(row.oportunidade_sequencial_empresa);
+  const solicitanteId = parseOptionalInteger(row.oportunidade_solicitante_id);
+  const solicitanteNome = normalizeString(row.oportunidade_solicitante_nome);
+
+  const oportunidade =
+    oportunidadeId && oportunidadeId > 0
+      ? {
+          id: oportunidadeId,
+          sequencial_empresa: sequencial ?? null,
+          data_criacao: row.oportunidade_data_criacao ?? null,
+          numero_processo_cnj: row.oportunidade_numero_processo_cnj ?? null,
+          numero_protocolo: row.oportunidade_numero_protocolo ?? null,
+          solicitante_id: solicitanteId ?? null,
+          solicitante_nome: solicitanteNome,
+        }
+      : null;
+
+  return {
+    id: row.id,
+    cliente_id: row.cliente_id,
+    idempresa: row.idempresa ?? null,
+    numero: row.numero,
+    uf: row.uf,
+    municipio: row.municipio,
+    orgao_julgador: row.orgao_julgador,
+    tipo: row.tipo,
+    status: row.status,
+    classe_judicial: row.classe_judicial,
+    assunto: row.assunto,
+    jurisdicao: row.jurisdicao,
+    oportunidade_id: oportunidade?.id ?? null,
+    advogado_responsavel: row.advogado_responsavel,
+    data_distribuicao: row.data_distribuicao,
+    criado_em: row.criado_em,
+    atualizado_em: row.atualizado_em,
+    ultima_sincronizacao: normalizeTimestamp(row.ultima_sincronizacao),
+    consultas_api_count: parseInteger(row.consultas_api_count),
+    movimentacoes_count: parseInteger(row.movimentacoes_count),
+    cliente: row.cliente_id
+      ? {
+          id: row.cliente_id,
+          nome: row.cliente_nome ?? null,
+          documento: row.cliente_documento ?? null,
+          tipo:
+            row.cliente_tipo === null || row.cliente_tipo === undefined
+              ? null
+              : String(row.cliente_tipo),
+        }
+      : null,
+    oportunidade,
+    advogados: parseAdvogados(row.advogados),
+    movimentacoes: parseMovimentacoes(row.movimentacoes),
+  };
+};
 
 export const listProcessos = async (req: Request, res: Response) => {
   try {
@@ -609,6 +691,15 @@ export const createProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
+  const oportunidadeResolution = resolveNullablePositiveInteger(
+    req.body?.oportunidade_id ?? req.body?.proposta_id ?? null,
+  );
+
+  if (!oportunidadeResolution.ok) {
+    return res.status(400).json({ error: 'oportunidade_id inválido' });
+  }
+
+  const oportunidadeIdValue = oportunidadeResolution.value;
   const rawAdvogados = Array.isArray(advogados) ? advogados : [];
   const advogadoIds = Array.from(
     new Set(
@@ -662,6 +753,27 @@ export const createProcesso = async (req: Request, res: Response) => {
 
     if (clienteExists.rowCount === 0) {
       return res.status(400).json({ error: 'Cliente não encontrado' });
+    }
+
+    const oportunidadeResolution = resolveNullablePositiveInteger(
+      req.body?.oportunidade_id ?? req.body?.proposta_id ?? null,
+    );
+
+    if (!oportunidadeResolution.ok) {
+      return res.status(400).json({ error: 'oportunidade_id inválido' });
+    }
+
+    const oportunidadeIdValue = oportunidadeResolution.value;
+
+    if (oportunidadeIdValue !== null) {
+      const oportunidadeExists = await pool.query(
+        'SELECT 1 FROM public.oportunidades WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+        [oportunidadeIdValue, empresaId],
+      );
+
+      if (oportunidadeExists.rowCount === 0) {
+        return res.status(400).json({ error: 'Proposta não encontrada' });
+      }
     }
 
     let advogadosSelecionados: Array<{ id: number; nome: string | null }> = [];
@@ -726,11 +838,12 @@ export const createProcesso = async (req: Request, res: Response) => {
             classe_judicial,
             assunto,
             jurisdicao,
+            oportunidade_id,
             advogado_responsavel,
             data_distribuicao,
             idempresa
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           RETURNING id`,
         [
           parsedClienteId,
@@ -743,6 +856,7 @@ export const createProcesso = async (req: Request, res: Response) => {
           classeValue,
           assuntoValue,
           jurisdicaoValue,
+          oportunidadeIdValue,
           advogadoColumnValue,
           dataDistribuicaoValue,
           empresaId,
@@ -856,6 +970,15 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
+  const oportunidadeResolution = resolveNullablePositiveInteger(
+    req.body?.oportunidade_id ?? req.body?.proposta_id ?? null,
+  );
+
+  if (!oportunidadeResolution.ok) {
+    return res.status(400).json({ error: 'oportunidade_id inválido' });
+  }
+
+  const oportunidadeIdValue = oportunidadeResolution.value;
   const rawAdvogados = Array.isArray(advogados) ? advogados : [];
   const advogadoIds = Array.from(
     new Set(
@@ -900,6 +1023,17 @@ export const updateProcesso = async (req: Request, res: Response) => {
       return res
         .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    if (oportunidadeIdValue !== null) {
+      const oportunidadeExists = await pool.query(
+        'SELECT 1 FROM public.oportunidades WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+        [oportunidadeIdValue, empresaId],
+      );
+
+      if (oportunidadeExists.rowCount === 0) {
+        return res.status(400).json({ error: 'Proposta não encontrada' });
+      }
     }
 
     const existingProcess = await pool.query(
@@ -982,11 +1116,12 @@ export const updateProcesso = async (req: Request, res: Response) => {
                 classe_judicial = $8,
                 assunto = $9,
                 jurisdicao = $10,
-                advogado_responsavel = $11,
-                data_distribuicao = $12,
+                oportunidade_id = $11,
+                advogado_responsavel = $12,
+                data_distribuicao = $13,
                 atualizado_em = NOW()
-          WHERE id = $13
-            AND idempresa IS NOT DISTINCT FROM $14
+          WHERE id = $14
+            AND idempresa IS NOT DISTINCT FROM $15
           RETURNING id`,
         [
           parsedClienteId,
@@ -999,6 +1134,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
           classeValue,
           assuntoValue,
           jurisdicaoValue,
+          oportunidadeIdValue,
           advogadoColumnValue,
           dataDistribuicaoValue,
           parsedId,

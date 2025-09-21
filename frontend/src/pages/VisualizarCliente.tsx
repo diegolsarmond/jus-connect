@@ -155,6 +155,8 @@ interface ApiProcess {
   ultima_sincronizacao?: string | null;
   consultas_api_count?: number | string | null;
   movimentacoes_count?: number | string | null;
+  oportunidade_id?: number | string | null;
+  oportunidade?: ApiProcessOpportunity | null;
 }
 
 interface ApiProcessLawyer {
@@ -166,6 +168,14 @@ interface ApiProcessLawyer {
   perfil?: string | null;
   perfil_nome?: string | null;
   email?: string | null;
+}
+
+interface ApiProcessOpportunity {
+  id?: number | string | null;
+  sequencial_empresa?: number | string | null;
+  data_criacao?: string | null;
+  solicitante_nome?: string | null;
+  solicitante?: { nome?: string | null } | null;
 }
 
 interface ApiFinancialFlow {
@@ -241,6 +251,50 @@ const mapApiClientToClient = (c: ApiClient): LocalClient => ({
   registrationDate: c.datacadastro,
 });
 
+const parseOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const formatPropostaLabel = (
+  id: number,
+  sequencial: number | null,
+  dataCriacao: string | null,
+  solicitante?: string | null,
+): string => {
+  const numero = sequencial && sequencial > 0 ? sequencial : id;
+  let ano = new Date().getFullYear();
+
+  if (dataCriacao) {
+    const parsed = new Date(dataCriacao);
+    if (!Number.isNaN(parsed.getTime())) {
+      ano = parsed.getFullYear();
+    }
+  }
+
+  const solicitanteNome =
+    typeof solicitante === "string" && solicitante.trim().length > 0
+      ? solicitante.trim()
+      : "";
+
+  return `Proposta #${numero}/${ano}${solicitanteNome ? ` - ${solicitanteNome}` : ""}`;
+};
+
 const mapApiProcessToProcess = (process: ApiProcess): Process => {
   const lawyers: Process["lawyers"] = [];
   const seen = new Set<number>();
@@ -283,6 +337,27 @@ const mapApiProcessToProcess = (process: ApiProcess): Process => {
     lawyers.push({ id: 0, name: process.advogado_responsavel });
   }
 
+  const oportunidadeResumo = process.oportunidade ?? null;
+  const oportunidadeId = parseOptionalInteger(
+    process.oportunidade_id ?? oportunidadeResumo?.id ?? null,
+  );
+  const oportunidadeSequencial = parseOptionalInteger(
+    oportunidadeResumo?.sequencial_empresa,
+  );
+  const oportunidadeDataCriacao =
+    typeof oportunidadeResumo?.data_criacao === "string"
+      ? oportunidadeResumo.data_criacao
+      : null;
+  const oportunidadeSolicitante =
+    pickFirstNonEmptyString(
+      typeof oportunidadeResumo?.solicitante_nome === "string"
+        ? oportunidadeResumo.solicitante_nome
+        : undefined,
+      typeof oportunidadeResumo?.solicitante?.nome === "string"
+        ? oportunidadeResumo.solicitante.nome
+        : undefined,
+    ) ?? null;
+
   return {
     id: Number(process.id),
     number: process.numero ?? "",
@@ -302,6 +377,21 @@ const mapApiProcessToProcess = (process: ApiProcess): Process => {
     lastSync: process.ultima_sincronizacao ?? null,
     syncCount: parseApiInteger(process.consultas_api_count),
     movementsCount: parseApiInteger(process.movimentacoes_count),
+    proposal:
+      oportunidadeId && oportunidadeId > 0
+        ? {
+            id: oportunidadeId,
+            label: formatPropostaLabel(
+              oportunidadeId,
+              oportunidadeSequencial,
+              oportunidadeDataCriacao,
+              oportunidadeSolicitante,
+            ),
+            solicitante: oportunidadeSolicitante,
+            dataCriacao: oportunidadeDataCriacao,
+            sequencial: oportunidadeSequencial,
+          }
+        : null,
   };
 };
 
@@ -583,6 +673,8 @@ export default function VisualizarCliente() {
           process.subject ?? "",
           process.responsibleLawyer ?? "",
           lawyerNames,
+          process.proposal?.label ?? "",
+          process.proposal?.solicitante ?? "",
         ];
 
         return searchableFields.some((field) =>
@@ -616,6 +708,7 @@ export default function VisualizarCliente() {
           consultasApi: process.syncCount ?? 0,
           movimentacoes: process.movementsCount ?? 0,
           situacao: process.status || "",
+          proposal: process.proposal ?? null,
         };
       });
   }, [client?.processes, processSearch, processSort]);
@@ -1054,7 +1147,16 @@ export default function VisualizarCliente() {
                     {filteredProcesses.length > 0 ? (
                       filteredProcesses.map((p) => (
                         <TableRow key={p.id}>
-                          <TableCell>{p.numero}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span>{p.numero}</span>
+                              {p.proposal ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {p.proposal.label}
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
                           <TableCell>{p.dataDistribuicao || "-"}</TableCell>
                           <TableCell>{p.assunto || "-"}</TableCell>
                           <TableCell>

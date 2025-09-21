@@ -23,6 +23,16 @@ export interface ProcessoMovimentacao {
   atualizado_em?: string | null;
 }
 
+export interface ProcessoOportunidadeResumo {
+  id: number;
+  sequencial_empresa: number | null;
+  data_criacao: string | null;
+  numero_processo_cnj: string | null;
+  numero_protocolo: string | null;
+  solicitante_id: number | null;
+  solicitante_nome: string | null;
+}
+
 export interface Processo {
   id: number;
   cliente_id: number;
@@ -36,6 +46,7 @@ export interface Processo {
   classe_judicial: string | null;
   assunto: string | null;
   jurisdicao: string | null;
+  oportunidade_id: number | null;
   advogado_responsavel: string | null;
   data_distribuicao: string | null;
   criado_em: string;
@@ -44,6 +55,7 @@ export interface Processo {
   consultas_api_count: number;
   movimentacoes_count: number;
   cliente?: ProcessoClienteResumo | null;
+  oportunidade?: ProcessoOportunidadeResumo | null;
   advogados: ProcessoAdvogado[];
   movimentacoes?: ProcessoMovimentacao[];
 }

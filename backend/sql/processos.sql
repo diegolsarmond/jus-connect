@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.processos (
   classe_judicial TEXT,
   assunto TEXT,
   jurisdicao TEXT,
+  oportunidade_id INTEGER REFERENCES public.oportunidades(id),
   advogado_responsavel TEXT,
   data_distribuicao TIMESTAMP WITHOUT TIME ZONE,
   criado_em TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
