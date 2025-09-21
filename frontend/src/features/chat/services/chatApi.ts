@@ -211,7 +211,7 @@ export interface ChatResponsibleOption {
 }
 
 export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> => {
-  const response = await fetch(getApiUrl("get_api_usuarios_empresa"), {
+  const response = await fetch(getApiUrl("usuarios/empresa"), {
     headers: { Accept: "application/json" },
   });
   const payload = await parseJson<unknown>(response);

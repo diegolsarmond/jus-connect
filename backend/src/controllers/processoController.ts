@@ -275,6 +275,41 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
   return movimentacoes;
 };
 
+const MOVIMENTACOES_DEFAULT_LIMIT = 200;
+
+const MOVIMENTACOES_BASE_QUERY = `
+  SELECT
+    pm.id,
+    pm.data,
+    pm.tipo,
+    pm.tipo_publicacao,
+    pm.classificacao_predita,
+    pm.conteudo,
+    pm.texto_categoria,
+    pm.fonte,
+    pm.criado_em,
+    pm.atualizado_em
+  FROM public.processo_movimentacoes pm
+  WHERE pm.processo_id = $1
+  ORDER BY pm.data DESC NULLS LAST, pm.id DESC
+`;
+
+const fetchProcessoMovimentacoes = async (
+  processoId: number,
+  client?: PoolClient,
+  limit: number = MOVIMENTACOES_DEFAULT_LIMIT,
+): Promise<Processo['movimentacoes']> => {
+  const executor = client ?? pool;
+  const trimmedLimit = Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : 0;
+  const query =
+    trimmedLimit > 0
+      ? `${MOVIMENTACOES_BASE_QUERY}\n  LIMIT $2`
+      : MOVIMENTACOES_BASE_QUERY;
+  const params = trimmedLimit > 0 ? [processoId, trimmedLimit] : [processoId];
+  const result = await executor.query(query, params);
+  return parseMovimentacoes(result.rows);
+};
+
 const safeJsonStringify = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -523,7 +558,10 @@ export const getProcessoById = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Processo não encontrado' });
     }
 
-    res.json(mapProcessoRow(result.rows[0]));
+    const processo = mapProcessoRow(result.rows[0]);
+    processo.movimentacoes = await fetchProcessoMovimentacoes(parsedId);
+
+    res.json(processo);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1200,24 +1238,22 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
       if (movimentacoesPreparadas.length > 0) {
         const values: unknown[] = [];
         const placeholders = movimentacoesPreparadas
-          .map((mov: PreparedMovimentacaoRecord, index: number) => {
-            const baseIndex = index * 9;
-            const classificacaoIndex = baseIndex + 6;
-            const fonteIndex = baseIndex + 9;
-            values.push(
-              mov.id,
-              parsedId,
-              mov.data,
-              mov.tipo,
-              mov.tipo_publicacao,
-              mov.classificacao_predita,
-              mov.conteudo,
-              mov.texto_categoria,
-              mov.fonte
-            );
-            return `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, CASE WHEN $${classificacaoIndex} IS NULL THEN NULL ELSE $${classificacaoIndex}::jsonb END, $${baseIndex + 7}, $${baseIndex + 8}, CASE WHEN $${fonteIndex} IS NULL THEN NULL ELSE $${fonteIndex}::jsonb END)`;
-          })
-          .join(', ');
+            .map((mov: PreparedMovimentacaoRecord, index: number) => {
+              const baseIndex = index * 9;
+              values.push(
+                mov.id,
+                parsedId,
+                mov.data,
+                mov.tipo,
+                mov.tipo_publicacao,
+                mov.classificacao_predita,
+                mov.conteudo,
+                mov.texto_categoria,
+                mov.fonte
+              );
+              return `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}::jsonb, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9}::jsonb)`;
+            })
+            .join(', ');
 
         await clientDb.query(
           `INSERT INTO public.processo_movimentacoes (
@@ -1275,6 +1311,11 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
         [parsedId]
       );
 
+      const movimentacoesCompletas = await fetchProcessoMovimentacoes(
+        parsedId,
+        clientDb,
+      );
+
       await clientDb.query('COMMIT');
 
       if (processoAtualizadoResult.rowCount === 0) {
@@ -1287,7 +1328,7 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
       );
 
       processoAtualizado.movimentacoes_count = totalMovimentacoes;
-      processoAtualizado.movimentacoes = parseMovimentacoes(items);
+      processoAtualizado.movimentacoes = movimentacoesCompletas;
 
       return res.json({
         processo: processoAtualizado,
