@@ -38,6 +38,7 @@ type OpportunityRow = {
   sequencial_empresa: number;
   data_criacao: string | null;
   ultima_atualizacao: string | null;
+  idempresa: number | null;
 };
 
 type OpportunityDetails = OpportunityRow & {
@@ -557,7 +558,8 @@ async function fetchOpportunityData(id: number) {
     `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
-            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao
+            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao,
+            idempresa
        FROM public.oportunidades WHERE id = $1`,
     [id],
   );
@@ -616,8 +618,24 @@ async function fetchOpportunityData(id: number) {
     responsavel = (responsavelResult.rowCount ?? 0) > 0 ? responsavelResult.rows[0] : null;
   }
 
-  const empresaResult = await queryEmpresas<EmpresaRow>('ORDER BY id LIMIT 1');
-  let empresa: EmpresaRow | null = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+  const empresaId = opportunity.idempresa ?? null;
+  let empresa: EmpresaRow | null = null;
+
+  if (empresaId !== null) {
+    const empresaByIdResult = await queryEmpresas<EmpresaRow>('WHERE id = $1', [
+      empresaId,
+    ]);
+    if ((empresaByIdResult.rowCount ?? 0) > 0) {
+      empresa = empresaByIdResult.rows[0] ?? null;
+    }
+  }
+
+  if (!empresa) {
+    const fallbackResult = await queryEmpresas<EmpresaRow>('ORDER BY id LIMIT 1');
+    if ((fallbackResult.rowCount ?? 0) > 0) {
+      empresa = fallbackResult.rows[0] ?? null;
+    }
+  }
 
   if (empresa) {
     const endereco = await fetchEmpresaEndereco(empresa.id);
