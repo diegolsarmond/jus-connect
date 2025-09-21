@@ -1,3 +1,9 @@
+export interface ProcessLawyer {
+  id: number;
+  name: string;
+  role?: string;
+}
+
 export interface Process {
   id: number;
   number?: string;
@@ -18,9 +24,13 @@ export interface Process {
   distributionDate?: string;
   subject?: string;
   responsibleLawyer?: string;
+  lawyers?: ProcessLawyer[];
   lastMovement?: string;
   createdAt?: string;
   updatedAt?: string;
+  lastSync?: string | null;
+  syncCount?: number;
+  movementsCount?: number;
 }
 
 export interface Client {
