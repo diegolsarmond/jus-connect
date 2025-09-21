@@ -5,6 +5,7 @@ import {
   Archive,
   ArrowLeft,
   Calendar,
+  Download,
   Clock,
   FileText,
   Landmark,
@@ -45,6 +46,23 @@ interface ApiProcessoMovimentacao {
   fonte?: Record<string, unknown> | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
+}
+
+interface ApiProcessoDocumentoPublico {
+  id?: number | string | null;
+  titulo?: string | null;
+  descricao?: string | null;
+  data?: string | null;
+  data_publicacao?: string | null;
+  tipo?: string | null;
+  extensao?: string | null;
+  paginas?: number | string | null;
+  numero_paginas?: number | string | null;
+  key?: string | null;
+  chave?: string | null;
+  links?: unknown;
+  link?: string | null;
+  url?: string | null;
 }
 
 interface ApiProcessoOportunidade {
@@ -117,6 +135,20 @@ interface ProcessoDetalhes {
   ultimaSincronizacao: string | null;
   movimentacoesCount: number;
   movimentacoes: ProcessoMovimentacaoDetalhe[];
+}
+
+interface ProcessoDocumentoPublico {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  data: string | null;
+  dataFormatada: string | null;
+  tipo: string | null;
+  extensao: string | null;
+  paginas: number | null;
+  key: string | null;
+  links: Record<string, string>;
+  downloadUrl: string | null;
 }
 
 interface ProcessoMovimentacaoDetalhe {
@@ -443,6 +475,179 @@ const mapApiMovimentacoes = (
   return movimentacoes;
 };
 
+const buildDocumentoLinksMap = (
+  primary: unknown,
+  ...fallbacks: unknown[]
+): Record<string, string> => {
+  const links: Record<string, string> = {};
+
+  const addLink = (keyHint: string, rawValue: unknown) => {
+    if (typeof rawValue !== "string") {
+      return;
+    }
+
+    const trimmedValue = rawValue.trim();
+    if (!trimmedValue) {
+      return;
+    }
+
+    const baseKey = keyHint ? keyHint.trim().toLowerCase() : "link";
+    let candidateKey = baseKey || "link";
+    let counter = 1;
+
+    while (links[candidateKey] && links[candidateKey] !== trimmedValue) {
+      candidateKey = `${baseKey || "link"}_${counter}`;
+      counter += 1;
+    }
+
+    if (!links[candidateKey]) {
+      links[candidateKey] = trimmedValue;
+    }
+  };
+
+  const processValue = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        if (typeof entry === "string") {
+          addLink(`link_${index + 1}`, entry);
+          return;
+        }
+
+        if (!entry || typeof entry !== "object") {
+          return;
+        }
+
+        const entryObj = entry as Record<string, unknown>;
+        const rel =
+          typeof entryObj.rel === "string"
+            ? entryObj.rel
+            : typeof entryObj.tipo === "string"
+              ? entryObj.tipo
+              : "";
+        const href =
+          typeof entryObj.href === "string"
+            ? entryObj.href
+            : typeof entryObj.url === "string"
+              ? entryObj.url
+              : typeof entryObj.link === "string"
+                ? entryObj.link
+                : null;
+
+        addLink(rel || `link_${index + 1}`, href);
+      });
+      return;
+    }
+
+    if (value && typeof value === "object") {
+      Object.entries(value as Record<string, unknown>).forEach(([rawKey, rawValue]) => {
+        const key = typeof rawKey === "string" ? rawKey : String(rawKey);
+        addLink(key, rawValue);
+      });
+      return;
+    }
+
+    addLink("link", value);
+  };
+
+  processValue(primary);
+  fallbacks.forEach((fallback, index) => addLink(`fallback_${index + 1}`, fallback));
+
+  return links;
+};
+
+const mapApiDocumentosPublicos = (
+  value: unknown,
+): ProcessoDocumentoPublico[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const documentos: ProcessoDocumentoPublico[] = [];
+
+  value.forEach((item, index) => {
+    if (!item || typeof item !== "object") {
+      return;
+    }
+
+    const raw = item as ApiProcessoDocumentoPublico;
+
+    let id: string | null = null;
+    const idCandidates = [raw.id, raw.key, raw.chave, raw.titulo];
+
+    for (const candidate of idCandidates) {
+      if (typeof candidate === "number" && Number.isFinite(candidate)) {
+        id = String(Math.trunc(candidate));
+        break;
+      }
+
+      if (typeof candidate === "string") {
+        const trimmed = candidate.trim();
+        if (trimmed) {
+          id = trimmed;
+          break;
+        }
+      }
+    }
+
+    if (!id) {
+      id = `documento_${index + 1}`;
+    }
+
+    const titulo = normalizeString(raw.titulo) || `Documento ${index + 1}`;
+    const descricao = normalizeString(raw.descricao) || null;
+    const dataValue =
+      normalizeString(raw.data) || normalizeString(raw.data_publicacao) || null;
+    const dataFormatada = dataValue ? formatDateToPtBR(dataValue) : null;
+    const tipoValue = normalizeString(raw.tipo);
+    const tipo = tipoValue ? tipoValue.toUpperCase() : null;
+    const extensaoValue = normalizeString(raw.extensao);
+    const extensao = extensaoValue
+      ? extensaoValue.replace(/^\./, "").toUpperCase()
+      : null;
+    const paginas = parseOptionalInteger(raw.paginas ?? raw.numero_paginas);
+    const key = normalizeString(raw.key) || normalizeString(raw.chave) || null;
+    const links = buildDocumentoLinksMap(raw.links, raw.link, raw.url);
+
+    const downloadPrioridades = [
+      "arquivo",
+      "download",
+      "original",
+      "api",
+      "link",
+      "fallback_1",
+    ];
+    let downloadUrl: string | null = null;
+
+    for (const prioridade of downloadPrioridades) {
+      if (links[prioridade]) {
+        downloadUrl = links[prioridade];
+        break;
+      }
+    }
+
+    if (!downloadUrl) {
+      const [firstLink] = Object.values(links);
+      downloadUrl = firstLink ?? null;
+    }
+
+    documentos.push({
+      id,
+      titulo,
+      descricao,
+      data: dataValue,
+      dataFormatada,
+      tipo,
+      extensao,
+      paginas: paginas ?? null,
+      key,
+      links,
+      downloadUrl,
+    });
+  });
+
+  return documentos;
+};
+
 const mapApiProcessoToDetalhes = (
   processo: ApiProcessoResponse,
   fallbackId?: string | number,
@@ -576,6 +781,9 @@ export default function VisualizarProcesso() {
   const [loading, setLoading] = useState(true);
   const [processo, setProcesso] = useState<ProcessoDetalhes | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [documentosPublicos, setDocumentosPublicos] = useState<ProcessoDocumentoPublico[]>([]);
+  const [documentosLoading, setDocumentosLoading] = useState(true);
+  const [documentosError, setDocumentosError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -647,6 +855,87 @@ export default function VisualizarProcesso() {
       cancelled = true;
     };
   }, [processoId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!processoId || !processo?.id) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const fetchDocumentos = async () => {
+      setDocumentosLoading(true);
+      setDocumentosError(null);
+      setDocumentosPublicos([]);
+
+      try {
+        const res = await fetch(
+          getApiUrl(`processos/${processoId}/documentos-publicos`),
+          {
+            headers: { Accept: "application/json" },
+          },
+        );
+
+        const text = await res.text();
+        let json: unknown = null;
+
+        if (text) {
+          try {
+            json = JSON.parse(text);
+          } catch (parseError) {
+            console.error(
+              "Não foi possível interpretar os documentos públicos do processo",
+              parseError,
+            );
+          }
+        }
+
+        if (!res.ok) {
+          const message =
+            json &&
+            typeof json === "object" &&
+            "error" in json &&
+            typeof (json as { error: unknown }).error === "string"
+              ? (json as { error: string }).error
+              : `Não foi possível carregar os documentos públicos (HTTP ${res.status})`;
+          throw new Error(message);
+        }
+
+        const documentosPayload =
+          json && typeof json === "object" && Array.isArray((json as { documentos?: unknown[] }).documentos)
+            ? (json as { documentos: unknown[] }).documentos
+            : Array.isArray(json)
+              ? (json as unknown[])
+              : [];
+
+        const mapped = mapApiDocumentosPublicos(documentosPayload);
+
+        if (!cancelled) {
+          setDocumentosPublicos(mapped);
+        }
+      } catch (fetchError) {
+        const message =
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Erro ao carregar os documentos públicos.";
+        if (!cancelled) {
+          setDocumentosError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setDocumentosLoading(false);
+        }
+      }
+    };
+
+    fetchDocumentos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [processoId, processo?.id]);
 
   const criadoEmLabel = useMemo(
     () => formatDateTimeOrNull(processo?.criadoEm),
@@ -887,6 +1176,135 @@ export default function VisualizarProcesso() {
               Utilize o botão de sincronização para importar publicações e andamentos diretamente do tribunal.
             </p>
           </div>
+      </CardContent>
+    </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold">Documentos públicos</CardTitle>
+          <CardDescription>
+            Arquivos disponibilizados pelo Escavador para este processo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {documentosLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-20 w-full rounded-xl" />
+              <Skeleton className="h-20 w-full rounded-xl" />
+            </div>
+          ) : documentosError ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Erro ao carregar documentos públicos</AlertTitle>
+              <AlertDescription>{documentosError}</AlertDescription>
+            </Alert>
+          ) : documentosPublicos.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+              Nenhum documento público foi disponibilizado para este processo até o momento.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {documentosPublicos.map((documento) => {
+                const paginasLabel =
+                  documento.paginas && documento.paginas > 0
+                    ? `${documento.paginas} ${documento.paginas === 1 ? "página" : "páginas"}`
+                    : null;
+                const additionalLinks = Object.entries(documento.links).filter(
+                  ([, href]) => href !== documento.downloadUrl,
+                );
+
+                return (
+                  <div
+                    key={documento.id}
+                    className="flex flex-col gap-4 rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-base font-semibold text-foreground">
+                          {documento.titulo}
+                        </p>
+                        {documento.extensao ? (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-primary/40 bg-primary/5 px-2.5 text-[10px] uppercase tracking-wide text-primary"
+                          >
+                            {documento.extensao}
+                          </Badge>
+                        ) : null}
+                        {documento.tipo ? (
+                          <Badge className="rounded-full bg-secondary px-2.5 text-[10px] uppercase tracking-wide text-secondary-foreground">
+                            {documento.tipo}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        {documento.dataFormatada ? (
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {documento.dataFormatada}
+                          </span>
+                        ) : null}
+                        {paginasLabel ? (
+                          <span className="flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5" />
+                            {paginasLabel}
+                          </span>
+                        ) : null}
+                        {documento.key ? (
+                          <span className="truncate text-xs text-muted-foreground">
+                            Chave: {documento.key}
+                          </span>
+                        ) : null}
+                      </div>
+                      {documento.descricao ? (
+                        <p className="text-sm text-muted-foreground">
+                          {documento.descricao}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+                      {documento.downloadUrl ? (
+                        <Button asChild>
+                          <a
+                            href={documento.downloadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Baixar documento
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button variant="outline" disabled className="inline-flex items-center gap-2">
+                          <Download className="h-4 w-4" />
+                          Download indisponível
+                        </Button>
+                      )}
+                      {additionalLinks.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          {additionalLinks.map(([key, href]) => {
+                            const label = key.replace(/_/g, " ");
+                            return (
+                              <a
+                                key={`${documento.id}-${key}`}
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline-offset-2 hover:underline"
+                              >
+                                {label}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
