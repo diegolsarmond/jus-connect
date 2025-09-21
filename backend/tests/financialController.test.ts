@@ -68,8 +68,8 @@ test('listFlows combines financial and opportunity flows', async () => {
   const financialRow = {
     id: 10,
     tipo: 'despesa',
-    conta_id: 7,
-    categoria_id: 3,
+    conta_id: '7',
+    categoria_id: '3',
     descricao: 'Conta de luz',
     valor: 100.5,
     vencimento: new Date('2024-01-10T00:00:00.000Z'),
@@ -162,7 +162,11 @@ test('listFlows combines financial and opportunity flows', async () => {
   assert.equal(calls[0]?.values, undefined);
   assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
   assert.match(calls[1]?.text ?? '', /ff\.id::TEXT AS id/);
+  assert.match(calls[1]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
+  assert.match(calls[1]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
   assert.match(calls[1]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
+  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS conta_id/);
+  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS categoria_id/);
   assert.deepEqual(calls[1]?.values, [1, 1]);
   assert.deepEqual(calls[2]?.values, []);
 });
@@ -180,8 +184,8 @@ test('listFlows preserves textual identifiers returned by the database', async (
   const financialRow = {
     id: textId,
     tipo: 'despesa',
-    conta_id: 9,
-    categoria_id: 4,
+    conta_id: '9',
+    categoria_id: '4',
     descricao: 'Assinatura de software',
     valor: '199.90',
     vencimento: '2024-05-20',
@@ -290,8 +294,8 @@ test('listFlows returns only financial flows when opportunity tables are absent'
   const financialRow = {
     id: 5,
     tipo: 'despesa',
-    conta_id: 1,
-    categoria_id: 2,
+    conta_id: '1',
+    categoria_id: '2',
     descricao: 'Taxa bancária',
     valor: 150.75,
     vencimento: new Date('2024-03-10T00:00:00.000Z'),

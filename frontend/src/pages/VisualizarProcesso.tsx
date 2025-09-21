@@ -604,6 +604,7 @@ const normalizeDocumentoLinks = (
   return normalizedEntries;
 };
 
+
 const mapApiDocumentosPublicos = (
   value: unknown,
 ): ProcessoDocumentoPublico[] => {
@@ -657,6 +658,7 @@ const mapApiDocumentosPublicos = (
     const key = normalizeString(raw.key) || normalizeString(raw.chave) || null;
     const rawLinks = buildDocumentoLinksMap(raw.links, raw.link, raw.url);
     const links = normalizeDocumentoLinks(rawLinks);
+
 
     const downloadPrioridades = [
       "arquivo",
