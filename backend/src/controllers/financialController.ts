@@ -7,6 +7,18 @@ import AsaasChargeService, {
   ValidationError as AsaasValidationError,
 } from '../services/asaasChargeService';
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const normalizeUuid = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return UUID_REGEX.test(trimmed) ? trimmed : null;
+};
+
 const POSTGRES_UNDEFINED_TABLE = '42P01';
 const POSTGRES_UNDEFINED_COLUMN = '42703';
 const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
@@ -162,8 +174,8 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.vencimento::date AS vencimento,
           ff.pagamento::date AS pagamento,
           ff.status AS status,
-          ff.conta_id AS conta_id,
-          ff.categoria_id AS categoria_id,
+          ff.conta_id::TEXT AS conta_id,
+          ff.categoria_id::TEXT AS categoria_id,
           NULL::TEXT AS cliente_id
         FROM financial_flows ff
       `;
@@ -239,8 +251,8 @@ ${baseFinancialFlowsSelect}
             WHEN LOWER(p.status) IN ('quitado','quitada','pago','paga') THEN 'pago'
             ELSE 'pendente'
           END AS status,
-          NULL::INTEGER AS conta_id,
-          NULL::INTEGER AS categoria_id,
+          NULL::TEXT AS conta_id,
+          NULL::TEXT AS categoria_id,
           p.solicitante_id::TEXT AS cliente_id
         FROM oportunidade_parcelas_enriched p
       )
@@ -459,8 +471,12 @@ ${baseFinancialFlowsSelect}
 
 export const getFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const flowId = normalizeUuid(id);
+  if (!flowId) {
+    return res.status(400).json({ error: 'Invalid flow id' });
+  }
   try {
-    const result = await pool.query('SELECT * FROM financial_flows WHERE id = $1', [id]);
+    const result = await pool.query('SELECT * FROM financial_flows WHERE id = $1', [flowId]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Flow not found' });
     res.json({ flow: result.rows[0] });
   } catch (err) {
@@ -551,6 +567,10 @@ export const createFlow = async (req: Request, res: Response) => {
 
 export const updateFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const flowId = normalizeUuid(id);
+  if (!flowId) {
+    return res.status(400).json({ error: 'Invalid flow id' });
+  }
   const {
     tipo,
     descricao,
@@ -578,7 +598,7 @@ export const updateFlow = async (req: Request, res: Response) => {
     await client.query('BEGIN');
     const result = await client.query(
       'UPDATE financial_flows SET tipo=$1, descricao=$2, valor=$3, vencimento=$4, pagamento=$5, status=$6 WHERE id=$7 RETURNING *',
-      [tipo, descricao, valor, vencimento, pagamento, status, id],
+      [tipo, descricao, valor, vencimento, pagamento, status, flowId],
     );
     if (result.rowCount === 0) {
       await client.query('ROLLBACK');
@@ -638,8 +658,12 @@ export const updateFlow = async (req: Request, res: Response) => {
 
 export const deleteFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const flowId = normalizeUuid(id);
+  if (!flowId) {
+    return res.status(400).json({ error: 'Invalid flow id' });
+  }
   try {
-    const result = await pool.query('DELETE FROM financial_flows WHERE id=$1', [id]);
+    const result = await pool.query('DELETE FROM financial_flows WHERE id=$1', [flowId]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Flow not found' });
     res.status(204).send();
   } catch (err) {
@@ -650,9 +674,13 @@ export const deleteFlow = async (req: Request, res: Response) => {
 
 export const settleFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const flowId = normalizeUuid(id);
+  if (!flowId) {
+    return res.status(400).json({ error: 'Invalid flow id' });
+  }
   const { pagamentoData } = req.body;
   try {
-    const current = await pool.query('SELECT external_provider FROM financial_flows WHERE id = $1', [id]);
+    const current = await pool.query('SELECT external_provider FROM financial_flows WHERE id = $1', [flowId]);
     if (current.rowCount === 0) {
       return res.status(404).json({ error: 'Flow not found' });
     }
@@ -664,7 +692,7 @@ export const settleFlow = async (req: Request, res: Response) => {
 
     const result = await pool.query(
       "UPDATE financial_flows SET pagamento=$1, status='pago' WHERE id=$2 RETURNING *",
-      [pagamentoData, id],
+      [pagamentoData, flowId],
     );
     res.json({ flow: result.rows[0] });
   } catch (err) {
@@ -675,6 +703,10 @@ export const settleFlow = async (req: Request, res: Response) => {
 
 export const createAsaasChargeForFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const flowId = normalizeUuid(id);
+  if (!flowId) {
+    return res.status(400).json({ error: 'Invalid flow id' });
+  }
   const {
     paymentMethod,
     clienteId,
@@ -698,7 +730,7 @@ export const createAsaasChargeForFlow = async (req: Request, res: Response) => {
 
   try {
     await client.query('BEGIN');
-    const flowResult = await client.query('SELECT * FROM financial_flows WHERE id = $1', [id]);
+    const flowResult = await client.query('SELECT * FROM financial_flows WHERE id = $1', [flowId]);
     if (flowResult.rowCount === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Flow not found' });

@@ -39,6 +39,7 @@ type OpportunityRow = {
   sequencial_empresa: number;
   data_criacao: string | null;
   ultima_atualizacao: string | null;
+  idempresa: number | null;
 };
 
 type OpportunityDetails = OpportunityRow & {
@@ -464,6 +465,7 @@ async function fetchEmpresaEndereco(empresaId: number | null): Promise<EmpresaAd
       });
 
     if (result && result.rowCount > 0) {
+
       return result.rows[0];
     }
   }
@@ -584,6 +586,7 @@ async function fetchOpportunityAudience(opportunity: OpportunityDetails): Promis
 
   return null;
 }
+
 
 function buildVariables({
   opportunity,
@@ -731,7 +734,8 @@ async function fetchOpportunityData(id: number): Promise<OpportunityData | null>
     `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, idempresa, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
-            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao
+            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao,
+            idempresa
        FROM public.oportunidades WHERE id = $1`,
     [id],
   );
@@ -794,6 +798,7 @@ async function fetchOpportunityData(id: number): Promise<OpportunityData | null>
   if (opportunity.idempresa !== null && opportunity.idempresa !== undefined) {
     const empresaResult = await queryEmpresas<EmpresaRow>('WHERE id = $1 LIMIT 1', [opportunity.idempresa]);
     empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+
   }
 
   if (empresa) {
@@ -804,6 +809,7 @@ async function fetchOpportunityData(id: number): Promise<OpportunityData | null>
   }
 
   const audiencia = await fetchOpportunityAudience(opportunity);
+
 
   return {
     opportunity,
