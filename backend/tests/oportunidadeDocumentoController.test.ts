@@ -128,6 +128,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
     {
       rows: [
         { column_name: 'id' },
+
         { column_name: 'cep' },
         { column_name: 'rua' },
         { column_name: 'numero' },
@@ -230,4 +231,5 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   assert.ok(empresaQuery, 'expected empresa query to be executed');
   assert.match(empresaQuery!.text, /WHERE id = \$1/);
   assert.deepEqual(empresaQuery!.values, [55]);
+
 });

@@ -17,6 +17,7 @@ type OpportunityRow = {
   tipo_processo_id: number | null;
   area_atuacao_id: number | null;
   responsavel_id: number | null;
+  idempresa: number | null;
   numero_processo_cnj: string | null;
   numero_protocolo: string | null;
   vara_ou_orgao: string | null;
@@ -42,6 +43,7 @@ type OpportunityRow = {
   audiencia_local: string | null;
   data_criacao: string | null;
   ultima_atualizacao: string | null;
+  idempresa: number | null;
 };
 
 type OpportunityDetails = OpportunityRow & {
@@ -114,6 +116,21 @@ type EnvolvidoRow = {
   telefone: string | null;
   endereco: string | null;
   relacao: string | null;
+};
+
+type OpportunityAudience = {
+  data: string | null;
+  hora: string | null;
+  local: string | null;
+};
+
+type OpportunityData = {
+  opportunity: OpportunityDetails;
+  solicitante: ClienteRow | null;
+  envolvidos: EnvolvidoRow[];
+  responsavel: ResponsavelRow | null;
+  empresa: EmpresaRow | null;
+  audiencia: OpportunityAudience | null;
 };
 
 type TemplateRow = {
@@ -376,6 +393,7 @@ function formatTimeString(input: string | null, fallbackDate?: string | null): s
   }
 
   return null;
+
 }
 
 async function fetchNomeById(query: string, id: number | null): Promise<string | null> {
@@ -451,7 +469,8 @@ async function fetchEmpresaEndereco(empresaId: number | null): Promise<EmpresaAd
         throw error;
       });
 
-    if (result && (result.rowCount ?? 0) > 0) {
+    if (result && result.rowCount > 0) {
+
       return result.rows[0];
     }
   }
@@ -459,19 +478,129 @@ async function fetchEmpresaEndereco(empresaId: number | null): Promise<EmpresaAd
   return null;
 }
 
+async function fetchOpportunityProcessId(opportunityId: number): Promise<number | null> {
+  const queries = [
+    `SELECT id FROM public.processos WHERE oportunidade_id = $1 ORDER BY atualizado_em DESC NULLS LAST, id DESC LIMIT 1`,
+    `SELECT id FROM public.processos WHERE oportunidade_id = $1 ORDER BY id DESC LIMIT 1`,
+  ];
+
+  for (const query of queries) {
+    const result = await pool
+      .query<{ id: number | null }>(query, [opportunityId])
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (!result || result.rowCount === 0) {
+      continue;
+    }
+
+    const rawId = result.rows[0]?.id;
+    if (rawId === null || rawId === undefined) {
+      continue;
+    }
+
+    const parsed = Number(rawId);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+type AudienceRow = {
+  data?: string | null;
+  hora?: string | null;
+  hora_inicio?: string | null;
+  local?: string | null;
+};
+
+const AUDIENCIA_FILTER = `
+  (
+    (te.nome IS NOT NULL AND LOWER(te.nome) LIKE '%audi%') OR
+    (a.titulo IS NOT NULL AND LOWER(a.titulo) LIKE '%audi%') OR
+    (a.descricao IS NOT NULL AND LOWER(a.descricao) LIKE '%audi%')
+  )
+`;
+
+const buildAgendaAudienceQuery = (column: string): string => `
+  SELECT a.data, a.hora_inicio AS hora, a.local
+    FROM public.agenda a
+    LEFT JOIN public.tipo_evento te ON te.id = a.tipo
+   WHERE a.${column} = $1
+     AND ${AUDIENCIA_FILTER}
+   ORDER BY a.data NULLS LAST, a.hora_inicio NULLS LAST, a.id DESC
+   LIMIT 1
+`;
+
+async function fetchOpportunityAudience(opportunity: OpportunityDetails): Promise<OpportunityAudience | null> {
+  const attempts: Array<{ query: string; params: unknown[] }> = [
+    { query: buildAgendaAudienceQuery('id_oportunidades'), params: [opportunity.id] },
+    { query: buildAgendaAudienceQuery('oportunidade_id'), params: [opportunity.id] },
+  ];
+
+  const processId = await fetchOpportunityProcessId(opportunity.id);
+  if (processId !== null) {
+    attempts.push({ query: buildAgendaAudienceQuery('processo_id'), params: [processId] });
+  }
+
+  attempts.push({
+    query: `
+      SELECT t.data, t.hora, NULL::text AS local
+        FROM public.tarefas t
+       WHERE t.id_oportunidades = $1
+         AND (
+           (t.titulo IS NOT NULL AND LOWER(t.titulo) LIKE '%audi%') OR
+           (t.descricao IS NOT NULL AND LOWER(t.descricao) LIKE '%audi%')
+         )
+       ORDER BY t.data NULLS LAST, t.hora NULLS LAST, t.id DESC
+       LIMIT 1
+    `,
+    params: [opportunity.id],
+  });
+
+  for (const attempt of attempts) {
+    const result = await pool
+      .query<AudienceRow>(attempt.query, attempt.params)
+      .catch((error) => {
+        if (isPgMissingRelationError(error)) {
+          return null;
+        }
+        throw error;
+      });
+
+    if (!result || result.rowCount === 0) {
+      continue;
+    }
+
+    const row = result.rows[0];
+    const data = coerceString(row?.data ?? null);
+    const hora = coerceString(row?.hora ?? row?.hora_inicio ?? null);
+    const local = coerceString(row?.local ?? null);
+
+    return {
+      data,
+      hora,
+      local,
+    };
+  }
+
+  return null;
+}
+
+
 function buildVariables({
   opportunity,
   solicitante,
   envolvidos,
   responsavel,
   empresa,
-}: {
-  opportunity: OpportunityDetails;
-  solicitante: ClienteRow | null;
-  envolvidos: EnvolvidoRow[];
-  responsavel: ResponsavelRow | null;
-  empresa: EmpresaRow | null;
-}): VariableMap {
+  audiencia,
+}: OpportunityData): VariableMap {
   const variables: VariableMap = {};
 
   const assign = (key: string, value: unknown) => {
@@ -510,6 +639,12 @@ function buildVariables({
     formatTimeString(opportunity.audiencia_horario, opportunity.audiencia_data),
   );
   assign('processo.audiencia.local', opportunity.audiencia_local ?? opportunity.vara_ou_orgao);
+
+  if (audiencia) {
+    assign('processo.audiencia.data', formatDatePtBr(audiencia.data));
+    assign('processo.audiencia.horario', formatAudienceTime(audiencia.data, audiencia.hora));
+    assign('processo.audiencia.local', audiencia.local);
+  }
 
   assign('oportunidade.id', opportunity.id);
   assign('oportunidade.data_criacao', formatDatePtBr(opportunity.data_criacao));
@@ -605,13 +740,14 @@ function buildVariables({
   return variables;
 }
 
-async function fetchOpportunityData(id: number) {
+async function fetchOpportunityData(id: number): Promise<OpportunityData | null> {
   const opportunityResult = await pool.query<OpportunityRow>(
-    `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+    `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, idempresa, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
             contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, idempresa,
             audiencia_data, audiencia_horario, audiencia_local, data_criacao, ultima_atualizacao
+
        FROM public.oportunidades WHERE id = $1`,
     [id],
   );
@@ -674,6 +810,7 @@ async function fetchOpportunityData(id: number) {
   if (opportunity.idempresa !== null && opportunity.idempresa !== undefined) {
     const empresaResult = await queryEmpresas<EmpresaRow>('WHERE id = $1', [opportunity.idempresa]);
     empresa = (empresaResult.rowCount ?? 0) > 0 ? empresaResult.rows[0] : null;
+
   }
 
   if (empresa) {
@@ -683,7 +820,17 @@ async function fetchOpportunityData(id: number) {
     }
   }
 
-  return { opportunity, solicitante, envolvidos: envolvidosResult.rows, responsavel, empresa };
+  const audiencia = await fetchOpportunityAudience(opportunity);
+
+
+  return {
+    opportunity,
+    solicitante,
+    envolvidos: envolvidosResult.rows,
+    responsavel,
+    empresa,
+    audiencia,
+  };
 }
 
 export const createOpportunityDocumentFromTemplate = async (req: Request, res: Response) => {
@@ -838,4 +985,9 @@ export const deleteOpportunityDocument = async (req: Request, res: Response) => 
     console.error(error);
     return res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+export const __test__ = {
+  buildVariables,
+  fetchOpportunityData,
 };
