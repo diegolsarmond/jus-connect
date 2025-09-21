@@ -18,6 +18,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { getApiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -37,15 +50,19 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Archive,
+  Check,
   Calendar,
   Clock,
   FileText,
   Gavel as GavelIcon,
   Landmark,
+  Loader2,
   MapPin,
+  RefreshCw,
   Search,
   Users as UsersIcon,
   Eye,
+  ChevronsUpDown,
 } from "lucide-react";
 
 interface ProcessoCliente {
@@ -55,6 +72,12 @@ interface ProcessoCliente {
   papel: string;
 }
 
+interface ProcessoAdvogado {
+  id: number;
+  nome: string;
+  funcao?: string;
+}
+
 interface Processo {
   id: number;
   numero: string;
@@ -62,11 +85,14 @@ interface Processo {
   status: string;
   tipo: string;
   cliente: ProcessoCliente;
-  advogadoResponsavel: string;
+  advogados: ProcessoAdvogado[];
   classeJudicial: string;
   assunto: string;
   jurisdicao: string;
   orgaoJulgador: string;
+  ultimaSincronizacao: string | null;
+  consultasApiCount: number;
+  movimentacoesCount: number;
 }
 
 interface Uf {
@@ -117,14 +143,34 @@ interface ApiProcesso {
   criado_em: string | null;
   atualizado_em: string | null;
   cliente?: ApiProcessoCliente | null;
+  advogados?: ApiProcessoAdvogado[] | null;
+  ultima_sincronizacao?: string | null;
+  consultas_api_count?: number | string | null;
+  movimentacoes_count?: number | string | null;
+}
+
+interface ApiProcessoAdvogado {
+  id?: number | string | null;
+  nome?: string | null;
+  name?: string | null;
+  funcao?: string | null;
+  cargo?: string | null;
+  perfil?: string | null;
+  perfil_nome?: string | null;
+}
+
+interface AdvogadoOption {
+  id: string;
+  nome: string;
+  descricao?: string;
 }
 
 interface ProcessFormState {
   numero: string;
   uf: string;
   municipio: string;
-  orgaoJulgador: string;
   clienteId: string;
+  advogados: string[];
 }
 
 const formatProcessNumber = (value: string) => {
@@ -153,6 +199,81 @@ const formatDateToPtBR = (value: string | null | undefined): string => {
   }
 
   return date.toLocaleDateString("pt-BR");
+};
+
+const formatDateTimeToPtBR = (value: string | null | undefined): string => {
+  if (!value) {
+    return "Nunca sincronizado";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Data inválida";
+  }
+
+  return date.toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+};
+
+const pickFirstNonEmptyString = (
+  ...values: Array<string | null | undefined>
+): string | undefined => {
+  for (const value of values) {
+    if (!value || typeof value !== "string") {
+      continue;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+};
+
+const getNameFromEmail = (email: string | null | undefined): string | undefined => {
+  if (!email || typeof email !== "string") {
+    return undefined;
+  }
+
+  const trimmed = email.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const [localPart] = trimmed.split("@");
+  if (!localPart) {
+    return undefined;
+  }
+
+  return localPart
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+    .trim();
+};
+
+const parseApiInteger = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
 };
 
 const normalizeClienteTipo = (value: string | null | undefined): string => {
@@ -191,8 +312,8 @@ const createEmptyProcessForm = (): ProcessFormState => ({
   numero: "",
   uf: "",
   municipio: "",
-  orgaoJulgador: "",
   clienteId: "",
+  advogados: [],
 });
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
@@ -202,6 +323,51 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     processo.jurisdicao ||
     [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
     "Não informado";
+
+  const advogados: ProcessoAdvogado[] = [];
+  const seen = new Set<number>();
+
+  if (Array.isArray(processo.advogados)) {
+    for (const advogado of processo.advogados) {
+      if (!advogado) {
+        continue;
+      }
+
+      const idValue =
+        typeof advogado.id === "number"
+          ? advogado.id
+          : typeof advogado.id === "string"
+            ? Number.parseInt(advogado.id, 10)
+            : null;
+
+      if (!idValue || !Number.isFinite(idValue) || idValue <= 0 || seen.has(idValue)) {
+        continue;
+      }
+
+      const nome =
+        pickFirstNonEmptyString(advogado.nome, advogado.name, advogado.perfil_nome) ??
+        `Advogado #${idValue}`;
+
+      const funcao = pickFirstNonEmptyString(
+        advogado.funcao,
+        advogado.cargo,
+        advogado.perfil,
+        advogado.perfil_nome,
+      );
+
+      advogados.push({ id: idValue, nome, funcao });
+      seen.add(idValue);
+    }
+  }
+
+  if (advogados.length === 0) {
+    const fallbackNome = processo.advogado_responsavel?.trim();
+    if (fallbackNome) {
+      advogados.push({ id: 0, nome: fallbackNome });
+    }
+  }
+
+  advogados.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   return {
     id: processo.id,
@@ -216,12 +382,14 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
       documento: documento,
       papel: resolveClientePapel(clienteResumo?.tipo),
     },
-    advogadoResponsavel:
-      processo.advogado_responsavel?.trim() || "Não informado",
+    advogados,
     classeJudicial: processo.classe_judicial?.trim() || "Não informada",
     assunto: processo.assunto?.trim() || "Não informado",
     jurisdicao,
     orgaoJulgador: processo.orgao_julgador?.trim() || "Não informado",
+    ultimaSincronizacao: processo.ultima_sincronizacao ?? null,
+    consultasApiCount: parseApiInteger(processo.consultas_api_count),
+    movimentacoesCount: parseApiInteger(processo.movimentacoes_count),
   };
 };
 
@@ -262,6 +430,10 @@ export default function Processos() {
   const [processForm, setProcessForm] = useState<ProcessFormState>(
     createEmptyProcessForm,
   );
+  const [advogadosOptions, setAdvogadosOptions] = useState<AdvogadoOption[]>([]);
+  const [advogadosLoading, setAdvogadosLoading] = useState(false);
+  const [advogadosError, setAdvogadosError] = useState<string | null>(null);
+  const [advogadosPopoverOpen, setAdvogadosPopoverOpen] = useState(false);
   const [ufs, setUfs] = useState<Uf[]>([]);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [municipiosLoading, setMunicipiosLoading] = useState(false);
@@ -271,6 +443,7 @@ export default function Processos() {
   const [processosError, setProcessosError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingProcess, setCreatingProcess] = useState(false);
+  const [syncingProcessId, setSyncingProcessId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -349,6 +522,153 @@ export default function Processos() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchAdvogados = async () => {
+      setAdvogadosLoading(true);
+      setAdvogadosError(null);
+
+      try {
+        const res = await fetch(getApiUrl("get_api_usuarios_empresa"), {
+          headers: { Accept: "application/json" },
+        });
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error("Não foi possível interpretar a resposta de advogados", error);
+        }
+
+        if (!res.ok) {
+          const message =
+            json && typeof json === "object" && "error" in json &&
+            typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível carregar os advogados (HTTP ${res.status})`;
+          throw new Error(message);
+        }
+
+        const payloadArray: Record<string, unknown>[] = Array.isArray(json)
+          ? (json as Record<string, unknown>[])
+          : Array.isArray((json as { data?: unknown[] })?.data)
+            ? ((json as { data: unknown[] }).data as Record<string, unknown>[])
+            : Array.isArray((json as { rows?: unknown[] })?.rows)
+              ? ((json as { rows: unknown[] }).rows as Record<string, unknown>[])
+              : [];
+
+        const options: AdvogadoOption[] = [];
+        const seen = new Set<string>();
+
+        for (const item of payloadArray) {
+          if (!item) {
+            continue;
+          }
+
+          const idRaw = item["id"];
+          let idValue: string | null = null;
+
+          if (typeof idRaw === "number" && Number.isFinite(idRaw)) {
+            idValue = String(Math.trunc(idRaw));
+          } else if (typeof idRaw === "string") {
+            const trimmed = idRaw.trim();
+            if (trimmed) {
+              idValue = trimmed;
+            }
+          }
+
+          if (!idValue || seen.has(idValue)) {
+            continue;
+          }
+
+          const nome = pickFirstNonEmptyString(
+            typeof item["nome_completo"] === "string" ? (item["nome_completo"] as string) : undefined,
+            typeof item["nome"] === "string" ? (item["nome"] as string) : undefined,
+            typeof item["nome_usuario"] === "string" ? (item["nome_usuario"] as string) : undefined,
+            typeof item["nomeusuario"] === "string" ? (item["nomeusuario"] as string) : undefined,
+            typeof item["email"] === "string" ? getNameFromEmail(item["email"] as string) : undefined,
+          );
+
+          if (!nome) {
+            continue;
+          }
+
+          const descricao = pickFirstNonEmptyString(
+            typeof item["perfil_nome"] === "string" ? (item["perfil_nome"] as string) : undefined,
+            typeof item["perfil_nome_exibicao"] === "string"
+              ? (item["perfil_nome_exibicao"] as string)
+              : undefined,
+            typeof item["funcao"] === "string" ? (item["funcao"] as string) : undefined,
+            typeof item["cargo"] === "string" ? (item["cargo"] as string) : undefined,
+          );
+
+          options.push({ id: idValue, nome, descricao });
+          seen.add(idValue);
+        }
+
+        options.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+        if (!cancelled) {
+          setAdvogadosOptions(options);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setAdvogadosOptions([]);
+          setAdvogadosError(
+            error instanceof Error
+              ? error.message
+              : "Erro ao carregar advogados",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setAdvogadosLoading(false);
+        }
+      }
+    };
+
+    fetchAdvogados();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setProcessForm((prev) => {
+      const valid = prev.advogados.filter((id) =>
+        advogadosOptions.some((option) => option.id === id)
+      );
+
+      if (valid.length === prev.advogados.length) {
+        return prev;
+      }
+
+      return { ...prev, advogados: valid };
+    });
+  }, [advogadosOptions]);
+
+  const selectedAdvogados = useMemo(
+    () =>
+      processForm.advogados
+        .map((id) => advogadosOptions.find((option) => option.id === id))
+        .filter((option): option is AdvogadoOption => Boolean(option)),
+    [processForm.advogados, advogadosOptions],
+  );
+
+  const toggleAdvogadoSelection = useCallback((id: string) => {
+    setProcessForm((prev) => {
+      const alreadySelected = prev.advogados.includes(id);
+      const updated = alreadySelected
+        ? prev.advogados.filter((advId) => advId !== id)
+        : [...prev.advogados, id];
+
+      return { ...prev, advogados: updated };
+    });
   }, []);
 
   const loadProcessos = useCallback(async () => {
@@ -526,6 +846,7 @@ export default function Processos() {
   const handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
+      setAdvogadosPopoverOpen(false);
       setProcessForm(createEmptyProcessForm());
       setCreateError(null);
     }
@@ -553,6 +874,15 @@ export default function Processos() {
     setCreatingProcess(true);
 
     try {
+      const advogadosPayload = processForm.advogados
+        .map((id) => Number.parseInt(id, 10))
+        .filter((value) => Number.isFinite(value) && value > 0);
+
+      const jurisdicaoPayload = [processForm.municipio, processForm.uf]
+        .map((value) => value?.trim())
+        .filter((value) => value && value.length > 0)
+        .join(" - ");
+
       const res = await fetch(getApiUrl("processos"), {
         method: "POST",
         headers: {
@@ -564,8 +894,8 @@ export default function Processos() {
           numero: processForm.numero,
           uf: processForm.uf,
           municipio: processForm.municipio,
-          orgao_julgador: processForm.orgaoJulgador,
-          jurisdicao: `${processForm.municipio} - ${processForm.uf}`,
+          ...(jurisdicaoPayload ? { jurisdicao: jurisdicaoPayload } : {}),
+          advogados: advogadosPayload,
         }),
       });
 
@@ -611,11 +941,95 @@ export default function Processos() {
     }
   };
 
+  const handleSyncProcess = useCallback(
+    async (processoId: number) => {
+      if (syncingProcessId === processoId) {
+        return;
+      }
+
+      setSyncingProcessId(processoId);
+
+      try {
+        const res = await fetch(getApiUrl(`processos/${processoId}/sincronizar`), {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        });
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error("Não foi possível interpretar a resposta de sincronização", error);
+        }
+
+        if (!res.ok) {
+          const message =
+            json && typeof json === "object" &&
+            "error" in json &&
+            typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível sincronizar o processo (HTTP ${res.status})`;
+          throw new Error(message);
+        }
+
+        const processoPayload =
+          (json as { processo?: ApiProcesso | null })?.processo ?? (json as ApiProcesso | null);
+
+        if (!processoPayload || typeof processoPayload !== "object") {
+          throw new Error(
+            "Resposta inválida do servidor ao sincronizar o processo",
+          );
+        }
+
+        const mapped = mapApiProcessoToProcesso(processoPayload as ApiProcesso);
+
+        setProcessos((prev) =>
+          prev.map((processo) => (processo.id === mapped.id ? mapped : processo)),
+        );
+
+        const movimentacoesInfo =
+          (json as {
+            movimentacoes?: { novas?: unknown; total?: unknown } | null;
+          })?.movimentacoes ?? null;
+
+        if (movimentacoesInfo && typeof movimentacoesInfo === "object") {
+          const novas = parseApiInteger(
+            (movimentacoesInfo as { novas?: unknown }).novas,
+          );
+          const total = parseApiInteger(
+            (movimentacoesInfo as { total?: unknown }).total,
+          );
+
+          toast({
+            title: "Processo sincronizado com sucesso",
+            description:
+              novas > 0
+                ? `${novas} novas movimentações registradas (total: ${total}).`
+                : `Nenhuma nova movimentação encontrada (total registrado: ${total}).`,
+          });
+        } else {
+          toast({ title: "Processo sincronizado com sucesso" });
+        }
+      } catch (error) {
+        console.error(error);
+        const message =
+          error instanceof Error ? error.message : "Erro ao sincronizar o processo";
+        toast({
+          title: "Erro ao sincronizar processo",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setSyncingProcessId(null);
+      }
+    },
+    [syncingProcessId, toast],
+  );
+
   const isCreateDisabled =
     !processForm.numero ||
     !processForm.uf ||
     !processForm.municipio ||
-    !processForm.orgaoJulgador ||
     !processForm.clienteId ||
     creatingProcess;
 
@@ -639,10 +1053,11 @@ export default function Processos() {
       const searchPool = [
         processo.numero,
         processo.cliente?.nome,
-        processo.advogadoResponsavel,
         processo.status,
         processo.tipo,
         processo.orgaoJulgador,
+        processo.classeJudicial,
+        processo.advogados.map((adv) => adv.nome).join(" "),
       ];
 
       const hasTextMatch = searchPool.some((value) => {
@@ -868,31 +1283,66 @@ export default function Processos() {
                         <Clock className="h-4 w-4" />
                         {processo.assunto}
                       </span>
+                      <span className="hidden h-4 w-px bg-border/60 xl:block" aria-hidden />
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <RefreshCw className="h-4 w-4" />
+                        {processo.movimentacoesCount} movimentações
+                      </span>
                     </CardDescription>
                   </div>
                   <div className="flex flex-col items-start gap-3 text-sm text-muted-foreground md:items-end">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 md:self-end"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        navigate(`/clientes/${processo.cliente.id}/processos/${processo.id}`);
-                      }}
-                    >
-                      <Eye className="h-4 w-4" />
-                      Visualizar processo
-                    </Button>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          navigate(`/clientes/${processo.cliente.id}/processos/${processo.id}`);
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                        Visualizar
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="gap-2"
+                        disabled={syncingProcessId === processo.id}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleSyncProcess(processo.id);
+                        }}
+                      >
+                        {syncingProcessId === processo.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Sincronizar
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-left md:justify-end">
                       <UsersIcon className="h-4 w-4" />
-                      <span className="font-medium text-foreground">
-                        {processo.advogadoResponsavel}
-                      </span>
+                      {processo.advogados.length === 0 ? (
+                        <span>Nenhum advogado vinculado</span>
+                      ) : (
+                        <span className="font-medium text-foreground">
+                          {processo.advogados.map((adv) => adv.nome).join(", ")}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Landmark className="h-4 w-4" />
                       <span>{processo.orgaoJulgador}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        Última sincronização: {formatDateTimeToPtBR(processo.ultimaSincronizacao)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -919,6 +1369,27 @@ export default function Processos() {
                         >
                           {processo.cliente.papel}
                         </Badge>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Equipe jurídica
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-start gap-2 text-sm text-foreground">
+                        {processo.advogados.length === 0 ? (
+                          <span className="text-muted-foreground">Nenhum advogado vinculado</span>
+                        ) : (
+                          processo.advogados.map((adv) => (
+                            <Badge
+                              key={`${processo.id}-${adv.id}`}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {adv.nome}
+                              {adv.funcao ? ` · ${adv.funcao}` : ""}
+                            </Badge>
+                          ))
+                        )}
                       </div>
                     </div>
                     <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
@@ -960,11 +1431,32 @@ export default function Processos() {
                   </div>
                   <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Movimentações
+                      Sincronização e movimentações
                     </p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      As movimentações automáticas estão indisponíveis porque a integração com o CNJ foi desativada.
+                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-foreground">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <RefreshCw className="h-4 w-4" />
+                        {processo.consultasApiCount > 0
+                          ? `${processo.consultasApiCount} sincronizações registradas`
+                          : "Nenhuma sincronização realizada"}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        Última sincronização: {formatDateTimeToPtBR(processo.ultimaSincronizacao)}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <FileText className="h-4 w-4" />
+                        {processo.movimentacoesCount} movimentações registradas
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Utilize o botão “Sincronizar” para importar as movimentações mais recentes deste processo.
                     </p>
+                    {processo.movimentacoesCount > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Consulte a visualização detalhada para acompanhar todas as movimentações armazenadas.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </AccordionContent>
@@ -1075,18 +1567,101 @@ export default function Processos() {
               </Select>
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="process-orgao">Órgão Julgador</Label>
-              <Input
-                id="process-orgao"
-                placeholder="Informe o órgão julgador"
-                value={processForm.orgaoJulgador}
-                onChange={(event) =>
-                  setProcessForm((prev) => ({
-                    ...prev,
-                    orgaoJulgador: event.target.value,
-                  }))
-                }
-              />
+              <Label>Advogados responsáveis</Label>
+              <Popover
+                open={advogadosPopoverOpen}
+                onOpenChange={setAdvogadosPopoverOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={advogadosPopoverOpen}
+                    className="w-full justify-between"
+                    disabled={advogadosLoading && advogadosOptions.length === 0}
+                  >
+                    <span className="truncate">
+                      {advogadosLoading && advogadosOptions.length === 0
+                        ? "Carregando advogados..."
+                        : selectedAdvogados.length === 0
+                          ? advogadosOptions.length === 0
+                            ? "Nenhum advogado disponível"
+                            : "Selecione os advogados responsáveis"
+                          : selectedAdvogados.length === 1
+                            ? selectedAdvogados[0].nome
+                            : `${selectedAdvogados.length} advogados selecionados`}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Pesquisar advogados..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {advogadosLoading
+                          ? "Carregando advogados..."
+                          : advogadosError ?? "Nenhum advogado encontrado"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {advogadosOptions.map((advogado) => {
+                          const selected = processForm.advogados.includes(advogado.id);
+                          return (
+                            <CommandItem
+                              key={advogado.id}
+                              value={`${advogado.nome} ${advogado.descricao ?? ""}`}
+                              onSelect={() => toggleAdvogadoSelection(advogado.id)}
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${selected ? "opacity-100" : "opacity-0"}`}
+                              />
+                              <div className="flex flex-col">
+                                <span>{advogado.nome}</span>
+                                {advogado.descricao ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {advogado.descricao}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedAdvogados.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {selectedAdvogados.map((advogado) => (
+                    <Badge
+                      key={`selected-${advogado.id}`}
+                      variant="secondary"
+                      className="flex items-center gap-1 text-xs"
+                    >
+                      <span>{advogado.nome}</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleAdvogadoSelection(advogado.id)}
+                        className="ml-1 text-muted-foreground transition hover:text-foreground"
+                        aria-label={`Remover ${advogado.nome}`}
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {advogadosError
+                    ? advogadosError
+                    : "Selecione os advogados responsáveis pelo processo (opcional)."}
+                </p>
+              )}
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="process-number">Número do processo</Label>

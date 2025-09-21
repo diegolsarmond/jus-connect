@@ -6,6 +6,7 @@ import {
   createProcesso,
   updateProcesso,
   deleteProcesso,
+  syncProcessoMovimentacoes,
 } from '../controllers/processoController';
 
 const router = Router();
@@ -47,6 +48,22 @@ const router = Router();
  *         data_distribuicao:
  *           type: string
  *           format: date
+ *         ultima_sincronizacao:
+ *           type: string
+ *           format: date-time
+ *         consultas_api_count:
+ *           type: integer
+ *         movimentacoes_count:
+ *           type: integer
+ *         advogados:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: integer
+ *               nome:
+ *                 type: string
  *         criado_em:
  *           type: string
  *           format: date-time
@@ -154,7 +171,6 @@ router.get('/processos/:id', getProcessoById);
  *               - numero
  *               - uf
  *               - municipio
- *               - orgao_julgador
  *             properties:
  *               cliente_id:
  *                 type: integer
@@ -163,8 +179,6 @@ router.get('/processos/:id', getProcessoById);
  *               uf:
  *                 type: string
  *               municipio:
- *                 type: string
- *               orgao_julgador:
  *                 type: string
  *               tipo:
  *                 type: string
@@ -181,6 +195,10 @@ router.get('/processos/:id', getProcessoById);
  *               data_distribuicao:
  *                 type: string
  *                 format: date
+ *               advogados:
+ *                 type: array
+ *                 items:
+ *                   type: integer
  *     responses:
  *       201:
  *         description: Processo criado com sucesso
@@ -194,6 +212,32 @@ router.get('/processos/:id', getProcessoById);
  *         description: Número de processo já cadastrado
  */
 router.post('/processos', createProcesso);
+
+/**
+ * @swagger
+ * /api/processos/{id}/sincronizar:
+ *   post:
+ *     summary: Sincroniza as movimentações de um processo com a API externa
+ *     tags: [Processos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Processo sincronizado com sucesso
+ *       400:
+ *         description: Dados inválidos para sincronização
+ *       401:
+ *         description: Token inválido
+ *       404:
+ *         description: Processo não encontrado
+ *       502:
+ *         description: Falha ao consultar o provedor externo
+ */
+router.post('/processos/:id/sincronizar', syncProcessoMovimentacoes);
 
 /**
  * @swagger
@@ -218,7 +262,6 @@ router.post('/processos', createProcesso);
  *               - numero
  *               - uf
  *               - municipio
- *               - orgao_julgador
  *             properties:
  *               cliente_id:
  *                 type: integer
@@ -227,8 +270,6 @@ router.post('/processos', createProcesso);
  *               uf:
  *                 type: string
  *               municipio:
- *                 type: string
- *               orgao_julgador:
  *                 type: string
  *               tipo:
  *                 type: string
@@ -245,6 +286,10 @@ router.post('/processos', createProcesso);
  *               data_distribuicao:
  *                 type: string
  *                 format: date
+ *               advogados:
+ *                 type: array
+ *                 items:
+ *                   type: integer
  *     responses:
  *       200:
  *         description: Processo atualizado
