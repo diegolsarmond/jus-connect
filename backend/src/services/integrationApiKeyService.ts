@@ -2,11 +2,13 @@ import { QueryResultRow } from 'pg';
 import { URL } from 'url';
 import pool from './db';
 
-export const API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas'] as const;
+export const API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas', 'escavador'] as const;
 export type ApiKeyProvider = (typeof API_KEY_PROVIDERS)[number];
 
 export const API_KEY_ENVIRONMENTS = ['producao', 'homologacao'] as const;
 export type ApiKeyEnvironment = (typeof API_KEY_ENVIRONMENTS)[number];
+
+export const ESCAVADOR_DEFAULT_API_URL = 'https://api.escavador.com/api/v2';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -70,11 +72,15 @@ function getDefaultApiUrl(
   provider: ApiKeyProvider,
   environment: ApiKeyEnvironment,
 ): string | null {
-  if (provider !== 'asaas') {
-    return null;
+  if (provider === 'asaas') {
+    return ASAAS_DEFAULT_API_URLS[environment] ?? null;
   }
 
-  return ASAAS_DEFAULT_API_URLS[environment] ?? null;
+  if (provider === 'escavador') {
+    return ESCAVADOR_DEFAULT_API_URL;
+  }
+
+  return null;
 }
 
 function normalizeProvider(value: string | undefined): ApiKeyProvider {
@@ -86,7 +92,7 @@ function normalizeProvider(value: string | undefined): ApiKeyProvider {
     throw new ValidationError('Provider is required');
   }
   if (!API_KEY_PROVIDERS.includes(normalized as ApiKeyProvider)) {
-    throw new ValidationError('Provider must be Gemini, OpenAI or Asaas');
+    throw new ValidationError('Provider must be Gemini, OpenAI, Asaas or Escavador');
   }
   return normalized as ApiKeyProvider;
 }

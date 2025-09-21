@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { PoolClient } from 'pg';
+import IntegrationApiKeyService, {
+  ESCAVADOR_DEFAULT_API_URL,
+} from '../services/integrationApiKeyService';
+
 import pool from '../services/db';
 import { Processo } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
@@ -12,6 +16,19 @@ const normalizeString = (value: unknown): string | null => {
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
 };
+
+const integrationApiKeyService = new IntegrationApiKeyService();
+const DEFAULT_ESCAVADOR_INTEGRATION_ID = 4;
+const parsedEscavadorIntegrationId = Number.parseInt(
+  process.env.ESCAVADOR_INTEGRATION_ID ?? '',
+  10,
+);
+const ESCAVADOR_INTEGRATION_ID =
+  Number.isNaN(parsedEscavadorIntegrationId) || parsedEscavadorIntegrationId <= 0
+    ? DEFAULT_ESCAVADOR_INTEGRATION_ID
+    : parsedEscavadorIntegrationId;
+const FALLBACK_ESCAVADOR_API_BASE_URL =
+  normalizeString(process.env.ESCAVADOR_API_BASE_URL) ?? ESCAVADOR_DEFAULT_API_URL;
 
 const normalizeUppercase = (value: unknown): string | null => {
   const normalized = normalizeString(value);
@@ -361,10 +378,6 @@ const baseProcessoSelect = `
   FROM public.processos p
   LEFT JOIN public.clientes c ON c.id = p.cliente_id
 `;
-
-const ESCAVADOR_API_BASE_URL =
-  process.env.ESCAVADOR_API_BASE_URL ?? 'https://api.escavador.com/api/v2';
-const ESCAVADOR_API_TOKEN = process.env.ESCAVADOR_API_TOKEN ?? '';
 
 const mapProcessoRow = (row: any): Processo => ({
   id: row.id,
@@ -734,6 +747,7 @@ export const createProcesso = async (req: Request, res: Response) => {
 
       await clientDb.query('COMMIT');
 
+
       if (finalResult.rowCount === 0) {
         throw new Error('Não foi possível localizar o processo recém-criado.');
       }
@@ -1059,13 +1073,43 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
         .json({ error: 'Número do processo inválido para sincronização.' });
     }
 
-    if (!ESCAVADOR_API_TOKEN) {
+    const escavadorIntegration = await integrationApiKeyService.findById(
+      ESCAVADOR_INTEGRATION_ID,
+    );
+
+    if (!escavadorIntegration) {
       return res.status(503).json({
-        error: 'Token da API Escavador não configurado. Configure ESCAVADOR_API_TOKEN.',
+        error:
+          'Integração do Escavador não configurada. Cadastre a chave (ID 4) em Configurações > Integrações.',
       });
     }
 
-    const endpointBase = ESCAVADOR_API_BASE_URL.replace(/\/$/, '');
+    if (escavadorIntegration.provider !== 'escavador') {
+      return res.status(503).json({
+        error: 'A integração configurada não corresponde ao provedor Escavador.',
+      });
+    }
+
+    if (!escavadorIntegration.active) {
+      return res.status(503).json({
+        error: 'Integração do Escavador desativada. Ative a chave para sincronizar processos.',
+      });
+    }
+
+    const escavadorToken = normalizeString(escavadorIntegration.key);
+
+    if (!escavadorToken) {
+      return res.status(503).json({
+        error: 'Chave de API do Escavador não definida. Atualize a integração para continuar.',
+      });
+    }
+
+    const baseFromIntegration = normalizeString(escavadorIntegration.apiUrl);
+    const endpointBase = (baseFromIntegration ?? FALLBACK_ESCAVADOR_API_BASE_URL).replace(
+      /\/$/,
+      '',
+    );
+
     const url = `${endpointBase}/processos/numero_cnj/${encodeURIComponent(numeroProcesso)}/movimentacoes`;
 
     let externalResponse: globalThis.Response;
@@ -1073,7 +1117,8 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
     try {
       externalResponse = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${ESCAVADOR_API_TOKEN}`,
+          Authorization: `Bearer ${escavadorToken}`,
+
           'X-Requested-With': 'XMLHttpRequest',
           Accept: 'application/json',
         },
@@ -1087,6 +1132,17 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
       return res
         .status(502)
         .json({ error: 'Falha ao consultar a API de movimentações.' });
+    }
+
+    try {
+      await integrationApiKeyService.update(escavadorIntegration.id, {
+        lastUsed: new Date(),
+      });
+    } catch (updateError) {
+      console.error(
+        'Não foi possível atualizar a data de último uso da integração do Escavador',
+        updateError,
+      );
     }
 
     let payload: any = null;
