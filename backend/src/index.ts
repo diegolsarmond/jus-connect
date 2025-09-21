@@ -8,6 +8,7 @@ import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
 import escritorioRoutes from './routes/escritorioRoutes';
 import perfilRoutes from './routes/perfilRoutes';
 import planoRoutes from './routes/planoRoutes';
+import subscriptionRoutes from './routes/subscriptionRoutes';
 import situacaoClienteRoutes from './routes/situacaoClienteRoutes';
 import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
 import situacaoPropostaRoutes from './routes/situacaoPropostaRoutes';
@@ -205,6 +206,7 @@ registerModuleRoutes(
   perfilRoutes
 );
 registerModuleRoutes('configuracoes', planoRoutes);
+registerModuleRoutes('configuracoes', subscriptionRoutes);
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-situacao-processo'],
   situacaoProcessoRoutes
