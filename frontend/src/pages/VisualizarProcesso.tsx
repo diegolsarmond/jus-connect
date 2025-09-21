@@ -9,6 +9,8 @@ import {
   MapPin,
   Users,
   AlertCircle,
+  RefreshCw,
+  Newspaper,
 } from "lucide-react";
 
 import {
@@ -31,6 +33,19 @@ interface ApiProcessoCliente {
   tipo?: string | null;
 }
 
+interface ApiProcessoMovimentacao {
+  id?: number | string | null;
+  data?: string | null;
+  tipo?: string | null;
+  tipo_publicacao?: string | null;
+  classificacao_predita?: Record<string, unknown> | null;
+  conteudo?: string | null;
+  texto_categoria?: string | null;
+  fonte?: Record<string, unknown> | null;
+  criado_em?: string | null;
+  atualizado_em?: string | null;
+}
+
 interface ApiProcessoResponse {
   id?: number | null;
   cliente_id?: number | null;
@@ -48,6 +63,10 @@ interface ApiProcessoResponse {
   criado_em?: string | null;
   atualizado_em?: string | null;
   cliente?: ApiProcessoCliente | null;
+  movimentacoes?: ApiProcessoMovimentacao[] | null;
+  movimentacoes_count?: number | string | null;
+  consultas_api_count?: number | string | null;
+  ultima_sincronizacao?: string | null;
 }
 
 interface ProcessoDetalhes {
@@ -72,6 +91,35 @@ interface ProcessoDetalhes {
     documento: string | null;
     papel: string;
   } | null;
+  consultasApiCount: number;
+  ultimaSincronizacao: string | null;
+  movimentacoesCount: number;
+  movimentacoes: ProcessoMovimentacaoDetalhe[];
+}
+
+interface ProcessoMovimentacaoDetalhe {
+  id: string;
+  data: string | null;
+  dataFormatada: string | null;
+  tipo: string;
+  tipoPublicacao: string | null;
+  conteudo: string | null;
+  textoCategoria: string | null;
+  classificacao: {
+    nome: string;
+    descricao: string | null;
+    hierarquia: string | null;
+  } | null;
+  fonte: {
+    nome: string | null;
+    sigla: string | null;
+    tipo: string | null;
+    caderno: string | null;
+    grau: string | null;
+    grauFormatado: string | null;
+  } | null;
+  criadoEm: string | null;
+  atualizadoEm: string | null;
 }
 
 const formatDateToPtBR = (value: string | null | undefined): string | null => {
@@ -156,6 +204,179 @@ const resolveClientePapel = (tipo: string | null | undefined): string => {
   return "Parte";
 };
 
+const parseInteger = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+};
+
+const decodeHtmlEntities = (value: string): string =>
+  value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/");
+
+const normalizeMovimentacaoText = (
+  value: string | null | undefined,
+): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const decoded = decodeHtmlEntities(value)
+    .replace(/\r\n/g, "\n")
+    .replace(/\u00a0/g, " ");
+
+  const trimmed = decoded.trim();
+  return trimmed ? trimmed : null;
+};
+
+const mapApiMovimentacoes = (
+  value: unknown,
+): ProcessoMovimentacaoDetalhe[] => {
+  const movimentacoes: ProcessoMovimentacaoDetalhe[] = [];
+
+  const processItem = (item: unknown) => {
+    if (!item || typeof item !== "object") {
+      return;
+    }
+
+    const raw = item as ApiProcessoMovimentacao;
+    const idCandidate = raw.id ?? null;
+    let id: string | null = null;
+
+    if (typeof idCandidate === "number" && Number.isFinite(idCandidate)) {
+      id = String(Math.trunc(idCandidate));
+    } else if (typeof idCandidate === "string") {
+      const trimmed = idCandidate.trim();
+      if (trimmed) {
+        id = trimmed;
+      }
+    }
+
+    if (!id) {
+      return;
+    }
+
+    const dataValue = normalizeString(raw.data) || null;
+    const dataFormatada = dataValue ? formatDateToPtBR(dataValue) : null;
+    const tipo = normalizeString(raw.tipo) || "Movimentação";
+    const tipoPublicacao = normalizeString(raw.tipo_publicacao) || null;
+    const conteudo = normalizeMovimentacaoText(raw.conteudo);
+    const textoCategoria = normalizeMovimentacaoText(raw.texto_categoria);
+
+    let classificacao: ProcessoMovimentacaoDetalhe["classificacao"] = null;
+    const rawClassificacao = raw.classificacao_predita;
+
+    if (rawClassificacao && typeof rawClassificacao === "object") {
+      const classificacaoObj = rawClassificacao as Record<string, unknown>;
+      const nome = normalizeString(classificacaoObj.nome);
+      const descricao = normalizeMovimentacaoText(
+        typeof classificacaoObj.descricao === "string"
+          ? classificacaoObj.descricao
+          : null,
+      );
+      const hierarquia = normalizeString(classificacaoObj.hierarquia);
+
+      if (nome || descricao || hierarquia) {
+        classificacao = {
+          nome: nome || "Classificação predita",
+          descricao,
+          hierarquia: hierarquia || null,
+        };
+      }
+    }
+
+    let fonte: ProcessoMovimentacaoDetalhe["fonte"] = null;
+    const rawFonte = raw.fonte;
+
+    if (rawFonte && typeof rawFonte === "object") {
+      const fonteObj = rawFonte as Record<string, unknown>;
+      const nome = normalizeString(fonteObj.nome) || null;
+      const sigla = normalizeString(fonteObj.sigla) || null;
+      const tipoFonte = normalizeString(fonteObj.tipo) || null;
+      const caderno = normalizeString(fonteObj.caderno) || null;
+      const grauFormatado = normalizeString(fonteObj.grau_formatado) || null;
+      const grauValue =
+        normalizeString(fonteObj.grau) ||
+        (typeof fonteObj.grau === "number" ? String(fonteObj.grau) : null);
+
+      if (nome || sigla || tipoFonte || caderno || grauFormatado || grauValue) {
+        fonte = {
+          nome,
+          sigla,
+          tipo: tipoFonte,
+          caderno,
+          grau: grauValue,
+          grauFormatado,
+        };
+      }
+    }
+
+    movimentacoes.push({
+      id,
+      data: dataValue,
+      dataFormatada: dataFormatada ?? dataValue,
+      tipo,
+      tipoPublicacao,
+      conteudo,
+      textoCategoria,
+      classificacao,
+      fonte,
+      criadoEm: normalizeString(raw.criado_em) || null,
+      atualizadoEm: normalizeString(raw.atualizado_em) || null,
+    });
+  };
+
+  if (Array.isArray(value)) {
+    value.forEach(processItem);
+    return movimentacoes;
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(processItem);
+      } else {
+        processItem(parsed);
+      }
+    } catch {
+      // ignore invalid JSON
+    }
+
+    return movimentacoes;
+  }
+
+  if (value && typeof value === "object") {
+    const possibleRows = (value as { rows?: unknown[] }).rows;
+    if (Array.isArray(possibleRows)) {
+      possibleRows.forEach(processItem);
+    }
+  }
+
+  return movimentacoes;
+};
+
 const mapApiProcessoToDetalhes = (
   processo: ApiProcessoResponse,
   fallbackId?: string | number,
@@ -187,6 +408,12 @@ const mapApiProcessoToDetalhes = (
     normalizeString(clienteResumo?.nome) || "Cliente não informado";
   const clienteDocumento = normalizeString(clienteResumo?.documento) || null;
   const clientePapel = resolveClientePapel(clienteResumo?.tipo);
+  const movimentacoes = mapApiMovimentacoes(processo.movimentacoes);
+  const consultasApiCount = parseInteger(processo.consultas_api_count);
+  const movimentacoesCount = Math.max(
+    parseInteger(processo.movimentacoes_count),
+    movimentacoes.length,
+  );
 
   return {
     id:
@@ -215,6 +442,10 @@ const mapApiProcessoToDetalhes = (
           papel: clientePapel,
         }
       : null,
+    consultasApiCount,
+    ultimaSincronizacao: processo.ultima_sincronizacao ?? null,
+    movimentacoesCount,
+    movimentacoes,
   };
 };
 
@@ -339,6 +570,11 @@ export default function VisualizarProcesso() {
         ? formatDateToPtBR(processo.dataDistribuicao)
         : null),
     [processo?.dataDistribuicao, processo?.dataDistribuicaoFormatada],
+  );
+
+  const ultimaSincronizacaoLabel = useMemo(
+    () => formatDateTimeOrNull(processo?.ultimaSincronizacao),
+    [processo?.ultimaSincronizacao],
   );
 
   const handleGerarContrato = useCallback(() => {
@@ -515,12 +751,147 @@ export default function VisualizarProcesso() {
 
           <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Movimentações externas
+              Sincronização com o Escavador
             </p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              As integrações automáticas com o CNJ estão desativadas. Consulte o andamento diretamente no sistema do tribunal, se necessário.
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <RefreshCw className="h-4 w-4" />
+                {processo.consultasApiCount > 0
+                  ? `${processo.consultasApiCount} sincronizações registradas`
+                  : "Nenhuma sincronização realizada"}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4" />
+                {ultimaSincronizacaoLabel
+                  ? `Última sincronização em ${ultimaSincronizacaoLabel}`
+                  : "Nunca sincronizado"}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <FileText className="h-4 w-4" />
+                {processo.movimentacoesCount} movimentações armazenadas
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Utilize o botão de sincronização para importar publicações e andamentos diretamente do tribunal.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold">
+            Movimentações sincronizadas
+          </CardTitle>
+          <CardDescription>
+            Acompanhe as publicações e andamentos capturados automaticamente pelo Escavador.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {processo.movimentacoes.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+              Nenhuma movimentação foi sincronizada até o momento. Utilize a ação de sincronização na listagem de processos para importar os dados do tribunal.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {processo.movimentacoes.map((movimentacao) => {
+                const fonteDescricao = movimentacao.fonte
+                  ? [
+                      movimentacao.fonte.sigla && movimentacao.fonte.nome
+                        ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
+                        : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
+                      movimentacao.fonte.caderno,
+                      movimentacao.fonte.grauFormatado ?? movimentacao.fonte.grau,
+                      movimentacao.fonte.tipo,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : null;
+
+                return (
+                  <div
+                    key={movimentacao.id}
+                    className="rounded-lg border border-border/60 bg-muted/20 p-4 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground">
+                            {movimentacao.tipo}
+                          </p>
+                          {movimentacao.tipoPublicacao ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] uppercase tracking-wide"
+                            >
+                              {movimentacao.tipoPublicacao}
+                            </Badge>
+                          ) : null}
+                          {movimentacao.classificacao ? (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] uppercase tracking-wide"
+                            >
+                              {movimentacao.classificacao.nome}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        {fonteDescricao ? (
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                            <Newspaper className="h-3.5 w-3.5" />
+                            <span>{fonteDescricao}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {movimentacao.dataFormatada ?? movimentacao.data ?? "Data não informada"}
+                        </span>
+                        {movimentacao.criadoEm ? (
+                          <>
+                            <span aria-hidden className="hidden h-3 w-px bg-border/60 sm:block" />
+                            <span>
+                              Registrado em {formatDateTimeToPtBR(movimentacao.criadoEm)}
+                            </span>
+                          </>
+                        ) : null}
+                        {movimentacao.atualizadoEm &&
+                        movimentacao.atualizadoEm !== movimentacao.criadoEm ? (
+                          <>
+                            <span aria-hidden className="hidden h-3 w-px bg-border/60 sm:block" />
+                            <span>
+                              Atualizado em {formatDateTimeToPtBR(movimentacao.atualizadoEm)}
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    {movimentacao.conteudo ? (
+                      <div className="mt-3 rounded-md border border-border/40 bg-background/70 p-3 text-sm text-foreground whitespace-pre-line">
+                        {movimentacao.conteudo}
+                      </div>
+                    ) : null}
+                    {movimentacao.textoCategoria ? (
+                      <div className="mt-3 rounded-md border border-dashed border-border/40 bg-background/50 p-3 text-sm text-foreground whitespace-pre-line">
+                        {movimentacao.textoCategoria}
+                      </div>
+                    ) : null}
+                    {movimentacao.classificacao?.descricao ? (
+                      <p className="mt-3 text-xs text-muted-foreground whitespace-pre-line">
+                        {movimentacao.classificacao.descricao}
+                      </p>
+                    ) : null}
+                    {movimentacao.classificacao?.hierarquia ? (
+                      <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                        Hierarquia: {movimentacao.classificacao.hierarquia}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
