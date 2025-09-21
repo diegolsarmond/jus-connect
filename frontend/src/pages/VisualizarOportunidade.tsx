@@ -22,6 +22,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +51,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { format as dfFormat, parseISO } from "date-fns";
+import { Download, ExternalLink, FileText, Loader2, Trash } from "lucide-react";
+import { createSimplePdfFromHtml } from "@/lib/pdf";
 
 interface Envolvido {
   nome?: string;
@@ -218,6 +230,104 @@ const sanitizeInteractionEntries = (value: unknown): InteractionEntry[] => {
   });
 
   return entries;
+};
+
+interface OpportunityDocument {
+  id: number;
+  oportunidade_id?: number | null;
+  template_id: number | null;
+  title: string;
+  created_at: string;
+  content_html: string;
+  variables?: Record<string, unknown>;
+  metadata?: unknown;
+}
+
+const normalizeOpportunityDocuments = (payload: unknown): OpportunityDocument[] => {
+  const extractList = (): unknown[] => {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (typeof payload === "object") {
+      const documents = (payload as { documents?: unknown }).documents;
+      if (Array.isArray(documents)) return documents;
+    }
+    return [];
+  };
+
+  const items = extractList();
+  return items.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+
+    const rawId = record["id"];
+    const numericId =
+      typeof rawId === "number"
+        ? rawId
+        : typeof rawId === "string"
+          ? Number.parseInt(rawId, 10)
+          : Number.NaN;
+    if (!Number.isFinite(numericId)) return [];
+
+    const rawTemplateId = record["template_id"];
+    const templateId = (() => {
+      if (typeof rawTemplateId === "number") {
+        return Number.isFinite(rawTemplateId) ? rawTemplateId : null;
+      }
+      if (typeof rawTemplateId === "string") {
+        const parsed = Number.parseInt(rawTemplateId, 10);
+        return Number.isNaN(parsed) ? null : parsed;
+      }
+      return null;
+    })();
+
+    const rawTitle = record["title"];
+    const title =
+      typeof rawTitle === "string" && rawTitle.trim().length > 0
+        ? rawTitle.trim()
+        : `Documento ${numericId}`;
+
+    const rawCreatedAt = record["created_at"];
+    const createdAt =
+      typeof rawCreatedAt === "string" && rawCreatedAt.trim().length > 0
+        ? rawCreatedAt.trim()
+        : new Date().toISOString();
+
+    const rawContent = record["content_html"];
+    const contentHtml =
+      typeof rawContent === "string" && rawContent.trim().length > 0
+        ? rawContent
+        : "<p></p>";
+
+    const rawVariables = record["variables"];
+    const variables =
+      rawVariables && typeof rawVariables === "object" && !Array.isArray(rawVariables)
+        ? (rawVariables as Record<string, unknown>)
+        : undefined;
+
+    return [
+      {
+        id: numericId,
+        oportunidade_id: (record["oportunidade_id"] as number | null | undefined) ?? null,
+        template_id: templateId,
+        title,
+        created_at: createdAt,
+        content_html: contentHtml,
+        variables,
+        metadata: record["metadata"],
+      },
+    ];
+  });
+};
+
+const slugifyFilename = (value: string): string => {
+  const base = value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-zA-Z0-9\s-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, "-")
+    .toLowerCase();
+  return base.length > 0 ? base : "documento";
 };
 
 interface BillingRecord {
@@ -416,6 +526,20 @@ export default function VisualizarOportunidade() {
     null,
   );
   const [documentSubmitting, setDocumentSubmitting] = useState(false);
+  const [documents, setDocuments] = useState<OpportunityDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentPreview, setDocumentPreview] = useState<OpportunityDocument | null>(null);
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
+  const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
+  const [documentActionState, setDocumentActionState] = useState<
+    { id: number; type: "download" | "open" } | null
+  >(null);
+  const [documentToDelete, setDocumentToDelete] = useState<OpportunityDocument | null>(
+    null,
+  );
+  const [documentDeleting, setDocumentDeleting] = useState(false);
   const [processForm, setProcessForm] = useState({
     numero: "",
     uf: "",
@@ -449,6 +573,7 @@ export default function VisualizarOportunidade() {
     [id],
   );
   const skipInteractionPersistenceRef = useRef<string | null>(null);
+  const documentPdfUrlsRef = useRef<Map<number, string>>(new Map());
 
   const patchOpportunity = useCallback(
     (updater: (prev: OpportunityData) => OpportunityData) => {
@@ -466,6 +591,40 @@ export default function VisualizarOportunidade() {
     },
     []
   );
+
+  const fetchDocuments = useCallback(async (): Promise<OpportunityDocument[]> => {
+    if (!id) return [];
+
+    const response = await fetch(
+      `${apiUrl}/api/oportunidades/${id}/documentos`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = (await response.json()) as unknown;
+    return normalizeOpportunityDocuments(payload);
+  }, [apiUrl, id]);
+
+  const refreshDocuments = useCallback(async () => {
+    if (!id) {
+      setDocuments([]);
+      setDocumentsError(null);
+      return;
+    }
+
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+    try {
+      const docs = await fetchDocuments();
+      setDocuments(docs);
+    } catch (error) {
+      console.error(error);
+      setDocumentsError("Erro ao carregar documentos");
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, [fetchDocuments, id]);
 
   const resetDocumentDialog = () => {
     setDocumentType(null);
@@ -500,6 +659,78 @@ export default function VisualizarOportunidade() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const cache = documentPdfUrlsRef.current;
+    return () => {
+      cache.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          console.warn("Falha ao revogar URL do PDF", error);
+        }
+      });
+      cache.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!id) {
+      setDocuments([]);
+      setDocumentsError(null);
+      setDocumentsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setDocumentsLoading(true);
+    setDocumentsError(null);
+
+    fetchDocuments()
+      .then((docs) => {
+        if (!cancelled) {
+          setDocuments(docs);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          setDocumentsError("Erro ao carregar documentos");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDocumentsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchDocuments, id]);
+
+  useEffect(() => {
+    const cached = documentPdfUrlsRef.current;
+    const validIds = new Set(documents.map((doc) => doc.id));
+    for (const [docId, url] of cached) {
+      if (!validIds.has(docId)) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          console.warn("Falha ao revogar URL do PDF", error);
+        }
+        cached.delete(docId);
+      }
+    }
+
+    if (documentPreview && !validIds.has(documentPreview.id)) {
+      setDocumentPreview(null);
+      setDocumentPreviewUrl(null);
+    }
+  }, [documents, documentPreview]);
 
   useEffect(() => {
     if (!processForm.uf) {
@@ -1791,6 +2022,7 @@ export default function VisualizarOportunidade() {
           message: `${createdTitle} criado com sucesso`,
         });
         setDocumentDialogOpen(false);
+        await refreshDocuments();
       } catch (error) {
         console.error(error);
         setSnack({ open: true, message: "Erro ao criar documento" });
@@ -1819,6 +2051,135 @@ export default function VisualizarOportunidade() {
     setDocumentDialogOpen(false);
     navigate(`/documentos?${params.toString()}`);
   };
+
+  const ensurePdfUrl = useCallback(
+    async (doc: OpportunityDocument): Promise<string> => {
+      const cached = documentPdfUrlsRef.current.get(doc.id);
+      if (cached) return cached;
+
+      if (typeof window === "undefined") {
+        throw new Error("Visualização de PDF indisponível neste ambiente");
+      }
+
+      const blob = createSimplePdfFromHtml(doc.title ?? `Documento ${doc.id}`, doc.content_html ?? "<p></p>");
+      const url = URL.createObjectURL(blob);
+      documentPdfUrlsRef.current.set(doc.id, url);
+      return url;
+    },
+    [],
+  );
+
+  const closeDocumentPreview = () => {
+    setDocumentPreview(null);
+    setDocumentPreviewUrl(null);
+    setDocumentPreviewError(null);
+    setDocumentPreviewLoading(false);
+  };
+
+  const handleViewDocument = async (doc: OpportunityDocument) => {
+    setDocumentPreview(doc);
+    setDocumentPreviewUrl(null);
+    setDocumentPreviewError(null);
+    setDocumentPreviewLoading(true);
+
+    try {
+      const cached = documentPdfUrlsRef.current.get(doc.id);
+      if (cached) {
+        setDocumentPreviewUrl(cached);
+        setDocumentPreviewLoading(false);
+        return;
+      }
+
+      const url = await ensurePdfUrl(doc);
+      setDocumentPreviewUrl(url);
+    } catch (error) {
+      console.error(error);
+      setDocumentPreviewError("Erro ao gerar PDF do documento");
+      setSnack({ open: true, message: "Erro ao gerar PDF do documento" });
+    } finally {
+      setDocumentPreviewLoading(false);
+    }
+  };
+
+  const handleDownloadDocument = async (doc: OpportunityDocument) => {
+    if (typeof document === "undefined") {
+      setSnack({ open: true, message: "Função indisponível neste ambiente" });
+      return;
+    }
+
+    setDocumentActionState({ id: doc.id, type: "download" });
+    try {
+      const url = await ensurePdfUrl(doc);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${slugifyFilename(doc.title)}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    } catch (error) {
+      console.error(error);
+      setSnack({ open: true, message: "Erro ao baixar documento" });
+    } finally {
+      setDocumentActionState(null);
+    }
+  };
+
+  const handleOpenDocumentInNewTab = async (doc: OpportunityDocument) => {
+    if (typeof window === "undefined") {
+      setSnack({ open: true, message: "Função indisponível neste ambiente" });
+      return;
+    }
+
+    setDocumentActionState({ id: doc.id, type: "open" });
+    try {
+      const url = await ensurePdfUrl(doc);
+      window.open(url, "_blank", "noopener");
+    } catch (error) {
+      console.error(error);
+      setSnack({ open: true, message: "Erro ao abrir documento" });
+    } finally {
+      setDocumentActionState(null);
+    }
+  };
+
+  const handleDeleteDocument = (doc: OpportunityDocument) => {
+    setDocumentToDelete(doc);
+  };
+
+  const handleConfirmDeleteDocument = async () => {
+    if (!documentToDelete || !id) return;
+
+    setDocumentDeleting(true);
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/oportunidades/${id}/documentos/${documentToDelete.id}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const cachedUrl = documentPdfUrlsRef.current.get(documentToDelete.id);
+      if (cachedUrl) {
+        try {
+          URL.revokeObjectURL(cachedUrl);
+        } catch (error) {
+          console.warn("Falha ao revogar URL do PDF", error);
+        }
+        documentPdfUrlsRef.current.delete(documentToDelete.id);
+      }
+
+      await refreshDocuments();
+      setSnack({ open: true, message: "Documento excluído" });
+    } catch (error) {
+      console.error(error);
+      setSnack({ open: true, message: "Erro ao excluir documento" });
+    } finally {
+      setDocumentDeleting(false);
+      setDocumentToDelete(null);
+    }
+  };
+
 
   const renderFormatted = (key: string, value: unknown) => {
     if (value === null || value === undefined || value === "") {
@@ -2169,6 +2530,123 @@ export default function VisualizarOportunidade() {
                   </div>
                 </section>
               )}
+
+              <section
+                aria-labelledby="heading-documents"
+                className={sectionContainerClass}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 id="heading-documents" className={sectionTitleClass}>
+                    Documentos gerados
+                  </h2>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onCreateDocument}
+                  >
+                    Criar documento
+                  </Button>
+                </div>
+                <div className="space-y-4">
+                  {documentsLoading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Carregando documentos...
+                    </div>
+                  )}
+                  {documentsError && !documentsLoading && (
+                    <p className="text-sm text-destructive">{documentsError}</p>
+                  )}
+                  {!documentsLoading && !documentsError && documents.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhum documento gerado ainda. Utilize o botão acima para criar um documento a partir de um modelo.
+                    </p>
+                  )}
+                  {documents.length > 0 && (
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      {documents.map((doc) => {
+                        const title =
+                          typeof doc.title === "string" && doc.title.trim().length > 0
+                            ? doc.title.trim()
+                            : `Documento ${doc.id}`;
+                        const createdAtText = formatDate(doc.created_at);
+                        const isDownloadLoading =
+                          documentActionState?.id === doc.id &&
+                          documentActionState?.type === "download";
+                        const isOpenLoading =
+                          documentActionState?.id === doc.id &&
+                          documentActionState?.type === "open";
+
+                        return (
+                          <div
+                            key={doc.id}
+                            className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/60 p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                <div className="rounded-md bg-muted p-2 text-muted-foreground">
+                                  <FileText className="h-4 w-4" />
+                                </div>
+                                <div className="space-y-1">
+                                  <h3 className="font-semibold leading-none">{title}</h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    Criado em {createdAtText}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleDeleteDocument(doc)}
+                                disabled={documentDeleting && documentToDelete?.id === doc.id}
+                                aria-label={`Excluir ${title}`}
+                              >
+                                {documentDeleting && documentToDelete?.id === doc.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="secondary" onClick={() => handleViewDocument(doc)}>
+                                Visualizar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadDocument(doc)}
+                                disabled={isDownloadLoading}
+                              >
+                                {isDownloadLoading ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Download className="mr-2 h-4 w-4" />
+                                )}
+                                Download
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleOpenDocumentInNewTab(doc)}
+                                disabled={isOpenLoading}
+                              >
+                                {isOpenLoading ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                )}
+                                Abrir em nova aba
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
 
               {renderDataSection("detalhes")}
               {renderDataSection("metadados")}
@@ -2523,6 +3001,127 @@ export default function VisualizarOportunidade() {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={Boolean(documentPreview)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDocumentPreview();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>{documentPreview?.title ?? "Documento"}</DialogTitle>
+            <DialogDescription>
+              Visualização do documento em PDF. Faça o download ou abra em uma nova aba para compartilhar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-[400px] rounded-lg border border-border/60 bg-muted/20 p-2">
+            {documentPreviewLoading ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Gerando PDF do documento...
+              </div>
+            ) : documentPreviewError ? (
+              <p className="p-4 text-sm text-destructive">{documentPreviewError}</p>
+            ) : documentPreviewUrl ? (
+              <iframe
+                title={`Documento ${documentPreview?.title ?? documentPreview?.id ?? ""}`}
+                src={documentPreviewUrl}
+                className="h-[70vh] w-full rounded-md bg-white"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-sm text-muted-foreground">
+                  Pré-visualização indisponível.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="sm:justify-end">
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              {documentPreview && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleDownloadDocument(documentPreview)}
+                    disabled={
+                      documentActionState?.id === documentPreview.id &&
+                      documentActionState?.type === "download"
+                    }
+                  >
+                    {documentActionState?.id === documentPreview.id &&
+                    documentActionState?.type === "download" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleOpenDocumentInNewTab(documentPreview)}
+                    disabled={
+                      documentActionState?.id === documentPreview.id &&
+                      documentActionState?.type === "open"
+                    }
+                  >
+                    {documentActionState?.id === documentPreview.id &&
+                    documentActionState?.type === "open" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                    )}
+                    Abrir em nova aba
+                  </Button>
+                </>
+              )}
+              <Button type="button" onClick={closeDocumentPreview}>
+                Fechar
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={documentToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDocumentToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir documento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza de que deseja excluir "{documentToDelete?.title ?? "Documento"}"? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={documentDeleting}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteDocument}
+              disabled={documentDeleting}
+            >
+              {documentDeleting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Excluindo...
+                </span>
+              ) : (
+                "Excluir"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={billingDialogOpen}
