@@ -555,6 +555,56 @@ const buildDocumentoLinksMap = (
   return links;
 };
 
+const ABSOLUTE_LINK_PATTERN = /^[a-z][a-z\d+\-.]*:/i;
+
+const resolveDocumentoLinkHref = (href: unknown): string | null => {
+  if (typeof href !== "string") {
+    return null;
+  }
+
+  const trimmed = href.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (ABSOLUTE_LINK_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("//")) {
+    const protocol =
+      typeof window !== "undefined" && window.location?.protocol
+        ? window.location.protocol
+        : "https:";
+    return `${protocol}${trimmed}`;
+  }
+
+  const normalizedPath = trimmed.replace(/^\/+/, "");
+  const withoutApiPrefix = normalizedPath.replace(/^api\/+/, "");
+
+  return getApiUrl(withoutApiPrefix);
+};
+
+const normalizeDocumentoLinks = (
+  links: Record<string, string>,
+): Record<string, string> => {
+  const normalizedEntries = Object.entries(links).reduce<Record<string, string>>(
+    (acc, [key, value]) => {
+      const resolved = resolveDocumentoLinkHref(value);
+
+      if (resolved) {
+        acc[key] = resolved;
+      }
+
+      return acc;
+    },
+    {},
+  );
+
+  return normalizedEntries;
+};
+
+
 const mapApiDocumentosPublicos = (
   value: unknown,
 ): ProcessoDocumentoPublico[] => {
@@ -606,7 +656,9 @@ const mapApiDocumentosPublicos = (
       : null;
     const paginas = parseOptionalInteger(raw.paginas ?? raw.numero_paginas);
     const key = normalizeString(raw.key) || normalizeString(raw.chave) || null;
-    const links = buildDocumentoLinksMap(raw.links, raw.link, raw.url);
+    const rawLinks = buildDocumentoLinksMap(raw.links, raw.link, raw.url);
+    const links = normalizeDocumentoLinks(rawLinks);
+
 
     const downloadPrioridades = [
       "arquivo",
