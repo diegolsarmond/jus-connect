@@ -532,7 +532,7 @@ export default function Processos() {
       setAdvogadosError(null);
 
       try {
-        const res = await fetch(getApiUrl("get_api_usuarios_empresa"), {
+        const res = await fetch(getApiUrl("usuarios/empresa"), {
           headers: { Accept: "application/json" },
         });
 
