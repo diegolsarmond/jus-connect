@@ -161,6 +161,11 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
       ],
       rowCount: 1,
     },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
     (text: string, values?: unknown[]) => {
       assert.match(text, /INSERT INTO public\.oportunidade_documentos/);
       insertedPayload.content = values?.[3] as string;
