@@ -49,6 +49,31 @@ interface ApiUsuario {
   datacriacao: string;
 }
 
+interface ApiPerfil {
+  id: number;
+  nome: string;
+}
+
+const extractArray = <T,>(value: unknown): T[] => {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (Array.isArray((value as { rows?: unknown })?.rows)) {
+    return (value as { rows: T[] }).rows;
+  }
+
+  if (Array.isArray((value as { data?: unknown })?.data)) {
+    return (value as { data: T[] }).data;
+  }
+
+  if (Array.isArray((value as { data?: { rows?: unknown } })?.data?.rows)) {
+    return (value as { data: { rows: T[] } }).data.rows;
+  }
+
+  return [];
+};
+
 const perfilToRole = (perfil: number): User["role"] => {
   switch (perfil) {
     case 1:
@@ -99,6 +124,7 @@ const roleVariants = {
 
 export default function Usuarios() {
   const [users, setUsers] = useState<User[]>([]);
+  const [perfilNames, setPerfilNames] = useState<Record<number, string>>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("todos");
   const [statusFilter, setStatusFilter] = useState<string>("todos");
@@ -107,11 +133,32 @@ export default function Usuarios() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const resolvePerfilNome = (perfilId: number | null | undefined): string => {
+    if (typeof perfilId !== "number") {
+      return "Sem perfil";
+    }
+
+    const nome = perfilNames[perfilId];
+
+    if (typeof nome === "string" && nome.trim().length > 0) {
+      return nome.trim();
+    }
+
+    return `Perfil ${perfilId}`;
+  };
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const url = joinUrl(apiUrl, "/api/usuarios/empresa");
-        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        const [response, perfisResponse] = await Promise.all([
+          fetch(joinUrl(apiUrl, "/api/usuarios/empresa"), {
+            headers: { Accept: "application/json" },
+          }),
+          fetch(joinUrl(apiUrl, "/api/perfis"), {
+            headers: { Accept: "application/json" },
+          }),
+        ]);
+
         if (!response.ok) {
           throw new Error("Failed to fetch users");
         }
@@ -122,10 +169,34 @@ export default function Usuarios() {
             ? json.rows
             : Array.isArray(json?.data?.rows)
               ? json.data.rows
-              : Array.isArray(json?.data)
-                ? json.data
-                : [];
+            : Array.isArray(json?.data)
+              ? json.data
+              : [];
         setUsers(data.map(mapApiUserToUser));
+
+        if (perfisResponse.ok) {
+          try {
+            const perfisJson = await perfisResponse.json();
+            const perfis = extractArray<ApiPerfil>(perfisJson);
+            const mappedNames = perfis.reduce<Record<number, string>>((acc, perfil) => {
+              if (typeof perfil.id === "number" && typeof perfil.nome === "string") {
+                const trimmed = perfil.nome.trim();
+
+                if (trimmed.length > 0) {
+                  acc[perfil.id] = trimmed;
+                }
+              }
+
+              return acc;
+            }, {});
+
+            setPerfilNames(mappedNames);
+          } catch (error) {
+            console.error("Erro ao processar perfis:", error);
+          }
+        } else {
+          console.error("Erro ao carregar perfis: resposta inválida");
+        }
       } catch (error) {
         console.error("Erro ao buscar usuários:", error);
       }
@@ -357,8 +428,8 @@ export default function Usuarios() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge >
-                      {[user.perfil]}
+                    <Badge>
+                      {resolvePerfilNome((user as { perfil?: number | null }).perfil ?? null)}
                     </Badge>
                   </TableCell>
                   <TableCell>{user.escritorio}</TableCell>
