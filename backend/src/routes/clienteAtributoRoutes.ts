@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  listClienteAtributoTipos,
   listClienteAtributos,
   createClienteAtributo,
   updateClienteAtributo,
@@ -32,6 +33,29 @@ const router = Router();
  *           type: string
  *           format: date-time
  */
+
+/**
+ * @swagger
+ * /api/clientes/atributos/tipos:
+ *   get:
+ *     summary: Lista os tipos de atributos de clientes da empresa autenticada
+ *     tags: [ClienteAtributos]
+ *     responses:
+ *       200:
+ *         description: Lista de tipos de atributos disponíveis
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   nome:
+ *                     type: string
+ */
+router.get('/clientes/atributos/tipos', listClienteAtributoTipos);
 
 /**
  * @swagger
