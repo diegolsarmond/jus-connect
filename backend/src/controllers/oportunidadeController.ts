@@ -156,25 +156,114 @@ const buildInstallmentValues = (total: number, count: number): number[] => {
   return values;
 };
 
+const normalizeDateOnly = (input: unknown): Date | null => {
+  if (input instanceof Date) {
+    if (Number.isNaN(input.getTime())) {
+      return null;
+    }
+    const year = input.getUTCFullYear();
+    const monthIndex = input.getUTCMonth();
+    const day = input.getUTCDate();
+    return new Date(Date.UTC(year, monthIndex, day));
+  }
+
+  const text = normalizeText(input);
+  if (!text) {
+    return null;
+  }
+
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) {
+    return null;
+  }
+
+  const candidate = new Date(Date.UTC(year, monthIndex, day));
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== monthIndex ||
+    candidate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return candidate;
+};
+
+const formatDateOnly = (value: Date): string => {
+  const year = value.getUTCFullYear().toString().padStart(4, '0');
+  const month = (value.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = value.getUTCDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const addMonthsPreservingDay = (base: Date, monthsToAdd: number): Date => {
+  const desiredDay = base.getUTCDate();
+  const baseMonthIndex = base.getUTCMonth();
+  const baseYear = base.getUTCFullYear();
+  const totalMonths = baseMonthIndex + monthsToAdd;
+  const targetYear = baseYear + Math.floor(totalMonths / 12);
+  const normalizedMonthIndex = ((totalMonths % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetYear, normalizedMonthIndex + 1, 0),
+  ).getUTCDate();
+  const day = Math.min(desiredDay, lastDayOfTargetMonth);
+  return new Date(Date.UTC(targetYear, normalizedMonthIndex, day));
+};
+
+const buildInstallmentDueDates = (
+  count: number,
+  firstDueDate: Date | null,
+): (Date | null)[] => {
+  if (!Number.isFinite(count) || count <= 0) {
+    return [];
+  }
+
+  if (!firstDueDate) {
+    return Array.from({ length: count }, () => null);
+  }
+
+  const schedule: (Date | null)[] = [];
+  for (let index = 0; index < count; index += 1) {
+    schedule.push(addMonthsPreservingDay(firstDueDate, index));
+  }
+
+  return schedule;
+};
+
+type InstallmentEntry = {
+  valor: number;
+  dataPrevista: Date | null;
+};
+
 const resetOpportunityInstallments = async (
   client: PoolClient,
   oportunidadeId: number,
-  values: number[],
+  installments: InstallmentEntry[],
 ) => {
   await client.query('DELETE FROM public.oportunidade_parcelas WHERE oportunidade_id = $1', [
     oportunidadeId,
   ]);
 
-  if (values.length === 0) {
+  if (installments.length === 0) {
     return;
   }
 
-  for (let index = 0; index < values.length; index += 1) {
-    const valorParcela = values[index];
+  for (let index = 0; index < installments.length; index += 1) {
+    const installment = installments[index];
+    const dueDateParam =
+      installment.dataPrevista !== null ? formatDateOnly(installment.dataPrevista) : null;
     await client.query(
-      `INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor)
-       VALUES ($1, $2, $3)`,
-      [oportunidadeId, index + 1, valorParcela],
+      `INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor, data_prevista)
+       VALUES ($1, $2, $3, $4)`,
+      [oportunidadeId, index + 1, installment.valor, dueDateParam],
     );
   }
 };
@@ -185,6 +274,7 @@ const createOrReplaceOpportunityInstallments = async (
   valorHonorarios: unknown,
   formaPagamento: unknown,
   qtdeParcelas: unknown,
+  prazoProximo: unknown,
 ) => {
   const normalizedPayment = normalizePaymentLabel(formaPagamento);
   const honorarios = normalizeDecimal(valorHonorarios);
@@ -204,7 +294,13 @@ const createOrReplaceOpportunityInstallments = async (
   }
 
   const values = buildInstallmentValues(honorarios, totalParcelas);
-  await resetOpportunityInstallments(client, oportunidadeId, values);
+  const firstDueDate = normalizeDateOnly(prazoProximo);
+  const dueDates = buildInstallmentDueDates(values.length, firstDueDate);
+  const installments = values.map((valor, index) => ({
+    valor,
+    dataPrevista: dueDates[index] ?? null,
+  }));
+  await resetOpportunityInstallments(client, oportunidadeId, installments);
 };
 
 const ensureOpportunityInstallments = async (
@@ -213,6 +309,7 @@ const ensureOpportunityInstallments = async (
   valorHonorarios: unknown,
   formaPagamento: unknown,
   qtdeParcelas: unknown,
+  prazoProximo: unknown,
 ) => {
   const existing = await client.query(
     'SELECT id FROM public.oportunidade_parcelas WHERE oportunidade_id = $1 LIMIT 1',
@@ -227,6 +324,7 @@ const ensureOpportunityInstallments = async (
     valorHonorarios,
     formaPagamento,
     qtdeParcelas,
+    prazoProximo,
   );
 };
 
@@ -521,6 +619,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
       valor_honorarios,
       forma_pagamento,
       qtde_parcelas,
+      prazo_proximo,
     );
     await client.query('COMMIT');
     res.status(201).json(oportunidade);
@@ -665,6 +764,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
       valor_honorarios,
       forma_pagamento,
       qtde_parcelas,
+      prazo_proximo,
     );
 
     await client.query('COMMIT');
@@ -893,7 +993,7 @@ export const createOportunidadeFaturamento = async (
     await client.query('BEGIN');
 
     const opportunityResult = await client.query(
-      `SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios
+      `SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios, prazo_proximo
          FROM public.oportunidades
         WHERE id = $1`,
       [id],
@@ -912,6 +1012,7 @@ export const createOportunidadeFaturamento = async (
       opportunity.valor_honorarios,
       opportunity.forma_pagamento,
       opportunity.qtde_parcelas,
+      opportunity.prazo_proximo,
     );
 
     const installmentsResult = await client.query(
