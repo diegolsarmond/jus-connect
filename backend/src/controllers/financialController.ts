@@ -58,10 +58,26 @@ const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
 
 const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
 const FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
+const FINANCIAL_FLOW_CLIENTE_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
+const FINANCIAL_FLOW_FORNECEDOR_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type FinancialFlowEmpresaColumn = string;
+type FinancialFlowClienteColumn = string;
+type FinancialFlowFornecedorColumn = string;
 
 const FINANCIAL_FLOW_EMPRESA_CANDIDATES = ['idempresa', 'empresa_id', 'empresa'] as const;
+const FINANCIAL_FLOW_CLIENTE_CANDIDATES = [
+  'cliente_id',
+  'clienteid',
+  'idcliente',
+  'cliente',
+] as const;
+const FINANCIAL_FLOW_FORNECEDOR_CANDIDATES = [
+  'fornecedor_id',
+  'fornecedorid',
+  'idfornecedor',
+  'fornecedor',
+] as const;
 
 const quoteIdentifier = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 
@@ -71,9 +87,39 @@ let opportunityTablesCheckPromise: Promise<boolean> | null = null;
 
 let financialFlowEmpresaColumn: FinancialFlowEmpresaColumn | null = null;
 let financialFlowEmpresaColumnCheckedAt: number | null = null;
-let financialFlowEmpresaColumnPromise:
-  | Promise<FinancialFlowEmpresaColumn | null>
+
+let financialFlowClienteColumn: FinancialFlowClienteColumn | null = null;
+let financialFlowClienteColumnCheckedAt: number | null = null;
+
+let financialFlowFornecedorColumn: FinancialFlowFornecedorColumn | null = null;
+let financialFlowFornecedorColumnCheckedAt: number | null = null;
+
+type FinancialFlowColumnsLookup = Map<string, string>;
+
+let financialFlowColumnsLookup: FinancialFlowColumnsLookup | null = null;
+let financialFlowColumnsCheckedAt: number | null = null;
+let financialFlowColumnsPromise:
+  | Promise<FinancialFlowColumnsLookup | null>
   | null = null;
+
+const updateFinancialFlowColumnsLookup = (
+  value: FinancialFlowColumnsLookup | null,
+) => {
+  financialFlowColumnsLookup = value;
+  financialFlowColumnsCheckedAt = Date.now();
+};
+
+const resetFinancialFlowColumnsLookup = () => {
+  financialFlowColumnsLookup = null;
+  financialFlowColumnsCheckedAt = null;
+  financialFlowColumnsPromise = null;
+  financialFlowEmpresaColumn = null;
+  financialFlowEmpresaColumnCheckedAt = null;
+  financialFlowClienteColumn = null;
+  financialFlowClienteColumnCheckedAt = null;
+  financialFlowFornecedorColumn = null;
+  financialFlowFornecedorColumnCheckedAt = null;
+};
 
 const updateOpportunityTablesAvailability = (value: boolean) => {
   opportunityTablesAvailability = value;
@@ -92,9 +138,102 @@ const updateFinancialFlowEmpresaColumn = (value: FinancialFlowEmpresaColumn | nu
 };
 
 const resetFinancialFlowEmpresaColumnCache = () => {
-  financialFlowEmpresaColumn = null;
-  financialFlowEmpresaColumnCheckedAt = null;
-  financialFlowEmpresaColumnPromise = null;
+  resetFinancialFlowColumnsLookup();
+};
+
+const updateFinancialFlowClienteColumn = (value: FinancialFlowClienteColumn | null) => {
+  financialFlowClienteColumn = value;
+  financialFlowClienteColumnCheckedAt = Date.now();
+};
+
+const resetFinancialFlowClienteColumnCache = () => {
+  resetFinancialFlowColumnsLookup();
+};
+
+const updateFinancialFlowFornecedorColumn = (
+  value: FinancialFlowFornecedorColumn | null,
+) => {
+  financialFlowFornecedorColumn = value;
+  financialFlowFornecedorColumnCheckedAt = Date.now();
+};
+
+const resetFinancialFlowFornecedorColumnCache = () => {
+  resetFinancialFlowColumnsLookup();
+};
+
+const ensureFinancialFlowColumns = async () => {
+  if (
+    financialFlowColumnsLookup !== null &&
+    financialFlowColumnsCheckedAt !== null &&
+    Date.now() - financialFlowColumnsCheckedAt < FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS
+  ) {
+    return;
+  }
+
+  if (financialFlowColumnsPromise) {
+    await financialFlowColumnsPromise;
+    return;
+  }
+
+  financialFlowColumnsPromise = pool
+    .query<{ column_name: string }>(
+      `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'financial_flows'
+      `,
+    )
+    .then((result) => {
+      const available = result.rows
+        .map((row) => row?.column_name)
+        .filter((name): name is string => typeof name === 'string');
+
+      const lookup: FinancialFlowColumnsLookup = new Map();
+      for (const name of available) {
+        lookup.set(name.toLowerCase(), name);
+      }
+
+      updateFinancialFlowColumnsLookup(lookup);
+
+      const empresaMatch = FINANCIAL_FLOW_EMPRESA_CANDIDATES.find((candidate) =>
+        lookup.has(candidate.toLowerCase()),
+      );
+      const resolvedEmpresa = empresaMatch
+        ? lookup.get(empresaMatch.toLowerCase()) ?? empresaMatch
+        : null;
+      updateFinancialFlowEmpresaColumn(resolvedEmpresa ?? null);
+
+      const clienteMatch = FINANCIAL_FLOW_CLIENTE_CANDIDATES.find((candidate) =>
+        lookup.has(candidate.toLowerCase()),
+      );
+      const resolvedCliente = clienteMatch
+        ? lookup.get(clienteMatch.toLowerCase()) ?? clienteMatch
+        : null;
+      updateFinancialFlowClienteColumn(resolvedCliente ?? null);
+
+      const fornecedorMatch = FINANCIAL_FLOW_FORNECEDOR_CANDIDATES.find((candidate) =>
+        lookup.has(candidate.toLowerCase()),
+      );
+      const resolvedFornecedor = fornecedorMatch
+        ? lookup.get(fornecedorMatch.toLowerCase()) ?? fornecedorMatch
+        : null;
+      updateFinancialFlowFornecedorColumn(resolvedFornecedor ?? null);
+
+      return lookup;
+    })
+    .catch(() => {
+      updateFinancialFlowColumnsLookup(null);
+      updateFinancialFlowEmpresaColumn(null);
+      updateFinancialFlowClienteColumn(null);
+      updateFinancialFlowFornecedorColumn(null);
+      return null;
+    })
+    .finally(() => {
+      financialFlowColumnsPromise = null;
+    });
+
+  await financialFlowColumnsPromise;
 };
 
 const determineOpportunityTablesAvailability = async (): Promise<boolean> => {
@@ -188,60 +327,49 @@ const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
 export const __internal = {
   resetOpportunityTablesAvailabilityCache,
   resetFinancialFlowEmpresaColumnCache,
+  resetFinancialFlowClienteColumnCache,
+  resetFinancialFlowFornecedorColumnCache,
 };
 
 const asaasChargeService = new AsaasChargeService();
 
 const determineFinancialFlowEmpresaColumn = async (): Promise<FinancialFlowEmpresaColumn | null> => {
   if (
-    financialFlowEmpresaColumn !== null &&
     financialFlowEmpresaColumnCheckedAt !== null &&
     Date.now() - financialFlowEmpresaColumnCheckedAt < FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS
   ) {
     return financialFlowEmpresaColumn;
   }
 
-  if (financialFlowEmpresaColumnPromise) {
-    return financialFlowEmpresaColumnPromise;
+  await ensureFinancialFlowColumns();
+
+  return financialFlowEmpresaColumn;
+};
+
+const determineFinancialFlowClienteColumn = async (): Promise<FinancialFlowClienteColumn | null> => {
+  if (
+    financialFlowClienteColumnCheckedAt !== null &&
+    Date.now() - financialFlowClienteColumnCheckedAt < FINANCIAL_FLOW_CLIENTE_COLUMN_CACHE_TTL_MS
+  ) {
+    return financialFlowClienteColumn;
   }
 
-  financialFlowEmpresaColumnPromise = pool
-    .query<{ column_name: string }>(
-      `
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'financial_flows'
-      `,
-    )
-    .then((result) => {
-      const available = result.rows
-        .map((row) => row?.column_name)
-        .filter((name): name is string => typeof name === 'string');
+  await ensureFinancialFlowColumns();
 
-      const lookup = new Map<string, string>();
-      for (const name of available) {
-        lookup.set(name.toLowerCase(), name);
-      }
+  return financialFlowClienteColumn;
+};
 
-      const match = FINANCIAL_FLOW_EMPRESA_CANDIDATES.find((candidate) =>
-        lookup.has(candidate.toLowerCase()),
-      );
+const determineFinancialFlowFornecedorColumn = async (): Promise<FinancialFlowFornecedorColumn | null> => {
+  if (
+    financialFlowFornecedorColumnCheckedAt !== null &&
+    Date.now() - financialFlowFornecedorColumnCheckedAt < FINANCIAL_FLOW_FORNECEDOR_COLUMN_CACHE_TTL_MS
+  ) {
+    return financialFlowFornecedorColumn;
+  }
 
-      const resolved = match ? lookup.get(match.toLowerCase()) ?? match : null;
+  await ensureFinancialFlowColumns();
 
-      updateFinancialFlowEmpresaColumn(resolved ?? null);
-      return resolved ?? null;
-    })
-    .catch(() => {
-      updateFinancialFlowEmpresaColumn(null);
-      return null;
-    })
-    .finally(() => {
-      financialFlowEmpresaColumnPromise = null;
-    });
-
-  return financialFlowEmpresaColumnPromise;
+  return financialFlowFornecedorColumn;
 };
 
 export const listFlows = async (req: Request, res: Response) => {
@@ -293,10 +421,20 @@ export const listFlows = async (req: Request, res: Response) => {
     }
 
     const empresaColumn = await determineFinancialFlowEmpresaColumn();
+    const clienteColumn = await determineFinancialFlowClienteColumn();
+    const fornecedorColumn = await determineFinancialFlowFornecedorColumn();
     const hasEmpresaColumn = typeof empresaColumn === 'string' && empresaColumn.length > 0;
     const empresaColumnExpression = hasEmpresaColumn
       ? `ff.${quoteIdentifier(empresaColumn)}`
       : '$1::INTEGER';
+    const clienteColumnExpression =
+      typeof clienteColumn === 'string' && clienteColumn.length > 0
+        ? `ff.${quoteIdentifier(clienteColumn)}::TEXT`
+        : 'NULL::TEXT';
+    const fornecedorColumnExpression =
+      typeof fornecedorColumn === 'string' && fornecedorColumn.length > 0
+        ? `ff.${quoteIdentifier(fornecedorColumn)}::TEXT`
+        : 'NULL::TEXT';
 
     const filters: (string | number)[] = [empresaId];
     const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
@@ -319,8 +457,8 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.status AS status,
           ff.conta_id::TEXT AS conta_id,
           ff.categoria_id::TEXT AS categoria_id,
-          ff.cliente_id::TEXT AS cliente_id,
-          ff.fornecedor_id::TEXT AS fornecedor_id,
+          ${clienteColumnExpression} AS cliente_id,
+          ${fornecedorColumnExpression} AS fornecedor_id,
           ${empresaColumnExpression} AS empresa_id
         FROM financial_flows ff
       `;
