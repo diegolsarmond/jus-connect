@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { format as formatDateFn } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AppointmentForm } from './AppointmentForm';
-import type { Appointment, AppointmentType } from '@/types/agenda';
-import { normalizeAppointmentType } from '@/types/agenda';
+import type { Appointment, AppointmentType, MeetingFormat } from '@/types/agenda';
+import {
+  normalizeAppointmentType,
+  normalizeMeetingFormat,
+  meetingFormatToTipoLocal,
+} from '@/types/agenda';
 import { getApiBaseUrl } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -44,6 +48,7 @@ export interface AppointmentCreationPrefill {
   clientPhone?: string;
   clientEmail?: string;
   location?: string;
+  meetingFormat?: MeetingFormat;
   reminders?: boolean;
   notifyClient?: boolean;
 }
@@ -62,6 +67,11 @@ const createInitialValues = (
   }
 
   const now = new Date();
+  const hasLocation = typeof prefill.location === 'string' && prefill.location.trim().length > 0;
+  const meetingFormat = normalizeMeetingFormat(
+    prefill.meetingFormat,
+    hasLocation ? 'presencial' : 'online',
+  );
 
   return {
     id: -1,
@@ -76,7 +86,8 @@ const createInitialValues = (
     clientName: prefill.clientName,
     clientPhone: prefill.clientPhone,
     clientEmail: prefill.clientEmail,
-    location: prefill.location,
+    location: meetingFormat === 'presencial' ? prefill.location : undefined,
+    meetingFormat,
     reminders: prefill.reminders ?? true,
     notifyClient: prefill.notifyClient,
     createdAt: now,
@@ -164,6 +175,8 @@ export default function AppointmentCreationDialog({
     const normalizedEndTime = appointmentData.endTime
       ? ensureTimeString(appointmentData.endTime)
       : undefined;
+    const normalizedMeetingFormat = normalizeMeetingFormat(appointmentData.meetingFormat);
+    const normalizedLocation = toOptionalString(appointmentData.location);
 
     const normalizedData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'> = {
       ...appointmentData,
@@ -175,7 +188,8 @@ export default function AppointmentCreationDialog({
       clientName: toOptionalString(appointmentData.clientName),
       clientPhone: toOptionalString(appointmentData.clientPhone),
       clientEmail: toOptionalString(appointmentData.clientEmail),
-      location: toOptionalString(appointmentData.location),
+      meetingFormat: normalizedMeetingFormat,
+      location: normalizedMeetingFormat === 'presencial' ? normalizedLocation : undefined,
     };
 
     setIsSubmitting(true);
@@ -195,8 +209,9 @@ export default function AppointmentCreationDialog({
         hora_inicio: normalizedData.startTime,
         hora_fim: normalizedData.endTime ?? null,
         cliente: parsedClientId ?? null,
-        tipo_local: null,
-        local: normalizedData.location ?? null,
+        tipo_local: meetingFormatToTipoLocal(normalizedMeetingFormat),
+        local:
+          normalizedMeetingFormat === 'presencial' ? normalizedData.location ?? null : null,
         lembrete: normalizedData.reminders,
         status: 1,
       };

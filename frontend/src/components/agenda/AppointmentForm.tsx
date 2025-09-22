@@ -25,6 +25,7 @@ import {
   APPOINTMENT_TYPE_VALUES,
   normalizeAppointmentType,
   isValidAppointmentType,
+  normalizeMeetingFormat,
 } from '@/types/agenda';
 
 const apiUrl = getApiBaseUrl();
@@ -46,6 +47,7 @@ const appointmentSchema = z.object({
   clientName: z.string().optional(),
   clientPhone: z.string().optional(),
   clientEmail: z.string().optional(),
+  meetingFormat: z.enum(['presencial', 'online']).default('presencial'),
   location: z.string().optional(),
   reminders: z.boolean().default(true),
   notifyClient: z.boolean().default(false),
@@ -72,21 +74,29 @@ export function AppointmentForm({
   submitLabel,
   isSubmitting = false,
 }: AppointmentFormProps) {
-  const defaultValues = useMemo<AppointmentFormData>(() => ({
-    title: initialValues?.title ?? '',
-    description: initialValues?.description ?? '',
-    type: initialValues?.type ?? 'reuniao',
-    date: initialValues?.date ?? initialDate ?? new Date(),
-    startTime: initialValues?.startTime ?? '',
-    endTime: initialValues?.endTime ?? '',
-    clientId: initialValues?.clientId ? String(initialValues.clientId) : '',
-    clientName: initialValues?.clientName ?? '',
-    clientPhone: initialValues?.clientPhone ?? '',
-    clientEmail: initialValues?.clientEmail ?? '',
-    location: initialValues?.location ?? '',
-    reminders: initialValues?.reminders ?? true,
-    notifyClient: initialValues?.notifyClient ?? false,
-  }), [initialValues, initialDate]);
+  const defaultValues = useMemo<AppointmentFormData>(() => {
+    const hasLocation =
+      typeof initialValues?.location === 'string' && initialValues.location.trim().length > 0;
+    const fallbackMeetingFormat = initialValues ? (hasLocation ? 'presencial' : 'online') : 'presencial';
+    const meetingFormat = normalizeMeetingFormat(initialValues?.meetingFormat, fallbackMeetingFormat);
+
+    return {
+      title: initialValues?.title ?? '',
+      description: initialValues?.description ?? '',
+      type: initialValues?.type ?? 'reuniao',
+      date: initialValues?.date ?? initialDate ?? new Date(),
+      startTime: initialValues?.startTime ?? '',
+      endTime: initialValues?.endTime ?? '',
+      clientId: initialValues?.clientId ? String(initialValues.clientId) : '',
+      clientName: initialValues?.clientName ?? '',
+      clientPhone: initialValues?.clientPhone ?? '',
+      clientEmail: initialValues?.clientEmail ?? '',
+      location: initialValues?.location ?? '',
+      meetingFormat,
+      reminders: initialValues?.reminders ?? true,
+      notifyClient: initialValues?.notifyClient ?? false,
+    } satisfies AppointmentFormData;
+  }, [initialValues, initialDate]);
 
   const form = useForm<AppointmentFormData>({
     resolver: zodResolver(appointmentSchema),
@@ -119,14 +129,6 @@ export function AppointmentForm({
     [initialValues],
   );
   const [hasClient, setHasClient] = useState<boolean>(defaultHasClient);
-  const defaultMeetingFormat = useMemo<'presencial' | 'online'>(() => {
-    if (initialValues) {
-      return initialValues.location ? 'presencial' : 'online';
-    }
-    return 'presencial';
-  }, [initialValues]);
-  const [meetingFormat, setMeetingFormat] = useState<'presencial' | 'online'>(defaultMeetingFormat);
-
   useEffect(() => {
     const fetchClientes = async () => {
       try {
@@ -249,6 +251,7 @@ export function AppointmentForm({
     }
 
     const normalizedType = normalizeAppointmentType(data.type) ?? 'outro';
+    const normalizedMeetingFormat = normalizeMeetingFormat(data.meetingFormat);
     onSubmit({
       title: data.title,
       description: data.description,
@@ -260,13 +263,15 @@ export function AppointmentForm({
       clientName: hasClient ? data.clientName : undefined,
       clientPhone: hasClient ? data.clientPhone : undefined,
       clientEmail: hasClient ? data.clientEmail : undefined,
-      location: meetingFormat === 'presencial' ? data.location : undefined,
+      meetingFormat: normalizedMeetingFormat,
+      location: normalizedMeetingFormat === 'presencial' ? data.location : undefined,
       reminders: data.reminders,
       notifyClient: hasClient ? data.notifyClient : false,
     });
   };
 
   const clientName = form.watch('clientName') || '';
+  const meetingFormat = form.watch('meetingFormat') ?? 'presencial';
 
   useEffect(() => {
     setIsAllDay(Boolean(initialValues ? !initialValues.endTime : false));
@@ -275,10 +280,6 @@ export function AppointmentForm({
   useEffect(() => {
     setHasClient(defaultHasClient);
   }, [defaultHasClient]);
-
-  useEffect(() => {
-    setMeetingFormat(defaultMeetingFormat);
-  }, [defaultMeetingFormat]);
 
   useEffect(() => {
     if (highlightedClienteIndex >= clientes.length) {
@@ -660,10 +661,13 @@ export function AppointmentForm({
               <RadioGroup
                 value={meetingFormat}
                 onValueChange={(value) => {
-                  const normalized = value === 'online' ? 'online' : 'presencial';
-                  setMeetingFormat(normalized);
+                  const normalized = normalizeMeetingFormat(value, 'presencial');
+                  form.setValue('meetingFormat', normalized, {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                  });
                   if (normalized === 'online') {
-                    form.setValue('location', '');
+                    form.setValue('location', '', { shouldDirty: true });
                   }
                 }}
                 className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4"
