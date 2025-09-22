@@ -22,6 +22,16 @@ const financialFlowColumnsResponse: QueryResponse = {
   rowCount: 5,
 };
 
+const financialFlowColumnsWithoutEmpresaResponse: QueryResponse = {
+  rows: [
+    { column_name: 'id' },
+    { column_name: 'tipo' },
+    { column_name: 'descricao' },
+    { column_name: 'valor' },
+  ],
+  rowCount: 4,
+};
+
 
 const DEFAULT_EMPRESA_ID = 123;
 const empresaLookupResponse: QueryResponse = {
@@ -203,13 +213,75 @@ test('listFlows combines financial and opportunity flows', async () => {
   assert.match(calls[3]?.text ?? '', /ff\.id::TEXT AS id/);
   assert.match(calls[3]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
   assert.match(calls[3]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
-  assert.match(calls[3]?.text ?? '', /ff\.idempresa AS empresa_id/);
+  assert.match(calls[3]?.text ?? '', /ff\."idempresa" AS empresa_id/);
   assert.match(calls[3]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
   assert.match(calls[3]?.text ?? '', /NULL::TEXT AS conta_id/);
   assert.match(calls[3]?.text ?? '', /NULL::TEXT AS categoria_id/);
   assert.match(calls[3]?.text ?? '', /p\.idempresa AS empresa_id/);
   assert.match(calls[3]?.text ?? '', /WHERE combined_flows\.empresa_id = \$1/);
   assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 1, 1]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
+});
+
+test('listFlows falls back to authenticated empresa when column is missing', async () => {
+  const tablesRow = {
+    parcelas: false,
+    oportunidades: false,
+    clientes: false,
+    faturamentos: false,
+  };
+
+  const financialRow = {
+    id: 1,
+    tipo: 'receita',
+    conta_id: null,
+    categoria_id: null,
+    descricao: 'Mensalidade',
+    valor: 100,
+    vencimento: '2024-01-01',
+    pagamento: null,
+    status: 'pendente',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
+    financialFlowColumnsWithoutEmpresaResponse,
+    { rows: [tablesRow], rowCount: 1 },
+    { rows: [financialRow], rowCount: 1 },
+    { rows: [{ total: 1 }], rowCount: 1 },
+  ]);
+
+  const req = { query: {}, auth: { userId: 99 } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await listFlows(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    items: [
+      {
+        id: 1,
+        tipo: 'receita',
+        conta_id: null,
+        categoria_id: null,
+        descricao: 'Mensalidade',
+        valor: 100,
+        vencimento: '2024-01-01',
+        pagamento: null,
+        status: 'pendente',
+      },
+    ],
+    total: 1,
+    page: 1,
+    limit: 10,
+  });
+
+  assert.match(calls[3]?.text ?? '', /\$1::INTEGER AS empresa_id/);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
   assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
 });
 
@@ -274,7 +346,7 @@ test('listFlows tolerates legacy empresa column names', async () => {
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [3]);
   assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
-  assert.match(calls[3]?.text ?? '', /ff\.empresa AS empresa_id/);
+  assert.match(calls[3]?.text ?? '', /ff\."empresa" AS empresa_id/);
 
 });
 
