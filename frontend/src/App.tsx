@@ -47,7 +47,6 @@ import Etiquetas from "./pages/configuracoes/parametros/Etiquetas";
 import FluxoTrabalho from "./pages/configuracoes/parametros/FluxoTrabalho";
 import SituacaoProposta from "./pages/configuracoes/parametros/SituacaoProposta";
 import Empresas from "./pages/configuracoes/Empresas";
-import Planos from "./pages/configuracoes/Planos";
 import Integracoes from "./pages/configuracoes/Integracoes";
 import Usuarios from "./pages/configuracoes/usuarios/Usuarios";
 import NovoUsuario from "./pages/configuracoes/usuarios/NovoUsuario";
@@ -173,7 +172,6 @@ const App = () => (
               <Route path="/configuracoes/usuarios" element={withModule("configuracoes-usuarios", <Usuarios />)} />
               <Route path="/configuracoes/empresas" element={withModule("configuracoes", <Empresas />)} />
               <Route path="/configuracoes/empresas/nova" element={withModule("configuracoes", <NovaEmpresa />)} />
-              <Route path="/configuracoes/planos" element={withModule("configuracoes", <Planos />)} />
               <Route path="/configuracoes/integracoes" element={withModule("configuracoes-integracoes", <Integracoes />)} />
               <Route path="/configuracoes/usuarios/novo" element={withModule("configuracoes-usuarios", <NovoUsuario />)} />
               <Route path="/configuracoes/usuarios/:id" element={withModule("configuracoes-usuarios", <PerfilUsuario />)} />
