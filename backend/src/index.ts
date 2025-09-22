@@ -16,6 +16,7 @@ import etiquetaRoutes from './routes/etiquetaRoutes';
 import usuarioRoutes from './routes/usuarioRoutes';
 import empresaRoutes from './routes/empresaRoutes';
 import clienteRoutes from './routes/clienteRoutes';
+import fornecedorRoutes from './routes/fornecedorRoutes';
 import agendaRoutes from './routes/agendaRoutes';
 import templateRoutes from './routes/templateRoutes';
 import tagRoutes from './routes/tagRoutes';
@@ -226,6 +227,7 @@ registerModuleRoutes(
 registerModuleRoutes('configuracoes', empresaRoutes);
 registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);
 registerModuleRoutes('clientes', clienteRoutes);
+registerModuleRoutes('fornecedores', fornecedorRoutes);
 registerModuleRoutes('agenda', agendaRoutes);
 registerModuleRoutes('documentos', templateRoutes);
 registerModuleRoutes('documentos', tagRoutes);
