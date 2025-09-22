@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../services/db';
 import { queryEmpresas } from '../services/empresaQueries';
 import { replaceVariables } from '../services/templateService';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 type Primitive = string | number | boolean | null | undefined;
 
@@ -148,6 +149,48 @@ type OpportunityDocumentRow = {
   variables: unknown;
   created_at: string;
 };
+
+type AuthenticatedContext =
+  | { ok: true; empresaId: number; userId: number }
+  | { ok: false };
+
+async function resolveAuthenticatedContext(
+  req: Request,
+  res: Response,
+): Promise<AuthenticatedContext> {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return { ok: false };
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return { ok: false };
+  }
+
+  const { empresaId } = empresaLookup;
+
+  if (empresaId === null) {
+    res.status(403).json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    return { ok: false };
+  }
+
+  return { ok: true, empresaId, userId: req.auth.userId };
+}
+
+async function ensureOpportunityAccess(
+  oportunidadeId: number,
+  empresaId: number,
+): Promise<boolean> {
+  const result = await pool.query(
+    'SELECT 1 FROM public.oportunidades WHERE id = $1 AND idempresa = $2 LIMIT 1',
+    [oportunidadeId, empresaId],
+  );
+
+  return (result.rowCount ?? 0) > 0;
+}
 
 function ensureEditorJsonContent(value: unknown): EditorJsonNode[] | null {
   if (!value) return null;
@@ -742,7 +785,10 @@ function buildVariables({
   return variables;
 }
 
-async function fetchOpportunityData(id: number): Promise<OpportunityData | null> {
+async function fetchOpportunityData(
+  id: number,
+  empresaId: number,
+): Promise<OpportunityData | null> {
   const opportunityResult = await pool.query<OpportunityRow>(
     `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, idempresa, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
@@ -750,8 +796,8 @@ async function fetchOpportunityData(id: number): Promise<OpportunityData | null>
             contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa,
             audiencia_data, audiencia_horario, audiencia_local, data_criacao, ultima_atualizacao
 
-       FROM public.oportunidades WHERE id = $1`,
-    [id],
+       FROM public.oportunidades WHERE id = $1 AND idempresa = $2`,
+    [id, empresaId],
   );
   if (opportunityResult.rowCount === 0) {
     return null;
@@ -850,19 +896,26 @@ export const createOpportunityDocumentFromTemplate = async (req: Request, res: R
   }
 
   try {
+    const authContext = await resolveAuthenticatedContext(req, res);
+    if (!authContext.ok) {
+      return;
+    }
+
+    const { empresaId, userId } = authContext;
+
+    const opportunityData = await fetchOpportunityData(opportunityId, empresaId);
+    if (!opportunityData) {
+      return res.status(404).json({ error: 'Oportunidade não encontrada' });
+    }
+
     const templateResult = await pool.query<TemplateRow>(
-      'SELECT id, title, content FROM templates WHERE id = $1',
-      [numericTemplateId],
+      'SELECT id, title, content FROM templates WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2 AND idusuario = $3',
+      [numericTemplateId, empresaId, userId],
     );
     if (templateResult.rowCount === 0) {
       return res.status(404).json({ error: 'Template não encontrado' });
     }
     const template = templateResult.rows[0];
-
-    const opportunityData = await fetchOpportunityData(opportunityId);
-    if (!opportunityData) {
-      return res.status(404).json({ error: 'Oportunidade não encontrada' });
-    }
 
     const { contentHtml, contentEditorJson, metadata } = parseTemplateContent(template.content);
     const variables = buildVariables(opportunityData);
@@ -934,6 +987,18 @@ export const listOpportunityDocuments = async (req: Request, res: Response) => {
   }
 
   try {
+    const authContext = await resolveAuthenticatedContext(req, res);
+    if (!authContext.ok) {
+      return;
+    }
+
+    const { empresaId } = authContext;
+
+    const hasAccess = await ensureOpportunityAccess(opportunityId, empresaId);
+    if (!hasAccess) {
+      return res.status(404).json({ error: 'Oportunidade não encontrada' });
+    }
+
     const result = await pool.query<OpportunityDocumentRow>(
       `SELECT id, oportunidade_id, template_id, title, content, variables, created_at
        FROM public.oportunidade_documentos
@@ -962,6 +1027,18 @@ export const getOpportunityDocument = async (req: Request, res: Response) => {
   }
 
   try {
+    const authContext = await resolveAuthenticatedContext(req, res);
+    if (!authContext.ok) {
+      return;
+    }
+
+    const { empresaId } = authContext;
+
+    const hasAccess = await ensureOpportunityAccess(opportunityId, empresaId);
+    if (!hasAccess) {
+      return res.status(404).json({ error: 'Oportunidade não encontrada' });
+    }
+
     const result = await pool.query<OpportunityDocumentRow>(
       `SELECT id, oportunidade_id, template_id, title, content, variables, created_at
        FROM public.oportunidade_documentos
@@ -991,6 +1068,18 @@ export const deleteOpportunityDocument = async (req: Request, res: Response) => 
   }
 
   try {
+    const authContext = await resolveAuthenticatedContext(req, res);
+    if (!authContext.ok) {
+      return;
+    }
+
+    const { empresaId } = authContext;
+
+    const hasAccess = await ensureOpportunityAccess(opportunityId, empresaId);
+    if (!hasAccess) {
+      return res.status(404).json({ error: 'Oportunidade não encontrada' });
+    }
+
     const result = await pool.query(
       'DELETE FROM public.oportunidade_documentos WHERE oportunidade_id = $1 AND id = $2 RETURNING id',
       [opportunityId, docId],
