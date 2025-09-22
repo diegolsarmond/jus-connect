@@ -84,7 +84,7 @@ function extractCollection(payload: unknown): unknown[] {
 }
 
 export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAttributeType[]> {
-  const response = await fetch(getApiUrl('get_api_clientes_atributos_tipos'), {
+  const response = await fetch(getApiUrl('clientes/atributos/tipos'), {
     headers: { Accept: 'application/json' },
   });
 
