@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { queryEmpresas } from '../services/empresaQueries';
-import { replaceVariables } from '../services/templateService';
+import { replaceVariables, resolveVariableValue } from '../services/templateService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 type Primitive = string | number | boolean | null | undefined;
@@ -322,8 +322,35 @@ function replaceInString(value: string, variables: VariableMap): string {
   return replaceVariables(value, variables);
 }
 
+function collectNodePlainText(node: EditorJsonNode): string {
+  let text = '';
+  if (typeof node.text === 'string') {
+    text += node.text;
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) {
+      text += collectNodePlainText(child);
+    }
+  }
+  return text;
+}
+
 function fillEditorNodes(nodes: EditorJsonNode[], variables: VariableMap): EditorJsonNode[] {
   return nodes.map((node) => {
+    const dataVariable =
+      node.attrs && typeof node.attrs['data-variable'] === 'string'
+        ? (node.attrs['data-variable'] as string)
+        : null;
+
+    if (dataVariable) {
+      const resolved = resolveVariableValue(variables, dataVariable);
+      const fallbackText = replaceInString(collectNodePlainText(node), variables);
+      return {
+        type: 'text',
+        text: resolved !== undefined ? resolved : fallbackText,
+      };
+    }
+
     const next: EditorJsonNode = { type: node.type };
     if (typeof node.text === 'string') {
       next.text = replaceInString(node.text, variables);
