@@ -67,6 +67,7 @@ const formSchema = z.object({
     .optional(),
   valor_causa: z.string().optional(),
   valor_honorarios: z.string().optional(),
+  valor_entrada: z.string().optional(),
   percentual_honorarios: z.string().optional(),
   forma_pagamento: z.string().optional(),
   qtde_parcelas: z.string().optional(),
@@ -160,9 +161,10 @@ export default function EditarOportunidade() {
       ],
       valor_causa: "",
       valor_honorarios: "",
+      valor_entrada: "",
       percentual_honorarios: "",
       forma_pagamento: "",
-        qtde_parcelas: "",
+      qtde_parcelas: "",
       contingenciamento: "",
       detalhes: "",
       documentos_anexados: undefined,
@@ -314,11 +316,18 @@ export default function EditarOportunidade() {
                   currency: "BRL",
                 }).format(Number(data.valor_honorarios))
               : "",
+          valor_entrada:
+            data.valor_entrada !== null && data.valor_entrada !== undefined
+              ? new Intl.NumberFormat("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                }).format(Number(data.valor_entrada))
+              : "",
           percentual_honorarios: data.percentual_honorarios
             ? String(data.percentual_honorarios)
             : "",
           forma_pagamento: data.forma_pagamento || "",
-            qtde_parcelas: data.qtde_parcelas ? String(data.qtde_parcelas) : "",
+          qtde_parcelas: data.qtde_parcelas ? String(data.qtde_parcelas) : "",
           contingenciamento: data.contingenciamento || "",
           detalhes: data.detalhes || "",
           documentos_anexados: undefined,
@@ -468,6 +477,7 @@ export default function EditarOportunidade() {
           : null,
         valor_causa: parseCurrency(values.valor_causa || ""),
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
+        valor_entrada: parseCurrency(values.valor_entrada || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
         forma_pagamento: values.forma_pagamento || null,
         qtde_parcelas: values.qtde_parcelas ? Number(values.qtde_parcelas) : null,
@@ -809,6 +819,30 @@ export default function EditarOportunidade() {
                           </FormItem>
                         )}
                       />
+
+                      {formaPagamento === "Parcelado" && (
+                        <FormField
+                          control={form.control}
+                          name="valor_entrada"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor de Entrada</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value}
+                                  onChange={(e) =>
+                                    field.onChange(
+                                      formatCurrency(e.target.value),
+                                    )
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
                       {formaPagamento === "Parcelado" && (
                         <FormField
