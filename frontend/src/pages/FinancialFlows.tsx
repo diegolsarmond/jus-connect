@@ -20,7 +20,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/api';
-import { Info, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Info, AlertCircle, ChevronLeft, ChevronRight, ChevronsUpDown, Check } from 'lucide-react';
 import { AsaasChargeDialog } from '@/components/financial/AsaasChargeDialog';
 import type { CustomerOption } from '@/components/financial/AsaasChargeDialog';
 
@@ -43,6 +44,15 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 
 const CHART_COLORS = {
   receitas: '#16a34a',
@@ -56,12 +66,25 @@ const CHART_SERIES_LABELS = {
   aberto: 'Cobranças em aberto',
 } as const;
 
-const INITIAL_FORM_STATE = {
-  tipo: 'receita' as Flow['tipo'],
+type FlowFormState = {
+  tipo: Flow['tipo'];
+  descricao: string;
+  valor: string;
+  vencimento: string;
+  clienteId: string;
+  fornecedorId: string;
+};
+
+const INITIAL_FORM_STATE: FlowFormState = {
+  tipo: 'receita',
   descricao: '',
   valor: '',
   vencimento: '',
+  clienteId: '',
+  fornecedorId: '',
 };
+
+type SupplierOption = CustomerOption & { phone?: string };
 
 function normalizeCustomerOption(entry: unknown): CustomerOption | null {
   if (!entry || typeof entry !== 'object') {
@@ -104,6 +127,66 @@ function normalizeCustomerOption(entry: unknown): CustomerOption | null {
   };
 }
 
+function normalizeSupplierOption(entry: unknown): SupplierOption | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const record = entry as Record<string, unknown>;
+  const idCandidate =
+    record.id ??
+    record.fornecedorId ??
+    record.fornecedor_id ??
+    record.supplierId ??
+    record.supplier_id ??
+    record.externalId ??
+    record.external_id;
+
+  if (idCandidate === undefined || idCandidate === null) {
+    return null;
+  }
+
+  const id = String(idCandidate);
+  const nameCandidate =
+    record.nome ??
+    record.razaoSocial ??
+    record['razao_social'] ??
+    record.fantasia ??
+    record.companyName ??
+    record.name;
+
+  const emailCandidate =
+    record.email ??
+    record.emailPrincipal ??
+    record.primaryEmail ??
+    record.contatoEmail ??
+    record['contato_email'];
+  const documentCandidate =
+    record.documento ??
+    record.document ??
+    record.cnpj ??
+    record.cpf ??
+    record.cpfCnpj ??
+    record['numero_documento'];
+  const phoneCandidate = record.telefone ?? record.phone ?? record['telefone_principal'];
+
+  const labelCandidate = typeof nameCandidate === 'string' ? nameCandidate.trim() : '';
+  const emailValue = typeof emailCandidate === 'string' ? emailCandidate : undefined;
+  const documentValue = typeof documentCandidate === 'string' ? documentCandidate : undefined;
+  const phoneValue = typeof phoneCandidate === 'string' ? phoneCandidate.trim() : undefined;
+
+  const label = labelCandidate.length > 0 ? labelCandidate : `Fornecedor ${id}`;
+
+  return {
+    id,
+    label,
+    email: emailValue,
+    document: documentValue,
+    phone: phoneValue && phoneValue.length > 0 ? phoneValue : undefined,
+    raw: entry,
+  };
+}
+
 async function fetchCustomersForFlows(): Promise<CustomerOption[]> {
   const response = await fetch(getApiUrl('clientes'));
   if (!response.ok) {
@@ -120,6 +203,67 @@ async function fetchCustomersForFlows(): Promise<CustomerOption[]> {
     .filter((customer): customer is CustomerOption => Boolean(customer));
 }
 
+async function fetchSuppliersForFlows(): Promise<SupplierOption[]> {
+  const response = await fetch(getApiUrl('fornecedores'));
+  if (!response.ok) {
+    throw new Error(`Falha ao carregar fornecedores (HTTP ${response.status})`);
+  }
+
+  const payload = await response.json();
+  const listCandidates = Array.isArray(payload)
+    ? payload
+    : (payload?.items as unknown[]) ?? (payload?.data as unknown[]) ?? (payload?.results as unknown[]) ?? [];
+
+  return listCandidates
+    .map((entry) => normalizeSupplierOption(entry))
+    .filter((supplier): supplier is SupplierOption => Boolean(supplier));
+}
+
+const DIGIT_ONLY_REGEX = /\D+/g;
+
+const BRAZILIAN_CURRENCY_FORMATTER = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+});
+
+const extractCurrencyDigits = (value: string): string => value.replace(DIGIT_ONLY_REGEX, '');
+
+const formatCurrencyInputValue = (digits: string): string => {
+  if (!digits) {
+    return '';
+  }
+  const parsed = Number.parseInt(digits, 10);
+  if (Number.isNaN(parsed)) {
+    return '';
+  }
+  return BRAZILIAN_CURRENCY_FORMATTER.format(parsed / 100);
+};
+
+const parseCurrencyDigits = (digits: string): number | null => {
+  if (!digits) {
+    return null;
+  }
+  const parsed = Number.parseInt(digits, 10);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+  return parsed / 100;
+};
+
+const buildOptionDetails = (option: CustomerOption | SupplierOption): string | null => {
+  const details: string[] = [];
+  if (typeof option.document === 'string' && option.document.trim().length > 0) {
+    details.push(option.document.trim());
+  }
+  if (typeof option.email === 'string' && option.email.trim().length > 0) {
+    details.push(option.email.trim());
+  }
+  if ('phone' in option && typeof option.phone === 'string' && option.phone.trim().length > 0) {
+    details.push(option.phone.trim());
+  }
+  return details.length > 0 ? details.join(' • ') : null;
+};
+
 const FinancialFlows = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -135,6 +279,11 @@ const FinancialFlows = () => {
     isLoading: customersLoading,
     error: customersError,
   } = useQuery({ queryKey: ['flows-customers'], queryFn: fetchCustomersForFlows, staleTime: 1000 * 60 * 5 });
+  const {
+    data: suppliers = [],
+    isLoading: suppliersLoading,
+    error: suppliersError,
+  } = useQuery({ queryKey: ['flows-suppliers'], queryFn: fetchSuppliersForFlows, staleTime: 1000 * 60 * 5 });
 
   const [chargeDialogFlow, setChargeDialogFlow] = useState<Flow | null>(null);
   const [chargeSummaries, setChargeSummaries] = useState<Record<number, AsaasCharge | null>>({});
@@ -149,6 +298,16 @@ const FinancialFlows = () => {
       });
     }
   }, [customersError, toast]);
+
+  useEffect(() => {
+    if (suppliersError instanceof Error) {
+      toast({
+        title: 'Erro ao carregar fornecedores',
+        description: suppliersError.message,
+        variant: 'destructive',
+      });
+    }
+  }, [suppliersError, toast]);
 
   const handleChargeSaved = useCallback((flowId: number, charge: AsaasCharge) => {
     setChargeSummaries((prev) => ({ ...prev, [flowId]: charge }));
@@ -472,23 +631,39 @@ const FinancialFlows = () => {
   };
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [form, setForm] = useState(INITIAL_FORM_STATE);
+  const [form, setForm] = useState<FlowFormState>(INITIAL_FORM_STATE);
+  const [isCustomerPopoverOpen, setIsCustomerPopoverOpen] = useState(false);
+  const [isSupplierPopoverOpen, setIsSupplierPopoverOpen] = useState(false);
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === form.clienteId) ?? null,
+    [customers, form.clienteId],
+  );
+  const selectedSupplier = useMemo(
+    () => suppliers.find((supplier) => supplier.id === form.fornecedorId) ?? null,
+    [suppliers, form.fornecedorId],
+  );
   const isFormValid = useMemo(() => {
-    const parsedValue = Number.parseFloat(form.valor);
-    return Boolean(form.descricao.trim()) && !Number.isNaN(parsedValue);
+    const parsedValue = parseCurrencyDigits(form.valor);
+    return Boolean(form.descricao.trim()) && parsedValue !== null;
   }, [form.descricao, form.valor]);
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      createFlow({
+    mutationFn: () => {
+      const parsedValue = parseCurrencyDigits(form.valor) ?? 0;
+      return createFlow({
         tipo: form.tipo,
         descricao: form.descricao,
-        valor: Number.parseFloat(form.valor),
+        valor: parsedValue,
         vencimento: form.vencimento,
-      }),
+        clienteId: form.tipo === 'receita' && form.clienteId ? form.clienteId : undefined,
+        fornecedorId: form.tipo === 'despesa' && form.fornecedorId ? form.fornecedorId : undefined,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows'] });
       setForm(INITIAL_FORM_STATE);
+      setIsCustomerPopoverOpen(false);
+      setIsSupplierPopoverOpen(false);
       setIsCreateDialogOpen(false);
     },
   });
@@ -598,6 +773,8 @@ const FinancialFlows = () => {
           setIsCreateDialogOpen(open);
           if (!open) {
             setForm(INITIAL_FORM_STATE);
+            setIsCustomerPopoverOpen(false);
+            setIsSupplierPopoverOpen(false);
           }
         }}
       >
@@ -678,7 +855,17 @@ const FinancialFlows = () => {
               <Label htmlFor="flow-type">Tipo</Label>
               <Select
                 value={form.tipo}
-                onValueChange={(value) => setForm((prev) => ({ ...prev, tipo: value as Flow['tipo'] }))}
+                onValueChange={(value) => {
+                  const nextType = value as Flow['tipo'];
+                  setForm((prev) => ({
+                    ...prev,
+                    tipo: nextType,
+                    clienteId: nextType === 'receita' ? prev.clienteId : '',
+                    fornecedorId: nextType === 'despesa' ? prev.fornecedorId : '',
+                  }));
+                  setIsCustomerPopoverOpen(false);
+                  setIsSupplierPopoverOpen(false);
+                }}
               >
                 <SelectTrigger id="flow-type">
                   <SelectValue placeholder="Selecione o tipo" />
@@ -689,6 +876,168 @@ const FinancialFlows = () => {
                 </SelectContent>
               </Select>
             </div>
+            {form.tipo === 'receita' ? (
+              <div className="space-y-2">
+                <Label htmlFor="flow-customer">Cliente (opcional)</Label>
+                <Popover open={isCustomerPopoverOpen} onOpenChange={setIsCustomerPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="flow-customer"
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={isCustomerPopoverOpen}
+                      className="w-full justify-between"
+                    >
+                      {customersLoading
+                        ? 'Carregando clientes...'
+                        : selectedCustomer
+                          ? selectedCustomer.label
+                          : 'Selecione um cliente (opcional)'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar cliente..." />
+                      <CommandList>
+                        {customersLoading ? (
+                          <div className="p-2 text-sm text-muted-foreground">Carregando clientes...</div>
+                        ) : customersError instanceof Error ? (
+                          <div className="p-2 text-sm text-destructive">Não foi possível carregar os clientes.</div>
+                        ) : (
+                          <>
+                            <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="__none"
+                                onSelect={() => {
+                                  setForm((prev) => ({ ...prev, clienteId: '' }));
+                                  setIsCustomerPopoverOpen(false);
+                                }}
+                              >
+                                <span>Sem cliente</span>
+                                <Check className={cn('ml-auto h-4 w-4', form.clienteId === '' ? 'opacity-100' : 'opacity-0')} />
+                              </CommandItem>
+                              {customers.map((customer) => {
+                                const details = buildOptionDetails(customer);
+                                const isSelected = form.clienteId === customer.id;
+                                const searchableText = [
+                                  customer.label,
+                                  customer.document,
+                                  customer.email,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ');
+                                return (
+                                  <CommandItem
+                                    key={customer.id}
+                                    value={searchableText}
+                                    onSelect={() => {
+                                      setForm((prev) => ({ ...prev, clienteId: customer.id }));
+                                      setIsCustomerPopoverOpen(false);
+                                    }}
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-medium leading-snug">{customer.label}</span>
+                                      {details ? (
+                                        <span className="text-xs text-muted-foreground">{details}</span>
+                                      ) : null}
+                                    </div>
+                                    <Check className={cn('ml-auto h-4 w-4', isSelected ? 'opacity-100' : 'opacity-0')} />
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="flow-supplier">Fornecedor (opcional)</Label>
+                <Popover open={isSupplierPopoverOpen} onOpenChange={setIsSupplierPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="flow-supplier"
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={isSupplierPopoverOpen}
+                      className="w-full justify-between"
+                    >
+                      {suppliersLoading
+                        ? 'Carregando fornecedores...'
+                        : selectedSupplier
+                          ? selectedSupplier.label
+                          : 'Selecione um fornecedor (opcional)'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar fornecedor..." />
+                      <CommandList>
+                        {suppliersLoading ? (
+                          <div className="p-2 text-sm text-muted-foreground">Carregando fornecedores...</div>
+                        ) : suppliersError instanceof Error ? (
+                          <div className="p-2 text-sm text-destructive">Não foi possível carregar os fornecedores.</div>
+                        ) : (
+                          <>
+                            <CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="__none"
+                                onSelect={() => {
+                                  setForm((prev) => ({ ...prev, fornecedorId: '' }));
+                                  setIsSupplierPopoverOpen(false);
+                                }}
+                              >
+                                <span>Sem fornecedor</span>
+                                <Check className={cn('ml-auto h-4 w-4', form.fornecedorId === '' ? 'opacity-100' : 'opacity-0')} />
+                              </CommandItem>
+                              {suppliers.map((supplier) => {
+                                const details = buildOptionDetails(supplier);
+                                const isSelected = form.fornecedorId === supplier.id;
+                                const searchableText = [
+                                  supplier.label,
+                                  supplier.document,
+                                  supplier.email,
+                                  supplier.phone,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ');
+                                return (
+                                  <CommandItem
+                                    key={supplier.id}
+                                    value={searchableText}
+                                    onSelect={() => {
+                                      setForm((prev) => ({ ...prev, fornecedorId: supplier.id }));
+                                      setIsSupplierPopoverOpen(false);
+                                    }}
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-medium leading-snug">{supplier.label}</span>
+                                      {details ? (
+                                        <span className="text-xs text-muted-foreground">{details}</span>
+                                      ) : null}
+                                    </div>
+                                    <Check className={cn('ml-auto h-4 w-4', isSelected ? 'opacity-100' : 'opacity-0')} />
+                                  </CommandItem>
+                                );
+                              })}
+                            </CommandGroup>
+                          </>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="flow-description">Descrição</Label>
               <Input
@@ -702,11 +1051,14 @@ const FinancialFlows = () => {
               <Label htmlFor="flow-value">Valor</Label>
               <Input
                 id="flow-value"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.valor}
-                onChange={(event) => setForm((prev) => ({ ...prev, valor: event.target.value }))}
+                type="text"
+                inputMode="decimal"
+                placeholder="R$ 0,00"
+                value={formatCurrencyInputValue(form.valor)}
+                onChange={(event) => {
+                  const digits = extractCurrencyDigits(event.target.value);
+                  setForm((prev) => ({ ...prev, valor: digits }));
+                }}
               />
             </div>
             <div className="space-y-2">

@@ -63,6 +63,8 @@ export interface Flow {
   pagamento?: string | null;
   valor: number;
   status: 'pendente' | 'pago';
+  cliente_id?: string | null;
+  fornecedor_id?: string | null;
 }
 
 const FLOWS_ENDPOINT = getApiUrl('financial/flows');
@@ -109,7 +111,16 @@ export async function fetchFlows(): Promise<Flow[]> {
   return collection;
 }
 
-export async function createFlow(flow: Partial<Flow>): Promise<Flow> {
+export type CreateFlowPayload = {
+  tipo: Flow['tipo'];
+  descricao: string;
+  valor: number;
+  vencimento: string;
+  clienteId?: string | number | null;
+  fornecedorId?: string | number | null;
+};
+
+export async function createFlow(flow: CreateFlowPayload): Promise<Flow> {
   const res = await fetch(FLOWS_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
