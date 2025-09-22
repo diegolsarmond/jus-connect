@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react
 import {
   LayoutDashboard,
   Users,
+  Package,
   Target,
   Calendar,
   CheckSquare,
@@ -107,6 +108,7 @@ export function Sidebar() {
       { name: "Dashboard", href: "/", icon: LayoutDashboard, moduleId: "dashboard" },
       { name: "Conversas", href: "/conversas", icon: MessageCircle, moduleId: "conversas" },
       { name: "Clientes", href: "/clientes", icon: Users, moduleId: "clientes" },
+      { name: "Fornecedores", href: "/fornecedores", icon: Package, moduleId: "fornecedores" },
       { name: "Pipeline", href: "/pipeline", icon: Target, children: pipelineMenus, moduleId: "pipeline" },
       { name: "Agenda", href: "/agenda", icon: Calendar, moduleId: "agenda" },
       { name: "Tarefas", href: "/tarefas", icon: CheckSquare, moduleId: "tarefas" },

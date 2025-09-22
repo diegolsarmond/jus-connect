@@ -11,6 +11,10 @@ import Clientes from "./pages/Clientes";
 import NovoCliente from "./pages/NovoCliente";
 import EditarCliente from "./pages/EditarCliente";
 import VisualizarCliente from "./pages/VisualizarCliente";
+import Fornecedores from "./pages/Fornecedores";
+import NovoFornecedor from "./pages/NovoFornecedor";
+import EditarFornecedor from "./pages/EditarFornecedor";
+import VisualizarFornecedor from "./pages/VisualizarFornecedor";
 import NovoProcesso from "./pages/NovoProcesso";
 import VisualizarProcesso from "./pages/VisualizarProcesso";
 import ContratoPreview from "./pages/ContratoPreview";
@@ -127,6 +131,10 @@ const App = () => (
                 element={withModule("clientes", <ContratoPreview />)}
               />
               <Route path="/clientes/:id" element={withModule("clientes", <VisualizarCliente />)} />
+              <Route path="/fornecedores" element={withModule("fornecedores", <Fornecedores />)} />
+              <Route path="/fornecedores/novo" element={withModule("fornecedores", <NovoFornecedor />)} />
+              <Route path="/fornecedores/:id/editar" element={withModule("fornecedores", <EditarFornecedor />)} />
+              <Route path="/fornecedores/:id" element={withModule("fornecedores", <VisualizarFornecedor />)} />
               <Route path="/pipeline" element={withModule("pipeline", <PipelineMenu />)} />
               <Route path="/pipeline/:fluxoId" element={withModule("pipeline", <Pipeline />)} />
               <Route path="/pipeline/nova-oportunidade" element={withModule("pipeline", <NovaOportunidade />)} />
