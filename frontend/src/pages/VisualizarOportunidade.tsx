@@ -3645,7 +3645,7 @@ export default function VisualizarOportunidade() {
                   }
                 >
                   <SelectTrigger id="billing-forma">
-                    <SelectValue placeholder="Selecione a forma" />
+                    <SelectValue placeholder="Selecione a forma de pagamento" />
                   </SelectTrigger>
                   <SelectContent>
                     {BILLING_PAYMENT_OPTIONS.map((option) => (
