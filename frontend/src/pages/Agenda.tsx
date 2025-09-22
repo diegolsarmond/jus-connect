@@ -27,6 +27,9 @@ import {
   AppointmentStatus,
   appointmentTypes,
   normalizeAppointmentType,
+  normalizeMeetingFormat,
+  meetingFormatToTipoLocal,
+  tipoLocalToMeetingFormat,
 } from '@/types/agenda';
 
 const apiUrl = getApiBaseUrl();
@@ -231,6 +234,19 @@ function mapAgendaResponseToAppointment(
 
   const numericId = toNumericId(row.id);
   const finalId = numericId ?? fallback.id ?? Date.now();
+  const hasRowLocation = typeof row.local === 'string' && row.local.trim().length > 0;
+  const fallbackMeetingFormat = normalizeMeetingFormat(
+    fallback.meetingFormat,
+    hasRowLocation ? 'presencial' : 'online',
+  );
+  const resolvedMeetingFormat = tipoLocalToMeetingFormat(
+    row.tipo_local,
+    fallbackMeetingFormat,
+  );
+  const resolvedLocation =
+    resolvedMeetingFormat === 'presencial'
+      ? row.local ?? fallback.location ?? undefined
+      : undefined;
 
   return {
     id: finalId,
@@ -246,7 +262,8 @@ function mapAgendaResponseToAppointment(
     clientName: row.cliente ?? fallback.clientName ?? undefined,
     clientPhone: row.cliente_telefone ?? fallback.clientPhone ?? undefined,
     clientEmail: row.cliente_email ?? fallback.clientEmail ?? undefined,
-    location: row.local ?? fallback.location ?? undefined,
+    location: resolvedLocation,
+    meetingFormat: resolvedMeetingFormat,
     reminders: resolvedReminders,
     notifyClient: fallback.notifyClient ?? false,
     createdAt,
@@ -437,6 +454,8 @@ export default function Agenda() {
     const normalizedEndTime = appointmentData.endTime
       ? ensureTimeString(appointmentData.endTime)
       : undefined;
+    const normalizedMeetingFormat = normalizeMeetingFormat(appointmentData.meetingFormat);
+    const normalizedLocation = toOptionalString(appointmentData.location);
 
     const normalizedData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'> = {
       ...appointmentData,
@@ -448,7 +467,8 @@ export default function Agenda() {
       clientName: toOptionalString(appointmentData.clientName),
       clientPhone: toOptionalString(appointmentData.clientPhone),
       clientEmail: toOptionalString(appointmentData.clientEmail),
-      location: toOptionalString(appointmentData.location),
+      meetingFormat: normalizedMeetingFormat,
+      location: normalizedMeetingFormat === 'presencial' ? normalizedLocation : undefined,
     };
 
     setIsSavingAppointment(true);
@@ -490,8 +510,9 @@ export default function Agenda() {
           hora_inicio: normalizedData.startTime,
           hora_fim: normalizedData.endTime ?? null,
           cliente: parsedClientId ?? null,
-          tipo_local: null,
-          local: normalizedData.location ?? null,
+          tipo_local: meetingFormatToTipoLocal(normalizedMeetingFormat),
+          local:
+            normalizedMeetingFormat === 'presencial' ? normalizedData.location ?? null : null,
           lembrete: normalizedData.reminders,
           status: 1,
         };

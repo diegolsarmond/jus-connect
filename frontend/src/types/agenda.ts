@@ -7,6 +7,8 @@ export type AppointmentType =
   | 'prazo'
   | 'outro';
 
+export type MeetingFormat = 'presencial' | 'online';
+
 export const APPOINTMENT_TYPE_VALUES: AppointmentType[] = [
   'reuniao',
   'visita',
@@ -15,8 +17,47 @@ export const APPOINTMENT_TYPE_VALUES: AppointmentType[] = [
   'outro',
 ];
 
+export const MEETING_FORMAT_VALUES: MeetingFormat[] = ['presencial', 'online'];
+
 export const isValidAppointmentType = (value: unknown): value is AppointmentType =>
   typeof value === 'string' && (APPOINTMENT_TYPE_VALUES as string[]).includes(value);
+
+export const normalizeMeetingFormat = (
+  value: unknown,
+  fallback: MeetingFormat = 'presencial',
+): MeetingFormat => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'online') {
+      return 'online';
+    }
+    if (normalized === 'presencial') {
+      return 'presencial';
+    }
+  }
+
+  return fallback;
+};
+
+export const meetingFormatToTipoLocal = (meetingFormat: MeetingFormat): 'interno' | 'externo' =>
+  meetingFormat === 'online' ? 'externo' : 'interno';
+
+export const tipoLocalToMeetingFormat = (
+  tipoLocal: unknown,
+  fallback: MeetingFormat = 'presencial',
+): MeetingFormat => {
+  if (typeof tipoLocal === 'string') {
+    const normalized = tipoLocal.trim().toLowerCase();
+    if (normalized === 'externo' || normalized === 'online' || normalized === 'virtual') {
+      return 'online';
+    }
+    if (normalized === 'interno' || normalized === 'presencial') {
+      return 'presencial';
+    }
+  }
+
+  return fallback;
+};
 
 const removeDiacritics = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -96,6 +137,7 @@ export interface Appointment {
   clientPhone?: string;
   clientEmail?: string;
   location?: string;
+  meetingFormat: MeetingFormat;
   reminders: boolean;
   notifyClient?: boolean;
   createdAt: Date;
