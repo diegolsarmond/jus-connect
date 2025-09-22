@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -387,9 +387,11 @@ interface BillingFormState {
   condicaoPagamento: BillingCondition;
   parcelas: string;
   valor: string;
+  juros: string;
+  multa: string;
   dataFaturamento: string;
   observacoes: string;
-  selectedInstallmentId: number | null;
+  selectedInstallmentIds: number[];
 }
 
 const coerceArray = (data: unknown): unknown[] => {
@@ -549,6 +551,13 @@ export default function VisualizarOportunidade() {
   const [interactionHistory, setInteractionHistory] = useState<InteractionEntry[]>([]);
   const [installments, setInstallments] = useState<InstallmentRecord[]>([]);
   const [billingHistory, setBillingHistory] = useState<BillingRecord[]>([]);
+  const billingHistoryById = useMemo(() => {
+    const map = new Map<number, BillingRecord>();
+    billingHistory.forEach((record) => {
+      map.set(record.id, record);
+    });
+    return map;
+  }, [billingHistory]);
   const [billingDialogOpen, setBillingDialogOpen] = useState(false);
   const [billingSubmitting, setBillingSubmitting] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
@@ -558,9 +567,11 @@ export default function VisualizarOportunidade() {
     condicaoPagamento: "À vista",
     parcelas: "1",
     valor: "",
+    juros: "",
+    multa: "",
     dataFaturamento: new Date().toISOString().slice(0, 10),
     observacoes: "",
-    selectedInstallmentId: null,
+    selectedInstallmentIds: [],
   }));
 
   const interactionStorageKey = useMemo(
@@ -1279,6 +1290,44 @@ export default function VisualizarOportunidade() {
 
   const hasPendingInstallments = pendingInstallments.length > 0;
 
+  const pendingInstallmentsById = useMemo(() => {
+    const map = new Map<number, InstallmentRecord>();
+    pendingInstallments.forEach((installment) => {
+      map.set(installment.id, installment);
+    });
+    return map;
+  }, [pendingInstallments]);
+
+  const areInstallmentArraysEqual = (a: number[], b: number[]): boolean => {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let index = 0; index < a.length; index += 1) {
+      if (a[index] !== b[index]) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const sumInstallmentsById = (ids: number[]): number | null => {
+    if (ids.length === 0) {
+      return null;
+    }
+    let total = 0;
+    for (const id of ids) {
+      const installment = pendingInstallmentsById.get(id);
+      if (!installment) {
+        return null;
+      }
+      const value = parseToNumber(installment.valor);
+      if (value === null) {
+        return null;
+      }
+      total += value;
+    }
+    return total;
+  };
+
   const calculateInstallmentTotal = useCallback(
     (count: number): number | null => {
       if (!Number.isFinite(count) || count <= 0) return null;
@@ -1553,28 +1602,46 @@ export default function VisualizarOportunidade() {
 
   useEffect(() => {
     if (!billingDialogOpen) return;
-    if (!hasPendingInstallments) return;
 
     setBillingForm((prev) => {
-      if (prev.selectedInstallmentId !== null) {
-        const exists = pendingInstallments.some(
-          (installment) => installment.id === prev.selectedInstallmentId,
-        );
-        if (exists) {
+      if (!hasPendingInstallments) {
+        if (prev.selectedInstallmentIds.length === 0) {
           return prev;
         }
+        return { ...prev, selectedInstallmentIds: [] };
       }
 
-      const first = pendingInstallments[0];
-      if (!first) {
-        return prev;
+      const pendingIds = pendingInstallments.map((installment) => installment.id);
+      const filteredIds = prev.selectedInstallmentIds.filter((id) =>
+        pendingIds.includes(id),
+      );
+
+      if (filteredIds.length === 0) {
+        const firstId = pendingIds[0];
+        if (firstId === undefined) {
+          return { ...prev, selectedInstallmentIds: [] };
+        }
+        if (
+          prev.selectedInstallmentIds.length === 1 &&
+          prev.selectedInstallmentIds[0] === firstId
+        ) {
+          return prev;
+        }
+        return { ...prev, selectedInstallmentIds: [firstId] };
       }
 
-      if (prev.selectedInstallmentId === first.id) {
-        return prev;
+      if (filteredIds.length !== prev.selectedInstallmentIds.length) {
+        return { ...prev, selectedInstallmentIds: filteredIds };
       }
 
-      return { ...prev, selectedInstallmentId: first.id };
+      const sameOrder = filteredIds.every(
+        (id, index) => id === prev.selectedInstallmentIds[index],
+      );
+      if (!sameOrder) {
+        return { ...prev, selectedInstallmentIds: filteredIds };
+      }
+
+      return prev;
     });
   }, [billingDialogOpen, hasPendingInstallments, pendingInstallments]);
 
@@ -1598,15 +1665,14 @@ export default function VisualizarOportunidade() {
         ? "Parcelado"
         : "À vista";
 
-    const selectedInstallment = hasPendingInstallments ? pendingInstallments[0] : undefined;
-    const selectedInstallmentValue = selectedInstallment
-      ? parseToNumber(selectedInstallment.valor)
-      : null;
+    const defaultSelectedIds = hasPendingInstallments
+      ? pendingInstallments.slice(0, 1).map((installment) => installment.id)
+      : [];
 
     const parcelasBase =
       defaultCondition === "Parcelado"
         ? hasPendingInstallments
-          ? 1
+          ? Math.max(defaultSelectedIds.length, 1)
           : pendingCount > 0
             ? pendingCount
             : parcelasRegistradas && parcelasRegistradas > 0
@@ -1621,7 +1687,8 @@ export default function VisualizarOportunidade() {
     const parcelasParaValor = Math.max(parcelasBase, 1);
 
     const computedTotal = hasPendingInstallments
-      ? selectedInstallmentValue ?? calculateInstallmentTotal(1)
+      ? sumInstallmentsById(defaultSelectedIds) ??
+        calculateInstallmentTotal(defaultSelectedIds.length || 1)
       : defaultCondition === "Parcelado"
         ? calculateInstallmentTotal(parcelasParaValor) ??
           (honorarios !== null && parcelasRegistradas && parcelasRegistradas > 0
@@ -1637,13 +1704,19 @@ export default function VisualizarOportunidade() {
         matchedOption || registeredForma.length === 0 ? "" : registeredForma,
       condicaoPagamento: defaultCondition,
       parcelas:
-        defaultCondition === "Parcelado"
-          ? String(hasPendingInstallments ? 1 : parcelasParaValor)
-          : "1",
+        hasPendingInstallments
+          ? defaultSelectedIds.length > 0
+            ? String(defaultSelectedIds.length)
+            : ""
+          : defaultCondition === "Parcelado"
+            ? String(Math.max(parcelasParaValor, 1))
+            : "1",
       valor: formatNumberForInput(computedTotal ?? null),
+      juros: "",
+      multa: "",
       dataFaturamento: new Date().toISOString().slice(0, 10),
       observacoes: "",
-      selectedInstallmentId: selectedInstallment ? selectedInstallment.id : null,
+      selectedInstallmentIds: defaultSelectedIds,
     });
     setBillingError(null);
     setBillingDialogOpen(true);
@@ -1654,15 +1727,14 @@ export default function VisualizarOportunidade() {
 
     const honorariosRegistrados = parseToNumber(opportunity?.valor_honorarios);
     const totalParcelasRegistradas = parseToNumber(opportunity?.qtde_parcelas);
-    const selectedInstallment =
-      hasPendingInstallments && billingForm.selectedInstallmentId !== null
-        ? pendingInstallments.find(
-            (installment) => installment.id === billingForm.selectedInstallmentId,
-          )
-        : undefined;
+    const selectedInstallmentIds = hasPendingInstallments
+      ? billingForm.selectedInstallmentIds.filter((installmentId) =>
+          pendingInstallmentsById.has(installmentId),
+        )
+      : [];
 
-    if (hasPendingInstallments && !selectedInstallment) {
-      setBillingError("Selecione a parcela que deseja faturar.");
+    if (hasPendingInstallments && selectedInstallmentIds.length === 0) {
+      setBillingError("Selecione ao menos uma parcela que deseja faturar.");
       return;
     }
 
@@ -1694,14 +1766,49 @@ export default function VisualizarOportunidade() {
       return;
     }
 
-    const selectedInstallmentIds = selectedInstallment ? [selectedInstallment.id] : [];
-    const selectedInstallmentValue = selectedInstallment
-      ? parseToNumber(selectedInstallment.valor)
-      : null;
+    const jurosTexto = billingForm.juros.trim();
+    let jurosValor = 0;
+    if (jurosTexto.length > 0) {
+      const parsedJuros = parseToNumber(jurosTexto);
+      if (parsedJuros === null || Number.isNaN(parsedJuros)) {
+        setBillingError("Informe um valor válido para os juros.");
+        return;
+      }
+      if (parsedJuros < 0) {
+        setBillingError("Os juros não podem ser negativos.");
+        return;
+      }
+      jurosValor = parsedJuros;
+    }
+
+    const multaTexto = billingForm.multa.trim();
+    let multaValor = 0;
+    if (multaTexto.length > 0) {
+      const parsedMulta = parseToNumber(multaTexto);
+      if (parsedMulta === null || Number.isNaN(parsedMulta)) {
+        setBillingError("Informe um valor válido para a multa.");
+        return;
+      }
+      if (parsedMulta < 0) {
+        setBillingError("A multa não pode ser negativa.");
+        return;
+      }
+      multaValor = parsedMulta;
+    }
+
+    const encargosValor = jurosValor + multaValor;
 
     let parcelasValor: number | null = null;
+    let baseValor: number | null = null;
+
     if (selectedInstallmentIds.length > 0) {
+      const selectedSum = sumInstallmentsById(selectedInstallmentIds);
+      if (selectedSum === null) {
+        setBillingError("Não foi possível identificar o valor das parcelas selecionadas.");
+        return;
+      }
       parcelasValor = selectedInstallmentIds.length;
+      baseValor = selectedSum;
     } else if (billingForm.condicaoPagamento === "Parcelado") {
       const parsedParcelas = Number.parseInt(billingForm.parcelas, 10);
       if (!parsedParcelas || Number.isNaN(parsedParcelas) || parsedParcelas < 1) {
@@ -1713,38 +1820,43 @@ export default function VisualizarOportunidade() {
         return;
       }
       parcelasValor = parsedParcelas;
-    }
-
-    if (selectedInstallmentIds.length > 0) {
-      if (selectedInstallmentValue === null) {
-        setBillingError("Não foi possível identificar o valor da parcela selecionada.");
-        return;
-      }
-      valorNumero = selectedInstallmentValue;
-    } else if (billingForm.condicaoPagamento === "Parcelado") {
       if (parcelasValor) {
         const calculated = calculateInstallmentTotal(parcelasValor);
         if (calculated !== null) {
-          valorNumero = calculated;
+          baseValor = calculated;
         } else if (
-          valorNumero === null &&
           honorariosRegistrados !== null &&
           totalParcelasRegistradas &&
           totalParcelasRegistradas > 0
         ) {
-          valorNumero =
+          baseValor =
             (honorariosRegistrados /
               Math.max(Math.trunc(totalParcelasRegistradas), 1)) * parcelasValor;
         }
       }
     } else {
       const pendingCount = pendingInstallments.length;
-      const calculated = pendingCount > 0 ? calculateInstallmentTotal(pendingCount) : null;
-      if (calculated !== null) {
-        valorNumero = calculated;
-      } else if (valorNumero === null) {
-        valorNumero = honorariosRegistrados;
+      if (pendingCount > 0) {
+        const calculated = calculateInstallmentTotal(pendingCount);
+        if (calculated !== null) {
+          baseValor = calculated;
+          parcelasValor = pendingCount;
+        }
       }
+      if (baseValor === null) {
+        baseValor = honorariosRegistrados;
+      }
+    }
+
+    if (baseValor !== null) {
+      valorNumero = baseValor + encargosValor;
+    } else if (valorNumero === null && encargosValor > 0) {
+      valorNumero = encargosValor;
+    }
+
+    if (valorNumero === null) {
+      setBillingError("Não foi possível determinar o valor para faturamento.");
+      return;
     }
 
     const payload = {
@@ -1758,6 +1870,8 @@ export default function VisualizarOportunidade() {
             ? pendingInstallments.length
             : undefined,
       parcelas_ids: selectedInstallmentIds.length > 0 ? selectedInstallmentIds : undefined,
+      juros: jurosValor > 0 ? jurosValor : undefined,
+      multa: multaValor > 0 ? multaValor : undefined,
       observacoes:
         billingForm.observacoes.trim().length > 0
           ? billingForm.observacoes.trim()
@@ -1804,22 +1918,68 @@ export default function VisualizarOportunidade() {
   useEffect(() => {
     if (!billingDialogOpen) return;
 
+    const jurosValor = (() => {
+      const trimmed = billingForm.juros.trim();
+      if (trimmed.length === 0) return 0;
+      const parsed = parseToNumber(trimmed);
+      return parsed !== null && Number.isFinite(parsed) ? parsed : 0;
+    })();
+
+    const multaValor = (() => {
+      const trimmed = billingForm.multa.trim();
+      if (trimmed.length === 0) return 0;
+      const parsed = parseToNumber(trimmed);
+      return parsed !== null && Number.isFinite(parsed) ? parsed : 0;
+    })();
+
+    const extrasTotal = jurosValor + multaValor;
+
     if (hasPendingInstallments) {
-      const selected =
-        billingForm.selectedInstallmentId !== null
-          ? pendingInstallments.find(
-              (installment) => installment.id === billingForm.selectedInstallmentId,
-            )
-          : pendingInstallments[0];
-      const computed = selected ? parseToNumber(selected.valor) : null;
-      if (computed !== null) {
-        const formatted = formatNumberForInput(computed);
-        setBillingForm((prev) =>
-          prev.valor === formatted && prev.parcelas === "1"
-            ? prev
-            : { ...prev, valor: formatted, parcelas: "1" },
-        );
-      }
+      const sanitizedIds = billingForm.selectedInstallmentIds.filter((id) =>
+        pendingInstallmentsById.has(id),
+      );
+      const idsToUse =
+        sanitizedIds.length > 0
+          ? sanitizedIds
+          : pendingInstallments.slice(0, 1).map((installment) => installment.id);
+      const selectedTotal = idsToUse.length > 0 ? sumInstallmentsById(idsToUse) : null;
+      const formattedTotal =
+        selectedTotal !== null
+          ? formatNumberForInput(selectedTotal + extrasTotal)
+          : null;
+      const parcelasValue = idsToUse.length > 0 ? String(idsToUse.length) : "";
+
+      setBillingForm((prev) => {
+        let changed = false;
+
+        if (!areInstallmentArraysEqual(prev.selectedInstallmentIds, idsToUse)) {
+          changed = true;
+        }
+
+        if (prev.parcelas !== parcelasValue) {
+          changed = true;
+        }
+
+        if (formattedTotal !== null && prev.valor !== formattedTotal) {
+          changed = true;
+        }
+
+        if (!changed) {
+          return prev;
+        }
+
+        const updated: BillingFormState = {
+          ...prev,
+          selectedInstallmentIds: idsToUse,
+          parcelas: parcelasValue,
+        };
+
+        if (formattedTotal !== null) {
+          updated.valor = formattedTotal;
+        }
+
+        return updated;
+      });
       return;
     }
 
@@ -1846,7 +2006,7 @@ export default function VisualizarOportunidade() {
         })();
 
       if (computed !== null) {
-        const formatted = formatNumberForInput(computed);
+        const formatted = formatNumberForInput(computed + extrasTotal);
         setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
       }
     } else if (billingForm.condicaoPagamento === "À vista") {
@@ -1856,7 +2016,10 @@ export default function VisualizarOportunidade() {
           ? calculateInstallmentTotal(pendingCount)
           : parseToNumber(opportunity?.valor_honorarios);
       if (computed !== null) {
-        const formatted = formatNumberForInput(computed);
+        const formatted = formatNumberForInput(computed + extrasTotal);
+        setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
+      } else if (extrasTotal > 0) {
+        const formatted = formatNumberForInput(extrasTotal);
         setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
       }
     }
@@ -1864,10 +2027,13 @@ export default function VisualizarOportunidade() {
     billingDialogOpen,
     billingForm.condicaoPagamento,
     billingForm.parcelas,
-    billingForm.selectedInstallmentId,
+    billingForm.selectedInstallmentIds,
+    billingForm.juros,
+    billingForm.multa,
     calculateInstallmentTotal,
     formatNumberForInput,
     hasPendingInstallments,
+    pendingInstallmentsById,
     pendingInstallments,
     opportunity?.valor_honorarios,
     opportunity?.qtde_parcelas,
@@ -2791,88 +2957,70 @@ export default function VisualizarOportunidade() {
                             ? formatDate(installment.quitado_em)
                             : null;
 
-                        return (
-                          <div
-                            key={installment.id}
-                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 p-3"
-                          >
-                            <div>
-                              <p className="text-xs text-muted-foreground">
-                                Parcela {installment.numero_parcela}
-                              </p>
+                      return (
+                        <div
+                          key={installment.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 p-3"
+                        >
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              Parcela {installment.numero_parcela}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold">
                                 {valorParcela !== null ? formatCurrency(valorParcela) : "—"}
                               </p>
-                            </div>
-                            <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
-                              <Badge variant={isPaid ? "secondary" : "outline"}>
-                                {isPaid ? "Quitada" : "Pendente"}
-                              </Badge>
-                              {quitadoEm && <span>Quitada em {quitadoEm}</span>}
+                              {(() => {
+                                const faturamento =
+                                  typeof installment.faturamento_id === "number"
+                                    ? billingHistoryById.get(installment.faturamento_id)
+                                    : null;
+                                if (!faturamento) {
+                                  return null;
+                                }
+                                const forma =
+                                  typeof faturamento.forma_pagamento === "string" &&
+                                  faturamento.forma_pagamento.trim().length > 0
+                                    ? faturamento.forma_pagamento.trim()
+                                    : null;
+                                const condicao =
+                                  typeof faturamento.condicao_pagamento === "string" &&
+                                  faturamento.condicao_pagamento.trim().length > 0
+                                    ? faturamento.condicao_pagamento.trim()
+                                    : null;
+                                const parcelasValor = parseToNumber(faturamento.parcelas);
+
+                                return (
+                                  <>
+                                    {forma && <Badge variant="outline">{forma}</Badge>}
+                                    {condicao ? (
+                                      <Badge variant="outline">{condicao}</Badge>
+                                    ) : parcelasValor && parcelasValor > 1 ? (
+                                      <Badge variant="secondary">
+                                        {parcelasValor} {parcelasValor > 1 ? "parcelas" : "parcela"}
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline">À vista</Badge>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {billingHistory.length > 0 ? (
-                  <div className="space-y-3">
-                    {billingHistory.map((record) => {
-                      const valor = parseToNumber(record.valor);
-                      const parcelasValor = parseToNumber(record.parcelas);
-                      const faturamentoData =
-                        typeof record.data_faturamento === "string" &&
-                        record.data_faturamento.trim().length > 0
-                          ? formatDate(record.data_faturamento)
-                          : null;
-
-                      return (
-                        <div
-                          key={record.id}
-                          className="rounded-lg border border-border/60 bg-background/60 p-4 shadow-sm"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="space-y-1">
-                              <p className="text-sm font-semibold">
-                                {record.forma_pagamento}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                {record.condicao_pagamento && (
-                                  <Badge variant="outline">
-                                    {record.condicao_pagamento}
-                                  </Badge>
-                                )}
-                                {!record.condicao_pagamento &&
-                                  (!parcelasValor || parcelasValor <= 1) && (
-                                    <Badge variant="outline">À vista</Badge>
-                                  )}
-                                {parcelasValor && parcelasValor > 1 && (
-                                  <Badge variant="secondary">
-                                    {parcelasValor}{" "}
-                                    {parcelasValor > 1 ? "parcelas" : "parcela"}
-                                  </Badge>
-                                )}
-                                {faturamentoData && faturamentoData !== "—" && (
-                                  <span>Faturado em {faturamentoData}</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-sm font-semibold">
-                              {valor !== null ? formatCurrency(valor) : "—"}
-                            </div>
+                          <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
+                            <Badge variant={isPaid ? "secondary" : "outline"}>
+                              {isPaid ? "Quitada" : "Pendente"}
+                            </Badge>
+                            {quitadoEm && <span>Quitada em {quitadoEm}</span>}
                           </div>
-                          {record.observacoes && record.observacoes.length > 0 && (
-                            <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
-                              {record.observacoes}
-                            </p>
-                          )}
                         </div>
                       );
                     })}
                   </div>
-                ) : (
+                </div>
+                )}
+
+                {billingHistory.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     Nenhum faturamento registrado até o momento.
                   </p>
@@ -3304,56 +3452,57 @@ export default function VisualizarOportunidade() {
                 <div className="space-y-2 sm:col-span-2">
                   <p className="text-sm font-medium text-foreground">Parcelas pendentes</p>
                   <div className="space-y-3 rounded-md border border-border/70 bg-background p-3">
-                    <RadioGroup
-                      value={
-                        billingForm.selectedInstallmentId !== null
-                          ? String(billingForm.selectedInstallmentId)
-                          : ""
-                      }
-                      onValueChange={(value) => {
-                        if (!value) {
-                          setBillingForm((prev) => ({
-                            ...prev,
-                            selectedInstallmentId: null,
-                          }));
-                          return;
-                        }
-                        const parsed = Number(value);
-                        setBillingForm((prev) => ({
-                          ...prev,
-                          selectedInstallmentId: Number.isNaN(parsed) ? null : parsed,
-                        }));
-                      }}
-                    >
-                      {pendingInstallments.map((installment) => {
-                        const optionId = `billing-installment-${installment.id}`;
-                        const valorParcela = parseToNumber(installment.valor);
-                        return (
-                          <div
-                            key={installment.id}
-                            className="flex items-start gap-3 rounded-md border border-border/40 p-3"
-                          >
-                            <RadioGroupItem value={String(installment.id)} id={optionId} />
-                            <div className="flex flex-1 flex-col">
-                              <Label
-                                htmlFor={optionId}
-                                className="cursor-pointer font-medium leading-none"
-                              >
-                                {`Parcela ${installment.numero_parcela}`}
-                              </Label>
-                              <span className="text-xs text-muted-foreground">
-                                {valorParcela !== null
-                                  ? formatCurrency(valorParcela)
-                                  : "Valor não informado"}
-                              </span>
-                            </div>
+                    {pendingInstallments.map((installment) => {
+                      const optionId = `billing-installment-${installment.id}`;
+                      const valorParcela = parseToNumber(installment.valor);
+                      const isChecked = billingForm.selectedInstallmentIds.includes(
+                        installment.id,
+                      );
+                      return (
+                        <div
+                          key={installment.id}
+                          className="flex items-start gap-3 rounded-md border border-border/40 p-3"
+                        >
+                          <Checkbox
+                            id={optionId}
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              setBillingForm((prev) => {
+                                const nextIds = new Set(prev.selectedInstallmentIds);
+                                if (checked === true) {
+                                  nextIds.add(installment.id);
+                                } else {
+                                  nextIds.delete(installment.id);
+                                }
+                                const ordered = pendingInstallments
+                                  .map((item) => item.id)
+                                  .filter((id) => nextIds.has(id));
+                                return {
+                                  ...prev,
+                                  selectedInstallmentIds: ordered,
+                                };
+                              });
+                            }}
+                          />
+                          <div className="flex flex-1 flex-col">
+                            <Label
+                              htmlFor={optionId}
+                              className="cursor-pointer font-medium leading-none"
+                            >
+                              {`Parcela ${installment.numero_parcela}`}
+                            </Label>
+                            <span className="text-xs text-muted-foreground">
+                              {valorParcela !== null
+                                ? formatCurrency(valorParcela)
+                                : "Valor não informado"}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </RadioGroup>
+                        </div>
+                      );
+                    })}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    A parcela selecionada será atualizada como paga após o faturamento.
+                    As parcelas selecionadas serão atualizadas como pagas após o faturamento.
                   </p>
                 </div>
               )}
@@ -3406,30 +3555,6 @@ export default function VisualizarOportunidade() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="billing-valor">Valor a faturar</Label>
-                <Input
-                  id="billing-valor"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  readOnly={hasPendingInstallments || billingForm.condicaoPagamento === "Parcelado"}
-                  value={billingForm.valor}
-                  onChange={(event) =>
-                    setBillingForm((prev) => ({
-                      ...prev,
-                      valor: event.target.value,
-                    }))
-                  }
-                />
-                {(billingForm.condicaoPagamento === "Parcelado" || hasPendingInstallments) && (
-                  <p className="text-xs text-muted-foreground">
-                    O valor é calculado automaticamente conforme as parcelas selecionadas.
-                  </p>
-                )}
-              </div>
-
               {billingForm.condicaoPagamento === "Parcelado" && (
                 <div className="space-y-2">
                   <Label htmlFor="billing-parcelas">Quantidade de parcelas</Label>
@@ -3450,6 +3575,66 @@ export default function VisualizarOportunidade() {
                   />
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="billing-valor">Valor a faturar</Label>
+                <Input
+                  id="billing-valor"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  readOnly={hasPendingInstallments || billingForm.condicaoPagamento === "Parcelado"}
+                  value={billingForm.valor}
+                  onChange={(event) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      valor: event.target.value,
+                    }))
+                  }
+                />
+                {(billingForm.condicaoPagamento === "Parcelado" || hasPendingInstallments) && (
+                  <p className="text-xs text-muted-foreground">
+                    O valor é calculado automaticamente conforme as parcelas e encargos selecionados.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="billing-juros">Juros</Label>
+                <Input
+                  id="billing-juros"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={billingForm.juros}
+                  onChange={(event) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      juros: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="billing-multa">Multa</Label>
+                <Input
+                  id="billing-multa"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={billingForm.multa}
+                  onChange={(event) =>
+                    setBillingForm((prev) => ({
+                      ...prev,
+                      multa: event.target.value,
+                    }))
+                  }
+                />
+              </div>
 
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="billing-observacoes">Observações</Label>

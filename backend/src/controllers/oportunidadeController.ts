@@ -247,6 +247,7 @@ const resetOpportunityInstallments = async (
   client: PoolClient,
   oportunidadeId: number,
   installments: InstallmentEntry[],
+  empresaId: number | null,
 ) => {
   await client.query('DELETE FROM public.oportunidade_parcelas WHERE oportunidade_id = $1', [
     oportunidadeId,
@@ -256,14 +257,16 @@ const resetOpportunityInstallments = async (
     return;
   }
 
+  const empresaValue = empresaId ?? null;
+
   for (let index = 0; index < installments.length; index += 1) {
     const installment = installments[index];
     const dueDateParam =
       installment.dataPrevista !== null ? formatDateOnly(installment.dataPrevista) : null;
     await client.query(
-      `INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor, data_prevista)
-       VALUES ($1, $2, $3, $4)`,
-      [oportunidadeId, index + 1, installment.valor, dueDateParam],
+      `INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor, data_prevista, idempresa)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [oportunidadeId, index + 1, installment.valor, dueDateParam, empresaValue],
     );
   }
 };
@@ -275,11 +278,12 @@ const createOrReplaceOpportunityInstallments = async (
   formaPagamento: unknown,
   qtdeParcelas: unknown,
   prazoProximo: unknown,
+  empresaId: number | null,
 ) => {
   const normalizedPayment = normalizePaymentLabel(formaPagamento);
   const honorarios = normalizeDecimal(valorHonorarios);
   if (!honorarios || honorarios <= 0 || !shouldCreateInstallments(normalizedPayment)) {
-    await resetOpportunityInstallments(client, oportunidadeId, []);
+    await resetOpportunityInstallments(client, oportunidadeId, [], empresaId);
     return;
   }
 
@@ -300,7 +304,7 @@ const createOrReplaceOpportunityInstallments = async (
     valor,
     dataPrevista: dueDates[index] ?? null,
   }));
-  await resetOpportunityInstallments(client, oportunidadeId, installments);
+  await resetOpportunityInstallments(client, oportunidadeId, installments, empresaId);
 };
 
 const ensureOpportunityInstallments = async (
@@ -310,6 +314,7 @@ const ensureOpportunityInstallments = async (
   formaPagamento: unknown,
   qtdeParcelas: unknown,
   prazoProximo: unknown,
+  empresaId: number | null,
 ) => {
   const existing = await client.query(
     'SELECT id FROM public.oportunidade_parcelas WHERE oportunidade_id = $1 LIMIT 1',
@@ -325,6 +330,7 @@ const ensureOpportunityInstallments = async (
     formaPagamento,
     qtdeParcelas,
     prazoProximo,
+    empresaId,
   );
 };
 
@@ -620,6 +626,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
       forma_pagamento,
       qtde_parcelas,
       prazo_proximo,
+      empresaId,
     );
     await client.query('COMMIT');
     res.status(201).json(oportunidade);
@@ -699,7 +706,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
                  valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-                 detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao`,
+                 detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa`,
       [
         tipo_processo_id,
         area_atuacao_id,
@@ -765,6 +772,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
       forma_pagamento,
       qtde_parcelas,
       prazo_proximo,
+      typeof oportunidade.idempresa === 'number' ? oportunidade.idempresa : null,
     );
 
     await client.query('COMMIT');
@@ -940,6 +948,8 @@ export const createOportunidadeFaturamento = async (
     observacoes,
     data_faturamento,
     parcelas_ids,
+    juros,
+    multa,
   } = req.body as {
     forma_pagamento?: unknown;
     condicao_pagamento?: unknown;
@@ -948,6 +958,8 @@ export const createOportunidadeFaturamento = async (
     observacoes?: unknown;
     data_faturamento?: unknown;
     parcelas_ids?: unknown;
+    juros?: unknown;
+    multa?: unknown;
   };
 
   const formaValue = normalizeText(forma_pagamento);
@@ -987,13 +999,57 @@ export const createOportunidadeFaturamento = async (
 
   const observations = normalizeText(observacoes);
 
+  const jurosValor = (() => {
+    if (juros === undefined || juros === null) {
+      return 0;
+    }
+    if (typeof juros === 'string' && juros.trim().length === 0) {
+      return 0;
+    }
+    const parsed = normalizeDecimal(juros);
+    if (parsed === null) {
+      return null;
+    }
+    return parsed;
+  })();
+
+  if (jurosValor === null) {
+    return res.status(400).json({ error: 'juros inválido.' });
+  }
+  if (jurosValor < 0) {
+    return res.status(400).json({ error: 'juros não pode ser negativo.' });
+  }
+
+  const multaValor = (() => {
+    if (multa === undefined || multa === null) {
+      return 0;
+    }
+    if (typeof multa === 'string' && multa.trim().length === 0) {
+      return 0;
+    }
+    const parsed = normalizeDecimal(multa);
+    if (parsed === null) {
+      return null;
+    }
+    return parsed;
+  })();
+
+  if (multaValor === null) {
+    return res.status(400).json({ error: 'multa inválida.' });
+  }
+  if (multaValor < 0) {
+    return res.status(400).json({ error: 'multa não pode ser negativa.' });
+  }
+
+  const encargosValor = jurosValor + multaValor;
+
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
     const opportunityResult = await client.query(
-      `SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios, prazo_proximo
+      `SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios, prazo_proximo, idempresa
          FROM public.oportunidades
         WHERE id = $1`,
       [id],
@@ -1013,6 +1069,7 @@ export const createOportunidadeFaturamento = async (
       opportunity.forma_pagamento,
       opportunity.qtde_parcelas,
       opportunity.prazo_proximo,
+      typeof opportunity.idempresa === 'number' ? opportunity.idempresa : null,
     );
 
     const installmentsResult = await client.query(
@@ -1083,6 +1140,11 @@ export const createOportunidadeFaturamento = async (
       } else if (Math.abs(valorToPersist - sum) > 0.009) {
         valorToPersist = sum;
       }
+      if (valorToPersist !== null) {
+        valorToPersist += encargosValor;
+      }
+    } else if (valorToPersist === null && encargosValor > 0) {
+      valorToPersist = encargosValor;
     }
 
     const parcelasToPersist = isParcelado

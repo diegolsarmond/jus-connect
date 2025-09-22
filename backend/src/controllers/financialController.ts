@@ -2,10 +2,23 @@ import { Request, Response } from 'express';
 import type { QueryResult } from 'pg';
 import pool from '../services/db';
 import type { Flow } from '../models/flow';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasChargeService, {
   ChargeConflictError,
   ValidationError as AsaasValidationError,
 } from '../services/asaasChargeService';
+
+const getAuthenticatedUser = (
+  req: Request,
+  res: Response,
+): NonNullable<Request['auth']> | null => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  return req.auth;
+};
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -19,15 +32,50 @@ const normalizeUuid = (value: unknown): string | null => {
   return UUID_REGEX.test(trimmed) ? trimmed : null;
 };
 
+const normalizeOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+    return null;
+  }
+
+  return null;
+};
+
 const POSTGRES_UNDEFINED_TABLE = '42P01';
 const POSTGRES_UNDEFINED_COLUMN = '42703';
 const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
 
 const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
+const FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type FinancialFlowEmpresaColumn = 'idempresa' | 'empresa_id' | 'empresa';
+
+const FINANCIAL_FLOW_EMPRESA_CANDIDATES: FinancialFlowEmpresaColumn[] = [
+  'idempresa',
+  'empresa_id',
+  'empresa',
+];
 
 let opportunityTablesAvailability: boolean | null = null;
 let opportunityTablesAvailabilityCheckedAt: number | null = null;
 let opportunityTablesCheckPromise: Promise<boolean> | null = null;
+
+let financialFlowEmpresaColumn: FinancialFlowEmpresaColumn | null = null;
+let financialFlowEmpresaColumnCheckedAt: number | null = null;
+let financialFlowEmpresaColumnPromise:
+  | Promise<FinancialFlowEmpresaColumn | null>
+  | null = null;
 
 const updateOpportunityTablesAvailability = (value: boolean) => {
   opportunityTablesAvailability = value;
@@ -38,6 +86,17 @@ const resetOpportunityTablesAvailabilityCache = () => {
   opportunityTablesAvailability = null;
   opportunityTablesAvailabilityCheckedAt = null;
   opportunityTablesCheckPromise = null;
+};
+
+const updateFinancialFlowEmpresaColumn = (value: FinancialFlowEmpresaColumn | null) => {
+  financialFlowEmpresaColumn = value;
+  financialFlowEmpresaColumnCheckedAt = Date.now();
+};
+
+const resetFinancialFlowEmpresaColumnCache = () => {
+  financialFlowEmpresaColumn = null;
+  financialFlowEmpresaColumnCheckedAt = null;
+  financialFlowEmpresaColumnPromise = null;
 };
 
 const determineOpportunityTablesAvailability = async (): Promise<boolean> => {
@@ -130,9 +189,57 @@ const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
 
 export const __internal = {
   resetOpportunityTablesAvailabilityCache,
+  resetFinancialFlowEmpresaColumnCache,
 };
 
 const asaasChargeService = new AsaasChargeService();
+
+const determineFinancialFlowEmpresaColumn = async (): Promise<FinancialFlowEmpresaColumn | null> => {
+  if (
+    financialFlowEmpresaColumn !== null &&
+    financialFlowEmpresaColumnCheckedAt !== null &&
+    Date.now() - financialFlowEmpresaColumnCheckedAt < FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS
+  ) {
+    return financialFlowEmpresaColumn;
+  }
+
+  if (financialFlowEmpresaColumnPromise) {
+    return financialFlowEmpresaColumnPromise;
+  }
+
+  financialFlowEmpresaColumnPromise = pool
+    .query<{ column_name: string }>(
+      `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'financial_flows'
+      `,
+    )
+    .then((result) => {
+      const available = new Set(
+        result.rows
+          .map((row) => row?.column_name)
+          .filter((name): name is string => typeof name === 'string'),
+      );
+
+      const match = FINANCIAL_FLOW_EMPRESA_CANDIDATES.find((candidate) =>
+        available.has(candidate),
+      );
+
+      updateFinancialFlowEmpresaColumn(match ?? null);
+      return match ?? null;
+    })
+    .catch(() => {
+      updateFinancialFlowEmpresaColumn(null);
+      return null;
+    })
+    .finally(() => {
+      financialFlowEmpresaColumnPromise = null;
+    });
+
+  return financialFlowEmpresaColumnPromise;
+};
 
 export const listFlows = async (req: Request, res: Response) => {
   const { page = '1', limit = '10', clienteId } = req.query;
@@ -158,12 +265,50 @@ export const listFlows = async (req: Request, res: Response) => {
     clienteValue && clienteValue.trim().length > 0 ? clienteValue.trim() : null;
 
   try {
-    const filters: (string | number)[] = [];
-    let filterClause = '';
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res.status(empresaLookup.status).json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res.json({
+        items: [],
+        total: 0,
+        page: effectivePage,
+        limit: effectiveLimit,
+      });
+      return;
+    }
+
+    const empresaColumn = await determineFinancialFlowEmpresaColumn();
+
+    if (!empresaColumn) {
+      res.status(500).json({
+        error:
+          'Não foi possível determinar a empresa associada aos lançamentos financeiros. Entre em contato com o suporte.',
+      });
+      return;
+    }
+
+
+    const filters: (string | number)[] = [empresaId];
+    const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
+
     if (trimmedClienteId) {
       filters.push(trimmedClienteId);
-      filterClause = `WHERE combined_flows.cliente_id = $${filters.length}`;
+      filterConditions.push(`combined_flows.cliente_id = $${filters.length}`);
     }
+
+    const filterClause = `WHERE ${filterConditions.join(' AND ')}`;
 
     const baseFinancialFlowsSelect = `
         SELECT
@@ -176,7 +321,9 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.status AS status,
           ff.conta_id::TEXT AS conta_id,
           ff.categoria_id::TEXT AS categoria_id,
-          NULL::TEXT AS cliente_id
+          ff.cliente_id::TEXT AS cliente_id,
+          ff.fornecedor_id::TEXT AS fornecedor_id
+
         FROM financial_flows ff
       `;
 
@@ -203,6 +350,7 @@ ${baseFinancialFlowsSelect}
           o.sequencial_empresa,
           o.qtde_parcelas,
           o.solicitante_id,
+          p.idempresa,
           c.nome AS cliente_nome,
           f.valor AS faturamento_valor,
           f.parcelas AS faturamento_parcelas,
@@ -253,7 +401,9 @@ ${baseFinancialFlowsSelect}
           END AS status,
           NULL::TEXT AS conta_id,
           NULL::TEXT AS categoria_id,
-          p.solicitante_id::TEXT AS cliente_id
+          p.solicitante_id::TEXT AS cliente_id,
+          NULL::TEXT AS fornecedor_id
+
         FROM oportunidade_parcelas_enriched p
       )
     `;
@@ -271,7 +421,7 @@ ${baseFinancialFlowsSelect}
 
       const dataQuery = `
       ${combinedCte}
-      SELECT id, tipo, descricao, valor, vencimento, pagamento, status, conta_id, categoria_id
+      SELECT id, tipo, descricao, valor, vencimento, pagamento, status, conta_id, categoria_id, cliente_id, fornecedor_id
       FROM combined_flows
       ${filterClause}
       ORDER BY vencimento DESC, id DESC
@@ -448,6 +598,14 @@ ${baseFinancialFlowsSelect}
             : Number.isFinite(Number(row.categoria_id))
               ? Number(row.categoria_id)
               : null,
+        cliente_id:
+          typeof row.cliente_id === 'string' && row.cliente_id.trim().length > 0
+            ? row.cliente_id.trim()
+            : null,
+        fornecedor_id:
+          typeof row.fornecedor_id === 'string' && row.fornecedor_id.trim().length > 0
+            ? row.fornecedor_id.trim()
+            : null,
         descricao: normalizeDescricao(row.descricao),
         valor: normalizeNumber(row.valor),
         vencimento,
@@ -493,6 +651,7 @@ export const createFlow = async (req: Request, res: Response) => {
     vencimento,
     paymentMethod,
     clienteId,
+    fornecedorId,
     integrationApiKeyId,
     cardToken,
     asaasCustomerId,
@@ -509,9 +668,16 @@ export const createFlow = async (req: Request, res: Response) => {
 
   try {
     await client.query('BEGIN');
+    const tipoText = typeof tipo === 'string' ? tipo.trim().toLowerCase() : '';
+    const isDespesa = tipoText === 'despesa';
+    const normalizedTipo: Flow['tipo'] = isDespesa ? 'despesa' : 'receita';
+    const normalizedClienteId = normalizeOptionalInteger(clienteId);
+    const normalizedFornecedorId = normalizeOptionalInteger(fornecedorId);
+    const clienteIdForInsert = isDespesa ? null : normalizedClienteId;
+    const fornecedorIdForInsert = isDespesa ? normalizedFornecedorId : null;
     const inserted = await client.query(
-      'INSERT INTO financial_flows (tipo, descricao, valor, vencimento, status) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [tipo, descricao, valor, vencimento, 'pendente'],
+      'INSERT INTO financial_flows (tipo, descricao, valor, vencimento, status, cliente_id, fornecedor_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [normalizedTipo, descricao, valor, vencimento, 'pendente', clienteIdForInsert, fornecedorIdForInsert],
     );
 
     let flow = inserted.rows[0];
@@ -526,7 +692,7 @@ export const createFlow = async (req: Request, res: Response) => {
         {
           financialFlowId: flow.id,
           billingType: paymentMethod,
-          clienteId: clienteId ?? null,
+          clienteId: clienteIdForInsert,
           integrationApiKeyId: integrationApiKeyId ?? null,
           value: valor,
           dueDate: vencimento,
@@ -580,6 +746,7 @@ export const updateFlow = async (req: Request, res: Response) => {
     status,
     paymentMethod,
     clienteId,
+    fornecedorId,
     integrationApiKeyId,
     cardToken,
     asaasCustomerId,
@@ -596,9 +763,16 @@ export const updateFlow = async (req: Request, res: Response) => {
 
   try {
     await client.query('BEGIN');
+    const tipoText = typeof tipo === 'string' ? tipo.trim().toLowerCase() : '';
+    const isDespesa = tipoText === 'despesa';
+    const normalizedTipo: Flow['tipo'] = isDespesa ? 'despesa' : 'receita';
+    const normalizedClienteId = normalizeOptionalInteger(clienteId);
+    const normalizedFornecedorId = normalizeOptionalInteger(fornecedorId);
+    const clienteIdForUpdate = isDespesa ? null : normalizedClienteId;
+    const fornecedorIdForUpdate = isDespesa ? normalizedFornecedorId : null;
     const result = await client.query(
-      'UPDATE financial_flows SET tipo=$1, descricao=$2, valor=$3, vencimento=$4, pagamento=$5, status=$6 WHERE id=$7 RETURNING *',
-      [tipo, descricao, valor, vencimento, pagamento, status, flowId],
+      'UPDATE financial_flows SET tipo=$1, descricao=$2, valor=$3, vencimento=$4, pagamento=$5, status=$6, cliente_id=$7, fornecedor_id=$8 WHERE id=$9 RETURNING *',
+      [normalizedTipo, descricao, valor, vencimento, pagamento, status, clienteIdForUpdate, fornecedorIdForUpdate, flowId],
     );
     if (result.rowCount === 0) {
       await client.query('ROLLBACK');
@@ -617,7 +791,7 @@ export const updateFlow = async (req: Request, res: Response) => {
         {
           financialFlowId: flow.id,
           billingType: paymentMethod,
-          clienteId: clienteId ?? null,
+          clienteId: clienteIdForUpdate,
           integrationApiKeyId: integrationApiKeyId ?? null,
           value: valor ?? flow.valor,
           dueDate: vencimento ?? flow.vencimento,

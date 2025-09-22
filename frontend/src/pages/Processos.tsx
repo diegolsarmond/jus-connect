@@ -1303,6 +1303,24 @@ export default function Processos() {
     [syncingProcessId, toast],
   );
 
+  const handleViewProcessDetails = useCallback(
+    (processoToView: Processo) => {
+      const clienteId = processoToView.cliente?.id ?? null;
+
+      if (!clienteId || clienteId <= 0) {
+        toast({
+          title: "Não foi possível abrir o processo",
+          description: "Cliente relacionado ao processo não identificado.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      navigate(`/clientes/${clienteId}/processos/${processoToView.id}`);
+    },
+    [navigate, toast],
+  );
+
   const isCreateDisabled =
     !processForm.numero ||
     !processForm.uf ||
@@ -1765,7 +1783,7 @@ export default function Processos() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => navigate(`/processos/${processo.id}`)}
+                          onClick={() => handleViewProcessDetails(processo)}
                         >
                           <Eye className="mr-2 h-4 w-4" />
                           Visualizar detalhes

@@ -803,6 +803,7 @@ export default function MeuPlano() {
                                 key={plano.id}
                                 className="md:basis-1/2 lg:basis-1/3 xl:basis-1/4"
                               >
+
                                 <Card
                                   className={cn(
                                     "relative flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 shadow-[0_24px_45px_-35px_rgba(15,23,42,0.9)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_35px_65px_-35px_rgba(15,23,42,0.55)]",
@@ -816,6 +817,7 @@ export default function MeuPlano() {
                                   <div className="pointer-events-none absolute -bottom-32 left-0 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl" />
 
                                   <CardHeader className="space-y-4 pb-0 text-left">
+
                                     <div className="flex flex-wrap items-center gap-2">
                                       {isAtual && (
                                         <Badge className="flex items-center gap-2 border border-emerald-400/60 bg-emerald-500/20 text-emerald-100">
