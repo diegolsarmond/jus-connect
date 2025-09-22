@@ -208,6 +208,7 @@ interface ProcessFormState {
   advogados: string[];
   propostaId: string;
   dataDistribuicao: string;
+  instancia: string;
 }
 
 const formatProcessNumber = (value: string) => {
@@ -397,6 +398,7 @@ const createEmptyProcessForm = (): ProcessFormState => ({
   advogados: [],
   propostaId: "",
   dataDistribuicao: "",
+  instancia: "",
 });
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
@@ -1156,6 +1158,11 @@ export default function Processos() {
         ...(jurisdicaoPayload ? { jurisdicao: jurisdicaoPayload } : {}),
         advogados: advogadosPayload,
       };
+
+      const instanciaPayload = processForm.instancia.trim();
+      if (instanciaPayload) {
+        payload.orgao_julgador = instanciaPayload;
+      }
 
       const dataDistribuicaoPayload = processForm.dataDistribuicao.trim();
       if (dataDistribuicaoPayload) {
@@ -2109,6 +2116,20 @@ export default function Processos() {
                   setProcessForm((prev) => ({
                     ...prev,
                     numero: formatProcessNumber(event.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2 md:col-span-1">
+              <Label htmlFor="process-instancia">Instância do processo</Label>
+              <Input
+                id="process-instancia"
+                placeholder="Ex.: 1ª Vara Cível"
+                value={processForm.instancia}
+                onChange={(event) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    instancia: event.target.value,
                   }))
                 }
               />
