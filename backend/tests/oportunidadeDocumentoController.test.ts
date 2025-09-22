@@ -9,11 +9,17 @@ type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
 
 let createOpportunityDocumentFromTemplate: typeof import('../src/controllers/oportunidadeDocumentoController')['createOpportunityDocumentFromTemplate'];
+let listOpportunityDocuments: typeof import('../src/controllers/oportunidadeDocumentoController')['listOpportunityDocuments'];
+let getOpportunityDocument: typeof import('../src/controllers/oportunidadeDocumentoController')['getOpportunityDocument'];
+let deleteOpportunityDocument: typeof import('../src/controllers/oportunidadeDocumentoController')['deleteOpportunityDocument'];
 
 test.before(async () => {
-  ({ createOpportunityDocumentFromTemplate } = await import(
-    '../src/controllers/oportunidadeDocumentoController'
-  ));
+  ({
+    createOpportunityDocumentFromTemplate,
+    listOpportunityDocuments,
+    getOpportunityDocument,
+    deleteOpportunityDocument,
+  } = await import('../src/controllers/oportunidadeDocumentoController'));
 });
 
 const createMockResponse = () => {
@@ -70,7 +76,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   const insertedPayload: { content?: string; variables?: string } = {};
 
   const { calls, restore } = setupQueryMock([
-    { rows: [{ id: 7, title: 'Modelo', content: templateContent }], rowCount: 1 },
+    { rows: [{ empresa: 55 }], rowCount: 1 },
     {
       rows: [
         {
@@ -128,7 +134,6 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
     {
       rows: [
         { column_name: 'id' },
-
         { column_name: 'cep' },
         { column_name: 'rua' },
         { column_name: 'numero' },
@@ -166,6 +171,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
     { rows: [], rowCount: 0 },
     { rows: [], rowCount: 0 },
     { rows: [], rowCount: 0 },
+    { rows: [{ id: 7, title: 'Modelo', content: templateContent }], rowCount: 1 },
     (text: string, values?: unknown[]) => {
       assert.match(text, /INSERT INTO public\.oportunidade_documentos/);
       insertedPayload.content = values?.[3] as string;
@@ -190,6 +196,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   const req = {
     params: { id: '123' },
     body: { templateId: 7 },
+    auth: { userId: 99 },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -237,4 +244,154 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   assert.match(empresaQuery!.text, /WHERE id = \$1/);
   assert.deepEqual(empresaQuery!.values, [55]);
 
+  const opportunityQuery = calls.find((call) =>
+    call.text.includes('FROM public.oportunidades') && call.text.includes('idempresa = $2'),
+  );
+  assert.ok(opportunityQuery, 'expected opportunity lookup to include empresa filter');
+  assert.deepEqual(opportunityQuery!.values, [123, 55]);
+
+  const templateQuery = calls.find((call) => call.text.includes('FROM templates'));
+  assert.ok(templateQuery, 'expected template query to be executed');
+  assert.match(templateQuery!.text, /idusuario = \$3/);
+  assert.deepEqual(templateQuery!.values, [7, 55, 99]);
+});
+
+test('createOpportunityDocumentFromTemplate returns 401 when auth is missing', async () => {
+  const { restore } = setupQueryMock([]);
+
+  const req = {
+    params: { id: '5' },
+    body: { templateId: 2 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createOpportunityDocumentFromTemplate(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 401);
+  assert.deepEqual(res.body, { error: 'Token inválido.' });
+});
+
+test('createOpportunityDocumentFromTemplate returns 403 when user lacks empresa', async () => {
+  const { restore } = setupQueryMock([{ rows: [{ empresa: null }], rowCount: 1 }]);
+
+  const req = {
+    params: { id: '7' },
+    body: { templateId: 3 },
+    auth: { userId: 42 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createOpportunityDocumentFromTemplate(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário autenticado não possui empresa vinculada.',
+  });
+});
+
+test('createOpportunityDocumentFromTemplate returns 404 when opportunity does not belong to empresa', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 99 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const req = {
+    params: { id: '88' },
+    body: { templateId: 5 },
+    auth: { userId: 77 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createOpportunityDocumentFromTemplate(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Oportunidade não encontrada' });
+  assert.equal(calls.length, 2);
+});
+
+test('listOpportunityDocuments returns 404 when opportunity is inaccessible', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 12 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const req = {
+    params: { id: '900' },
+    auth: { userId: 321 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await listOpportunityDocuments(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Oportunidade não encontrada' });
+  assert.equal(calls.length, 2);
+});
+
+test('getOpportunityDocument returns 404 when opportunity is inaccessible', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 87 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const req = {
+    params: { id: '10', documentId: '555' },
+    auth: { userId: 9 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await getOpportunityDocument(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Oportunidade não encontrada' });
+  assert.equal(calls.length, 2);
+});
+
+test('deleteOpportunityDocument returns 404 when opportunity is inaccessible', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 101 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const req = {
+    params: { id: '55', documentId: '3' },
+    auth: { userId: 42 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await deleteOpportunityDocument(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Oportunidade não encontrada' });
+  assert.equal(calls.length, 2);
 });
