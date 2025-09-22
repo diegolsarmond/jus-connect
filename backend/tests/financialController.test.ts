@@ -11,6 +11,12 @@ type QueryResponse = { rows: any[]; rowCount: number };
 let listFlows: typeof import('../src/controllers/financialController')['listFlows'];
 let __internal: typeof import('../src/controllers/financialController')['__internal'];
 
+const DEFAULT_EMPRESA_ID = 123;
+const empresaLookupResponse: QueryResponse = {
+  rows: [{ empresa: DEFAULT_EMPRESA_ID }],
+  rowCount: 1,
+};
+
 test.before(async () => {
   ({ listFlows, __internal } = await import('../src/controllers/financialController'));
 });
@@ -98,6 +104,7 @@ test('listFlows combines financial and opportunity flows', async () => {
   };
 
   const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
     { rows: [tablesRow], rowCount: 1 },
     { rows: [financialRow, oportunidadeRow], rowCount: 2 },
     { rows: [{ total: 2 }], rowCount: 1 },
@@ -108,6 +115,7 @@ test('listFlows combines financial and opportunity flows', async () => {
       page: '2',
       limit: '1',
     },
+    auth: { userId: 10 },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -149,26 +157,31 @@ test('listFlows combines financial and opportunity flows', async () => {
     limit: 1,
   });
 
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [10]);
   assert.match(
-    calls[0]?.text ?? '',
+    calls[1]?.text ?? '',
     /to_regclass\('public\.oportunidade_parcelas'\)/,
   );
   assert.match(
-    calls[0]?.text ?? '',
+    calls[1]?.text ?? '',
     /has_table_privilege\(parcelas, 'SELECT'\)/,
   );
 
-  assert.equal(calls[0]?.values, undefined);
-  assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
-  assert.match(calls[1]?.text ?? '', /ff\.id::TEXT AS id/);
-  assert.match(calls[1]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
-  assert.match(calls[1]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
-  assert.match(calls[1]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
-  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS conta_id/);
-  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS categoria_id/);
-  assert.deepEqual(calls[1]?.values, [1, 1]);
-  assert.deepEqual(calls[2]?.values, []);
+  assert.equal(calls[1]?.values, undefined);
+  assert.match(calls[2]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
+  assert.match(calls[2]?.text ?? '', /ff\.id::TEXT AS id/);
+  assert.match(calls[2]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
+  assert.match(calls[2]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
+  assert.match(calls[2]?.text ?? '', /ff\.idempresa AS empresa_id/);
+  assert.match(calls[2]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
+  assert.match(calls[2]?.text ?? '', /NULL::TEXT AS conta_id/);
+  assert.match(calls[2]?.text ?? '', /NULL::TEXT AS categoria_id/);
+  assert.match(calls[2]?.text ?? '', /p\.idempresa AS empresa_id/);
+  assert.match(calls[2]?.text ?? '', /WHERE combined_flows\.empresa_id = \$1/);
+  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 1, 1]);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID]);
 });
 
 test('listFlows preserves textual identifiers returned by the database', async () => {
@@ -194,12 +207,13 @@ test('listFlows preserves textual identifiers returned by the database', async (
   };
 
   const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
     { rows: [tablesRow], rowCount: 1 },
     { rows: [financialRow], rowCount: 1 },
     { rows: [{ total: 1 }], rowCount: 1 },
   ]);
 
-  const req = { query: {} } as unknown as Request;
+  const req = { query: {}, auth: { userId: 5 } } as unknown as Request;
   const res = createMockResponse();
 
   try {
@@ -228,10 +242,14 @@ test('listFlows preserves textual identifiers returned by the database', async (
     limit: 10,
   });
 
-  assert.equal(calls.length, 3);
-  assert.match(calls[1]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.deepEqual(calls[1]?.values, [10, 0]);
-  assert.deepEqual(calls[2]?.values, []);
+  assert.equal(calls.length, 4);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [5]);
+  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[1]?.values, undefined);
+  assert.match(calls[2]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID]);
 });
 
 test('listFlows applies cliente filter when provided', async () => {
@@ -244,6 +262,7 @@ test('listFlows applies cliente filter when provided', async () => {
   };
 
   const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
     { rows: [tablesRow], rowCount: 1 },
     { rows: [], rowCount: 0 },
     { rows: [{ total: 0 }], rowCount: 1 },
@@ -253,6 +272,7 @@ test('listFlows applies cliente filter when provided', async () => {
     query: {
       clienteId: '42',
     },
+    auth: { userId: 8 },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -271,15 +291,20 @@ test('listFlows applies cliente filter when provided', async () => {
     limit: 10,
   });
 
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [8]);
   assert.match(
-    calls[0]?.text ?? '',
+    calls[1]?.text ?? '',
     /to_regclass\('public\.oportunidade_parcelas'\)/,
   );
-  assert.equal(calls[0]?.values, undefined);
-  assert.match(calls[1]?.text ?? '', /WHERE combined_flows\.cliente_id = \$1/);
-  assert.deepEqual(calls[1]?.values, ['42', 10, 0]);
-  assert.deepEqual(calls[2]?.values, ['42']);
+  assert.equal(calls[1]?.values, undefined);
+  assert.match(
+    calls[2]?.text ?? '',
+    /WHERE combined_flows\.empresa_id = \$1 AND combined_flows\.cliente_id = \$2/,
+  );
+  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, '42', 10, 0]);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, '42']);
 });
 
 test('listFlows returns only financial flows when opportunity tables are absent', async () => {
@@ -304,12 +329,13 @@ test('listFlows returns only financial flows when opportunity tables are absent'
   };
 
   const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
     { rows: [tablesRow], rowCount: 1 },
     { rows: [financialRow], rowCount: 1 },
     { rows: [{ total: 1 }], rowCount: 1 },
   ]);
 
-  const req = { query: {} } as unknown as Request;
+  const req = { query: {}, auth: { userId: 4 } } as unknown as Request;
   const res = createMockResponse();
 
   try {
@@ -338,11 +364,15 @@ test('listFlows returns only financial flows when opportunity tables are absent'
     limit: 10,
   });
 
-  assert.equal(calls.length, 3);
-  assert.match(calls[1]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.doesNotMatch(calls[1]?.text ?? '', /UNION ALL/);
-  assert.deepEqual(calls[1]?.values, [10, 0]);
-  assert.deepEqual(calls[2]?.values, []);
+  assert.equal(calls.length, 4);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [4]);
+  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[1]?.values, undefined);
+  assert.match(calls[2]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.doesNotMatch(calls[2]?.text ?? '', /UNION ALL/);
+  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID]);
 });
 
 test('listFlows retries without opportunity tables when union query fails', async () => {
@@ -372,13 +402,14 @@ test('listFlows retries without opportunity tables when union query fails', asyn
   );
 
   const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
     { rows: [tablesRow], rowCount: 1 },
     missingTableError,
     { rows: [financialRow], rowCount: 1 },
     { rows: [{ total: 1 }], rowCount: 1 },
   ]);
 
-  const req = { query: {} } as unknown as Request;
+  const req = { query: {}, auth: { userId: 6 } } as unknown as Request;
   const res = createMockResponse();
 
   try {
@@ -407,12 +438,17 @@ test('listFlows retries without opportunity tables when union query fails', asyn
     limit: 10,
   });
 
-  assert.equal(calls.length, 4);
-  assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
-  assert.match(calls[2]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.doesNotMatch(calls[2]?.text ?? '', /UNION ALL/);
-  assert.deepEqual(calls[2]?.values, [10, 0]);
-  assert.deepEqual(calls[3]?.values, []);
+  assert.equal(calls.length, 5);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [6]);
+  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[1]?.values, undefined);
+  assert.match(calls[2]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
+  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.match(calls[3]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.doesNotMatch(calls[3]?.text ?? '', /UNION ALL/);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
 });
 
 test('listFlows retries without opportunity tables when privileges are missing', async () => {
@@ -441,13 +477,14 @@ test('listFlows retries without opportunity tables when privileges are missing',
   );
 
   const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
     { rows: [tablesRow], rowCount: 1 },
     insufficientPrivilegeError,
     { rows: [financialRow], rowCount: 1 },
     { rows: [{ total: 1 }], rowCount: 1 },
   ]);
 
-  const req = { query: {} } as unknown as Request;
+  const req = { query: {}, auth: { userId: 7 } } as unknown as Request;
   const res = createMockResponse();
 
   try {
@@ -476,11 +513,16 @@ test('listFlows retries without opportunity tables when privileges are missing',
     limit: 10,
   });
 
-  assert.equal(calls.length, 4);
-  assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
-  assert.match(calls[2]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.doesNotMatch(calls[2]?.text ?? '', /UNION ALL/);
-  assert.deepEqual(calls[2]?.values, [10, 0]);
-  assert.deepEqual(calls[3]?.values, []);
+  assert.equal(calls.length, 5);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [7]);
+  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[1]?.values, undefined);
+  assert.match(calls[2]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
+  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.match(calls[3]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.doesNotMatch(calls[3]?.text ?? '', /UNION ALL/);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
 
 });
