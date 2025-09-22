@@ -1747,7 +1747,6 @@ export default function VisualizarCliente() {
                       <TableRow>
                         <TableHead>Tipo</TableHead>
                         <TableHead>Valor</TableHead>
-                        <TableHead>Data de cadastro</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1759,9 +1758,6 @@ export default function VisualizarCliente() {
                               {attribute.documentTypeName}
                             </TableCell>
                             <TableCell>{attribute.value}</TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              {formatDateTimeOrFallback(attribute.createdAt, "-")}
-                            </TableCell>
                             <TableCell>
                               <div className="flex justify-end gap-2">
                                 <Button
