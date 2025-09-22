@@ -2427,7 +2427,10 @@ export default function VisualizarOportunidade() {
         throw new Error("Visualização de PDF indisponível neste ambiente");
       }
 
-      const blob = createSimplePdfFromHtml(doc.title ?? `Documento ${doc.id}`, doc.content_html ?? "<p></p>");
+      const blob = await createSimplePdfFromHtml(
+        doc.title ?? `Documento ${doc.id}`,
+        doc.content_html ?? "<p></p>",
+      );
       const url = URL.createObjectURL(blob);
       documentPdfUrlsRef.current.set(doc.id, url);
       return url;
