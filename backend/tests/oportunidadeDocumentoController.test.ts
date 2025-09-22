@@ -67,7 +67,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   const templateContent =
     '{"content_html":"<p>{{escritorio.nome}}</p><p>{{processo.audiencia.data}}</p><p>{{processo.audiencia.horario}}</p><p>{{processo.audiencia.local}}</p>"}';
 
-  const insertedPayload: { content?: string; variables?: string } = {};
+  const insertedPayload: { content?: string; variables?: string; title?: string } = {};
 
   const { calls, restore } = setupQueryMock([
     { rows: [{ id: 7, title: 'Modelo', content: templateContent }], rowCount: 1 },
@@ -168,6 +168,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
     { rows: [], rowCount: 0 },
     (text: string, values?: unknown[]) => {
       assert.match(text, /INSERT INTO public\.oportunidade_documentos/);
+      insertedPayload.title = values?.[2] as string;
       insertedPayload.content = values?.[3] as string;
       insertedPayload.variables = values?.[4] as string;
       return {
@@ -189,7 +190,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
 
   const req = {
     params: { id: '123' },
-    body: { templateId: 7 },
+    body: { templateId: 7, title: '  Documento Personalizado  ' },
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -206,7 +207,11 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   const responseBody = res.body as {
     content_html?: string;
     variables?: unknown;
+    title?: string;
   };
+
+  assert.equal(insertedPayload.title, 'Documento Personalizado');
+  assert.equal(responseBody.title, 'Documento Personalizado');
 
   assert.match(responseBody.content_html ?? '', /Empresa Correta/);
   assert.match(responseBody.content_html ?? '', /10\/06\/2024/);
