@@ -730,7 +730,8 @@ export default function EditorPage() {
         return clientCustomAttributes.map(attribute => ({
           id: `cliente.atributos_personalizados.${attribute.id}`,
           label: attribute.label,
-          value: attribute.value ?? undefined,
+          value: attribute.value,
+
         }));
       })();
 

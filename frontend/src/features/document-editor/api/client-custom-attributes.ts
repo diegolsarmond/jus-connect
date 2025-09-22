@@ -3,7 +3,8 @@ import { getApiUrl } from '@/lib/api';
 export interface ClientCustomAttributeType {
   id: string;
   label: string;
-  value?: string;
+  value: string;
+
 }
 
 const COLLECTION_KEYS = ['data', 'items', 'rows', 'tipos', 'values'];
@@ -83,6 +84,52 @@ function extractCollection(payload: unknown): unknown[] {
   return [];
 }
 
+function slugify(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+}
+
+function extractVariableValue({
+  rawValue,
+  id,
+  label,
+  index,
+}: {
+  rawValue: string | undefined;
+  id: string;
+  label: string;
+  index: number;
+}): string {
+  if (rawValue) {
+    const trimmed = rawValue.trim();
+    if (trimmed.length > 0) {
+      const match = trimmed.match(/^{{\s*([^}]+)\s*}}$/);
+      if (match && match[1]) {
+        return match[1];
+      }
+      return trimmed;
+    }
+  }
+
+  const fromLabel = slugify(label);
+  if (fromLabel) {
+    return `cliente.atributos_personalizados.${fromLabel}`;
+  }
+
+  const fromId = slugify(id);
+  if (fromId) {
+    return `cliente.atributos_personalizados.${fromId}`;
+  }
+
+  return `cliente.atributos_personalizados.custom_${index + 1}`;
+}
+
+
 export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAttributeType[]> {
   const response = await fetch(getApiUrl('clientes/atributos/tipos'), {
     headers: { Accept: 'application/json' },
@@ -108,7 +155,8 @@ export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAtt
     }
 
     const id = pickFirstString(item, ID_KEYS) ?? `custom-${index}`;
-    const value = pickFirstString(item, VALUE_KEYS);
+    const rawValue = pickFirstString(item, VALUE_KEYS);
+
     const signature = `${id}|${label}`;
 
     if (seen.has(signature)) {
@@ -119,7 +167,8 @@ export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAtt
     attributes.push({
       id,
       label,
-      value: value?.trim() || undefined,
+      value: extractVariableValue({ rawValue, id, label, index }),
+
     });
   });
 
