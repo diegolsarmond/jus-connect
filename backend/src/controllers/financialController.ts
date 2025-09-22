@@ -59,13 +59,11 @@ const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
 const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
 const FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
 
-type FinancialFlowEmpresaColumn = 'idempresa' | 'empresa_id' | 'empresa';
+type FinancialFlowEmpresaColumn = string;
 
-const FINANCIAL_FLOW_EMPRESA_CANDIDATES: FinancialFlowEmpresaColumn[] = [
-  'idempresa',
-  'empresa_id',
-  'empresa',
-];
+const FINANCIAL_FLOW_EMPRESA_CANDIDATES = ['idempresa', 'empresa_id', 'empresa'] as const;
+
+const quoteIdentifier = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 
 let opportunityTablesAvailability: boolean | null = null;
 let opportunityTablesAvailabilityCheckedAt: number | null = null;
@@ -217,18 +215,23 @@ const determineFinancialFlowEmpresaColumn = async (): Promise<FinancialFlowEmpre
       `,
     )
     .then((result) => {
-      const available = new Set(
-        result.rows
-          .map((row) => row?.column_name)
-          .filter((name): name is string => typeof name === 'string'),
-      );
+      const available = result.rows
+        .map((row) => row?.column_name)
+        .filter((name): name is string => typeof name === 'string');
+
+      const lookup = new Map<string, string>();
+      for (const name of available) {
+        lookup.set(name.toLowerCase(), name);
+      }
 
       const match = FINANCIAL_FLOW_EMPRESA_CANDIDATES.find((candidate) =>
-        available.has(candidate),
+        lookup.has(candidate.toLowerCase()),
       );
 
-      updateFinancialFlowEmpresaColumn(match ?? null);
-      return match ?? null;
+      const resolved = match ? lookup.get(match.toLowerCase()) ?? match : null;
+
+      updateFinancialFlowEmpresaColumn(resolved ?? null);
+      return resolved ?? null;
     })
     .catch(() => {
       updateFinancialFlowEmpresaColumn(null);
@@ -290,15 +293,10 @@ export const listFlows = async (req: Request, res: Response) => {
     }
 
     const empresaColumn = await determineFinancialFlowEmpresaColumn();
-
-    if (!empresaColumn) {
-      res.status(500).json({
-        error:
-          'Não foi possível determinar a empresa associada aos lançamentos financeiros. Entre em contato com o suporte.',
-      });
-      return;
-    }
-
+    const hasEmpresaColumn = typeof empresaColumn === 'string' && empresaColumn.length > 0;
+    const empresaColumnExpression = hasEmpresaColumn
+      ? `ff.${quoteIdentifier(empresaColumn)}`
+      : '$1::INTEGER';
 
     const filters: (string | number)[] = [empresaId];
     const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
@@ -321,9 +319,10 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.status AS status,
           ff.conta_id::TEXT AS conta_id,
           ff.categoria_id::TEXT AS categoria_id,
+          NULL::TEXT AS cliente_id,
+          ${empresaColumnExpression} AS empresa_id
           ff.cliente_id::TEXT AS cliente_id,
           ff.fornecedor_id::TEXT AS fornecedor_id
-
         FROM financial_flows ff
       `;
 
