@@ -30,6 +30,7 @@ import tarefaRoutes from './routes/tarefaRoutes';
 import tarefaResponsavelRoutes from './routes/tarefaResponsavelRoutes';
 import tipoDocumentoRoutes from './routes/tipoDocumentoRoutes';
 import clienteDocumentoRoutes from './routes/clienteDocumentoRoutes';
+import clienteAtributoRoutes from './routes/clienteAtributoRoutes';
 import supportRoutes from './routes/supportRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import integrationApiKeyRoutes from './routes/integrationApiKeyRoutes';
@@ -226,6 +227,7 @@ registerModuleRoutes(
 registerModuleRoutes('configuracoes', empresaRoutes);
 registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);
 registerModuleRoutes('clientes', clienteRoutes);
+registerModuleRoutes('clientes', clienteAtributoRoutes);
 registerModuleRoutes('agenda', agendaRoutes);
 registerModuleRoutes('documentos', templateRoutes);
 registerModuleRoutes('documentos', tagRoutes);
