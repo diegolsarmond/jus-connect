@@ -29,6 +29,7 @@ test('createOrReplaceOpportunityInstallments replaces installments when editing'
     'Pagamento Parcelado',
     3,
     '2024-05-10',
+    123,
   );
 
   await createOrReplaceOpportunityInstallments(
@@ -38,6 +39,7 @@ test('createOrReplaceOpportunityInstallments replaces installments when editing'
     'À vista',
     1,
     '2024-08-01',
+    123,
   );
 
   const deleteCalls = client.calls.filter((call) =>
@@ -51,16 +53,16 @@ test('createOrReplaceOpportunityInstallments replaces installments when editing'
   assert.equal(insertCalls.length, 4);
 
   const firstInsert = insertCalls[0];
-  assert.deepEqual(firstInsert?.values, [10, 1, 400, '2024-05-10']);
+  assert.deepEqual(firstInsert?.values, [10, 1, 400, '2024-05-10', 123]);
 
   const secondInsert = insertCalls[1];
-  assert.deepEqual(secondInsert?.values, [10, 2, 400, '2024-06-10']);
+  assert.deepEqual(secondInsert?.values, [10, 2, 400, '2024-06-10', 123]);
 
   const thirdInsert = insertCalls[2];
-  assert.deepEqual(thirdInsert?.values, [10, 3, 400, '2024-07-10']);
+  assert.deepEqual(thirdInsert?.values, [10, 3, 400, '2024-07-10', 123]);
 
   const lastInsert = insertCalls[insertCalls.length - 1];
-  assert.deepEqual(lastInsert?.values, [10, 1, 600, '2024-08-01']);
+  assert.deepEqual(lastInsert?.values, [10, 1, 600, '2024-08-01', 123]);
 
   const deleteIndexes = deleteCalls.map((call) => client.calls.indexOf(call));
   assert.equal(deleteIndexes[0], 0);
@@ -84,6 +86,7 @@ test('createOrReplaceOpportunityInstallments keeps day when month is shorter', a
     'Pagamento Parcelado',
     2,
     '2024-01-31',
+    null,
   );
 
   const insertCalls = client.calls.filter((call) =>
@@ -92,8 +95,8 @@ test('createOrReplaceOpportunityInstallments keeps day when month is shorter', a
   assert.equal(insertCalls.length, 2);
 
   const firstInsert = insertCalls[0];
-  assert.deepEqual(firstInsert?.values, [99, 1, 1000, '2024-01-31']);
+  assert.deepEqual(firstInsert?.values, [99, 1, 1000, '2024-01-31', null]);
 
   const secondInsert = insertCalls[1];
-  assert.deepEqual(secondInsert?.values, [99, 2, 1000, '2024-02-29']);
+  assert.deepEqual(secondInsert?.values, [99, 2, 1000, '2024-02-29', null]);
 });

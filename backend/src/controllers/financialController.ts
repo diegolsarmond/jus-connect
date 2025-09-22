@@ -2,10 +2,23 @@ import { Request, Response } from 'express';
 import type { QueryResult } from 'pg';
 import pool from '../services/db';
 import type { Flow } from '../models/flow';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasChargeService, {
   ChargeConflictError,
   ValidationError as AsaasValidationError,
 } from '../services/asaasChargeService';
+
+const getAuthenticatedUser = (
+  req: Request,
+  res: Response,
+): NonNullable<Request['auth']> | null => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  return req.auth;
+};
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -158,12 +171,39 @@ export const listFlows = async (req: Request, res: Response) => {
     clienteValue && clienteValue.trim().length > 0 ? clienteValue.trim() : null;
 
   try {
-    const filters: (string | number)[] = [];
-    let filterClause = '';
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res.status(empresaLookup.status).json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res.json({
+        items: [],
+        total: 0,
+        page: effectivePage,
+        limit: effectiveLimit,
+      });
+      return;
+    }
+
+    const filters: (string | number)[] = [empresaId];
+    const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
+
     if (trimmedClienteId) {
       filters.push(trimmedClienteId);
-      filterClause = `WHERE combined_flows.cliente_id = $${filters.length}`;
+      filterConditions.push(`combined_flows.cliente_id = $${filters.length}`);
     }
+
+    const filterClause = `WHERE ${filterConditions.join(' AND ')}`;
 
     const baseFinancialFlowsSelect = `
         SELECT
@@ -176,7 +216,8 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.status AS status,
           ff.conta_id::TEXT AS conta_id,
           ff.categoria_id::TEXT AS categoria_id,
-          NULL::TEXT AS cliente_id
+          NULL::TEXT AS cliente_id,
+          ff.idempresa AS empresa_id
         FROM financial_flows ff
       `;
 
@@ -203,6 +244,7 @@ ${baseFinancialFlowsSelect}
           o.sequencial_empresa,
           o.qtde_parcelas,
           o.solicitante_id,
+          p.idempresa,
           c.nome AS cliente_nome,
           f.valor AS faturamento_valor,
           f.parcelas AS faturamento_parcelas,
@@ -253,7 +295,8 @@ ${baseFinancialFlowsSelect}
           END AS status,
           NULL::TEXT AS conta_id,
           NULL::TEXT AS categoria_id,
-          p.solicitante_id::TEXT AS cliente_id
+          p.solicitante_id::TEXT AS cliente_id,
+          p.idempresa AS empresa_id
         FROM oportunidade_parcelas_enriched p
       )
     `;
