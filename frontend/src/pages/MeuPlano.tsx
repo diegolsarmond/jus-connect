@@ -842,7 +842,6 @@ export default function MeuPlano() {
                                           Plano
                                         </span>
                                         <CardTitle className="text-2xl font-semibold text-white">
-
                                           {plano.nome}
                                         </CardTitle>
                                       </div>
@@ -856,7 +855,6 @@ export default function MeuPlano() {
                                             {carouselPricing.mainPrice}
                                           </span>
                                           <span className="text-sm font-medium text-slate-300">
-
                                             {carouselPricing.cadenceLabel}
                                           </span>
                                         </div>
@@ -872,7 +870,6 @@ export default function MeuPlano() {
                                         )}
                                         {carouselPricing.helper && (
                                           <p className="text-[11px] text-slate-300">{carouselPricing.helper}</p>
-
                                         )}
                                       </div>
 
@@ -886,7 +883,6 @@ export default function MeuPlano() {
 
                                   <CardContent className="flex flex-1 flex-col gap-4">
                                     <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-slate-200">
-
                                       <span className="font-semibold text-sky-200">
                                         Inclui recursos essenciais para sua equipe
                                       </span>
@@ -896,7 +892,6 @@ export default function MeuPlano() {
                                         Principais benefícios
                                       </p>
                                       <ul className="space-y-2 text-xs text-slate-100">
-
                                         {plano.recursos.length > 0 ? (
                                           plano.recursos.slice(0, 6).map((recurso) => (
                                             <li key={recurso} className="flex items-start gap-3 text-left">
@@ -914,7 +909,6 @@ export default function MeuPlano() {
                                   </CardContent>
 
                                   <CardFooter className="mt-auto flex flex-col gap-2 p-4 pt-0">
-
                                     <Button
                                       className={cn(
                                         "w-full font-semibold",
