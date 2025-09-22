@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -30,6 +30,39 @@ function joinUrl(base: string, path = "") {
   const b = base.replace(/\/+$/, "");
   const p = path ? (path.startsWith("/") ? path : `/${path}`) : "";
   return `${b}${p}`;
+}
+
+function formatDocument(value: string, type: "pf" | "pj") {
+  const digits = value.replace(/\D/g, "");
+  if (type === "pj") {
+    return digits
+      .slice(0, 14)
+      .replace(/(\d{2})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1/$2")
+      .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+  }
+  return digits
+    .slice(0, 11)
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+function formatCep(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) {
+    return digits;
+  }
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 10) {
+    return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  }
+  return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
 }
 
 const formSchema = z.object({
@@ -75,30 +108,77 @@ export default function NovoFornecedor() {
     },
   });
 
-  const formatDocument = (value: string, type: "pf" | "pj") => {
-    const digits = value.replace(/\D/g, "");
-    if (type === "pj") {
-      return digits
-        .slice(0, 14)
-        .replace(/(\d{2})(\d)/, "$1.$2")
-        .replace(/(\d{3})(\d)/, "$1.$2")
-        .replace(/(\d{3})(\d)/, "$1/$2")
-        .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
-    }
-    return digits
-      .slice(0, 11)
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-  };
+  const selectedType = form.watch("type");
+  const cepValue = form.watch("cep");
+  const lastFetchedCepRef = useRef<string | null>(null);
 
-  const formatPhone = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 11);
-    if (digits.length <= 10) {
-      return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  useEffect(() => {
+    const currentDocument = form.getValues("document");
+    if (!currentDocument) {
+      return;
     }
-    return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
-  };
+    form.setValue("document", formatDocument(currentDocument, selectedType), {
+      shouldDirty: true,
+    });
+  }, [form, selectedType]);
+
+  useEffect(() => {
+    const digits = (cepValue || "").replace(/\D/g, "");
+
+    if (digits.length < 8) {
+      lastFetchedCepRef.current = null;
+      return;
+    }
+
+    if (digits === lastFetchedCepRef.current) {
+      return;
+    }
+
+    const fetchCep = async () => {
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+        const data = await response.json();
+        const currentCepDigits = (form.getValues("cep") || "").replace(/\D/g, "");
+
+        if (currentCepDigits !== digits) {
+          return;
+        }
+
+        if (!response.ok || data.erro) {
+          lastFetchedCepRef.current = digits;
+          toast({
+            title: "CEP não encontrado",
+            description: "Preencha os dados manualmente ou tente outro CEP.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        form.setValue("street", data.logradouro || "", { shouldDirty: true });
+        form.setValue("complement", data.complemento || "", { shouldDirty: true });
+        form.setValue("neighborhood", data.bairro || "", { shouldDirty: true });
+        form.setValue("city", data.localidade || "", { shouldDirty: true });
+        form.setValue("state", data.uf || "", { shouldDirty: true });
+        lastFetchedCepRef.current = digits;
+      } catch (error) {
+        const currentCepDigits = (form.getValues("cep") || "").replace(/\D/g, "");
+
+        if (currentCepDigits !== digits) {
+          return;
+        }
+
+        console.error("Erro ao buscar CEP:", error);
+        toast({
+          title: "Erro ao buscar CEP",
+          description: "Não foi possível preencher o endereço automaticamente.",
+          variant: "destructive",
+        });
+        lastFetchedCepRef.current = digits;
+      }
+    };
+
+    fetchCep();
+  }, [cepValue, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -221,12 +301,18 @@ export default function NovoFornecedor() {
                 name="document"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CPF/CNPJ</FormLabel>
+                    <FormLabel>{selectedType === "pj" ? "CNPJ" : "CPF"}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="000.000.000-00"
+                        placeholder={
+                          selectedType === "pj"
+                            ? "00.000.000/0000-00"
+                            : "000.000.000-00"
+                        }
                         {...field}
-                        onChange={(event) => field.onChange(formatDocument(event.target.value, form.getValues("type")))}
+                        onChange={(event) =>
+                          field.onChange(formatDocument(event.target.value, selectedType))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -242,7 +328,11 @@ export default function NovoFornecedor() {
                     <FormItem>
                       <FormLabel>CEP</FormLabel>
                       <FormControl>
-                        <Input placeholder="00000-000" {...field} />
+                        <Input
+                          placeholder="00000-000"
+                          {...field}
+                          onChange={(event) => field.onChange(formatCep(event.target.value))}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
