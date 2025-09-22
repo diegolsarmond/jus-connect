@@ -771,7 +771,7 @@ export default function MeuPlano() {
                       Alterar plano
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-4xl">
+                  <DialogContent className="sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl">
                     <DialogHeader>
                       <DialogTitle>Escolha um novo plano</DialogTitle>
                       <DialogDescription>
@@ -799,7 +799,11 @@ export default function MeuPlano() {
                             const isDestaque = destaquePlanoId === plano.id;
 
                             return (
-                              <CarouselItem key={plano.id} className="md:basis-1/2 lg:basis-1/3">
+                              <CarouselItem
+                                key={plano.id}
+                                className="md:basis-1/2 lg:basis-1/3 xl:basis-1/4"
+                              >
+
                                 <Card
                                   className={cn(
                                     "relative flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 shadow-[0_24px_45px_-35px_rgba(15,23,42,0.9)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_35px_65px_-35px_rgba(15,23,42,0.55)]",
@@ -812,7 +816,8 @@ export default function MeuPlano() {
                                   <div className="pointer-events-none absolute -top-24 right-0 h-48 w-48 rounded-full bg-primary/15 blur-3xl" />
                                   <div className="pointer-events-none absolute -bottom-32 left-0 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl" />
 
-                                  <CardHeader className="space-y-6 pb-0 text-left">
+                                  <CardHeader className="space-y-4 pb-0 text-left">
+
                                     <div className="flex flex-wrap items-center gap-2">
                                       {isAtual && (
                                         <Badge className="flex items-center gap-2 border border-emerald-400/60 bg-emerald-500/20 text-emerald-100">
@@ -836,7 +841,8 @@ export default function MeuPlano() {
                                         <span className="text-xs uppercase tracking-[0.3em] text-slate-300">
                                           Plano
                                         </span>
-                                        <CardTitle className="text-3xl font-semibold text-white">
+                                        <CardTitle className="text-2xl font-semibold text-white">
+
                                           {plano.nome}
                                         </CardTitle>
                                       </div>
@@ -845,11 +851,12 @@ export default function MeuPlano() {
                                         <span className="text-xs uppercase tracking-[0.3em] text-slate-300">
                                           Investimento
                                         </span>
-                                        <div className="flex items-baseline gap-2">
-                                          <span className="text-4xl font-bold text-white">
+                                        <div className="flex items-baseline gap-1.5">
+                                          <span className="text-3xl font-bold text-white">
                                             {carouselPricing.mainPrice}
                                           </span>
-                                          <span className="text-base font-medium text-slate-300">
+                                          <span className="text-sm font-medium text-slate-300">
+
                                             {carouselPricing.cadenceLabel}
                                           </span>
                                         </div>
@@ -864,7 +871,8 @@ export default function MeuPlano() {
                                           </p>
                                         )}
                                         {carouselPricing.helper && (
-                                          <p className="text-xs text-slate-300">{carouselPricing.helper}</p>
+                                          <p className="text-[11px] text-slate-300">{carouselPricing.helper}</p>
+
                                         )}
                                       </div>
 
@@ -876,17 +884,19 @@ export default function MeuPlano() {
                                     </div>
                                   </CardHeader>
 
-                                  <CardContent className="flex flex-1 flex-col gap-5">
-                                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
+                                  <CardContent className="flex flex-1 flex-col gap-4">
+                                    <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-slate-200">
+
                                       <span className="font-semibold text-sky-200">
                                         Inclui recursos essenciais para sua equipe
                                       </span>
                                     </div>
                                     <div className="space-y-3">
-                                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">
                                         Principais benefícios
                                       </p>
-                                      <ul className="space-y-2 text-sm text-slate-100">
+                                      <ul className="space-y-2 text-xs text-slate-100">
+
                                         {plano.recursos.length > 0 ? (
                                           plano.recursos.slice(0, 6).map((recurso) => (
                                             <li key={recurso} className="flex items-start gap-3 text-left">
@@ -903,7 +913,8 @@ export default function MeuPlano() {
                                     </div>
                                   </CardContent>
 
-                                  <CardFooter className="mt-auto flex flex-col gap-3 p-6 pt-0">
+                                  <CardFooter className="mt-auto flex flex-col gap-2 p-4 pt-0">
+
                                     <Button
                                       className={cn(
                                         "w-full font-semibold",
