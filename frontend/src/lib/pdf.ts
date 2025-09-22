@@ -340,9 +340,11 @@ function base64ToUint8Array(base64: string): Uint8Array {
   throw new Error("Base64 decoding não disponível neste ambiente");
 }
 
+type AssetCache = Map<string, Promise<string | null>>;
+
 async function fetchAssetAsDataUri(
   url: string,
-  cache: Map<string, Promise<string | null>>,
+  cache: AssetCache,
 ): Promise<string | null> {
   const existing = cache.get(url);
   if (existing) {
@@ -378,7 +380,7 @@ async function fetchAssetAsDataUri(
 async function replaceCssUrls(
   cssText: string,
   baseUrl: string,
-  cache: Map<string, Promise<string | null>>,
+  cache: AssetCache,
 ): Promise<string> {
   const regex = /url\((['\"]?)([^'\")]+)\1\)/gi;
   let match: RegExpExecArray | null;
@@ -416,7 +418,7 @@ async function replaceCssUrls(
 async function inlineImageSources(
   container: ParentNode,
   baseUrl: string,
-  cache: Map<string, Promise<string | null>>,
+  cache: AssetCache,
 ): Promise<void> {
   const images = Array.from(container.querySelectorAll("img"));
   await Promise.all(
@@ -439,7 +441,7 @@ async function inlineImageSources(
 async function inlineStyleAttributes(
   container: ParentNode,
   baseUrl: string,
-  cache: Map<string, Promise<string | null>>,
+  cache: AssetCache,
 ): Promise<void> {
   const styledElements = Array.from(container.querySelectorAll<HTMLElement>("[style]"));
   await Promise.all(
@@ -457,7 +459,7 @@ async function inlineStyleAttributes(
 async function inlineStyleElements(
   container: ParentNode,
   baseUrl: string,
-  cache: Map<string, Promise<string | null>>,
+  cache: AssetCache,
 ): Promise<void> {
   const styleNodes = Array.from(container.querySelectorAll<HTMLStyleElement>("style"));
   await Promise.all(
@@ -472,11 +474,114 @@ async function inlineStyleElements(
   );
 }
 
-async function inlineExternalAssets(container: HTMLElement, baseUrl: string): Promise<void> {
-  const cache = new Map<string, Promise<string | null>>();
-  await inlineImageSources(container, baseUrl, cache);
-  await inlineStyleAttributes(container, baseUrl, cache);
-  await inlineStyleElements(container, baseUrl, cache);
+async function inlineExternalAssets(
+  container: HTMLElement,
+  baseUrl: string,
+  cache?: AssetCache,
+): Promise<AssetCache> {
+  const effectiveCache = cache ?? new Map<string, Promise<string | null>>();
+  await inlineImageSources(container, baseUrl, effectiveCache);
+  await inlineStyleAttributes(container, baseUrl, effectiveCache);
+  await inlineStyleElements(container, baseUrl, effectiveCache);
+  return effectiveCache;
+}
+
+const PSEUDO_ELEMENT_ATTRIBUTE = "data-pdf-export-pseudo";
+
+function isElementWithStyle(element: Element): element is HTMLElement | SVGElement {
+  return typeof (element as HTMLElement).style !== "undefined";
+}
+
+function applyComputedStyle(target: CSSStyleDeclaration, computed: CSSStyleDeclaration): void {
+  if (typeof computed.cssText === "string" && computed.cssText.length > 0) {
+    target.cssText = computed.cssText;
+    return;
+  }
+
+  for (let index = 0; index < computed.length; index += 1) {
+    const property = computed.item(index);
+    if (!property) {
+      continue;
+    }
+    const value = computed.getPropertyValue(property);
+    const priority = computed.getPropertyPriority(property);
+    if (priority) {
+      target.setProperty(property, value, priority);
+    } else {
+      target.setProperty(property, value);
+    }
+  }
+}
+
+function cssTextFromComputed(style: CSSStyleDeclaration): string {
+  if (typeof style.cssText === "string" && style.cssText.length > 0) {
+    return style.cssText;
+  }
+
+  const declarations: string[] = [];
+  for (let index = 0; index < style.length; index += 1) {
+    const property = style.item(index);
+    if (!property) {
+      continue;
+    }
+    const value = style.getPropertyValue(property);
+    const priority = style.getPropertyPriority(property);
+    const suffix = priority ? ` !${priority}` : "";
+    declarations.push(`${property}: ${value}${suffix};`);
+  }
+  return declarations.join(" ");
+}
+
+function shouldCopyPseudoElement(style: CSSStyleDeclaration): boolean {
+  const content = style.getPropertyValue("content");
+  if (!content || content === "none" || content === "normal") {
+    return false;
+  }
+  const trimmed = content.trim();
+  if (!trimmed || trimmed === "\"\"" || trimmed === "''") {
+    return false;
+  }
+  return true;
+}
+
+function cloneComputedStyles(
+  source: Element,
+  target: Element,
+  pseudoRules: string[],
+  counter: { value: number },
+): void {
+  if (isElementWithStyle(target)) {
+    const computed = window.getComputedStyle(source);
+    applyComputedStyle(target.style, computed);
+
+    (["::before", "::after"] as const).forEach((pseudo) => {
+      const pseudoStyle = window.getComputedStyle(source, pseudo);
+      if (!shouldCopyPseudoElement(pseudoStyle)) {
+        return;
+      }
+
+      let identifier = target.getAttribute(PSEUDO_ELEMENT_ATTRIBUTE);
+      if (!identifier) {
+        counter.value += 1;
+        identifier = `p${counter.value}`;
+        target.setAttribute(PSEUDO_ELEMENT_ATTRIBUTE, identifier);
+      }
+
+      const cssText = cssTextFromComputed(pseudoStyle);
+      if (cssText) {
+        pseudoRules.push(`[${PSEUDO_ELEMENT_ATTRIBUTE}="${identifier}"]${pseudo} { ${cssText} }`);
+      }
+    });
+  }
+
+  const sourceChildren = Array.from(source.children);
+  const targetChildren = Array.from(target.children);
+  sourceChildren.forEach((sourceChild, index) => {
+    const targetChild = targetChildren[index];
+    if (sourceChild && targetChild) {
+      cloneComputedStyles(sourceChild, targetChild, pseudoRules, counter);
+    }
+  });
 }
 
 async function waitForImages(container: HTMLElement): Promise<void> {
@@ -535,13 +640,36 @@ function ensureTitleNode(container: HTMLElement, title: string): void {
   container.insertBefore(heading, container.firstChild);
 }
 
-async function renderElementToCanvas(element: HTMLElement): Promise<HTMLCanvasElement> {
+type RenderToCanvasOptions = {
+  baseUrl?: string;
+  assetCache?: AssetCache;
+};
+
+async function renderElementToCanvas(
+  element: HTMLElement,
+  options?: RenderToCanvasOptions,
+): Promise<HTMLCanvasElement> {
   const rect = element.getBoundingClientRect();
   const width = Math.max(Math.ceil(rect.width), 1);
   const height = Math.max(Math.ceil(rect.height), 1);
 
   const clone = element.cloneNode(true) as HTMLElement;
   clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+
+  if (typeof window !== "undefined" && typeof window.getComputedStyle === "function") {
+    const pseudoRules: string[] = [];
+    const counter = { value: 0 };
+    cloneComputedStyles(element, clone, pseudoRules, counter);
+    if (pseudoRules.length > 0) {
+      const styleNode = document.createElement("style");
+      styleNode.textContent = pseudoRules.join("\n");
+      clone.insertBefore(styleNode, clone.firstChild);
+    }
+  }
+
+  const baseUrl = options?.baseUrl ?? getBaseUrl();
+  await inlineExternalAssets(clone, baseUrl, options?.assetCache);
+
   const serialized = new XMLSerializer().serializeToString(clone);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%">${serialized}</foreignObject></svg>`;
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
@@ -802,11 +930,11 @@ async function createRichPdfFromHtml(title: string, html: string): Promise<Blob>
 
   try {
     const baseUrl = getBaseUrl();
-    await inlineExternalAssets(container, baseUrl);
+    const assetCache = await inlineExternalAssets(container, baseUrl);
     await waitForImages(container);
     await waitForFonts();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const canvas = await renderElementToCanvas(container);
+    const canvas = await renderElementToCanvas(container, { baseUrl, assetCache });
     const pdfBytes = canvasToPdf(canvas);
     return new Blob([pdfBytes], { type: "application/pdf" });
   } finally {
@@ -817,8 +945,8 @@ async function createRichPdfFromHtml(title: string, html: string): Promise<Blob>
 export async function __inlineAssetsForTesting(
   container: HTMLElement,
   baseUrl?: string,
-): Promise<void> {
-  await inlineExternalAssets(container, baseUrl ?? getBaseUrl());
+): Promise<AssetCache> {
+  return inlineExternalAssets(container, baseUrl ?? getBaseUrl());
 }
 
 export async function createSimplePdfFromHtml(title: string, html: string): Promise<Blob> {
