@@ -19,6 +19,26 @@ const normalizeUuid = (value: unknown): string | null => {
   return UUID_REGEX.test(trimmed) ? trimmed : null;
 };
 
+const normalizeOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+    return null;
+  }
+
+  return null;
+};
+
 const POSTGRES_UNDEFINED_TABLE = '42P01';
 const POSTGRES_UNDEFINED_COLUMN = '42703';
 const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
@@ -176,7 +196,8 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.status AS status,
           ff.conta_id::TEXT AS conta_id,
           ff.categoria_id::TEXT AS categoria_id,
-          NULL::TEXT AS cliente_id
+          ff.cliente_id::TEXT AS cliente_id,
+          ff.fornecedor_id::TEXT AS fornecedor_id
         FROM financial_flows ff
       `;
 
@@ -253,7 +274,8 @@ ${baseFinancialFlowsSelect}
           END AS status,
           NULL::TEXT AS conta_id,
           NULL::TEXT AS categoria_id,
-          p.solicitante_id::TEXT AS cliente_id
+          p.solicitante_id::TEXT AS cliente_id,
+          NULL::TEXT AS fornecedor_id
         FROM oportunidade_parcelas_enriched p
       )
     `;
@@ -271,7 +293,7 @@ ${baseFinancialFlowsSelect}
 
       const dataQuery = `
       ${combinedCte}
-      SELECT id, tipo, descricao, valor, vencimento, pagamento, status, conta_id, categoria_id
+      SELECT id, tipo, descricao, valor, vencimento, pagamento, status, conta_id, categoria_id, cliente_id, fornecedor_id
       FROM combined_flows
       ${filterClause}
       ORDER BY vencimento DESC, id DESC
@@ -448,6 +470,14 @@ ${baseFinancialFlowsSelect}
             : Number.isFinite(Number(row.categoria_id))
               ? Number(row.categoria_id)
               : null,
+        cliente_id:
+          typeof row.cliente_id === 'string' && row.cliente_id.trim().length > 0
+            ? row.cliente_id.trim()
+            : null,
+        fornecedor_id:
+          typeof row.fornecedor_id === 'string' && row.fornecedor_id.trim().length > 0
+            ? row.fornecedor_id.trim()
+            : null,
         descricao: normalizeDescricao(row.descricao),
         valor: normalizeNumber(row.valor),
         vencimento,
@@ -493,6 +523,7 @@ export const createFlow = async (req: Request, res: Response) => {
     vencimento,
     paymentMethod,
     clienteId,
+    fornecedorId,
     integrationApiKeyId,
     cardToken,
     asaasCustomerId,
@@ -509,9 +540,16 @@ export const createFlow = async (req: Request, res: Response) => {
 
   try {
     await client.query('BEGIN');
+    const tipoText = typeof tipo === 'string' ? tipo.trim().toLowerCase() : '';
+    const isDespesa = tipoText === 'despesa';
+    const normalizedTipo: Flow['tipo'] = isDespesa ? 'despesa' : 'receita';
+    const normalizedClienteId = normalizeOptionalInteger(clienteId);
+    const normalizedFornecedorId = normalizeOptionalInteger(fornecedorId);
+    const clienteIdForInsert = isDespesa ? null : normalizedClienteId;
+    const fornecedorIdForInsert = isDespesa ? normalizedFornecedorId : null;
     const inserted = await client.query(
-      'INSERT INTO financial_flows (tipo, descricao, valor, vencimento, status) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [tipo, descricao, valor, vencimento, 'pendente'],
+      'INSERT INTO financial_flows (tipo, descricao, valor, vencimento, status, cliente_id, fornecedor_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [normalizedTipo, descricao, valor, vencimento, 'pendente', clienteIdForInsert, fornecedorIdForInsert],
     );
 
     let flow = inserted.rows[0];
@@ -526,7 +564,7 @@ export const createFlow = async (req: Request, res: Response) => {
         {
           financialFlowId: flow.id,
           billingType: paymentMethod,
-          clienteId: clienteId ?? null,
+          clienteId: clienteIdForInsert,
           integrationApiKeyId: integrationApiKeyId ?? null,
           value: valor,
           dueDate: vencimento,
@@ -580,6 +618,7 @@ export const updateFlow = async (req: Request, res: Response) => {
     status,
     paymentMethod,
     clienteId,
+    fornecedorId,
     integrationApiKeyId,
     cardToken,
     asaasCustomerId,
@@ -596,9 +635,16 @@ export const updateFlow = async (req: Request, res: Response) => {
 
   try {
     await client.query('BEGIN');
+    const tipoText = typeof tipo === 'string' ? tipo.trim().toLowerCase() : '';
+    const isDespesa = tipoText === 'despesa';
+    const normalizedTipo: Flow['tipo'] = isDespesa ? 'despesa' : 'receita';
+    const normalizedClienteId = normalizeOptionalInteger(clienteId);
+    const normalizedFornecedorId = normalizeOptionalInteger(fornecedorId);
+    const clienteIdForUpdate = isDespesa ? null : normalizedClienteId;
+    const fornecedorIdForUpdate = isDespesa ? normalizedFornecedorId : null;
     const result = await client.query(
-      'UPDATE financial_flows SET tipo=$1, descricao=$2, valor=$3, vencimento=$4, pagamento=$5, status=$6 WHERE id=$7 RETURNING *',
-      [tipo, descricao, valor, vencimento, pagamento, status, flowId],
+      'UPDATE financial_flows SET tipo=$1, descricao=$2, valor=$3, vencimento=$4, pagamento=$5, status=$6, cliente_id=$7, fornecedor_id=$8 WHERE id=$9 RETURNING *',
+      [normalizedTipo, descricao, valor, vencimento, pagamento, status, clienteIdForUpdate, fornecedorIdForUpdate, flowId],
     );
     if (result.rowCount === 0) {
       await client.query('ROLLBACK');
@@ -617,7 +663,7 @@ export const updateFlow = async (req: Request, res: Response) => {
         {
           financialFlowId: flow.id,
           billingType: paymentMethod,
-          clienteId: clienteId ?? null,
+          clienteId: clienteIdForUpdate,
           integrationApiKeyId: integrationApiKeyId ?? null,
           value: valor ?? flow.valor,
           dueDate: vencimento ?? flow.vencimento,
