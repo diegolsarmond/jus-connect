@@ -3253,10 +3253,21 @@ export default function VisualizarOportunidade() {
                 className={sectionContainerClass}
               >
                 <h2 id="heading-interactions" className={sectionTitleClass}>
-                  Anexos e Comentários
+                  COMPLEMENTAR PROPOSTA
                 </h2>
                 <div className="space-y-5">
                   <div className="grid gap-4 md:grid-cols-2">
+                    
+                    <div className="space-y-3">
+                      <Label htmlFor="opportunity-comment">Comentário</Label>
+                      <Textarea
+                        id="opportunity-comment"
+                        placeholder="Escreva um comentário sobre esta oportunidade"
+                        value={commentText}
+                        onChange={(event) => setCommentText(event.target.value)}
+                        rows={pendingAttachments.length > 0 ? 6 : 4}
+                      />
+                    </div>
                     <div className="space-y-3">
                       <Label htmlFor="opportunity-attachments">Anexos</Label>
                       <Input
@@ -3291,16 +3302,6 @@ export default function VisualizarOportunidade() {
                           ))}
                         </ul>
                       )}
-                    </div>
-                    <div className="space-y-3">
-                      <Label htmlFor="opportunity-comment">Comentário</Label>
-                      <Textarea
-                        id="opportunity-comment"
-                        placeholder="Escreva um comentário sobre esta oportunidade"
-                        value={commentText}
-                        onChange={(event) => setCommentText(event.target.value)}
-                        rows={pendingAttachments.length > 0 ? 6 : 4}
-                      />
                     </div>
                   </div>
 
