@@ -70,6 +70,7 @@ const formSchema = z.object({
   valor_honorarios: z.string().optional(),
   percentual_honorarios: z.string().optional(),
   forma_pagamento: z.string().optional(),
+  valor_entrada: z.string().optional(),
   qtde_parcelas: z.string().optional(),
   contingenciamento: z.string().optional(),
   detalhes: z.string().optional(),
@@ -213,6 +214,7 @@ export default function NovaOportunidade() {
       valor_honorarios: "",
       percentual_honorarios: "",
       forma_pagamento: "",
+      valor_entrada: "",
       qtde_parcelas: "",
       contingenciamento: "",
       detalhes: "",
@@ -457,7 +459,8 @@ export default function NovaOportunidade() {
         valor_honorarios: parseCurrency(values.valor_honorarios || ""),
         percentual_honorarios: parsePercent(values.percentual_honorarios || ""),
         forma_pagamento: values.forma_pagamento || null,
-          qtde_parcelas: values.qtde_parcelas ? Number(values.qtde_parcelas) : null,
+        valor_entrada: parseCurrency(values.valor_entrada || ""),
+        qtde_parcelas: values.qtde_parcelas ? Number(values.qtde_parcelas) : null,
         contingenciamento: values.contingenciamento || null,
         detalhes: values.detalhes || null,
         documentos_anexados: null,
@@ -816,6 +819,28 @@ export default function NovaOportunidade() {
                           </FormItem>
                         )}
                       />
+
+                      {formaPagamento === "Parcelado" && (
+                        <FormField
+                          control={form.control}
+                          name="valor_entrada"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor de Entrada</FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value}
+                                  onChange={(e) =>
+                                    field.onChange(formatCurrency(e.target.value))
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
                       <FormField
                         control={form.control}
