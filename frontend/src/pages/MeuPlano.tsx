@@ -31,6 +31,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { routes } from "@/config/routes";
 import {
   AlertTriangle,
   ArrowRight,
@@ -926,7 +927,7 @@ export default function MeuPlano() {
                                       className="w-full border-white/30 bg-white/10 text-white hover:bg-white/20"
                                       asChild
                                     >
-                                      <Link to="/configuracoes/planos">Gerenciar no painel</Link>
+                                      <Link to={routes.admin.newPlan}>Gerenciar no painel</Link>
                                     </Button>
                                   </CardFooter>
                                 </Card>
@@ -946,7 +947,7 @@ export default function MeuPlano() {
                   </Button>
                 )}
                 <Button size="lg" variant="ghost" className="rounded-full" asChild>
-                  <Link to="/configuracoes/planos" className="flex items-center gap-2">
+                  <Link to={routes.admin.newPlan} className="flex items-center gap-2">
                     Gerenciar no painel
                     <ArrowRight className="h-4 w-4" />
                   </Link>

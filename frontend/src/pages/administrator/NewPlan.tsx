@@ -1,236 +1,197 @@
-import { useNavigate } from "react-router-dom";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { routes } from "@/config/routes";
-import { Check, ArrowRight, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getApiBaseUrl } from "@/lib/api";
 
-type PlanTemplate = {
-  id: string;
+interface Plan {
+  id: number;
   name: string;
   price: string;
-  pricePeriod: string;
-  activationFee: string;
-  description: string;
-  trialMessage: string;
-  features: string[];
-  highlight?: boolean;
-  highlightLabel?: string;
-};
+}
 
-const planTemplates: PlanTemplate[] = [
-  {
-    id: "essencial",
-    name: "Essencial",
-    price: "R$ 200,00",
-    pricePeriod: "/mês",
-    activationFee: "Taxa de ativação",
-    description:
-      "Ideal para escritórios em estruturação ou expansão com gestão padronizada.",
-    trialMessage: "Experimente grátis por 7 dias.",
-    features: [
-      "Até 3 usuários",
-      "1 advogado master + 2 usuários consultores",
-      "Tarefas e fluxos de trabalho",
-      "Prospecção 100x Station",
-      "Gestão operacional com fluxos integrados",
-      "Monitoramento de mídias e captura automatizada",
-    ],
-  },
-  {
-    id: "banca-juridica",
-    name: "Banca Jurídica",
-    price: "R$ 420,00",
-    pricePeriod: "/mês",
-    activationFee: "Taxa de ativação",
-    description:
-      "Ideal para escritórios em crescimento, com equipe híbrida e filiais.",
-    trialMessage: "Experimente grátis por 7 dias.",
-    features: [
-      "Até 6 usuários",
-      "2 advogados master + 4 usuários consultores",
-      "Monitoramento de mídias e captura automatizada",
-      "Gestão operacional 360°",
-      "Integração com PJE, Projudi, e-SAJ e E-proc",
-      "Aplicativo mobile para acompanhamento em tempo real",
-    ],
-  },
-  {
-    id: "banca-max",
-    name: "Banca Max",
-    price: "R$ 850,00",
-    pricePeriod: "/mês",
-    activationFee: "Taxa de ativação",
-    description:
-      "Automação avançada, IA e atendimento humanizado para bancas estruturadas.",
-    trialMessage: "Experimente grátis por 7 dias.",
-    features: [
-      "Até 12 usuários",
-      "4 advogados master + 8 usuários consultores",
-      "Automação avançada com IA e fluxos inteligentes",
-      "Atendimento omnichannel + captura de leads",
-      "Business Intelligence com dashboards personalizados",
-      "Integração com Google Agenda, Apple e Outlook",
-    ],
-    highlight: true,
-    highlightLabel: "Mais Vendido",
-  },
-  {
-    id: "elite",
-    name: "Elite",
-    price: "R$ 1.750,00",
-    pricePeriod: "/mês",
-    activationFee: "Taxa de ativação",
-    description:
-      "Experiência jurídica completa, com inteligência de dados e consultoria estratégica.",
-    trialMessage: "Experimente grátis por 7 dias.",
-    features: [
-      "Usuários ilimitados",
-      "8 advogados master + consultores ilimitados",
-      "Consultoria estratégica com dados DriveIn",
-      "Squad dedicado Jus Connect",
-      "Integrações com BI externo e Data Driven",
-      "Implantação sob medida e integrações customizadas",
-    ],
-  },
-];
+function joinUrl(base: string, path = "") {
+  const normalizedBase = base.replace(/\/+$/, "");
+  const normalizedPath = path ? (path.startsWith("/") ? path : `/${path}`) : "";
+  return `${normalizedBase}${normalizedPath}`;
+}
 
 export default function NewPlan() {
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const apiUrl = getApiBaseUrl();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [newPlan, setNewPlan] = useState({ name: "", price: "" });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingPlan, setEditingPlan] = useState({ name: "", price: "" });
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleCreatePlan = (template: PlanTemplate) => {
-    toast({
-      title: `Modelo ${template.name} criado!`,
-      description:
-        "O plano foi adicionado à sua base e pode ser ajustado nas configurações.",
-    });
-    navigate(routes.admin.plans);
+  useEffect(() => {
+    const fetchPlans = async () => {
+      const url = joinUrl(apiUrl, "/api/planos");
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        const parsed: unknown[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.rows)
+            ? data.rows
+            : Array.isArray(data?.data?.rows)
+              ? data.data.rows
+              : Array.isArray(data?.data)
+                ? data.data
+                : [];
+        setPlans(
+          parsed.map((item) => {
+            const plan = item as { id: number | string; nome?: string; valor?: string | number };
+            return {
+              id: Number(plan.id),
+              name: plan.nome ?? "",
+              price: String(plan.valor ?? ""),
+            };
+          }),
+        );
+      } catch (error) {
+        console.error(error);
+        setErrorMsg(error instanceof Error ? error.message : "Erro ao buscar dados");
+        setPlans([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPlans();
+  }, [apiUrl]);
+
+  const addPlan = () => {
+    if (!newPlan.name.trim() || !newPlan.price.trim()) return;
+    setPlans([...plans, { id: Date.now(), ...newPlan }]);
+    setNewPlan({ name: "", price: "" });
   };
 
-  const handleContact = (template: PlanTemplate) => {
-    toast({
-      title: "Contato registrado",
-      description: `Nossa equipe comercial entrará em contato sobre o plano ${template.name}.`,
-    });
+  const startEdit = (plan: Plan) => {
+    setEditingId(plan.id);
+    setEditingPlan({ name: plan.name, price: plan.price });
+  };
+
+  const saveEdit = () => {
+    if (editingId === null) return;
+    setPlans(plans.map((plan) => (plan.id === editingId ? { id: editingId, ...editingPlan } : plan)));
+    setEditingId(null);
+    setEditingPlan({ name: "", price: "" });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingPlan({ name: "", price: "" });
+  };
+
+  const deletePlan = (id: number) => {
+    setPlans(plans.filter((plan) => plan.id !== id));
   };
 
   return (
-    <div className="space-y-10">
-      <div className="text-center space-y-3">
-        <Badge variant="outline" className="mx-auto border-sky-500/60 bg-sky-500/10 text-sky-200">
-          Biblioteca de modelos
-        </Badge>
-        <div>
-          <h1 className="text-3xl font-bold">Crie um novo plano</h1>
-          <p className="text-muted-foreground">
-            Escolha um modelo estratégico para acelerar a configuração do seu CRM
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Planos</h1>
+        <p className="text-muted-foreground">Gerencie os planos disponíveis</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-4">
-        {planTemplates.map((template) => (
-          <Card
-            key={template.id}
-            className={cn(
-              "relative flex h-full flex-col overflow-hidden border border-white/10 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white shadow-xl",
-              template.highlight &&
-                "border-sky-500/60 shadow-[0_0_45px_rgba(56,189,248,0.35)]"
-            )}
-          >
-            <div className="pointer-events-none absolute -top-20 right-0 h-48 w-48 rounded-full bg-sky-500/20 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-32 left-0 h-56 w-56 rounded-full bg-indigo-500/10 blur-3xl" />
-
-            {template.highlight && (
-              <div className="absolute left-1/2 top-4 -translate-x-1/2">
-                <Badge className="flex items-center gap-2 border border-sky-400/60 bg-sky-500/20 text-sky-100">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {template.highlightLabel}
-                </Badge>
-              </div>
-            )}
-
-            <CardHeader className="space-y-5 pb-0">
-              <div className="space-y-4 text-left">
-                <div className="space-y-2">
-                  <CardTitle className="text-3xl font-semibold text-white">
-                    {template.name}
-                  </CardTitle>
-                  <div className="space-y-1">
-                    <span className="text-xs uppercase tracking-[0.3em] text-slate-300">
-                      A partir de
-                    </span>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold text-white">
-                        {template.price}
-                      </span>
-                      <span className="text-base font-medium text-slate-300">
-                        {template.pricePeriod}
-                      </span>
-                    </div>
-                    <span className="text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
-                      {template.activationFee}
-                    </span>
-                  </div>
-                </div>
-                <CardDescription className="text-sm text-slate-200">
-                  {template.description}
-                </CardDescription>
-              </div>
-            </CardHeader>
-
-            <CardContent className="flex flex-col gap-5 text-slate-100">
-              <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-                <span className="font-semibold text-sky-200">
-                  {template.trialMessage}
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                  O que você terá
-                </p>
-                <ul className="space-y-2 text-sm text-slate-100">
-                  {template.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3">
-                      <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-300" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </CardContent>
-
-            <CardFooter className="mt-auto flex flex-col gap-3 p-6 pt-0 sm:flex-row">
-              <Button
-                className="w-full bg-sky-500 text-slate-950 hover:bg-sky-400 sm:flex-1"
-                onClick={() => handleCreatePlan(template)}
-              >
-                Teste gratuito
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full border-white/20 bg-white/10 text-white hover:bg-white/20 sm:flex-1"
-                onClick={() => handleContact(template)}
-              >
-                Fale conosco
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          placeholder="Nome do plano"
+          value={newPlan.name}
+          onChange={(event) => setNewPlan({ ...newPlan, name: event.target.value })}
+          className="max-w-sm"
+        />
+        <Input
+          placeholder="Valor"
+          value={newPlan.price}
+          onChange={(event) => setNewPlan({ ...newPlan, price: event.target.value })}
+          className="max-w-sm"
+        />
+        <Button onClick={addPlan}>
+          <Plus className="mr-2 h-4 w-4" />
+          Adicionar
+        </Button>
       </div>
+
+      {loading && <p className="text-muted-foreground">Carregando…</p>}
+      {errorMsg && <p className="text-red-600">{errorMsg}</p>}
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Nome</TableHead>
+            <TableHead>Valor</TableHead>
+            <TableHead className="w-32">Ações</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {plans.map((plan) => (
+            <TableRow key={plan.id}>
+              <TableCell>
+                {editingId === plan.id ? (
+                  <Input
+                    value={editingPlan.name}
+                    onChange={(event) => setEditingPlan((prev) => ({ ...prev, name: event.target.value }))}
+                  />
+                ) : (
+                  plan.name
+                )}
+              </TableCell>
+              <TableCell>
+                {editingId === plan.id ? (
+                  <Input
+                    value={editingPlan.price}
+                    onChange={(event) => setEditingPlan((prev) => ({ ...prev, price: event.target.value }))}
+                  />
+                ) : (
+                  plan.price
+                )}
+              </TableCell>
+              <TableCell className="flex gap-2">
+                {editingId === plan.id ? (
+                  <>
+                    <Button size="icon" variant="ghost" onClick={saveEdit}>
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={cancelEdit}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button size="icon" variant="ghost" onClick={() => startEdit(plan)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => deletePlan(plan.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+          {plans.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={3} className="text-center text-muted-foreground">
+                Nenhum plano cadastrado
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 }
-
