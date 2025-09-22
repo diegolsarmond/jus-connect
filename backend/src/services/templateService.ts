@@ -41,7 +41,7 @@ export function replaceVariables(
     MUSTACHE_VARIABLE_REGEX,
     (_match, key: string) => {
       const resolved = resolveVariableValue(values, key);
-      return resolved !== undefined ? resolved : `<${key}>`;
+      return resolved !== undefined ? resolved : `{{${key}}}`;
     },
   );
 }

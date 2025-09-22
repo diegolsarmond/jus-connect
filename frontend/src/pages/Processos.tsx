@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Archive,
   Check,
@@ -64,6 +65,7 @@ import {
   Eye,
   ChevronsUpDown,
 } from "lucide-react";
+import { usePlan } from "@/features/plans/PlanProvider";
 
 interface ProcessoCliente {
   id: number;
@@ -84,7 +86,7 @@ interface ProcessoProposta {
   solicitante?: string | null;
 }
 
-interface Processo {
+export interface Processo {
   id: number;
   numero: string;
   dataDistribuicao: string;
@@ -509,6 +511,82 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
   };
 };
 
+interface ProcessosSyncActionProps {
+  allowsSync: boolean;
+  syncLimit: number | null;
+  processo: Processo;
+  isSyncing: boolean;
+  onSync: (processoId: number) => void;
+}
+
+export function ProcessosSyncAction({
+  allowsSync,
+  syncLimit,
+  processo,
+  isSyncing,
+  onSync,
+}: ProcessosSyncActionProps) {
+  const limitReached =
+    syncLimit !== null && processo.consultasApiCount >= syncLimit;
+
+  const button = (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => onSync(processo.id)}
+      disabled={isSyncing || limitReached}
+    >
+      {isSyncing ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Sincronizando...
+        </>
+      ) : (
+        <>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Sincronizar processo
+        </>
+      )}
+    </Button>
+  );
+
+  if (!allowsSync) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            className="flex cursor-default items-center gap-1 px-3 py-1 text-xs"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Sincronização indisponível
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          Plano atual não permite sincronizar processos automaticamente.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (limitReached) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex">
+            {button}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          {`Limite de sincronizações atingido (${processo.consultasApiCount}/${syncLimit}).`}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return button;
+}
+
 const getStatusBadgeClassName = (status: string) => {
   const normalized = status.toLowerCase();
 
@@ -564,6 +642,10 @@ export default function Processos() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingProcess, setCreatingProcess] = useState(false);
   const [syncingProcessId, setSyncingProcessId] = useState<number | null>(null);
+  const { plan } = usePlan();
+
+  const planAllowsSync = plan?.sincronizacaoProcessosHabilitada ?? true;
+  const planSyncLimit = plan?.sincronizacaoProcessosLimite ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -1231,6 +1313,33 @@ export default function Processos() {
         return;
       }
 
+      if (!planAllowsSync) {
+        toast({
+          title: "Sincronização indisponível",
+          description:
+            "Seu plano atual não permite sincronizar processos com o Escavador.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const processoAtual = processos.find(
+        (processo) => processo.id === processoId,
+      );
+
+      if (
+        planSyncLimit !== null &&
+        processoAtual &&
+        processoAtual.consultasApiCount >= planSyncLimit
+      ) {
+        toast({
+          title: "Limite de sincronizações atingido",
+          description: `Limite de sincronizações do plano atingido (${processoAtual.consultasApiCount}/${planSyncLimit}).`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       setSyncingProcessId(processoId);
 
       try {
@@ -1307,7 +1416,7 @@ export default function Processos() {
         setSyncingProcessId(null);
       }
     },
-    [syncingProcessId, toast],
+    [syncingProcessId, toast, planAllowsSync, planSyncLimit, processos],
   );
 
   const handleViewProcessDetails = useCallback(
@@ -1795,19 +1904,13 @@ export default function Processos() {
                           <Eye className="mr-2 h-4 w-4" />
                           Visualizar detalhes
                         </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleSyncProcess(processo.id)}
-                          disabled={isSyncing}
-                        >
-                          {isSyncing ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                          )}
-                          {isSyncing ? "Sincronizando..." : "Sincronizar processo"}
-                        </Button>
+                        <ProcessosSyncAction
+                          allowsSync={planAllowsSync}
+                          syncLimit={planSyncLimit}
+                          processo={processo}
+                          isSyncing={isSyncing}
+                          onSync={handleSyncProcess}
+                        />
                       </div>
                     </div>
                   </div>
