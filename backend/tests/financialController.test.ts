@@ -404,6 +404,7 @@ test('listFlows tolerates missing fornecedor column', async () => {
     status: 'pendente',
   };
 
+
   const { calls, restore } = setupQueryMock([
     empresaLookupResponse,
     financialFlowColumnsWithoutFornecedorResponse,

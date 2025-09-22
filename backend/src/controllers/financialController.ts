@@ -65,6 +65,7 @@ type FinancialFlowEmpresaColumn = string;
 type FinancialFlowClienteColumn = string;
 type FinancialFlowFornecedorColumn = string;
 
+
 const FINANCIAL_FLOW_EMPRESA_CANDIDATES = ['idempresa', 'empresa_id', 'empresa'] as const;
 const FINANCIAL_FLOW_CLIENTE_CANDIDATES = [
   'cliente_id',
@@ -78,6 +79,7 @@ const FINANCIAL_FLOW_FORNECEDOR_CANDIDATES = [
   'idfornecedor',
   'fornecedor',
 ] as const;
+
 
 const quoteIdentifier = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 
@@ -119,6 +121,7 @@ const resetFinancialFlowColumnsLookup = () => {
   financialFlowClienteColumnCheckedAt = null;
   financialFlowFornecedorColumn = null;
   financialFlowFornecedorColumnCheckedAt = null;
+
 };
 
 const updateOpportunityTablesAvailability = (value: boolean) => {
@@ -160,6 +163,7 @@ const updateFinancialFlowFornecedorColumn = (
 const resetFinancialFlowFornecedorColumnCache = () => {
   resetFinancialFlowColumnsLookup();
 };
+
 
 const ensureFinancialFlowColumns = async () => {
   if (
@@ -227,6 +231,7 @@ const ensureFinancialFlowColumns = async () => {
       updateFinancialFlowEmpresaColumn(null);
       updateFinancialFlowClienteColumn(null);
       updateFinancialFlowFornecedorColumn(null);
+
       return null;
     })
     .finally(() => {
@@ -329,6 +334,7 @@ export const __internal = {
   resetFinancialFlowEmpresaColumnCache,
   resetFinancialFlowClienteColumnCache,
   resetFinancialFlowFornecedorColumnCache,
+
 };
 
 const asaasChargeService = new AsaasChargeService();
@@ -370,6 +376,7 @@ const determineFinancialFlowFornecedorColumn = async (): Promise<FinancialFlowFo
   await ensureFinancialFlowColumns();
 
   return financialFlowFornecedorColumn;
+
 };
 
 export const listFlows = async (req: Request, res: Response) => {
@@ -423,6 +430,7 @@ export const listFlows = async (req: Request, res: Response) => {
     const empresaColumn = await determineFinancialFlowEmpresaColumn();
     const clienteColumn = await determineFinancialFlowClienteColumn();
     const fornecedorColumn = await determineFinancialFlowFornecedorColumn();
+
     const hasEmpresaColumn = typeof empresaColumn === 'string' && empresaColumn.length > 0;
     const empresaColumnExpression = hasEmpresaColumn
       ? `ff.${quoteIdentifier(empresaColumn)}`
@@ -435,6 +443,7 @@ export const listFlows = async (req: Request, res: Response) => {
       typeof fornecedorColumn === 'string' && fornecedorColumn.length > 0
         ? `ff.${quoteIdentifier(fornecedorColumn)}::TEXT`
         : 'NULL::TEXT';
+
 
     const filters: (string | number)[] = [empresaId];
     const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
