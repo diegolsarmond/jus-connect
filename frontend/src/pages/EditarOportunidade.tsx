@@ -322,7 +322,10 @@ export default function EditarOportunidade() {
           contingenciamento: data.contingenciamento || "",
           detalhes: data.detalhes || "",
           documentos_anexados: undefined,
-          criado_por: data.criado_por || "",
+          criado_por:
+            data.criado_por !== null && data.criado_por !== undefined
+              ? String(data.criado_por)
+              : "",
           data_criacao: data.data_criacao ? data.data_criacao.substring(0, 10) : "",
           ultima_atualizacao: data.ultima_atualizacao
             ? data.ultima_atualizacao.substring(0, 10)
