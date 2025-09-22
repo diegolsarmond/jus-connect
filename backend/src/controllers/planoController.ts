@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { sanitizeModuleIds } from '../constants/modules';
 import pool from '../services/db';
 
 const RECORRENCIAS_PERMITIDAS = ['mensal', 'anual', 'nenhuma'] as const;
@@ -17,6 +18,10 @@ type PlanoRow = {
   recorrencia: Recorrencia | null;
   qtde_usuarios: number | string | null;
   recursos: unknown;
+  modulos: string[] | null;
+  max_propostas: number | string | null;
+  sincronizacao_processos_habilitada: boolean | null;
+  sincronizacao_processos_limite: number | string | null;
   max_casos?: number | string | null;
   maxCases?: number | string | null;
   sincronizacao_processos_habilitada?: boolean | number | string | null;
@@ -25,7 +30,17 @@ type PlanoRow = {
   sincronizacaoProcessosLimite?: number | string | null;
 };
 
-type PlanoResponseRow = Omit<PlanoRow, 'recursos' | 'max_casos' | 'maxCases'> & {
+type PlanoResponseRow = Omit<
+  PlanoRow,
+  |
+    'recursos'
+    | 'max_casos'
+    | 'maxCases'
+    | 'modulos'
+    | 'max_propostas'
+    | 'sincronizacao_processos_habilitada'
+    | 'sincronizacao_processos_limite'
+> & {
   recursos: string[];
   max_casos: number | null;
   maxCases: number | null;
@@ -113,6 +128,7 @@ const parseNullableInteger = (value: unknown): number | null => {
   }
 
   return null;
+
 };
 
 type RecursosDetails = {
@@ -171,6 +187,112 @@ const toInteger = (value: unknown): number | null => {
   }
 
   return null;
+};
+
+const toBoolean = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+
+    if (!normalized) {
+      return null;
+    }
+
+    if (['true', '1', 'sim', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+
+    if (['false', '0', 'nao', 'não', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const parseBooleanOrDefault = (
+  value: unknown,
+  fieldName: string,
+  fallback: boolean
+): boolean => {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (value === null) {
+    return false;
+  }
+
+  const parsed = toBoolean(value);
+  if (parsed === null) {
+    throw new Error(`${fieldName} deve ser um booleano válido`);
+  }
+
+  return parsed;
+};
+
+const parseOptionalIntegerOrDefault = (
+  value: unknown,
+  fieldName: string,
+  fallback: number | null
+): number | null => {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string' && !value.trim()) {
+    return null;
+  }
+
+  const parsed = toInteger(value);
+  if (parsed === null) {
+    throw new Error(`${fieldName} deve ser um número inteiro válido`);
+  }
+
+  return parsed;
+};
+
+const parseModulesOrDefault = (
+  value: unknown,
+  fallback: string[],
+  fallbackWasNull: boolean
+): string[] | null => {
+  if (value === undefined) {
+    return fallbackWasNull ? null : fallback;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    return sanitizeModuleIds(value);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(error.message);
+    }
+
+    throw new Error('modulos inválidos');
+  }
 };
 
 const pushFeature = (features: string[], entry: unknown) => {
@@ -318,6 +440,7 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
   const sincronizacaoProcessosHabilitada = parseBooleanFlag(rawSyncEnabled);
   const sincronizacaoProcessosLimite = parseNullableInteger(rawSyncLimit);
 
+
   return {
     ...row,
     ativo: row.ativo ?? true,
@@ -326,6 +449,7 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     maxCases: maxCasos,
     sincronizacao_processos_habilitada: sincronizacaoProcessosHabilitada,
     sincronizacao_processos_limite: sincronizacaoProcessosLimite,
+
   };
 };
 
@@ -333,6 +457,7 @@ export const listPlanos = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
       'SELECT id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite FROM public.planos'
+
     );
     const formatted = result.rows.map((row) => formatPlanoRow(row as PlanoRow));
     res.json(formatted);
@@ -357,6 +482,7 @@ export const createPlano = async (req: Request, res: Response) => {
     sincronizacaoProcessosHabilitada,
     sincronizacao_processos_limite,
     sincronizacaoProcessosLimite,
+
   } = req.body;
 
   const descricaoValue: string = descricao ?? '';
@@ -371,6 +497,48 @@ export const createPlano = async (req: Request, res: Response) => {
     sincronizacao_processos_limite ?? sincronizacaoProcessosLimite,
   );
 
+  let modulosValue: string[] | null;
+  try {
+    modulosValue = parseModulesOrDefault(modulos, [], false);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'modulos inválidos';
+    return res.status(400).json({ error: message });
+  }
+
+  let maxPropostasValue: number | null;
+  try {
+    maxPropostasValue = parseOptionalIntegerOrDefault(max_propostas, 'max_propostas', null);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'max_propostas inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  let sincronizacaoProcessosHabilitadaValue: boolean;
+  try {
+    sincronizacaoProcessosHabilitadaValue = parseBooleanOrDefault(
+      sincronizacao_processos_habilitada,
+      'sincronizacao_processos_habilitada',
+      false
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'sincronizacao_processos_habilitada inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  let sincronizacaoProcessosLimiteValue: number | null;
+  try {
+    sincronizacaoProcessosLimiteValue = parseOptionalIntegerOrDefault(
+      sincronizacao_processos_limite,
+      'sincronizacao_processos_limite',
+      null
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'sincronizacao_processos_limite inválido';
+    return res.status(400).json({ error: message });
+  }
+
   if (recorrencia !== null && !isRecorrenciaValida(recorrencia)) {
     return res.status(400).json({ error: 'Recorrência inválida' });
   }
@@ -378,6 +546,7 @@ export const createPlano = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       'INSERT INTO public.planos (nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite) VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9) RETURNING id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite',
+
       [
         nome,
         valor,
@@ -388,6 +557,7 @@ export const createPlano = async (req: Request, res: Response) => {
         recursosValue,
         syncEnabledValue,
         syncLimitValue,
+
       ]
     );
     const payload = formatPlanoRow(result.rows[0] as PlanoRow);
@@ -410,11 +580,16 @@ export const updatePlano = async (req: Request, res: Response) => {
     recursos,
     max_casos,
     maxCases,
+    modulos,
+    max_propostas,
+    sincronizacao_processos_habilitada,
+    sincronizacao_processos_limite,
   } = req.body;
 
   try {
     const existingResult = await pool.query(
       'SELECT id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite FROM public.planos WHERE id = $1',
+
       [id]
     );
 
@@ -438,6 +613,7 @@ export const updatePlano = async (req: Request, res: Response) => {
     const hasSyncLimit =
       Object.prototype.hasOwnProperty.call(req.body, 'sincronizacao_processos_limite') ||
       Object.prototype.hasOwnProperty.call(req.body, 'sincronizacaoProcessosLimite');
+
 
     let updatedRecorrencia: Recorrencia | null;
     if (hasRecorrencia) {
@@ -484,6 +660,7 @@ export const updatePlano = async (req: Request, res: Response) => {
 
     const result = await pool.query(
       'UPDATE public.planos SET nome = $1, valor = $2, ativo = $3, descricao = $4, recorrencia = $5, qtde_usuarios = $6, recursos = $7, sincronizacao_processos_habilitada = $8, sincronizacao_processos_limite = $9 WHERE id = $10 RETURNING id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite',
+
       [
         nome ?? currentPlano.nome,
         valor ?? currentPlano.valor,
@@ -494,6 +671,7 @@ export const updatePlano = async (req: Request, res: Response) => {
         recursosValue,
         updatedSyncEnabled,
         updatedSyncLimit,
+
         id,
       ]
     );
