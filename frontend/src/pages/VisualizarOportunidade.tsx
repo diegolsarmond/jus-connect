@@ -3128,19 +3128,7 @@ export default function VisualizarOportunidade() {
                                 )}
                                 Download
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleOpenDocumentInNewTab(doc)}
-                                disabled={isOpenLoading}
-                              >
-                                {isOpenLoading ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <ExternalLink className="mr-2 h-4 w-4" />
-                                )}
-                                Abrir em nova aba
-                              </Button>
+
                             </div>
                           </div>
                         );
@@ -3158,7 +3146,7 @@ export default function VisualizarOportunidade() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 id="heading-billing" className={sectionTitleClass}>
-                    Faturamentos
+                    FATURAMENTOS
                   </h2>
                   <Button
                     variant="outline"
@@ -3167,7 +3155,7 @@ export default function VisualizarOportunidade() {
                     disabled={!opportunity}
                     aria-label="Registrar novo faturamento"
                   >
-                    Novo faturamento
+                    Faturar
                   </Button>
                 </div>
 
@@ -3590,7 +3578,7 @@ export default function VisualizarOportunidade() {
       >
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Faturar oportunidade</DialogTitle>
+            <DialogTitle>Faturar Proposta</DialogTitle>
             <DialogDescription>
               Confirme as condições cadastradas e registre o faturamento desta proposta.
             </DialogDescription>
@@ -3599,11 +3587,11 @@ export default function VisualizarOportunidade() {
           <div className="space-y-6">
             <div className="space-y-3 rounded-lg border border-dashed border-border/70 bg-muted/40 p-4">
               <p className="text-sm font-medium text-muted-foreground">
-                Condições cadastradas
+                Condições de pagamento
               </p>
               <dl className="grid gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs uppercase text-muted-foreground">Forma cadastrada</dt>
+                  <dt className="text-xs uppercase text-muted-foreground">Forma de pagamento</dt>
                   <dd className="font-medium text-foreground">
                     {typeof opportunity?.forma_pagamento === "string" &&
                     opportunity.forma_pagamento.trim().length > 0
