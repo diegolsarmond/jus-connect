@@ -10,11 +10,17 @@ type QueryResponse = { rows: any[]; rowCount: number };
 
 let createOpportunityDocumentFromTemplate: typeof import('../src/controllers/oportunidadeDocumentoController')['createOpportunityDocumentFromTemplate'];
 let listOpportunityDocuments: typeof import('../src/controllers/oportunidadeDocumentoController')['listOpportunityDocuments'];
+let getOpportunityDocument: typeof import('../src/controllers/oportunidadeDocumentoController')['getOpportunityDocument'];
+let deleteOpportunityDocument: typeof import('../src/controllers/oportunidadeDocumentoController')['deleteOpportunityDocument'];
 
 test.before(async () => {
-  ({ createOpportunityDocumentFromTemplate, listOpportunityDocuments } = await import(
-    '../src/controllers/oportunidadeDocumentoController'
-  ));
+  ({
+    createOpportunityDocumentFromTemplate,
+    listOpportunityDocuments,
+    getOpportunityDocument,
+    deleteOpportunityDocument,
+  } = await import('../src/controllers/oportunidadeDocumentoController'));
+
 });
 
 const createMockResponse = () => {
@@ -191,7 +197,8 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
 
   const req = {
     params: { id: '123' },
-    body: { templateId: 7, title: '  Documento Personalizado  ' },
+    body: { templateId: 7 },
+    auth: { userId: 99 },
 
   } as unknown as Request;
 
@@ -346,4 +353,53 @@ test('listOpportunityDocuments returns 404 when opportunity is inaccessible', as
   assert.equal(res.statusCode, 404);
   assert.deepEqual(res.body, { error: 'Oportunidade não encontrada' });
   assert.equal(calls.length, 2);
+});
+
+test('getOpportunityDocument returns 404 when opportunity is inaccessible', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 87 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const req = {
+    params: { id: '10', documentId: '555' },
+    auth: { userId: 9 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await getOpportunityDocument(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Oportunidade não encontrada' });
+  assert.equal(calls.length, 2);
+});
+
+test('deleteOpportunityDocument returns 404 when opportunity is inaccessible', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 101 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const req = {
+    params: { id: '55', documentId: '3' },
+    auth: { userId: 42 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await deleteOpportunityDocument(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Oportunidade não encontrada' });
+  assert.equal(calls.length, 2);
+
 });
