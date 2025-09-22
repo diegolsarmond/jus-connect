@@ -2,6 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, isBefore, isValid, parseISO, startOfDay, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { fetchFlows, createFlow, settleFlow, Flow, AsaasCharge, AsaasChargeStatus } from '@/lib/flows';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,6 +33,35 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+
+const CHART_COLORS = {
+  receitas: '#16a34a',
+  despesas: '#dc2626',
+  aberto: '#f59e0b',
+} as const;
+
+const CHART_SERIES_LABELS = {
+  receitas: 'Receitas',
+  despesas: 'Despesas',
+  aberto: 'Cobranças em aberto',
+} as const;
+
+const INITIAL_FORM_STATE = {
+  tipo: 'receita' as Flow['tipo'],
+  descricao: '',
+  valor: '',
+  vencimento: '',
+};
 
 function normalizeCustomerOption(entry: unknown): CustomerOption | null {
   if (!entry || typeof entry !== 'object') {
@@ -272,7 +311,7 @@ const FinancialFlows = () => {
           totals,
         };
       })
-      .sort((a, b) => b.sortValue - a.sortValue);
+      .sort((a, b) => a.sortValue - b.sortValue);
   }, [filteredFlows, deriveMonthLabel]);
 
   const globalTotals = useMemo(() => {
@@ -329,7 +368,7 @@ const FinancialFlows = () => {
       return Array.from(accumulator.entries())
         .map(([year, yearPeriods]) => ({
           year,
-          periods: yearPeriods.sort((a, b) => b.sortValue - a.sortValue),
+          periods: yearPeriods.sort((a, b) => a.sortValue - b.sortValue),
         }))
         .sort((a, b) => b.year - a.year);
     },
@@ -346,8 +385,12 @@ const FinancialFlows = () => {
       return;
     }
 
+    const currentYear = new Date().getFullYear();
+    const fallbackYear = availableYears[0];
+    const preferredYear = availableYears.includes(currentYear) ? currentYear : fallbackYear;
+
     if (activeYear === null || !availableYears.includes(activeYear)) {
-      setActiveYear(availableYears[0]);
+      setActiveYear(preferredYear);
     }
   }, [activeYear, availableYears]);
 
@@ -364,6 +407,25 @@ const FinancialFlows = () => {
     return undatedPeriod ? [...periodsWithYear, undatedPeriod] : periodsWithYear;
   }, [periodsForActiveYear, undatedPeriod]);
 
+  const chartData = useMemo(
+    () =>
+      periodsForActiveYear.map((period) => {
+        const monthDate = new Date(period.sortValue);
+        const monthLabel = format(monthDate, 'MMM', { locale: ptBR });
+        const normalizedLabel = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+        const openChargesValue = period.totals.status.pendente.value + period.totals.status.vencido.value;
+
+        return {
+          key: period.key,
+          month: normalizedLabel,
+          receitas: period.totals.receitas,
+          despesas: period.totals.despesas,
+          aberto: openChargesValue,
+        };
+      }),
+    [periodsForActiveYear],
+  );
+
   useEffect(() => {
     const visibleKeys = visiblePeriods.map((period) => period.key);
     if (visibleKeys.length === 0) {
@@ -373,10 +435,18 @@ const FinancialFlows = () => {
       return;
     }
 
+    const now = new Date();
+    const currentPeriodKey = format(now, 'yyyy-MM');
+    const shouldPrioritizeCurrentMonth = activeYear !== null && activeYear === now.getFullYear();
+    const preferredKey =
+      shouldPrioritizeCurrentMonth && visibleKeys.includes(currentPeriodKey)
+        ? currentPeriodKey
+        : visibleKeys[0];
+
     if (!activePeriodKey || !visibleKeys.includes(activePeriodKey)) {
-      setActivePeriodKey(visibleKeys[0]);
+      setActivePeriodKey(preferredKey);
     }
-  }, [activePeriodKey, visiblePeriods]);
+  }, [activePeriodKey, activeYear, visiblePeriods]);
 
   const safePeriodKey =
     visiblePeriods.length > 0
@@ -401,24 +471,25 @@ const FinancialFlows = () => {
     setActiveYear(targetYear);
   };
 
-  const [form, setForm] = useState({
-    tipo: 'receita' as Flow['tipo'],
-    descricao: '',
-    valor: '',
-    vencimento: '',
-  });
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [form, setForm] = useState(INITIAL_FORM_STATE);
+  const isFormValid = useMemo(() => {
+    const parsedValue = Number.parseFloat(form.valor);
+    return Boolean(form.descricao.trim()) && !Number.isNaN(parsedValue);
+  }, [form.descricao, form.valor]);
 
   const createMutation = useMutation({
     mutationFn: () =>
       createFlow({
         tipo: form.tipo,
         descricao: form.descricao,
-        valor: parseFloat(form.valor),
+        valor: Number.parseFloat(form.valor),
         vencimento: form.vencimento,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows'] });
-      setForm({ tipo: 'receita', descricao: '', valor: '', vencimento: '' });
+      setForm(INITIAL_FORM_STATE);
+      setIsCreateDialogOpen(false);
     },
   });
 
@@ -521,6 +592,141 @@ const FinancialFlows = () => {
         ))}
       </div>
 
+      <Dialog
+        open={isCreateDialogOpen}
+        onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (!open) {
+            setForm(INITIAL_FORM_STATE);
+          }
+        }}
+      >
+        <Card className="space-y-6 p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Resumo mensal do ano selecionado</h2>
+              <p className="text-sm text-muted-foreground">
+                Compare receitas, despesas e cobranças em aberto.
+              </p>
+            </div>
+            <DialogTrigger asChild>
+              <Button type="button">Nova movimentação</Button>
+            </DialogTrigger>
+          </div>
+          <div className="h-[320px]">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} barSize={24}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis tickFormatter={(value) => formatCurrency(Number(value))} />
+                  <RechartsTooltip
+                    formatter={(value, name) => {
+                      const numericValue = typeof value === 'number' ? value : Number(value);
+                      const label =
+                        CHART_SERIES_LABELS[name as keyof typeof CHART_SERIES_LABELS] ?? String(name);
+                      return [formatCurrency(numericValue), label];
+                    }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="receitas"
+                    name={CHART_SERIES_LABELS.receitas}
+                    fill={CHART_COLORS.receitas}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="despesas"
+                    name={CHART_SERIES_LABELS.despesas}
+                    fill={CHART_COLORS.despesas}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="aberto"
+                    name={CHART_SERIES_LABELS.aberto}
+                    fill={CHART_COLORS.aberto}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border/60 text-sm text-muted-foreground">
+                Nenhum lançamento com vencimento no ano selecionado.
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo lançamento financeiro</DialogTitle>
+            <DialogDescription>
+              Cadastre uma nova receita ou despesa para controlar o fluxo de caixa.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!isFormValid || createMutation.isPending) {
+                return;
+              }
+              createMutation.mutate();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="flow-type">Tipo</Label>
+              <Select
+                value={form.tipo}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, tipo: value as Flow['tipo'] }))}
+              >
+                <SelectTrigger id="flow-type">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="receita">Receita</SelectItem>
+                  <SelectItem value="despesa">Despesa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="flow-description">Descrição</Label>
+              <Input
+                id="flow-description"
+                value={form.descricao}
+                onChange={(event) => setForm((prev) => ({ ...prev, descricao: event.target.value }))}
+                placeholder="Ex.: Mensalidade do cliente ACME"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="flow-value">Valor</Label>
+              <Input
+                id="flow-value"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.valor}
+                onChange={(event) => setForm((prev) => ({ ...prev, valor: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="flow-due-date">Vencimento</Label>
+              <Input
+                id="flow-due-date"
+                type="date"
+                value={form.vencimento}
+                onChange={(event) => setForm((prev) => ({ ...prev, vencimento: event.target.value }))}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={!isFormValid || createMutation.isPending}>
+                {createMutation.isPending ? 'Salvando...' : 'Salvar lançamento'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Card className="p-4">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
@@ -574,55 +780,6 @@ const FinancialFlows = () => {
           </div>
         </div>
       </Card>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!form.valor || Number.isNaN(parseFloat(form.valor))) {
-            return;
-          }
-          createMutation.mutate();
-        }}
-        className="flex flex-col gap-2 md:flex-row md:items-end"
-      >
-        <div>
-          <label className="block text-sm mb-1">Tipo</label>
-          <select
-            value={form.tipo}
-            onChange={(e) => setForm({ ...form, tipo: e.target.value as Flow['tipo'] })}
-            className="border rounded p-2"
-          >
-            <option value="receita">Receita</option>
-            <option value="despesa">Despesa</option>
-          </select>
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm mb-1">Descrição</label>
-          <Input
-            value={form.descricao}
-            onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-          />
-        </div>
-        <div>
-          <label className="block text-sm mb-1">Valor</label>
-          <Input
-            type="number"
-            value={form.valor}
-            onChange={(e) => setForm({ ...form, valor: e.target.value })}
-          />
-        </div>
-        <div>
-          <label className="block text-sm mb-1">Vencimento</label>
-          <Input
-            type="date"
-            value={form.vencimento}
-            onChange={(e) => setForm({ ...form, vencimento: e.target.value })}
-          />
-        </div>
-        <Button type="submit" disabled={createMutation.isPending}>
-          {createMutation.isPending ? 'Salvando...' : 'Salvar'}
-        </Button>
-      </form>
 
       {periods.length > 0 ? (
         <div className="space-y-4">
