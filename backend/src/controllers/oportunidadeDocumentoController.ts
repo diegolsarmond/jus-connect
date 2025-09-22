@@ -883,7 +883,7 @@ async function fetchOpportunityData(
 
 export const createOpportunityDocumentFromTemplate = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { templateId } = req.body as { templateId?: unknown };
+  const { templateId, title } = req.body as { templateId?: unknown; title?: unknown };
 
   const opportunityId = Number(id);
   if (!Number.isFinite(opportunityId)) {
@@ -929,6 +929,20 @@ export const createOpportunityDocumentFromTemplate = async (req: Request, res: R
       metadata,
     });
 
+    let requestedTitle: string | null = null;
+    if (title !== undefined && title !== null) {
+      if (typeof title !== 'string') {
+        return res.status(400).json({ error: 'Título inválido' });
+      }
+      const trimmed = title.trim();
+      if (!trimmed) {
+        return res.status(400).json({ error: 'Título inválido' });
+      }
+      requestedTitle = trimmed;
+    }
+
+    const finalTitle = requestedTitle ?? template.title;
+
     const insertResult = await pool.query(
       `INSERT INTO public.oportunidade_documentos (oportunidade_id, template_id, title, content, variables)
        VALUES ($1, $2, $3, $4, $5)
@@ -936,19 +950,23 @@ export const createOpportunityDocumentFromTemplate = async (req: Request, res: R
       [
         opportunityId,
         numericTemplateId,
-        template.title,
+        finalTitle,
         storedContent,
         JSON.stringify(variables),
       ],
     );
 
     const document = insertResult.rows[0];
+    const responseTitle =
+      document && typeof document.title === 'string' && document.title.trim().length > 0
+        ? document.title.trim()
+        : finalTitle;
 
     return res.status(201).json({
       id: document.id,
       oportunidade_id: document.oportunidade_id,
       template_id: document.template_id,
-      title: document.title,
+      title: responseTitle,
       content: document.content,
       variables: document.variables,
       created_at: document.created_at,

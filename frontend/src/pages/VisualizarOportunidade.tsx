@@ -42,6 +42,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -51,7 +64,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { format as dfFormat, parseISO } from "date-fns";
-import { Download, ExternalLink, FileText, Loader2, Trash } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Trash,
+} from "lucide-react";
 import { createSimplePdfFromHtml } from "@/lib/pdf";
 
 interface Envolvido {
@@ -83,12 +104,23 @@ interface OpportunityData {
   numero_protocolo?: string | null;
   vara_ou_orgao?: string | null;
   comarca?: string | null;
+  processo_id?: number | null;
   tipo_processo_nome?: string | null;
   area?: string | null;
   documentos_anexados?: unknown;
   criado_por?: number | string | null;
   criado_por_nome?: string | null;
   [key: string]: unknown;
+}
+
+interface ProcessOption {
+  id: number;
+  numero: string;
+  municipio?: string | null;
+  orgao_julgador?: string | null;
+  status?: string | null;
+  tipo?: string | null;
+  oportunidade_id?: number | null;
 }
 
 interface ParticipantData {
@@ -483,20 +515,93 @@ const mapInstallmentRecords = (data: unknown): InstallmentRecord[] =>
     ];
   });
 
-const formatProcessNumber = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 20);
-  const match = digits.match(/^(\d{0,7})(\d{0,2})(\d{0,4})(\d{0,1})(\d{0,2})(\d{0,4})$/);
-  if (!match) return digits;
-  const [, part1 = "", part2 = "", part3 = "", part4 = "", part5 = "", part6 = ""] = match;
+const normalizeProcessNumber = (value: unknown): string | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value).toString();
+  }
 
-  let formatted = part1;
-  if (part2) formatted += `-${part2}`;
-  if (part3) formatted += `.${part3}`;
-  if (part4) formatted += `.${part4}`;
-  if (part5) formatted += `.${part5}`;
-  if (part6) formatted += `.${part6}`;
-  return formatted;
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, "");
+  return digits.length > 0 ? digits : null;
 };
+
+const parseProcessOptions = (data: unknown): ProcessOption[] =>
+  coerceArray(data).flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+
+    const idRaw = record["id"];
+    const numeroRaw = record["numero"];
+
+    if (idRaw === undefined || numeroRaw === undefined) {
+      return [];
+    }
+
+    const id =
+      typeof idRaw === "number"
+        ? idRaw
+        : typeof idRaw === "string"
+          ? Number.parseInt(idRaw, 10)
+          : Number.NaN;
+
+    const numero =
+      typeof numeroRaw === "string" && numeroRaw.trim().length > 0
+        ? numeroRaw.trim()
+        : typeof numeroRaw === "number"
+          ? String(numeroRaw)
+          : null;
+
+    if (!Number.isFinite(id) || !numero) {
+      return [];
+    }
+
+    const municipio =
+      typeof record["municipio"] === "string" && record["municipio"].trim().length > 0
+        ? record["municipio"].trim()
+        : null;
+
+    const orgao =
+      typeof record["orgao_julgador"] === "string" && record["orgao_julgador"].trim().length > 0
+        ? record["orgao_julgador"].trim()
+        : null;
+
+    const status =
+      typeof record["status"] === "string" && record["status"].trim().length > 0
+        ? record["status"].trim()
+        : null;
+
+    const tipo =
+      typeof record["tipo"] === "string" && record["tipo"].trim().length > 0
+        ? record["tipo"].trim()
+        : null;
+
+    const oportunidadeRaw = record["oportunidade_id"];
+    let oportunidadeId: number | null = null;
+
+    if (typeof oportunidadeRaw === "number") {
+      oportunidadeId = Number.isFinite(oportunidadeRaw)
+        ? Math.trunc(oportunidadeRaw)
+        : null;
+    } else if (typeof oportunidadeRaw === "string") {
+      const parsed = Number.parseInt(oportunidadeRaw, 10);
+      oportunidadeId = Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return [
+      {
+        id: Math.trunc(id),
+        numero,
+        municipio,
+        orgao_julgador: orgao,
+        status,
+        tipo,
+        oportunidade_id: oportunidadeId,
+      },
+    ];
+  });
 
 const STATUS_EMPTY_VALUE = "__no_status__";
 
@@ -514,6 +619,7 @@ export default function VisualizarOportunidade() {
   const [statusSaving, setStatusSaving] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [documentType, setDocumentType] = useState<"modelo" | "processo" | null>(null);
+  const [documentTitle, setDocumentTitle] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [documentTemplates, setDocumentTemplates] = useState<
     Array<{ value: string; label: string }>
@@ -537,15 +643,11 @@ export default function VisualizarOportunidade() {
     null,
   );
   const [documentDeleting, setDocumentDeleting] = useState(false);
-  const [processForm, setProcessForm] = useState({
-    numero: "",
-    uf: "",
-    municipio: "",
-    orgaoJulgador: "",
-  });
-  const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
-  const [municipios, setMunicipios] = useState<{ id: number; nome: string }[]>([]);
-  const [municipiosLoading, setMunicipiosLoading] = useState(false);
+  const [processOptions, setProcessOptions] = useState<ProcessOption[]>([]);
+  const [processOptionsLoading, setProcessOptionsLoading] = useState(false);
+  const [processOptionsError, setProcessOptionsError] = useState<string | null>(null);
+  const [processPopoverOpen, setProcessPopoverOpen] = useState(false);
+  const [selectedProcessId, setSelectedProcessId] = useState<string>("");
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
   const [commentText, setCommentText] = useState("");
   const [interactionHistory, setInteractionHistory] = useState<InteractionEntry[]>([]);
@@ -580,6 +682,11 @@ export default function VisualizarOportunidade() {
   );
   const skipInteractionPersistenceRef = useRef<string | null>(null);
   const documentPdfUrlsRef = useRef<Map<number, string>>(new Map());
+
+  const parsedOpportunityId = useMemo(
+    () => (id ? Number.parseInt(id, 10) : Number.NaN),
+    [id],
+  );
 
   const patchOpportunity = useCallback(
     (updater: (prev: OpportunityData) => OpportunityData) => {
@@ -634,37 +741,108 @@ export default function VisualizarOportunidade() {
 
   const resetDocumentDialog = () => {
     setDocumentType(null);
+    setDocumentTitle("");
     setSelectedTemplate("");
-    setProcessForm({ numero: "", uf: "", municipio: "", orgaoJulgador: "" });
-    setMunicipios([]);
-    setMunicipiosLoading(false);
+    setSelectedProcessId("");
+    setProcessPopoverOpen(false);
+    setProcessOptionsError(null);
     setDocumentTemplatesError(null);
     setDocumentSubmitting(false);
   };
 
   useEffect(() => {
+    if (!documentDialogOpen || documentType !== "processo") {
+      return;
+    }
+
     let cancelled = false;
 
-    const fetchUfs = async () => {
+    const fetchProcesses = async () => {
+      setProcessOptionsLoading(true);
+      setProcessOptionsError(null);
+
       try {
-        const res = await fetch(
-          "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { sigla: string; nome: string }[];
-        if (!cancelled) setUfs(data);
+        const response = await fetch(`${apiUrl}/api/processos`, {
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (!cancelled) {
+          setProcessOptions(parseProcessOptions(payload));
+        }
       } catch (error) {
         console.error(error);
-        if (!cancelled) setUfs([]);
+        if (!cancelled) {
+          setProcessOptions([]);
+          setProcessOptionsError("Erro ao carregar processos");
+        }
+      } finally {
+        if (!cancelled) {
+          setProcessOptionsLoading(false);
+        }
       }
     };
 
-    fetchUfs();
+    fetchProcesses().catch((error) => {
+      console.error(error);
+    });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [apiUrl, documentDialogOpen, documentType]);
+
+  useEffect(() => {
+    if (!documentDialogOpen || documentType !== "processo") {
+      return;
+    }
+
+    if (selectedProcessId) {
+      return;
+    }
+
+    if (processOptions.length === 0) {
+      return;
+    }
+
+    if (Number.isFinite(parsedOpportunityId)) {
+      const linkedProcess = processOptions.find(
+        (option) => option.oportunidade_id === parsedOpportunityId,
+      );
+
+      if (linkedProcess) {
+        setSelectedProcessId(String(linkedProcess.id));
+        return;
+      }
+    }
+
+    const currentProcessNumber = normalizeProcessNumber(
+      opportunity?.numero_processo_cnj ?? null,
+    );
+
+    if (!currentProcessNumber) {
+      return;
+    }
+
+    const matchingProcess = processOptions.find(
+      (option) => normalizeProcessNumber(option.numero) === currentProcessNumber,
+    );
+
+    if (matchingProcess) {
+      setSelectedProcessId(String(matchingProcess.id));
+    }
+  }, [
+    documentDialogOpen,
+    documentType,
+    parsedOpportunityId,
+    opportunity?.numero_processo_cnj,
+    processOptions,
+    selectedProcessId,
+  ]);
 
   useEffect(() => {
     const cache = documentPdfUrlsRef.current;
@@ -737,39 +915,6 @@ export default function VisualizarOportunidade() {
       setDocumentPreviewUrl(null);
     }
   }, [documents, documentPreview]);
-
-  useEffect(() => {
-    if (!processForm.uf) {
-      setMunicipios([]);
-      setMunicipiosLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setMunicipiosLoading(true);
-
-    const fetchMunicipios = async () => {
-      try {
-        const res = await fetch(
-          `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${processForm.uf}/municipios?orderBy=nome`,
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { id: number; nome: string }[];
-        if (!cancelled) setMunicipios(data);
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) setMunicipios([]);
-      } finally {
-        if (!cancelled) setMunicipiosLoading(false);
-      }
-    };
-
-    fetchMunicipios();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [processForm.uf]);
 
   const getStatusLabel = (value: number | null | undefined) => {
     if (value === null || value === undefined) return undefined;
@@ -2169,6 +2314,8 @@ export default function VisualizarOportunidade() {
 
     if (documentType === "modelo") {
       if (!selectedTemplate) return;
+      const trimmedTitle = documentTitle.trim();
+      if (!trimmedTitle) return;
       const templateId = Number.parseInt(selectedTemplate, 10);
       if (Number.isNaN(templateId)) return;
       setDocumentSubmitting(true);
@@ -2178,7 +2325,7 @@ export default function VisualizarOportunidade() {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ templateId }),
+            body: JSON.stringify({ templateId, title: trimmedTitle }),
           },
         );
         if (!response.ok) {
@@ -2204,24 +2351,71 @@ export default function VisualizarOportunidade() {
       return;
     }
 
-    if (
-      !processForm.numero ||
-      !processForm.uf ||
-      !processForm.municipio ||
-      !processForm.orgaoJulgador
-    )
-      return;
+    if (documentType === "processo") {
+      if (!id || !selectedProcessId) {
+        return;
+      }
 
-    const params = new URLSearchParams();
-    if (id) params.set("oportunidade", id);
-    params.set("tipo", documentType);
-    params.set("numero_processo", processForm.numero);
-    params.set("uf", processForm.uf);
-    params.set("comarca", processForm.municipio);
-    params.set("vara_orgao", processForm.orgaoJulgador);
+      const parsedProcessId = Number.parseInt(selectedProcessId, 10);
+      if (!Number.isFinite(parsedProcessId)) {
+        return;
+      }
 
-    setDocumentDialogOpen(false);
-    navigate(`/documentos?${params.toString()}`);
+      setDocumentSubmitting(true);
+
+      try {
+        const response = await fetch(
+          `${apiUrl}/api/oportunidades/${id}/vincular-processo`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({ processoId: parsedProcessId }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = (await response.json()) as OpportunityData;
+
+        setOpportunity((prev) => {
+          if (!prev) return payload;
+          const merged = { ...prev, ...payload };
+          if ((prev as { _namesLoaded?: boolean })._namesLoaded) {
+            Object.defineProperty(merged, "_namesLoaded", {
+              value: true,
+              enumerable: false,
+            });
+          }
+          return merged;
+        });
+
+        setProcessOptions((prev) =>
+          prev.map((option) =>
+            option.id === parsedProcessId
+              ? {
+                  ...option,
+                  oportunidade_id: Number.isFinite(parsedOpportunityId)
+                    ? parsedOpportunityId
+                    : option.oportunidade_id,
+                }
+              : option,
+          ),
+        );
+
+        setSnack({ open: true, message: "Processo vinculado com sucesso" });
+        setDocumentDialogOpen(false);
+      } catch (error) {
+        console.error(error);
+        setSnack({ open: true, message: "Erro ao vincular processo" });
+      } finally {
+        setDocumentSubmitting(false);
+      }
+    }
   };
 
   const ensurePdfUrl = useCallback(
@@ -2518,6 +2712,47 @@ export default function VisualizarOportunidade() {
     );
   };
 
+  const selectedProcessOption = useMemo(() => {
+    const parsedId = Number.parseInt(selectedProcessId, 10);
+    if (!Number.isFinite(parsedId)) {
+      return null;
+    }
+    return processOptions.find((option) => option.id === parsedId) ?? null;
+  }, [selectedProcessId, processOptions]);
+
+  const processButtonLabel = useMemo(() => {
+    if (processOptionsLoading) {
+      return "Carregando processos...";
+    }
+
+    if (selectedProcessOption) {
+      const details = [
+        selectedProcessOption.municipio,
+        selectedProcessOption.orgao_julgador,
+        selectedProcessOption.status,
+      ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+      return details.length > 0
+        ? `${selectedProcessOption.numero} — ${details.join(" • ")}`
+        : selectedProcessOption.numero;
+    }
+
+    if (processOptionsError) {
+      return processOptionsError;
+    }
+
+    if (processOptions.length === 0) {
+      return "Nenhum processo disponível";
+    }
+
+    return "Selecione um processo";
+  }, [
+    processOptionsLoading,
+    selectedProcessOption,
+    processOptionsError,
+    processOptions,
+  ]);
+
   if (!opportunity) {
     return (
       <div className="p-6 space-y-4">
@@ -2532,16 +2767,14 @@ export default function VisualizarOportunidade() {
     );
   }
 
+  const trimmedDocumentTitle = documentTitle.trim();
+
   const isDocumentContinueDisabled =
     documentSubmitting ||
     (documentType === "modelo"
-      ? !selectedTemplate
+      ? !selectedTemplate || trimmedDocumentTitle.length === 0
       : documentType === "processo"
-      ?
-          !processForm.numero ||
-          !processForm.uf ||
-          !processForm.municipio ||
-          !processForm.orgaoJulgador
+      ? !selectedProcessId
       : true);
 
   const statusSelectValue =
@@ -3714,140 +3947,167 @@ export default function VisualizarOportunidade() {
             </div>
 
             {documentType === "modelo" && (
-              <div className="space-y-2">
-                <Label htmlFor="document-template">Modelo</Label>
-                <Select
-                  value={selectedTemplate}
-                  onValueChange={setSelectedTemplate}
-                  disabled={
-                    documentTemplatesLoading ||
-                    (documentTemplates.length === 0 && !documentTemplatesError)
-                  }
-                >
-                  <SelectTrigger
-                    id="document-template"
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="document-template">Modelo</Label>
+                  <Select
+                    value={selectedTemplate}
+                    onValueChange={setSelectedTemplate}
                     disabled={
                       documentTemplatesLoading ||
                       (documentTemplates.length === 0 && !documentTemplatesError)
                     }
                   >
-                    <SelectValue
-                      placeholder={
-                        documentTemplatesLoading
-                          ? "Carregando modelos..."
-                          : documentTemplates.length === 0
-                          ? documentTemplatesError ?? "Nenhum modelo disponível"
-                          : "Selecione um modelo"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {documentTemplates.length > 0 ? (
-                      documentTemplates.map((template) => (
-                        <SelectItem key={template.value} value={template.value}>
-                          {template.label}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="__no_template__" disabled>
-                        {documentTemplatesError ?? "Nenhum modelo cadastrado"}
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                {documentTemplatesError && (
-                  <p className="text-sm text-destructive">{documentTemplatesError}</p>
-                )}
-              </div>
-            )}
-
-            {documentType === "processo" && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="process-uf">UF</Label>
-                  <Select
-                    value={processForm.uf}
-                    onValueChange={(value) =>
-                      setProcessForm((prev) => ({
-                        ...prev,
-                        uf: value,
-                        municipio: "",
-                      }))
-                    }
-                  >
-                    <SelectTrigger id="process-uf">
-                      <SelectValue placeholder="Selecione a UF" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ufs.map((uf) => (
-                        <SelectItem key={uf.sigla} value={uf.sigla}>
-                          {uf.nome} ({uf.sigla})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="process-municipio">Município</Label>
-                  <Select
-                    value={processForm.municipio}
-                    onValueChange={(value) =>
-                      setProcessForm((prev) => ({ ...prev, municipio: value }))
-                    }
-                  >
                     <SelectTrigger
-                      id="process-municipio"
-                      disabled={!processForm.uf || municipiosLoading}
+                      id="document-template"
+                      disabled={
+                        documentTemplatesLoading ||
+                        (documentTemplates.length === 0 && !documentTemplatesError)
+                      }
                     >
                       <SelectValue
                         placeholder={
-                          !processForm.uf
-                            ? "Selecione a UF primeiro"
-                            : municipiosLoading
-                            ? "Carregando municípios..."
-                            : municipios.length > 0
-                            ? "Selecione o município"
-                            : "Nenhum município encontrado"
+                          documentTemplatesLoading
+                            ? "Carregando modelos..."
+                            : documentTemplates.length === 0
+                            ? documentTemplatesError ?? "Nenhum modelo disponível"
+                            : "Selecione um modelo"
                         }
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {municipios.map((municipio) => (
-                        <SelectItem key={municipio.id} value={municipio.nome}>
-                          {municipio.nome}
+                      {documentTemplates.length > 0 ? (
+                        documentTemplates.map((template) => (
+                          <SelectItem key={template.value} value={template.value}>
+                            {template.label}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="__no_template__" disabled>
+                          {documentTemplatesError ?? "Nenhum modelo cadastrado"}
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
+                  {documentTemplatesError && (
+                    <p className="text-sm text-destructive">{documentTemplatesError}</p>
+                  )}
                 </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="process-orgao">Órgão Julgador</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="document-title">Título do documento</Label>
                   <Input
-                    id="process-orgao"
-                    placeholder="Informe o órgão julgador"
-                    value={processForm.orgaoJulgador}
-                    onChange={(event) =>
-                      setProcessForm((prev) => ({
-                        ...prev,
-                        orgaoJulgador: event.target.value,
-                      }))
-                    }
+                    id="document-title"
+                    placeholder="Informe o título do documento"
+                    value={documentTitle}
+                    onChange={(event) => setDocumentTitle(event.target.value)}
+                    disabled={documentSubmitting}
                   />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="process-number">Número do processo</Label>
-                  <Input
-                    id="process-number"
-                    placeholder="0000000-00.0000.0.00.0000"
-                    value={processForm.numero}
-                    onChange={(event) =>
-                      setProcessForm((prev) => ({
-                        ...prev,
-                        numero: formatProcessNumber(event.target.value),
-                      }))
-                    }
-                  />
-                </div>
+              </div>
+            )}
+
+            {documentType === "processo" && (
+              <div className="space-y-2">
+                <Label htmlFor="process-select">Processo</Label>
+                <Popover
+                  open={processPopoverOpen}
+                  onOpenChange={setProcessPopoverOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="process-select"
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={processPopoverOpen}
+                      className="w-full justify-between"
+                      disabled={processOptionsLoading && processOptions.length === 0}
+                    >
+                      <span className="truncate">{processButtonLabel}</span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[var(--radix-popover-trigger-width)] p-0"
+                    align="start"
+                  >
+                    <Command>
+                      <CommandInput placeholder="Buscar processo..." />
+                      <CommandList>
+                        <CommandEmpty>
+                          {processOptionsLoading
+                            ? "Carregando processos..."
+                            : processOptionsError ?? "Nenhum processo encontrado"}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {processOptions.map((option) => {
+                            const searchValue = [
+                              option.numero,
+                              option.municipio ?? "",
+                              option.orgao_julgador ?? "",
+                              option.status ?? "",
+                              option.tipo ?? "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ");
+                            const selected = selectedProcessId === String(option.id);
+                            const isLinkedToOther =
+                              option.oportunidade_id !== null &&
+                              option.oportunidade_id !== undefined &&
+                              Number.isFinite(parsedOpportunityId) &&
+                              option.oportunidade_id !== parsedOpportunityId;
+                            const descriptionParts = [
+                              option.municipio,
+                              option.orgao_julgador,
+                              option.status,
+                            ].filter((part): part is string =>
+                              Boolean(part && part.trim().length > 0),
+                            );
+                            if (
+                              option.oportunidade_id !== null &&
+                              option.oportunidade_id !== undefined &&
+                              option.oportunidade_id !== parsedOpportunityId
+                            ) {
+                              descriptionParts.push(
+                                `Vinculado à oportunidade #${option.oportunidade_id}`,
+                              );
+                            }
+                            const description = descriptionParts.join(" • ");
+
+                            return (
+                              <CommandItem
+                                key={option.id}
+                                value={searchValue}
+                                disabled={isLinkedToOther}
+                                onSelect={() => {
+                                  setSelectedProcessId(String(option.id));
+                                  setProcessPopoverOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 ${
+                                    selected ? "opacity-100" : "opacity-0"
+                                  }`}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{option.numero}</span>
+                                  {description ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      {description}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {processOptionsError && !processOptionsLoading ? (
+                  <p className="text-sm text-destructive">{processOptionsError}</p>
+                ) : null}
               </div>
             )}
           </div>
