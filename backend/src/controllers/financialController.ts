@@ -2,10 +2,23 @@ import { Request, Response } from 'express';
 import type { QueryResult } from 'pg';
 import pool from '../services/db';
 import type { Flow } from '../models/flow';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasChargeService, {
   ChargeConflictError,
   ValidationError as AsaasValidationError,
 } from '../services/asaasChargeService';
+
+const getAuthenticatedUser = (
+  req: Request,
+  res: Response,
+): NonNullable<Request['auth']> | null => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  return req.auth;
+};
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,10 +57,25 @@ const POSTGRES_UNDEFINED_COLUMN = '42703';
 const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
 
 const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
+const FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type FinancialFlowEmpresaColumn = 'idempresa' | 'empresa_id' | 'empresa';
+
+const FINANCIAL_FLOW_EMPRESA_CANDIDATES: FinancialFlowEmpresaColumn[] = [
+  'idempresa',
+  'empresa_id',
+  'empresa',
+];
 
 let opportunityTablesAvailability: boolean | null = null;
 let opportunityTablesAvailabilityCheckedAt: number | null = null;
 let opportunityTablesCheckPromise: Promise<boolean> | null = null;
+
+let financialFlowEmpresaColumn: FinancialFlowEmpresaColumn | null = null;
+let financialFlowEmpresaColumnCheckedAt: number | null = null;
+let financialFlowEmpresaColumnPromise:
+  | Promise<FinancialFlowEmpresaColumn | null>
+  | null = null;
 
 const updateOpportunityTablesAvailability = (value: boolean) => {
   opportunityTablesAvailability = value;
@@ -58,6 +86,17 @@ const resetOpportunityTablesAvailabilityCache = () => {
   opportunityTablesAvailability = null;
   opportunityTablesAvailabilityCheckedAt = null;
   opportunityTablesCheckPromise = null;
+};
+
+const updateFinancialFlowEmpresaColumn = (value: FinancialFlowEmpresaColumn | null) => {
+  financialFlowEmpresaColumn = value;
+  financialFlowEmpresaColumnCheckedAt = Date.now();
+};
+
+const resetFinancialFlowEmpresaColumnCache = () => {
+  financialFlowEmpresaColumn = null;
+  financialFlowEmpresaColumnCheckedAt = null;
+  financialFlowEmpresaColumnPromise = null;
 };
 
 const determineOpportunityTablesAvailability = async (): Promise<boolean> => {
@@ -150,9 +189,57 @@ const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
 
 export const __internal = {
   resetOpportunityTablesAvailabilityCache,
+  resetFinancialFlowEmpresaColumnCache,
 };
 
 const asaasChargeService = new AsaasChargeService();
+
+const determineFinancialFlowEmpresaColumn = async (): Promise<FinancialFlowEmpresaColumn | null> => {
+  if (
+    financialFlowEmpresaColumn !== null &&
+    financialFlowEmpresaColumnCheckedAt !== null &&
+    Date.now() - financialFlowEmpresaColumnCheckedAt < FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS
+  ) {
+    return financialFlowEmpresaColumn;
+  }
+
+  if (financialFlowEmpresaColumnPromise) {
+    return financialFlowEmpresaColumnPromise;
+  }
+
+  financialFlowEmpresaColumnPromise = pool
+    .query<{ column_name: string }>(
+      `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'financial_flows'
+      `,
+    )
+    .then((result) => {
+      const available = new Set(
+        result.rows
+          .map((row) => row?.column_name)
+          .filter((name): name is string => typeof name === 'string'),
+      );
+
+      const match = FINANCIAL_FLOW_EMPRESA_CANDIDATES.find((candidate) =>
+        available.has(candidate),
+      );
+
+      updateFinancialFlowEmpresaColumn(match ?? null);
+      return match ?? null;
+    })
+    .catch(() => {
+      updateFinancialFlowEmpresaColumn(null);
+      return null;
+    })
+    .finally(() => {
+      financialFlowEmpresaColumnPromise = null;
+    });
+
+  return financialFlowEmpresaColumnPromise;
+};
 
 export const listFlows = async (req: Request, res: Response) => {
   const { page = '1', limit = '10', clienteId } = req.query;
@@ -178,12 +265,50 @@ export const listFlows = async (req: Request, res: Response) => {
     clienteValue && clienteValue.trim().length > 0 ? clienteValue.trim() : null;
 
   try {
-    const filters: (string | number)[] = [];
-    let filterClause = '';
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+    if (!empresaLookup.success) {
+      res.status(empresaLookup.status).json({ error: empresaLookup.message });
+      return;
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      res.json({
+        items: [],
+        total: 0,
+        page: effectivePage,
+        limit: effectiveLimit,
+      });
+      return;
+    }
+
+    const empresaColumn = await determineFinancialFlowEmpresaColumn();
+
+    if (!empresaColumn) {
+      res.status(500).json({
+        error:
+          'Não foi possível determinar a empresa associada aos lançamentos financeiros. Entre em contato com o suporte.',
+      });
+      return;
+    }
+
+
+    const filters: (string | number)[] = [empresaId];
+    const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
+
     if (trimmedClienteId) {
       filters.push(trimmedClienteId);
-      filterClause = `WHERE combined_flows.cliente_id = $${filters.length}`;
+      filterConditions.push(`combined_flows.cliente_id = $${filters.length}`);
     }
+
+    const filterClause = `WHERE ${filterConditions.join(' AND ')}`;
 
     const baseFinancialFlowsSelect = `
         SELECT
@@ -198,6 +323,7 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.categoria_id::TEXT AS categoria_id,
           ff.cliente_id::TEXT AS cliente_id,
           ff.fornecedor_id::TEXT AS fornecedor_id
+
         FROM financial_flows ff
       `;
 
@@ -224,6 +350,7 @@ ${baseFinancialFlowsSelect}
           o.sequencial_empresa,
           o.qtde_parcelas,
           o.solicitante_id,
+          p.idempresa,
           c.nome AS cliente_nome,
           f.valor AS faturamento_valor,
           f.parcelas AS faturamento_parcelas,
@@ -276,6 +403,7 @@ ${baseFinancialFlowsSelect}
           NULL::TEXT AS categoria_id,
           p.solicitante_id::TEXT AS cliente_id,
           NULL::TEXT AS fornecedor_id
+
         FROM oportunidade_parcelas_enriched p
       )
     `;
