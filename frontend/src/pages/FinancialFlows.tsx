@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/api';
-import { Info, AlertCircle } from 'lucide-react';
+import { Info, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AsaasChargeDialog } from '@/components/financial/AsaasChargeDialog';
 import type { CustomerOption } from '@/components/financial/AsaasChargeDialog';
 
@@ -143,7 +143,8 @@ const FinancialFlows = () => {
     totals: PeriodTotals;
   };
 
-  const [activePeriod, setActivePeriod] = useState<string | null>(null);
+  const [activeYear, setActiveYear] = useState<number | null>(null);
+  const [activePeriodKey, setActivePeriodKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | DerivedStatus>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | Flow['tipo']>('all');
@@ -303,10 +304,102 @@ const FinancialFlows = () => {
 
   const hasAnyFlow = detailedFlows.length > 0;
 
+  const datedPeriods = useMemo(() => periods.filter((period) => period.key !== 'sem-data'), [periods]);
+  const undatedPeriod = useMemo(
+    () => periods.find((period) => period.key === 'sem-data') ?? null,
+    [periods],
+  );
+
+  const yearGroups = useMemo(
+    () => {
+      const accumulator = new Map<number, PeriodGroup[]>();
+
+      datedPeriods.forEach((period) => {
+        const [yearPart] = period.key.split('-');
+        const year = Number.parseInt(yearPart, 10);
+        if (!Number.isFinite(year)) {
+          return;
+        }
+        if (!accumulator.has(year)) {
+          accumulator.set(year, []);
+        }
+        accumulator.get(year)!.push(period);
+      });
+
+      return Array.from(accumulator.entries())
+        .map(([year, yearPeriods]) => ({
+          year,
+          periods: yearPeriods.sort((a, b) => b.sortValue - a.sortValue),
+        }))
+        .sort((a, b) => b.year - a.year);
+    },
+    [datedPeriods],
+  );
+
+  const availableYears = useMemo(() => yearGroups.map((group) => group.year), [yearGroups]);
+
+  useEffect(() => {
+    if (availableYears.length === 0) {
+      if (activeYear !== null) {
+        setActiveYear(null);
+      }
+      return;
+    }
+
+    if (activeYear === null || !availableYears.includes(activeYear)) {
+      setActiveYear(availableYears[0]);
+    }
+  }, [activeYear, availableYears]);
+
+  const periodsForActiveYear = useMemo(() => {
+    if (activeYear === null) {
+      return [];
+    }
+
+    return yearGroups.find((group) => group.year === activeYear)?.periods ?? [];
+  }, [activeYear, yearGroups]);
+
+  const visiblePeriods = useMemo(() => {
+    const periodsWithYear = periodsForActiveYear;
+    return undatedPeriod ? [...periodsWithYear, undatedPeriod] : periodsWithYear;
+  }, [periodsForActiveYear, undatedPeriod]);
+
+  useEffect(() => {
+    const visibleKeys = visiblePeriods.map((period) => period.key);
+    if (visibleKeys.length === 0) {
+      if (activePeriodKey !== null) {
+        setActivePeriodKey(null);
+      }
+      return;
+    }
+
+    if (!activePeriodKey || !visibleKeys.includes(activePeriodKey)) {
+      setActivePeriodKey(visibleKeys[0]);
+    }
+  }, [activePeriodKey, visiblePeriods]);
+
   const safePeriodKey =
-    activePeriod && periods.some((period) => period.key === activePeriod)
-      ? activePeriod
-      : periods[0]?.key ?? '';
+    visiblePeriods.length > 0
+      ? activePeriodKey && visiblePeriods.some((period) => period.key === activePeriodKey)
+        ? activePeriodKey
+        : visiblePeriods[0].key
+      : undefined;
+
+  const currentYearIndex = activeYear !== null ? availableYears.indexOf(activeYear) : -1;
+  const hasPreviousYear = currentYearIndex >= 0 && currentYearIndex < availableYears.length - 1;
+  const hasNextYear = currentYearIndex > 0;
+
+  const handleGoToPreviousYear = () => {
+    if (!hasPreviousYear) return;
+    const targetYear = availableYears[currentYearIndex + 1];
+    setActiveYear(targetYear);
+  };
+
+  const handleGoToNextYear = () => {
+    if (!hasNextYear) return;
+    const targetYear = availableYears[currentYearIndex - 1];
+    setActiveYear(targetYear);
+  };
 
   const [form, setForm] = useState({
     tipo: 'receita' as Flow['tipo'],
@@ -532,24 +625,78 @@ const FinancialFlows = () => {
       </form>
 
       {periods.length > 0 ? (
-        <Tabs value={safePeriodKey} onValueChange={setActivePeriod} className="w-full">
-          <TabsList className="w-full flex flex-wrap gap-2">
-            {periods.map((period) => (
-              <TabsTrigger key={period.key} value={period.key} className="data-[state=active]:bg-primary/10">
-                <span className="flex items-center gap-2">
-                  {period.label}
-                  <Badge variant="outline">{period.flows.length}</Badge>
-                </span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <div className="space-y-4">
+          {availableYears.length > 0 ? (
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Relatórios mensais</h2>
+                <p className="text-sm text-muted-foreground">
+                  Navegue entre os anos e selecione um mês para analisar os lançamentos do período.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={handleGoToPreviousYear}
+                  disabled={!hasPreviousYear}
+                  aria-label="Ano anterior"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Select
+                  value={activeYear !== null ? String(activeYear) : undefined}
+                  onValueChange={(value) => {
+                    const parsedYear = Number.parseInt(value, 10);
+                    if (Number.isFinite(parsedYear)) {
+                      setActiveYear(parsedYear);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[140px]" aria-label="Selecionar ano">
+                    <SelectValue placeholder="Selecionar ano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableYears.map((year) => (
+                      <SelectItem key={year} value={String(year)}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={handleGoToNextYear}
+                  disabled={!hasNextYear}
+                  aria-label="Próximo ano"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
-          {periods.map((period) => (
-            <TabsContent key={period.key} value={period.key} className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card className="p-4">
-                  <p className="text-sm text-muted-foreground">Saldo do período</p>
-                  <p className="text-2xl font-bold">{formatCurrency(period.totals.saldo)}</p>
+          <Tabs value={safePeriodKey} onValueChange={setActivePeriodKey} className="w-full">
+            <TabsList className="w-full flex flex-wrap gap-2">
+              {visiblePeriods.map((period) => (
+                <TabsTrigger key={period.key} value={period.key} className="data-[state=active]:bg-primary/10">
+                  <span className="flex items-center gap-2">
+                    {period.label}
+                    <Badge variant="outline">{period.flows.length}</Badge>
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {visiblePeriods.map((period) => (
+              <TabsContent key={period.key} value={period.key} className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card className="p-4">
+                    <p className="text-sm text-muted-foreground">Saldo do período</p>
+                    <p className="text-2xl font-bold">{formatCurrency(period.totals.saldo)}</p>
                 </Card>
                 <Card className="p-4">
                   <p className="text-sm text-muted-foreground">Receitas</p>
@@ -641,7 +788,8 @@ const FinancialFlows = () => {
               </div>
             </TabsContent>
           ))}
-        </Tabs>
+          </Tabs>
+        </div>
       ) : (
         <Card className="p-6 text-center text-muted-foreground">
           {hasAnyFlow
