@@ -354,20 +354,17 @@ test('listFlows tolerates legacy empresa column names', async () => {
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [3]);
   assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
+  assert.equal(calls[1]?.values, undefined);
+  assert.match(calls[2]?.text ?? '', /WITH tables AS/);
+  assert.equal(calls[2]?.values, undefined);
+  assert.match(calls[3]?.text ?? '', /ff\.id::TEXT AS id/);
+  assert.match(calls[3]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
+  assert.match(calls[3]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
+  assert.match(calls[3]?.text ?? '', /NULL::TEXT AS cliente_id/);
+  assert.match(calls[3]?.text ?? '', /ff\.fornecedor_id::TEXT AS fornecedor_id/);
   assert.match(calls[3]?.text ?? '', /ff\."empresa" AS empresa_id/);
-  assert.equal(calls[0]?.values, undefined);
-  assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
-  assert.match(calls[1]?.text ?? '', /ff\.id::TEXT AS id/);
-  assert.match(calls[1]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
-  assert.match(calls[1]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
-  assert.match(calls[1]?.text ?? '', /ff\.cliente_id::TEXT AS cliente_id/);
-  assert.match(calls[1]?.text ?? '', /ff\.fornecedor_id::TEXT AS fornecedor_id/);
-  assert.match(calls[1]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
-  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS conta_id/);
-  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS categoria_id/);
-  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS fornecedor_id/);
-  assert.deepEqual(calls[1]?.values, [1, 1]);
-  assert.deepEqual(calls[2]?.values, []);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
 
 });
 
