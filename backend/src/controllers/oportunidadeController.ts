@@ -243,21 +243,68 @@ type InstallmentEntry = {
   dataPrevista: Date | null;
 };
 
+const buildEntryInstallment = (
+  total: number | null,
+  entryAmount: number | null,
+  dueDate: Date | null,
+): { entry: InstallmentEntry | null; remainingTotal: number } => {
+  if (!total || !Number.isFinite(total) || total <= 0) {
+    return { entry: null, remainingTotal: total ?? 0 };
+  }
+
+  if (!entryAmount || !Number.isFinite(entryAmount) || entryAmount <= 0) {
+    return { entry: null, remainingTotal: total };
+  }
+
+  const totalCents = Math.round(total * 100);
+  const rawEntryCents = Math.round(entryAmount * 100);
+  const entryCents = Math.min(rawEntryCents, totalCents);
+
+  if (entryCents <= 0) {
+    return { entry: null, remainingTotal: total };
+  }
+
+  const remainingCents = Math.max(totalCents - entryCents, 0);
+
+  return {
+    entry: {
+      valor: entryCents / 100,
+      dataPrevista: dueDate,
+    },
+    remainingTotal: remainingCents / 100,
+  };
+};
+
 const resetOpportunityInstallments = async (
   client: PoolClient,
   oportunidadeId: number,
   installments: InstallmentEntry[],
   empresaId: number | null,
+  entryInstallment: InstallmentEntry | null = null,
 ) => {
   await client.query('DELETE FROM public.oportunidade_parcelas WHERE oportunidade_id = $1', [
     oportunidadeId,
   ]);
 
-  if (installments.length === 0) {
+  const hasEntry = Boolean(entryInstallment);
+
+  if (!hasEntry && installments.length === 0) {
     return;
   }
 
   const empresaValue = empresaId ?? null;
+
+  if (entryInstallment) {
+    const entryDueDateParam =
+      entryInstallment.dataPrevista !== null
+        ? formatDateOnly(entryInstallment.dataPrevista)
+        : null;
+    await client.query(
+      `INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor, data_prevista, idempresa)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [oportunidadeId, 0, entryInstallment.valor, entryDueDateParam, empresaValue],
+    );
+  }
 
   for (let index = 0; index < installments.length; index += 1) {
     const installment = installments[index];
@@ -279,11 +326,20 @@ const createOrReplaceOpportunityInstallments = async (
   qtdeParcelas: unknown,
   prazoProximo: unknown,
   empresaId: number | null,
+  valorEntrada?: unknown,
 ) => {
   const normalizedPayment = normalizePaymentLabel(formaPagamento);
   const honorarios = normalizeDecimal(valorHonorarios);
+  const entryAmount = normalizeDecimal(valorEntrada);
+  const firstDueDate = normalizeDateOnly(prazoProximo);
+  const { entry, remainingTotal } = buildEntryInstallment(
+    honorarios,
+    entryAmount,
+    firstDueDate,
+  );
+
   if (!honorarios || honorarios <= 0 || !shouldCreateInstallments(normalizedPayment)) {
-    await resetOpportunityInstallments(client, oportunidadeId, [], empresaId);
+    await resetOpportunityInstallments(client, oportunidadeId, [], empresaId, entry);
     return;
   }
 
@@ -293,18 +349,17 @@ const createOrReplaceOpportunityInstallments = async (
     : 1;
 
   if (!totalParcelas || totalParcelas <= 0) {
-    await resetOpportunityInstallments(client, oportunidadeId, [], empresaId);
+    await resetOpportunityInstallments(client, oportunidadeId, [], empresaId, entry);
     return;
   }
 
-  const values = buildInstallmentValues(honorarios, totalParcelas);
-  const firstDueDate = normalizeDateOnly(prazoProximo);
+  const values = buildInstallmentValues(remainingTotal, totalParcelas);
   const dueDates = buildInstallmentDueDates(values.length, firstDueDate);
   const installments = values.map((valor, index) => ({
     valor,
     dataPrevista: dueDates[index] ?? null,
   }));
-  await resetOpportunityInstallments(client, oportunidadeId, installments, empresaId);
+  await resetOpportunityInstallments(client, oportunidadeId, installments, empresaId, entry);
 };
 
 const ensureOpportunityInstallments = async (
