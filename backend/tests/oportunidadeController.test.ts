@@ -30,6 +30,7 @@ test('createOrReplaceOpportunityInstallments replaces installments when editing'
     3,
     '2024-05-10',
     123,
+    null,
   );
 
   await createOrReplaceOpportunityInstallments(
@@ -40,6 +41,7 @@ test('createOrReplaceOpportunityInstallments replaces installments when editing'
     1,
     '2024-08-01',
     123,
+    undefined,
   );
 
   const deleteCalls = client.calls.filter((call) =>
@@ -87,6 +89,7 @@ test('createOrReplaceOpportunityInstallments keeps day when month is shorter', a
     2,
     '2024-01-31',
     null,
+    undefined,
   );
 
   const insertCalls = client.calls.filter((call) =>
@@ -99,4 +102,37 @@ test('createOrReplaceOpportunityInstallments keeps day when month is shorter', a
 
   const secondInsert = insertCalls[1];
   assert.deepEqual(secondInsert?.values, [99, 2, 1000, '2024-02-29', null]);
+});
+
+test('createOrReplaceOpportunityInstallments stores entry installment with numero 0', async () => {
+  if (!process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = 'postgres://user:pass@localhost:5432/test';
+  }
+
+  const controller = await import('../src/controllers/oportunidadeController');
+  const { createOrReplaceOpportunityInstallments } = controller.__test__;
+
+  const client = new RecordingClient();
+
+  await createOrReplaceOpportunityInstallments(
+    client as any,
+    77,
+    '1.000,00',
+    'Pagamento Parcelado',
+    3,
+    '2024-03-15',
+    45,
+    '100,00',
+  );
+
+  const insertCalls = client.calls.filter((call) =>
+    call.text.includes('INSERT INTO public.oportunidade_parcelas'),
+  );
+  assert.equal(insertCalls.length, 4);
+
+  const [entryCall, ...parcelCalls] = insertCalls;
+  assert.deepEqual(entryCall?.values, [77, 0, 100, '2024-03-15', 45]);
+  assert.deepEqual(parcelCalls[0]?.values, [77, 1, 300, '2024-03-15', 45]);
+  assert.deepEqual(parcelCalls[1]?.values, [77, 2, 300, '2024-04-15', 45]);
+  assert.deepEqual(parcelCalls[2]?.values, [77, 3, 300, '2024-05-15', 45]);
 });
