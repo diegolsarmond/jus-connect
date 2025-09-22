@@ -71,8 +71,51 @@ const setupQueryMock = (
 };
 
 test('createOpportunityDocumentFromTemplate uses the opportunity empresa when filling variables', async () => {
-  const templateContent =
-    '{"content_html":"<p>{{escritorio.nome}}</p><p>{{processo.audiencia.data}}</p><p>{{processo.audiencia.horario}}</p><p>{{processo.audiencia.local}}</p>"}';
+  const templateEditorJson = [
+    {
+      type: 'p',
+      children: [
+        { type: 'text', text: 'Empresa: ' },
+        {
+          type: 'span',
+          attrs: { 'data-variable': 'escritorio.nome', 'data-label': 'Escritório' },
+          children: [{ type: 'text', text: '[[Escritório]]' }],
+        },
+      ],
+    },
+    {
+      type: 'p',
+      children: [
+        { type: 'text', text: 'Audiência: ' },
+        {
+          type: 'span',
+          attrs: { 'data-variable': 'processo.audiencia.data' },
+          children: [{ type: 'text', text: 'Data audiência' }],
+        },
+        { type: 'text', text: ' às ' },
+        {
+          type: 'span',
+          attrs: { 'data-variable': 'processo.audiencia.horario' },
+          children: [{ type: 'text', text: 'Horário audiência' }],
+        },
+        { type: 'text', text: ' em ' },
+        {
+          type: 'span',
+          attrs: { 'data-variable': 'processo.audiencia.local' },
+          children: [{ type: 'text', text: 'Local audiência' }],
+        },
+      ],
+    },
+  ];
+
+  const templateContent = JSON.stringify({
+    content_html:
+      '<p>Empresa: <span data-variable="escritorio.nome" data-label="Escritório">[[Escritório]]</span></p>' +
+      '<p>Audiência: <span data-variable="processo.audiencia.data">Data audiência</span> às ' +
+      '<span data-variable="processo.audiencia.horario">Horário audiência</span> em ' +
+      '<span data-variable="processo.audiencia.local">Local audiência</span></p>',
+    content_editor_json: templateEditorJson,
+  });
 
   const insertedPayload: { content?: string; variables?: string; title?: string } = {};
 
@@ -197,7 +240,7 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
 
   const req = {
     params: { id: '123' },
-    body: { templateId: 7 },
+    body: { templateId: 7, title: 'Documento Personalizado' },
     auth: { userId: 99 },
 
   } as unknown as Request;
@@ -235,8 +278,33 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   const parsedStored = JSON.parse(storedContent!);
   assert.equal(
     parsedStored.content_html,
-    '<p>Empresa Correta</p><p>10/06/2024</p><p>13:45</p><p>Fórum Central</p>',
+    '<p>Empresa: Empresa Correta</p><p>Audiência: 10/06/2024 às 13:45 em Fórum Central</p>',
   );
+  assert.doesNotMatch(parsedStored.content_html, /<span[^>]*data-variable/);
+
+  const parsedEditorJson = parsedStored.content_editor_json;
+  assert.ok(Array.isArray(parsedEditorJson));
+  assert.equal(JSON.stringify(parsedEditorJson).includes('data-variable'), false);
+  assert.deepEqual(parsedEditorJson, [
+    {
+      type: 'p',
+      children: [
+        { type: 'text', text: 'Empresa: ' },
+        { type: 'text', text: 'Empresa Correta' },
+      ],
+    },
+    {
+      type: 'p',
+      children: [
+        { type: 'text', text: 'Audiência: ' },
+        { type: 'text', text: '10/06/2024' },
+        { type: 'text', text: ' às ' },
+        { type: 'text', text: '13:45' },
+        { type: 'text', text: ' em ' },
+        { type: 'text', text: 'Fórum Central' },
+      ],
+    },
+  ]);
 
   const parsedVariables = JSON.parse(storedVariables!);
   assert.equal(parsedVariables['escritorio.nome'], 'Empresa Correta');
