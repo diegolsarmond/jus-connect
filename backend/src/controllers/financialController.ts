@@ -319,10 +319,9 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.status AS status,
           ff.conta_id::TEXT AS conta_id,
           ff.categoria_id::TEXT AS categoria_id,
-          NULL::TEXT AS cliente_id,
-          ${empresaColumnExpression} AS empresa_id
           ff.cliente_id::TEXT AS cliente_id,
-          ff.fornecedor_id::TEXT AS fornecedor_id
+          ff.fornecedor_id::TEXT AS fornecedor_id,
+          ${empresaColumnExpression} AS empresa_id
         FROM financial_flows ff
       `;
 
@@ -401,7 +400,8 @@ ${baseFinancialFlowsSelect}
           NULL::TEXT AS conta_id,
           NULL::TEXT AS categoria_id,
           p.solicitante_id::TEXT AS cliente_id,
-          NULL::TEXT AS fornecedor_id
+          NULL::TEXT AS fornecedor_id,
+          p.idempresa AS empresa_id
 
         FROM oportunidade_parcelas_enriched p
       )
@@ -582,7 +582,7 @@ ${baseFinancialFlowsSelect}
       const vencimento = normalizeDate(row.vencimento) ?? new Date().toISOString().slice(0, 10);
       const pagamento = normalizeDate(row.pagamento);
 
-      return {
+      const flow: Flow = {
         id: normalizeId(row.id),
         tipo: normalizeTipo(row.tipo),
         conta_id:
@@ -597,20 +597,28 @@ ${baseFinancialFlowsSelect}
             : Number.isFinite(Number(row.categoria_id))
               ? Number(row.categoria_id)
               : null,
-        cliente_id:
-          typeof row.cliente_id === 'string' && row.cliente_id.trim().length > 0
-            ? row.cliente_id.trim()
-            : null,
-        fornecedor_id:
-          typeof row.fornecedor_id === 'string' && row.fornecedor_id.trim().length > 0
-            ? row.fornecedor_id.trim()
-            : null,
         descricao: normalizeDescricao(row.descricao),
         valor: normalizeNumber(row.valor),
         vencimento,
         pagamento,
         status: normalizeStatus(row.status),
       };
+
+      if (Object.prototype.hasOwnProperty.call(row, 'cliente_id')) {
+        flow.cliente_id =
+          typeof row.cliente_id === 'string' && row.cliente_id.trim().length > 0
+            ? row.cliente_id.trim()
+            : null;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(row, 'fornecedor_id')) {
+        flow.fornecedor_id =
+          typeof row.fornecedor_id === 'string' && row.fornecedor_id.trim().length > 0
+            ? row.fornecedor_id.trim()
+            : null;
+      }
+
+      return flow;
     });
 
     const total = Number(totalResult.rows[0]?.total ?? 0);
