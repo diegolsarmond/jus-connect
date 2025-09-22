@@ -4,6 +4,7 @@ export interface ClientCustomAttributeType {
   id: string;
   label: string;
   value: string;
+
 }
 
 const COLLECTION_KEYS = ['data', 'items', 'rows', 'tipos', 'values'];
@@ -128,8 +129,9 @@ function extractVariableValue({
   return `cliente.atributos_personalizados.custom_${index + 1}`;
 }
 
+
 export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAttributeType[]> {
-  const response = await fetch(getApiUrl('get_api_clientes_atributos_tipos'), {
+  const response = await fetch(getApiUrl('clientes/atributos/tipos'), {
     headers: { Accept: 'application/json' },
   });
 
@@ -154,6 +156,7 @@ export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAtt
 
     const id = pickFirstString(item, ID_KEYS) ?? `custom-${index}`;
     const rawValue = pickFirstString(item, VALUE_KEYS);
+
     const signature = `${id}|${label}`;
 
     if (seen.has(signature)) {
@@ -165,6 +168,7 @@ export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAtt
       id,
       label,
       value: extractVariableValue({ rawValue, id, label, index }),
+
     });
   });
 

@@ -731,6 +731,7 @@ export default function EditorPage() {
           id: `cliente.atributos_personalizados.${attribute.id}`,
           label: attribute.label,
           value: attribute.value,
+
         }));
       })();
 
