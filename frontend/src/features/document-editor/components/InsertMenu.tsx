@@ -15,15 +15,17 @@ import { variableMenuTree } from '../data/variable-items';
 type InsertMenuProps = {
   onSelect: (item: VariableMenuItem) => void;
   disabled?: boolean;
+  items?: VariableMenuItem[];
 };
 
 function RenderMenuItems({ items, onSelect }: { items: VariableMenuItem[]; onSelect: (item: VariableMenuItem) => void }) {
   return (
     <>
-      {items.map(item => {
+      {items.map((item, index) => {
+        const key = item.id ?? item.value ?? `${item.label}-${index}`;
         if (item.children && item.children.length > 0) {
           return (
-            <DropdownMenuSub key={item.value}>
+            <DropdownMenuSub key={key}>
               <DropdownMenuSubTrigger className="flex items-center justify-between gap-2">
                 <span>{item.label}</span>
               </DropdownMenuSubTrigger>
@@ -34,12 +36,20 @@ function RenderMenuItems({ items, onSelect }: { items: VariableMenuItem[]; onSel
           );
         }
 
+        if (item.value) {
+          return (
+            <DropdownMenuItem key={key} onSelect={() => onSelect(item)}>
+              <div className="flex flex-col">
+                <span>{item.label}</span>
+                <span className="text-xs text-muted-foreground">{`{{${item.value}}}`}</span>
+              </div>
+            </DropdownMenuItem>
+          );
+        }
+
         return (
-          <DropdownMenuItem key={item.value} onSelect={() => onSelect(item)}>
-            <div className="flex flex-col">
-              <span>{item.label}</span>
-              <span className="text-xs text-muted-foreground">{`{{${item.value}}}`}</span>
-            </div>
+          <DropdownMenuItem key={key} disabled>
+            <span className="text-muted-foreground">{item.label}</span>
           </DropdownMenuItem>
         );
       })}
@@ -47,7 +57,9 @@ function RenderMenuItems({ items, onSelect }: { items: VariableMenuItem[]; onSel
   );
 }
 
-export function InsertMenu({ onSelect, disabled }: InsertMenuProps) {
+export function InsertMenu({ onSelect, disabled, items }: InsertMenuProps) {
+  const menuItems = items ?? variableMenuTree;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={disabled}>
@@ -57,7 +69,7 @@ export function InsertMenu({ onSelect, disabled }: InsertMenuProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56" sideOffset={8}>
-        <RenderMenuItems items={variableMenuTree} onSelect={onSelect} />
+        <RenderMenuItems items={menuItems} onSelect={onSelect} />
       </DropdownMenuContent>
     </DropdownMenu>
   );
