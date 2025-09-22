@@ -37,13 +37,11 @@ type OpportunityRow = {
   documentos_anexados: unknown;
   criado_por: number | string | null;
   sequencial_empresa: number;
-  idempresa: number | null;
   audiencia_data: string | null;
   audiencia_horario: string | null;
   audiencia_local: string | null;
   data_criacao: string | null;
   ultima_atualizacao: string | null;
-  idempresa: number | null;
 };
 
 type OpportunityDetails = OpportunityRow & {
@@ -396,6 +394,10 @@ function formatTimeString(input: string | null, fallbackDate?: string | null): s
 
 }
 
+function formatAudienceTime(date: string | null, time: string | null): string | null {
+  return formatTimeString(time, date);
+}
+
 async function fetchNomeById(query: string, id: number | null): Promise<string | null> {
   if (id === null || id === undefined) return null;
   const result = await pool.query<{ nome: string | null }>(query, [id]);
@@ -469,9 +471,9 @@ async function fetchEmpresaEndereco(empresaId: number | null): Promise<EmpresaAd
         throw error;
       });
 
-    if (result && result.rowCount > 0) {
-
-      return result.rows[0];
+    const rows = result?.rows ?? [];
+    if (rows.length > 0) {
+      return rows[0];
     }
   }
 
@@ -745,7 +747,7 @@ async function fetchOpportunityData(id: number): Promise<OpportunityData | null>
     `SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, idempresa, numero_processo_cnj, numero_protocolo,
             vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
             valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
-            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa, idempresa,
+            contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa,
             audiencia_data, audiencia_horario, audiencia_local, data_criacao, ultima_atualizacao
 
        FROM public.oportunidades WHERE id = $1`,
