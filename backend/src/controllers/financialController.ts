@@ -279,6 +279,7 @@ export const listFlows = async (req: Request, res: Response) => {
       return;
     }
 
+
     const filters: (string | number)[] = [empresaId];
     const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
 
@@ -302,6 +303,7 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.categoria_id::TEXT AS categoria_id,
           NULL::TEXT AS cliente_id,
           ff.${empresaColumn} AS empresa_id
+
         FROM financial_flows ff
       `;
 
