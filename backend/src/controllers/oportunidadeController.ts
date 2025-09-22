@@ -940,6 +940,8 @@ export const createOportunidadeFaturamento = async (
     observacoes,
     data_faturamento,
     parcelas_ids,
+    juros,
+    multa,
   } = req.body as {
     forma_pagamento?: unknown;
     condicao_pagamento?: unknown;
@@ -948,6 +950,8 @@ export const createOportunidadeFaturamento = async (
     observacoes?: unknown;
     data_faturamento?: unknown;
     parcelas_ids?: unknown;
+    juros?: unknown;
+    multa?: unknown;
   };
 
   const formaValue = normalizeText(forma_pagamento);
@@ -986,6 +990,50 @@ export const createOportunidadeFaturamento = async (
   }
 
   const observations = normalizeText(observacoes);
+
+  const jurosValor = (() => {
+    if (juros === undefined || juros === null) {
+      return 0;
+    }
+    if (typeof juros === 'string' && juros.trim().length === 0) {
+      return 0;
+    }
+    const parsed = normalizeDecimal(juros);
+    if (parsed === null) {
+      return null;
+    }
+    return parsed;
+  })();
+
+  if (jurosValor === null) {
+    return res.status(400).json({ error: 'juros inválido.' });
+  }
+  if (jurosValor < 0) {
+    return res.status(400).json({ error: 'juros não pode ser negativo.' });
+  }
+
+  const multaValor = (() => {
+    if (multa === undefined || multa === null) {
+      return 0;
+    }
+    if (typeof multa === 'string' && multa.trim().length === 0) {
+      return 0;
+    }
+    const parsed = normalizeDecimal(multa);
+    if (parsed === null) {
+      return null;
+    }
+    return parsed;
+  })();
+
+  if (multaValor === null) {
+    return res.status(400).json({ error: 'multa inválida.' });
+  }
+  if (multaValor < 0) {
+    return res.status(400).json({ error: 'multa não pode ser negativa.' });
+  }
+
+  const encargosValor = jurosValor + multaValor;
 
   const client = await pool.connect();
 
@@ -1083,6 +1131,11 @@ export const createOportunidadeFaturamento = async (
       } else if (Math.abs(valorToPersist - sum) > 0.009) {
         valorToPersist = sum;
       }
+      if (valorToPersist !== null) {
+        valorToPersist += encargosValor;
+      }
+    } else if (valorToPersist === null && encargosValor > 0) {
+      valorToPersist = encargosValor;
     }
 
     const parcelasToPersist = isParcelado
