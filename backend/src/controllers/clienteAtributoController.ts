@@ -182,6 +182,40 @@ const parseValor = (valor: unknown, res: Response): string | null => {
   return valorString;
 };
 
+export const listClienteAtributoTipos = async (req: Request, res: Response) => {
+  const auth = getAuthenticatedUser(req, res);
+  if (!auth) {
+    return;
+  }
+
+  const empresaId = await resolveEmpresaId(auth, res);
+  if (empresaId === undefined) {
+    return;
+  }
+
+  const empresaIdValue = empresaId ?? null;
+
+  try {
+    const result = await pool.query(
+      `SELECT td.id, td.nome
+       FROM public.tipo_documento td
+       WHERE EXISTS (
+         SELECT 1
+         FROM public.cliente_atributos ca
+         WHERE ca.idtipodocumento = td.id
+       )
+       AND td.idempresa IS NOT DISTINCT FROM $1
+       ORDER BY td.nome ASC`,
+      [empresaIdValue]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const listClienteAtributos = async (req: Request, res: Response) => {
   const auth = getAuthenticatedUser(req, res);
   if (!auth) {
