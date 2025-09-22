@@ -514,6 +514,7 @@ export default function VisualizarOportunidade() {
   const [statusSaving, setStatusSaving] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [documentType, setDocumentType] = useState<"modelo" | "processo" | null>(null);
+  const [documentTitle, setDocumentTitle] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [documentTemplates, setDocumentTemplates] = useState<
     Array<{ value: string; label: string }>
@@ -634,6 +635,7 @@ export default function VisualizarOportunidade() {
 
   const resetDocumentDialog = () => {
     setDocumentType(null);
+    setDocumentTitle("");
     setSelectedTemplate("");
     setProcessForm({ numero: "", uf: "", municipio: "", orgaoJulgador: "" });
     setMunicipios([]);
@@ -2169,6 +2171,8 @@ export default function VisualizarOportunidade() {
 
     if (documentType === "modelo") {
       if (!selectedTemplate) return;
+      const trimmedTitle = documentTitle.trim();
+      if (!trimmedTitle) return;
       const templateId = Number.parseInt(selectedTemplate, 10);
       if (Number.isNaN(templateId)) return;
       setDocumentSubmitting(true);
@@ -2178,7 +2182,7 @@ export default function VisualizarOportunidade() {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ templateId }),
+            body: JSON.stringify({ templateId, title: trimmedTitle }),
           },
         );
         if (!response.ok) {
@@ -2532,10 +2536,12 @@ export default function VisualizarOportunidade() {
     );
   }
 
+  const trimmedDocumentTitle = documentTitle.trim();
+
   const isDocumentContinueDisabled =
     documentSubmitting ||
     (documentType === "modelo"
-      ? !selectedTemplate
+      ? !selectedTemplate || trimmedDocumentTitle.length === 0
       : documentType === "processo"
       ?
           !processForm.numero ||
@@ -3714,50 +3720,62 @@ export default function VisualizarOportunidade() {
             </div>
 
             {documentType === "modelo" && (
-              <div className="space-y-2">
-                <Label htmlFor="document-template">Modelo</Label>
-                <Select
-                  value={selectedTemplate}
-                  onValueChange={setSelectedTemplate}
-                  disabled={
-                    documentTemplatesLoading ||
-                    (documentTemplates.length === 0 && !documentTemplatesError)
-                  }
-                >
-                  <SelectTrigger
-                    id="document-template"
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="document-template">Modelo</Label>
+                  <Select
+                    value={selectedTemplate}
+                    onValueChange={setSelectedTemplate}
                     disabled={
                       documentTemplatesLoading ||
                       (documentTemplates.length === 0 && !documentTemplatesError)
                     }
                   >
-                    <SelectValue
-                      placeholder={
-                        documentTemplatesLoading
-                          ? "Carregando modelos..."
-                          : documentTemplates.length === 0
-                          ? documentTemplatesError ?? "Nenhum modelo disponível"
-                          : "Selecione um modelo"
+                    <SelectTrigger
+                      id="document-template"
+                      disabled={
+                        documentTemplatesLoading ||
+                        (documentTemplates.length === 0 && !documentTemplatesError)
                       }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {documentTemplates.length > 0 ? (
-                      documentTemplates.map((template) => (
-                        <SelectItem key={template.value} value={template.value}>
-                          {template.label}
+                    >
+                      <SelectValue
+                        placeholder={
+                          documentTemplatesLoading
+                            ? "Carregando modelos..."
+                            : documentTemplates.length === 0
+                            ? documentTemplatesError ?? "Nenhum modelo disponível"
+                            : "Selecione um modelo"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {documentTemplates.length > 0 ? (
+                        documentTemplates.map((template) => (
+                          <SelectItem key={template.value} value={template.value}>
+                            {template.label}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="__no_template__" disabled>
+                          {documentTemplatesError ?? "Nenhum modelo cadastrado"}
                         </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="__no_template__" disabled>
-                        {documentTemplatesError ?? "Nenhum modelo cadastrado"}
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                {documentTemplatesError && (
-                  <p className="text-sm text-destructive">{documentTemplatesError}</p>
-                )}
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {documentTemplatesError && (
+                    <p className="text-sm text-destructive">{documentTemplatesError}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="document-title">Título do documento</Label>
+                  <Input
+                    id="document-title"
+                    placeholder="Informe o título do documento"
+                    value={documentTitle}
+                    onChange={(event) => setDocumentTitle(event.target.value)}
+                    disabled={documentSubmitting}
+                  />
+                </div>
               </div>
             )}
 
