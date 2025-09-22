@@ -4,6 +4,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -770,7 +771,7 @@ export default function MeuPlano() {
                       Alterar plano
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-4xl">
+                  <DialogContent className="sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl">
                     <DialogHeader>
                       <DialogTitle>Escolha um novo plano</DialogTitle>
                       <DialogDescription>
@@ -798,70 +799,135 @@ export default function MeuPlano() {
                             const isDestaque = destaquePlanoId === plano.id;
 
                             return (
-                              <CarouselItem key={plano.id} className="md:basis-1/2 lg:basis-1/3">
-                                <div
+                              <CarouselItem
+                                key={plano.id}
+                                className="md:basis-1/2 lg:basis-1/3 xl:basis-1/4"
+                              >
+                                <Card
                                   className={cn(
-                                    "flex h-full flex-col justify-between rounded-2xl border p-6 shadow-sm transition hover:shadow-lg",
-                                    isSelecionado ? "border-primary shadow-primary/30" : "border-border",
+                                    "relative flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 shadow-[0_24px_45px_-35px_rgba(15,23,42,0.9)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_35px_65px_-35px_rgba(15,23,42,0.55)]",
+                                    isSelecionado
+                                      ? "border-primary/60 shadow-[0_0_40px_rgba(59,130,246,0.35)]"
+                                      : undefined,
+                                    isAtual && !isSelecionado ? "border-emerald-400/60" : undefined,
                                   )}
                                 >
-                                  <div className="space-y-4">
-                                    <div className="flex flex-wrap gap-2">
-                                      {isAtual && !previewPlano && (
-                                        <Badge variant="secondary">Plano atual</Badge>
+                                  <div className="pointer-events-none absolute -top-24 right-0 h-48 w-48 rounded-full bg-primary/15 blur-3xl" />
+                                  <div className="pointer-events-none absolute -bottom-32 left-0 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl" />
+
+                                  <CardHeader className="space-y-4 pb-0 text-left">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {isAtual && (
+                                        <Badge className="flex items-center gap-2 border border-emerald-400/60 bg-emerald-500/20 text-emerald-100">
+                                          <Sparkles className="h-3.5 w-3.5" /> Plano atual
+                                        </Badge>
                                       )}
                                       {isPreviewing && (
-                                        <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+                                        <Badge className="border border-primary/50 bg-primary/20 text-primary-foreground">
                                           Pré-visualizando
                                         </Badge>
                                       )}
                                       {isDestaque && (
-                                        <Badge variant="outline" className="gap-1">
-                                          <Crown className="h-3 w-3" /> Mais completo
+                                        <Badge className="flex items-center gap-2 border border-amber-400/60 bg-amber-500/20 text-amber-100">
+                                          <Crown className="h-3.5 w-3.5" /> Mais completo
                                         </Badge>
                                       )}
                                     </div>
-                                    <div className="space-y-2">
-                                      <p className="text-lg font-semibold text-foreground">{plano.nome}</p>
-                                      <div className="flex items-baseline gap-2">
-                                        <span className="text-2xl font-bold">{carouselPricing.mainPrice}</span>
-                                        <span className="text-xs font-medium uppercase text-muted-foreground">
-                                          {carouselPricing.cadenceLabel}
+
+                                    <div className="space-y-4">
+                                      <div className="space-y-2">
+                                        <span className="text-xs uppercase tracking-[0.3em] text-slate-300">
+                                          Plano
                                         </span>
+                                        <CardTitle className="text-2xl font-semibold text-white">
+                                          {plano.nome}
+                                        </CardTitle>
                                       </div>
-                                      {carouselPricing.savingsLabel && (
-                                        <p className="text-xs font-medium text-primary/80">{carouselPricing.savingsLabel}</p>
-                                      )}
-                                      {carouselPricing.helper && (
-                                        <p className="text-xs text-muted-foreground">{carouselPricing.helper}</p>
+
+                                      <div className="space-y-2">
+                                        <span className="text-xs uppercase tracking-[0.3em] text-slate-300">
+                                          Investimento
+                                        </span>
+                                        <div className="flex items-baseline gap-1.5">
+                                          <span className="text-3xl font-bold text-white">
+                                            {carouselPricing.mainPrice}
+                                          </span>
+                                          <span className="text-sm font-medium text-slate-300">
+                                            {carouselPricing.cadenceLabel}
+                                          </span>
+                                        </div>
+                                        {carouselPricing.discountBadge && (
+                                          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-sky-400/60 bg-sky-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-sky-100">
+                                            {carouselPricing.discountBadge} na modalidade anual
+                                          </span>
+                                        )}
+                                        {carouselPricing.savingsLabel && (
+                                          <p className="text-xs font-medium text-sky-200">
+                                            {carouselPricing.savingsLabel}
+                                          </p>
+                                        )}
+                                        {carouselPricing.helper && (
+                                          <p className="text-[11px] text-slate-300">{carouselPricing.helper}</p>
+                                        )}
+                                      </div>
+
+                                      {plano.descricao && (
+                                        <CardDescription className="text-sm text-slate-200/90">
+                                          {plano.descricao}
+                                        </CardDescription>
                                       )}
                                     </div>
-                                    <ul className="space-y-2 text-sm text-muted-foreground">
-                                      {plano.recursos.slice(0, 4).map((recurso) => (
-                                        <li key={recurso} className="flex items-center gap-2 text-left">
-                                          <Check className="h-4 w-4 text-primary" />
-                                          <span>{recurso}</span>
-                                        </li>
-                                      ))}
-                                      {plano.recursos.length === 0 && (
-                                        <li className="text-xs">Atualize o cadastro do plano para listar os benefícios.</li>
-                                      )}
-                                    </ul>
-                                  </div>
-                                  <div className="mt-6 space-y-2">
+                                  </CardHeader>
+
+                                  <CardContent className="flex flex-1 flex-col gap-4">
+                                    <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-slate-200">
+                                      <span className="font-semibold text-sky-200">
+                                        Inclui recursos essenciais para sua equipe
+                                      </span>
+                                    </div>
+                                    <div className="space-y-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-300">
+                                        Principais benefícios
+                                      </p>
+                                      <ul className="space-y-2 text-xs text-slate-100">
+                                        {plano.recursos.length > 0 ? (
+                                          plano.recursos.slice(0, 6).map((recurso) => (
+                                            <li key={recurso} className="flex items-start gap-3 text-left">
+                                              <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-300" />
+                                              <span>{recurso}</span>
+                                            </li>
+                                          ))
+                                        ) : (
+                                          <li className="text-xs text-slate-300">
+                                            Atualize o cadastro do plano para listar os benefícios.
+                                          </li>
+                                        )}
+                                      </ul>
+                                    </div>
+                                  </CardContent>
+
+                                  <CardFooter className="mt-auto flex flex-col gap-2 p-4 pt-0">
                                     <Button
-                                      className="w-full"
-                                      variant={isSelecionado ? "secondary" : "default"}
+                                      className={cn(
+                                        "w-full font-semibold",
+                                        isSelecionado
+                                          ? "bg-white text-slate-950 hover:bg-white/90"
+                                          : "bg-primary text-primary-foreground hover:bg-primary/90",
+                                      )}
                                       onClick={() => handlePreviewPlan(plano)}
                                       disabled={isAtual && !previewPlano}
                                     >
                                       {isSelecionado ? "Visualizando" : "Pré-visualizar"}
                                     </Button>
-                                    <Button variant="ghost" className="w-full" asChild>
+                                    <Button
+                                      variant="outline"
+                                      className="w-full border-white/30 bg-white/10 text-white hover:bg-white/20"
+                                      asChild
+                                    >
                                       <Link to="/configuracoes/planos">Gerenciar no painel</Link>
                                     </Button>
-                                  </div>
-                                </div>
+                                  </CardFooter>
+                                </Card>
                               </CarouselItem>
                             );
                           })}
