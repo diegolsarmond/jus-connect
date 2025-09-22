@@ -66,6 +66,7 @@ import { AuthProvider } from "@/features/auth/AuthProvider";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 import { RequireModule } from "@/features/auth/RequireModule";
 import { RequireAdminUser } from "@/features/auth/RequireAdminUser";
+import { PlanProvider } from "@/features/plans/PlanProvider";
 
 const CRMLayout = lazy(() =>
   import("@/components/layout/CRMLayout").then((module) => ({ default: module.CRMLayout })),
@@ -110,7 +111,9 @@ const App = () => (
               <Route
                 element={(
                   <ProtectedRoute>
-                    <CRMLayout />
+                    <PlanProvider>
+                      <CRMLayout />
+                    </PlanProvider>
                   </ProtectedRoute>
                 )}
               >

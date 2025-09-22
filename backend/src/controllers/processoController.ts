@@ -66,6 +66,97 @@ const resolveNullablePositiveInteger = (
   return { ok: false };
 };
 
+const resolveNullableNonNegativeInteger = (
+  value: unknown,
+): { ok: true; value: number | null } | { ok: false } => {
+  if (value === undefined || value === null) {
+    return { ok: true, value: null };
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value >= 0) {
+      return { ok: true, value };
+    }
+    return { ok: false };
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return { ok: true, value: null };
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return { ok: true, value: parsed };
+    }
+
+    return { ok: false };
+  }
+
+  return { ok: false };
+};
+
+const parseBooleanFlag = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (
+      [
+        '1',
+        'true',
+        't',
+        'yes',
+        'y',
+        'sim',
+        'on',
+        'habilitado',
+        'habilitada',
+        'ativo',
+        'ativa',
+      ].includes(normalized)
+    ) {
+      return true;
+    }
+
+    if (
+      [
+        '0',
+        'false',
+        'f',
+        'no',
+        'n',
+        'nao',
+        'não',
+        'off',
+        'desabilitado',
+        'desabilitada',
+        'inativo',
+        'inativa',
+      ].includes(normalized)
+    ) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
 const normalizeDate = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -1404,7 +1495,16 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
     }
 
     const processoResult = await pool.query(
-      'SELECT numero FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      `SELECT
+         p.numero,
+         p.consultas_api_count,
+         pl.sincronizacao_processos_habilitada,
+         pl.sincronizacao_processos_limite
+       FROM public.processos p
+       LEFT JOIN public.empresas emp ON emp.id IS NOT DISTINCT FROM p.idempresa
+       LEFT JOIN public.planos pl ON pl.id::text = emp.plano::text
+      WHERE p.id = $1 AND p.idempresa IS NOT DISTINCT FROM $2
+      LIMIT 1`,
       [parsedId, empresaId]
     );
 
@@ -1412,14 +1512,59 @@ export const syncProcessoMovimentacoes = async (req: Request, res: Response) => 
       return res.status(404).json({ error: 'Processo não encontrado' });
     }
 
-    const numeroProcesso = normalizeString(
-      (processoResult.rows[0] as { numero: unknown }).numero
-    );
+    const processoRow = processoResult.rows[0] as {
+      numero: unknown;
+      consultas_api_count?: unknown;
+      sincronizacao_processos_habilitada?: unknown;
+      sincronizacao_processos_limite?: unknown;
+    };
+
+    const numeroProcesso = normalizeString(processoRow.numero);
 
     if (!numeroProcesso) {
       return res
         .status(400)
         .json({ error: 'Número do processo inválido para sincronização.' });
+    }
+
+    const consultasApiCountAtual = parseInteger(
+      processoRow.consultas_api_count,
+    );
+    const sincronizacaoProcessosHabilitada =
+      parseBooleanFlag(processoRow.sincronizacao_processos_habilitada) ?? true;
+    const limiteResult = resolveNullableNonNegativeInteger(
+      processoRow.sincronizacao_processos_limite,
+    );
+    const sincronizacaoProcessosLimite = limiteResult.ok
+      ? limiteResult.value
+      : null;
+
+    if (!sincronizacaoProcessosHabilitada) {
+      const message =
+        'Seu plano atual não permite sincronizar processos com o Escavador.';
+
+      await pool.query(
+        'INSERT INTO public.processo_consultas_api (processo_id, sucesso, detalhes) VALUES ($1, $2, $3)',
+        [parsedId, false, message]
+      );
+
+      return res.status(403).json({ error: message });
+    }
+
+    if (
+      sincronizacaoProcessosLimite !== null &&
+      consultasApiCountAtual >= sincronizacaoProcessosLimite
+    ) {
+      const logMessage = `Limite de sincronizações do plano atingido (${consultasApiCountAtual}/${sincronizacaoProcessosLimite}).`;
+      const responseMessage =
+        'Limite de sincronizações do plano atingido para este processo.';
+
+      await pool.query(
+        'INSERT INTO public.processo_consultas_api (processo_id, sucesso, detalhes) VALUES ($1, $2, $3)',
+        [parsedId, false, logMessage]
+      );
+
+      return res.status(429).json({ error: responseMessage });
     }
 
     const escavadorIntegration = await integrationApiKeyService.findById(

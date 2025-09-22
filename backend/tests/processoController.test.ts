@@ -8,9 +8,10 @@ import IntegrationApiKeyService from '../src/services/integrationApiKeyService';
 process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
 let listProcessoDocumentosPublicos: typeof import('../src/controllers/processoController')['listProcessoDocumentosPublicos'];
+let syncProcessoMovimentacoes: typeof import('../src/controllers/processoController')['syncProcessoMovimentacoes'];
 
 test.before(async () => {
-  ({ listProcessoDocumentosPublicos } = await import('../src/controllers/processoController'));
+  ({ listProcessoDocumentosPublicos, syncProcessoMovimentacoes } = await import('../src/controllers/processoController'));
 });
 
 const createMockResponse = () => {
@@ -243,4 +244,115 @@ test('listProcessoDocumentosPublicos trata erros específicos da API do Escavado
     error: 'Documentos públicos não encontrados para este processo.',
   });
   assert.equal(updateIntegrationMock.mock.calls.length, 1);
+});
+
+test('syncProcessoMovimentacoes retorna 403 quando plano não permite sincronização', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 7 }], rowCount: 1 },
+    {
+      rows: [
+        {
+          numero: ' 12345678901234567890 ',
+          consultas_api_count: 1,
+          sincronizacao_processos_habilitada: false,
+          sincronizacao_processos_limite: 10,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const findIntegrationMock = test.mock.method(
+    IntegrationApiKeyService.prototype,
+    'findById',
+    async () => {
+      throw new Error('should not fetch integration when plano bloqueia');
+    },
+  );
+
+  const fetchMock = test.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('should not call external API when plano bloqueia');
+  });
+
+  const req = {
+    params: { id: '5' },
+    auth: { userId: 91 } as Request['auth'],
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await syncProcessoMovimentacoes(req, res);
+  } finally {
+    fetchMock.mock.restore();
+    findIntegrationMock.mock.restore();
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Seu plano atual não permite sincronizar processos com o Escavador.',
+  });
+  assert.equal(findIntegrationMock.mock.calls.length, 0);
+  assert.equal(fetchMock.mock.calls.length, 0);
+  assert.equal(calls.length, 3);
+  assert.match(calls[1]?.text ?? '', /FROM public\.processos/i);
+  assert.match(calls[2]?.text ?? '', /INSERT INTO public\.processo_consultas_api/i);
+});
+
+test('syncProcessoMovimentacoes retorna 429 quando limite do plano é atingido', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 11 }], rowCount: 1 },
+    {
+      rows: [
+        {
+          numero: ' 22222222222222222222 ',
+          consultas_api_count: 3,
+          sincronizacao_processos_habilitada: true,
+          sincronizacao_processos_limite: 3,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const findIntegrationMock = test.mock.method(
+    IntegrationApiKeyService.prototype,
+    'findById',
+    async () => {
+      throw new Error('should not fetch integration when limite atingido');
+    },
+  );
+
+  const fetchMock = test.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('should not call external API when limite atingido');
+  });
+
+  const req = {
+    params: { id: '8' },
+    auth: { userId: 37 } as Request['auth'],
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await syncProcessoMovimentacoes(req, res);
+  } finally {
+    fetchMock.mock.restore();
+    findIntegrationMock.mock.restore();
+    restore();
+  }
+
+  assert.equal(res.statusCode, 429);
+  assert.deepEqual(res.body, {
+    error: 'Limite de sincronizações do plano atingido para este processo.',
+  });
+  assert.equal(findIntegrationMock.mock.calls.length, 0);
+  assert.equal(fetchMock.mock.calls.length, 0);
+  assert.equal(calls.length, 3);
+  assert.match(calls[1]?.text ?? '', /FROM public\.processos/i);
+  assert.match(calls[2]?.text ?? '', /INSERT INTO public\.processo_consultas_api/i);
+  assert.match(String(calls[2]?.values?.[2] ?? ''), /Limite de sincronizações do plano atingido/);
 });
