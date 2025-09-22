@@ -683,6 +683,11 @@ export default function VisualizarOportunidade() {
   const skipInteractionPersistenceRef = useRef<string | null>(null);
   const documentPdfUrlsRef = useRef<Map<number, string>>(new Map());
 
+  const parsedOpportunityId = useMemo(
+    () => (id ? Number.parseInt(id, 10) : Number.NaN),
+    [id],
+  );
+
   const patchOpportunity = useCallback(
     (updater: (prev: OpportunityData) => OpportunityData) => {
       setOpportunity((prev) => {
@@ -2706,11 +2711,6 @@ export default function VisualizarOportunidade() {
       </section>
     );
   };
-
-  const parsedOpportunityId = useMemo(
-    () => (id ? Number.parseInt(id, 10) : Number.NaN),
-    [id],
-  );
 
   const selectedProcessOption = useMemo(() => {
     const parsedId = Number.parseInt(selectedProcessId, 10);
