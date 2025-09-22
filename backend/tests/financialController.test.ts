@@ -111,6 +111,8 @@ test('listFlows combines financial and opportunity flows', async () => {
     tipo: 'despesa',
     conta_id: '7',
     categoria_id: '3',
+    cliente_id: null,
+    fornecedor_id: '55',
     descricao: 'Conta de luz',
     valor: 100.5,
     vencimento: new Date('2024-01-10T00:00:00.000Z'),
@@ -123,6 +125,8 @@ test('listFlows combines financial and opportunity flows', async () => {
     tipo: 'receita',
     conta_id: null,
     categoria_id: null,
+    cliente_id: '77',
+    fornecedor_id: null,
     descricao: 'Oportunidade 5 - Cliente Teste - Parcela 1/2',
     valor: '250.00',
     vencimento: '2024-02-15',
@@ -171,6 +175,8 @@ test('listFlows combines financial and opportunity flows', async () => {
         tipo: 'despesa',
         conta_id: 7,
         categoria_id: 3,
+        cliente_id: null,
+        fornecedor_id: '55',
         descricao: 'Conta de luz',
         valor: 100.5,
         vencimento: '2024-01-10',
@@ -182,6 +188,8 @@ test('listFlows combines financial and opportunity flows', async () => {
         tipo: 'receita',
         conta_id: null,
         categoria_id: null,
+        cliente_id: '77',
+        fornecedor_id: null,
         descricao: 'Oportunidade 5 - Cliente Teste - Parcela 1/2',
         valor: 250,
         vencimento: '2024-02-15',
@@ -347,6 +355,19 @@ test('listFlows tolerates legacy empresa column names', async () => {
   assert.deepEqual(calls[0]?.values, [3]);
   assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
   assert.match(calls[3]?.text ?? '', /ff\."empresa" AS empresa_id/);
+  assert.equal(calls[0]?.values, undefined);
+  assert.match(calls[1]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
+  assert.match(calls[1]?.text ?? '', /ff\.id::TEXT AS id/);
+  assert.match(calls[1]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
+  assert.match(calls[1]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
+  assert.match(calls[1]?.text ?? '', /ff\.cliente_id::TEXT AS cliente_id/);
+  assert.match(calls[1]?.text ?? '', /ff\.fornecedor_id::TEXT AS fornecedor_id/);
+  assert.match(calls[1]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
+  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS conta_id/);
+  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS categoria_id/);
+  assert.match(calls[1]?.text ?? '', /NULL::TEXT AS fornecedor_id/);
+  assert.deepEqual(calls[1]?.values, [1, 1]);
+  assert.deepEqual(calls[2]?.values, []);
 
 });
 
@@ -365,6 +386,8 @@ test('listFlows preserves textual identifiers returned by the database', async (
     tipo: 'despesa',
     conta_id: '9',
     categoria_id: '4',
+    cliente_id: '15',
+    fornecedor_id: null,
     descricao: 'Assinatura de software',
     valor: '199.90',
     vencimento: '2024-05-20',
@@ -398,6 +421,8 @@ test('listFlows preserves textual identifiers returned by the database', async (
         tipo: 'despesa',
         conta_id: 9,
         categoria_id: 4,
+        cliente_id: '15',
+        fornecedor_id: null,
         descricao: 'Assinatura de software',
         valor: 199.9,
         vencimento: '2024-05-20',
@@ -501,6 +526,8 @@ test('listFlows returns only financial flows when opportunity tables are absent'
     tipo: 'despesa',
     conta_id: '1',
     categoria_id: '2',
+    cliente_id: null,
+    fornecedor_id: '88',
     descricao: 'Taxa bancária',
     valor: 150.75,
     vencimento: new Date('2024-03-10T00:00:00.000Z'),
@@ -534,6 +561,8 @@ test('listFlows returns only financial flows when opportunity tables are absent'
         tipo: 'despesa',
         conta_id: 1,
         categoria_id: 2,
+        cliente_id: null,
+        fornecedor_id: '88',
         descricao: 'Taxa bancária',
         valor: 150.75,
         vencimento: '2024-03-10',
@@ -574,6 +603,8 @@ test('listFlows retries without opportunity tables when union query fails', asyn
     tipo: 'receita',
     conta_id: null,
     categoria_id: null,
+    cliente_id: '91',
+    fornecedor_id: null,
     descricao: 'Mensalidade',
     valor: 80,
     vencimento: '2024-04-01',
@@ -613,6 +644,8 @@ test('listFlows retries without opportunity tables when union query fails', asyn
         tipo: 'receita',
         conta_id: null,
         categoria_id: null,
+        cliente_id: '91',
+        fornecedor_id: null,
         descricao: 'Mensalidade',
         valor: 80,
         vencimento: '2024-04-01',
@@ -654,6 +687,8 @@ test('listFlows retries without opportunity tables when privileges are missing',
     tipo: 'receita',
     conta_id: null,
     categoria_id: null,
+    cliente_id: '44',
+    fornecedor_id: null,
     descricao: 'Mensalidade',
     valor: 80,
     vencimento: '2024-04-01',
@@ -693,6 +728,8 @@ test('listFlows retries without opportunity tables when privileges are missing',
         tipo: 'receita',
         conta_id: null,
         categoria_id: null,
+        cliente_id: '44',
+        fornecedor_id: null,
         descricao: 'Mensalidade',
         valor: 80,
         vencimento: '2024-04-01',

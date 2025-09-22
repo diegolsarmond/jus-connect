@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Client, Process } from "@/types/client";
 import {
@@ -36,6 +36,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   AlertTriangle,
+  Pencil,
 } from "lucide-react";
 import {
   Table,
@@ -139,6 +140,24 @@ interface ApiDocumento {
   id: number;
   nome_arquivo: string;
   tipo_nome: string;
+}
+
+interface ApiClienteAtributo {
+  id: number;
+  cliente_id: number;
+  tipo_documento_id: number;
+  tipo_documento_nome: string;
+  valor: string;
+  datacadastro: string;
+}
+
+interface ClienteAtributo {
+  id: number;
+  clientId: number;
+  documentTypeId: number;
+  documentTypeName: string;
+  value: string;
+  createdAt: string;
 }
 
 interface ApiProcess {
@@ -249,6 +268,17 @@ const mapApiClientToClient = (c: ApiClient): LocalClient => ({
   city: c.cidade,
   state: c.uf,
   registrationDate: c.datacadastro,
+});
+
+const mapApiAttributeToAttribute = (
+  attribute: ApiClienteAtributo,
+): ClienteAtributo => ({
+  id: attribute.id,
+  clientId: attribute.cliente_id,
+  documentTypeId: attribute.tipo_documento_id,
+  documentTypeName: attribute.tipo_documento_nome ?? "",
+  value: attribute.valor ?? "",
+  createdAt: attribute.datacadastro ?? "",
 });
 
 const parseOptionalInteger = (value: unknown): number | null => {
@@ -451,6 +481,11 @@ export default function VisualizarCliente() {
   const [historySearch, setHistorySearch] = useState("");
   const [historySort, setHistorySort] = useState<"asc" | "desc">("desc");
   const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>([]);
+  const [contactAttributes, setContactAttributes] = useState<ClienteAtributo[]>([]);
+  const [attributeForm, setAttributeForm] = useState({ typeId: "", value: "" });
+  const [editingAttributeId, setEditingAttributeId] = useState<number | null>(null);
+  const [attributeError, setAttributeError] = useState<string | null>(null);
+  const [savingAttribute, setSavingAttribute] = useState(false);
 
   const handleAddDocument = async () => {
     if (selectedFile && selectedType) {
@@ -519,6 +554,115 @@ export default function VisualizarCliente() {
     }
   };
 
+  const resetAttributeForm = () => {
+    setAttributeForm({ typeId: "", value: "" });
+    setEditingAttributeId(null);
+    setAttributeError(null);
+  };
+
+  const handleSubmitAttribute = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!id) {
+      return;
+    }
+
+    if (!attributeForm.typeId) {
+      setAttributeError("Selecione um tipo de documento.");
+      return;
+    }
+
+    if (!attributeForm.value.trim()) {
+      setAttributeError("Informe um valor para o atributo.");
+      return;
+    }
+
+    setAttributeError(null);
+    setSavingAttribute(true);
+
+    const payload = {
+      idtipodocumento: Number(attributeForm.typeId),
+      valor: attributeForm.value.trim(),
+    };
+
+    try {
+      const url = editingAttributeId
+        ? joinUrl(apiUrl, `/api/clientes/${id}/atributos/${editingAttributeId}`)
+        : joinUrl(apiUrl, `/api/clientes/${id}/atributos`);
+
+      const response = await fetch(url, {
+        method: editingAttributeId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Não foi possível salvar o atributo.");
+      }
+
+      const savedAttribute: ApiClienteAtributo = await response.json();
+      const mappedAttribute = mapApiAttributeToAttribute(savedAttribute);
+
+      setContactAttributes((prev) => {
+        if (editingAttributeId) {
+          return prev.map((attribute) =>
+            attribute.id === mappedAttribute.id ? mappedAttribute : attribute,
+          );
+        }
+
+        return [...prev, mappedAttribute];
+      });
+
+      resetAttributeForm();
+    } catch (error) {
+      console.error("Erro ao salvar atributo:", error);
+      setAttributeError("Não foi possível salvar o atributo. Tente novamente.");
+    } finally {
+      setSavingAttribute(false);
+    }
+  };
+
+  const handleEditAttribute = (attribute: ClienteAtributo) => {
+    setAttributeForm({
+      typeId: String(attribute.documentTypeId),
+      value: attribute.value,
+    });
+    setEditingAttributeId(attribute.id);
+    setAttributeError(null);
+  };
+
+  const handleDeleteAttribute = async (attributeId: number) => {
+    if (!id) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        joinUrl(apiUrl, `/api/clientes/${id}/atributos/${attributeId}`),
+        { method: "DELETE" },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Não foi possível remover o atributo.");
+      }
+
+      setContactAttributes((prev) =>
+        prev.filter((attribute) => attribute.id !== attributeId),
+      );
+
+      if (editingAttributeId === attributeId) {
+        resetAttributeForm();
+      }
+
+      setAttributeError(null);
+    } catch (error) {
+      console.error("Erro ao remover atributo:", error);
+      setAttributeError("Não foi possível remover o atributo. Tente novamente.");
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -535,6 +679,7 @@ export default function VisualizarCliente() {
           processesRes,
           typesRes,
           docsRes,
+          attributesRes,
           financialRes,
         ] = await Promise.all([
           fetch(joinUrl(apiUrl, `/api/clientes/${id}`), {
@@ -543,6 +688,7 @@ export default function VisualizarCliente() {
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/processos`)),
           fetch(joinUrl(apiUrl, `/api/tipo-documentos`)),
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/documentos`)),
+          fetch(joinUrl(apiUrl, `/api/clientes/${id}/atributos`)),
           fetch(financialUrl.toString()),
         ]);
 
@@ -589,6 +735,17 @@ export default function VisualizarCliente() {
               base64: d.arquivo_base64,
             }))
           );
+        }
+
+        if (attributesRes.ok) {
+          const attributesJson: ApiClienteAtributo[] = await attributesRes.json();
+          setContactAttributes(
+            attributesJson.map((attribute) =>
+              mapApiAttributeToAttribute(attribute),
+            ),
+          );
+        } else {
+          setContactAttributes([]);
         }
 
         if (financialRes.ok) {
@@ -1504,100 +1661,142 @@ export default function VisualizarCliente() {
           <TabsContent value="dados" className="mt-4 space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Dados pessoais</CardTitle>
+                <CardTitle>Atributos do contato</CardTitle>
                 <CardDescription>
-                  Informações cadastrais utilizadas para identificação e contato.
+                  Cadastre e gerencie informações personalizadas vinculadas a este cliente.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <form className="grid gap-4 md:grid-cols-2">
+              <CardContent className="space-y-6">
+                <form
+                  onSubmit={handleSubmitAttribute}
+                  className="grid gap-4 md:grid-cols-[2fr_2fr_auto] md:items-end"
+                >
                   <div className="space-y-2">
-                    <Label htmlFor="personal-id">Código do cliente</Label>
-                    <Input id="personal-id" value={String(client.id)} readOnly />
+                    <Label htmlFor="attribute-type">Tipo de documento</Label>
+                    <Select
+                      value={attributeForm.typeId}
+                      onValueChange={(value) =>
+                        setAttributeForm((prev) => ({ ...prev, typeId: value }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="attribute-type"
+                        disabled={savingAttribute || documentTypes.length === 0}
+                      >
+                        <SelectValue placeholder="Selecione um tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {documentTypes.length === 0 ? (
+                          <SelectItem value="__empty__" disabled>
+                            Nenhum tipo disponível
+                          </SelectItem>
+                        ) : (
+                          documentTypes.map((type) => (
+                            <SelectItem key={type.id} value={String(type.id)}>
+                              {type.nome}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="personal-type">Tipo de cliente</Label>
-                    <Input id="personal-type" value={client.type} readOnly />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="personal-name">Nome completo</Label>
-                    <Input id="personal-name" value={client.name} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-document">
-                      {client.type === "Pessoa Física" ? "CPF" : "CNPJ"}
-                    </Label>
-                    <Input id="personal-document" value={client.document} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-status">Status</Label>
-                    <Input id="personal-status" value={client.status} readOnly />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="personal-email">Email</Label>
-                    <Input id="personal-email" type="email" value={client.email} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-phone">Telefone</Label>
-                    <Input id="personal-phone" value={client.phone} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-registration">Data de cadastro</Label>
+                    <Label htmlFor="attribute-value">Valor</Label>
                     <Input
-                      id="personal-registration"
-                      value={formatDisplayDate(client.registrationDate)}
-                      readOnly
+                      id="attribute-value"
+                      value={attributeForm.value}
+                      onChange={(event) =>
+                        setAttributeForm((prev) => ({
+                          ...prev,
+                          value: event.target.value,
+                        }))
+                      }
+                      placeholder="Informe o valor do atributo"
+                      disabled={savingAttribute}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-last-contact">Último contato</Label>
-                    <Input
-                      id="personal-last-contact"
-                      value={formatDisplayDate(client.lastContact)}
-                      readOnly
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-cep">CEP</Label>
-                    <Input id="personal-cep" value={client.cep ?? ""} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-state">UF</Label>
-                    <Input id="personal-state" value={client.state ?? ""} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-city">Cidade</Label>
-                    <Input id="personal-city" value={client.city ?? ""} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-neighborhood">Bairro</Label>
-                    <Input
-                      id="personal-neighborhood"
-                      value={client.neighborhood ?? ""}
-                      readOnly
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="personal-street">Logradouro</Label>
-                    <Input id="personal-street" value={client.street ?? ""} readOnly />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="personal-number">Número</Label>
-                    <Input
-                      id="personal-number"
-                      value={client.streetNumber ?? ""}
-                      readOnly
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="personal-complement">Complemento</Label>
-                    <Input
-                      id="personal-complement"
-                      value={client.complement ?? ""}
-                      readOnly
-                    />
+                  <div className="flex items-end gap-2">
+                    <Button
+                      type="submit"
+                      disabled={
+                        savingAttribute || documentTypes.length === 0
+                      }
+                    >
+                      {editingAttributeId
+                        ? "Salvar atributo"
+                        : "Adicionar atributo"}
+                    </Button>
+                    {editingAttributeId ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetAttributeForm}
+                        disabled={savingAttribute}
+                      >
+                        Cancelar
+                      </Button>
+                    ) : null}
                   </div>
                 </form>
+                {attributeError ? (
+                  <p className="text-sm text-destructive">{attributeError}</p>
+                ) : null}
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Data de cadastro</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {contactAttributes.length > 0 ? (
+                        contactAttributes.map((attribute) => (
+                          <TableRow key={attribute.id}>
+                            <TableCell className="font-medium">
+                              {attribute.documentTypeName}
+                            </TableCell>
+                            <TableCell>{attribute.value}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {formatDateTimeOrFallback(attribute.createdAt, "-")}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEditAttribute(attribute)}
+                                  aria-label={`Editar atributo ${attribute.documentTypeName}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteAttribute(attribute.id)}
+                                  aria-label={`Remover atributo ${attribute.documentTypeName}`}
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell
+                            colSpan={4}
+                            className="py-6 text-center text-sm text-muted-foreground"
+                          >
+                            Nenhum atributo cadastrado.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
