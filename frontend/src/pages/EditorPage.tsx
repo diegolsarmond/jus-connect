@@ -41,12 +41,15 @@ import type {
 } from '@/types/templates';
 import { defaultTemplateMetadata } from '@/types/templates';
 import type { VariableMenuItem } from '@/features/document-editor/data/variable-items';
+import { variableMenuTree } from '@/features/document-editor/data/variable-items';
 import { InsertMenu } from '@/features/document-editor/components/InsertMenu';
 import { EditorToolbar, type ToolbarAlignment, type ToolbarBlock, type ToolbarState } from '@/features/document-editor/components/EditorToolbar';
 import { SidebarNavigation } from '@/features/document-editor/components/SidebarNavigation';
 import { MetadataModal, type MetadataFormValues } from '@/features/document-editor/components/MetadataModal';
 import { SaveButton } from '@/features/document-editor/components/SaveButton';
 import { Menu, Sparkles } from 'lucide-react';
+import { fetchClientCustomAttributeTypes } from '@/features/document-editor/api/client-custom-attributes';
+import type { ClientCustomAttributeType } from '@/features/document-editor/api/client-custom-attributes';
 
 function escapeHtml(text: string): string {
   const div = document.createElement('div');
@@ -136,6 +139,13 @@ function formatVariableLabel(name: string, label?: string | null): string {
     .join(' • ');
 }
 
+function cloneVariableMenuItems(items: VariableMenuItem[]): VariableMenuItem[] {
+  return items.map(item => ({
+    ...item,
+    children: item.children ? cloneVariableMenuItems(item.children) : undefined,
+  }));
+}
+
 const fontSizeMap: Record<string, string> = {
   '1': '10px',
   '2': '12px',
@@ -168,6 +178,8 @@ const DOCUMENT_TYPE_OPTIONS = [
   { value: 'notificacao', label: 'Notificação' },
   { value: 'outro', label: 'Outro' },
 ];
+
+const EMPTY_CLIENT_CUSTOM_ATTRIBUTES: ClientCustomAttributeType[] = [];
 
 export default function EditorPage() {
   const { id } = useParams();
@@ -205,6 +217,11 @@ export default function EditorPage() {
   const integrationQuery = useQuery({
     queryKey: ['integration-api-keys'],
     queryFn: fetchIntegrationApiKeys,
+  });
+
+  const clientCustomAttributeTypesQuery = useQuery({
+    queryKey: ['client-custom-attribute-types'],
+    queryFn: fetchClientCustomAttributeTypes,
   });
 
   const activeAiIntegrations = useMemo(() => {
@@ -527,6 +544,10 @@ export default function EditorPage() {
   };
 
   const handleInsertVariable = (item: VariableMenuItem) => {
+    if (!item.value) {
+      return;
+    }
+
     const selection = document.getSelection();
     const editor = editorRef.current;
     if (!selection || !editor || selection.rangeCount === 0) return;
@@ -668,6 +689,79 @@ export default function EditorPage() {
     updateToolbarState();
   };
 
+  const clientCustomAttributes: ClientCustomAttributeType[] =
+    clientCustomAttributeTypesQuery.data ?? EMPTY_CLIENT_CUSTOM_ATTRIBUTES;
+  const isLoadingClientAttributes = clientCustomAttributeTypesQuery.isLoading || clientCustomAttributeTypesQuery.isFetching;
+  const hasClientAttributeError = Boolean(clientCustomAttributeTypesQuery.isError);
+
+  const variableMenuItems = useMemo(() => {
+    const cloned = cloneVariableMenuItems(variableMenuTree);
+    const clientSection = cloned.find(item => item.id === 'cliente');
+
+    if (clientSection) {
+      const attributeChildren: VariableMenuItem[] = (() => {
+        if (isLoadingClientAttributes) {
+          return [
+            {
+              id: 'cliente.atributos_personalizados.loading',
+              label: 'Carregando atributos...',
+            },
+          ];
+        }
+
+        if (hasClientAttributeError) {
+          return [
+            {
+              id: 'cliente.atributos_personalizados.error',
+              label: 'Não foi possível carregar os atributos personalizados.',
+            },
+          ];
+        }
+
+        if (clientCustomAttributes.length === 0) {
+          return [
+            {
+              id: 'cliente.atributos_personalizados.empty',
+              label: 'Nenhum atributo personalizado cadastrado.',
+            },
+          ];
+        }
+
+        return clientCustomAttributes.map(attribute => ({
+          id: `cliente.atributos_personalizados.${attribute.id}`,
+          label: attribute.label,
+          value: attribute.value,
+        }));
+      })();
+
+      const baseChildren = clientSection.children ?? [];
+      let foundPlaceholder = false;
+
+      const updatedChildren = baseChildren.map(child => {
+        if (child.id === 'cliente.atributos_personalizados') {
+          foundPlaceholder = true;
+          return {
+            ...child,
+            children: attributeChildren,
+          };
+        }
+        return child;
+      });
+
+      if (!foundPlaceholder) {
+        updatedChildren.push({
+          id: 'cliente.atributos_personalizados',
+          label: 'Atributos personalizados',
+          children: attributeChildren,
+        });
+      }
+
+      clientSection.children = updatedChildren;
+    }
+
+    return cloned;
+  }, [clientCustomAttributes, hasClientAttributeError, isLoadingClientAttributes]);
+
   const placeholderList = useMemo(() => extractPlaceholders(contentHtml), [contentHtml]);
 
   const metadataFormDefaults: MetadataFormValues = {
@@ -700,6 +794,7 @@ export default function EditorPage() {
         onSelectSection={focusSection}
         onInsertVariable={handleInsertVariable}
         className="hidden md:flex"
+        items={variableMenuItems}
       />
 
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
@@ -714,6 +809,7 @@ export default function EditorPage() {
             onSelectSection={focusSection}
             onInsertVariable={handleInsertVariable}
             className="border-r-0"
+            items={variableMenuItems}
           />
         </SheetContent>
       </Sheet>
@@ -762,7 +858,7 @@ export default function EditorPage() {
                   <Sparkles className="h-4 w-4" aria-hidden="true" />
                   {isLoadingAiIntegrations ? 'Carregando IA...' : 'Gerar texto com IA'}
                 </Button>
-                <InsertMenu onSelect={handleInsertVariable} />
+                <InsertMenu onSelect={handleInsertVariable} items={variableMenuItems} />
               </div>
             </div>
             <EditorToolbar

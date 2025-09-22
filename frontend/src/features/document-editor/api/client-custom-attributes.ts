@@ -1,0 +1,172 @@
+import { getApiUrl } from '@/lib/api';
+
+export interface ClientCustomAttributeType {
+  id: string;
+  label: string;
+  value: string;
+}
+
+const COLLECTION_KEYS = ['data', 'items', 'rows', 'tipos', 'values'];
+const LABEL_KEYS = [
+  'nome',
+  'nome_tipo',
+  'nome_atributo',
+  'descricao',
+  'descricao_tipo',
+  'descricao_atributo',
+  'descricao_tipo_atributo',
+  'descricao_tipodocumento',
+  'descricao_tipo_documento',
+  'titulo',
+  'label',
+  'tipo',
+  'name',
+];
+const VALUE_KEYS = [
+  'variavel',
+  'chave',
+  'key',
+  'slug',
+  'campo',
+  'tag',
+  'identificador',
+  'codigo',
+  'valor',
+];
+const ID_KEYS = [
+  'id',
+  'idtipo',
+  'id_tipo',
+  'idtipodocumento',
+  'id_tipo_documento',
+  'idtipoatributo',
+  'id_tipo_atributo',
+  'idatributo',
+  'id_atributo',
+  'idtipoatributocliente',
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function pickFirstString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    } else if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
+  }
+
+  return undefined;
+}
+
+function extractCollection(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (isRecord(payload)) {
+    for (const key of COLLECTION_KEYS) {
+      const value = payload[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+    }
+  }
+
+  return [];
+}
+
+function slugify(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+}
+
+function extractVariableValue({
+  rawValue,
+  id,
+  label,
+  index,
+}: {
+  rawValue: string | undefined;
+  id: string;
+  label: string;
+  index: number;
+}): string {
+  if (rawValue) {
+    const trimmed = rawValue.trim();
+    if (trimmed.length > 0) {
+      const match = trimmed.match(/^{{\s*([^}]+)\s*}}$/);
+      if (match && match[1]) {
+        return match[1];
+      }
+      return trimmed;
+    }
+  }
+
+  const fromLabel = slugify(label);
+  if (fromLabel) {
+    return `cliente.atributos_personalizados.${fromLabel}`;
+  }
+
+  const fromId = slugify(id);
+  if (fromId) {
+    return `cliente.atributos_personalizados.${fromId}`;
+  }
+
+  return `cliente.atributos_personalizados.custom_${index + 1}`;
+}
+
+export async function fetchClientCustomAttributeTypes(): Promise<ClientCustomAttributeType[]> {
+  const response = await fetch(getApiUrl('get_api_clientes_atributos_tipos'), {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error('Não foi possível carregar os atributos personalizados.');
+  }
+
+  const payload = (await response.json()) as unknown;
+  const rawItems = extractCollection(payload);
+  const attributes: ClientCustomAttributeType[] = [];
+  const seen = new Set<string>();
+
+  rawItems.forEach((item, index) => {
+    if (!isRecord(item)) {
+      return;
+    }
+
+    const label = pickFirstString(item, LABEL_KEYS);
+    if (!label) {
+      return;
+    }
+
+    const id = pickFirstString(item, ID_KEYS) ?? `custom-${index}`;
+    const rawValue = pickFirstString(item, VALUE_KEYS);
+    const signature = `${id}|${label}`;
+
+    if (seen.has(signature)) {
+      return;
+    }
+
+    seen.add(signature);
+    attributes.push({
+      id,
+      label,
+      value: extractVariableValue({ rawValue, id, label, index }),
+    });
+  });
+
+  return attributes.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+}
