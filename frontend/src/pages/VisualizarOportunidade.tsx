@@ -70,6 +70,8 @@ interface OpportunityData {
   status?: string;
   ultima_atualizacao?: string;
   envolvidos?: Envolvido[];
+  responsavel_id?: number | null;
+  responsible?: string | null;
   valor_causa?: number | string | null;
   valor_honorarios?: number | string | null;
   percentual_honorarios?: number | string | null;
@@ -77,6 +79,15 @@ interface OpportunityData {
   qtde_parcelas?: number | string | null;
   sequencial_empresa?: number;
   data_criacao?: string | null;
+  numero_processo_cnj?: string | null;
+  numero_protocolo?: string | null;
+  vara_ou_orgao?: string | null;
+  comarca?: string | null;
+  tipo_processo_nome?: string | null;
+  area?: string | null;
+  documentos_anexados?: unknown;
+  criado_por?: number | string | null;
+  criado_por_nome?: string | null;
   [key: string]: unknown;
 }
 
@@ -469,22 +480,6 @@ const mapInstallmentRecords = (data: unknown): InstallmentRecord[] =>
       },
     ];
   });
-
-const PREFERRED_ORDER = [
-  "numero_processo_cnj",
-  "numero_protocolo",
-  "vara_ou_orgao",
-  "comarca",
-  "prazo_proximo",
-  "valor_causa",
-  "valor_honorarios",
-  "percentual_honorarios",
-  "forma_pagamento",
-  "contingenciamento",
-  "detalhes",
-  "data_criacao",
-  "ultima_atualizacao",
-] as const;
 
 const formatProcessNumber = (value: string) => {
   const digits = value.replace(/\D/g, "").slice(0, 20);
@@ -1024,6 +1019,40 @@ export default function VisualizarOportunidade() {
           }
         }
 
+        if (
+          updated.criado_por_nome === undefined &&
+          opportunity.criado_por !== null &&
+          opportunity.criado_por !== undefined
+        ) {
+          if (typeof opportunity.criado_por === "string") {
+            const trimmed = opportunity.criado_por.trim();
+            if (trimmed.length > 0) {
+              const parsed = Number.parseInt(trimmed, 10);
+              if (Number.isNaN(parsed)) {
+                updated.criado_por_nome = trimmed;
+              } else {
+                const res = await fetch(`${apiUrl}/api/usuarios/${parsed}`);
+                if (res.ok) {
+                  const user = await res.json();
+                  updated.criado_por_nome = user.nome_completo ?? user.nome ?? String(parsed);
+                }
+              }
+            }
+          } else if (
+            typeof opportunity.criado_por === "number" &&
+            Number.isFinite(opportunity.criado_por)
+          ) {
+            const res = await fetch(
+              `${apiUrl}/api/usuarios/${opportunity.criado_por}`
+            );
+            if (res.ok) {
+              const user = await res.json();
+              updated.criado_por_nome =
+                user.nome_completo ?? user.nome ?? String(opportunity.criado_por);
+            }
+          }
+        }
+
         if (opportunity.tipo_processo_id) {
           const tipos = (await fetchList(
             `${apiUrl}/api/tipo-processos`
@@ -1234,25 +1263,6 @@ export default function VisualizarOportunidade() {
       // outras chaves curtas que fazem sentido copiar podem ser adicionadas aqui
     ].includes(key);
 
-  // ordem preferencial (mantive para apresentação)
-  const orderedEntries = useMemo(() => {
-    if (!opportunity) return [];
-    const entries = Object.entries(opportunity);
-    const ordered: Array<[string, unknown]> = [];
-    const used = new Set<string>();
-    for (const k of PREFERRED_ORDER) {
-      const match = entries.find(([key]) => key === k);
-      if (match) {
-        ordered.push(match);
-        used.add(match[0]);
-      }
-    }
-    for (const [k, v] of entries) {
-      if (!used.has(k)) ordered.push([k, v]);
-    }
-    return ordered;
-  }, [opportunity]);
-
   const sortedInstallments = useMemo(() => {
     if (installments.length === 0) return [] as InstallmentRecord[];
     return [...installments].sort((a, b) => a.numero_parcela - b.numero_parcela);
@@ -1326,6 +1336,7 @@ export default function VisualizarOportunidade() {
         "numero_processo_cnj",
         "numero_protocolo",
         "tipo_processo_nome",
+        "area",
         "vara_ou_orgao",
         "comarca",
       ],
@@ -1334,11 +1345,6 @@ export default function VisualizarOportunidade() {
       key: "detalhes",
       label: "DETALHES",
       fields: ["detalhes"],
-    },
-    {
-      key: "metadados",
-      label: "SISTEMA",
-      fields: ["data_criacao", "ultima_atualizacao", "criado_por", "id", "title"],
     },
   ];
 
@@ -2248,11 +2254,40 @@ export default function VisualizarOportunidade() {
     return <span>{String(value)}</span>;
   };
 
+  const hasProcessFieldValue = (value: unknown) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    return true;
+  };
+
+  const hasAttachmentValue = (value: unknown) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "number") {
+      return !Number.isNaN(value) && value !== 0;
+    }
+    if (typeof value === "string") {
+      return value.trim().length > 0;
+    }
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    if (typeof value === "object") {
+      return Object.keys(value as Record<string, unknown>).length > 0;
+    }
+    return true;
+  };
+
   const renderDataSection = (sectionKey: string) => {
     const section = sectionsDef.find((item) => item.key === sectionKey);
     if (!section) return null;
 
-    const fields = section.fields.filter((field) => entriesMap.has(field));
+    const fields = section.fields.filter((field) => {
+      if (!entriesMap.has(field)) return false;
+      if (section.key === "processo") {
+        return hasProcessFieldValue(entriesMap.get(field));
+      }
+      return true;
+    });
     if (fields.length === 0) return null;
 
     return (
@@ -2353,6 +2388,50 @@ export default function VisualizarOportunidade() {
       : getStatusLabel(opportunity.status_id);
 
   const lastUpdateText = formatDate(opportunity.ultima_atualizacao);
+  const createdAtText = formatDate(opportunity.data_criacao);
+  const createdByRaw =
+    typeof opportunity.criado_por_nome === "string" && opportunity.criado_por_nome.trim().length > 0
+      ? opportunity.criado_por_nome
+      : opportunity.criado_por;
+  const createdByName = (() => {
+    if (typeof createdByRaw === "string") {
+      const trimmed = createdByRaw.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+    if (typeof createdByRaw === "number") {
+      return Number.isFinite(createdByRaw) ? String(createdByRaw) : null;
+    }
+    return null;
+  })();
+  const responsibleName = (() => {
+    if (typeof opportunity.responsible === "string") {
+      const trimmed = opportunity.responsible.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+    return null;
+  })();
+  const attachedDocumentsValue = opportunity.documentos_anexados;
+  const hasAttachedDocuments = hasAttachmentValue(attachedDocumentsValue);
+  const createdInfo = (() => {
+    const hasCreatedAt = createdAtText && createdAtText !== "—";
+    if (!hasCreatedAt && !createdByName) return null;
+    let text = "Cadastrada";
+    if (hasCreatedAt) {
+      text += ` em ${createdAtText}`;
+    }
+    if (createdByName) {
+      text += ` por ${createdByName}`;
+    }
+    return text;
+  })();
+  const lastUpdateInfo =
+    lastUpdateText && lastUpdateText !== "—"
+      ? `Última atualização em ${lastUpdateText}`
+      : null;
+  const footerInfoLines = [createdInfo, lastUpdateInfo].filter(
+    (line): line is string => Boolean(line),
+  );
+  const hasFooterMetadata = footerInfoLines.length > 0 || Boolean(responsibleName);
   const proposalNumber = opportunity.sequencial_empresa ?? opportunity.id;
   const headerYearSource = opportunity.data_criacao ?? opportunity.ultima_atualizacao ?? null;
   const headerYear = headerYearSource
@@ -2498,35 +2577,47 @@ export default function VisualizarOportunidade() {
                     ENVOLVIDOS COM O PROCESSO
                   </h2>
                   <div className="space-y-4">
-                    {participants.map((p, idx) => (
-                      <div
-                        key={p.id ?? idx}
-                        className="rounded-lg border border-border/60 bg-background p-4 shadow-sm"
-                      >
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                          {Object.entries(p).map(([k, v]) => {
-                            if (!participantLabels[k]) return null;
-                            return (
-                              <div
-                                key={k}
-                                className="rounded-lg border border-border/60 bg-background/60 p-3"
-                              >
-                                <dl>
-                                  <dt className="text-sm font-medium text-muted-foreground">
-                                    {participantLabels[k]}
-                                  </dt>
-                                  <dd className="mt-1">
-                                    {v ?? (
-                                      <span className="text-muted-foreground">—</span>
-                                    )}
-                                  </dd>
-                                </dl>
-                              </div>
-                            );
-                          })}
+                    {participants.map((p, idx) => {
+                      const participantTitleId = `participant-${idx + 1}`;
+                      return (
+                        <div
+                          key={p.id ?? idx}
+                          className="rounded-lg border border-border/60 bg-background p-4 shadow-sm"
+                          aria-labelledby={participantTitleId}
+                        >
+                          <div className="mb-3 flex items-center justify-between">
+                            <h3
+                              id={participantTitleId}
+                              className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+                            >
+                              {`Envolvido ${idx + 1}`}
+                            </h3>
+                          </div>
+                          <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
+                            {Object.entries(p).map(([k, v]) => {
+                              if (!participantLabels[k]) return null;
+                              return (
+                                <div
+                                  key={k}
+                                  className="rounded-lg border border-border/60 bg-background/60 p-3"
+                                >
+                                  <dl>
+                                    <dt className="text-sm font-medium text-muted-foreground">
+                                      {participantLabels[k]}
+                                    </dt>
+                                    <dd className="mt-1">
+                                      {v ?? (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </dd>
+                                  </dl>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               )}
@@ -2537,7 +2628,7 @@ export default function VisualizarOportunidade() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 id="heading-documents" className={sectionTitleClass}>
-                    Documentos gerados
+                    DOCUMENTOS DO PROCESSO
                   </h2>
                   <Button
                     variant="outline"
@@ -2548,6 +2639,18 @@ export default function VisualizarOportunidade() {
                   </Button>
                 </div>
                 <div className="space-y-4">
+                  {hasAttachedDocuments && (
+                    <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                      <dl>
+                        <dt className="text-sm font-medium text-muted-foreground">
+                          Documentos anexados
+                        </dt>
+                        <dd className="mt-1 text-sm">
+                          {renderFormatted("documentos_anexados", attachedDocumentsValue)}
+                        </dd>
+                      </dl>
+                    </div>
+                  )}
                   {documentsLoading && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -2649,7 +2752,6 @@ export default function VisualizarOportunidade() {
               </section>
 
               {renderDataSection("detalhes")}
-              {renderDataSection("metadados")}
 
               <section
                 aria-labelledby="heading-billing"
@@ -2926,47 +3028,20 @@ export default function VisualizarOportunidade() {
                 </div>
               </section>
 
-              {/* Metadados extras: campos que não estão nas seções acima */}
-              <section aria-labelledby="heading-extras" className={sectionContainerClass}>
-                <h2 id="heading-extras" className={sectionTitleClass}>
-                  Metadados
-                </h2>
-
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {orderedEntries
-                    .filter(([k]) => {
-                      // já apresentados nas seções? se não, mostrará aqui (e exclui id/title já mostrados se preferir)
-                      const inAnySection = sectionsDef.some((s) => s.fields.includes(k));
-                      return (
-                        !inAnySection &&
-                        k !== "id" &&
-                        k !== "title" &&
-                        !k.endsWith("_id")
-                      );
-                    })
-                    .map(([k, v]) => (
-                      <div
-                        key={k}
-                        className="rounded-lg border border-border/60 bg-background/60 p-3"
-                      >
-                        <dl>
-                          <dt className="text-sm font-medium text-muted-foreground">{formatLabel(k)}</dt>
-                          <dd className="mt-1">{renderFormatted(k, v)}</dd>
-                        </dl>
-                      </div>
-                    ))}
-                </div>
-              </section>
             </div>
           </ScrollArea>
         </CardContent>
       </Card>
 
-      <div className="mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-sm text-muted-foreground">
-          {lastUpdateText && lastUpdateText !== "—"
-            ? `Última atualização em ${lastUpdateText}`
-            : "Revise ou exporte a proposta conforme necessário."}
+      <div className="mt-6 flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1 text-sm text-muted-foreground">
+          {footerInfoLines.map((line, index) => (
+            <p key={`${line}-${index}`}>{line}</p>
+          ))}
+          {responsibleName && <p>Responsável: {responsibleName}</p>}
+          {!hasFooterMetadata && (
+            <p>Revise ou exporte a proposta conforme necessário.</p>
+          )}
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Button
