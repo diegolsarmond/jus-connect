@@ -37,10 +37,25 @@ const POSTGRES_UNDEFINED_COLUMN = '42703';
 const POSTGRES_INSUFFICIENT_PRIVILEGE = '42501';
 
 const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
+const FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type FinancialFlowEmpresaColumn = 'idempresa' | 'empresa_id' | 'empresa';
+
+const FINANCIAL_FLOW_EMPRESA_CANDIDATES: FinancialFlowEmpresaColumn[] = [
+  'idempresa',
+  'empresa_id',
+  'empresa',
+];
 
 let opportunityTablesAvailability: boolean | null = null;
 let opportunityTablesAvailabilityCheckedAt: number | null = null;
 let opportunityTablesCheckPromise: Promise<boolean> | null = null;
+
+let financialFlowEmpresaColumn: FinancialFlowEmpresaColumn | null = null;
+let financialFlowEmpresaColumnCheckedAt: number | null = null;
+let financialFlowEmpresaColumnPromise:
+  | Promise<FinancialFlowEmpresaColumn | null>
+  | null = null;
 
 const updateOpportunityTablesAvailability = (value: boolean) => {
   opportunityTablesAvailability = value;
@@ -51,6 +66,17 @@ const resetOpportunityTablesAvailabilityCache = () => {
   opportunityTablesAvailability = null;
   opportunityTablesAvailabilityCheckedAt = null;
   opportunityTablesCheckPromise = null;
+};
+
+const updateFinancialFlowEmpresaColumn = (value: FinancialFlowEmpresaColumn | null) => {
+  financialFlowEmpresaColumn = value;
+  financialFlowEmpresaColumnCheckedAt = Date.now();
+};
+
+const resetFinancialFlowEmpresaColumnCache = () => {
+  financialFlowEmpresaColumn = null;
+  financialFlowEmpresaColumnCheckedAt = null;
+  financialFlowEmpresaColumnPromise = null;
 };
 
 const determineOpportunityTablesAvailability = async (): Promise<boolean> => {
@@ -143,9 +169,57 @@ const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
 
 export const __internal = {
   resetOpportunityTablesAvailabilityCache,
+  resetFinancialFlowEmpresaColumnCache,
 };
 
 const asaasChargeService = new AsaasChargeService();
+
+const determineFinancialFlowEmpresaColumn = async (): Promise<FinancialFlowEmpresaColumn | null> => {
+  if (
+    financialFlowEmpresaColumn !== null &&
+    financialFlowEmpresaColumnCheckedAt !== null &&
+    Date.now() - financialFlowEmpresaColumnCheckedAt < FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS
+  ) {
+    return financialFlowEmpresaColumn;
+  }
+
+  if (financialFlowEmpresaColumnPromise) {
+    return financialFlowEmpresaColumnPromise;
+  }
+
+  financialFlowEmpresaColumnPromise = pool
+    .query<{ column_name: string }>(
+      `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'financial_flows'
+      `,
+    )
+    .then((result) => {
+      const available = new Set(
+        result.rows
+          .map((row) => row?.column_name)
+          .filter((name): name is string => typeof name === 'string'),
+      );
+
+      const match = FINANCIAL_FLOW_EMPRESA_CANDIDATES.find((candidate) =>
+        available.has(candidate),
+      );
+
+      updateFinancialFlowEmpresaColumn(match ?? null);
+      return match ?? null;
+    })
+    .catch(() => {
+      updateFinancialFlowEmpresaColumn(null);
+      return null;
+    })
+    .finally(() => {
+      financialFlowEmpresaColumnPromise = null;
+    });
+
+  return financialFlowEmpresaColumnPromise;
+};
 
 export const listFlows = async (req: Request, res: Response) => {
   const { page = '1', limit = '10', clienteId } = req.query;
@@ -195,6 +269,17 @@ export const listFlows = async (req: Request, res: Response) => {
       return;
     }
 
+    const empresaColumn = await determineFinancialFlowEmpresaColumn();
+
+    if (!empresaColumn) {
+      res.status(500).json({
+        error:
+          'Não foi possível determinar a empresa associada aos lançamentos financeiros. Entre em contato com o suporte.',
+      });
+      return;
+    }
+
+
     const filters: (string | number)[] = [empresaId];
     const filterConditions: string[] = ['combined_flows.empresa_id = $1'];
 
@@ -217,7 +302,8 @@ export const listFlows = async (req: Request, res: Response) => {
           ff.conta_id::TEXT AS conta_id,
           ff.categoria_id::TEXT AS categoria_id,
           NULL::TEXT AS cliente_id,
-          ff.idempresa AS empresa_id
+          ff.${empresaColumn} AS empresa_id
+
         FROM financial_flows ff
       `;
 

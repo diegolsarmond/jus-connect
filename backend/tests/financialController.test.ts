@@ -11,11 +11,35 @@ type QueryResponse = { rows: any[]; rowCount: number };
 let listFlows: typeof import('../src/controllers/financialController')['listFlows'];
 let __internal: typeof import('../src/controllers/financialController')['__internal'];
 
+const financialFlowColumnsResponse: QueryResponse = {
+  rows: [
+    { column_name: 'id' },
+    { column_name: 'tipo' },
+    { column_name: 'descricao' },
+    { column_name: 'valor' },
+    { column_name: 'idempresa' },
+  ],
+  rowCount: 5,
+};
+
+
 const DEFAULT_EMPRESA_ID = 123;
 const empresaLookupResponse: QueryResponse = {
   rows: [{ empresa: DEFAULT_EMPRESA_ID }],
   rowCount: 1,
 };
+
+const financialFlowEmpresaColumnOnlyEmpresaResponse: QueryResponse = {
+  rows: [
+    { column_name: 'id' },
+    { column_name: 'tipo' },
+    { column_name: 'descricao' },
+    { column_name: 'valor' },
+    { column_name: 'empresa' },
+  ],
+  rowCount: 5,
+};
+
 
 test.before(async () => {
   ({ listFlows, __internal } = await import('../src/controllers/financialController'));
@@ -23,6 +47,7 @@ test.before(async () => {
 
 test.afterEach(() => {
   __internal.resetOpportunityTablesAvailabilityCache();
+  __internal.resetFinancialFlowEmpresaColumnCache();
 });
 
 const createMockResponse = () => {
@@ -105,6 +130,8 @@ test('listFlows combines financial and opportunity flows', async () => {
 
   const { calls, restore } = setupQueryMock([
     empresaLookupResponse,
+    financialFlowColumnsResponse,
+
     { rows: [tablesRow], rowCount: 1 },
     { rows: [financialRow, oportunidadeRow], rowCount: 2 },
     { rows: [{ total: 2 }], rowCount: 1 },
@@ -157,31 +184,98 @@ test('listFlows combines financial and opportunity flows', async () => {
     limit: 1,
   });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [10]);
+  assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
+  assert.equal(calls[1]?.values, undefined);
   assert.match(
-    calls[1]?.text ?? '',
+    calls[2]?.text ?? '',
     /to_regclass\('public\.oportunidade_parcelas'\)/,
   );
   assert.match(
-    calls[1]?.text ?? '',
+    calls[2]?.text ?? '',
     /has_table_privilege\(parcelas, 'SELECT'\)/,
   );
 
-  assert.equal(calls[1]?.values, undefined);
-  assert.match(calls[2]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
-  assert.match(calls[2]?.text ?? '', /ff\.id::TEXT AS id/);
-  assert.match(calls[2]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
-  assert.match(calls[2]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
-  assert.match(calls[2]?.text ?? '', /ff\.idempresa AS empresa_id/);
-  assert.match(calls[2]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
-  assert.match(calls[2]?.text ?? '', /NULL::TEXT AS conta_id/);
-  assert.match(calls[2]?.text ?? '', /NULL::TEXT AS categoria_id/);
-  assert.match(calls[2]?.text ?? '', /p\.idempresa AS empresa_id/);
-  assert.match(calls[2]?.text ?? '', /WHERE combined_flows\.empresa_id = \$1/);
-  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 1, 1]);
-  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID]);
+  assert.equal(calls[2]?.values, undefined);
+  assert.match(calls[3]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
+  assert.match(calls[3]?.text ?? '', /ff\.id::TEXT AS id/);
+  assert.match(calls[3]?.text ?? '', /ff\.conta_id::TEXT AS conta_id/);
+  assert.match(calls[3]?.text ?? '', /ff\.categoria_id::TEXT AS categoria_id/);
+  assert.match(calls[3]?.text ?? '', /ff\.idempresa AS empresa_id/);
+  assert.match(calls[3]?.text ?? '', /\(-p\.id\)::TEXT AS id/);
+  assert.match(calls[3]?.text ?? '', /NULL::TEXT AS conta_id/);
+  assert.match(calls[3]?.text ?? '', /NULL::TEXT AS categoria_id/);
+  assert.match(calls[3]?.text ?? '', /p\.idempresa AS empresa_id/);
+  assert.match(calls[3]?.text ?? '', /WHERE combined_flows\.empresa_id = \$1/);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 1, 1]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
+});
+
+test('listFlows tolerates legacy empresa column names', async () => {
+  const tablesRow = {
+    parcelas: false,
+    oportunidades: false,
+    clientes: false,
+    faturamentos: false,
+  };
+
+  const financialRow = {
+    id: 1,
+    tipo: 'receita',
+    conta_id: null,
+    categoria_id: null,
+    descricao: 'Mensalidade',
+    valor: 100,
+    vencimento: '2024-01-01',
+    pagamento: null,
+    status: 'pendente',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
+    financialFlowEmpresaColumnOnlyEmpresaResponse,
+    { rows: [tablesRow], rowCount: 1 },
+    { rows: [financialRow], rowCount: 1 },
+    { rows: [{ total: 1 }], rowCount: 1 },
+  ]);
+
+  const req = { query: {}, auth: { userId: 3 } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await listFlows(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    items: [
+      {
+        id: 1,
+        tipo: 'receita',
+        conta_id: null,
+        categoria_id: null,
+        descricao: 'Mensalidade',
+        valor: 100,
+        vencimento: '2024-01-01',
+        pagamento: null,
+        status: 'pendente',
+      },
+    ],
+    total: 1,
+    page: 1,
+    limit: 10,
+  });
+
+  assert.equal(calls.length, 5);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [3]);
+  assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
+  assert.match(calls[3]?.text ?? '', /ff\.empresa AS empresa_id/);
+
 });
 
 test('listFlows preserves textual identifiers returned by the database', async () => {
@@ -208,6 +302,8 @@ test('listFlows preserves textual identifiers returned by the database', async (
 
   const { calls, restore } = setupQueryMock([
     empresaLookupResponse,
+    financialFlowColumnsResponse,
+
     { rows: [tablesRow], rowCount: 1 },
     { rows: [financialRow], rowCount: 1 },
     { rows: [{ total: 1 }], rowCount: 1 },
@@ -242,14 +338,17 @@ test('listFlows preserves textual identifiers returned by the database', async (
     limit: 10,
   });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [5]);
-  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
   assert.deepEqual(calls[1]?.values, undefined);
-  assert.match(calls[2]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
-  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID]);
+  assert.match(calls[2]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[2]?.values, undefined);
+  assert.match(calls[3]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
+
 });
 
 test('listFlows applies cliente filter when provided', async () => {
@@ -263,6 +362,8 @@ test('listFlows applies cliente filter when provided', async () => {
 
   const { calls, restore } = setupQueryMock([
     empresaLookupResponse,
+    financialFlowColumnsResponse,
+
     { rows: [tablesRow], rowCount: 1 },
     { rows: [], rowCount: 0 },
     { rows: [{ total: 0 }], rowCount: 1 },
@@ -291,20 +392,27 @@ test('listFlows applies cliente filter when provided', async () => {
     limit: 10,
   });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
+
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [8]);
   assert.match(
     calls[1]?.text ?? '',
-    /to_regclass\('public\.oportunidade_parcelas'\)/,
+    /information_schema\.columns/,
   );
   assert.equal(calls[1]?.values, undefined);
   assert.match(
     calls[2]?.text ?? '',
+    /to_regclass\('public\.oportunidade_parcelas'\)/,
+  );
+  assert.equal(calls[2]?.values, undefined);
+  assert.match(
+    calls[3]?.text ?? '',
     /WHERE combined_flows\.empresa_id = \$1 AND combined_flows\.cliente_id = \$2/,
   );
-  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, '42', 10, 0]);
-  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, '42']);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, '42', 10, 0]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID, '42']);
+
 });
 
 test('listFlows returns only financial flows when opportunity tables are absent', async () => {
@@ -330,6 +438,8 @@ test('listFlows returns only financial flows when opportunity tables are absent'
 
   const { calls, restore } = setupQueryMock([
     empresaLookupResponse,
+    financialFlowColumnsResponse,
+
     { rows: [tablesRow], rowCount: 1 },
     { rows: [financialRow], rowCount: 1 },
     { rows: [{ total: 1 }], rowCount: 1 },
@@ -364,15 +474,18 @@ test('listFlows returns only financial flows when opportunity tables are absent'
     limit: 10,
   });
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 5);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [4]);
-  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
   assert.deepEqual(calls[1]?.values, undefined);
-  assert.match(calls[2]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.doesNotMatch(calls[2]?.text ?? '', /UNION ALL/);
-  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
-  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID]);
+  assert.match(calls[2]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[2]?.values, undefined);
+  assert.match(calls[3]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.doesNotMatch(calls[3]?.text ?? '', /UNION ALL/);
+  assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
+
 });
 
 test('listFlows retries without opportunity tables when union query fails', async () => {
@@ -403,6 +516,8 @@ test('listFlows retries without opportunity tables when union query fails', asyn
 
   const { calls, restore } = setupQueryMock([
     empresaLookupResponse,
+    financialFlowColumnsResponse,
+
     { rows: [tablesRow], rowCount: 1 },
     missingTableError,
     { rows: [financialRow], rowCount: 1 },
@@ -438,17 +553,20 @@ test('listFlows retries without opportunity tables when union query fails', asyn
     limit: 10,
   });
 
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [6]);
-  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
   assert.deepEqual(calls[1]?.values, undefined);
-  assert.match(calls[2]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
-  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
-  assert.match(calls[3]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.doesNotMatch(calls[3]?.text ?? '', /UNION ALL/);
+  assert.match(calls[2]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[2]?.values, undefined);
+  assert.match(calls[3]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
   assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
-  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
+  assert.match(calls[4]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.doesNotMatch(calls[4]?.text ?? '', /UNION ALL/);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[5]?.values, [DEFAULT_EMPRESA_ID]);
+
 });
 
 test('listFlows retries without opportunity tables when privileges are missing', async () => {
@@ -478,6 +596,8 @@ test('listFlows retries without opportunity tables when privileges are missing',
 
   const { calls, restore } = setupQueryMock([
     empresaLookupResponse,
+    financialFlowColumnsResponse,
+
     { rows: [tablesRow], rowCount: 1 },
     insufficientPrivilegeError,
     { rows: [financialRow], rowCount: 1 },
@@ -513,16 +633,19 @@ test('listFlows retries without opportunity tables when privileges are missing',
     limit: 10,
   });
 
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 6);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.deepEqual(calls[0]?.values, [7]);
-  assert.match(calls[1]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
   assert.deepEqual(calls[1]?.values, undefined);
-  assert.match(calls[2]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
-  assert.deepEqual(calls[2]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
-  assert.match(calls[3]?.text ?? '', /WITH combined_flows AS \(/);
-  assert.doesNotMatch(calls[3]?.text ?? '', /UNION ALL/);
+  assert.match(calls[2]?.text ?? '', /to_regclass\('public\.oportunidade_parcelas'\)/);
+  assert.deepEqual(calls[2]?.values, undefined);
+  assert.match(calls[3]?.text ?? '', /WITH oportunidade_parcelas_enriched AS/);
   assert.deepEqual(calls[3]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
-  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID]);
+  assert.match(calls[4]?.text ?? '', /WITH combined_flows AS \(/);
+  assert.doesNotMatch(calls[4]?.text ?? '', /UNION ALL/);
+  assert.deepEqual(calls[4]?.values, [DEFAULT_EMPRESA_ID, 10, 0]);
+  assert.deepEqual(calls[5]?.values, [DEFAULT_EMPRESA_ID]);
+
 
 });
