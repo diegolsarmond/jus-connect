@@ -293,7 +293,7 @@ const createOrReplaceOpportunityInstallments = async (
     : 1;
 
   if (!totalParcelas || totalParcelas <= 0) {
-    await resetOpportunityInstallments(client, oportunidadeId, []);
+    await resetOpportunityInstallments(client, oportunidadeId, [], empresaId);
     return;
   }
 
@@ -823,6 +823,155 @@ export const updateOportunidadeStatus = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const linkProcessoToOportunidade = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { processoId } = req.body as { processoId?: unknown };
+
+  const oportunidadeId = parsePositiveIntegerParam(id);
+  if (oportunidadeId === null) {
+    res.status(400).json({ error: 'Oportunidade inválida' });
+    return;
+  }
+
+  const processoIdParsed = parsePositiveIntegerParam(processoId);
+
+  if (processoIdParsed === null) {
+    res.status(400).json({ error: 'processoId inválido' });
+    return;
+  }
+
+  const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+
+  if (!empresaResolution.ok) {
+    return;
+  }
+
+  const { empresaId } = empresaResolution;
+
+  const hasAccess = await ensureOpportunityAccess(oportunidadeId, empresaId);
+
+  if (!hasAccess) {
+    res.status(404).json({ error: 'Oportunidade não encontrada' });
+    return;
+  }
+
+  const processoResult = await pool.query(
+    `SELECT id, numero, municipio, orgao_julgador, status, tipo, oportunidade_id
+       FROM public.processos
+      WHERE id = $1
+        AND idempresa IS NOT DISTINCT FROM $2
+      LIMIT 1`,
+    [processoIdParsed, empresaId],
+  );
+
+  if (processoResult.rowCount === 0) {
+    res.status(404).json({ error: 'Processo não encontrado' });
+    return;
+  }
+
+  const processoRow = processoResult.rows[0] as {
+    id: number;
+    numero: unknown;
+    municipio: unknown;
+    orgao_julgador: unknown;
+    status: unknown;
+    tipo: unknown;
+    oportunidade_id: number | null;
+  };
+
+  if (
+    processoRow.oportunidade_id !== null &&
+    processoRow.oportunidade_id !== oportunidadeId
+  ) {
+    res.status(400).json({ error: 'Processo já está vinculado a outra oportunidade' });
+    return;
+  }
+
+  const numeroValue = normalizeText(
+    typeof processoRow.numero === 'number'
+      ? processoRow.numero.toString()
+      : processoRow.numero,
+  );
+  const municipioValue = normalizeText(processoRow.municipio);
+  const orgaoValue = normalizeText(processoRow.orgao_julgador);
+  const statusValue = normalizeText(processoRow.status);
+  const tipoValue = normalizeText(processoRow.tipo);
+
+  let client: PoolClient | null = null;
+
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    await client.query(
+      'UPDATE public.processos SET oportunidade_id = $1, atualizado_em = NOW() WHERE id = $2',
+      [oportunidadeId, processoIdParsed],
+    );
+
+    const oportunidadeResult = await client.query(
+      `UPDATE public.oportunidades
+          SET numero_processo_cnj = $1,
+              comarca = $2,
+              vara_ou_orgao = $3,
+              ultima_atualizacao = NOW()
+        WHERE id = $4 AND idempresa = $5
+        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
+                  valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
+                  contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa,
+                  data_criacao, ultima_atualizacao, idempresa`,
+      [numeroValue ?? null, municipioValue ?? null, orgaoValue ?? null, oportunidadeId, empresaId],
+    );
+
+    if (oportunidadeResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: 'Oportunidade não encontrada' });
+      return;
+    }
+
+    await client.query('COMMIT');
+
+    const oportunidadeRow = oportunidadeResult.rows[0] as Record<string, unknown>;
+    const responsePayload: Record<string, unknown> = {
+      ...oportunidadeRow,
+      processo_id: processoIdParsed,
+    };
+
+    if (statusValue) {
+      responsePayload.status = statusValue;
+    }
+
+    if (tipoValue) {
+      responsePayload.tipo_processo_nome = tipoValue;
+    }
+
+    if (!responsePayload.comarca && municipioValue) {
+      responsePayload.comarca = municipioValue;
+    }
+
+    if (!responsePayload.vara_ou_orgao && orgaoValue) {
+      responsePayload.vara_ou_orgao = orgaoValue;
+    }
+
+    res.json(responsePayload);
+  } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error(
+          'Erro ao reverter transação de vinculação de processo:',
+          rollbackError,
+        );
+      }
+    }
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client?.release();
   }
 };
 

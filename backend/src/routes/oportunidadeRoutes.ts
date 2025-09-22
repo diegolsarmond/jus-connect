@@ -7,6 +7,7 @@ import {
   createOportunidade,
   updateOportunidade,
   updateOportunidadeStatus,
+  linkProcessoToOportunidade,
   updateOportunidadeEtapa,
   deleteOportunidade,
   listOportunidadeFaturamentos,
@@ -557,6 +558,42 @@ router.put('/oportunidades/:id', updateOportunidade);
  *         description: Oportunidade não encontrada
  */
 router.patch('/oportunidades/:id/status', updateOportunidadeStatus);
+
+/**
+ * @swagger
+ * /api/oportunidades/{id}/vincular-processo:
+ *   post:
+ *     summary: Vincula um processo existente à oportunidade
+ *     tags: [Oportunidades]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               processoId:
+ *                 type: integer
+ *                 description: Identificador do processo a ser vinculado
+ *     responses:
+ *       200:
+ *         description: Dados atualizados da oportunidade
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Oportunidade'
+ *       400:
+ *         description: Requisição inválida
+ *       404:
+ *         description: Recurso não encontrado
+ */
+router.post('/oportunidades/:id/vincular-processo', linkProcessoToOportunidade);
 
 /**
  * @swagger
