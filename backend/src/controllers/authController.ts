@@ -5,6 +5,138 @@ import { signToken } from '../utils/tokenUtils';
 import { authConfig } from '../constants/auth';
 import { fetchPerfilModules } from '../services/moduleService';
 
+const TRIAL_DURATION_DAYS = 14;
+
+const parseOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    return Number.isNaN(normalized) ? null : normalized;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseBooleanFlag = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (['1', 'true', 't', 'yes', 'y', 'sim', 'on', 'ativo', 'ativa'].includes(normalized)) {
+      return true;
+    }
+
+    if (['0', 'false', 'f', 'no', 'n', 'nao', 'não', 'off', 'inativo', 'inativa'].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const parseDateValue = (value: unknown): Date | null => {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
+
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed;
+  }
+
+  return null;
+};
+
+const calculateTrialEnd = (startDate: Date | null): Date | null => {
+  if (!startDate) {
+    return null;
+  }
+
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + TRIAL_DURATION_DAYS);
+  return endDate;
+};
+
+const resolveSubscriptionPayload = (row: {
+  empresa_plano?: unknown;
+  empresa_ativo?: unknown;
+  empresa_datacadastro?: unknown;
+}) => {
+  const planId = parseOptionalInteger(row.empresa_plano);
+  const isActive = parseBooleanFlag(row.empresa_ativo);
+  const startedAtDate = parseDateValue(row.empresa_datacadastro);
+
+  if (planId === null) {
+    return {
+      planId: null,
+      status: 'inactive' as const,
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: null,
+    };
+  }
+
+  if (isActive === false) {
+    return {
+      planId,
+      status: 'inactive' as const,
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: null,
+    };
+  }
+
+  const trialEndsAtDate = calculateTrialEnd(startedAtDate);
+  const now = new Date();
+  const isTrialing =
+    startedAtDate !== null &&
+    trialEndsAtDate !== null &&
+    now.getTime() < trialEndsAtDate.getTime();
+
+  return {
+    planId,
+    status: isTrialing ? ('trialing' as const) : ('active' as const),
+    startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+    trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+  };
+};
+
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
 export const login = async (req: Request, res: Response) => {
@@ -28,7 +160,10 @@ export const login = async (req: Request, res: Response) => {
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
               u.setor AS setor_id,
-              esc.nome AS setor_nome
+              esc.nome AS setor_nome,
+              emp.plano AS empresa_plano,
+              emp.ativo AS empresa_ativo,
+              emp.datacadastro AS empresa_datacadastro
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -53,6 +188,9 @@ export const login = async (req: Request, res: Response) => {
       empresa_nome: string | null;
       setor_id: number | null;
       setor_nome: string | null;
+      empresa_plano?: unknown;
+      empresa_ativo?: unknown;
+      empresa_datacadastro?: unknown;
     };
 
     if (user.status === false) {
@@ -79,6 +217,11 @@ export const login = async (req: Request, res: Response) => {
 
     const modulos = await fetchPerfilModules(user.perfil);
 
+    const subscription =
+      user.empresa_id != null
+        ? resolveSubscriptionPayload(user)
+        : null;
+
     res.json({
       token,
       expiresIn: authConfig.expirationSeconds,
@@ -92,6 +235,7 @@ export const login = async (req: Request, res: Response) => {
         empresa_nome: user.empresa_nome,
         setor_id: user.setor_id,
         setor_nome: user.setor_nome,
+        subscription,
       },
     });
   } catch (error) {
@@ -144,7 +288,10 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
               u.setor AS setor_id,
-              esc.nome AS setor_nome
+              esc.nome AS setor_nome,
+              emp.plano AS empresa_plano,
+              emp.ativo AS empresa_ativo,
+              emp.datacadastro AS empresa_datacadastro
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -162,6 +309,15 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 
     const modulos = await fetchPerfilModules(user.perfil);
 
+    const subscription =
+      user.empresa_id != null
+        ? resolveSubscriptionPayload(user as {
+            empresa_plano?: unknown;
+            empresa_ativo?: unknown;
+            empresa_datacadastro?: unknown;
+          })
+        : null;
+
     res.json({
       id: user.id,
       nome_completo: user.nome_completo,
@@ -173,6 +329,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       setor_id: user.setor_id,
       setor_nome: user.setor_nome,
       modulos,
+      subscription,
     });
   } catch (error) {
     console.error('Erro ao carregar usuário autenticado', error);

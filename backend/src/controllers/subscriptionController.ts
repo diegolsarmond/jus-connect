@@ -55,6 +55,18 @@ const parseStartDate = (value: unknown): Date | null => {
   return null;
 };
 
+const TRIAL_DURATION_DAYS = 14;
+
+const calculateTrialEndDate = (startDate: Date | null): Date | null => {
+  if (!startDate) {
+    return null;
+  }
+
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + TRIAL_DURATION_DAYS);
+  return endDate;
+};
+
 export const createSubscription = async (req: Request, res: Response) => {
   const companyId = parseNumericId(req.body?.companyId);
   const planId = parseNumericId(req.body?.planId);
@@ -67,6 +79,7 @@ export const createSubscription = async (req: Request, res: Response) => {
   }
 
   const isActive = status === 'active' || status === 'trialing';
+  const trialEndsAt = status === 'trialing' ? calculateTrialEndDate(startDate) : null;
 
   try {
     const result = await pool.query(
@@ -93,6 +106,7 @@ export const createSubscription = async (req: Request, res: Response) => {
       status,
       isActive: updated.ativo,
       startDate: updated.datacadastro,
+      trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
     });
   } catch (error) {
     console.error('Erro ao criar assinatura', error);

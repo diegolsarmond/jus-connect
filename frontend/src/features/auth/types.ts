@@ -1,3 +1,12 @@
+export type SubscriptionStatus = "active" | "trialing" | "inactive";
+
+export interface AuthSubscription {
+  planId: number | null;
+  status: SubscriptionStatus;
+  startedAt: string | null;
+  trialEndsAt: string | null;
+}
+
 export interface AuthUser {
   id: number;
   nome_completo: string;
@@ -9,6 +18,7 @@ export interface AuthUser {
   empresa_nome: string | null;
   setor_id: number | null;
   setor_nome: string | null;
+  subscription: AuthSubscription | null;
 }
 
 export interface LoginCredentials {

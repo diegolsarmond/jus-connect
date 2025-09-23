@@ -1,5 +1,11 @@
 import { getApiUrl } from "@/lib/api";
-import type { AuthUser, LoginCredentials, LoginResponse } from "./types";
+import type {
+  AuthSubscription,
+  AuthUser,
+  LoginCredentials,
+  LoginResponse,
+  SubscriptionStatus,
+} from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -17,6 +23,119 @@ const parseModules = (value: unknown): string[] => {
   }
 
   return value.filter((item): item is string => typeof item === "string");
+};
+
+const parseInteger = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseBooleanFlag = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (["1", "true", "t", "yes", "y", "sim", "on", "ativo", "ativa"].includes(normalized)) {
+      return true;
+    }
+
+    if (["0", "false", "f", "no", "n", "nao", "não", "off", "inativo", "inativa"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const parseIsoDate = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed.toISOString();
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
+
+    return value.toISOString();
+  }
+
+  return null;
+};
+
+const parseSubscriptionStatus = (value: unknown, fallback: SubscriptionStatus): SubscriptionStatus => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "active" || normalized === "trialing" || normalized === "inactive") {
+    return normalized;
+  }
+
+  return fallback;
+};
+
+const parseSubscription = (value: unknown): AuthSubscription | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const planId = parseInteger(record.planId ?? record.plan_id ?? record.plano ?? record.plan);
+  const isActive = parseBooleanFlag(record.isActive ?? record.active ?? record.ativo);
+  const statusFallback: SubscriptionStatus = planId === null || isActive === false ? "inactive" : "active";
+  const status = parseSubscriptionStatus(record.status, statusFallback);
+  const startedAt =
+    parseIsoDate(record.startedAt ?? record.startDate ?? record.start_at ?? record.datacadastro) ?? null;
+  const trialEndsAt =
+    parseIsoDate(record.trialEndsAt ?? record.trial_end ?? record.trialEnd ?? record.endsAt ?? record.endDate) ?? null;
+
+  return {
+    planId,
+    status,
+    startedAt,
+    trialEndsAt,
+  };
 };
 
 const parseErrorMessage = async (response: Response) => {
@@ -67,6 +186,7 @@ export const loginRequest = async (
     user: {
       ...data.user,
       modulos: parseModules((data.user as AuthUser & { modulos?: unknown }).modulos),
+      subscription: parseSubscription((data.user as { subscription?: unknown }).subscription),
     },
   };
 };
@@ -96,6 +216,7 @@ export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
   return {
     ...data,
     modulos: parseModules(data.modulos),
+    subscription: parseSubscription((data as { subscription?: unknown }).subscription),
   } satisfies AuthUser;
 };
 
