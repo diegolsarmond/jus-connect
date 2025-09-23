@@ -31,7 +31,7 @@ import { ChatInput } from "./ChatInput";
 import { MessageViewport } from "./MessageViewport";
 import styles from "./ChatWindow.module.css";
 import { DeviceLinkContent } from "./DeviceLinkModal";
-import { fetchChatResponsibles, fetchChatTags, type ChatResponsibleOption } from "../services/chatApi";
+import { fetchChatTags, type ChatResponsibleOption } from "../services/chatApi";
 import {
   createClienteAttribute,
   deleteClienteAttribute,
@@ -184,6 +184,8 @@ interface ChatWindowProps {
   onTypingActivity?: (isTyping: boolean) => void;
   onCreateTask?: () => void;
   onCreateAppointment?: () => void;
+  responsibleOptions?: ChatResponsibleOption[];
+  isLoadingResponsibles?: boolean;
 }
 
 export const ChatWindow = ({
@@ -201,14 +203,14 @@ export const ChatWindow = ({
   onTypingActivity,
   onCreateTask,
   onCreateAppointment,
+  responsibleOptions: providedResponsibleOptions = [],
+  isLoadingResponsibles = false,
 }: ChatWindowProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [stickToBottom, setStickToBottom] = useState(true);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(false);
-  const [responsibleOptions, setResponsibleOptions] = useState<ChatResponsibleOption[]>([]);
-  const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const [clientInput, setClientInput] = useState("");
   const [selectedAttributeTypeId, setSelectedAttributeTypeId] = useState("");
   const [clientIdInput, setClientIdInput] = useState("");
@@ -378,30 +380,6 @@ export const ChatWindow = ({
 
   useEffect(() => {
     let canceled = false;
-    const loadResponsibles = async () => {
-      try {
-        setIsLoadingResponsibles(true);
-        const options = await fetchChatResponsibles();
-        if (!canceled) {
-          setResponsibleOptions(options);
-        }
-      } catch (error) {
-        console.error("Falha ao carregar responsáveis", error);
-      } finally {
-        if (!canceled) {
-          setIsLoadingResponsibles(false);
-        }
-      }
-    };
-
-    loadResponsibles();
-    return () => {
-      canceled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let canceled = false;
     const loadTags = async () => {
       try {
         setIsLoadingTags(true);
@@ -462,25 +440,31 @@ export const ChatWindow = ({
     };
   }, [isClientLinked]);
 
-  useEffect(() => {
-    if (!conversation?.responsible) {
-      return;
+  const responsibleOptions = useMemo(() => {
+    const map = new Map<string, ChatResponsibleOption>();
+    for (const option of providedResponsibleOptions) {
+      map.set(option.id, option);
     }
-    setResponsibleOptions((prev) => {
-      if (prev.some((option) => option.id === conversation.responsible!.id)) {
-        return prev;
+
+    if (conversation?.responsible) {
+      const { id, name, role } = conversation.responsible;
+      if (!map.has(id)) {
+        map.set(id, { id, name, role });
+      } else {
+        const existing = map.get(id);
+        if (existing && role && !existing.role) {
+          map.set(id, { ...existing, role });
+        }
       }
-      const next = [
-        ...prev,
-        {
-          id: conversation.responsible.id,
-          name: conversation.responsible.name,
-          role: conversation.responsible.role,
-        },
-      ];
-      return next.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-    });
-  }, [conversation?.responsible?.id, conversation?.responsible?.name, conversation?.responsible?.role]);
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [
+    providedResponsibleOptions,
+    conversation?.responsible?.id,
+    conversation?.responsible?.name,
+    conversation?.responsible?.role,
+  ]);
 
   useEffect(() => {
     if (!conversation?.tags) {
