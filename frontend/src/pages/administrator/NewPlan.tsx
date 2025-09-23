@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Loader2, ChevronsUpDown, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -28,6 +36,7 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { getApiBaseUrl } from "@/lib/api";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface ModuleInfo {
   id: string;
@@ -443,7 +452,13 @@ export default function NewPlan() {
     }));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (submitting) {
+      return;
+    }
+
     const name = formState.name.trim();
     const price = formState.price.trim();
     if (!name || !price) {
@@ -565,209 +580,260 @@ export default function NewPlan() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-foreground">Planos</h1>
-        <p className="text-muted-foreground">Gerencie os planos disponíveis</p>
+        <p className="text-muted-foreground">Cadastre novos planos e acompanhe os existentes</p>
       </div>
 
-      <div className="space-y-4 rounded-lg border p-4">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="plan-name">Nome do plano</Label>
-            <Input
-              id="plan-name"
-              placeholder="Nome do plano"
-              value={formState.name}
-              onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="plan-price">Valor</Label>
-            <Input
-              id="plan-price"
-              placeholder="Valor"
-              value={formState.price}
-              onChange={(event) => setFormState((prev) => ({ ...prev, price: event.target.value }))}
-            />
-          </div>
-          <div className="space-y-2 md:col-span-2 lg:col-span-3">
-            <Label>Módulos habilitados</Label>
-            <ModuleMultiSelect
-              modules={availableModules}
-              selected={formState.modules}
-              onChange={handleModuleChange}
-              disabled={fetching && availableModules.length === 0}
-            />
-            {availableModules.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum módulo disponível para seleção.</p>
-            ) : (
-              renderModuleBadges(formState.modules)
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="plan-user-limit">Limite de usuários</Label>
-            <Input
-              id="plan-user-limit"
-              placeholder="Ilimitado"
-              inputMode="numeric"
-              value={formState.userLimit}
-              onChange={(event) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  userLimit: sanitizeLimitInput(event.target.value),
-                }))
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="plan-process-limit">Limite de processos</Label>
-            <Input
-              id="plan-process-limit"
-              placeholder="Ilimitado"
-              inputMode="numeric"
-              value={formState.processLimit}
-              onChange={(event) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  processLimit: sanitizeLimitInput(event.target.value),
-                }))
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="plan-proposal-limit">Limite de propostas</Label>
-            <Input
-              id="plan-proposal-limit"
-              placeholder="Ilimitado"
-              inputMode="numeric"
-              value={formState.proposalLimit}
-              onChange={(event) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  proposalLimit: sanitizeLimitInput(event.target.value),
-                }))
-              }
-            />
-          </div>
-        </div>
-
-        <div className="space-y-4 rounded-lg border p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <Label htmlFor="plan-process-sync" className="text-base">
-                Sincronização de processos
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Habilite para ativar a sincronização automática dos processos e defina a cota mensal.
-              </p>
+      <form onSubmit={handleSubmit} className="space-y-0">
+        <Card>
+          <CardHeader>
+            <CardTitle>Cadastrar novo plano</CardTitle>
+            <CardDescription>
+              Defina as informações principais, os módulos habilitados e os limites oferecidos no plano.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="plan-name">Nome do plano</Label>
+                <Input
+                  id="plan-name"
+                  placeholder="Ex.: Plano Essencial"
+                  value={formState.name}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
+                  disabled={submitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-price">Valor</Label>
+                <Input
+                  id="plan-price"
+                  placeholder="Ex.: 199,90"
+                  value={formState.price}
+                  onChange={(event) => setFormState((prev) => ({ ...prev, price: event.target.value }))}
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Utilize valores numéricos com vírgula ou ponto. Este valor será exibido na listagem de planos.
+                </p>
+              </div>
             </div>
-            <Switch
-              id="plan-process-sync"
-              checked={formState.processSyncEnabled}
-              onCheckedChange={(checked) =>
-                setFormState((prev) => ({
-                  ...prev,
-                  processSyncEnabled: checked,
-                  processSyncQuota: checked ? prev.processSyncQuota : "",
-                }))
-              }
-            />
-          </div>
 
-          {formState.processSyncEnabled ? (
-            <div className="space-y-2 sm:w-64">
-              <Label htmlFor="plan-process-sync-quota">Cota de sincronizações</Label>
-              <Input
-                id="plan-process-sync-quota"
-                placeholder="Ex.: 50"
-                inputMode="numeric"
-                value={formState.processSyncQuota}
-                onChange={(event) =>
-                  setFormState((prev) => ({
-                    ...prev,
-                    processSyncQuota: sanitizeLimitInput(event.target.value),
-                  }))
-                }
+            <div className="space-y-2">
+              <Label>Módulos habilitados</Label>
+              <ModuleMultiSelect
+                modules={availableModules}
+                selected={formState.modules}
+                onChange={handleModuleChange}
+                disabled={submitting || (fetching && availableModules.length === 0)}
               />
-              <p className="text-xs text-muted-foreground">
-                Defina a quantidade máxima de sincronizações automáticas permitidas para o plano.
-              </p>
+              {availableModules.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum módulo disponível para seleção.</p>
+              ) : (
+                <div className="rounded-md border border-dashed p-3">
+                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Módulos selecionados</p>
+                  {renderModuleBadges(formState.modules)}
+                </div>
+              )}
             </div>
-          ) : null}
-        </div>
 
-        {submitError && <p className="text-sm text-red-600">{submitError}</p>}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="plan-user-limit">Limite de usuários</Label>
+                <Input
+                  id="plan-user-limit"
+                  placeholder="Ilimitado"
+                  inputMode="numeric"
+                  value={formState.userLimit}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      userLimit: sanitizeLimitInput(event.target.value),
+                    }))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">Deixe em branco para ilimitado ou utilize um número inteiro.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-process-limit">Limite de processos</Label>
+                <Input
+                  id="plan-process-limit"
+                  placeholder="Ilimitado"
+                  inputMode="numeric"
+                  value={formState.processLimit}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      processLimit: sanitizeLimitInput(event.target.value),
+                    }))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">Informe a quantidade máxima de processos sincronizados no plano.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-proposal-limit">Limite de propostas</Label>
+                <Input
+                  id="plan-proposal-limit"
+                  placeholder="Ilimitado"
+                  inputMode="numeric"
+                  value={formState.proposalLimit}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      proposalLimit: sanitizeLimitInput(event.target.value),
+                    }))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">Use valores inteiros. Campos em branco manterão o limite aberto.</p>
+              </div>
+            </div>
 
-        <div className="flex justify-end">
-          <Button type="button" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              <>
-                <Plus className="mr-2 h-4 w-4" />
-                Adicionar plano
-              </>
+            <div className="space-y-4 rounded-lg border p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label htmlFor="plan-process-sync" className="text-base">
+                    Sincronização de processos
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Habilite para ativar a sincronização automática dos processos e defina a cota mensal.
+                  </p>
+                </div>
+                <Switch
+                  id="plan-process-sync"
+                  checked={formState.processSyncEnabled}
+                  onCheckedChange={(checked) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      processSyncEnabled: checked,
+                      processSyncQuota: checked ? prev.processSyncQuota : "",
+                    }))
+                  }
+                  disabled={submitting}
+                />
+              </div>
+
+              {formState.processSyncEnabled ? (
+                <div className="space-y-2 sm:w-64">
+                  <Label htmlFor="plan-process-sync-quota">Cota de sincronizações</Label>
+                  <Input
+                    id="plan-process-sync-quota"
+                    placeholder="Ex.: 50"
+                    inputMode="numeric"
+                    value={formState.processSyncQuota}
+                    onChange={(event) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        processSyncQuota: sanitizeLimitInput(event.target.value),
+                      }))
+                    }
+                    disabled={submitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Defina a quantidade máxima de sincronizações automáticas permitidas para o plano.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            {submitError && (
+              <Alert variant="destructive">
+                <AlertTitle>Não foi possível salvar o plano</AlertTitle>
+                <AlertDescription>{submitError}</AlertDescription>
+              </Alert>
             )}
-          </Button>
-        </div>
-      </div>
+          </CardContent>
+          <CardFooter className="justify-end">
+            <Button type="submit" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar plano
+                </>
+              )}
+            </Button>
+          </CardFooter>
+        </Card>
+      </form>
 
-      {fetching && <p className="text-muted-foreground">Carregando planos…</p>}
-      {fetchError && <p className="text-sm text-red-600">{fetchError}</p>}
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nome</TableHead>
-            <TableHead>Valor</TableHead>
-            <TableHead>Módulos</TableHead>
-            <TableHead>Limites</TableHead>
-            <TableHead>Sincronização de processos</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {plans.map((plan) => (
-            <TableRow key={plan.id}>
-              <TableCell>{plan.name}</TableCell>
-              <TableCell>{plan.price}</TableCell>
-              <TableCell>{renderModuleBadges(plan.modules)}</TableCell>
-              <TableCell>
-                <div className="space-y-1 text-sm">
-                  <p>
-                    <span className="font-medium">Usuários:</span> {formatLimit(plan.userLimit)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Processos:</span> {formatLimit(plan.processLimit)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Propostas:</span> {formatLimit(plan.proposalLimit)}
-                  </p>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="space-y-1 text-sm">
-                  <Badge variant={plan.processSyncEnabled ? "default" : "outline"}>
-                    {plan.processSyncEnabled ? "Habilitada" : "Desabilitada"}
-                  </Badge>
-                  <p>
-                    <span className="font-medium">Cota:</span> {formatLimit(plan.processSyncQuota)}
-                  </p>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-          {plans.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground">
-                Nenhum plano cadastrado
-              </TableCell>
-            </TableRow>
+      <Card>
+        <CardHeader>
+          <CardTitle>Planos cadastrados</CardTitle>
+          <CardDescription>Consulte os planos existentes e seus limites configurados.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {fetchError && (
+            <Alert variant="destructive">
+              <AlertTitle>Erro ao carregar planos</AlertTitle>
+              <AlertDescription>{fetchError}</AlertDescription>
+            </Alert>
           )}
-        </TableBody>
-      </Table>
+          {fetching ? (
+            <p className="text-sm text-muted-foreground">Carregando planos…</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Módulos</TableHead>
+                    <TableHead>Limites</TableHead>
+                    <TableHead>Sincronização de processos</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {plans.map((plan) => (
+                    <TableRow key={plan.id}>
+                      <TableCell className="align-top font-medium">{plan.name}</TableCell>
+                      <TableCell className="align-top">{plan.price}</TableCell>
+                      <TableCell className="align-top">{renderModuleBadges(plan.modules)}</TableCell>
+                      <TableCell className="align-top">
+                        <div className="space-y-1 text-sm">
+                          <p>
+                            <span className="font-medium">Usuários:</span> {formatLimit(plan.userLimit)}
+                          </p>
+                          <p>
+                            <span className="font-medium">Processos:</span> {formatLimit(plan.processLimit)}
+                          </p>
+                          <p>
+                            <span className="font-medium">Propostas:</span> {formatLimit(plan.proposalLimit)}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <div className="space-y-1 text-sm">
+                          <Badge variant={plan.processSyncEnabled ? "default" : "outline"}>
+                            {plan.processSyncEnabled ? "Habilitada" : "Desabilitada"}
+                          </Badge>
+                          <p>
+                            <span className="font-medium">Cota:</span> {formatLimit(plan.processSyncQuota)}
+                          </p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {plans.length === 0 && !fetching && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        Nenhum plano cadastrado
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
