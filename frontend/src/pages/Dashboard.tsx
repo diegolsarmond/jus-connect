@@ -1,276 +1,104 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { TrendingUp, TrendingDown, Gavel, CheckCircle, Users, AlertCircle } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+} from "recharts";
+
 import { Badge } from "@/components/ui/badge";
-import { mockAnalytics, mockMonthlyData, mockAreaDistribution } from "@/data/mockData";
-import { TrendingUp, TrendingDown, Gavel, CheckCircle, Users } from "lucide-react";
-import { getApiUrl } from "@/lib/api";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  loadDashboardAnalytics,
+  type DashboardAnalytics,
+  type DistributionSlice,
+  type MonthlySeriesPoint,
+} from "@/services/analytics";
 
-const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))'];
+const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))"];
 
-type ProcessoDashboardMetrics = {
-  total: number;
-  active: number;
-  concluded: number;
-  closingRate: number;
-};
-
-type ClienteDashboardMetrics = {
-  total: number;
-  active: number;
-  prospects: number;
-};
-
-type ProcessoApiSummary = {
-  status?: string | null;
-};
-
-const CLOSED_STATUS_KEYWORDS = [
-  "encerrado",
-  "concluido",
-  "finalizado",
-  "arquivado",
-  "baixado",
-  "baixa",
-];
-
-const normalizeStatus = (status: unknown): string => {
-  if (typeof status !== "string") {
-    return "";
-  }
-
-  return status
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-};
-
-const isConcludedStatus = (status: unknown): boolean => {
-  const normalized = normalizeStatus(status);
-
-  if (!normalized) {
-    return false;
-  }
-
-  return CLOSED_STATUS_KEYWORDS.some((keyword) => normalized.includes(keyword));
-};
-
-type ClienteApiSummary = {
-  ativo?: unknown;
-  status?: unknown;
-  situacao?: unknown;
-  situacao_cliente?: unknown;
-};
-
-const isClienteAtivo = (cliente: ClienteApiSummary): boolean => {
-  const { ativo } = cliente;
-
-  if (typeof ativo === "boolean") {
-    return ativo;
-  }
-
-  if (typeof ativo === "number") {
-    return ativo > 0;
-  }
-
-  if (typeof ativo === "string") {
-    const normalized = normalizeStatus(ativo);
-
-    if (!normalized) {
-      // Continua a avaliação com base em outros campos
-    } else if (["true", "1", "sim", "s", "yes", "y"].includes(normalized)) {
-      return true;
-    } else if (["false", "0", "nao", "não", "n"].includes(normalized)) {
-      return false;
-    } else if (normalized.includes("inativ") || normalized.includes("desativ")) {
-      return false;
-    } else if (normalized.startsWith("ativo")) {
-      return true;
-    }
-  }
-
-  const statusCandidates = [cliente.status, cliente.situacao, cliente.situacao_cliente];
-
-  for (const candidate of statusCandidates) {
-    const normalized = normalizeStatus(candidate);
-
-    if (!normalized) {
-      continue;
-    }
-
-    if (normalized.includes("prospec")) {
-      return false;
-    }
-
-    if (normalized.includes("inativ") || normalized.includes("desativ")) {
-      return false;
-    }
-
-    if (normalized.startsWith("ativo")) {
-      return true;
-    }
-  }
-
-  return false;
-};
+const formatPercentage = (value: number) => `${value.toFixed(1)}%`;
 
 export default function Dashboard() {
-  const { taxaConversao, crescimentoMensal } = mockAnalytics;
-  const [processMetrics, setProcessMetrics] = useState<ProcessoDashboardMetrics>({
-    total: mockAnalytics.processosAtivos + mockAnalytics.processosConcluidos,
-    active: mockAnalytics.processosAtivos,
-    concluded: mockAnalytics.processosConcluidos,
-    closingRate: mockAnalytics.indiceEncerramento,
-  });
-  const [clientMetrics, setClientMetrics] = useState<ClienteDashboardMetrics>({
-    total: mockAnalytics.totalClientes,
-    active: mockAnalytics.clientesAtivos,
-    prospects: mockAnalytics.clientesProspecto,
-  });
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [monthlySeries, setMonthlySeries] = useState<MonthlySeriesPoint[]>([]);
+  const [areaDistribution, setAreaDistribution] = useState<DistributionSlice[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const abortController = new AbortController();
-    let isMounted = true;
+    const controller = new AbortController();
+    let mounted = true;
 
-    const loadProcessMetrics = async () => {
+    const loadData = async () => {
+      setIsLoading(true);
       try {
-        const response = await fetch(getApiUrl("processos"), {
-          headers: { Accept: "application/json" },
-          signal: abortController.signal,
-        });
+        const data = await loadDashboardAnalytics(controller.signal);
 
-        if (!response.ok) {
-          console.error(`Falha ao carregar processos para o dashboard (HTTP ${response.status})`);
+        if (!mounted) {
           return;
         }
 
-        const data = (await response.json()) as unknown;
-
-        if (!Array.isArray(data)) {
-          console.error("Resposta inválida da API ao listar processos para o dashboard.");
+        setAnalytics(data);
+        setMonthlySeries(data.monthlySeries);
+        setAreaDistribution(data.areaDistribution);
+        setError(null);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
           return;
         }
 
-        const processos = data as ProcessoApiSummary[];
-
-        const concludedCount = processos.reduce((total, processo) => {
-          return isConcludedStatus(processo.status) ? total + 1 : total;
-        }, 0);
-
-        const totalCount = data.length;
-        const activeCount = Math.max(totalCount - concludedCount, 0);
-        const closingRate = totalCount === 0 ? 0 : Math.round((concludedCount / totalCount) * 100);
-
-        if (!isMounted) {
-          return;
+        console.error("Falha ao carregar métricas do dashboard", err);
+        if (mounted) {
+          setError("Não foi possível carregar as métricas do dashboard.");
         }
-
-        setProcessMetrics({
-          total: totalCount,
-          active: activeCount,
-          concluded: concludedCount,
-          closingRate,
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") {
-          return;
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
         }
-
-        console.error("Erro ao carregar processos para o dashboard", error);
       }
     };
 
-    void loadProcessMetrics();
+    void loadData();
 
     return () => {
-      isMounted = false;
-      abortController.abort();
+      mounted = false;
+      controller.abort();
     };
   }, []);
 
-  useEffect(() => {
-    const abortController = new AbortController();
-    let isMounted = true;
+  const processMetrics = analytics?.processMetrics ?? {
+    total: 0,
+    active: 0,
+    concluded: 0,
+    closingRate: 0,
+  };
 
-    const extractClientes = (payload: unknown): ClienteApiSummary[] => {
-      if (Array.isArray(payload)) {
-        return payload as ClienteApiSummary[];
-      }
+  const clientMetrics = analytics?.clientMetrics ?? {
+    total: 0,
+    active: 0,
+    prospects: 0,
+  };
 
-      if (payload && typeof payload === "object") {
-        const maybeRows = (payload as { rows?: unknown }).rows;
+  const conversionRate = analytics?.kpis.conversionRate ?? 0;
+  const monthlyGrowth = analytics?.kpis.monthlyGrowth ?? 0;
 
-        if (Array.isArray(maybeRows)) {
-          return maybeRows as ClienteApiSummary[];
-        }
+  const processosPorCliente = useMemo(() => {
+    if (clientMetrics.active === 0) {
+      return "0.0";
+    }
 
-        const maybeData = (payload as { data?: unknown }).data;
-
-        if (Array.isArray(maybeData)) {
-          return maybeData as ClienteApiSummary[];
-        }
-
-        if (maybeData && typeof maybeData === "object") {
-          const nestedRows = (maybeData as { rows?: unknown }).rows;
-
-          if (Array.isArray(nestedRows)) {
-            return nestedRows as ClienteApiSummary[];
-          }
-        }
-      }
-
-      return [];
-    };
-
-    const loadClientMetrics = async () => {
-      try {
-        const response = await fetch(getApiUrl("clientes"), {
-          headers: { Accept: "application/json" },
-          signal: abortController.signal,
-        });
-
-        if (!response.ok) {
-          console.error(`Falha ao carregar clientes para o dashboard (HTTP ${response.status})`);
-          return;
-        }
-
-        const payload = (await response.json()) as unknown;
-        const clientes = extractClientes(payload);
-
-        const total = clientes.length;
-        const active = clientes.reduce((count, cliente) => (isClienteAtivo(cliente) ? count + 1 : count), 0);
-        const prospects = Math.max(total - active, 0);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setClientMetrics({
-          total,
-          active,
-          prospects,
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") {
-          return;
-        }
-
-        console.error("Erro ao carregar clientes para o dashboard", error);
-      }
-    };
-
-    void loadClientMetrics();
-
-    return () => {
-      isMounted = false;
-      abortController.abort();
-    };
-  }, []);
-
-  const processosPorCliente = clientMetrics.active > 0
-    ? (processMetrics.active / clientMetrics.active).toFixed(1)
-    : "0.0";
+    return (processMetrics.active / clientMetrics.active).toFixed(1);
+  }, [clientMetrics.active, processMetrics.active]);
 
   return (
     <div className="space-y-6">
@@ -279,8 +107,17 @@ export default function Dashboard() {
         <p className="text-muted-foreground">Visão geral do seu CRM jurídico</p>
       </div>
 
+      {error ? (
+        <Card className="border-destructive/50 bg-destructive/10 text-destructive">
+          <CardContent className="flex items-center gap-3 py-4 text-sm">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" aria-busy={isLoading}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Processos Ativos</CardTitle>
@@ -289,8 +126,9 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{processMetrics.active}</div>
             <div className="flex items-center text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-              +{crescimentoMensal}% mês anterior
+              <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+              {monthlyGrowth >= 0 ? "+" : ""}
+              {monthlyGrowth}% mês anterior
             </div>
           </CardContent>
         </Card>
@@ -302,7 +140,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{processMetrics.concluded}</div>
-            <p className="text-xs text-muted-foreground">Encerrados no mês</p>
+            <p className="text-xs text-muted-foreground">Encerrados no período</p>
           </CardContent>
         </Card>
 
@@ -333,7 +171,7 @@ export default function Dashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid gap-4 xl:grid-cols-12">
+      <div className="grid gap-4 xl:grid-cols-12" aria-busy={isLoading}>
         <Card className="xl:col-span-7">
           <CardHeader>
             <CardTitle>Abertura de Processos</CardTitle>
@@ -341,11 +179,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="pl-2">
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={mockMonthlyData}>
+              <LineChart data={monthlySeries}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [value, 'Processos']} />
+                <YAxis allowDecimals={false} />
+                <Tooltip formatter={(value: number) => [value, "Processos"]} />
                 <Line
                   type="monotone"
                   dataKey="processos"
@@ -367,20 +205,19 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={mockAreaDistribution}
+                    data={areaDistribution}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}%`}
+                    label={({ name, value }) => `${name}: ${formatPercentage(value)}`}
                     outerRadius={80}
-                    fill="#8884d8"
                     dataKey="value"
                   >
-                    {mockAreaDistribution.map((entry, index) => (
+                    {areaDistribution.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={(value: number) => [`${value.toFixed(1)}%`, "Percentual"]} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -393,11 +230,11 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={mockMonthlyData}>
+                <LineChart data={monthlySeries}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [value, 'Clientes']} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip formatter={(value: number) => [value, "Clientes"]} />
                   <Line
                     type="monotone"
                     dataKey="clientes"
@@ -412,7 +249,7 @@ export default function Dashboard() {
       </div>
 
       {/* Churn and Customer Growth */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2" aria-busy={isLoading}>
         <Card>
           <CardHeader>
             <CardTitle>Encerramentos Mensais</CardTitle>
@@ -420,11 +257,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={mockMonthlyData}>
+              <BarChart data={monthlySeries}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [value, 'Encerrados']} />
+                <YAxis allowDecimals={false} />
+                <Tooltip formatter={(value: number) => [value, "Encerrados"]} />
                 <Bar dataKey="encerrados" fill="hsl(var(--destructive))" />
               </BarChart>
             </ResponsiveContainer>
@@ -433,14 +270,14 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Stats */}
-      <Card>
+      <Card aria-busy={isLoading}>
         <CardHeader>
           <CardTitle>Métricas Rápidas</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{taxaConversao}%</div>
+              <div className="text-2xl font-bold text-primary">{conversionRate}%</div>
               <p className="text-sm text-muted-foreground">Taxa de Conversão de Clientes</p>
             </div>
             <div className="text-center">
@@ -461,4 +298,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
