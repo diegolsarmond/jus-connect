@@ -6,9 +6,10 @@ interface SaveButtonProps {
   onClick: () => void;
   disabled?: boolean;
   isDirty?: boolean;
+  label?: string;
 }
 
-export function SaveButton({ onClick, disabled, isDirty }: SaveButtonProps) {
+export function SaveButton({ onClick, disabled, isDirty, label }: SaveButtonProps) {
   return (
     <div className="pointer-events-none fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
       <div
@@ -28,7 +29,7 @@ export function SaveButton({ onClick, disabled, isDirty }: SaveButtonProps) {
         className="pointer-events-auto gap-2 shadow-lg"
       >
         <Save className="h-4 w-4" />
-        Salvar novo modelo
+        {label ?? "Salvar novo modelo"}
       </Button>
     </div>
   );
