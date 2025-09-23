@@ -36,6 +36,8 @@ const createMockResponse = () => {
 
 type QueryResponse = { rows: unknown[]; rowCount: number };
 
+type QueryResult = QueryResponse | Error;
+
 type QueryCall = { text: string; values?: unknown[] };
 
 const setupPoolQueryMock = (responses: QueryResponse[]) => {
@@ -61,7 +63,7 @@ const setupPoolQueryMock = (responses: QueryResponse[]) => {
   };
 };
 
-const setupPoolConnectMock = (responses: QueryResponse[]) => {
+const setupPoolConnectMock = (responses: QueryResult[]) => {
   const calls: QueryCall[] = [];
   let released = false;
 
@@ -78,7 +80,13 @@ const setupPoolConnectMock = (responses: QueryResponse[]) => {
         throw new Error('Unexpected client query invocation');
       }
 
-      return responses.shift()!;
+      const result = responses.shift()!;
+
+      if (result instanceof Error) {
+        throw result;
+      }
+
+      return result;
     },
     release() {
       released = true;
@@ -126,6 +134,7 @@ const duplicateCheckResponses: QueryResponse[] = [
       ],
       rowCount: 1,
     },
+    { rows: [], rowCount: 1 },
   ];
 
   const { calls: clientCalls, restore: restoreConnect, wasReleased } = setupPoolConnectMock(
@@ -183,6 +192,18 @@ const duplicateCheckResponses: QueryResponse[] = [
   assert.ok((userInsertCall?.values?.[8] as string).startsWith('sha256:'));
   assert.notEqual(userInsertCall?.values?.[8], 'SenhaSegura123');
 
+  const companyInsertCall = clientCalls.find((call) =>
+    call.text.includes('INSERT INTO public.empresas')
+  );
+  assert.ok(companyInsertCall, 'expected company insert to be executed');
+  assert.equal(companyInsertCall?.values?.[5], null);
+
+  const updateResponsavelCall = clientCalls.find((call) =>
+    call.text.includes('UPDATE public.empresas SET responsavel')
+  );
+  assert.ok(updateResponsavelCall, 'expected company responsavel update to be executed');
+  assert.deepEqual(updateResponsavelCall?.values, [123, 42]);
+
   const perfilModuloCall = clientCalls.find((call) =>
     call.text.includes('INSERT INTO public.perfil_modulos')
   );
@@ -193,6 +214,101 @@ const duplicateCheckResponses: QueryResponse[] = [
   assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
   assert.deepEqual(poolCalls[1]?.values, [7]);
   assert.equal(wasReleased(), true);
+});
+
+test('register utiliza módulos padrão quando tabela de planos está ausente', async () => {
+  const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock([
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const missingPlanosError = Object.assign(
+    new Error('relation "public.planos" does not exist'),
+    { code: '42P01' }
+  );
+
+  const clientResponses: QueryResult[] = [
+    { rows: [], rowCount: 0 },
+    missingPlanosError,
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 777,
+          nome_empresa: 'Acme Corp',
+          plano: null,
+          trial_started_at: '2024-01-01T00:00:00.000Z',
+          trial_ends_at: '2024-01-15T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 99, nome: 'Administrador' }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 1234,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          perfil: 99,
+          empresa: 777,
+          status: true,
+          telefone: null,
+          datacriacao: '2024-01-02T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+  ];
+
+  const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
+
+  const req = {
+    body: {
+      name: 'Alice Doe',
+      email: 'alice@example.com',
+      company: 'Acme Corp',
+      password: 'SenhaSegura123',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await register(req, res);
+  } finally {
+    restoreConnect();
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 201);
+
+  const responseBody = res.body as {
+    empresa: { plano: number | null };
+    perfil: { modulos: unknown };
+  };
+
+  assert.equal(responseBody.empresa.plano, null);
+  assert.ok(Array.isArray(responseBody.perfil.modulos));
+  assert.ok((responseBody.perfil.modulos as unknown[]).length > 0);
+
+  const perfilModuloCall = clientCalls.find((call) =>
+    call.text.includes('INSERT INTO public.perfil_modulos')
+  );
+  assert.ok(perfilModuloCall, 'expected perfil_modulos insert to be executed');
+  assert.ok(Array.isArray(perfilModuloCall?.values?.[1]));
+  assert.ok(((perfilModuloCall?.values?.[1] as unknown[]) ?? []).length > 0);
+
+  const updateResponsavelCall = clientCalls.find((call) =>
+    call.text.includes('UPDATE public.empresas SET responsavel')
+  );
+  assert.ok(updateResponsavelCall, 'expected company responsavel update to be executed');
+  assert.deepEqual(updateResponsavelCall?.values, [1234, 777]);
+
+  assert.equal(poolCalls.length, 1);
+  assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
 });
 
 test('register tolerates trailing spaces when matching existing company and profile', async () => {
