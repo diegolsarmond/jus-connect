@@ -1,5 +1,18 @@
 import { getApiUrl } from '@/lib/api';
-import { WAHAConfig, ChatOverview, Message, SendTextRequest, WAHAResponse, SessionStatus } from '@/types/waha';
+import {
+  WAHAConfig,
+  ChatOverview,
+  Message,
+  SendTextRequest,
+  SendImageRequest,
+  SendImageResponse,
+  SendFileRequest,
+  SendFileResponse,
+  SendVoiceRequest,
+  SendVoiceResponse,
+  WAHAResponse,
+  SessionStatus,
+} from '@/types/waha';
 
 const JSON_CONTENT_TYPE_REGEX = /application\/json|\+json/i;
 
@@ -602,6 +615,51 @@ class WAHAService {
     };
 
     return this.makeRequest<Message>('/api/sendText', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async sendImageMessage(
+    request: Omit<SendImageRequest, 'session'>,
+  ): Promise<WAHAResponse<SendImageResponse>> {
+    const config = await this.getResolvedConfig();
+    const payload: SendImageRequest = {
+      ...request,
+      session: config.session,
+    };
+
+    return this.makeRequest<SendImageResponse>('/api/sendImage', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async sendFileMessage(
+    request: Omit<SendFileRequest, 'session'>,
+  ): Promise<WAHAResponse<SendFileResponse>> {
+    const config = await this.getResolvedConfig();
+    const payload: SendFileRequest = {
+      ...request,
+      session: config.session,
+    };
+
+    return this.makeRequest<SendFileResponse>('/api/sendFile', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async sendVoiceMessage(
+    request: Omit<SendVoiceRequest, 'session'>,
+  ): Promise<WAHAResponse<SendVoiceResponse>> {
+    const config = await this.getResolvedConfig();
+    const payload: SendVoiceRequest = {
+      ...request,
+      session: config.session,
+    };
+
+    return this.makeRequest<SendVoiceResponse>('/api/sendVoice', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
