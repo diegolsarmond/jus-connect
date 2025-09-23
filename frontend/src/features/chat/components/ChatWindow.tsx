@@ -261,7 +261,7 @@ export const ChatWindow = ({
     return `${names[0]} e mais ${names.length - 1} pessoas estão digitando...`;
   }, [typingUsers]);
   const customAttributes = conversation?.customAttributes ?? [];
-  const isClientLinked = Boolean(conversation?.isLinkedToClient && conversation?.clientName);
+  const isClientLinked = Boolean(conversation?.isLinkedToClient && conversation?.clientId != null);
   const linkedClienteId = extractLinkedClienteId(conversation);
   const canManageClienteAttributes = Boolean(isClientLinked && linkedClienteId !== null);
   const internalNotes = conversation?.internalNotes ?? [];
@@ -343,6 +343,7 @@ export const ChatWindow = ({
     setInternalNoteContent("");
   }, [conversation]);
 
+  useEffect(() => {
     if (!conversationId) {
       setDetailsOpen(false);
       setClientInput("");
@@ -825,7 +826,6 @@ export const ChatWindow = ({
   }
 
   const detailsPanelId = `chat-details-${conversation.id}`;
-  const isClientLinked = Boolean(conversation?.isLinkedToClient && conversation?.clientId != null);
   return (
     <div
       className={styles.wrapper}
