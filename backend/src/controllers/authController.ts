@@ -360,29 +360,62 @@ const sanitizePlanModules = (value: unknown): string[] => {
   return sortModules(sanitized);
 };
 
+type DatabaseError = {
+  code?: unknown;
+  message?: unknown;
+};
+
+const shouldFallbackToDefaultPlan = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const { code, message } = error as DatabaseError;
+
+  if (typeof code === 'string' && ['42P01', '42703', '42501'].includes(code)) {
+    return true;
+  }
+
+  if (typeof message === 'string') {
+    const normalized = message.toLowerCase();
+    return normalized.includes('planos') && normalized.includes('does not exist');
+  }
+
+  return false;
+};
+
 const fetchDefaultPlanDetails = async (
   client: PoolClient
 ): Promise<{ planId: number | null; modules: string[] }> => {
-  const result = await client.query(
-    `SELECT id, modulos
-       FROM public.planos
-      WHERE ativo IS DISTINCT FROM FALSE
-   ORDER BY id
-      LIMIT 1`
-  );
+  try {
+    const result = await client.query(
+      `SELECT id, modulos
+         FROM public.planos
+        WHERE ativo IS DISTINCT FROM FALSE
+     ORDER BY id
+        LIMIT 1`
+    );
 
-  if (result.rowCount === 0) {
-    return { planId: null, modules: DEFAULT_MODULE_IDS };
+    if (result.rowCount === 0) {
+      return { planId: null, modules: DEFAULT_MODULE_IDS };
+    }
+
+    const row = result.rows[0] as { id?: unknown; modulos?: unknown };
+    const planId = parseInteger(row.id);
+    const modules = sanitizePlanModules(row.modulos);
+
+    return {
+      planId,
+      modules: modules.length > 0 ? modules : DEFAULT_MODULE_IDS,
+    };
+  } catch (error) {
+    if (shouldFallbackToDefaultPlan(error)) {
+      console.warn('Tabela de planos indisponível durante cadastro. Utilizando módulos padrão.', error);
+      return { planId: null, modules: DEFAULT_MODULE_IDS };
+    }
+
+    throw error;
   }
-
-  const row = result.rows[0] as { id?: unknown; modulos?: unknown };
-  const planId = parseInteger(row.id);
-  const modules = sanitizePlanModules(row.modulos);
-
-  return {
-    planId,
-    modules: modules.length > 0 ? modules : DEFAULT_MODULE_IDS,
-  };
 };
 
 export const register = async (req: Request, res: Response) => {
