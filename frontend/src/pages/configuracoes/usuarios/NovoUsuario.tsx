@@ -127,7 +127,7 @@ export default function NovoUsuario() {
 
     const payload = {
       nome_completo: data.name,
-      cpf: "",
+      cpf: null,
       email: data.email,
       perfil: Number.isNaN(perfilId) ? null : perfilId,
       empresa: empresaId,
