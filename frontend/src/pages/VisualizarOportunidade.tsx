@@ -1241,7 +1241,7 @@ export default function VisualizarOportunidade() {
     fase_id: "Fase ID",
     etapa_nome: "Etapa",
     etapa_id: "Etapa ID",
-    prazo_proximo: "Prazo Próximo",
+    prazo_proximo: "Data Primeira Parcela",
     status: "Status",
     status_id: "Status ID",
     solicitante_id: "Solicitante ID",
@@ -1464,7 +1464,7 @@ export default function VisualizarOportunidade() {
     {
       key: "fluxo",
       label: "DADOS DA PROPOSTA",
-      fields: ["fase", "etapa_nome", "prazo_proximo", "status"],
+      fields: ["fase", "etapa_nome", "status"],
     },
     {
       key: "solicitante",
@@ -1486,6 +1486,7 @@ export default function VisualizarOportunidade() {
         "percentual_honorarios",
         "forma_pagamento",
         "qtde_parcelas",
+        "prazo_proximo",
         "contingenciamento",
       ],
     },
