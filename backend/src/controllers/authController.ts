@@ -263,7 +263,7 @@ export const register = async (req: Request, res: Response) => {
       [normalizedEmail]
     );
 
-    if (duplicateCheck.rowCount > 0) {
+    if ((duplicateCheck.rowCount ?? 0) > 0) {
       res.status(409).json({ error: 'E-mail já cadastrado.' });
       return;
     }
@@ -280,7 +280,7 @@ export const register = async (req: Request, res: Response) => {
         [normalizedEmail]
       );
 
-      if (duplicateCheckTx.rowCount > 0) {
+      if ((duplicateCheckTx.rowCount ?? 0) > 0) {
         await client.query('ROLLBACK');
         transactionActive = false;
         res.status(409).json({ error: 'E-mail já cadastrado.' });
@@ -301,7 +301,7 @@ export const register = async (req: Request, res: Response) => {
       let companyName: string;
       let companyPlanId: number | null;
 
-      if (companyLookup.rowCount > 0) {
+      if ((companyLookup.rowCount ?? 0) > 0) {
         const row = companyLookup.rows[0] as {
           id?: unknown;
           nome_empresa?: unknown;
@@ -352,7 +352,7 @@ export const register = async (req: Request, res: Response) => {
       let perfilId: number;
       let perfilNome: string;
 
-      if (existingPerfil.rowCount > 0) {
+      if ((existingPerfil.rowCount ?? 0) > 0) {
         const perfilRow = existingPerfil.rows[0] as {
           id?: unknown;
           nome?: unknown;
