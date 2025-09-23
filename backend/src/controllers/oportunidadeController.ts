@@ -623,12 +623,12 @@ export const createOportunidade = async (req: Request, res: Response) => {
       `INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-        valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
+        valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, valor_entrada, contingenciamento,
         detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW(),NOW(),$23)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW(),NOW(),$24)
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
+                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, valor_entrada, contingenciamento,
                  detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa`,
       [
         tipo_processo_id,
@@ -648,6 +648,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
         percentual_honorarios,
         forma_pagamento,
         qtde_parcelas,
+        valor_entrada,
         contingenciamento,
         detalhes,
         documentos_anexados,
@@ -755,15 +756,16 @@ export const updateOportunidade = async (req: Request, res: Response) => {
          percentual_honorarios = $15,
          forma_pagamento = $16,
          qtde_parcelas = $17,
-         contingenciamento = $18,
-         detalhes = $19,
-         documentos_anexados = $20,
-         criado_por = $21,
+         valor_entrada = $18,
+         contingenciamento = $19,
+         detalhes = $20,
+         documentos_anexados = $21,
+         criado_por = $22,
          ultima_atualizacao = NOW()
-       WHERE id = $22
+       WHERE id = $23
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
+                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, valor_entrada, contingenciamento,
                  detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa`,
       [
         tipo_processo_id,
@@ -783,6 +785,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
         percentual_honorarios,
         forma_pagamento,
         qtde_parcelas,
+        valor_entrada,
         contingenciamento,
         detalhes,
         documentos_anexados,
