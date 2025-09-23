@@ -70,11 +70,13 @@ import {
   ChevronsUpDown,
   Download,
   ExternalLink,
+  FileDown,
   FileText,
   Loader2,
   Trash,
 } from "lucide-react";
 import { createSimplePdfFromHtml } from "@/lib/pdf";
+import { createDocxBlobFromHtml } from "@/lib/docx";
 
 interface Envolvido {
   nome?: string;
@@ -640,7 +642,7 @@ export default function VisualizarOportunidade() {
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
   const [documentActionState, setDocumentActionState] = useState<
-    { id: number; type: "download" | "open" } | null
+    { id: number; type: "download-pdf" | "download-docx" | "open" } | null
   >(null);
   const [documentToDelete, setDocumentToDelete] = useState<OpportunityDocument | null>(
     null,
@@ -2477,7 +2479,7 @@ export default function VisualizarOportunidade() {
 
       const blob = await createSimplePdfFromHtml(
         doc.title ?? `Documento ${doc.id}`,
-        doc.content_html ?? "<p></p>",
+        doc.content_html && doc.content_html.length > 0 ? doc.content_html : "<p></p>",
       );
       const url = URL.createObjectURL(blob);
       documentPdfUrlsRef.current.set(doc.id, url);
@@ -2518,27 +2520,48 @@ export default function VisualizarOportunidade() {
     }
   };
 
-  const handleDownloadDocument = async (doc: OpportunityDocument) => {
+  const handleDownloadDocument = async (
+    doc: OpportunityDocument,
+    format: "pdf" | "docx" = "pdf",
+  ) => {
     if (typeof document === "undefined") {
       setSnack({ open: true, message: "Função indisponível neste ambiente" });
       return;
     }
 
-    setDocumentActionState({ id: doc.id, type: "download" });
+    const actionType = format === "pdf" ? "download-pdf" : "download-docx";
+    setDocumentActionState({ id: doc.id, type: actionType });
     try {
-      const url = await ensurePdfUrl(doc);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${slugifyFilename(doc.title)}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+      if (format === "pdf") {
+        const url = await ensurePdfUrl(doc);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${slugifyFilename(doc.title)}.pdf`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      } else {
+        const html = doc.content_html && doc.content_html.length > 0 ? doc.content_html : "<p></p>";
+        const blob = createDocxBlobFromHtml(html);
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${slugifyFilename(doc.title)}.docx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error(error);
       setSnack({ open: true, message: "Erro ao baixar documento" });
     } finally {
       setDocumentActionState(null);
     }
+  };
+
+  const handleDownloadDocumentDocx = (doc: OpportunityDocument) => {
+    void handleDownloadDocument(doc, "docx");
   };
 
   const handleOpenDocumentInNewTab = async (doc: OpportunityDocument) => {
@@ -3123,9 +3146,12 @@ export default function VisualizarOportunidade() {
                             ? doc.title.trim()
                             : `Documento ${doc.id}`;
                         const createdAtText = formatDate(doc.created_at);
-                        const isDownloadLoading =
+                        const isPdfDownloadLoading =
                           documentActionState?.id === doc.id &&
-                          documentActionState?.type === "download";
+                          documentActionState?.type === "download-pdf";
+                        const isDocxDownloadLoading =
+                          documentActionState?.id === doc.id &&
+                          documentActionState?.type === "download-docx";
                         const isOpenLoading =
                           documentActionState?.id === doc.id &&
                           documentActionState?.type === "open";
@@ -3170,14 +3196,27 @@ export default function VisualizarOportunidade() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleDownloadDocument(doc)}
-                                disabled={isDownloadLoading}
+                                disabled={isPdfDownloadLoading}
                               >
-                                {isDownloadLoading ? (
+                                {isPdfDownloadLoading ? (
                                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 ) : (
                                   <Download className="mr-2 h-4 w-4" />
                                 )}
-                                Download
+                                Baixar PDF
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadDocumentDocx(doc)}
+                                disabled={isDocxDownloadLoading}
+                              >
+                                {isDocxDownloadLoading ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <FileDown className="mr-2 h-4 w-4" />
+                                )}
+                                Baixar DOCX
                               </Button>
 
                             </div>
@@ -3545,16 +3584,33 @@ export default function VisualizarOportunidade() {
                     onClick={() => handleDownloadDocument(documentPreview)}
                     disabled={
                       documentActionState?.id === documentPreview.id &&
-                      documentActionState?.type === "download"
+                      documentActionState?.type === "download-pdf"
                     }
                   >
                     {documentActionState?.id === documentPreview.id &&
-                    documentActionState?.type === "download" ? (
+                    documentActionState?.type === "download-pdf" ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Download className="mr-2 h-4 w-4" />
                     )}
                     Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleDownloadDocumentDocx(documentPreview)}
+                    disabled={
+                      documentActionState?.id === documentPreview.id &&
+                      documentActionState?.type === "download-docx"
+                    }
+                  >
+                    {documentActionState?.id === documentPreview.id &&
+                    documentActionState?.type === "download-docx" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileDown className="mr-2 h-4 w-4" />
+                    )}
+                    Baixar DOCX
                   </Button>
                   <Button
                     type="button"
