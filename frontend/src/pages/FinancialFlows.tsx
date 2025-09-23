@@ -12,7 +12,15 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchFlows, createFlow, settleFlow, Flow, AsaasCharge, AsaasChargeStatus } from '@/lib/flows';
+import {
+  fetchFlows,
+  createFlow,
+  settleFlow,
+  Flow,
+  AsaasCharge,
+  AsaasChargeStatus,
+  normalizeFlowId,
+} from '@/lib/flows';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -305,7 +313,8 @@ const FinancialFlows = () => {
   const [chargeDialogFlow, setChargeDialogFlow] = useState<Flow | null>(null);
   const [chargeSummaries, setChargeSummaries] = useState<Record<number, AsaasCharge | null>>({});
   const [chargeStatusHistory, setChargeStatusHistory] = useState<Record<number, AsaasChargeStatus[]>>({});
-  const [settleDialogFlow, setSettleDialogFlow] = useState<Flow | null>(null);
+  const [settleDialogFlow, setSettleDialogFlow] = useState<FlowWithDetails | null>(null);
+
   const [settleDate, setSettleDate] = useState(() => getDefaultPaymentDate());
 
   useEffect(() => {
@@ -343,6 +352,8 @@ const FinancialFlows = () => {
     computedStatus: DerivedStatus;
     dueDate: Date | null;
     pagamentoDate: Date | null;
+    normalizedId: string | null;
+    canManuallySettle: boolean;
   };
 
   type PeriodTotals = {
@@ -409,6 +420,7 @@ const FinancialFlows = () => {
       const dueDate = parsedDueDate && isValid(parsedDueDate) ? parsedDueDate : null;
       const parsedPaymentDate = flow.pagamento ? parseISO(flow.pagamento) : null;
       const pagamentoDate = parsedPaymentDate && isValid(parsedPaymentDate) ? parsedPaymentDate : null;
+      const normalizedId = normalizeFlowId(flow.id);
 
       const computedStatus: DerivedStatus =
         flow.status === 'pago' || pagamentoDate
@@ -421,6 +433,8 @@ const FinancialFlows = () => {
         computedStatus,
         dueDate,
         pagamentoDate,
+        normalizedId,
+        canManuallySettle: Boolean(normalizedId),
       };
     });
   }, [flows]);
@@ -688,7 +702,8 @@ const FinancialFlows = () => {
   });
 
   const settleMutation = useMutation({
-    mutationFn: ({ flowId, date }: { flowId: number | string; date: string }) => settleFlow(flowId, date),
+    mutationFn: ({ flowId, date }: { flowId: string; date: string }) => settleFlow(flowId, date),
+
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows'] });
       toast({
@@ -709,7 +724,17 @@ const FinancialFlows = () => {
     },
   });
 
-  const handleOpenSettleDialog = (flow: Flow) => {
+  const handleOpenSettleDialog = (flow: FlowWithDetails) => {
+    if (!flow.canManuallySettle) {
+      toast({
+        title: 'Ação indisponível',
+        description: 'Somente lançamentos cadastrados no Jus Connect podem ser marcados manualmente como pagos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+
     setSettleDialogFlow(flow);
 
     const normalizedPaymentDate = normalizeDateInputValue(flow.pagamento ?? undefined);
@@ -732,11 +757,12 @@ const FinancialFlows = () => {
   };
 
   const handleConfirmSettle = () => {
-    if (!settleDialogFlow || !settleDate || settleMutation.isPending) {
+    if (!settleDialogFlow || !settleDialogFlow.normalizedId || !settleDate || settleMutation.isPending) {
       return;
     }
 
-    settleMutation.mutate({ flowId: settleDialogFlow.id, date: settleDate });
+    settleMutation.mutate({ flowId: settleDialogFlow.normalizedId, date: settleDate });
+
   };
 
   const statusOrder: DerivedStatus[] = ['pendente', 'vencido', 'pago'];
@@ -1323,7 +1349,13 @@ const FinancialFlows = () => {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleOpenSettleDialog(flow)}
-                                  disabled={settleMutation.isPending}
+                                  disabled={settleMutation.isPending || !flow.canManuallySettle}
+                                  title={
+                                    !flow.canManuallySettle
+                                      ? 'Somente lançamentos cadastrados no Jus Connect podem ser marcados manualmente como pagos.'
+                                      : undefined
+                                  }
+
                                 >
                                   Marcar como pago
                                 </Button>
