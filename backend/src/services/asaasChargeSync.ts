@@ -1,6 +1,7 @@
 import { URLSearchParams } from 'url';
 import type { QueryResultRow } from 'pg';
 import pool from './db';
+import { createNotification, type NotificationType } from './notificationService';
 
 export const OPEN_PAYMENT_STATUSES = [
   'PENDING',
@@ -210,9 +211,12 @@ export class AsaasChargeSyncService {
       }
 
       const paymentStatus = normalizeStatus(payment.status);
+      let statusChanged = false;
+
       if (paymentStatus && paymentStatus !== normalizeStatus(charge.status)) {
         await this.db.query('UPDATE asaas_charges SET status = $1 WHERE id = $2', [paymentStatus, charge.id]);
         chargesUpdated += 1;
+        statusChanged = true;
       }
 
       if (charge.financial_flow_id) {
@@ -225,6 +229,10 @@ export class AsaasChargeSyncService {
           );
           flowsUpdated += 1;
         }
+      }
+
+      if (statusChanged) {
+        await this.notifyChargeUpdate(charge, payment, paymentStatus || charge.status);
       }
     }
 
@@ -281,6 +289,52 @@ export class AsaasChargeSyncService {
     }
 
     return payments;
+  }
+
+  private async notifyChargeUpdate(
+    charge: AsaasChargeRow,
+    payment: AsaasPayment,
+    status: string,
+  ): Promise<void> {
+    const normalizedStatus = normalizeStatus(status);
+    const type: NotificationType = PAID_PAYMENT_STATUS_SET.has(normalizedStatus)
+      ? 'success'
+      : normalizedStatus === 'OVERDUE'
+        ? 'warning'
+        : 'info';
+
+    const dueDate = payment.dueDate ?? null;
+    const paymentDate = payment.paymentDate ?? null;
+    const value = payment.value ?? null;
+    const statusLabel = normalizedStatus.replace(/_/g, ' ').toLowerCase();
+
+    const messageParts = [`Cobrança ${payment.id} agora está ${statusLabel}.`];
+    if (paymentDate) {
+      messageParts.push(`Pagamento registrado em ${paymentDate}.`);
+    } else if (dueDate) {
+      messageParts.push(`Vencimento em ${dueDate}.`);
+    }
+
+    try {
+      await createNotification({
+        userId: 'finance',
+        title: `Cobrança atualizada (${normalizedStatus})`,
+        message: messageParts.join(' '),
+        category: 'payments',
+        type,
+        metadata: {
+          chargeId: charge.id,
+          asaasId: charge.asaas_id,
+          financialFlowId: charge.financial_flow_id,
+          status: normalizedStatus,
+          dueDate,
+          paymentDate,
+          value,
+        },
+      });
+    } catch (error) {
+      console.error('Falha ao enviar notificação de cobrança do Asaas', error);
+    }
   }
 
   private buildFinancialFlowUpdate(status: string, paymentDate: string | null | undefined): [string, Date | null] | null {

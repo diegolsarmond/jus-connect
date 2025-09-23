@@ -3,14 +3,22 @@ import assert from 'node:assert/strict';
 import type { Request } from 'express';
 import { PjeNotificationProvider } from '../src/services/notificationProviders/pjeNotificationService';
 import { ProjudiNotificationProvider } from '../src/services/notificationProviders/projudiNotificationService';
-import { __resetNotificationState, listNotifications } from '../src/services/notificationService';
+import {
+  __resetNotificationState,
+  listNotifications,
+} from '../src/services/notificationService';
+import { initNotificationTestDb } from './helpers/notificationDb';
+
+test.before(async () => {
+  await initNotificationTestDb();
+});
 
 function mockRequest<T>(body: T): Request {
   return { body } as unknown as Request;
 }
 
-test.beforeEach(() => {
-  __resetNotificationState();
+test.beforeEach(async () => {
+  await __resetNotificationState();
 });
 
 test('PjeNotificationProvider creates notifications for deadline and movement events', async () => {
@@ -48,7 +56,7 @@ test('PjeNotificationProvider creates notifications for deadline and movement ev
   assert.equal(pending.length, 2);
   assert.equal((await provider.fetchUpdates()).length, 0);
 
-  const stored = listNotifications('adv-001');
+  const stored = await listNotifications('adv-001');
   assert.equal(stored.length, 2);
 });
 
@@ -86,6 +94,6 @@ test('ProjudiNotificationProvider creates notifications for deadline and documen
   assert.equal(pending.length, 2);
   assert.equal((await provider.fetchUpdates()).length, 0);
 
-  const stored = listNotifications('adv-002');
+  const stored = await listNotifications('adv-002');
   assert.equal(stored.length, 2);
 });

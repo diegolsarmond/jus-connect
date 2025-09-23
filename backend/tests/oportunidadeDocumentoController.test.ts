@@ -312,9 +312,14 @@ test('createOpportunityDocumentFromTemplate uses the opportunity empresa when fi
   assert.equal(parsedVariables['processo.audiencia.horario'], '13:45');
   assert.equal(parsedVariables['processo.audiencia.local'], 'Fórum Central');
 
-  const empresaQuery = calls.find((call) =>
-    call.text.includes('FROM public."vw.empresas"') && call.text.includes('nome_empresa'),
-  );
+  const empresaQuery = calls.find((call) => {
+    const text = call.text;
+    const matchesRelation =
+      text.includes('FROM public."vw.empresas"') ||
+      text.includes('FROM public."empresas"') ||
+      text.includes('FROM public.empresas');
+    return matchesRelation && text.includes('nome_empresa');
+  });
   assert.ok(empresaQuery, 'expected empresa query to be executed');
   assert.match(empresaQuery!.text, /WHERE id = \$1/);
   assert.deepEqual(empresaQuery!.values, [55]);

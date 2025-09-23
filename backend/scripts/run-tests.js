@@ -7,7 +7,7 @@ if (!process.env.DATABASE_URL) {
 
 const child = spawn(
   'node',
-  ['--test', '--import', 'tsx', 'tests/*.test.ts'],
+  ['--test', '--test-concurrency', '1', '--import', 'tsx', 'tests/*.test.ts'],
   {
     stdio: 'inherit',
     shell: true,

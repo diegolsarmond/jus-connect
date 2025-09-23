@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 import type { CreateNotificationInput, Notification } from '../notificationService';
 
-export type NotificationPublisher = (input: CreateNotificationInput) => Notification;
+export type NotificationPublisher = (input: CreateNotificationInput) => Promise<Notification>;
 
 export interface INotificationProvider {
   subscribe(): Promise<void>;

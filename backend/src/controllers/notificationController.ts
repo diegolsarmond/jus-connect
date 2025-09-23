@@ -8,6 +8,7 @@ import {
   markAllNotificationsAsRead,
   deleteNotification,
   getUnreadCount,
+  getUnreadCountByCategory,
   getNotificationPreferences,
   updateNotificationPreferences,
   NotificationNotFoundError,
@@ -46,26 +47,39 @@ function parseBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
-function parseLimit(value: unknown): number | undefined {
+function parsePositiveInteger(value: unknown): number | undefined {
   if (typeof value !== 'string' || value.trim() === '') {
     return undefined;
   }
 
   const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? undefined : parsed;
+  return Number.isNaN(parsed) || parsed <= 0 ? undefined : parsed;
 }
 
-export const listNotificationsHandler = (req: Request, res: Response) => {
+export const listNotificationsHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
     const onlyUnread = parseBoolean(req.query.onlyUnread);
-    const limit = parseLimit(req.query.limit);
+    const limit = parsePositiveInteger(req.query.limit) ?? parsePositiveInteger(req.query.pageSize);
+    const offsetParam = parsePositiveInteger(req.query.offset);
+    const page = parsePositiveInteger(req.query.page);
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
 
-    const notifications = listNotifications(userId, {
+    const offset = (() => {
+      if (typeof offsetParam === 'number') {
+        return offsetParam;
+      }
+      if (typeof page === 'number' && typeof limit === 'number') {
+        return (page - 1) * limit;
+      }
+      return undefined;
+    })();
+
+    const notifications = await listNotifications(userId, {
       onlyUnread: onlyUnread === undefined ? undefined : onlyUnread,
       category,
       limit,
+      offset,
     });
 
     res.json(notifications);
@@ -75,11 +89,11 @@ export const listNotificationsHandler = (req: Request, res: Response) => {
   }
 };
 
-export const getNotificationHandler = (req: Request, res: Response) => {
+export const getNotificationHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
     const { id } = req.params;
-    const notification = getNotification(userId, id);
+    const notification = await getNotification(userId, id);
     res.json(notification);
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
@@ -91,7 +105,7 @@ export const getNotificationHandler = (req: Request, res: Response) => {
   }
 };
 
-export const createNotificationHandler = (req: Request, res: Response) => {
+export const createNotificationHandler = async (req: Request, res: Response) => {
   try {
     const { userId, title, message, category, type, metadata, actionUrl } = req.body ?? {};
 
@@ -103,7 +117,7 @@ export const createNotificationHandler = (req: Request, res: Response) => {
       return res.status(400).json({ error: 'title, message and category are required' });
     }
 
-    const notification = createNotification({
+    const notification = await createNotification({
       userId,
       title,
       message,
@@ -120,11 +134,11 @@ export const createNotificationHandler = (req: Request, res: Response) => {
   }
 };
 
-export const markNotificationAsReadHandler = (req: Request, res: Response) => {
+export const markNotificationAsReadHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
     const { id } = req.params;
-    const notification = markNotificationAsRead(userId, id);
+    const notification = await markNotificationAsRead(userId, id);
     res.json(notification);
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
@@ -136,11 +150,11 @@ export const markNotificationAsReadHandler = (req: Request, res: Response) => {
   }
 };
 
-export const markNotificationAsUnreadHandler = (req: Request, res: Response) => {
+export const markNotificationAsUnreadHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
     const { id } = req.params;
-    const notification = markNotificationAsUnread(userId, id);
+    const notification = await markNotificationAsUnread(userId, id);
     res.json(notification);
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
@@ -152,10 +166,10 @@ export const markNotificationAsUnreadHandler = (req: Request, res: Response) => 
   }
 };
 
-export const markAllNotificationsAsReadHandler = (req: Request, res: Response) => {
+export const markAllNotificationsAsReadHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
-    const notifications = markAllNotificationsAsRead(userId);
+    const notifications = await markAllNotificationsAsRead(userId);
     res.json({ updated: notifications.length, notifications });
   } catch (error) {
     console.error(error);
@@ -163,11 +177,11 @@ export const markAllNotificationsAsReadHandler = (req: Request, res: Response) =
   }
 };
 
-export const deleteNotificationHandler = (req: Request, res: Response) => {
+export const deleteNotificationHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
     const { id } = req.params;
-    deleteNotification(userId, id);
+    await deleteNotification(userId, id);
     res.status(204).send();
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
@@ -179,21 +193,29 @@ export const deleteNotificationHandler = (req: Request, res: Response) => {
   }
 };
 
-export const getUnreadCountHandler = (req: Request, res: Response) => {
+export const getUnreadCountHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
-    const unread = getUnreadCount(userId);
-    res.json({ unread });
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const groupBy = typeof req.query.groupBy === 'string' ? req.query.groupBy.toLowerCase() : undefined;
+
+    if (groupBy === 'category') {
+      const counts = await getUnreadCountByCategory(userId);
+      return res.json({ counts });
+    }
+
+    const unread = await getUnreadCount(userId, { category });
+    res.json({ unread, category: category ?? null });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-export const getNotificationPreferencesHandler = (req: Request, res: Response) => {
+export const getNotificationPreferencesHandler = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
-    const preferences = getNotificationPreferences(userId);
+    const preferences = await getNotificationPreferences(userId);
     res.json(preferences);
   } catch (error) {
     console.error(error);
@@ -201,7 +223,7 @@ export const getNotificationPreferencesHandler = (req: Request, res: Response) =
   }
 };
 
-export const updateNotificationPreferencesHandler = (req: Request, res: Response) => {
+export const updateNotificationPreferencesHandler = async (req: Request, res: Response) => {
   try {
     const { userId, ...updates } = req.body ?? {};
 
@@ -213,7 +235,7 @@ export const updateNotificationPreferencesHandler = (req: Request, res: Response
       return res.status(400).json({ error: 'Request body must contain preference updates' });
     }
 
-    const updated = updateNotificationPreferences(userId, updates as NotificationPreferenceUpdates);
+    const updated = await updateNotificationPreferences(userId, updates as NotificationPreferenceUpdates);
     res.json(updated);
   } catch (error) {
     console.error(error);

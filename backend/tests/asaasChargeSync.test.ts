@@ -8,6 +8,8 @@ import {
   type AsaasPaymentsResponse,
   type AsaasPayment,
 } from '../src/services/asaasChargeSync';
+import { __resetNotificationState } from '../src/services/notificationService';
+import { initNotificationTestDb } from './helpers/notificationDb';
 
 type QueryCall = { text: string; values?: unknown[] };
 
@@ -47,6 +49,14 @@ class FakeClient {
     return { data: [], hasMore: false, totalCount: 0, limit: params.limit, offset: params.offset };
   }
 }
+
+test.before(async () => {
+  await initNotificationTestDb();
+});
+
+test.beforeEach(async () => {
+  await __resetNotificationState();
+});
 
 test('syncPendingCharges consults only pending charges when querying storage', async () => {
   const db = new FakeDb([

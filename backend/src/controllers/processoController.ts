@@ -5,6 +5,7 @@ import IntegrationApiKeyService, {
 } from '../services/integrationApiKeyService';
 
 import pool from '../services/db';
+import { createNotification } from '../services/notificationService';
 import { Processo } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
@@ -1170,7 +1171,41 @@ export const createProcesso = async (req: Request, res: Response) => {
         throw new Error('Não foi possível localizar o processo recém-criado.');
       }
 
-      res.status(201).json(mapProcessoRow(finalResult.rows[0]));
+      const processo = mapProcessoRow(finalResult.rows[0]);
+
+      const recipientIds = new Set<string>();
+      recipientIds.add(String(req.auth.userId));
+      for (const advogado of advogadosSelecionados) {
+        recipientIds.add(String(advogado.id));
+      }
+
+      await Promise.all(
+        Array.from(recipientIds).map(async (userId) => {
+          try {
+            await createNotification({
+              userId,
+              title: `Novo processo cadastrado: ${processo.numero}`,
+              message: processo.data_distribuicao
+                ? `Processo ${processo.numero} distribuído em ${processo.data_distribuicao}.`
+                : `Processo ${processo.numero} foi cadastrado.`,
+              category: 'process',
+              type: 'info',
+              metadata: {
+                processId: processo.id,
+                clientId: processo.cliente_id,
+                status: processo.status,
+                opportunityId: processo.oportunidade_id,
+                jurisdiction: processo.jurisdicao,
+                lawyers: advogadosSelecionados.map((adv) => adv.id),
+              },
+            });
+          } catch (notifyError) {
+            console.error('Falha ao enviar notificação de criação de processo', notifyError);
+          }
+        }),
+      );
+
+      res.status(201).json(processo);
     } catch (transactionError) {
       await clientDb.query('ROLLBACK');
       throw transactionError;
@@ -1449,7 +1484,43 @@ export const updateProcesso = async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Processo não encontrado' });
       }
 
-      res.json(mapProcessoRow(finalResult.rows[0]));
+      const processo = mapProcessoRow(finalResult.rows[0]);
+
+      const recipientIds = new Set<string>();
+      if (req.auth?.userId) {
+        recipientIds.add(String(req.auth.userId));
+      }
+      for (const advogado of advogadosSelecionados) {
+        recipientIds.add(String(advogado.id));
+      }
+
+      await Promise.all(
+        Array.from(recipientIds).map(async (userId) => {
+          try {
+            await createNotification({
+              userId,
+              title: `Processo atualizado: ${processo.numero}`,
+              message: processo.data_distribuicao
+                ? `Atualizações no processo ${processo.numero} distribuído em ${processo.data_distribuicao}.`
+                : `O processo ${processo.numero} foi atualizado.`,
+              category: 'process',
+              type: 'info',
+              metadata: {
+                processId: processo.id,
+                clientId: processo.cliente_id,
+                status: processo.status,
+                opportunityId: processo.oportunidade_id,
+                jurisdiction: processo.jurisdicao,
+                lawyers: advogadosSelecionados.map((adv) => adv.id),
+              },
+            });
+          } catch (notifyError) {
+            console.error('Falha ao enviar notificação de atualização de processo', notifyError);
+          }
+        }),
+      );
+
+      res.json(processo);
     } catch (transactionError) {
       await clientDb.query('ROLLBACK');
       throw transactionError;
