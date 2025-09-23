@@ -846,6 +846,7 @@ export default function VisualizarProcesso() {
 
     const fetchProcesso = async () => {
       if (!processoId) {
+        setProcesso(null);
         setError("Processo inválido");
         setLoading(false);
         return;
@@ -896,6 +897,7 @@ export default function VisualizarProcesso() {
             ? fetchError.message
             : "Erro ao carregar o processo";
         if (!cancelled) {
+          setProcesso(null);
           setError(message);
         }
       } finally {
@@ -907,7 +909,199 @@ export default function VisualizarProcesso() {
 
     fetchProcesso();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [processoId]);
+
+  useEffect(() => {
+    if (!processoId) {
+      setDocumentosPublicos([]);
+      setDocumentosError("Processo inválido");
+      setDocumentosLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchDocumentosPublicos = async () => {
+      setDocumentosLoading(true);
+      setDocumentosError(null);
+
+      try {
+        const res = await fetch(
+          getApiUrl(`processos/${processoId}/documentos-publicos`),
+          { headers: { Accept: "application/json" } },
+        );
+
+        const text = await res.text();
+        let json: unknown = null;
+
+        if (text) {
+          try {
+            json = JSON.parse(text);
+          } catch (parseError) {
+            console.error(
+              "Não foi possível interpretar os documentos públicos do processo",
+              parseError,
+            );
+          }
+        }
+
+        if (!res.ok) {
+          const message =
+            json &&
+            typeof json === "object" &&
+            "error" in json &&
+            typeof (json as { error: unknown }).error === "string"
+              ? (json as { error: string }).error
+              : `Não foi possível carregar os documentos públicos (HTTP ${res.status})`;
+          throw new Error(message);
+        }
+
+        const documentosPayload =
+          json && typeof json === "object" && "documentos" in json
+            ? (json as { documentos: unknown }).documentos
+            : json;
+
+        const documentos = mapApiDocumentosPublicos(documentosPayload);
+
+        if (!cancelled) {
+          setDocumentosPublicos(documentos);
+        }
+      } catch (fetchError) {
+        const message =
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Erro ao carregar os documentos públicos do processo.";
+        if (!cancelled) {
+          setDocumentosError(message);
+          setDocumentosPublicos([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setDocumentosLoading(false);
+        }
+      }
+    };
+
+    fetchDocumentosPublicos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [processoId]);
+
+  const dataDistribuicaoLabel = useMemo(() => {
+    if (!processo) {
+      return null;
+    }
+
     return (
+      processo.dataDistribuicaoFormatada ||
+      (processo.dataDistribuicao
+        ? formatDateToPtBR(processo.dataDistribuicao)
+        : null)
+    );
+  }, [processo]);
+
+  const criadoEmLabel = useMemo(() => {
+    if (!processo?.criadoEm) {
+      return null;
+    }
+
+    return formatDateTimeToPtBR(processo.criadoEm);
+  }, [processo?.criadoEm]);
+
+  const atualizadoEmLabel = useMemo(() => {
+    if (!processo?.atualizadoEm) {
+      return null;
+    }
+
+    return formatDateTimeToPtBR(processo.atualizadoEm);
+  }, [processo?.atualizadoEm]);
+
+  const ultimaSincronizacaoLabel = useMemo(() => {
+    if (!processo?.ultimaSincronizacao) {
+      return null;
+    }
+
+    return formatDateTimeToPtBR(processo.ultimaSincronizacao);
+  }, [processo?.ultimaSincronizacao]);
+
+  const ultimasMovimentacoes = useMemo(() => {
+    if (!processo) {
+      return [];
+    }
+
+    return processo.movimentacoes.slice(0, 3);
+  }, [processo]);
+
+  const documentosResumo = useMemo(() => {
+    if (documentosPublicos.length === 0) {
+      return {
+        total: 0,
+        ultimaData: null,
+        ultimoTitulo: null,
+      };
+    }
+
+    const [latest] = documentosPublicos;
+
+    return {
+      total: documentosPublicos.length,
+      ultimaData:
+        latest.dataFormatada ??
+        (latest.data ? formatDateToPtBR(latest.data) : null),
+      ultimoTitulo: latest.titulo ?? null,
+    };
+  }, [documentosPublicos]);
+
+  const handleGerarContrato = useCallback(() => {
+    if (!clienteIdParam || !processoId) {
+      return;
+    }
+
+    navigate(`/clientes/${clienteIdParam}/processos/${processoId}/contrato`);
+  }, [clienteIdParam, navigate, processoId]);
+
+  if (loading && !processo) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <Skeleton className="h-10 w-32" />
+          <div className="space-y-2 lg:w-1/2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-64 w-full rounded-xl" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!processo) {
+    return (
+      <div className="space-y-6 p-6">
+        <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar
+        </Button>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Erro ao carregar processo</AlertTitle>
+          <AlertDescription>
+            {error ?? "Não foi possível encontrar os dados deste processo."}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
@@ -1343,6 +1537,7 @@ export default function VisualizarProcesso() {
                         size="sm"
                         className="w-full justify-center"
                         onClick={handleGerarContrato}
+                        disabled={!clienteIdParam || !processoId}
                       >
                         Gerar contrato
                       </Button>
