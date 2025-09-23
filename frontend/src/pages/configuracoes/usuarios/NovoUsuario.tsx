@@ -45,7 +45,6 @@ const formSchema = z.object({
     .email("Email inválido")
     .refine((email) => !existingEmails.includes(email), "Email já cadastrado"),
   perfilId: z.string().min(1, "Perfil é obrigatório"),
-  setorId: z.string().min(1, "Setor é obrigatório"),
   password: z.string().min(6, "Mínimo de 6 caracteres").optional(),
   phone: z.string().optional(),
 });
@@ -57,15 +56,9 @@ type ApiPerfil = {
   nome: string;
 };
 
-type ApiSetor = {
-  id: number;
-  nome: string;
-};
-
 export default function NovoUsuario() {
   const navigate = useNavigate();
   const [perfis, setPerfis] = useState<ApiPerfil[]>([]);
-  const [setores, setSetores] = useState<ApiSetor[]>([]);
   const { user } = useAuth();
 
   const form = useForm<FormValues>({
@@ -74,7 +67,6 @@ export default function NovoUsuario() {
       name: "",
       email: "",
       perfilId: "",
-      setorId: "",
       password: "",
       phone: "",
     },
@@ -99,23 +91,17 @@ export default function NovoUsuario() {
 
     const fetchOptions = async () => {
       try {
-        const [perfisRes, setoresRes] = await Promise.all([
-          fetch(joinUrl(apiUrl, "/api/perfis"), { headers: { Accept: "application/json" } }),
-          fetch(joinUrl(apiUrl, "/api/escritorios"), { headers: { Accept: "application/json" } }),
-        ]);
+        const perfisRes = await fetch(joinUrl(apiUrl, "/api/perfis"), {
+          headers: { Accept: "application/json" },
+        });
 
         if (!perfisRes.ok) {
           throw new Error("Não foi possível carregar os perfis");
         }
-        if (!setoresRes.ok) {
-          throw new Error("Não foi possível carregar os setores");
-        }
 
         const perfisJson = await perfisRes.json();
-        const setoresJson = await setoresRes.json();
 
         setPerfis(extractArray<ApiPerfil>(perfisJson));
-        setSetores(extractArray<ApiSetor>(setoresJson));
       } catch (error) {
         console.error("Erro ao carregar opções:", error);
         toast({ title: "Erro ao carregar dados", variant: "destructive" });
@@ -137,7 +123,6 @@ export default function NovoUsuario() {
     }
 
     const perfilId = Number(data.perfilId);
-    const setorId = Number(data.setorId);
     const empresaId = user.empresa_id ?? null;
 
     const payload = {
@@ -146,7 +131,6 @@ export default function NovoUsuario() {
       email: data.email,
       perfil: Number.isNaN(perfilId) ? null : perfilId,
       empresa: empresaId,
-      setor: Number.isNaN(setorId) ? null : setorId,
       oab: null,
       status: true,
       senha: password,
@@ -240,31 +224,6 @@ export default function NovoUsuario() {
                         {perfis.map((perfil) => (
                           <SelectItem key={perfil.id} value={String(perfil.id)}>
                             {perfil.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="setorId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Setor</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o setor" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {setores.map((setor) => (
-                          <SelectItem key={setor.id} value={String(setor.id)}>
-                            {setor.nome}
                           </SelectItem>
                         ))}
                       </SelectContent>
