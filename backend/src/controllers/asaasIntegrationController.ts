@@ -1,6 +1,12 @@
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
 import pool from '../services/db';
+import {
+  applySubscriptionOverdue,
+  applySubscriptionPayment,
+  findCompanyIdForCliente,
+  findCompanyIdForFinancialFlow,
+} from '../services/subscriptionService';
 
 interface RawBodyRequest extends Request {
   rawBody?: string;
@@ -31,6 +37,7 @@ type ChargeRecord = {
   id: number;
   credential_id: number | null;
   financial_flow_id: number | null;
+  cliente_id: number | string | null;
 };
 
 type CredentialRecord = {
@@ -174,7 +181,7 @@ function extractChargeStatus(event: string, payment: AsaasPaymentPayload | null 
 
 async function findChargeByAsaasId(asaasChargeId: string): Promise<ChargeRecord | null> {
   const result = await pool.query<ChargeRecord>(
-    'SELECT id, credential_id, financial_flow_id FROM asaas_charges WHERE asaas_charge_id = $1',
+    'SELECT id, credential_id, financial_flow_id, cliente_id FROM asaas_charges WHERE asaas_charge_id = $1',
     [asaasChargeId]
   );
 
@@ -183,6 +190,24 @@ async function findChargeByAsaasId(asaasChargeId: string): Promise<ChargeRecord 
   }
 
   return result.rows[0] ?? null;
+}
+
+function extractDueDate(payment: AsaasPaymentPayload | null | undefined): Date | null {
+  if (!payment || typeof payment.dueDate !== 'string') {
+    return null;
+  }
+
+  const trimmed = payment.dueDate.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
 }
 
 async function findCredentialSecret(credentialId: number): Promise<string | null> {
@@ -341,12 +366,44 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
 
   const status = extractChargeStatus(normalizedEvent, payment);
   const paymentDate = shouldMarkAsPaid(normalizedEvent) ? extractPaymentDate(payment) : null;
+  const dueDate = normalizedEvent === 'PAYMENT_OVERDUE' ? extractDueDate(payment) : null;
 
   try {
     await updateCharge(asaasChargeId, normalizedEvent, status, paymentDate, payload ?? {});
 
     if (charge.financial_flow_id && shouldMarkAsPaid(normalizedEvent)) {
       await updateFinancialFlowAsPaid(charge.financial_flow_id, paymentDate);
+    }
+
+    let companyId: number | null = null;
+
+    try {
+      if (charge.financial_flow_id) {
+        companyId = await findCompanyIdForFinancialFlow(charge.financial_flow_id);
+      }
+
+      if (!companyId && charge.cliente_id != null) {
+        companyId = await findCompanyIdForCliente(charge.cliente_id);
+      }
+    } catch (lookupError) {
+      console.error('[AsaasWebhook] Failed to resolve company for charge', charge.id, lookupError);
+    }
+
+    if (companyId) {
+      try {
+        if (shouldMarkAsPaid(normalizedEvent)) {
+          const effectivePaymentDate = paymentDate ? new Date(paymentDate) : new Date();
+          await applySubscriptionPayment(companyId, effectivePaymentDate);
+        } else if (normalizedEvent === 'PAYMENT_OVERDUE') {
+          await applySubscriptionOverdue(companyId, dueDate);
+        }
+      } catch (subscriptionError) {
+        console.error(
+          '[AsaasWebhook] Failed to update subscription timelines for company',
+          companyId,
+          subscriptionError,
+        );
+      }
     }
   } catch (error) {
     console.error('[AsaasWebhook] Failed to persist webhook payload', error);

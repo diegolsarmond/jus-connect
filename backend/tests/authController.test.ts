@@ -93,7 +93,10 @@ const setupPoolConnectMock = (responses: QueryResponse[]) => {
 };
 
 test('register creates company, profile and user atomically', async () => {
-  const duplicateCheckResponses: QueryResponse[] = [{ rows: [], rowCount: 0 }];
+const duplicateCheckResponses: QueryResponse[] = [
+  { rows: [], rowCount: 0 },
+  { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+];
   const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock(
     duplicateCheckResponses
   );
@@ -183,8 +186,10 @@ test('register creates company, profile and user atomically', async () => {
   );
   assert.deepEqual(perfilModuloCall?.values?.[1], ['dashboard', 'clientes', 'configuracoes']);
 
-  assert.equal(poolCalls.length, 1);
+  assert.equal(poolCalls.length, 2);
   assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
+  assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
+  assert.deepEqual(poolCalls[1]?.values, [7]);
   assert.equal(wasReleased(), true);
 });
 
