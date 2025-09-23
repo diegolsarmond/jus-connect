@@ -790,7 +790,7 @@ export const login = async (req: Request, res: Response) => {
 
     const modulos = await fetchPerfilModules(user.perfil);
 
-    const subscription =
+    const subscriptionDetails =
       user.empresa_id != null
         ? resolveSubscriptionPayloadFromRow({
             empresa_plano: user.empresa_plano,
@@ -803,6 +803,29 @@ export const login = async (req: Request, res: Response) => {
             grace_expires_at: user.empresa_grace_expires_at ?? user.empresa_grace_period_ends_at,
             subscription_cadence: user.empresa_subscription_cadence,
           })
+        : null;
+
+    const subscription =
+      subscriptionDetails && subscriptionResolution
+        ? {
+            planId: subscriptionResolution.planId ?? subscriptionDetails.planId,
+            status: subscriptionResolution.status,
+            cadence: subscriptionDetails.cadence,
+            startedAt: subscriptionResolution.startedAt ?? subscriptionDetails.startedAt,
+            trialEndsAt:
+              subscriptionResolution.trialEndsAt ?? subscriptionDetails.trialEndsAt,
+            currentPeriodStart: subscriptionDetails.currentPeriodStart,
+            currentPeriodEndsAt:
+              subscriptionResolution.currentPeriodEndsAt ??
+              subscriptionDetails.currentPeriodEnd,
+            currentPeriodEnd: subscriptionDetails.currentPeriodEnd,
+            gracePeriodEndsAt:
+              subscriptionResolution.gracePeriodEndsAt ??
+              subscriptionDetails.graceExpiresAt,
+            graceExpiresAt: subscriptionDetails.graceExpiresAt,
+            isInGoodStanding: subscriptionResolution.isInGoodStanding,
+            blockingReason: subscriptionResolution.blockingReason,
+          }
         : null;
 
 
