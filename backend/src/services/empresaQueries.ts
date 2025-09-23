@@ -7,7 +7,7 @@ const EMPRESA_QUERY_SOURCES = [
   {
     label: 'view',
     text:
-      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, NULL::timestamp AS atualizacao FROM public."vw.empresas"',
+      'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, NULL::timestamp AS atualizacao FROM public."empresas"',
   },
   {
     label: 'table',
