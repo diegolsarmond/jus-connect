@@ -29,6 +29,7 @@ type PlanoResponseRow = Omit<
     | 'limite_propostas'
     | 'sincronizacao_processos_habilitada'
     | 'sincronizacao_processos_cota'
+    | 'ativo'
 
 > & {
   recursos: string[];
@@ -38,6 +39,7 @@ type PlanoResponseRow = Omit<
   limite_propostas: number | null;
   sincronizacao_processos_habilitada: boolean;
   sincronizacao_processos_cota: number | null;
+  ativo: boolean;
 };
 
 const parseBooleanFlag = (value: unknown): boolean | null => {
