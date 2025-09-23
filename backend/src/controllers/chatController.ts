@@ -132,6 +132,37 @@ function parseUpdateConversationPayload(body: any): UpdateConversationInput {
     }
   }
 
+  if (has('clientId')) {
+    const value = body.clientId;
+    let normalized: number | null;
+    if (value === null || value === undefined || (typeof value === 'string' && value.trim().length === 0)) {
+      normalized = null;
+    } else if (typeof value === 'number') {
+      if (!Number.isInteger(value) || value <= 0) {
+        throw new ChatValidationError('clientId must be a positive integer');
+      }
+      normalized = value;
+    } else if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        normalized = null;
+      } else {
+        const parsed = Number.parseInt(trimmed, 10);
+        if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+          throw new ChatValidationError('clientId must be a positive integer');
+        }
+        normalized = parsed;
+      }
+    } else {
+      throw new ChatValidationError('clientId must be a number, string or null');
+    }
+
+    payload.clientId = normalized;
+    if (!has('isLinkedToClient')) {
+      payload.isLinkedToClient = normalized !== null;
+    }
+  }
+
   if (has('isLinkedToClient')) {
     if (typeof body.isLinkedToClient !== 'boolean') {
       throw new ChatValidationError('isLinkedToClient must be a boolean');

@@ -47,6 +47,7 @@ export interface ConversationSummary {
   responsible?: ConversationResponsible | null;
   tags?: string[];
   isLinkedToClient?: boolean;
+  clientId?: number | null;
   clientName?: string | null;
   customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
@@ -125,6 +126,7 @@ export interface UpdateConversationInput {
   tags?: string[];
   phoneNumber?: string | null;
   isLinkedToClient?: boolean;
+  clientId?: number | null;
   clientName?: string | null;
   customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
@@ -157,6 +159,7 @@ interface ConversationRow extends QueryResultRow {
   responsible_id: number | null;
   responsible_snapshot: unknown;
   tags: unknown;
+  client_id: number | string | null;
   client_name: string | null;
   is_linked_to_client: boolean | null;
   custom_attributes: unknown;
@@ -561,11 +564,20 @@ function mapConversation(row: ConversationRow): ConversationDetails {
   const tags = parseStringArray(row.tags).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const customAttributes = parseCustomAttributes(row.custom_attributes);
   const internalNotes = parseInternalNotes(row.internal_notes);
+  let clientId: number | null = null;
+  if (typeof row.client_id === 'number' && Number.isFinite(row.client_id)) {
+    clientId = row.client_id;
+  } else if (typeof row.client_id === 'string' && row.client_id.trim()) {
+    const parsed = Number.parseInt(row.client_id, 10);
+    if (Number.isFinite(parsed)) {
+      clientId = parsed;
+    }
+  }
   const clientName =
     typeof row.client_name === 'string' && row.client_name.trim() ? row.client_name.trim() : null;
   const phoneNumber =
     typeof row.phone_number === 'string' && row.phone_number.trim() ? row.phone_number.trim() : undefined;
-  const isLinkedToClient = row.is_linked_to_client === true;
+  const isLinkedToClient = row.is_linked_to_client === true || clientId !== null;
   const isPrivate = row.is_private === true;
   const responsible = mapResponsible(row);
 
@@ -582,6 +594,7 @@ function mapConversation(row: ConversationRow): ConversationDetails {
     responsible,
     tags,
     isLinkedToClient,
+    clientId,
     clientName,
     customAttributes,
     isPrivate,
@@ -760,7 +773,7 @@ export default class ChatService {
   async listConversations(): Promise<ConversationSummary[]> {
     const result = await this.query(
       `SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
               custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
@@ -783,6 +796,7 @@ export default class ChatService {
         responsible: mapped.responsible,
         tags: mapped.tags,
         isLinkedToClient: mapped.isLinkedToClient,
+        clientId: mapped.clientId,
         clientName: mapped.clientName,
         customAttributes: mapped.customAttributes,
         isPrivate: mapped.isPrivate,
@@ -819,7 +833,7 @@ export default class ChatService {
   async getConversationDetails(conversationId: string): Promise<ConversationDetails | null> {
     const result = await this.query(
       `SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
               custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
@@ -866,7 +880,7 @@ export default class ChatService {
              pinned = EXCLUDED.pinned,
              metadata = EXCLUDED.metadata
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
                  custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,
@@ -887,6 +901,7 @@ export default class ChatService {
       responsible: mapped.responsible,
       tags: mapped.tags,
       isLinkedToClient: mapped.isLinkedToClient,
+      clientId: mapped.clientId,
       clientName: mapped.clientName,
       customAttributes: mapped.customAttributes,
       isPrivate: mapped.isPrivate,
@@ -981,6 +996,23 @@ export default class ChatService {
       }
     }
 
+    if (has('clientId')) {
+      const clientIdValue = changes.clientId;
+      if (clientIdValue === null) {
+        setNull('client_id');
+        if (!has('isLinkedToClient')) {
+          addAssignment('is_linked_to_client', false);
+        }
+      } else if (typeof clientIdValue === 'number' && Number.isInteger(clientIdValue) && clientIdValue > 0) {
+        addAssignment('client_id', clientIdValue);
+        if (!has('isLinkedToClient')) {
+          addAssignment('is_linked_to_client', true);
+        }
+      } else {
+        throw new ValidationError('clientId must be a positive integer or null');
+      }
+    }
+
     if (has('isLinkedToClient')) {
       const linkValue = changes.isLinkedToClient;
       if (typeof linkValue !== 'boolean') {
@@ -1016,7 +1048,7 @@ export default class ChatService {
           SET ${assignments.join(', ')}
         WHERE id = $1
         RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-                  phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                  phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
                   custom_attributes, is_private, internal_notes,
                   unread_count, last_message_id, last_message_preview, last_message_timestamp,
                   last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,
@@ -1070,7 +1102,7 @@ export default class ChatService {
               ELSE COALESCE(chat_conversations.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
             END
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
                  custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`,

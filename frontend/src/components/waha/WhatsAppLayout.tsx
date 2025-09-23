@@ -146,6 +146,10 @@ const mergeOverrides = (
     responsible:
       overrides.responsible !== undefined ? overrides.responsible : base.responsible ?? null,
     phoneNumber: overrides.phoneNumber ?? base.phoneNumber,
+    clientId:
+      overrides.clientId !== undefined
+        ? overrides.clientId ?? null
+        : base.clientId ?? null,
     clientName: overrides.clientName ?? base.clientName,
     isLinkedToClient: overrides.isLinkedToClient ?? base.isLinkedToClient,
     isPrivate: overrides.isPrivate ?? base.isPrivate,
@@ -216,6 +220,7 @@ const mapChatToConversation = (
     responsible: pickDefaultResponsible(chat.id),
     tags: pickDefaultTags(chat.id),
     isLinkedToClient: false,
+    clientId: null,
     clientName: null,
     customAttributes: [],
     isPrivate: false,
@@ -404,6 +409,10 @@ export const WhatsAppLayout = ({
       const prefill: AppointmentCreationPrefill = {
         title: activeConversation.name ? `Contato: ${activeConversation.name}` : undefined,
         description: activeConversation.lastMessage?.content,
+        clientId:
+          activeConversation.clientId !== null && activeConversation.clientId !== undefined
+            ? String(activeConversation.clientId)
+            : undefined,
         clientName: activeConversation.clientName ?? activeConversation.name,
         clientPhone: activeConversation.phoneNumber,
       };
@@ -489,6 +498,15 @@ export const WhatsAppLayout = ({
       }
       if ("phoneNumber" in changes) {
         next.phoneNumber = changes.phoneNumber;
+      }
+      if ("clientId" in changes) {
+        const rawId = changes.clientId;
+        if (rawId === null || rawId === undefined || rawId === "") {
+          next.clientId = null;
+        } else {
+          const parsed = Number.parseInt(String(rawId), 10);
+          next.clientId = Number.isFinite(parsed) ? parsed : next.clientId ?? null;
+        }
       }
       if ("isLinkedToClient" in changes) {
         next.isLinkedToClient = changes.isLinkedToClient ?? false;

@@ -216,6 +216,7 @@ export const publishConversationUpdate = (
     responsible: conversation.responsible,
     tags: conversation.tags,
     isLinkedToClient: conversation.isLinkedToClient,
+    clientId: conversation.clientId,
     clientName: conversation.clientName,
     customAttributes: conversation.customAttributes,
     isPrivate: conversation.isPrivate,
