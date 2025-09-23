@@ -191,17 +191,30 @@ export const updateConversation = async (
 };
 
 interface ApiUser {
-  id: number | string;
+  id?: number | string | null;
+  id_usuario?: number | string | null;
+  idUsuario?: number | string | null;
+  idusuario?: number | string | null;
+  usuario_id?: number | string | null;
+  usuarioId?: number | string | null;
+  user_id?: number | string | null;
+  userId?: number | string | null;
+  codigo?: number | string | null;
   nome_completo?: string | null;
   nome?: string | null;
   nome_usuario?: string | null;
   nomeusuario?: string | null;
+  nomeUsuario?: string | null;
+  nome_usuario_completo?: string | null;
   email?: string | null;
   perfil?: string | number | null;
   perfil_nome?: string | null;
   perfil_nome_exibicao?: string | null;
+  perfil_descricao?: string | null;
+  perfilDescricao?: string | null;
   funcao?: string | null;
   cargo?: string | null;
+  papel?: string | null;
 }
 
 export interface ChatResponsibleOption {
@@ -210,25 +223,139 @@ export interface ChatResponsibleOption {
   role?: string;
 }
 
+const extractUserArray = (payload: unknown): ApiUser[] => {
+  const direct = extractDataArray<ApiUser>(payload);
+  if (direct.length > 0) {
+    return direct;
+  }
+
+  const visited = new Set<object>();
+  const queue: unknown[] = [];
+
+  if (payload && typeof payload === "object") {
+    queue.push(payload);
+  }
+
+  const candidateKeys = [
+    "usuarios",
+    "usuarios_empresa",
+    "usuariosEmpresa",
+    "usuariosEmpresaRows",
+    "lista",
+    "list",
+    "items",
+    "result",
+    "results",
+    "response",
+    "payload",
+    "content",
+    "records",
+    "values",
+    "body",
+    "data",
+    "rows",
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
+      continue;
+    }
+
+    if (Array.isArray(current)) {
+      const objects = current.filter(
+        (item): item is ApiUser => Boolean(item && typeof item === "object"),
+      );
+      if (objects.length > 0) {
+        return objects;
+      }
+      continue;
+    }
+
+    if (typeof current !== "object") {
+      continue;
+    }
+
+    if (visited.has(current as object)) {
+      continue;
+    }
+    visited.add(current as object);
+
+    const extracted = extractDataArray<ApiUser>(current);
+    if (extracted.length > 0) {
+      return extracted;
+    }
+
+    for (const key of candidateKeys) {
+      if (key in (current as Record<string, unknown>)) {
+        queue.push((current as Record<string, unknown>)[key]);
+      }
+    }
+
+    for (const value of Object.values(current as Record<string, unknown>)) {
+      if (value && typeof value === "object") {
+        queue.push(value);
+      }
+    }
+  }
+
+  return [];
+};
+
+const extractUserId = (user: ApiUser): string | undefined => {
+  const candidates: Array<number | string | null | undefined> = [
+    user.id,
+    user.id_usuario,
+    user.idUsuario,
+    user.idusuario,
+    user.usuario_id,
+    user.usuarioId,
+    user.user_id,
+    user.userId,
+    user.codigo,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(Math.trunc(candidate));
+    }
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> => {
-  const response = await fetch(getApiUrl("usuarios/empresa"), {
+  const response = await fetch(getApiUrl("get_api_usuarios_empresa"), {
     headers: { Accept: "application/json" },
   });
   const payload = await parseJson<unknown>(response);
-  const data = extractDataArray<ApiUser>(payload);
+  const data = extractUserArray(payload);
   const options: ChatResponsibleOption[] = [];
   const seen = new Set<string>();
 
   for (const user of data) {
-    if (!user || user.id === undefined || user.id === null) {
+    if (!user) {
       continue;
     }
-    const id = String(user.id);
+    const id = extractUserId(user);
     if (!id || seen.has(id)) {
       continue;
     }
     const name =
-      pickFirstNonEmptyString(user.nome_completo, user.nome, user.nome_usuario, user.nomeusuario) ??
+      pickFirstNonEmptyString(
+        user.nome_completo,
+        user.nome,
+        user.nome_usuario,
+        user.nomeusuario,
+        user.nomeUsuario,
+        user.nome_usuario_completo,
+      ) ??
       getNameFromEmail(user.email);
     if (!name) {
       continue;
@@ -239,8 +366,11 @@ export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> 
         typeof user.perfil === "string" ? user.perfil : undefined,
         user.perfil_nome,
         user.perfil_nome_exibicao,
+        user.perfil_descricao,
+        user.perfilDescricao,
         user.funcao,
         user.cargo,
+        user.papel,
       ) ??
       (typeof user.perfil === "number" && Number.isFinite(user.perfil)
         ? String(user.perfil)
