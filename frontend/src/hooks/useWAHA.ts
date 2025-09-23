@@ -4,8 +4,9 @@ import WAHAService, {
   WAHARequestError,
   WAHA_SESSION_RECOVERY_MESSAGE,
 } from '@/services/waha';
-import { ChatOverview, ChatParticipant, Message, SessionStatus } from '@/types/waha';
+import { ChatOverview, ChatParticipant, Message, SessionStatus, WAHAResponse } from '@/types/waha';
 import { useToast } from '@/hooks/use-toast';
+import type { SendMessageInput } from '@/features/chat/types';
 
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 100;
@@ -743,74 +744,186 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
     [loadMessages],
   );
 
-  // Send a text message
-  const sendMessage = useCallback(async (chatId: string, text: string) => {
-    try {
-      const response = await wahaService.sendTextMessage({
-        chatId,
-        text,
-        linkPreview: true,
-      });
+  // Send a message (text or media)
+  const sendMessage = useCallback(
+    async (chatId: string, payload: SendMessageInput) => {
+      const attachments = payload.attachments ?? [];
+      const [primaryAttachment] = attachments;
+      const trimmedContent = payload.content?.trim?.() ?? '';
+      const hasTextContent = trimmedContent.length > 0;
+      const hasAttachment = Boolean(primaryAttachment);
 
-      if (response.error) {
-        throw new WAHARequestError(response.error, response.status);
+      if (!hasTextContent && !hasAttachment) {
+        return;
       }
 
-      if (response.data && isMountedRef.current) {
-        // Add the sent message to the local state
-        setMessages(prev => ({
-          ...prev,
-          [chatId]: [...(prev[chatId] || []), response.data!]
-        }));
+      const resolveMessageKind = (): 'text' | 'image' | 'audio' | 'file' => {
+        if (!hasAttachment) {
+          return 'text';
+        }
 
-        // Update the last message in the chat overview
-        setChats(prev =>
-          sortChatsByRecency(
-            prev.map(chat =>
-              chat.id === chatId
-                ? {
-                    ...chat,
-                    lastMessage: {
-                      body: text,
-                      timestamp: response.data!.timestamp,
-                      fromMe: true,
-                      type: 'text'
+        const explicitType = payload.type?.toLowerCase();
+        const attachmentType = primaryAttachment?.type?.toLowerCase();
+
+        if (explicitType === 'image' || attachmentType === 'image') {
+          return 'image';
+        }
+        if (explicitType === 'audio' || attachmentType === 'audio') {
+          return 'audio';
+        }
+        return 'file';
+      };
+
+      const kind = resolveMessageKind();
+      const baseCaption = hasTextContent ? trimmedContent : undefined;
+      const attachmentUrl = primaryAttachment?.url;
+      const attachmentName = primaryAttachment?.name;
+
+      try {
+        let response: WAHAResponse<Message> | null = null;
+
+        if (kind === 'text') {
+          const messageText = trimmedContent;
+          if (!messageText) {
+            return;
+          }
+          response = await wahaService.sendTextMessage({
+            chatId,
+            text: messageText,
+            linkPreview: true,
+          });
+        } else if (kind === 'image') {
+          if (!attachmentUrl) {
+            throw new Error('Nenhuma imagem encontrada para envio.');
+          }
+          response = await wahaService.sendImageMessage({
+            chatId,
+            image: attachmentUrl,
+            caption: baseCaption,
+            filename: attachmentName,
+            isBase64: attachmentUrl.startsWith('data:'),
+          });
+        } else if (kind === 'audio') {
+          if (!attachmentUrl) {
+            throw new Error('Nenhum áudio encontrado para envio.');
+          }
+          response = await wahaService.sendVoiceMessage({
+            chatId,
+            voice: attachmentUrl,
+            caption: baseCaption,
+            filename: attachmentName,
+          });
+        } else {
+          if (!attachmentUrl) {
+            throw new Error('Nenhum arquivo encontrado para envio.');
+          }
+          response = await wahaService.sendFileMessage({
+            chatId,
+            file: attachmentUrl,
+            caption: baseCaption,
+            filename: attachmentName,
+            isBase64: attachmentUrl.startsWith('data:'),
+          });
+        }
+
+        if (!response) {
+          return;
+        }
+
+        if (response.error) {
+          throw new WAHARequestError(response.error, response.status);
+        }
+
+        const data = response.data;
+        if (data && isMountedRef.current) {
+          const normalized: Message = {
+            ...data,
+            body:
+              data.body ??
+              (kind === 'text' && hasTextContent ? trimmedContent : data.body),
+            caption:
+              data.caption ??
+              (kind !== 'text' && baseCaption ? baseCaption : data.caption),
+            filename:
+              data.filename ?? (kind !== 'text' ? attachmentName : data.filename),
+            mediaUrl:
+              data.mediaUrl ?? (kind !== 'text' ? attachmentUrl : data.mediaUrl),
+          };
+
+          if (kind !== 'text' && !normalized.body && baseCaption) {
+            normalized.body = baseCaption;
+          }
+
+          setMessages((prev) => ({
+            ...prev,
+            [chatId]: [...(prev[chatId] || []), normalized],
+          }));
+
+          const lastMessagePreview =
+            normalized.body ??
+            normalized.caption ??
+            normalized.filename ??
+            (normalized.mediaUrl && normalized.type !== 'text' ? normalized.mediaUrl : '') ??
+            '';
+
+          setChats((prev) =>
+            sortChatsByRecency(
+              prev.map((chat) =>
+                chat.id === chatId
+                  ? {
+                      ...chat,
+                      lastMessage: {
+                        id: normalized.id,
+                        body: lastMessagePreview,
+                        timestamp: normalized.timestamp,
+                        fromMe: true,
+                        type: normalized.type,
+                        ack:
+                          typeof normalized.ack === 'number'
+                            ? normalized.ack
+                            : undefined,
+                        ackName:
+                          typeof normalized.ack === 'string'
+                            ? normalized.ack
+                            : undefined,
+                      },
                     }
-                  }
-                : chat
+                  : chat,
+              ),
             ),
-          ),
-        );
+          );
 
-        toast({
-          title: 'Mensagem enviada',
+          toast({
+            title: 'Mensagem enviada',
             description: 'Sua mensagem foi enviada com sucesso.',
-        });
-      }
-    } catch (err) {
-      let status: number | undefined;
-      let errorMessage = 'Não foi possível enviar a mensagem. Tente novamente.';
+          });
+        }
+      } catch (err) {
+        let status: number | undefined;
+        let errorMessage = 'Não foi possível enviar a mensagem. Tente novamente.';
 
-      if (err instanceof WAHARequestError) {
-        status = err.status;
-        if (err.message?.trim()) {
+        if (err instanceof WAHARequestError) {
+          status = err.status;
+          if (err.message?.trim()) {
+            errorMessage = err.message;
+          }
+        } else if (err instanceof Error && err.message.trim()) {
           errorMessage = err.message;
         }
-      } else if (err instanceof Error && err.message.trim()) {
-        errorMessage = err.message;
-      }
 
-      if (status === 422) {
-        errorMessage = WAHA_SESSION_RECOVERY_MESSAGE;
-      }
+        if (status === 422) {
+          errorMessage = WAHA_SESSION_RECOVERY_MESSAGE;
+        }
 
-      toast({
-        title: status === 422 ? 'Sessão desconectada' : 'Erro',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    }
-  }, [toast]);
+        toast({
+          title: status === 422 ? 'Sessão desconectada' : 'Erro',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
+    },
+    [toast],
+  );
 
   // Check session status
   const checkSessionStatus = useCallback(async () => {
