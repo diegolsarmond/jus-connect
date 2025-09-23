@@ -18,17 +18,17 @@ type PlanoRow = {
   recorrencia: Recorrencia | null;
   qtde_usuarios: number | string | null;
   recursos: unknown;
-  modulos: string[] | null;
-  max_propostas: number | string | null;
-  sincronizacao_processos_habilitada: boolean | null;
-  sincronizacao_processos_limite: number | string | null;
-  max_casos?: number | string | null;
-  maxCases?: number | string | null;
-  sincronizacao_processos_habilitada?: boolean | number | string | null;
-  sincronizacaoProcessosHabilitada?: boolean | number | string | null;
-  sincronizacao_processos_limite?: number | string | null;
-  sincronizacaoProcessosLimite?: number | string | null;
-};
+  modulos?: unknown;
+  max_propostas?: unknown;
+} &
+  Partial<{
+    max_casos: number | string | null;
+    maxCases: number | string | null;
+    sincronizacao_processos_habilitada: boolean | number | string | null;
+    sincronizacaoProcessosHabilitada: boolean | number | string | null;
+    sincronizacao_processos_limite: number | string | null;
+    sincronizacaoProcessosLimite: number | string | null;
+  }>;
 
 type PlanoResponseRow = Omit<
   PlanoRow,
@@ -39,7 +39,9 @@ type PlanoResponseRow = Omit<
     | 'modulos'
     | 'max_propostas'
     | 'sincronizacao_processos_habilitada'
+    | 'sincronizacaoProcessosHabilitada'
     | 'sincronizacao_processos_limite'
+    | 'sincronizacaoProcessosLimite'
 > & {
   recursos: string[];
   max_casos: number | null;
@@ -422,34 +424,39 @@ const prepareRecursosForStorage = (
 const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
   const recursosDetalhes = parseRecursosDetails(row.recursos);
   const explicitMaxCasos =
-    toInteger((row as { max_casos?: unknown }).max_casos) ??
-    toInteger((row as { maxCases?: unknown }).maxCases);
+    toInteger(row.max_casos) ?? toInteger(row.maxCases);
+
+  const rawSyncEnabled =
+    row.sincronizacao_processos_habilitada ??
+    row.sincronizacaoProcessosHabilitada ??
+    null;
+  const rawSyncLimit =
+    row.sincronizacao_processos_limite ??
+    row.sincronizacaoProcessosLimite ??
+    null;
 
   const maxCasos = explicitMaxCasos ?? recursosDetalhes.maxCasos ?? null;
-  const rawSyncEnabled =
-    (row as { sincronizacao_processos_habilitada?: unknown })
-      .sincronizacao_processos_habilitada ??
-    (row as { sincronizacaoProcessosHabilitada?: unknown })
-      .sincronizacaoProcessosHabilitada;
-  const rawSyncLimit =
-    (row as { sincronizacao_processos_limite?: unknown })
-      .sincronizacao_processos_limite ??
-    (row as { sincronizacaoProcessosLimite?: unknown })
-      .sincronizacaoProcessosLimite;
-
   const sincronizacaoProcessosHabilitada = parseBooleanFlag(rawSyncEnabled);
   const sincronizacaoProcessosLimite = parseNullableInteger(rawSyncLimit);
 
+  const {
+    max_casos: _ignoredMaxCasosSnake,
+    maxCases: _ignoredMaxCasesCamel,
+    sincronizacao_processos_habilitada: _ignoredSyncSnake,
+    sincronizacaoProcessosHabilitada: _ignoredSyncCamel,
+    sincronizacao_processos_limite: _ignoredLimitSnake,
+    sincronizacaoProcessosLimite: _ignoredLimitCamel,
+    ...baseRow
+  } = row;
 
   return {
-    ...row,
+    ...baseRow,
     ativo: row.ativo ?? true,
     recursos: recursosDetalhes.recursos,
     max_casos: maxCasos,
     maxCases: maxCasos,
     sincronizacao_processos_habilitada: sincronizacaoProcessosHabilitada,
     sincronizacao_processos_limite: sincronizacaoProcessosLimite,
-
   };
 };
 
@@ -478,6 +485,8 @@ export const createPlano = async (req: Request, res: Response) => {
     recursos,
     max_casos,
     maxCases,
+    modulos,
+    max_propostas,
     sincronizacao_processos_habilitada,
     sincronizacaoProcessosHabilitada,
     sincronizacao_processos_limite,
