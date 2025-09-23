@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, Search as SearchIcon, Server, Timer } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Activity, AlertTriangle, Search as SearchIcon, Server, Timer, AlertCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,18 +15,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { mockServerLogs, type ServerLog } from "@/data/mockData";
+import { loadAdminLogs, type LogEvent } from "@/services/analytics";
 import { cn } from "@/lib/utils";
 
-type LevelFilter = "all" | ServerLog["level"];
+type LevelFilter = "all" | LogEvent["level"];
 
-const levelLabels: Record<ServerLog["level"], string> = {
+const levelLabels: Record<LogEvent["level"], string> = {
   info: "Info",
   warn: "Alerta",
   error: "Erro",
 };
 
-const levelBadgeStyles: Record<ServerLog["level"], string> = {
+const levelBadgeStyles: Record<LogEvent["level"], string> = {
   info: "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-200",
   warn: "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100",
   error: "border-red-200 bg-red-100 text-red-800 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-100",
@@ -71,7 +71,7 @@ const formatDuration = (durationMs: number) => {
   return `${durationMs.toFixed(3)} ms`;
 };
 
-const buildMetadataSummary = (log: ServerLog) => {
+const buildMetadataSummary = (log: LogEvent) => {
   if (!log.metadata) {
     return null;
   }
@@ -98,19 +98,60 @@ const buildMetadataSummary = (log: ServerLog) => {
 const Logs = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [levelFilter, setLevelFilter] = useState<LevelFilter>("all");
+  const [logs, setLogs] = useState<LogEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let mounted = true;
+
+    const loadLogs = async () => {
+      setIsLoading(true);
+      try {
+        const data = await loadAdminLogs(controller.signal);
+        if (!mounted) {
+          return;
+        }
+
+        setLogs(data);
+        setError(null);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return;
+        }
+
+        console.error("Falha ao carregar logs administrativos", err);
+        if (mounted) {
+          setError("Não foi possível carregar os registros de log.");
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadLogs();
+
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
+  }, []);
 
   const sortedLogs = useMemo(
     () =>
-      [...mockServerLogs].sort(
+      [...logs].sort(
         (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       ),
-    [],
+    [logs],
   );
 
   const stats = useMemo(() => {
     let info = 0;
     let warn = 0;
-    let error = 0;
+    let errorCount = 0;
     let httpCount = 0;
     let totalDuration = 0;
     const uniqueIps = new Set<string>();
@@ -118,12 +159,16 @@ const Logs = () => {
     sortedLogs.forEach((log) => {
       if (log.level === "info") info += 1;
       if (log.level === "warn") warn += 1;
-      if (log.level === "error") error += 1;
+      if (log.level === "error") errorCount += 1;
 
       if (log.request) {
         httpCount += 1;
-        totalDuration += log.request.durationMs;
-        uniqueIps.add(log.request.clientIp);
+        if (typeof log.request.durationMs === "number") {
+          totalDuration += log.request.durationMs;
+        }
+        if (log.request.clientIp) {
+          uniqueIps.add(log.request.clientIp);
+        }
       }
     });
 
@@ -131,8 +176,8 @@ const Logs = () => {
       total: sortedLogs.length,
       info,
       warn,
-      error,
-      alerts: warn + error,
+      error: errorCount,
+      alerts: warn + errorCount,
       httpCount,
       avgDuration: httpCount ? totalDuration / httpCount : 0,
       uniqueClients: uniqueIps.size,
@@ -154,10 +199,10 @@ const Logs = () => {
 
       const haystackParts = [
         log.message,
-        log.logger,
+        log.source,
         log.request?.method,
         log.request?.uri,
-        log.request ? String(log.request.status) : undefined,
+        log.request?.status ? String(log.request.status) : undefined,
         log.request?.clientIp,
         log.request?.host,
         log.request?.userAgent,
@@ -175,11 +220,20 @@ const Logs = () => {
       <div className="space-y-1">
         <h1 className="text-3xl font-bold">Monitoramento de Logs</h1>
         <p className="text-muted-foreground">
-          Acompanhe eventos do servidor Caddy e requisições HTTP realizadas na aplicação.
+          Acompanhe eventos do servidor e requisições HTTP realizadas na aplicação.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {error ? (
+        <Card className="border-destructive/50 bg-destructive/10 text-destructive">
+          <CardContent className="flex items-center gap-3 py-4 text-sm">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" aria-busy={isLoading}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de registros</CardTitle>
@@ -237,7 +291,7 @@ const Logs = () => {
         </Card>
       </div>
 
-      <Card>
+      <Card aria-busy={isLoading}>
         <CardHeader className="space-y-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-1">
@@ -312,7 +366,7 @@ const Logs = () => {
                       <TableRow key={log.id}>
                         <TableCell>
                           <div className="font-medium">{formatDateTime(log.timestamp)}</div>
-                          {log.request ? (
+                          {typeof log.request?.durationMs === "number" ? (
                             <div className="text-xs text-muted-foreground">{formatDuration(log.request.durationMs)}</div>
                           ) : null}
                         </TableCell>
@@ -323,8 +377,8 @@ const Logs = () => {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            <span className="font-medium">{log.logger ?? "Aplicação"}</span>
-                            {log.request ? (
+                            <span className="font-medium">{log.source || "Aplicação"}</span>
+                            {log.request?.host ? (
                               <span className="text-xs text-muted-foreground">{log.request.host}</span>
                             ) : null}
                           </div>
@@ -339,15 +393,17 @@ const Logs = () => {
                           {log.request ? (
                             <div className="space-y-1 text-xs">
                               <div className="flex flex-wrap items-center gap-2">
-                                <Badge className={cn("w-fit", getStatusBadgeClass(log.request.status))}>
-                                  {log.request.status}
-                                </Badge>
+                                {typeof log.request.status === "number" ? (
+                                  <Badge className={cn("w-fit", getStatusBadgeClass(log.request.status))}>
+                                    {log.request.status}
+                                  </Badge>
+                                ) : null}
                                 <span className="font-medium text-foreground">
-                                  {log.request.method} {log.request.uri}
+                                  {[log.request.method, log.request.uri].filter(Boolean).join(" ") || "Requisição"}
                                 </span>
                               </div>
                               <div className="text-muted-foreground">
-                                {log.request.clientIp} • {log.request.protocol}
+                                {[log.request.clientIp, log.request.protocol].filter(Boolean).join(" • ") || "Sem detalhes"}
                               </div>
                             </div>
                           ) : (
