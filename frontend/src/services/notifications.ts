@@ -421,10 +421,6 @@ interface NotificationsUnreadResponse {
   count?: number | null;
 }
 
-const JSON_HEADERS: HeadersInit = {
-  Accept: "application/json",
-};
-
 const NUMBER_KEYS: Array<keyof NotificationsUnreadResponse> = [
   "unread",
   "unreadCount",
