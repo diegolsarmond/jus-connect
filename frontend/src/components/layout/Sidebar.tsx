@@ -34,6 +34,7 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
   useSidebar,
+  SidebarMenuBadge,
 } from "@/components/ui/sidebar";
 import {
   Collapsible,
@@ -42,6 +43,8 @@ import {
 } from "@/components/ui/collapsible";
 import { getApiBaseUrl } from "@/lib/api";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useSidebarCounters, type SidebarCounterKey, type SidebarCountersMap } from "@/hooks/useSidebarCounters";
+import { cn } from "@/lib/utils";
 
 interface NavItem {
   name: string;
@@ -49,6 +52,7 @@ interface NavItem {
   icon?: LucideIcon;
   children?: NavItem[];
   moduleId?: string;
+  badgeKey?: SidebarCounterKey;
 }
 
 export function Sidebar() {
@@ -106,12 +110,30 @@ export function Sidebar() {
   const navigation = useMemo<NavItem[]>(
     () => [
       { name: "Dashboard", href: "/", icon: LayoutDashboard, moduleId: "dashboard" },
-      { name: "Conversas", href: "/conversas", icon: MessageCircle, moduleId: "conversas" },
+      {
+        name: "Conversas",
+        href: "/conversas",
+        icon: MessageCircle,
+        moduleId: "conversas",
+        badgeKey: "messages",
+      },
       { name: "Clientes", href: "/clientes", icon: Users, moduleId: "clientes" },
       { name: "Fornecedores", href: "/fornecedores", icon: Package, moduleId: "fornecedores" },
       { name: "Pipeline", href: "/pipeline", icon: Target, children: pipelineMenus, moduleId: "pipeline" },
-      { name: "Agenda", href: "/agenda", icon: Calendar, moduleId: "agenda" },
-      { name: "Tarefas", href: "/tarefas", icon: CheckSquare, moduleId: "tarefas" },
+      {
+        name: "Agenda",
+        href: "/agenda",
+        icon: Calendar,
+        moduleId: "agenda",
+        badgeKey: "agenda",
+      },
+      {
+        name: "Tarefas",
+        href: "/tarefas",
+        icon: CheckSquare,
+        moduleId: "tarefas",
+        badgeKey: "tasks",
+      },
       { name: "Processos", href: "/processos", icon: Gavel, moduleId: "processos" },
       { name: "Intimações", href: "/intimacoes", icon: BellRing, moduleId: "intimacoes" },
       { name: "Documentos Padrões", href: "/documentos", icon: FileText, moduleId: "documentos" },
@@ -197,6 +219,10 @@ export function Sidebar() {
     [pipelineMenus],
   );
 
+  const {
+    counters: sidebarCounters,
+  } = useSidebarCounters();
+
   const filteredNavigation = useMemo<NavItem[]>(() => {
     const filterItems = (items: NavItem[]): NavItem[] =>
       items
@@ -246,6 +272,7 @@ export function Sidebar() {
           isItemActive={isItemActive}
           onNavigate={handleNavigate}
           renderChildren={renderNavItems}
+          counters={sidebarCounters}
         />
       );
 
@@ -312,6 +339,7 @@ type NavItemContentProps = {
   isItemActive: (item: NavItem) => boolean;
   onNavigate: (item: NavItem) => void;
   renderChildren: (items: NavItem[], depth: number) => ReactNode[];
+  counters: SidebarCountersMap;
 };
 
 function NavItemContent({
@@ -320,10 +348,31 @@ function NavItemContent({
   isItemActive,
   onNavigate,
   renderChildren,
+  counters,
 }: NavItemContentProps) {
   const hasChildren = Boolean(item.children && item.children.length > 0);
   const active = isItemActive(item);
   const [open, setOpen] = useState(active);
+
+  const counter = item.badgeKey ? counters[item.badgeKey] : undefined;
+  const shouldRenderBadge = Boolean(
+    counter && !counter.isError && (counter.isLoading || typeof counter.count === "number"),
+  );
+  const displayValue = typeof counter?.count === "number" ? formatCounterValue(counter.count) : undefined;
+  const badgeAriaLabel = counter
+    ? `Contador de ${item.name}: ${
+        displayValue ?? (counter.isLoading ? "carregando" : "indisponível")
+      }`
+    : undefined;
+  const badge = shouldRenderBadge ? (
+    <SidebarMenuBadge
+      aria-label={badgeAriaLabel}
+      aria-live="polite"
+      data-state={counter?.isLoading ? "loading" : "ready"}
+    >
+      {displayValue ?? null}
+    </SidebarMenuBadge>
+  ) : null;
 
   useEffect(() => {
     if (hasChildren && active) {
@@ -343,11 +392,15 @@ function NavItemContent({
       return (
         <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible">
           <CollapsibleTrigger asChild>
-            <SidebarMenuButton isActive={active} className="justify-between">
+            <SidebarMenuButton
+              isActive={active}
+              className={cn("justify-between", badge && "relative pr-7")}
+            >
               <span className="flex items-center gap-2">
                 {Icon && <Icon className="h-4 w-4" />}
                 <span className="truncate">{item.name}</span>
               </span>
+              {badge}
               <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </CollapsibleTrigger>
@@ -361,8 +414,13 @@ function NavItemContent({
     return (
       <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible">
         <CollapsibleTrigger asChild>
-          <SidebarMenuSubButton isActive={active} size="sm" className="justify-between">
+          <SidebarMenuSubButton
+            isActive={active}
+            size="sm"
+            className={cn("justify-between", badge && "relative pr-6")}
+          >
             <span className="truncate">{item.name}</span>
+            {badge}
             <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
           </SidebarMenuSubButton>
         </CollapsibleTrigger>
@@ -378,9 +436,14 @@ function NavItemContent({
   if (depth === 0) {
     return (
       <SidebarMenuButton asChild isActive={active}>
-        <NavLink to={item.href ?? "#"} className="flex w-full items-center gap-2" onClick={handleClick}>
+        <NavLink
+          to={item.href ?? "#"}
+          className={cn("flex w-full items-center gap-2", badge && "relative pr-7")}
+          onClick={handleClick}
+        >
           {Icon && <Icon className="h-4 w-4" />}
           <span className="truncate">{item.name}</span>
+          {badge}
         </NavLink>
       </SidebarMenuButton>
     );
@@ -388,10 +451,25 @@ function NavItemContent({
 
   return (
     <SidebarMenuSubButton asChild isActive={active} size="sm">
-      <NavLink to={item.href ?? "#"} className="flex w-full items-center gap-2" onClick={handleClick}>
+      <NavLink
+        to={item.href ?? "#"}
+        className={cn("flex w-full items-center gap-2", badge && "relative pr-6")}
+        onClick={handleClick}
+      >
         {Icon && <Icon className="h-4 w-4" />}
         <span className="truncate">{item.name}</span>
+        {badge}
       </NavLink>
     </SidebarMenuSubButton>
   );
+}
+
+function formatCounterValue(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    return "0";
+  }
+  if (value > 99) {
+    return "99+";
+  }
+  return String(value);
 }
