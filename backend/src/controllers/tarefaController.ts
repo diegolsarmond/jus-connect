@@ -39,11 +39,15 @@ export const listTarefas = async (req: Request, res: Response) => {
        LEFT JOIN public.usuarios u ON u.id = tr.id_usuario
        WHERE t.ativo IS TRUE
          AND t.idempresa IS NOT DISTINCT FROM $1
-         AND EXISTS (
-           SELECT 1
-             FROM public.tarefas_responsaveis trf
-            WHERE trf.id_tarefa = t.id
-              AND trf.id_usuario = $2
+         AND (
+           t.privada IS NOT TRUE
+           OR t.idusuario = $2
+           OR EXISTS (
+             SELECT 1
+               FROM public.tarefas_responsaveis trf
+              WHERE trf.id_tarefa = t.id
+                AND trf.id_usuario = $2
+           )
          )
        GROUP BY t.id
 ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`,
@@ -96,33 +100,60 @@ export const getTarefaById = async (req: Request, res: Response) => {
 
     const tarefa = result.rows[0];
 
+    let responsaveisRows: Array<{ id_usuario?: unknown }> = [];
     try {
       const responsaveisResult = await pool.query(
         'SELECT id_usuario FROM public.tarefas_responsaveis WHERE id_tarefa = $1',
         [id],
       );
+      responsaveisRows = responsaveisResult.rows;
+    } catch (responsaveisError) {
+      console.error('Falha ao buscar responsáveis da tarefa', responsaveisError);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
 
+    const userId = req.auth.userId;
+    const responsavelIds = new Set<number>();
+    for (const row of responsaveisRows) {
+      const value = row.id_usuario;
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        responsavelIds.add(value);
+      }
+    }
+
+    const isCreator = typeof tarefa.idusuario === 'number' && tarefa.idusuario === userId;
+    const isResponsavel = responsavelIds.has(userId);
+    const isPrivate =
+      tarefa.privada === true ||
+      tarefa.privada === 'true' ||
+      tarefa.privada === 't' ||
+      tarefa.privada === 1;
+
+    if (isPrivate && !isCreator && !isResponsavel) {
+      return res
+        .status(403)
+        .json({ error: 'Você não tem permissão para visualizar esta tarefa.' });
+    }
+
+    try {
       const recipientIds = new Set<string>();
-      if (req.auth?.userId) {
-        recipientIds.add(String(req.auth.userId));
+      if (userId) {
+        recipientIds.add(String(userId));
       }
 
       if (typeof tarefa.idusuario === 'number') {
         recipientIds.add(String(tarefa.idusuario));
       }
 
-      for (const row of responsaveisResult.rows) {
-        const value = (row as { id_usuario?: unknown }).id_usuario;
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          recipientIds.add(String(value));
-        }
+      for (const responsavelId of responsavelIds) {
+        recipientIds.add(String(responsavelId));
       }
 
       await Promise.all(
-        Array.from(recipientIds).map(async (userId) => {
+        Array.from(recipientIds).map(async (recipientId) => {
           try {
             await createNotification({
-              userId,
+              userId: recipientId,
               title: `Tarefa atualizada: ${tarefa.titulo}`,
               message: tarefa.hora
                 ? `A tarefa "${tarefa.titulo}" foi atualizada para ${tarefa.data} às ${tarefa.hora}.`
