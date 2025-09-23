@@ -648,6 +648,7 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         const response = await wahaService.getChatMessages(chatId, {
           limit: MESSAGE_PAGE_SIZE,
           offset,
+          downloadMedia: true,
         });
 
         if (response.error) {
