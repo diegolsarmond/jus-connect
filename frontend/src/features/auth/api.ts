@@ -108,7 +108,14 @@ const parseSubscriptionStatus = (value: unknown, fallback: SubscriptionStatus): 
   }
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === "active" || normalized === "trialing" || normalized === "inactive") {
+  if (
+    normalized === "active" ||
+    normalized === "trialing" ||
+    normalized === "inactive" ||
+    normalized === "grace_period" ||
+    normalized === "past_due" ||
+    normalized === "expired"
+  ) {
     return normalized;
   }
 
@@ -129,12 +136,31 @@ const parseSubscription = (value: unknown): AuthSubscription | null => {
     parseIsoDate(record.startedAt ?? record.startDate ?? record.start_at ?? record.datacadastro) ?? null;
   const trialEndsAt =
     parseIsoDate(record.trialEndsAt ?? record.trial_end ?? record.trialEnd ?? record.endsAt ?? record.endDate) ?? null;
+  const currentPeriodEnd =
+    parseIsoDate(
+      record.currentPeriodEnd ??
+        record.current_period_end ??
+        record.currentPeriodEndAt ??
+        record.periodEnd ??
+        record.subscriptionCurrentPeriodEnd,
+    ) ?? null;
+  const graceEndsAt =
+    parseIsoDate(
+      record.graceEndsAt ??
+        record.grace_ends_at ??
+        record.graceEnds ??
+        record.gracePeriodEnd ??
+        record.gracePeriodEndsAt ??
+        record.grace_deadline,
+    ) ?? null;
 
   return {
     planId,
     status,
     startedAt,
     trialEndsAt,
+    currentPeriodEnd,
+    graceEndsAt,
   };
 };
 

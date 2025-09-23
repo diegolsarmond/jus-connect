@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { PlanSelection } from "@/features/plans/PlanSelection";
+import { evaluateSubscriptionAccess } from "@/features/auth/subscriptionStatus";
 import {
   AlertTriangle,
   ArrowRight,
@@ -117,9 +118,9 @@ function normalizeApiRows(data: unknown): unknown[] {
 
 export default function MeuPlano() {
   const { user } = useAuth();
-  const subscriptionStatus = user?.subscription?.status;
+  const { hasAccess } = evaluateSubscriptionAccess(user?.subscription ?? null);
 
-  if (!subscriptionStatus || subscriptionStatus === "inactive") {
+  if (!hasAccess) {
     return <PlanSelection />;
   }
 

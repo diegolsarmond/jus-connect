@@ -46,6 +46,7 @@ describe("PlanSelection", () => {
     vi.mocked(useAuth).mockReturnValue({
       user: {
         empresa_id: 99,
+        subscription: null,
       },
       refreshUser,
     } as unknown as ReturnType<typeof useAuth>);
@@ -91,5 +92,44 @@ describe("PlanSelection", () => {
 
     expect(refreshUser).toHaveBeenCalledTimes(1);
     expect(navigateMock).toHaveBeenCalledWith("/", { replace: true });
+  });
+
+  it("surfaces regularization messaging when the subscription expired", async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        empresa_id: 42,
+        subscription: {
+          status: "expired",
+          planId: null,
+          startedAt: null,
+          trialEndsAt: null,
+          currentPeriodEnd: null,
+          graceEndsAt: null,
+        },
+      },
+      refreshUser: vi.fn(),
+    } as unknown as ReturnType<typeof useAuth>);
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 1, nome: "Essencial", valor_mensal: 120 }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+
+    act(() => {
+      root.render(<PlanSelection />);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const header = container.querySelector("h1");
+    expect(header?.textContent ?? "").toContain("Atualize seu plano para continuar");
+    expect(container.textContent ?? "").toContain("Regularize sua assinatura");
   });
 });

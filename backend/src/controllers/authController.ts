@@ -13,6 +13,10 @@ import {
   type SubscriptionCadence,
 } from '../services/subscriptionService';
 
+const TRIAL_DURATION_DAYS = 14;
+const GRACE_PERIOD_DAYS = 10;
+
+
 const parseOptionalInteger = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     const normalized = Math.trunc(value);
@@ -101,6 +105,198 @@ const resolveSubscriptionPayload = (row: {
   grace_expires_at?: unknown;
   subscription_cadence?: unknown;
 }) => resolveSubscriptionPayloadFromRow(row);
+const addDays = (date: Date, days: number): Date => {
+  const result = new Date(date.getTime());
+  result.setDate(result.getDate() + days);
+  return result;
+};
+
+const calculateTrialEnd = (startDate: Date | null): Date | null => {
+  if (!startDate) {
+    return null;
+  }
+
+  return addDays(startDate, TRIAL_DURATION_DAYS);
+};
+
+type SubscriptionRow = {
+  empresa_plano?: unknown;
+  empresa_ativo?: unknown;
+  empresa_datacadastro?: unknown;
+  empresa_trial_ends_at?: unknown;
+  empresa_current_period_ends_at?: unknown;
+  empresa_grace_period_ends_at?: unknown;
+};
+
+type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace_period' | 'expired';
+
+type SubscriptionBlockingReason = 'inactive' | 'trial_expired' | 'grace_period_expired' | null;
+
+type SubscriptionResolution = {
+  planId: number | null;
+  status: SubscriptionStatus;
+  startedAt: string | null;
+  trialEndsAt: string | null;
+  currentPeriodEndsAt: string | null;
+  gracePeriodEndsAt: string | null;
+  isInGoodStanding: boolean;
+  blockingReason: SubscriptionBlockingReason;
+};
+
+type UserRowBase = SubscriptionRow & {
+  id: number;
+  nome_completo: string;
+  email: string;
+  status: boolean | null;
+  perfil: number | string | null;
+  empresa_id: number | null;
+  empresa_nome: string | null;
+  setor_id: number | null;
+  setor_nome: string | null;
+};
+
+type LoginUserRow = UserRowBase & {
+  senha: string | null;
+};
+
+const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolution => {
+  const planId = parseOptionalInteger(row.empresa_plano);
+  const isActive = parseBooleanFlag(row.empresa_ativo);
+  const startedAtDate = parseDateValue(row.empresa_datacadastro);
+  const persistedTrialEnd = parseDateValue(row.empresa_trial_ends_at);
+  const trialEndsAtDate = persistedTrialEnd ?? calculateTrialEnd(startedAtDate);
+  const currentPeriodEndsAtDate = parseDateValue(row.empresa_current_period_ends_at);
+  const persistedGracePeriodEndsAt = parseDateValue(row.empresa_grace_period_ends_at);
+  const computedGracePeriodEndsAt =
+    currentPeriodEndsAtDate != null ? addDays(currentPeriodEndsAtDate, GRACE_PERIOD_DAYS) : null;
+  const gracePeriodEndsAtDate = (() => {
+    if (persistedGracePeriodEndsAt && computedGracePeriodEndsAt) {
+      return persistedGracePeriodEndsAt.getTime() >= computedGracePeriodEndsAt.getTime()
+        ? persistedGracePeriodEndsAt
+        : computedGracePeriodEndsAt;
+    }
+
+    return persistedGracePeriodEndsAt ?? computedGracePeriodEndsAt ?? null;
+  })();
+
+  if (planId === null) {
+    return {
+      planId: null,
+      status: 'inactive',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: null,
+      currentPeriodEndsAt: null,
+      gracePeriodEndsAt: null,
+      isInGoodStanding: false,
+      blockingReason: 'inactive',
+    };
+  }
+
+  if (isActive === false) {
+    return {
+      planId,
+      status: 'inactive',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: null,
+      currentPeriodEndsAt: null,
+      gracePeriodEndsAt: null,
+      isInGoodStanding: false,
+      blockingReason: 'inactive',
+    };
+  }
+
+  const now = new Date();
+  let status: SubscriptionStatus = 'inactive';
+  let isInGoodStanding = false;
+
+  if (trialEndsAtDate && now.getTime() < trialEndsAtDate.getTime()) {
+    status = 'trialing';
+    isInGoodStanding = true;
+  } else if (currentPeriodEndsAtDate && now.getTime() <= currentPeriodEndsAtDate.getTime()) {
+    status = 'active';
+    isInGoodStanding = true;
+  } else if (gracePeriodEndsAtDate && now.getTime() <= gracePeriodEndsAtDate.getTime()) {
+    status = 'grace_period';
+    isInGoodStanding = true;
+  } else if (!trialEndsAtDate && !currentPeriodEndsAtDate && !gracePeriodEndsAtDate) {
+    status = 'active';
+    isInGoodStanding = true;
+  } else {
+    status = 'expired';
+  }
+
+  let blockingReason: SubscriptionBlockingReason = null;
+
+  if (!isInGoodStanding) {
+    if (status === 'inactive') {
+      blockingReason = 'inactive';
+    } else if (status === 'expired') {
+      const trialEnded = trialEndsAtDate ? now.getTime() >= trialEndsAtDate.getTime() : false;
+      const hasCurrentPeriod = currentPeriodEndsAtDate != null;
+      const pastGrace = gracePeriodEndsAtDate
+        ? now.getTime() > gracePeriodEndsAtDate.getTime()
+        : false;
+
+      if (pastGrace) {
+        blockingReason = 'grace_period_expired';
+      } else if (trialEnded && !hasCurrentPeriod) {
+        blockingReason = 'trial_expired';
+      } else {
+        blockingReason = 'inactive';
+      }
+    } else {
+      blockingReason = 'inactive';
+    }
+  }
+
+  return {
+    planId,
+    status,
+    startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+    trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+    currentPeriodEndsAt: currentPeriodEndsAtDate
+      ? currentPeriodEndsAtDate.toISOString()
+      : null,
+    gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+    isInGoodStanding,
+    blockingReason,
+  };
+};
+
+const evaluateSubscriptionAccess = (
+  subscription: SubscriptionResolution | null
+): { isAllowed: boolean; statusCode?: number; message?: string } => {
+  if (!subscription) {
+    return { isAllowed: true };
+  }
+
+  if (subscription.isInGoodStanding) {
+    return { isAllowed: true };
+  }
+
+  switch (subscription.blockingReason) {
+    case 'grace_period_expired':
+      return {
+        isAllowed: false,
+        statusCode: 402,
+        message:
+          'Assinatura expirada após o período de tolerância de 10 dias. Regularize o pagamento para continuar.',
+      };
+    case 'trial_expired':
+      return {
+        isAllowed: false,
+        statusCode: 403,
+        message:
+          'Período de teste encerrado. Realize uma assinatura para continuar acessando o sistema.',
+      };
+    default:
+      return {
+        isAllowed: false,
+        statusCode: 403,
+        message: 'Assinatura inativa. Entre em contato com o suporte para reativar o acesso.',
+      };
+  }
+};
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
@@ -503,6 +699,10 @@ export const login = async (req: Request, res: Response) => {
               emp.current_period_end AS empresa_current_period_end,
               emp.grace_expires_at AS empresa_grace_expires_at,
               emp.subscription_cadence AS empresa_subscription_cadence
+              emp.datacadastro AS empresa_datacadastro,
+              emp.subscription_trial_ends_at AS empresa_trial_ends_at,
+              emp.subscription_current_period_ends_at AS empresa_current_period_ends_at,
+              emp.subscription_grace_period_ends_at AS empresa_grace_period_ends_at
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -549,6 +749,19 @@ export const login = async (req: Request, res: Response) => {
       return;
     }
 
+    const subscription =
+      user.empresa_id != null
+        ? resolveSubscriptionPayload(user)
+        : null;
+
+    const subscriptionAccess = evaluateSubscriptionAccess(subscription);
+    if (!subscriptionAccess.isAllowed) {
+      res
+        .status(subscriptionAccess.statusCode ?? 403)
+        .json({ error: subscriptionAccess.message ?? 'Assinatura inativa.' });
+      return;
+    }
+
     const token = signToken(
       {
         sub: user.id,
@@ -574,6 +787,7 @@ export const login = async (req: Request, res: Response) => {
             subscription_cadence: user.empresa_subscription_cadence,
           })
         : null;
+
 
     res.json({
       token,
@@ -650,6 +864,10 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               emp.current_period_end AS empresa_current_period_end,
               emp.grace_expires_at AS empresa_grace_expires_at,
               emp.subscription_cadence AS empresa_subscription_cadence
+              emp.datacadastro AS empresa_datacadastro,
+              emp.subscription_trial_ends_at AS empresa_trial_ends_at,
+              emp.subscription_current_period_ends_at AS empresa_current_period_ends_at,
+              emp.subscription_grace_period_ends_at AS empresa_grace_period_ends_at
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -663,9 +881,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       return;
     }
 
-    const user = result.rows[0];
-
-    const modulos = await fetchPerfilModules(user.perfil);
+    const user = result.rows[0] as UserRowBase;
 
     const subscription =
       user.empresa_id != null
@@ -680,6 +896,17 @@ export const getCurrentUser = async (req: Request, res: Response) => {
             subscription_cadence: user.empresa_subscription_cadence,
           })
         : null;
+      user.empresa_id != null ? resolveSubscriptionPayload(user) : null;
+
+    const subscriptionAccess = evaluateSubscriptionAccess(subscription);
+    if (!subscriptionAccess.isAllowed) {
+      res
+        .status(subscriptionAccess.statusCode ?? 403)
+        .json({ error: subscriptionAccess.message ?? 'Assinatura inativa.' });
+      return;
+    }
+
+    const modulos = await fetchPerfilModules(user.perfil);
 
     res.json({
       id: user.id,
