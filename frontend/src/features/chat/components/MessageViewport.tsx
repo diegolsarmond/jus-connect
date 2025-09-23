@@ -24,10 +24,18 @@ const estimateHeight = (message: Message) => {
   }
   if (message.attachments && message.attachments.length > 0) {
     for (const attachment of message.attachments) {
-      base += attachment.type === "audio" ? 120 : 220;
+      if (attachment.type === "audio") {
+        base += 120;
+      } else if (attachment.type === "image") {
+        base += 220;
+      } else {
+        base += 140;
+      }
     }
   } else if (message.type === "audio") {
     base += 120;
+  } else if (message.type === "file") {
+    base += 140;
   }
   return base;
 };

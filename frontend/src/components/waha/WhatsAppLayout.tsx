@@ -39,18 +39,42 @@ const ensureIsoTimestamp = (value?: number): string => {
   return new Date(timestamp).toISOString();
 };
 
-const mapWahaMessageType = (message?: WAHAMessage | null): "text" | "image" | "audio" => {
+const documentExtensions = [
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".txt",
+  ".csv",
+  ".zip",
+  ".rar",
+  ".7z",
+  ".tar",
+  ".gz",
+  ".xml",
+  ".json",
+  ".odt",
+  ".ods",
+  ".odp",
+];
+
+const mapWahaMessageType = (message?: WAHAMessage | null): "text" | "image" | "audio" | "file" => {
   if (!message) {
     return "text";
   }
 
   const rawType = typeof message.type === "string" ? message.type.toLowerCase() : "";
   const mime = typeof message.mimeType === "string"
-    ? message.mimeType.toLowerCase()
+    ? message.mimeType.trim().toLowerCase()
     : typeof (message as { mimetype?: string }).mimetype === "string"
-      ? (message as { mimetype: string }).mimetype.toLowerCase()
+      ? (message as { mimetype: string }).mimetype.trim().toLowerCase()
       : "";
-  const filename = typeof message.filename === "string" ? message.filename.toLowerCase() : "";
+  const filename = typeof message.filename === "string"
+    ? message.filename.trim().toLowerCase()
+    : "";
 
   if (rawType === "audio" || rawType === "ptt" || rawType === "voice") {
     return "audio";
@@ -68,9 +92,28 @@ const mapWahaMessageType = (message?: WAHAMessage | null): "text" | "image" | "a
   if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"].some((extension) => filename.endsWith(extension))) {
     return "image";
   }
-
-  if (message.hasMedia && !mime) {
+  if (rawType === "sticker") {
     return "image";
+  }
+
+  if (rawType === "document" || rawType === "file") {
+    return "file";
+  }
+
+  if (rawType === "video" || mime.startsWith("video/")) {
+    return "file";
+  }
+
+  if (mime && !mime.startsWith("image/") && !mime.startsWith("audio/")) {
+    return "file";
+  }
+
+  if (documentExtensions.some((extension) => filename.endsWith(extension))) {
+    return "file";
+  }
+
+  if (message.hasMedia) {
+    return "file";
   }
 
   return "text";
@@ -206,7 +249,9 @@ const mapChatToConversation = (
               ? "Imagem"
               : wahaLastMessageType === "audio"
                 ? "Mensagem de áudio"
-                : "Nova conversa",
+                : wahaLastMessageType === "file"
+                  ? "Documento"
+                  : "Nova conversa",
         timestamp: ensureIsoTimestamp(chat.lastMessage.timestamp),
         sender: chat.lastMessage.fromMe ? "me" : "contact",
         type: wahaLastMessageType,
@@ -240,28 +285,89 @@ const mapChatToConversation = (
 
 const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
   const messageType = mapWahaMessageType(message);
-  const hasMedia = Boolean(message.mediaUrl && messageType !== "text");
-  const attachments = hasMedia && message.mediaUrl
+  const mediaUrlCandidateKeys = [
+    "mediaUrl",
+    "url",
+    "mediaURL",
+    "fileUrl",
+    "directPath",
+    "filePath",
+    "path",
+  ] as const;
+  let mediaUrl: string | undefined;
+  for (const key of mediaUrlCandidateKeys) {
+    const value = (message as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      mediaUrl = value.trim();
+      break;
+    }
+  }
+
+  const hasMedia = Boolean(mediaUrl && messageType !== "text");
+  const normalizedMime = typeof message.mimeType === "string"
+    ? message.mimeType.trim()
+    : typeof (message as { mimetype?: string }).mimetype === "string"
+      ? (message as { mimetype: string }).mimetype.trim()
+      : undefined;
+  const trimmedFilename = typeof message.filename === "string" && message.filename.trim().length > 0
+    ? message.filename.trim()
+    : undefined;
+
+  const attachments = hasMedia && mediaUrl
     ? [
         {
           id: `${message.id}-attachment`,
-          type: (messageType === "audio" ? "audio" : "image") as const,
-          url: message.mediaUrl,
-          name: message.filename ?? (messageType === "audio" ? "Áudio" : "Anexo"),
+          type: messageType === "audio" ? "audio" : messageType === "image" ? "image" : "file",
+          url: mediaUrl,
+          downloadUrl: mediaUrl,
+          mimeType: normalizedMime || undefined,
+          name:
+            trimmedFilename ??
+            (messageType === "audio"
+              ? "Mensagem de áudio"
+              : messageType === "image"
+                ? "Imagem"
+                : "Documento"),
         },
       ]
     : undefined;
 
+  const caption = typeof message.caption === "string" ? message.caption.trim() : undefined;
+  const normalizedBody = (() => {
+    const body = typeof message.body === "string" ? message.body : undefined;
+    if (!body) {
+      return undefined;
+    }
+    const trimmedBody = body.trim();
+    if (!trimmedBody) {
+      return undefined;
+    }
+    if (messageType === "file" && trimmedFilename && trimmedBody === trimmedFilename) {
+      return undefined;
+    }
+    return trimmedBody;
+  })();
+
+  const mediaFallback = (() => {
+    if (messageType === "audio" || messageType === "image") {
+      return trimmedFilename ?? mediaUrl ?? "";
+    }
+    if (messageType === "file") {
+      return "";
+    }
+    return mediaUrl ?? "";
+  })();
+
   const content = hasMedia
-    ? message.caption ?? message.body ?? message.filename ?? message.mediaUrl ?? ""
-    : message.body ?? message.caption ?? "";
+    ? caption ?? normalizedBody ?? mediaFallback
+    : normalizedBody ?? caption ?? "";
 
   const normalizedType = (() => {
     if (attachments) {
       return messageType;
     }
-    if (messageType === "audio") {
-      return "audio";
+    if (messageType === "audio" || messageType === "file") {
+      return messageType;
     }
     return "text";
   })();

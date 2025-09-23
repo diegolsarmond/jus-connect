@@ -245,8 +245,48 @@ export async function createFlow(flow: CreateFlowPayload): Promise<Flow> {
   return data.flow;
 }
 
-export async function settleFlow(id: number | string, pagamentoData: string): Promise<Flow> {
-  const res = await fetch(joinUrl(FLOWS_ENDPOINT, `${id}/settle`), {
+const FLOW_ID_UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const FLOW_ID_INTEGER_REGEX = /^-?\d+$/;
+
+export function normalizeFlowId(id: Flow['id']): string | null {
+  if (typeof id === 'number') {
+    if (!Number.isInteger(id)) {
+      return null;
+    }
+
+    return id.toString();
+  }
+
+
+  if (typeof id !== 'string') {
+    return null;
+  }
+
+  const trimmed = id.trim();
+  if (FLOW_ID_UUID_REGEX.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (FLOW_ID_INTEGER_REGEX.test(trimmed)) {
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed.toString();
+    }
+  }
+
+  return null;
+
+}
+
+export async function settleFlow(id: Flow['id'], pagamentoData: string): Promise<Flow> {
+  const normalizedId = normalizeFlowId(id);
+
+  if (!normalizedId) {
+    throw new Error('Este lançamento não pode ser marcado como pago manualmente.');
+  }
+
+  const res = await fetch(joinUrl(FLOWS_ENDPOINT, `${normalizedId}/settle`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pagamentoData }),

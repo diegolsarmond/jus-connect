@@ -48,6 +48,7 @@ export const formatConversationTimestamp = (value: string) => {
 export const getMessagePreview = (content: string, type: string) => {
   if (type === "image") return "Imagem";
   if (type === "audio") return "Mensagem de áudio";
+  if (type === "file" || type === "document") return "Documento";
   if (content.length <= 56) return content;
   return `${content.slice(0, 56).trim()}…`;
 };
