@@ -172,14 +172,43 @@ export const ChatWindow = ({
   }, [availableTags, tags]);
   const tagSelectSize = Math.min(Math.max(tagOptions.length, 4), 6);
 
+  const previousPanelConversationIdRef = useRef<string | undefined>(undefined);
+  const previousClientNameRef = useRef<string>("");
+  const conversationId = conversation?.id;
+  const conversationClientName = conversation?.clientName ?? "";
+
   useEffect(() => {
-    setDetailsOpen(false);
-    if (!conversation) return;
-    setClientInput(conversation.clientName ?? "");
-    setNewAttributeLabel("");
-    setNewAttributeValue("");
-    setInternalNoteContent("");
-  }, [conversation]);
+    if (!conversationId) {
+      setDetailsOpen(false);
+      setClientInput("");
+      setNewAttributeLabel("");
+      setNewAttributeValue("");
+      setInternalNoteContent("");
+      previousPanelConversationIdRef.current = undefined;
+      previousClientNameRef.current = "";
+      return;
+    }
+
+    const previousConversationId = previousPanelConversationIdRef.current;
+    const previousClientName = previousClientNameRef.current;
+    previousPanelConversationIdRef.current = conversationId;
+
+    if (previousConversationId !== conversationId) {
+      setClientInput(conversationClientName);
+      setNewAttributeLabel("");
+      setNewAttributeValue("");
+      setInternalNoteContent("");
+      previousClientNameRef.current = conversationClientName;
+      return;
+    }
+
+    if (previousClientName !== conversationClientName) {
+      previousClientNameRef.current = conversationClientName;
+      setClientInput((current) =>
+        current === previousClientName ? conversationClientName : current,
+      );
+    }
+  }, [conversationClientName, conversationId]);
 
   useEffect(() => {
     let canceled = false;
