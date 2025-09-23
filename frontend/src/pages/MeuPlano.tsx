@@ -43,21 +43,21 @@ import {
 
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
-type Recorrencia = "mensal" | "anual" | "nenhuma";
 type PricingMode = "mensal" | "anual";
 
 type PlanoDetalhe = {
   id: number;
   nome: string;
   ativo: boolean;
-  descricao: string;
-  recorrencia: Recorrencia | null;
-  qtdeUsuarios: number | null;
+  descricao: string | null;
   recursos: string[];
   dataCadastro: Date | null;
   valorMensal: number | null;
   valorAnual: number | null;
-  precoMensal: string;
+  limiteUsuarios: number | null;
+  limiteProcessos: number | null;
+  limitePropostas: number | null;
+  precoMensal: string | null;
   precoAnual: string | null;
   descontoAnualPercentual: number | null;
   economiaAnual: number | null;
@@ -67,6 +67,8 @@ type PlanoDetalhe = {
 type UsageMetrics = {
   usuariosAtivos: number | null;
   clientesAtivos: number | null;
+  processosAtivos: number | null;
+  propostasEmitidas: number | null;
 };
 
 type UsageItem = {
@@ -88,14 +90,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
   minimumFractionDigits: 2,
 });
-
-const recorrenciaLabels: Record<Recorrencia, string> = {
-  mensal: "Mensal",
-  anual: "Anual",
-  nenhuma: "Sem recorrência",
-};
-
-const ANNUAL_DISCOUNT_PERCENTAGE = 17;
+const countFormatter = new Intl.NumberFormat("pt-BR");
 
 function normalizeApiRows(data: unknown): unknown[] {
   if (Array.isArray(data)) {
@@ -158,19 +153,6 @@ function parseRecursos(value: unknown): string[] {
   return [];
 }
 
-function parseRecorrencia(value: unknown): Recorrencia | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "mensal" || normalized === "anual" || normalized === "nenhuma") {
-    return normalized;
-  }
-
-  return null;
-}
-
 function parseDate(value: unknown): Date | null {
   if (typeof value === "string" && value.trim()) {
     const parsed = new Date(value);
@@ -184,46 +166,99 @@ function parseDate(value: unknown): Date | null {
   return null;
 }
 
-function formatCurrencyValue(value: unknown): string {
-  const numeric = toNumber(value);
-  if (numeric !== null) {
-    return currencyFormatter.format(numeric);
-  }
-
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
-  }
-
-  return "Sob consulta";
-}
-
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function computeAnnualPricing(valorMensal: number | null) {
-  if (valorMensal === null) {
+function computePricingDetails(valorMensal: number | null, valorAnual: number | null) {
+  const precoMensal = valorMensal !== null ? currencyFormatter.format(valorMensal) : null;
+  const precoAnual = valorAnual !== null ? currencyFormatter.format(valorAnual) : null;
+
+  if (valorMensal === null || valorAnual === null) {
     return {
-      valorAnual: null,
-      precoAnual: null,
+      precoMensal,
+      precoAnual,
+      descontoPercentual: null,
       economiaAnual: null,
       economiaAnualFormatada: null,
-      descontoPercentual: null,
     } as const;
   }
 
-  const bruto = valorMensal * 12;
-  const desconto = bruto * (ANNUAL_DISCOUNT_PERCENTAGE / 100);
-  const valorAnual = roundCurrency(bruto - desconto);
-  const economiaAnual = roundCurrency(desconto);
+  const totalMensal = valorMensal * 12;
+  const economiaBruta = roundCurrency(Math.max(0, totalMensal - valorAnual));
+  const descontoPercentual =
+    totalMensal > 0 && economiaBruta > 0 ? Math.round((economiaBruta / totalMensal) * 100) : null;
 
   return {
-    valorAnual,
-    precoAnual: currencyFormatter.format(valorAnual),
-    economiaAnual,
-    economiaAnualFormatada: economiaAnual > 0 ? currencyFormatter.format(economiaAnual) : null,
-    descontoPercentual: ANNUAL_DISCOUNT_PERCENTAGE,
+    precoMensal,
+    precoAnual,
+    descontoPercentual,
+    economiaAnual: economiaBruta > 0 ? economiaBruta : null,
+    economiaAnualFormatada: economiaBruta > 0 ? currencyFormatter.format(economiaBruta) : null,
   } as const;
+}
+
+function hasMensalPricing(plan: PlanoDetalhe | null): boolean {
+  if (!plan) {
+    return false;
+  }
+
+  return Boolean(
+    (typeof plan.valorMensal === "number" && Number.isFinite(plan.valorMensal)) ||
+      (typeof plan.precoMensal === "string" && plan.precoMensal.trim()),
+  );
+}
+
+function hasAnualPricing(plan: PlanoDetalhe | null): boolean {
+  if (!plan) {
+    return false;
+  }
+
+  return Boolean(
+    (typeof plan.valorAnual === "number" && Number.isFinite(plan.valorAnual)) ||
+      (typeof plan.precoAnual === "string" && plan.precoAnual.trim()),
+  );
+}
+
+function getDefaultPricingMode(plan: PlanoDetalhe | null): PricingMode {
+  if (hasMensalPricing(plan)) {
+    return "mensal";
+  }
+
+  if (hasAnualPricing(plan)) {
+    return "anual";
+  }
+
+  return "mensal";
+}
+
+function formatAvailableModes(plan: PlanoDetalhe | null): string | null {
+  if (!plan) {
+    return null;
+  }
+
+  const modes: string[] = [];
+  if (hasMensalPricing(plan)) {
+    modes.push("Mensal");
+  }
+  if (hasAnualPricing(plan)) {
+    modes.push("Anual");
+  }
+
+  if (modes.length === 0) {
+    return null;
+  }
+
+  return modes.length === 2 ? `${modes[0]} ou ${modes[1]}` : modes[0];
+}
+
+function formatLimitValue(value: number | null, singular: string, plural: string): string {
+  if (value === null || !Number.isFinite(value) || value <= 0) {
+    return "Ilimitado";
+  }
+
+  const formatted = countFormatter.format(value);
+  return `${formatted} ${value === 1 ? singular : plural}`;
 }
 
 function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): PricingDisplay {
@@ -245,11 +280,11 @@ function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): Pric
       plan.valorAnual !== null && plan.valorMensal !== null
         ? `Equivalente a ${currencyFormatter.format(plan.valorAnual / 12)}/mês`
         : plan.precoMensal
-          ? `Plano mensal: ${plan.precoMensal}`
+          ? `Modalidade mensal: ${plan.precoMensal}`
           : null;
 
     const savingsLabel = plan.economiaAnualFormatada
-      ? `Economize ${plan.economiaAnualFormatada} em relação à cobrança mensal`
+      ? `Economize ${plan.economiaAnualFormatada} em relação à contratação mensal`
       : null;
 
     const discountBadge =
@@ -264,18 +299,22 @@ function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): Pric
     };
   }
 
-  const mainPrice = plan.precoMensal ?? fallback;
+  const derivedMensal =
+    plan.precoMensal ??
+    (plan.valorAnual !== null ? currencyFormatter.format(plan.valorAnual / 12) : null) ??
+    null;
+  const mainPrice = derivedMensal ?? fallback;
   const helper = plan.precoAnual
-    ? `Ou ${plan.precoAnual}/ano${
-        plan.descontoAnualPercentual !== null ? ` (${plan.descontoAnualPercentual}% off)` : ""
+    ? `Plano anual: ${plan.precoAnual}${
+        plan.descontoAnualPercentual !== null ? ` (${plan.descontoAnualPercentual}% de economia)` : ""
       }`
-    : plan.recorrencia && plan.recorrencia !== "nenhuma"
-      ? `Cobrança ${recorrenciaLabels[plan.recorrencia].toLowerCase()}`
-      : "Cobrança sob demanda";
+    : plan.valorMensal !== null
+      ? `Cobrança mensal em ${currencyFormatter.format(plan.valorMensal)}`
+      : "Consulte condições comerciais";
 
   const savingsLabel =
     plan.precoAnual && plan.economiaAnualFormatada
-      ? `Economize ${plan.economiaAnualFormatada} escolhendo o plano anual`
+      ? `Economize ${plan.economiaAnualFormatada} escolhendo a modalidade anual`
       : null;
 
   const discountBadge =
@@ -292,19 +331,35 @@ function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): Pric
   };
 }
 
-function calculateNextBilling(recorrencia: Recorrencia | null, dataCadastro: Date | null): string | null {
-  if (!recorrencia || recorrencia === "nenhuma") {
-    return null;
+function estimateNextBilling(plan: PlanoDetalhe | null): { nextBilling: string | null; cadenceLabel: string } {
+  if (!plan) {
+    return { nextBilling: null, cadenceLabel: "Sob consulta" };
   }
 
-  const incrementMonths = recorrencia === "mensal" ? 1 : 12;
-  const base = dataCadastro ?? new Date();
-  if (Number.isNaN(base.getTime())) {
-    return null;
+  const hasMensal = plan.valorMensal !== null;
+  const hasAnual = plan.valorAnual !== null;
+
+  const cadenceLabel = hasMensal && hasAnual
+    ? "Mensal ou anual"
+    : hasMensal
+      ? "Mensal"
+      : hasAnual
+        ? "Anual"
+        : "Sob consulta";
+
+  if (!plan.dataCadastro || Number.isNaN(plan.dataCadastro.getTime())) {
+    return { nextBilling: null, cadenceLabel };
   }
 
+  const baseDate = plan.dataCadastro;
   const now = new Date();
-  const next = new Date(base.getTime());
+  const next = new Date(baseDate.getTime());
+
+  const incrementMonths = hasMensal && !hasAnual ? 1 : !hasMensal && hasAnual ? 12 : null;
+  if (!incrementMonths) {
+    return { nextBilling: null, cadenceLabel };
+  }
+
   let iterations = 0;
   const maxIterations = 1000;
 
@@ -316,10 +371,10 @@ function calculateNextBilling(recorrencia: Recorrencia | null, dataCadastro: Dat
   }
 
   if (iterations >= maxIterations) {
-    return null;
+    return { nextBilling: null, cadenceLabel };
   }
 
-  return next.toLocaleDateString("pt-BR");
+  return { nextBilling: next.toLocaleDateString("pt-BR"), cadenceLabel };
 }
 
 function formatDate(value: Date | null): string | null {
@@ -387,7 +442,12 @@ export default function MeuPlano() {
   const [planosDisponiveis, setPlanosDisponiveis] = useState<PlanoDetalhe[]>([]);
   const [pricingMode, setPricingMode] = useState<PricingMode>("mensal");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [metrics, setMetrics] = useState<UsageMetrics>({ usuariosAtivos: null, clientesAtivos: null });
+  const [metrics, setMetrics] = useState<UsageMetrics>({
+    usuariosAtivos: null,
+    clientesAtivos: null,
+    processosAtivos: null,
+    propostasEmitidas: null,
+  });
 
   useEffect(() => {
     let disposed = false;
@@ -455,32 +515,50 @@ export default function MeuPlano() {
 
             const nome = typeof raw.nome === "string" ? raw.nome.trim() : String(raw.nome ?? `Plano ${idNumber}`);
             const ativo = typeof raw.ativo === "boolean" ? raw.ativo : true;
-            const descricao =
-              typeof raw.descricao === "string" ? raw.descricao.trim() : raw.descricao ? String(raw.descricao) : "";
-            const recorrencia = parseRecorrencia(raw.recorrencia);
-            const qtdeUsuarios = toNumber(raw.qtde_usuarios);
+            const descricaoRaw =
+              typeof raw.descricao === "string"
+                ? raw.descricao.trim()
+                : typeof raw.detalhes === "string"
+                  ? raw.detalhes.trim()
+                  : null;
             const recursos = parseRecursos(raw.recursos);
-            const dataCadastro = parseDate(raw.datacadastro);
-            const valorMensal = toNumber(raw.valor);
-            const precoMensal = valorMensal !== null ? currencyFormatter.format(valorMensal) : formatCurrencyValue(raw.valor);
-            const annualPricing = computeAnnualPricing(valorMensal);
+            const dataCadastro = parseDate((raw.datacadastro ?? raw.data_cadastro) as unknown);
+
+            const rawValorMensal = (raw.valor_mensal ?? raw.valorMensal ?? raw.preco_mensal ?? raw.precoMensal) as unknown;
+            const rawValorAnual = (raw.valor_anual ?? raw.valorAnual ?? raw.preco_anual ?? raw.precoAnual) as unknown;
+
+            const valorMensal = toNumber(rawValorMensal);
+            const valorAnual = toNumber(rawValorAnual);
+
+            const pricingDetails = computePricingDetails(valorMensal, valorAnual);
+            const precoMensal =
+              pricingDetails.precoMensal ??
+              (typeof rawValorMensal === "string" && rawValorMensal.trim() ? rawValorMensal.trim() : null);
+            const precoAnual =
+              pricingDetails.precoAnual ??
+              (typeof rawValorAnual === "string" && rawValorAnual.trim() ? rawValorAnual.trim() : null);
+
+            const limiteUsuarios = toNumber(raw.limite_usuarios ?? raw.limiteUsuarios);
+            const limiteProcessos = toNumber(raw.limite_processos ?? raw.limiteProcessos);
+            const limitePropostas = toNumber(raw.limite_propostas ?? raw.limitePropostas);
 
             return {
               id: idNumber,
               nome,
               ativo,
-              descricao,
-              recorrencia,
-              qtdeUsuarios: qtdeUsuarios ?? null,
+              descricao: descricaoRaw && descricaoRaw.length > 0 ? descricaoRaw : null,
               recursos,
               dataCadastro,
               valorMensal,
-              valorAnual: annualPricing.valorAnual,
+              valorAnual,
+              limiteUsuarios: limiteUsuarios ?? null,
+              limiteProcessos: limiteProcessos ?? null,
+              limitePropostas: limitePropostas ?? null,
               precoMensal,
-              precoAnual: annualPricing.precoAnual,
-              descontoAnualPercentual: annualPricing.descontoPercentual,
-              economiaAnual: annualPricing.economiaAnual,
-              economiaAnualFormatada: annualPricing.economiaAnualFormatada,
+              precoAnual,
+              descontoAnualPercentual: pricingDetails.descontoPercentual,
+              economiaAnual: pricingDetails.economiaAnual,
+              economiaAnualFormatada: pricingDetails.economiaAnualFormatada,
             } satisfies PlanoDetalhe;
           })
           .filter((item): item is PlanoDetalhe => item !== null);
@@ -509,8 +587,13 @@ export default function MeuPlano() {
           setPlanosDisponiveis(parsedPlanos);
           setPlanoAtual(planoSelecionado);
           setPreviewPlano(null);
-          setPricingMode(planoSelecionado.recorrencia === "anual" ? "anual" : "mensal");
-          setMetrics({ usuariosAtivos: usuariosCount, clientesAtivos });
+          setPricingMode(getDefaultPricingMode(planoSelecionado));
+          setMetrics({
+            usuariosAtivos: usuariosCount,
+            clientesAtivos,
+            processosAtivos: null,
+            propostasEmitidas: null,
+          });
         }
       } catch (err) {
         console.error(err);
@@ -519,7 +602,7 @@ export default function MeuPlano() {
           setPlanosDisponiveis([]);
           setPlanoAtual(null);
           setPreviewPlano(null);
-          setMetrics({ usuariosAtivos: null, clientesAtivos: null });
+          setMetrics({ usuariosAtivos: null, clientesAtivos: null, processosAtivos: null, propostasEmitidas: null });
         }
       } finally {
         if (!disposed) {
@@ -538,20 +621,25 @@ export default function MeuPlano() {
   const planoExibido = previewPlano ?? planoAtual;
 
   useEffect(() => {
-    if (pricingMode === "anual" && planoExibido && !planoExibido.precoAnual) {
-      setPricingMode("mensal");
+    if (!planoExibido) {
+      return;
+    }
+
+    if (pricingMode === "anual" && !hasAnualPricing(planoExibido)) {
+      setPricingMode(hasMensalPricing(planoExibido) ? "mensal" : "anual");
+      return;
+    }
+
+    if (pricingMode === "mensal" && !hasMensalPricing(planoExibido)) {
+      setPricingMode(hasAnualPricing(planoExibido) ? "anual" : "mensal");
     }
   }, [pricingMode, planoExibido]);
 
   const pricingDisplay = useMemo(() => buildPricingDisplay(planoExibido, pricingMode), [planoExibido, pricingMode]);
 
-  const proximaCobranca = useMemo(() => {
-    if (!planoAtual) {
-      return null;
-    }
+  const cobrancaInfo = useMemo(() => estimateNextBilling(planoAtual), [planoAtual]);
 
-    return calculateNextBilling(planoAtual.recorrencia, planoAtual.dataCadastro);
-  }, [planoAtual]);
+  const availableModesLabel = useMemo(() => formatAvailableModes(planoExibido), [planoExibido]);
 
   const usageItems = useMemo<UsageItem[]>(() => {
     if (!planoExibido) {
@@ -559,11 +647,25 @@ export default function MeuPlano() {
     }
 
     const items: UsageItem[] = [];
-    if (planoExibido.qtdeUsuarios !== null || metrics.usuariosAtivos !== null) {
+    if (planoExibido.limiteUsuarios !== null || metrics.usuariosAtivos !== null) {
       items.push({
         label: "Usuários ativos",
         current: metrics.usuariosAtivos,
-        limit: planoExibido.qtdeUsuarios,
+        limit: planoExibido.limiteUsuarios,
+      });
+    }
+    if (planoExibido.limiteProcessos !== null || metrics.processosAtivos !== null) {
+      items.push({
+        label: "Processos cadastrados",
+        current: metrics.processosAtivos,
+        limit: planoExibido.limiteProcessos,
+      });
+    }
+    if (planoExibido.limitePropostas !== null || metrics.propostasEmitidas !== null) {
+      items.push({
+        label: "Propostas enviadas",
+        current: metrics.propostasEmitidas,
+        limit: planoExibido.limitePropostas,
       });
     }
     if (metrics.clientesAtivos !== null) {
@@ -574,7 +676,13 @@ export default function MeuPlano() {
     }
 
     return items;
-  }, [metrics.clientesAtivos, metrics.usuariosAtivos, planoExibido]);
+  }, [
+    metrics.clientesAtivos,
+    metrics.processosAtivos,
+    metrics.propostasEmitidas,
+    metrics.usuariosAtivos,
+    planoExibido,
+  ]);
 
   const beneficios = planoExibido?.recursos ?? [];
 
@@ -584,19 +692,34 @@ export default function MeuPlano() {
     }
 
     const sorted = [...planosDisponiveis]
-      .filter((item) => item.valorMensal !== null)
-      .sort((a, b) => (b.valorMensal ?? 0) - (a.valorMensal ?? 0));
+      .map((item) => {
+        const monthlyEquivalent =
+          item.valorMensal !== null
+            ? item.valorMensal
+            : item.valorAnual !== null
+              ? item.valorAnual / 12
+              : null;
+        return { item, monthlyEquivalent };
+      })
+      .filter((entry) => entry.monthlyEquivalent !== null)
+      .sort((a, b) => (b.monthlyEquivalent ?? 0) - (a.monthlyEquivalent ?? 0));
 
-    return sorted[0]?.id ?? null;
+    return sorted[0]?.item.id ?? null;
   }, [planosDisponiveis]);
+
+  const anyMensalPlan = useMemo(() => planosDisponiveis.some((plan) => hasMensalPricing(plan)), [planosDisponiveis]);
+  const anyAnualPlan = useMemo(() => planosDisponiveis.some((plan) => hasAnualPricing(plan)), [planosDisponiveis]);
 
   const handlePreviewPlan = useCallback(
     (plan: PlanoDetalhe) => {
       setPreviewPlano(plan);
       setDialogOpen(false);
       setPricingMode((current) => {
-        if (current === "anual" && !plan.precoAnual) {
-          return "mensal";
+        if (current === "anual" && !hasAnualPricing(plan)) {
+          return hasMensalPricing(plan) ? "mensal" : "anual";
+        }
+        if (current === "mensal" && !hasMensalPricing(plan)) {
+          return hasAnualPricing(plan) ? "anual" : "mensal";
         }
         return current;
       });
@@ -612,7 +735,7 @@ export default function MeuPlano() {
   const resetPreview = useCallback(() => {
     setPreviewPlano(null);
     if (planoAtual) {
-      setPricingMode(planoAtual.recorrencia === "anual" ? "anual" : "mensal");
+      setPricingMode(getDefaultPricingMode(planoAtual));
     }
     toast({
       title: "Plano atual restabelecido",
@@ -620,7 +743,8 @@ export default function MeuPlano() {
     });
   }, [planoAtual, toast]);
 
-  const hasAnnualPricing = Boolean(planoExibido?.precoAnual);
+  const hasAnnualPricing = hasAnualPricing(planoExibido);
+  const hasMensalPricingAvailable = hasMensalPricing(planoExibido);
 
   return (
     <div className="p-6 space-y-6">
@@ -679,9 +803,7 @@ export default function MeuPlano() {
                     <Badge variant={planoExibido?.ativo ? "secondary" : "outline"}>
                       {planoExibido?.ativo ? "Disponível" : "Indisponível"}
                     </Badge>
-                    {planoExibido?.recorrencia && (
-                      <Badge variant="outline">{recorrenciaLabels[planoExibido.recorrencia]}</Badge>
-                    )}
+                    {availableModesLabel && <Badge variant="outline">{availableModesLabel}</Badge>}
                   </div>
                   <div className="flex items-center gap-3 text-3xl font-semibold tracking-tight md:text-4xl">
                     <Sparkles className="h-7 w-7 text-primary" />
@@ -701,7 +823,13 @@ export default function MeuPlano() {
                     variant="outline"
                     className="rounded-full border border-primary/30 bg-background/60 p-1"
                   >
-                    <ToggleGroupItem value="mensal" className="rounded-full px-4 py-2 text-sm">Mensal</ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="mensal"
+                      className="rounded-full px-4 py-2 text-sm"
+                      disabled={!hasMensalPricingAvailable}
+                    >
+                      Mensal
+                    </ToggleGroupItem>
                     <ToggleGroupItem value="anual" className="rounded-full px-4 py-2 text-sm" disabled={!hasAnnualPricing}>
                       Anual
                     </ToggleGroupItem>
@@ -728,7 +856,7 @@ export default function MeuPlano() {
 
               <Separator className="border-primary/20" />
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">Plano contratado</p>
                   <p className="text-sm font-semibold text-foreground">{planoAtual.nome}</p>
@@ -737,30 +865,39 @@ export default function MeuPlano() {
                   )}
                 </div>
                 <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Próxima cobrança</p>
-                  <p className="text-sm font-semibold text-foreground">
-                    {proximaCobranca ?? "Cobrança sob demanda"}
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Informações de cobrança</p>
+                  <p className="text-sm font-semibold text-foreground">{cobrancaInfo.cadenceLabel}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {cobrancaInfo.nextBilling
+                      ? `Próxima cobrança estimada em ${cobrancaInfo.nextBilling}`
+                      : "Consulte o time financeiro para confirmar a próxima cobrança."}
                   </p>
-                  <p className="text-xs text-muted-foreground">Referente ao plano atual</p>
                 </div>
                 <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Usuários incluídos</p>
                   <p className="text-sm font-semibold text-foreground">
-                    {planoExibido?.qtdeUsuarios ? `${planoExibido.qtdeUsuarios} usuários` : "Ilimitado"}
+                    {formatLimitValue(planoExibido?.limiteUsuarios ?? null, "usuário", "usuários")}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {previewPlano ? "Limite estimado para o plano em pré-visualização" : "Limite do plano atual"}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recorrência</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Processos incluídos</p>
                   <p className="text-sm font-semibold text-foreground">
-                    {planoExibido?.recorrencia
-                      ? recorrenciaLabels[planoExibido.recorrencia]
-                      : "Cobrança sob demanda"}
+                    {formatLimitValue(planoExibido?.limiteProcessos ?? null, "processo", "processos")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {previewPlano ? "Configuração sugerida para o plano escolhido" : "Configuração atual"}
+                    {previewPlano ? "Estimativa para o plano selecionado" : "Limite do plano atual"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Propostas incluídas</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatLimitValue(planoExibido?.limitePropostas ?? null, "proposta", "propostas")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {previewPlano ? "Estimativa para o plano selecionado" : "Limite do plano atual"}
                   </p>
                 </div>
               </div>
@@ -787,8 +924,20 @@ export default function MeuPlano() {
                         variant="outline"
                         className="mx-auto w-fit rounded-full border border-primary/20 bg-background p-1"
                       >
-                        <ToggleGroupItem value="mensal" className="rounded-full px-4 py-2 text-sm">Mensal</ToggleGroupItem>
-                        <ToggleGroupItem value="anual" className="rounded-full px-4 py-2 text-sm">Anual</ToggleGroupItem>
+                        <ToggleGroupItem
+                          value="mensal"
+                          className="rounded-full px-4 py-2 text-sm"
+                          disabled={!anyMensalPlan}
+                        >
+                          Mensal
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
+                          value="anual"
+                          className="rounded-full px-4 py-2 text-sm"
+                          disabled={!anyAnualPlan}
+                        >
+                          Anual
+                        </ToggleGroupItem>
                       </ToggleGroup>
                       <Carousel className="relative">
                         <CarouselContent>
@@ -977,15 +1126,17 @@ export default function MeuPlano() {
                     const hasLimit = limit !== null && Number.isFinite(limit) && limit > 0;
                     const hasCurrent = typeof item.current === "number" && Number.isFinite(item.current);
                     const progress = hasLimit && hasCurrent ? Math.min(100, Math.round((item.current / limit) * 100)) : 0;
+                    const limitFormatted = hasLimit ? countFormatter.format(limit) : null;
+                    const currentFormatted = hasCurrent ? countFormatter.format(item.current ?? 0) : "—";
                     return (
                       <div key={item.label} className="space-y-2 rounded-2xl border border-border/60 p-4">
                         <div className="flex items-center justify-between text-sm font-medium">
                           <span>{item.label}</span>
                           <span className="text-foreground">
                             {hasLimit
-                              ? `${hasCurrent ? item.current : "—"}/${limit}`
+                              ? `${hasCurrent ? currentFormatted : "—"}/${limitFormatted}`
                               : hasCurrent
-                                ? item.current
+                                ? currentFormatted
                                 : "—"}
                           </span>
                         </div>
