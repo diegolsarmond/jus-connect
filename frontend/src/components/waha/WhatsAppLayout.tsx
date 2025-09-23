@@ -16,7 +16,7 @@ import {
   type ChatResponsibleOption,
 } from "@/features/chat/services/chatApi";
 import type { ChatOverview, ChatParticipant, Message as WAHAMessage } from "@/types/waha";
-import WAHAService from "@/services/waha";
+import WAHAService, { WAHARequestError, WAHA_SESSION_RECOVERY_MESSAGE } from "@/services/waha";
 import { useToast } from "@/hooks/use-toast";
 import { DeviceLinkModal } from "@/features/chat/components/DeviceLinkModal";
 import {
@@ -524,16 +524,30 @@ export const WhatsAppLayout = ({
     if (!activeConversationId) {
       return;
     }
-    const trimmedContent = payload.content.trim();
-    const hasAttachments = (payload.attachments?.length ?? 0) > 0;
-    if (!hasAttachments && trimmedContent.length === 0) {
-      return;
+
+    try {
+      await wahaState.sendMessage(payload);
+    } catch (error) {
+      let title = "Erro";
+      let description = "Não foi possível enviar a mensagem. Tente novamente.";
+
+      if (error instanceof WAHARequestError) {
+        if (error.status === 422) {
+          title = "Sessão desconectada";
+          description = error.message?.trim() || WAHA_SESSION_RECOVERY_MESSAGE;
+        } else if (error.message?.trim()) {
+          description = error.message;
+        }
+      } else if (error instanceof Error && error.message.trim()) {
+        description = error.message;
+      }
+
+      toast({
+        title,
+        description,
+        variant: "destructive",
+      });
     }
-    const normalizedPayload =
-      trimmedContent === payload.content
-        ? payload
-        : { ...payload, content: trimmedContent };
-    await wahaState.sendMessage(activeConversationId, normalizedPayload);
   };
 
   const handleUpdateConversation = async (

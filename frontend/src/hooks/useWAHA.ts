@@ -746,7 +746,11 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
 
   // Send a message (text or media)
   const sendMessage = useCallback(
-    async (chatId: string, payload: SendMessageInput) => {
+    async (payload: SendMessageInput, options?: { chatId?: string }) => {
+      const chatId = options?.chatId ?? activeChatId;
+      if (!chatId) {
+        throw new Error('Nenhuma conversa ativa selecionada.');
+      }
       const attachments = payload.attachments ?? [];
       const [primaryAttachment] = attachments;
       const trimmedContent = payload.content?.trim?.() ?? '';
@@ -915,14 +919,14 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
           errorMessage = WAHA_SESSION_RECOVERY_MESSAGE;
         }
 
-        toast({
-          title: status === 422 ? 'Sessão desconectada' : 'Erro',
-          description: errorMessage,
-          variant: 'destructive',
-        });
+        if (status !== undefined) {
+          throw new WAHARequestError(errorMessage, status);
+        }
+
+        throw new Error(errorMessage);
       }
     },
-    [toast],
+    [activeChatId, toast],
   );
 
   // Check session status
