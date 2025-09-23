@@ -35,6 +35,7 @@ import {
   initialPlanFormState,
   extractCollection,
   parseInteger,
+  parseDecimal,
   sanitizeLimitInput,
   orderModules,
   parseModuleInfo,
@@ -213,9 +214,18 @@ export default function NewPlan() {
     }
 
     const name = formState.name.trim();
-    const price = formState.price.trim();
-    if (!name || !price) {
-      setSubmitError("Informe o nome e o valor do plano.");
+    const monthlyPriceInput = formState.monthlyPrice.trim();
+    const annualPriceInput = formState.annualPrice.trim();
+    if (!name || !monthlyPriceInput || !annualPriceInput) {
+      setSubmitError("Informe o nome, o valor mensal e o valor anual do plano.");
+      setSubmitSuccess(null);
+      return;
+    }
+
+    const monthlyPriceValue = parseDecimal(monthlyPriceInput);
+    const annualPriceValue = parseDecimal(annualPriceInput);
+    if (monthlyPriceValue == null || annualPriceValue == null) {
+      setSubmitError("Informe valores numéricos válidos para os preços mensal e anual.");
       setSubmitSuccess(null);
       return;
     }
@@ -234,9 +244,12 @@ export default function NewPlan() {
 
     const payload: Record<string, unknown> = {
       nome: name,
-      valor: price,
+      valor_mensal: monthlyPriceValue,
+      valor_anual: annualPriceValue,
+      valor: monthlyPriceValue,
       modulos: orderedModules,
       recursos: orderedModules,
+      limite_usuarios: userLimit,
       qtde_usuarios: userLimit,
       limite_processos: processLimit,
       max_casos: processLimit,
@@ -317,16 +330,33 @@ export default function NewPlan() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="plan-price">Valor</Label>
+                <Label htmlFor="plan-monthly-price">Valor mensal</Label>
                 <Input
-                  id="plan-price"
+                  id="plan-monthly-price"
                   placeholder="Ex.: 199,90"
-                  value={formState.price}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, price: event.target.value }))}
+                  value={formState.monthlyPrice}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, monthlyPrice: event.target.value }))
+                  }
                   disabled={submitting}
                 />
                 <p className="text-xs text-muted-foreground">
                   Utilize valores numéricos com vírgula ou ponto. Este valor será exibido na listagem de planos.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-annual-price">Valor anual</Label>
+                <Input
+                  id="plan-annual-price"
+                  placeholder="Ex.: 1999,90"
+                  value={formState.annualPrice}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, annualPrice: event.target.value }))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Informe o valor cobrado na contratação anual do plano.
                 </p>
               </div>
             </div>

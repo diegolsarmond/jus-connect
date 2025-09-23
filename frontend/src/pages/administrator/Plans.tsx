@@ -54,6 +54,7 @@ import {
   initialPlanFormState,
   extractCollection,
   parseInteger,
+  parseDecimal,
   sanitizeLimitInput,
   orderModules,
   parseModuleInfo,
@@ -143,7 +144,8 @@ function ModuleMultiSelect({ modules, selected, onChange, disabled }: ModuleMult
 
 const createFormStateFromPlan = (plan: Plan): PlanFormState => ({
   name: plan.name,
-  price: plan.price,
+  monthlyPrice: plan.monthlyPrice,
+  annualPrice: plan.annualPrice,
   modules: [...plan.modules],
   userLimit: plan.userLimit != null ? String(plan.userLimit) : "",
   processLimit: plan.processLimit != null ? String(plan.processLimit) : "",
@@ -304,9 +306,17 @@ export default function Plans() {
     }
 
     const name = editFormState.name.trim();
-    const price = editFormState.price.trim();
-    if (!name || !price) {
-      setEditError("Informe o nome e o valor do plano.");
+    const monthlyPriceInput = editFormState.monthlyPrice.trim();
+    const annualPriceInput = editFormState.annualPrice.trim();
+    if (!name || !monthlyPriceInput || !annualPriceInput) {
+      setEditError("Informe o nome, o valor mensal e o valor anual do plano.");
+      return;
+    }
+
+    const monthlyPriceValue = parseDecimal(monthlyPriceInput);
+    const annualPriceValue = parseDecimal(annualPriceInput);
+    if (monthlyPriceValue == null || annualPriceValue == null) {
+      setEditError("Informe valores numéricos válidos para os preços mensal e anual.");
       return;
     }
 
@@ -323,9 +333,12 @@ export default function Plans() {
 
     const payload: Record<string, unknown> = {
       nome: name,
-      valor: price,
+      valor_mensal: monthlyPriceValue,
+      valor_anual: annualPriceValue,
+      valor: monthlyPriceValue,
       modulos: orderedModules,
       recursos: orderedModules,
+      limite_usuarios: userLimit,
       qtde_usuarios: userLimit,
       limite_processos: processLimit,
       max_casos: processLimit,
@@ -425,7 +438,7 @@ export default function Plans() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>Valor</TableHead>
+                    <TableHead>Preços</TableHead>
                     <TableHead>Módulos</TableHead>
                     <TableHead>Limites</TableHead>
                     <TableHead>Sincronização de processos</TableHead>
@@ -436,7 +449,18 @@ export default function Plans() {
                   {plans.map((plan) => (
                     <TableRow key={plan.id}>
                       <TableCell className="align-top font-medium">{plan.name}</TableCell>
-                      <TableCell className="align-top">{plan.price || "—"}</TableCell>
+                      <TableCell className="align-top">
+                        <div className="space-y-1 text-sm">
+                          <p>
+                            <span className="font-medium">Mensal:</span>{" "}
+                            {plan.monthlyPrice || "—"}
+                          </p>
+                          <p>
+                            <span className="font-medium">Anual:</span>{" "}
+                            {plan.annualPrice || "—"}
+                          </p>
+                        </div>
+                      </TableCell>
                       <TableCell className="align-top">{renderModuleBadges(plan.modules)}</TableCell>
                       <TableCell className="align-top">
                         <div className="space-y-1 text-sm">
@@ -497,7 +521,7 @@ export default function Plans() {
             <DialogDescription>Atualize as informações do plano selecionado.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="edit-plan-name">Nome do plano</Label>
                 <Input
@@ -513,14 +537,28 @@ export default function Plans() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-plan-price">Valor</Label>
+                <Label htmlFor="edit-plan-monthly-price">Valor mensal</Label>
                 <Input
-                  id="edit-plan-price"
-                  value={editFormState.price}
+                  id="edit-plan-monthly-price"
+                  value={editFormState.monthlyPrice}
                   onChange={(event) =>
                     setEditFormState((prev) => ({
                       ...prev,
-                      price: event.target.value,
+                      monthlyPrice: event.target.value,
+                    }))
+                  }
+                  disabled={isSavingEdit}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-plan-annual-price">Valor anual</Label>
+                <Input
+                  id="edit-plan-annual-price"
+                  value={editFormState.annualPrice}
+                  onChange={(event) =>
+                    setEditFormState((prev) => ({
+                      ...prev,
+                      annualPrice: event.target.value,
                     }))
                   }
                   disabled={isSavingEdit}
