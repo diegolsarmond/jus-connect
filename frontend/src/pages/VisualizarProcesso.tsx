@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getApiUrl } from "@/lib/api";
 
 interface ApiProcessoCliente {
@@ -836,6 +837,9 @@ export default function VisualizarProcesso() {
   const [documentosPublicos, setDocumentosPublicos] = useState<ProcessoDocumentoPublico[]>([]);
   const [documentosLoading, setDocumentosLoading] = useState(true);
   const [documentosError, setDocumentosError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"resumo" | "atualizacoes" | "historico">(
+    "resumo",
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -903,634 +907,722 @@ export default function VisualizarProcesso() {
 
     fetchProcesso();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [processoId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!processoId || !processo?.id) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const fetchDocumentos = async () => {
-      setDocumentosLoading(true);
-      setDocumentosError(null);
-      setDocumentosPublicos([]);
-
-      try {
-        const res = await fetch(
-          getApiUrl(`processos/${processoId}/documentos-publicos`),
-          {
-            headers: { Accept: "application/json" },
-          },
-        );
-
-        const text = await res.text();
-        let json: unknown = null;
-
-        if (text) {
-          try {
-            json = JSON.parse(text);
-          } catch (parseError) {
-            console.error(
-              "Não foi possível interpretar os documentos públicos do processo",
-              parseError,
-            );
-          }
-        }
-
-        if (!res.ok) {
-          const message =
-            json &&
-            typeof json === "object" &&
-            "error" in json &&
-            typeof (json as { error: unknown }).error === "string"
-              ? (json as { error: string }).error
-              : `Não foi possível carregar os documentos públicos (HTTP ${res.status})`;
-          throw new Error(message);
-        }
-
-        const documentosPayload =
-          json && typeof json === "object" && Array.isArray((json as { documentos?: unknown[] }).documentos)
-            ? (json as { documentos: unknown[] }).documentos
-            : Array.isArray(json)
-              ? (json as unknown[])
-              : [];
-
-        const mapped = mapApiDocumentosPublicos(documentosPayload);
-
-        if (!cancelled) {
-          setDocumentosPublicos(mapped);
-        }
-      } catch (fetchError) {
-        const message =
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Erro ao carregar os documentos públicos.";
-        if (!cancelled) {
-          setDocumentosError(message);
-        }
-      } finally {
-        if (!cancelled) {
-          setDocumentosLoading(false);
-        }
-      }
-    };
-
-    fetchDocumentos();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [processoId, processo?.id]);
-
-  const criadoEmLabel = useMemo(
-    () => formatDateTimeOrNull(processo?.criadoEm),
-    [processo?.criadoEm],
-  );
-
-  const atualizadoEmLabel = useMemo(
-    () => formatDateTimeOrNull(processo?.atualizadoEm),
-    [processo?.atualizadoEm],
-  );
-
-  const dataDistribuicaoLabel = useMemo(
-    () =>
-      processo?.dataDistribuicaoFormatada ??
-      (processo?.dataDistribuicao
-        ? formatDateToPtBR(processo.dataDistribuicao)
-        : null),
-    [processo?.dataDistribuicao, processo?.dataDistribuicaoFormatada],
-  );
-
-  const ultimaSincronizacaoLabel = useMemo(
-    () => formatDateTimeOrNull(processo?.ultimaSincronizacao),
-    [processo?.ultimaSincronizacao],
-  );
-
-  const handleGerarContrato = useCallback(() => {
-    if (!processo || !clienteIdParam) {
-      return;
-    }
-
-    navigate(`/clientes/${clienteIdParam}/processos/${processo.id}/contrato`);
-  }, [clienteIdParam, navigate, processo]);
-
-  if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-1/2 rounded-lg" />
-          <Skeleton className="h-40 w-full rounded-xl" />
-          <Skeleton className="h-64 w-full rounded-xl" />
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-6 space-y-4">
-        <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erro ao carregar processo</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
-  if (!processo) {
-    return (
-      <div className="p-6 space-y-4">
-        <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Processo não encontrado</AlertTitle>
-          <AlertDescription>
-            Não foi possível localizar o processo solicitado.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-4">
-          <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-foreground">
-              Processo {processo.numero}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Consulte os dados cadastrados do processo e mantenha o acompanhamento organizado em um só lugar.
-            </p>
-          </div>
+        <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar
+        </Button>
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold text-foreground">
+            Processo {processo.numero}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Consulte os dados cadastrados do processo e mantenha o acompanhamento organizado em um só lugar.
+          </p>
         </div>
-
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center gap-3">
-            <CardTitle className="text-2xl font-semibold text-foreground">
-              Número {processo.numero}
-            </CardTitle>
-            <Badge className={`text-xs ${getStatusBadgeClassName(processo.status)}`}>
-              {processo.status}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={`text-xs ${getTipoBadgeClassName(processo.tipo)}`}
-            >
-              {processo.tipo}
-            </Badge>
-          </div>
-          <CardDescription>
-            {atualizadoEmLabel
-              ? `Última atualização em ${atualizadoEmLabel}.`
-              : "Dados conforme o cadastro do processo."}
-            {processo.proposta
-              ? ` Proposta vinculada: ${processo.proposta.label}.`
-              : ""}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Cliente
-              </p>
-              <div className="mt-2 flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {processo.cliente?.nome ?? "Cliente não informado"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {processo.cliente?.documento ?? "Documento não informado"}
-                  </p>
-                </div>
-                {processo.cliente?.papel ? (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] uppercase tracking-wide text-muted-foreground"
-                  >
-                    {processo.cliente.papel}
-                  </Badge>
-                ) : null}
-              </div>
-            </div>
-            {processo.proposta ? (
-              <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Proposta vinculada
-                </p>
-                <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                  <Archive className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium text-foreground">{processo.proposta.label}</p>
-                    {processo.proposta.solicitante ? (
-                      <p className="text-xs text-muted-foreground">
-                        Solicitante: {processo.proposta.solicitante}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Jurisdição
-              </p>
-              <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <span>{processo.jurisdicao}</span>
-              </div>
-            </div>
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Órgão julgador
-              </p>
-              <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                <Landmark className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <span>{processo.orgaoJulgador}</span>
-              </div>
-            </div>
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Classe judicial
-              </p>
-              <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <span>{processo.classeJudicial}</span>
-              </div>
-            </div>
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Assunto principal
-              </p>
-              <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                <Clock className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <span>{processo.assunto}</span>
-              </div>
-            </div>
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Advogado responsável
-              </p>
-              <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
-                <Users className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                <span>{processo.advogadoResponsavel}</span>
-              </div>
-            </div>
-          </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="w-full justify-start bg-muted/50">
+          <TabsTrigger value="resumo">Resumo</TabsTrigger>
+          <TabsTrigger value="atualizacoes">Atualizações</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
+        </TabsList>
 
-          <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Sincronização com o Escavador
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <RefreshCw className="h-4 w-4" />
-                {processo.consultasApiCount > 0
-                  ? `${processo.consultasApiCount} sincronizações registradas`
-                  : "Nenhuma sincronização realizada"}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Clock className="h-4 w-4" />
-                {ultimaSincronizacaoLabel
-                  ? `Última sincronização em ${ultimaSincronizacaoLabel}`
-                  : "Nunca sincronizado"}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <FileText className="h-4 w-4" />
-                {processo.movimentacoesCount} movimentações armazenadas
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Utilize o botão de sincronização para importar publicações e andamentos diretamente do tribunal.
-            </p>
-          </div>
-      </CardContent>
-    </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold">Documentos públicos</CardTitle>
-          <CardDescription>
-            Arquivos disponibilizados pelo Escavador para este processo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {documentosLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-20 w-full rounded-xl" />
-              <Skeleton className="h-20 w-full rounded-xl" />
-            </div>
-          ) : documentosError ? (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erro ao carregar documentos públicos</AlertTitle>
-              <AlertDescription>{documentosError}</AlertDescription>
-            </Alert>
-          ) : documentosPublicos.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
-              Nenhum documento público foi disponibilizado para este processo até o momento.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {documentosPublicos.map((documento) => {
-                const paginasLabel =
-                  documento.paginas && documento.paginas > 0
-                    ? `${documento.paginas} ${documento.paginas === 1 ? "página" : "páginas"}`
-                    : null;
-                const additionalLinks = Object.entries(documento.links).filter(
-                  ([, href]) => href !== documento.downloadUrl,
-                );
-
-                return (
-                  <div
-                    key={documento.id}
-                    className="flex flex-col gap-4 rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-base font-semibold text-foreground">
-                          {documento.titulo}
-                        </p>
-                        {documento.extensao ? (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full border-primary/40 bg-primary/5 px-2.5 text-[10px] uppercase tracking-wide text-primary"
-                          >
-                            {documento.extensao}
-                          </Badge>
-                        ) : null}
-                        {documento.tipo ? (
-                          <Badge className="rounded-full bg-secondary px-2.5 text-[10px] uppercase tracking-wide text-secondary-foreground">
-                            {documento.tipo}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                        {documento.dataFormatada ? (
-                          <span className="flex items-center gap-1.5">
-                            <Calendar className="h-3.5 w-3.5" />
-                            {documento.dataFormatada}
-                          </span>
-                        ) : null}
-                        {paginasLabel ? (
-                          <span className="flex items-center gap-1.5">
-                            <FileText className="h-3.5 w-3.5" />
-                            {paginasLabel}
-                          </span>
-                        ) : null}
-                        {documento.key ? (
-                          <span className="truncate text-xs text-muted-foreground">
-                            Chave: {documento.key}
-                          </span>
-                        ) : null}
-                      </div>
-                      {documento.descricao ? (
-                        <p className="text-sm text-muted-foreground">
-                          {documento.descricao}
-                        </p>
-                      ) : null}
+        <TabsContent value="resumo" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader className="space-y-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-2xl font-semibold text-foreground">
+                        Dados do processo
+                      </CardTitle>
+                      <CardDescription>
+                        {atualizadoEmLabel
+                          ? `Última atualização em ${atualizadoEmLabel}.`
+                          : "Dados conforme o cadastro do processo."}
+                      </CardDescription>
                     </div>
-                    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-                      {documento.downloadUrl ? (
-                        <Button asChild>
-                          <a
-                            href={documento.downloadUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            Baixar documento
-                          </a>
-                        </Button>
-                      ) : (
-                        <Button variant="outline" disabled className="inline-flex items-center gap-2">
-                          <Download className="h-4 w-4" />
-                          Download indisponível
-                        </Button>
-                      )}
-                      {additionalLinks.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                          {additionalLinks.map(([key, href]) => {
-                            const label = key.replace(/_/g, " ");
-                            return (
-                              <a
-                                key={`${documento.id}-${key}`}
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline-offset-2 hover:underline"
-                              >
-                                {label}
-                              </a>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold">
-            Movimentações sincronizadas
-          </CardTitle>
-          <CardDescription>
-            Acompanhe as publicações e andamentos capturados automaticamente pelo Escavador.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {processo.movimentacoes.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
-              Nenhuma movimentação foi sincronizada até o momento. Utilize a ação de sincronização na listagem de processos para importar os dados do tribunal.
-            </div>
-          ) : (
-            <div className="relative">
-              <div
-                className="pointer-events-none absolute left-3 top-3 bottom-3 w-px bg-border/60 sm:left-4"
-                aria-hidden
-              />
-              <div className="space-y-6">
-                {processo.movimentacoes.map((movimentacao, index) => {
-                  const fonteDescricao = movimentacao.fonte
-                    ? [
-                        movimentacao.fonte.sigla && movimentacao.fonte.nome
-                          ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
-                          : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
-                      movimentacao.fonte.caderno,
-                      movimentacao.fonte.grauFormatado ?? movimentacao.fonte.grau,
-                      movimentacao.fonte.tipo,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  : null;
-                  const dataPrincipal =
-                    movimentacao.dataFormatada ??
-                    movimentacao.data ??
-                    "Data não informada";
-                  const isMostRecent = index === 0;
-                  const indicatorClasses = isMostRecent
-                    ? "border-primary bg-primary text-primary-foreground shadow-lg"
-                    : "border-border/60 bg-background text-primary shadow-sm";
-                  const indicatorDotClasses = isMostRecent
-                    ? "bg-primary-foreground"
-                    : "bg-primary";
-
-                  return (
-                    <div
-                      key={movimentacao.id}
-                      className="relative pl-10 sm:pl-12"
-                    >
-                      <span
-                        className={`absolute left-3 top-6 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 ${indicatorClasses}`}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={`text-xs ${getStatusBadgeClassName(processo.status)}`}>
+                        {processo.status}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${getTipoBadgeClassName(processo.tipo)}`}
                       >
-                        <span className={`h-2 w-2 rounded-full ${indicatorDotClasses}`} />
-                      </span>
-                      <div className="rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-base font-semibold text-foreground">
-                                {movimentacao.tipo}
-                              </p>
-                              {movimentacao.tipoPublicacao ? (
-                                <Badge
-                                  variant="outline"
-                                  className="rounded-full border-primary/30 bg-primary/5 px-2.5 text-[10px] uppercase tracking-wide text-primary"
-                                >
-                                  {movimentacao.tipoPublicacao}
-                                </Badge>
+                        {processo.tipo}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      { label: "Número do processo", value: processo.numero },
+                      { label: "Classe judicial", value: processo.classeJudicial },
+                      { label: "Assunto principal", value: processo.assunto },
+                      { label: "Jurisdição", value: processo.jurisdicao },
+                      { label: "Órgão julgador", value: processo.orgaoJulgador },
+                      { label: "Advogado responsável", value: processo.advogadoResponsavel },
+                      {
+                        label: "Distribuído em",
+                        value: dataDistribuicaoLabel ?? "Data não informada",
+                      },
+                      {
+                        label: "Última atualização",
+                        value: atualizadoEmLabel ?? "Não informada",
+                      },
+                      {
+                        label: "Movimentações registradas",
+                        value: `${processo.movimentacoesCount}`,
+                      },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-lg border border-border/60 bg-muted/30 p-4"
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {item.label}
+                        </p>
+                        <div className="mt-1 text-sm font-medium text-foreground">{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Cliente
+                    </p>
+                    <div className="mt-2 flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {processo.cliente?.nome ?? "Cliente não informado"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {processo.cliente?.documento ?? "Documento não informado"}
+                        </p>
+                      </div>
+                      {processo.cliente?.papel ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                        >
+                          {processo.cliente.papel}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">
+                    Sincronização com o Escavador
+                  </CardTitle>
+                  <CardDescription>
+                    Consulte o histórico de importações automáticas realizadas para este processo.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <span className="flex items-center gap-1.5 text-foreground">
+                      <RefreshCw className="h-4 w-4 text-primary" />
+                      {processo.consultasApiCount > 0
+                        ? `${processo.consultasApiCount} sincronizações registradas`
+                        : "Nenhuma sincronização realizada"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      {ultimaSincronizacaoLabel
+                        ? `Última sincronização em ${ultimaSincronizacaoLabel}`
+                        : "Nunca sincronizado"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      {processo.movimentacoesCount} movimentações armazenadas
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Utilize a ação de sincronização na listagem de processos para importar publicações e andamentos diretamente do tribunal.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg font-semibold">Últimos históricos</CardTitle>
+                    <CardDescription>
+                      Principais andamentos registrados recentemente para o processo.
+                    </CardDescription>
+                  </div>
+                  {processo.movimentacoes.length > 0 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 w-full sm:mt-0 sm:w-auto"
+                      onClick={() => setActiveTab("historico")}
+                    >
+                      Ver histórico completo
+                    </Button>
+                  ) : null}
+                </CardHeader>
+                <CardContent>
+                  {ultimasMovimentacoes.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                      Nenhuma movimentação foi registrada até o momento.
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {ultimasMovimentacoes.map((movimentacao, index) => {
+                        const fonteDescricao = movimentacao.fonte
+                          ? [
+                              movimentacao.fonte.sigla && movimentacao.fonte.nome
+                                ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
+                                : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
+                              movimentacao.fonte.caderno,
+                              movimentacao.fonte.grauFormatado ?? movimentacao.fonte.grau,
+                              movimentacao.fonte.tipo,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : null;
+                        const dataPrincipal =
+                          movimentacao.dataFormatada ??
+                          movimentacao.data ??
+                          "Data não informada";
+                        const indicatorColor =
+                          index === 0 ? "bg-primary" : "bg-muted-foreground/50";
+
+                        return (
+                          <div key={movimentacao.id} className="relative pl-6">
+                            <span
+                              className={`absolute left-0 top-2 h-2 w-2 rounded-full ${indicatorColor}`}
+                              aria-hidden
+                            />
+                            <div className="rounded-lg border border-border/60 bg-background/80 p-4 shadow-sm">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-sm font-semibold text-foreground">
+                                      {movimentacao.tipo}
+                                    </p>
+                                    {movimentacao.tipoPublicacao ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                      >
+                                        {movimentacao.tipoPublicacao}
+                                      </Badge>
+                                    ) : null}
+                                    {movimentacao.classificacao ? (
+                                      <Badge
+                                        variant="secondary"
+                                        className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                      >
+                                        {movimentacao.classificacao.nome}
+                                      </Badge>
+                                    ) : null}
+                                  </div>
+                                  {fonteDescricao ? (
+                                    <p className="text-xs text-muted-foreground">{fonteDescricao}</p>
+                                  ) : null}
+                                </div>
+                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <Calendar className="h-3.5 w-3.5" />
+                                  {dataPrincipal}
+                                </span>
+                              </div>
+                              {movimentacao.conteudo ? (
+                                <p className="mt-2 text-sm text-muted-foreground line-clamp-3">
+                                  {movimentacao.conteudo}
+                                </p>
                               ) : null}
-                              {movimentacao.classificacao ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
-                                >
-                                  {movimentacao.classificacao.nome}
-                                </Badge>
+                              {movimentacao.textoCategoria ? (
+                                <p className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                  {movimentacao.textoCategoria}
+                                </p>
                               ) : null}
                             </div>
-                            {fonteDescricao ? (
-                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                <Newspaper className="h-3.5 w-3.5" />
-                                <span>{fonteDescricao}</span>
-                              </div>
-                            ) : null}
                           </div>
-                          <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground sm:items-end">
-                            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                              <Calendar className="h-4 w-4 text-primary" />
-                              {dataPrincipal}
-                            </span>
-                            {movimentacao.criadoEm ? (
-                              <span>
-                                Registrado em {formatDateTimeToPtBR(movimentacao.criadoEm)}
-                              </span>
-                            ) : null}
-                            {movimentacao.atualizadoEm &&
-                            movimentacao.atualizadoEm !== movimentacao.criadoEm ? (
-                              <span>
-                                Atualizado em {formatDateTimeToPtBR(movimentacao.atualizadoEm)}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                        {movimentacao.conteudo ? (
-                          <div className="mt-3 rounded-lg border border-border/40 bg-muted/30 p-3 text-sm text-foreground whitespace-pre-line">
-                            {movimentacao.conteudo}
-                          </div>
-                        ) : null}
-                        {movimentacao.textoCategoria ? (
-                          <div className="mt-3 rounded-lg border border-dashed border-border/40 bg-background/50 p-3 text-sm text-foreground whitespace-pre-line">
-                            {movimentacao.textoCategoria}
-                          </div>
-                        ) : null}
-                        {movimentacao.classificacao?.descricao ? (
-                          <p className="mt-3 text-xs text-muted-foreground whitespace-pre-line">
-                            {movimentacao.classificacao.descricao}
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Informações complementares</CardTitle>
+                  <CardDescription>
+                    Dados adicionais registrados no sistema para fins de acompanhamento.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-3 text-foreground">
+                    <span className="flex items-center gap-1.5 text-sm font-medium">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      {dataDistribuicaoLabel
+                        ? `Distribuído em ${dataDistribuicaoLabel}`
+                        : "Data de distribuição não informada"}
+                    </span>
+                    {criadoEmLabel ? (
+                      <>
+                        <span aria-hidden className="h-4 w-px bg-border/60" />
+                        <span>Criado em {criadoEmLabel}</span>
+                      </>
+                    ) : null}
+                    {atualizadoEmLabel ? (
+                      <>
+                        <span aria-hidden className="h-4 w-px bg-border/60" />
+                        <span>Atualizado em {atualizadoEmLabel}</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <p>
+                    {processo.uf && processo.municipio
+                      ? `Localização cadastrada: ${processo.municipio} - ${processo.uf}`
+                      : "Localização não informada."}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Recursos e desdobramentos</CardTitle>
+                  <CardDescription>
+                    Acompanhe recursos vinculados e outras ramificações do processo.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                    Nenhum recurso ou desdobramento cadastrado para este processo.
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Apensos</CardTitle>
+                  <CardDescription>
+                    Visualize processos apensados relacionados.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                    Nenhum processo apensado foi registrado.
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Próximas atividades</CardTitle>
+                  <CardDescription>
+                    Organize as tarefas planejadas para manter o processo em dia.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+                    Nenhuma atividade agendada para este processo.
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-center"
+                    disabled
+                  >
+                    Agendar atividade
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Documentos</CardTitle>
+                  <CardDescription>
+                    Acompanhe os arquivos públicos sincronizados pelo Escavador.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {documentosLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-6 w-1/2 rounded-md" />
+                      <Skeleton className="h-4 w-2/3 rounded-md" />
+                    </div>
+                  ) : documentosResumo.total === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+                      Nenhum documento público foi disponibilizado para este processo.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-3xl font-semibold text-foreground">
+                        {documentosResumo.total}
+                      </p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Documentos sincronizados
+                      </p>
+                      {documentosResumo.ultimaData ? (
+                        <p className="text-xs text-muted-foreground">
+                          Último documento em {documentosResumo.ultimaData}
+                        </p>
+                      ) : null}
+                      {documentosResumo.ultimoTitulo ? (
+                        <p className="text-sm text-foreground">{documentosResumo.ultimoTitulo}</p>
+                      ) : null}
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-center"
+                    onClick={() => setActiveTab("atualizacoes")}
+                    disabled={documentosLoading}
+                  >
+                    Ver documentos
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Atendimentos</CardTitle>
+                  <CardDescription>
+                    Centralize os contatos realizados com as partes envolvidas.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+                    Nenhum atendimento registrado.
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-center"
+                    disabled
+                  >
+                    Registrar atendimento
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">Honorários</CardTitle>
+                  <CardDescription>
+                    Acompanhe propostas e contratos relacionados ao processo.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {processo.proposta ? (
+                    <>
+                      <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+                        <p className="text-sm font-medium text-foreground">
+                          {processo.proposta.label}
+                        </p>
+                        {processo.proposta.solicitante ? (
+                          <p className="text-xs text-muted-foreground">
+                            Solicitante: {processo.proposta.solicitante}
                           </p>
                         ) : null}
-                        {movimentacao.classificacao?.hierarquia ? (
-                          <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                            Hierarquia: {movimentacao.classificacao.hierarquia}
+                        {processo.proposta.dataCriacao ? (
+                          <p className="text-xs text-muted-foreground">
+                            Criada em {formatDateToPtBR(processo.proposta.dataCriacao) ?? processo.proposta.dataCriacao}
                           </p>
                         ) : null}
                       </div>
+                      <Button
+                        size="sm"
+                        className="w-full justify-center"
+                        onClick={handleGerarContrato}
+                      >
+                        Gerar contrato
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+                      Nenhuma proposta de honorários vinculada ao processo.
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold">Informações complementares</CardTitle>
-          <CardDescription>
-            Dados adicionais registrados no sistema para fins de acompanhamento.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4" />
-              {dataDistribuicaoLabel
-                ? `Distribuído em ${dataDistribuicaoLabel}`
-                : "Data de distribuição não informada"}
-            </span>
-            {criadoEmLabel ? (
-              <>
-                <span aria-hidden className="h-4 w-px bg-border/60" />
-                <span>Criado em {criadoEmLabel}</span>
-              </>
-            ) : null}
-            {atualizadoEmLabel ? (
-              <>
-                <span aria-hidden className="h-4 w-px bg-border/60" />
-                <span>Atualizado em {atualizadoEmLabel}</span>
-              </>
-            ) : null}
           </div>
-          <p>
-            {processo.uf && processo.municipio
-              ? `Localização cadastrada: ${processo.municipio} - ${processo.uf}`
-              : "Localização não informada."}
-          </p>
-        </CardContent>
-      </Card>
+        </TabsContent>
+
+        <TabsContent value="atualizacoes" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold">Documentos públicos</CardTitle>
+              <CardDescription>
+                Arquivos disponibilizados pelo Escavador para este processo.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {documentosLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-20 w-full rounded-xl" />
+                  <Skeleton className="h-20 w-full rounded-xl" />
+                </div>
+              ) : documentosError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Erro ao carregar documentos públicos</AlertTitle>
+                  <AlertDescription>{documentosError}</AlertDescription>
+                </Alert>
+              ) : documentosPublicos.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                  Nenhum documento público foi disponibilizado para este processo até o momento.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {documentosPublicos.map((documento) => {
+                    const paginasLabel =
+                      documento.paginas && documento.paginas > 0
+                        ? `${documento.paginas} ${documento.paginas === 1 ? "página" : "páginas"}`
+                        : null;
+                    const additionalLinks = Object.entries(documento.links).filter(
+                      ([, href]) => href !== documento.downloadUrl,
+                    );
+
+                    return (
+                      <div
+                        key={documento.id}
+                        className="flex flex-col gap-4 rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-base font-semibold text-foreground">
+                              {documento.titulo}
+                            </p>
+                            {documento.extensao ? (
+                              <Badge
+                                variant="outline"
+                                className="rounded-full border-primary/40 bg-primary/5 px-2.5 text-[10px] uppercase tracking-wide text-primary"
+                              >
+                                {documento.extensao}
+                              </Badge>
+                            ) : null}
+                            {documento.tipo ? (
+                              <Badge className="rounded-full bg-secondary px-2.5 text-[10px] uppercase tracking-wide text-secondary-foreground">
+                                {documento.tipo}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            {documento.dataFormatada ? (
+                              <span className="flex items-center gap-1.5">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {documento.dataFormatada}
+                              </span>
+                            ) : null}
+                            {paginasLabel ? (
+                              <span className="flex items-center gap-1.5">
+                                <FileText className="h-3.5 w-3.5" />
+                                {paginasLabel}
+                              </span>
+                            ) : null}
+                            {documento.key ? (
+                              <span className="truncate text-xs text-muted-foreground">
+                                Chave: {documento.key}
+                              </span>
+                            ) : null}
+                          </div>
+                          {documento.descricao ? (
+                            <p className="text-sm text-muted-foreground">
+                              {documento.descricao}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+                          {documento.downloadUrl ? (
+                            <Button asChild>
+                              <a
+                                href={documento.downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2"
+                              >
+                                <Download className="h-4 w-4" />
+                                Baixar documento
+                              </a>
+                            </Button>
+                          ) : (
+                            <Button variant="outline" disabled className="inline-flex items-center gap-2">
+                              <Download className="h-4 w-4" />
+                              Download indisponível
+                            </Button>
+                          )}
+                          {additionalLinks.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                              {additionalLinks.map(([key, href]) => {
+                                const label = key.replace(/_/g, " ");
+                                return (
+                                  <a
+                                    key={`${documento.id}-${key}`}
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline-offset-2 hover:underline"
+                                  >
+                                    {label}
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="historico" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold">
+                Movimentações sincronizadas
+              </CardTitle>
+              <CardDescription>
+                Acompanhe as publicações e andamentos capturados automaticamente pelo Escavador.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {processo.movimentacoes.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                  Nenhuma movimentação foi sincronizada até o momento. Utilize a ação de sincronização na listagem de processos para importar os dados do tribunal.
+                </div>
+              ) : (
+                <div className="relative">
+                  <div
+                    className="pointer-events-none absolute left-3 top-3 bottom-3 w-px bg-border/60 sm:left-4"
+                    aria-hidden
+                  />
+                  <div className="space-y-6">
+                    {processo.movimentacoes.map((movimentacao, index) => {
+                      const fonteDescricao = movimentacao.fonte
+                        ? [
+                            movimentacao.fonte.sigla && movimentacao.fonte.nome
+                              ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
+                              : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
+                            movimentacao.fonte.caderno,
+                            movimentacao.fonte.grauFormatado ?? movimentacao.fonte.grau,
+                            movimentacao.fonte.tipo,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : null;
+                      const dataPrincipal =
+                        movimentacao.dataFormatada ??
+                        movimentacao.data ??
+                        "Data não informada";
+                      const isLast = index === processo.movimentacoes.length - 1;
+                      const indicatorDotClasses = isLast
+                        ? "bg-muted-foreground"
+                        : "bg-primary";
+
+                      return (
+                        <div key={movimentacao.id} className="relative pl-10 sm:pl-12">
+                          <span
+                            className="absolute left-1 top-2 flex h-4 w-4 items-center justify-center rounded-full border border-border/60 bg-background"
+                            aria-hidden
+                          >
+                            <span className={`h-2 w-2 rounded-full ${indicatorDotClasses}`} />
+                          </span>
+                          <div className="rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-base font-semibold text-foreground">
+                                    {movimentacao.tipo}
+                                  </p>
+                                  {movimentacao.tipoPublicacao ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                    >
+                                      {movimentacao.tipoPublicacao}
+                                    </Badge>
+                                  ) : null}
+                                  {movimentacao.classificacao ? (
+                                    <Badge
+                                      variant="secondary"
+                                      className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                    >
+                                      {movimentacao.classificacao.nome}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                {fonteDescricao ? (
+                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Newspaper className="h-3.5 w-3.5" />
+                                    <span>{fonteDescricao}</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground sm:items-end">
+                                <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                                  <Calendar className="h-4 w-4 text-primary" />
+                                  {dataPrincipal}
+                                </span>
+                                {movimentacao.criadoEm ? (
+                                  <span>
+                                    Registrado em {formatDateTimeToPtBR(movimentacao.criadoEm)}
+                                  </span>
+                                ) : null}
+                                {movimentacao.atualizadoEm &&
+                                movimentacao.atualizadoEm !== movimentacao.criadoEm ? (
+                                  <span>
+                                    Atualizado em {formatDateTimeToPtBR(movimentacao.atualizadoEm)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            {movimentacao.conteudo ? (
+                              <div className="mt-3 rounded-lg border border-border/40 bg-muted/30 p-3 text-sm text-foreground whitespace-pre-line">
+                                {movimentacao.conteudo}
+                              </div>
+                            ) : null}
+                            {movimentacao.textoCategoria ? (
+                              <div className="mt-3 rounded-lg border border-dashed border-border/40 bg-background/50 p-3 text-sm text-foreground whitespace-pre-line">
+                                {movimentacao.textoCategoria}
+                              </div>
+                            ) : null}
+                            {movimentacao.classificacao?.descricao ? (
+                              <p className="mt-3 text-xs text-muted-foreground whitespace-pre-line">
+                                {movimentacao.classificacao.descricao}
+                              </p>
+                            ) : null}
+                            {movimentacao.classificacao?.hierarquia ? (
+                              <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Hierarquia: {movimentacao.classificacao.hierarquia}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
 
