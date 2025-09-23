@@ -6,8 +6,12 @@ import { signToken } from '../utils/tokenUtils';
 import { authConfig } from '../constants/auth';
 import { fetchPerfilModules } from '../services/moduleService';
 import { SYSTEM_MODULES, normalizeModuleId, sortModules } from '../constants/modules';
-
-const TRIAL_DURATION_DAYS = 14;
+import {
+  calculateTrialEnd,
+  resolvePlanCadence,
+  resolveSubscriptionPayloadFromRow,
+  type SubscriptionCadence,
+} from '../services/subscriptionService';
 
 const parseOptionalInteger = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -87,57 +91,16 @@ const parseDateValue = (value: unknown): Date | null => {
   return null;
 };
 
-const calculateTrialEnd = (startDate: Date | null): Date | null => {
-  if (!startDate) {
-    return null;
-  }
-
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + TRIAL_DURATION_DAYS);
-  return endDate;
-};
-
 const resolveSubscriptionPayload = (row: {
   empresa_plano?: unknown;
   empresa_ativo?: unknown;
-  empresa_datacadastro?: unknown;
-}) => {
-  const planId = parseOptionalInteger(row.empresa_plano);
-  const isActive = parseBooleanFlag(row.empresa_ativo);
-  const startedAtDate = parseDateValue(row.empresa_datacadastro);
-
-  if (planId === null) {
-    return {
-      planId: null,
-      status: 'inactive' as const,
-      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
-      trialEndsAt: null,
-    };
-  }
-
-  if (isActive === false) {
-    return {
-      planId,
-      status: 'inactive' as const,
-      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
-      trialEndsAt: null,
-    };
-  }
-
-  const trialEndsAtDate = calculateTrialEnd(startedAtDate);
-  const now = new Date();
-  const isTrialing =
-    startedAtDate !== null &&
-    trialEndsAtDate !== null &&
-    now.getTime() < trialEndsAtDate.getTime();
-
-  return {
-    planId,
-    status: isTrialing ? ('trialing' as const) : ('active' as const),
-    startedAt: startedAtDate ? startedAtDate.toISOString() : null,
-    trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
-  };
-};
+  trial_started_at?: unknown;
+  trial_ends_at?: unknown;
+  current_period_start?: unknown;
+  current_period_end?: unknown;
+  grace_expires_at?: unknown;
+  subscription_cadence?: unknown;
+}) => resolveSubscriptionPayloadFromRow(row);
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
@@ -289,6 +252,19 @@ export const register = async (req: Request, res: Response) => {
 
       const { planId, modules } = await fetchDefaultPlanDetails(client);
 
+      let defaultCadence: SubscriptionCadence = 'monthly';
+      if (planId != null) {
+        try {
+          defaultCadence = await resolvePlanCadence(planId, null);
+        } catch (cadenceError) {
+          console.warn('Falha ao determinar recorrência padrão do plano durante cadastro.', cadenceError);
+        }
+      }
+
+      const trialStartedAt = new Date();
+      const trialEndsAt = calculateTrialEnd(trialStartedAt);
+      const graceExpiresAt = trialEndsAt;
+
       const companyLookup = await client.query(
         `SELECT id, nome_empresa, plano
            FROM public.empresas
@@ -318,16 +294,51 @@ export const register = async (req: Request, res: Response) => {
         companyPlanId = parseInteger(row.plano);
       } else {
         const insertResult = await client.query(
-          `INSERT INTO public.empresas (nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-        RETURNING id, nome_empresa, plano`,
-          [companyValue, null, phoneValue, normalizedEmail, planId, nameValue, true]
+          `INSERT INTO public.empresas (
+             nome_empresa,
+             cnpj,
+             telefone,
+             email,
+             plano,
+             responsavel,
+             ativo,
+             datacadastro,
+             trial_started_at,
+             trial_ends_at,
+             current_period_start,
+             current_period_end,
+             grace_expires_at,
+             subscription_cadence
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, $10, $11, $12, $13)
+        RETURNING id, nome_empresa, plano, trial_started_at, trial_ends_at, current_period_start, current_period_end, grace_expires_at, subscription_cadence`,
+          [
+            companyValue,
+            null,
+            phoneValue,
+            normalizedEmail,
+            planId,
+            nameValue,
+            true,
+            trialStartedAt,
+            trialEndsAt,
+            trialStartedAt,
+            trialEndsAt,
+            graceExpiresAt,
+            defaultCadence,
+          ]
         );
 
         const inserted = insertResult.rows[0] as {
           id?: unknown;
           nome_empresa?: unknown;
           plano?: unknown;
+          trial_started_at?: unknown;
+          trial_ends_at?: unknown;
+          current_period_start?: unknown;
+          current_period_end?: unknown;
+          grace_expires_at?: unknown;
+          subscription_cadence?: unknown;
         };
 
         const parsedId = parseInteger(inserted.id);
@@ -486,7 +497,12 @@ export const login = async (req: Request, res: Response) => {
               esc.nome AS setor_nome,
               emp.plano AS empresa_plano,
               emp.ativo AS empresa_ativo,
-              emp.datacadastro AS empresa_datacadastro
+              emp.trial_started_at AS empresa_trial_started_at,
+              emp.trial_ends_at AS empresa_trial_ends_at,
+              emp.current_period_start AS empresa_current_period_start,
+              emp.current_period_end AS empresa_current_period_end,
+              emp.grace_expires_at AS empresa_grace_expires_at,
+              emp.subscription_cadence AS empresa_subscription_cadence
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -513,7 +529,12 @@ export const login = async (req: Request, res: Response) => {
       setor_nome: string | null;
       empresa_plano?: unknown;
       empresa_ativo?: unknown;
-      empresa_datacadastro?: unknown;
+      empresa_trial_started_at?: unknown;
+      empresa_trial_ends_at?: unknown;
+      empresa_current_period_start?: unknown;
+      empresa_current_period_end?: unknown;
+      empresa_grace_expires_at?: unknown;
+      empresa_subscription_cadence?: unknown;
     };
 
     if (user.status === false) {
@@ -542,7 +563,16 @@ export const login = async (req: Request, res: Response) => {
 
     const subscription =
       user.empresa_id != null
-        ? resolveSubscriptionPayload(user)
+        ? resolveSubscriptionPayload({
+            empresa_plano: user.empresa_plano,
+            empresa_ativo: user.empresa_ativo,
+            trial_started_at: user.empresa_trial_started_at,
+            trial_ends_at: user.empresa_trial_ends_at,
+            current_period_start: user.empresa_current_period_start,
+            current_period_end: user.empresa_current_period_end,
+            grace_expires_at: user.empresa_grace_expires_at,
+            subscription_cadence: user.empresa_subscription_cadence,
+          })
         : null;
 
     res.json({
@@ -614,7 +644,12 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               esc.nome AS setor_nome,
               emp.plano AS empresa_plano,
               emp.ativo AS empresa_ativo,
-              emp.datacadastro AS empresa_datacadastro
+              emp.trial_started_at AS empresa_trial_started_at,
+              emp.trial_ends_at AS empresa_trial_ends_at,
+              emp.current_period_start AS empresa_current_period_start,
+              emp.current_period_end AS empresa_current_period_end,
+              emp.grace_expires_at AS empresa_grace_expires_at,
+              emp.subscription_cadence AS empresa_subscription_cadence
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -634,10 +669,15 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 
     const subscription =
       user.empresa_id != null
-        ? resolveSubscriptionPayload(user as {
-            empresa_plano?: unknown;
-            empresa_ativo?: unknown;
-            empresa_datacadastro?: unknown;
+        ? resolveSubscriptionPayload({
+            empresa_plano: user.empresa_plano,
+            empresa_ativo: user.empresa_ativo,
+            trial_started_at: user.empresa_trial_started_at,
+            trial_ends_at: user.empresa_trial_ends_at,
+            current_period_start: user.empresa_current_period_start,
+            current_period_end: user.empresa_current_period_end,
+            grace_expires_at: user.empresa_grace_expires_at,
+            subscription_cadence: user.empresa_subscription_cadence,
           })
         : null;
 

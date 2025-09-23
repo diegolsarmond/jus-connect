@@ -85,7 +85,7 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   ]);
 
   const remotePayments: AsaasPayment[] = [
-    { id: 'pay_1', status: 'OVERDUE' },
+    { id: 'pay_1', status: 'OVERDUE', dueDate: '2024-04-15' },
     { id: 'pay_2', status: 'RECEIVED', paymentDate: '2024-04-01' },
     { id: 'other', status: 'PENDING' },
   ];
@@ -94,7 +94,22 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
     { data: remotePayments, hasMore: false, limit: 100, offset: 0 },
   ]);
 
+  const subscriptionUpdates: Array<{
+    flowId: number;
+    status: string;
+    paymentDate: Date | null;
+    dueDate: string | null | undefined;
+  }> = [];
+
   const service = new AsaasChargeSyncService(db as any, client as any, 50);
+  (service as unknown as { updateSubscriptionForCharge: (...args: any[]) => Promise<void> }).updateSubscriptionForCharge = async (
+    flowId: number,
+    status: string,
+    paymentDate: Date | null,
+    dueDate: string | null | undefined,
+  ) => {
+    subscriptionUpdates.push({ flowId, status, paymentDate, dueDate });
+  };
 
   const result = await service.syncPendingCharges();
 
@@ -109,7 +124,7 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   assert.equal(client.calls[0].limit, 50);
   assert.equal(client.calls[0].offset, 0);
 
-  // First call is the SELECT used to load the pending charges
+
   const updateCalls = db.calls.slice(1);
   assert.equal(updateCalls.length, 4);
 
@@ -126,6 +141,17 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   assert.equal(updateFlow2.values?.[0], 'pago');
   assert.ok(updateFlow2.values?.[1] instanceof Date);
   assert.equal(updateFlow2.values?.[2], 20);
+
+  assert.equal(subscriptionUpdates.length, 2);
+  assert.deepEqual(
+    subscriptionUpdates.map((entry) => entry.flowId).sort(),
+    [10, 20],
+  );
+  const paymentEntry = subscriptionUpdates.find((entry) => entry.flowId === 20);
+  assert.ok(paymentEntry?.paymentDate instanceof Date);
+  const overdueEntry = subscriptionUpdates.find((entry) => entry.flowId === 10);
+  assert.equal(overdueEntry?.status, 'OVERDUE');
+  assert.equal(overdueEntry?.dueDate, '2024-04-15');
 });
 
 test('syncPendingCharges fails fast when credentials are not configured', async () => {

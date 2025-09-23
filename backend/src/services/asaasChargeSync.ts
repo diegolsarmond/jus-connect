@@ -2,6 +2,11 @@ import { URLSearchParams } from 'url';
 import type { QueryResultRow } from 'pg';
 import pool from './db';
 import { createNotification, type NotificationType } from './notificationService';
+import {
+  applySubscriptionOverdue,
+  applySubscriptionPayment,
+  findCompanyIdForFinancialFlow,
+} from './subscriptionService';
 
 export const OPEN_PAYMENT_STATUSES = [
   'PENDING',
@@ -228,6 +233,8 @@ export class AsaasChargeSyncService {
             [flowStatus, paymentDate, charge.financial_flow_id],
           );
           flowsUpdated += 1;
+
+          await this.updateSubscriptionForCharge(charge.financial_flow_id, paymentStatus, paymentDate, payment.dueDate);
         }
       }
 
@@ -349,6 +356,40 @@ export class AsaasChargeSyncService {
     }
 
     return null;
+  }
+
+  private async updateSubscriptionForCharge(
+    financialFlowId: number,
+    paymentStatus: string,
+    paymentDate: Date | null,
+    dueDate: string | null | undefined,
+  ): Promise<void> {
+    const normalizedStatus = normalizeStatus(paymentStatus);
+
+    let companyId: number | null = null;
+
+    try {
+      companyId = await findCompanyIdForFinancialFlow(financialFlowId);
+    } catch (error) {
+      console.error('[AsaasChargeSync] Failed to resolve company for financial flow', financialFlowId, error);
+      return;
+    }
+
+    if (!companyId) {
+      return;
+    }
+
+    try {
+      if (PAID_PAYMENT_STATUS_SET.has(normalizedStatus)) {
+        const effectivePaymentDate = paymentDate ?? new Date();
+        await applySubscriptionPayment(companyId, effectivePaymentDate);
+      } else if (normalizedStatus === 'OVERDUE') {
+        const parsedDueDate = parseDate(dueDate);
+        await applySubscriptionOverdue(companyId, parsedDueDate);
+      }
+    } catch (error) {
+      console.error('[AsaasChargeSync] Failed to update subscription timeline', { companyId, financialFlowId }, error);
+    }
   }
 }
 

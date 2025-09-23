@@ -59,12 +59,22 @@ test('createSubscription records a trial subscription and returns trial end date
 
   const { calls, restore } = setupQueryMock([
     {
+      rows: [{ valor_mensal: '199.90', valor_anual: '1999.90' }],
+      rowCount: 1,
+    },
+    {
       rows: [
         {
           id: 42,
           plano: 7,
           ativo: true,
           datacadastro: startDate.toISOString(),
+          trial_started_at: startDate.toISOString(),
+          trial_ends_at: expectedTrialEnd.toISOString(),
+          current_period_start: startDate.toISOString(),
+          current_period_end: expectedTrialEnd.toISOString(),
+          grace_expires_at: expectedTrialEnd.toISOString(),
+          subscription_cadence: 'monthly',
         },
       ],
       rowCount: 1,
@@ -95,13 +105,35 @@ test('createSubscription records a trial subscription and returns trial end date
     status?: string;
     trialEndsAt?: string | null;
     isActive?: boolean;
+    cadence?: string;
+    currentPeriodStart?: string | null;
+    currentPeriodEnd?: string | null;
+    graceExpiresAt?: string | null;
   };
 
   assert.equal(payload.status, 'trialing');
   assert.equal(payload.isActive, true);
   assert.equal(payload.trialEndsAt, expectedTrialEnd.toISOString());
+  assert.equal(payload.cadence, 'monthly');
+  assert.equal(payload.currentPeriodStart, startDate.toISOString());
+  assert.equal(payload.currentPeriodEnd, expectedTrialEnd.toISOString());
+  assert.equal(payload.graceExpiresAt, expectedTrialEnd.toISOString());
 
-  assert.equal(calls.length, 1);
-  assert.match(calls[0]?.text ?? '', /UPDATE public\.empresas/);
-  assert.deepEqual(calls[0]?.values, [7, true, startDate, 42]);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /FROM public\.planos/i);
+  assert.deepEqual(calls[0]?.values, [7]);
+
+  assert.match(calls[1]?.text ?? '', /UPDATE public\.empresas/);
+  assert.deepEqual(calls[1]?.values, [
+    7,
+    true,
+    startDate,
+    startDate,
+    expectedTrialEnd,
+    startDate,
+    expectedTrialEnd,
+    expectedTrialEnd,
+    'monthly',
+    42,
+  ]);
 });

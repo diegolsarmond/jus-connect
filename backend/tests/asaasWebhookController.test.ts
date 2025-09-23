@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import test from 'node:test';
 import type { Request, Response } from 'express';
 import { Pool } from 'pg';
+import { __internal as subscriptionInternal } from '../src/services/subscriptionService';
 
 process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
@@ -58,6 +59,10 @@ test.before(async () => {
   ));
 });
 
+test.beforeEach(() => {
+  subscriptionInternal.resetCaches();
+});
+
 test('handleAsaasWebhook processes PAYMENT_RECEIVED and updates financial flow', async () => {
   const secret = 'top-secret';
   const webhookBody = {
@@ -72,9 +77,24 @@ test('handleAsaasWebhook processes PAYMENT_RECEIVED and updates financial flow',
   const signature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
   const { calls, restore } = setupQueryMock([
-    { rows: [{ id: 1, credential_id: 55, financial_flow_id: 90 }], rowCount: 1 },
+    { rows: [{ id: 1, credential_id: 55, financial_flow_id: 90, cliente_id: null }], rowCount: 1 },
     { rows: [{ webhook_secret: secret }], rowCount: 1 },
     { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ column_name: 'empresa' }], rowCount: 1 },
+    { rows: [{ empresa_id: 123 }], rowCount: 1 },
+    {
+      rows: [
+        {
+          plano: 7,
+          subscription_cadence: 'monthly',
+          current_period_start: '2024-04-01T00:00:00.000Z',
+          current_period_end: '2024-04-30T00:00:00.000Z',
+          grace_expires_at: '2024-05-07T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
     { rows: [], rowCount: 1 },
   ]);
 
@@ -97,7 +117,7 @@ test('handleAsaasWebhook processes PAYMENT_RECEIVED and updates financial flow',
 
   assert.equal(res.statusCode, 202);
   assert.deepEqual(res.body, { received: true });
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 8);
 
   assert.match(calls[0]?.text ?? '', /FROM asaas_charges/i);
   assert.deepEqual(calls[0]?.values, ['pay_123']);
@@ -114,6 +134,19 @@ test('handleAsaasWebhook processes PAYMENT_RECEIVED and updates financial flow',
 
   assert.match(calls[3]?.text ?? '', /UPDATE financial_flows/i);
   assert.equal(calls[3]?.values?.[1], 90);
+
+  assert.match(calls[4]?.text ?? '', /information_schema\.columns/i);
+  assert.match(calls[5]?.text ?? '', /FROM financial_flows/i);
+  assert.deepEqual(calls[5]?.values, [90]);
+
+  assert.match(calls[6]?.text ?? '', /FROM public\.empresas/i);
+  assert.deepEqual(calls[6]?.values, [123]);
+
+  assert.match(calls[7]?.text ?? '', /UPDATE public\.empresas/i);
+  assert.ok(calls[7]?.values?.[0] instanceof Date);
+  assert.ok(calls[7]?.values?.[1] instanceof Date);
+  assert.equal(calls[7]?.values?.[3], 'monthly');
+  assert.equal(calls[7]?.values?.[4], 123);
 });
 
 test('handleAsaasWebhook logs error and skips updates when signature is invalid', async () => {
@@ -130,7 +163,7 @@ test('handleAsaasWebhook logs error and skips updates when signature is invalid'
   const wrongSignature = crypto.createHmac('sha256', 'other-secret').update(rawBody).digest('hex');
 
   const { calls, restore } = setupQueryMock([
-    { rows: [{ id: 10, credential_id: 42, financial_flow_id: 77 }], rowCount: 1 },
+    { rows: [{ id: 10, credential_id: 42, financial_flow_id: 77, cliente_id: null }], rowCount: 1 },
     { rows: [{ webhook_secret: secret }], rowCount: 1 },
   ]);
 
