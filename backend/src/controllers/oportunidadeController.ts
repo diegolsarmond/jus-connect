@@ -370,6 +370,7 @@ const ensureOpportunityInstallments = async (
   qtdeParcelas: unknown,
   prazoProximo: unknown,
   empresaId: number | null,
+  valorEntrada: unknown,
 ) => {
   const existing = await client.query(
     'SELECT id FROM public.oportunidade_parcelas WHERE oportunidade_id = $1 LIMIT 1',
@@ -386,6 +387,7 @@ const ensureOpportunityInstallments = async (
     qtdeParcelas,
     prazoProximo,
     empresaId,
+    valorEntrada,
   );
 };
 
@@ -1257,7 +1259,7 @@ export const createOportunidadeFaturamento = async (
     await client.query('BEGIN');
 
     const opportunityResult = await client.query(
-      `SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios, prazo_proximo, idempresa
+      `SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios, prazo_proximo, idempresa, valor_entrada
          FROM public.oportunidades
         WHERE id = $1`,
       [id],
@@ -1278,6 +1280,7 @@ export const createOportunidadeFaturamento = async (
       opportunity.qtde_parcelas,
       opportunity.prazo_proximo,
       typeof opportunity.idempresa === 'number' ? opportunity.idempresa : null,
+      opportunity.valor_entrada,
     );
 
     const installmentsResult = await client.query(
