@@ -202,7 +202,8 @@ const ensureFinancialFlowEmpresaColumn = async (): Promise<string | null> => {
     [FINANCIAL_FLOW_EMPRESA_COLUMNS],
   );
 
-  cachedFinancialFlowEmpresaColumn = result.rowCount > 0 ? result.rows[0].column_name : null;
+  cachedFinancialFlowEmpresaColumn =
+    (result.rowCount ?? 0) > 0 ? result.rows[0].column_name : null;
   return cachedFinancialFlowEmpresaColumn;
 };
 
@@ -221,7 +222,7 @@ const ensureClienteEmpresaColumn = async (): Promise<string | null> => {
     [CLIENTE_EMPRESA_COLUMNS],
   );
 
-  cachedClienteEmpresaColumn = result.rowCount > 0 ? result.rows[0].column_name : null;
+  cachedClienteEmpresaColumn = (result.rowCount ?? 0) > 0 ? result.rows[0].column_name : null;
   return cachedClienteEmpresaColumn;
 };
 

@@ -95,23 +95,13 @@ const parseDateValue = (value: unknown): Date | null => {
   return null;
 };
 
-const resolveSubscriptionPayload = (row: {
-  empresa_plano?: unknown;
-  empresa_ativo?: unknown;
-  trial_started_at?: unknown;
-  trial_ends_at?: unknown;
-  current_period_start?: unknown;
-  current_period_end?: unknown;
-  grace_expires_at?: unknown;
-  subscription_cadence?: unknown;
-}) => resolveSubscriptionPayloadFromRow(row);
 const addDays = (date: Date, days: number): Date => {
   const result = new Date(date.getTime());
   result.setDate(result.getDate() + days);
   return result;
 };
 
-const calculateTrialEnd = (startDate: Date | null): Date | null => {
+const calculateLegacyTrialEnd = (startDate: Date | null): Date | null => {
   if (!startDate) {
     return null;
   }
@@ -123,9 +113,14 @@ type SubscriptionRow = {
   empresa_plano?: unknown;
   empresa_ativo?: unknown;
   empresa_datacadastro?: unknown;
+  empresa_trial_started_at?: unknown;
   empresa_trial_ends_at?: unknown;
+  empresa_current_period_start?: unknown;
+  empresa_current_period_end?: unknown;
   empresa_current_period_ends_at?: unknown;
+  empresa_grace_expires_at?: unknown;
   empresa_grace_period_ends_at?: unknown;
+  empresa_subscription_cadence?: unknown;
 };
 
 type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace_period' | 'expired';
@@ -162,11 +157,32 @@ type LoginUserRow = UserRowBase & {
 const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolution => {
   const planId = parseOptionalInteger(row.empresa_plano);
   const isActive = parseBooleanFlag(row.empresa_ativo);
-  const startedAtDate = parseDateValue(row.empresa_datacadastro);
+  const startedAtDate = (() => {
+    const datacadastro = parseDateValue(row.empresa_datacadastro);
+    if (datacadastro) {
+      return datacadastro;
+    }
+
+    return parseDateValue(row.empresa_trial_started_at);
+  })();
   const persistedTrialEnd = parseDateValue(row.empresa_trial_ends_at);
-  const trialEndsAtDate = persistedTrialEnd ?? calculateTrialEnd(startedAtDate);
-  const currentPeriodEndsAtDate = parseDateValue(row.empresa_current_period_ends_at);
-  const persistedGracePeriodEndsAt = parseDateValue(row.empresa_grace_period_ends_at);
+  const trialEndsAtDate = persistedTrialEnd ?? calculateLegacyTrialEnd(startedAtDate);
+  const currentPeriodEndsAtDate = (() => {
+    const stored = parseDateValue(row.empresa_current_period_ends_at);
+    if (stored) {
+      return stored;
+    }
+
+    return parseDateValue(row.empresa_current_period_end);
+  })();
+  const persistedGracePeriodEndsAt = (() => {
+    const stored = parseDateValue(row.empresa_grace_period_ends_at);
+    if (stored) {
+      return stored;
+    }
+
+    return parseDateValue(row.empresa_grace_expires_at);
+  })();
   const computedGracePeriodEndsAt =
     currentPeriodEndsAtDate != null ? addDays(currentPeriodEndsAtDate, GRACE_PERIOD_DAYS) : null;
   const gracePeriodEndsAtDate = (() => {
@@ -228,9 +244,7 @@ const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolutio
   let blockingReason: SubscriptionBlockingReason = null;
 
   if (!isInGoodStanding) {
-    if (status === 'inactive') {
-      blockingReason = 'inactive';
-    } else if (status === 'expired') {
+    if (status === 'expired') {
       const trialEnded = trialEndsAtDate ? now.getTime() >= trialEndsAtDate.getTime() : false;
       const hasCurrentPeriod = currentPeriodEndsAtDate != null;
       const pastGrace = gracePeriodEndsAtDate
@@ -694,15 +708,14 @@ export const login = async (req: Request, res: Response) => {
               emp.plano AS empresa_plano,
               emp.ativo AS empresa_ativo,
               emp.trial_started_at AS empresa_trial_started_at,
-              emp.trial_ends_at AS empresa_trial_ends_at,
+              COALESCE(emp.trial_ends_at, emp.subscription_trial_ends_at) AS empresa_trial_ends_at,
               emp.current_period_start AS empresa_current_period_start,
-              emp.current_period_end AS empresa_current_period_end,
-              emp.grace_expires_at AS empresa_grace_expires_at,
-              emp.subscription_cadence AS empresa_subscription_cadence
+              COALESCE(emp.current_period_end, emp.subscription_current_period_ends_at) AS empresa_current_period_end,
+              COALESCE(emp.grace_expires_at, emp.subscription_grace_period_ends_at) AS empresa_grace_expires_at,
+              emp.subscription_cadence AS empresa_subscription_cadence,
               emp.datacadastro AS empresa_datacadastro,
-              emp.subscription_trial_ends_at AS empresa_trial_ends_at,
-              emp.subscription_current_period_ends_at AS empresa_current_period_ends_at,
-              emp.subscription_grace_period_ends_at AS empresa_grace_period_ends_at
+              COALESCE(emp.subscription_current_period_ends_at, emp.current_period_end) AS empresa_current_period_ends_at,
+              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -733,7 +746,10 @@ export const login = async (req: Request, res: Response) => {
       empresa_trial_ends_at?: unknown;
       empresa_current_period_start?: unknown;
       empresa_current_period_end?: unknown;
+      empresa_current_period_ends_at?: unknown;
       empresa_grace_expires_at?: unknown;
+      empresa_grace_period_ends_at?: unknown;
+      empresa_datacadastro?: unknown;
       empresa_subscription_cadence?: unknown;
     };
 
@@ -749,12 +765,12 @@ export const login = async (req: Request, res: Response) => {
       return;
     }
 
-    const subscription =
+    const subscriptionResolution =
       user.empresa_id != null
         ? resolveSubscriptionPayload(user)
         : null;
 
-    const subscriptionAccess = evaluateSubscriptionAccess(subscription);
+    const subscriptionAccess = evaluateSubscriptionAccess(subscriptionResolution);
     if (!subscriptionAccess.isAllowed) {
       res
         .status(subscriptionAccess.statusCode ?? 403)
@@ -776,14 +792,15 @@ export const login = async (req: Request, res: Response) => {
 
     const subscription =
       user.empresa_id != null
-        ? resolveSubscriptionPayload({
+        ? resolveSubscriptionPayloadFromRow({
             empresa_plano: user.empresa_plano,
             empresa_ativo: user.empresa_ativo,
-            trial_started_at: user.empresa_trial_started_at,
+            trial_started_at: user.empresa_trial_started_at ?? user.empresa_datacadastro,
             trial_ends_at: user.empresa_trial_ends_at,
-            current_period_start: user.empresa_current_period_start,
-            current_period_end: user.empresa_current_period_end,
-            grace_expires_at: user.empresa_grace_expires_at,
+            current_period_start: user.empresa_current_period_start ?? user.empresa_datacadastro,
+            current_period_end:
+              user.empresa_current_period_end ?? user.empresa_current_period_ends_at,
+            grace_expires_at: user.empresa_grace_expires_at ?? user.empresa_grace_period_ends_at,
             subscription_cadence: user.empresa_subscription_cadence,
           })
         : null;
@@ -859,15 +876,14 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               emp.plano AS empresa_plano,
               emp.ativo AS empresa_ativo,
               emp.trial_started_at AS empresa_trial_started_at,
-              emp.trial_ends_at AS empresa_trial_ends_at,
+              COALESCE(emp.trial_ends_at, emp.subscription_trial_ends_at) AS empresa_trial_ends_at,
               emp.current_period_start AS empresa_current_period_start,
-              emp.current_period_end AS empresa_current_period_end,
-              emp.grace_expires_at AS empresa_grace_expires_at,
-              emp.subscription_cadence AS empresa_subscription_cadence
+              COALESCE(emp.current_period_end, emp.subscription_current_period_ends_at) AS empresa_current_period_end,
+              COALESCE(emp.grace_expires_at, emp.subscription_grace_period_ends_at) AS empresa_grace_expires_at,
+              emp.subscription_cadence AS empresa_subscription_cadence,
               emp.datacadastro AS empresa_datacadastro,
-              emp.subscription_trial_ends_at AS empresa_trial_ends_at,
-              emp.subscription_current_period_ends_at AS empresa_current_period_ends_at,
-              emp.subscription_grace_period_ends_at AS empresa_grace_period_ends_at
+              COALESCE(emp.subscription_current_period_ends_at, emp.current_period_end) AS empresa_current_period_ends_at,
+              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -883,22 +899,10 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 
     const user = result.rows[0] as UserRowBase;
 
-    const subscription =
-      user.empresa_id != null
-        ? resolveSubscriptionPayload({
-            empresa_plano: user.empresa_plano,
-            empresa_ativo: user.empresa_ativo,
-            trial_started_at: user.empresa_trial_started_at,
-            trial_ends_at: user.empresa_trial_ends_at,
-            current_period_start: user.empresa_current_period_start,
-            current_period_end: user.empresa_current_period_end,
-            grace_expires_at: user.empresa_grace_expires_at,
-            subscription_cadence: user.empresa_subscription_cadence,
-          })
-        : null;
+    const subscriptionResolution =
       user.empresa_id != null ? resolveSubscriptionPayload(user) : null;
 
-    const subscriptionAccess = evaluateSubscriptionAccess(subscription);
+    const subscriptionAccess = evaluateSubscriptionAccess(subscriptionResolution);
     if (!subscriptionAccess.isAllowed) {
       res
         .status(subscriptionAccess.statusCode ?? 403)
@@ -907,6 +911,21 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     }
 
     const modulos = await fetchPerfilModules(user.perfil);
+
+    const subscription =
+      user.empresa_id != null
+        ? resolveSubscriptionPayloadFromRow({
+            empresa_plano: user.empresa_plano,
+            empresa_ativo: user.empresa_ativo,
+            trial_started_at: user.empresa_trial_started_at ?? user.empresa_datacadastro,
+            trial_ends_at: user.empresa_trial_ends_at,
+            current_period_start: user.empresa_current_period_start ?? user.empresa_datacadastro,
+            current_period_end:
+              user.empresa_current_period_end ?? user.empresa_current_period_ends_at,
+            grace_expires_at: user.empresa_grace_expires_at ?? user.empresa_grace_period_ends_at,
+            subscription_cadence: user.empresa_subscription_cadence,
+          })
+        : null;
 
     res.json({
       id: user.id,
