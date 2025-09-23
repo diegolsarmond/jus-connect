@@ -331,7 +331,7 @@ const extractUserId = (user: ApiUser): string | undefined => {
 };
 
 export const fetchChatResponsibles = async (): Promise<ChatResponsibleOption[]> => {
-  const response = await fetch(getApiUrl("get_api_usuarios_empresa"), {
+  const response = await fetch(getApiUrl("usuarios/empresa"), {
     headers: { Accept: "application/json" },
   });
   const payload = await parseJson<unknown>(response);
@@ -392,7 +392,7 @@ interface ApiEtiqueta {
 }
 
 export const fetchChatTags = async (): Promise<string[]> => {
-  const response = await fetch(getApiUrl("get_api_etiquetas"), {
+  const response = await fetch(getApiUrl("etiquetas"), {
     headers: { Accept: "application/json" },
   });
   const payload = await parseJson<unknown>(response);
