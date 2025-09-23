@@ -283,7 +283,7 @@ const mapChatToConversation = (
   return mergeOverrides(base, overrides);
 };
 
-const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
+export const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
   const messageType = mapWahaMessageType(message);
   const mediaUrlCandidateKeys = [
     "mediaUrl",
@@ -333,12 +333,12 @@ const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
     : undefined;
 
   const caption = typeof message.caption === "string" ? message.caption.trim() : undefined;
-  const normalizedBody = (() => {
-    const body = typeof message.body === "string" ? message.body : undefined;
-    if (!body) {
+  const bodyValue = typeof message.body === "string" ? message.body : undefined;
+  let normalizedBody = (() => {
+    if (!bodyValue) {
       return undefined;
     }
-    const trimmedBody = body.trim();
+    const trimmedBody = bodyValue.trim();
     if (!trimmedBody) {
       return undefined;
     }
@@ -348,15 +348,23 @@ const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
     return trimmedBody;
   })();
 
-  const mediaFallback = (() => {
-    if (messageType === "audio" || messageType === "image") {
-      return trimmedFilename ?? mediaUrl ?? "";
+  if (normalizedBody && hasMedia) {
+    const lowerBody = normalizedBody.toLowerCase();
+    if ((mediaUrl && normalizedBody === mediaUrl) || lowerBody.startsWith("data:") || lowerBody.startsWith("http") || lowerBody.startsWith("blob:") || lowerBody.startsWith("file:") || lowerBody.startsWith("ftp:")) {
+      normalizedBody = undefined;
     }
-    if (messageType === "file") {
-      return "";
-    }
-    return mediaUrl ?? "";
-  })();
+  }
+
+  const fallbackDescription =
+    messageType === "audio"
+      ? "Mensagem de áudio"
+      : messageType === "image"
+        ? "Imagem"
+        : messageType === "file"
+          ? "Documento"
+          : undefined;
+
+  const mediaFallback = trimmedFilename ?? fallbackDescription ?? mediaUrl ?? "";
 
   const content = hasMedia
     ? caption ?? normalizedBody ?? mediaFallback
