@@ -524,11 +524,16 @@ export const WhatsAppLayout = ({
     if (!activeConversationId) {
       return;
     }
-    const text = payload.content.trim();
-    if (!text) {
+    const trimmedContent = payload.content.trim();
+    const hasAttachments = (payload.attachments?.length ?? 0) > 0;
+    if (!hasAttachments && trimmedContent.length === 0) {
       return;
     }
-    await wahaState.sendMessage(activeConversationId, text);
+    const normalizedPayload =
+      trimmedContent === payload.content
+        ? payload
+        : { ...payload, content: trimmedContent };
+    await wahaState.sendMessage(activeConversationId, normalizedPayload);
   };
 
   const handleUpdateConversation = async (
