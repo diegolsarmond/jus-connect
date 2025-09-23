@@ -1,10 +1,14 @@
-import { Activity, User, Shield, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Activity, Eye, EyeOff, Loader2, Lock, Mail, Shield, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { AuditLog } from "@/types/user";
 
 interface AuditTimelineProps {
   logs: AuditLog[];
   maxItems?: number;
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 const actionIcons = {
@@ -52,18 +56,17 @@ const actionLabels = {
   TWO_FACTOR_DISABLED: "2FA Desativado",
 };
 
-export function AuditTimeline({ logs, maxItems = 10 }: AuditTimelineProps) {
+export function AuditTimeline({ logs, maxItems = 10, isLoading, error, onRetry }: AuditTimelineProps) {
   const displayLogs = logs.slice(0, maxItems);
 
-  const formatDateTime = (date: Date) => {
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  const formatDateTime = (date: Date) =>
+    new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     }).format(date);
-  };
 
   const getActionIcon = (action: string) => {
     const IconComponent = actionIcons[action as keyof typeof actionIcons] || Activity;
@@ -90,6 +93,29 @@ export function AuditTimeline({ logs, maxItems = 10 }: AuditTimelineProps) {
     }
     return null;
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-8 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>Carregando histórico...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+        <Shield className="h-8 w-8 text-destructive" />
+        <p className="text-sm text-muted-foreground max-w-xs">{error}</p>
+        {onRetry && (
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            Tentar novamente
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   if (displayLogs.length === 0) {
     return (
@@ -129,15 +155,13 @@ export function AuditTimeline({ logs, maxItems = 10 }: AuditTimelineProps) {
                   {label}
                 </span>
                 {priorityBadge}
-                <span className="text-xs text-muted-foreground">
-                  {formatDateTime(log.timestamp)}
-                </span>
+                <span className="text-xs text-muted-foreground">{formatDateTime(log.timestamp)}</span>
               </div>
-              
+
               <p className="text-sm text-foreground mb-2 leading-relaxed">
                 {log.description}
               </p>
-              
+
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <User className="h-3 w-3" />
                 <span>Por: {log.performedBy}</span>

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Edit2, Check, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Edit2, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,27 +8,36 @@ import { cn } from "@/lib/utils";
 interface EditableFieldProps {
   label: string;
   value: string;
-  onSave: (value: string) => void;
+  onSave: (value: string) => Promise<void> | void;
   type?: "text" | "email" | "tel" | "textarea";
   placeholder?: string;
   validation?: (value: string) => string | null;
   className?: string;
+  disabled?: boolean;
 }
 
-export function EditableField({ 
-  label, 
-  value, 
-  onSave, 
-  type = "text", 
+export function EditableField({
+  label,
+  value,
+  onSave,
+  type = "text",
   placeholder,
   validation,
-  className 
+  className,
+  disabled,
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
+  useEffect(() => {
+    if (!isEditing) {
+      setEditValue(value);
+    }
+  }, [value, isEditing]);
+
+  const handleSave = async () => {
     if (validation) {
       const validationError = validation(editValue);
       if (validationError) {
@@ -36,10 +45,19 @@ export function EditableField({
         return;
       }
     }
-    
-    onSave(editValue);
-    setIsEditing(false);
-    setError(null);
+
+    try {
+      setIsSaving(true);
+      await onSave(editValue);
+      setIsEditing(false);
+      setError(null);
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error ? saveError.message : "Não foi possível salvar as alterações.";
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -54,10 +72,10 @@ export function EditableField({
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-muted-foreground">{label}</label>
-        {!isEditing && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
+        {!isEditing && !disabled && (
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setIsEditing(true)}
             className="h-6 w-6 p-0 hover:bg-accent"
           >
@@ -71,19 +89,18 @@ export function EditableField({
           <InputComponent
             type={type === "textarea" ? undefined : type}
             value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
+            onChange={(event) => setEditValue(event.target.value)}
             placeholder={placeholder}
             className={cn("text-sm", error && "border-destructive")}
+            disabled={isSaving}
           />
-          {error && (
-            <p className="text-xs text-destructive">{error}</p>
-          )}
+          {error && <p className="text-xs text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave} className="h-7">
-              <Check className="h-3 w-3 mr-1" />
-              Salvar
+            <Button size="sm" onClick={handleSave} className="h-7" disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
+              {isSaving ? "Salvando" : "Salvar"}
             </Button>
-            <Button variant="outline" size="sm" onClick={handleCancel} className="h-7">
+            <Button variant="outline" size="sm" onClick={handleCancel} className="h-7" disabled={isSaving}>
               <X className="h-3 w-3 mr-1" />
               Cancelar
             </Button>

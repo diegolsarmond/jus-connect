@@ -1,104 +1,126 @@
-import { useState } from "react";
-import { ArrowLeft, Monitor, Smartphone, Shield, AlertTriangle, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowLeft, Monitor, RefreshCw, Shield, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ProfileCard } from "@/components/profile/ProfileCard";
 import { SessionsList } from "@/components/profile/SessionsList";
-import { UserSession } from "@/types/user";
+import {
+  fetchMeuPerfilSessions,
+  fetchMeuPerfilAuditLogs,
+  revokeMeuPerfilSession,
+  revokeTodasMeuPerfilSessions,
+} from "@/services/meuPerfil";
+import type { AuditLog, UserSession } from "@/types/user";
 
-// Mock data
-const mockSessions: UserSession[] = [
-  {
-    id: "1",
-    userId: "1",
-    device: "Chrome 120.0 - Windows 10",
-    location: "São Paulo, SP - Brasil",
-    lastActivity: new Date("2024-01-15T10:30:00"),
-    isActive: true
-  },
-  {
-    id: "2",
-    userId: "1", 
-    device: "Safari 17.2 - iPhone 15 Pro",
-    location: "São Paulo, SP - Brasil",
-    lastActivity: new Date("2024-01-15T08:45:00"),
-    isActive: true
-  },
-  {
-    id: "3",
-    userId: "1",
-    device: "Firefox 121.0 - macOS Sonoma",
-    location: "Rio de Janeiro, RJ - Brasil",
-    lastActivity: new Date("2024-01-14T16:20:00"),
-    isActive: true
-  },
-  {
-    id: "4",
-    userId: "1",
-    device: "Chrome 119.0 - Android 14",
-    location: "São Paulo, SP - Brasil",
-    lastActivity: new Date("2024-01-14T12:15:00"),
-    isActive: false
-  },
-  {
-    id: "5",
-    userId: "1",
-    device: "Edge 120.0 - Windows 11",
-    location: "Belo Horizonte, MG - Brasil",
-    lastActivity: new Date("2024-01-13T09:30:00"),
-    isActive: false
-  },
-  {
-    id: "6",
-    userId: "1",
-    device: "Safari 16.6 - iPad Pro",
-    location: "Brasília, DF - Brasil",
-    lastActivity: new Date("2024-01-12T14:45:00"),
-    isActive: false
-  }
-];
+const isAbortError = (error: unknown): error is DOMException =>
+  error instanceof DOMException && error.name === "AbortError";
+
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : "Não foi possível carregar os dados.");
 
 export default function SessaoDispositivos() {
-  const [sessions, setSessions] = useState<UserSession[]>(mockSessions);
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const activeSessions = sessions.filter(s => s.isActive);
-  const totalDevices = sessions.length;
-  const suspiciousActivities = sessions.filter(s => 
-    s.location.includes("Rio de Janeiro") || s.location.includes("Belo Horizonte")
-  ).length;
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
 
-  const handleRevokeSession = (sessionId: string) => {
-    setSessions(prev => 
-      prev.map(session => 
-        session.id === sessionId 
-          ? { ...session, isActive: false, lastActivity: new Date() }
-          : session
-      )
-    );
-  };
+  const loadSessions = useCallback(async (signal?: AbortSignal) => {
+    setIsLoadingSessions(true);
+    setSessionsError(null);
+    try {
+      const data = await fetchMeuPerfilSessions({ signal });
+      setSessions(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      setSessionsError(errorMessage(error));
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, []);
 
-  const handleRevokeAllSessions = () => {
-    setSessions(prev =>
-      prev.map(session => ({
-        ...session,
-        isActive: session.device.includes('Chrome 120.0 - Windows 10') ? true : false, // Keep current session
-        lastActivity: session.device.includes('Chrome 120.0 - Windows 10') ? session.lastActivity : new Date()
-      }))
-    );
-  };
+  const loadAuditLogs = useCallback(async (signal?: AbortSignal) => {
+    setIsAuditLoading(true);
+    try {
+      const data = await fetchMeuPerfilAuditLogs({ signal, limit: 10 });
+      setAuditLogs(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      console.warn("Não foi possível carregar os logs de auditoria.", error);
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, []);
 
-  const handleRefresh = () => {
+  useEffect(() => {
+    const sessionsController = new AbortController();
+    const logsController = new AbortController();
+
+    void loadSessions(sessionsController.signal);
+    void loadAuditLogs(logsController.signal);
+
+    return () => {
+      sessionsController.abort();
+      logsController.abort();
+    };
+  }, [loadSessions, loadAuditLogs]);
+
+  const handleRevokeSession = useCallback(
+    async (sessionId: string) => {
+      setSessionsError(null);
+      try {
+        const revoked = await revokeMeuPerfilSession(sessionId);
+        setSessions((prev) => prev.map((session) => (session.id === revoked.id ? revoked : session)));
+        await loadAuditLogs();
+      } catch (error) {
+        const message = errorMessage(error);
+        setSessionsError(message);
+        throw error instanceof Error ? error : new Error(message);
+      }
+    },
+    [loadAuditLogs],
+  );
+
+  const handleRevokeAllSessions = useCallback(async () => {
+    setSessionsError(null);
+    try {
+      await revokeTodasMeuPerfilSessions();
+      await loadSessions();
+      await loadAuditLogs();
+    } catch (error) {
+      const message = errorMessage(error);
+      setSessionsError(message);
+      throw error instanceof Error ? error : new Error(message);
+    }
+  }, [loadAuditLogs, loadSessions]);
+
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    setTimeout(() => {
+    try {
+      await loadSessions();
+      await loadAuditLogs();
+    } finally {
       setIsRefreshing(false);
-      // In real app, refetch session data
-    }, 1000);
-  };
+    }
+  }, [loadSessions, loadAuditLogs]);
+
+  const activeSessions = useMemo(() => sessions.filter((session) => session.isActive), [sessions]);
+  const mobileSessionsCount = useMemo(
+    () =>
+      sessions.filter((session) => /iphone|android|ipad/i.test(session.device)).length,
+    [sessions],
+  );
+  const revokedSessionsCount = useMemo(
+    () => sessions.filter((session) => !session.isActive && session.revokedAt).length,
+    [sessions],
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm">
@@ -107,19 +129,18 @@ export default function SessaoDispositivos() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold">Sessões e Dispositivos</h1>
-            <p className="text-muted-foreground">Monitore e gerencie o acesso à sua conta</p>
+            <p className="text-muted-foreground">Monitore e gerencie o acesso à sua conta.</p>
           </div>
         </div>
 
-        <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+        <Button variant="outline" onClick={() => void handleRefresh()} disabled={isRefreshing}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
           Atualizar
         </Button>
       </div>
 
-      {/* Statistics */}
       <div className="grid gap-4 md:grid-cols-4">
-        <ProfileCard title="Sessões Ativas" variant="compact">
+        <ProfileCard title="Sessões Ativas" variant="compact" isLoading={isLoadingSessions}>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-success-light">
               <Shield className="h-5 w-5 text-success" />
@@ -131,115 +152,84 @@ export default function SessaoDispositivos() {
           </div>
         </ProfileCard>
 
-        <ProfileCard title="Total de Dispositivos" variant="compact">
+        <ProfileCard title="Total de Dispositivos" variant="compact" isLoading={isLoadingSessions}>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary-light">
               <Monitor className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{totalDevices}</p>
+              <p className="text-2xl font-bold text-foreground">{sessions.length}</p>
               <p className="text-sm text-muted-foreground">registrados</p>
             </div>
           </div>
         </ProfileCard>
 
-        <ProfileCard title="Dispositivos Móveis" variant="compact">
+        <ProfileCard title="Dispositivos Móveis" variant="compact" isLoading={isLoadingSessions}>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-accent">
               <Smartphone className="h-5 w-5 text-accent-foreground" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">
-                {sessions.filter(s => s.device.toLowerCase().includes('iphone') || s.device.toLowerCase().includes('android')).length}
-              </p>
+              <p className="text-2xl font-bold text-foreground">{mobileSessionsCount}</p>
               <p className="text-sm text-muted-foreground">dispositivos</p>
             </div>
           </div>
         </ProfileCard>
 
-        <ProfileCard title="Atividade Suspeita" variant="compact">
+        <ProfileCard title="Sessões Revogadas" variant="compact" isLoading={isLoadingSessions}>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-warning-light">
               <AlertTriangle className="h-5 w-5 text-warning" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{suspiciousActivities}</p>
-              <p className="text-sm text-muted-foreground">localizações</p>
+              <p className="text-2xl font-bold text-foreground">{revokedSessionsCount}</p>
+              <p className="text-sm text-muted-foreground">nas últimas sessões</p>
             </div>
           </div>
         </ProfileCard>
       </div>
 
-      {/* Sessions List */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ProfileCard title="Todas as Sessões">
+          <ProfileCard
+            title="Todas as Sessões"
+            isLoading={isLoadingSessions}
+            error={sessionsError}
+            onRetry={() => void loadSessions()}
+          >
             <SessionsList
               sessions={sessions}
               onRevokeSession={handleRevokeSession}
               onRevokeAllSessions={handleRevokeAllSessions}
+              onReload={() => loadSessions()}
             />
           </ProfileCard>
         </div>
 
-        {/* Security Insights */}
         <div className="space-y-6">
-          <ProfileCard title="Insights de Segurança" variant="compact">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <h4 className="font-medium text-foreground">Localização Incomum</h4>
-                <p className="text-sm text-muted-foreground">
-                  Detectamos acessos de Rio de Janeiro e Belo Horizonte. Se não foi você, revogue essas sessões.
-                </p>
-                <Badge variant="outline" className="text-warning border-warning/50">
-                  Atenção Necessária
-                </Badge>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-medium text-foreground">Dispositivos Antigos</h4>
-                <p className="text-sm text-muted-foreground">
-                  Alguns dispositivos não fazem login há mais de 30 dias.
-                </p>
-                <Badge variant="secondary">
-                  Revisar
-                </Badge>
-              </div>
-            </div>
+          <ProfileCard
+            title="Logs de Segurança"
+            isLoading={isAuditLoading}
+            onRetry={() => void loadAuditLogs()}
+            emptyState={<p className="text-sm text-muted-foreground">Nenhum evento recente.</p>}
+          >
+            {auditLogs.length > 0 && (
+              <ul className="space-y-3 text-sm text-muted-foreground">
+                {auditLogs.slice(0, 5).map((log) => (
+                  <li key={log.id}>
+                    <p className="font-medium text-foreground">{log.action}</p>
+                    <p>{log.description}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </ProfileCard>
 
-          <ProfileCard title="Configurações de Sessão" variant="compact">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <h4 className="font-medium text-foreground">Timeout de Sessão</h4>
-                <p className="text-sm text-muted-foreground">
-                  Sessões inativas são automaticamente encerradas após 8 horas
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-medium text-foreground">Notificações</h4>
-                <p className="text-sm text-muted-foreground">
-                  Receba alertas sobre novos logins por email
-                </p>
-                <Button variant="outline" size="sm">
-                  Configurar
-                </Button>
-              </div>
-            </div>
-          </ProfileCard>
-
-          <ProfileCard title="Ações Rápidas" variant="compact">
-            <div className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full">
-                Alterar Senha
-              </Button>
-              <Button variant="outline" size="sm" className="w-full">
-                Ativar 2FA
-              </Button>
-              <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive-foreground hover:bg-destructive">
-                Revogar Todas as Sessões
-              </Button>
+          <ProfileCard title="Recomendações" variant="compact">
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>• Revogue sessões de dispositivos que você não reconhece.</p>
+              <p>• Mantenha a autenticação de dois fatores ativada para maior segurança.</p>
+              <p>• Atualize periodicamente sua senha e verifique o histórico de acessos.</p>
             </div>
           </ProfileCard>
         </div>

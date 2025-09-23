@@ -1,159 +1,44 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  User as UserIcon,
-  MapPin,
-  Briefcase,
-  Scale,
+  Activity,
   Bell,
-  Shield,
+  Briefcase,
+  Building,
   Calendar,
   Clock,
-  Building,
-  Link,
   FileText,
-  Activity,
+  Link,
+  MapPin,
+  Scale,
+  Shield,
+  User as UserIcon,
 } from "lucide-react";
 import { AvatarUploader } from "@/components/profile/AvatarUploader";
+import { AuditTimeline } from "@/components/profile/AuditTimeline";
 import { EditableField } from "@/components/profile/EditableField";
 import { ProfileCard } from "@/components/profile/ProfileCard";
-import { AuditTimeline } from "@/components/profile/AuditTimeline";
 import { SessionsList } from "@/components/profile/SessionsList";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import {
+  fetchMeuPerfil,
+  fetchMeuPerfilAuditLogs,
+  fetchMeuPerfilSessions,
+  revokeMeuPerfilSession,
+  revokeTodasMeuPerfilSessions,
+  updateMeuPerfil,
+  type MeuPerfilProfile,
+  type UpdateMeuPerfilPayload,
+} from "@/services/meuPerfil";
 import type { AuditLog, UserSession } from "@/types/user";
 
-interface ProfileData {
-  id: string;
-  name: string;
-  title: string;
-  email: string;
-  phone: string;
-  bio: string;
-  office: string;
-  oabNumber?: string;
-  oabUf?: string;
-  specialties: string[];
-  hourlyRate?: number;
-  timezone: string;
-  language: string;
-  linkedin?: string;
-  website?: string;
-  address: {
-    street: string;
-    city: string;
-    state: string;
-    zip: string;
-  };
-  notifications: {
-    securityAlerts: boolean;
-    agendaReminders: boolean;
-    newsletter: boolean;
-  };
-  security: {
-    twoFactor: boolean;
-    loginAlerts: boolean;
-    deviceApproval: boolean;
-  };
-  lastLogin: Date;
-  memberSince: Date;
-  avatar?: string;
-}
+const formatCurrency = (value: number | null | undefined) => {
+  if (value == null) {
+    return "Não informado";
+  }
 
-const initialProfile: ProfileData = {
-  id: "me",
-  name: "Dr. Diego Armond",
-  title: "Advogado Sênior",
-  email: "diego.armond@jusconnect.com",
-  phone: "(11) 99876-5432",
-  bio: "Atuo há mais de 10 anos em direito empresarial e digital, auxiliando empresas em questões contratuais complexas, governança corporativa e proteção de dados.",
-  office: "JusConnect - Matriz",
-  oabNumber: "123456",
-  oabUf: "SP",
-  specialties: ["Direito Empresarial", "Direito Digital", "Contratos"],
-  hourlyRate: 450,
-  timezone: "America/Sao_Paulo",
-  language: "Português (Brasil)",
-  linkedin: "https://www.linkedin.com/in/diego-armond",
-  website: "https://jusconnect.com/diego-armond",
-  address: {
-    street: "Av. Paulista, 1000",
-    city: "São Paulo",
-    state: "SP",
-    zip: "01310-100",
-  },
-  notifications: {
-    securityAlerts: true,
-    agendaReminders: true,
-    newsletter: false,
-  },
-  security: {
-    twoFactor: true,
-    loginAlerts: true,
-    deviceApproval: false,
-  },
-  lastLogin: new Date("2024-02-12T08:45:00"),
-  memberSince: new Date("2021-03-10T10:00:00"),
-  avatar: undefined,
-};
-
-const initialAuditLogs: AuditLog[] = [
-  {
-    id: "log-1",
-    userId: "me",
-    action: "LOGIN",
-    description: "Login realizado no portal web",
-    timestamp: new Date("2024-02-12T08:45:00"),
-    performedBy: "Dr. Diego Armond",
-  },
-  {
-    id: "log-2",
-    userId: "me",
-    action: "TWO_FACTOR_ENABLED",
-    description: "Autenticação de dois fatores ativada",
-    timestamp: new Date("2024-02-10T11:20:00"),
-    performedBy: "Dr. Diego Armond",
-  },
-  {
-    id: "log-3",
-    userId: "me",
-    action: "PROFILE_UPDATE",
-    description: "Informações profissionais atualizadas",
-    timestamp: new Date("2024-02-05T16:10:00"),
-    performedBy: "Dr. Diego Armond",
-  },
-];
-
-const initialSessions: UserSession[] = [
-  {
-    id: "session-1",
-    userId: "me",
-    device: "Chrome 120.0 - macOS",
-    location: "São Paulo, SP - Brasil",
-    lastActivity: new Date("2024-02-12T08:45:00"),
-    isActive: true,
-  },
-  {
-    id: "session-2",
-    userId: "me",
-    device: "Safari 17.2 - iPhone",
-    location: "São Paulo, SP - Brasil",
-    lastActivity: new Date("2024-02-11T22:10:00"),
-    isActive: true,
-  },
-  {
-    id: "session-3",
-    userId: "me",
-    device: "Edge 120.0 - Windows 11",
-    location: "Campinas, SP - Brasil",
-    lastActivity: new Date("2024-02-08T18:30:00"),
-    isActive: false,
-  },
-];
-
-const formatCurrency = (value?: number) => {
-  if (value == null) return "Não informado";
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
@@ -161,15 +46,19 @@ const formatCurrency = (value?: number) => {
   }).format(value);
 };
 
-const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat("pt-BR", {
+const formatDate = (date: Date | null | undefined) => {
+  if (!date) {
+    return "Não informado";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "long",
     year: "numeric",
   }).format(date);
+};
 
-const validateRequired = (value: string) =>
-  value.trim().length === 0 ? "Campo obrigatório" : null;
+const validateRequired = (value: string) => (value.trim().length === 0 ? "Campo obrigatório" : null);
 
 const validateEmail = (value: string) => {
   if (value.trim().length === 0) return "Campo obrigatório";
@@ -210,180 +99,346 @@ const validateHourlyRate = (value: string) => {
 
 const specialtiesToString = (specialties: string[]) => specialties.join(", ");
 
-export default function MeuPerfil() {
-  const [profile, setProfile] = useState<ProfileData>(initialProfile);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(initialAuditLogs);
-  const [sessions, setSessions] = useState<UserSession[]>(initialSessions);
-  const [avatarPreview, setAvatarPreview] = useState<string | undefined>(initialProfile.avatar);
+const toNullableString = (value: string): string | null => {
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+};
 
-  const initials = useMemo(
-    () =>
-      profile.name
-        .split(" ")
-        .filter(Boolean)
-        .map((word) => word[0])
-        .join("")
-        .toUpperCase(),
-    [profile.name],
+const isAbortError = (error: unknown): error is DOMException =>
+  error instanceof DOMException && error.name === "AbortError";
+
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : "Não foi possível completar a ação.");
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === "string") {
+        resolve(result);
+      } else {
+        reject(new Error("Formato de arquivo inválido."));
+      }
+    };
+    reader.onerror = () => reject(new Error("Não foi possível processar o arquivo selecionado."));
+    reader.readAsDataURL(file);
+  });
+
+export default function MeuPerfil() {
+  const [profile, setProfile] = useState<MeuPerfilProfile | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const loadProfile = useCallback(async (signal?: AbortSignal) => {
+    setIsProfileLoading(true);
+    setProfileError(null);
+    try {
+      const data = await fetchMeuPerfil({ signal });
+      setProfile(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      setProfileError(errorMessage(error));
+    } finally {
+      setIsProfileLoading(false);
+    }
+  }, []);
+
+  const loadAuditLogs = useCallback(async (signal?: AbortSignal) => {
+    setIsAuditLoading(true);
+    setAuditError(null);
+    try {
+      const data = await fetchMeuPerfilAuditLogs({ signal, limit: 20 });
+      setAuditLogs(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      setAuditError(errorMessage(error));
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, []);
+
+  const loadSessions = useCallback(async (signal?: AbortSignal) => {
+    setIsSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const data = await fetchMeuPerfilSessions({ signal });
+      setSessions(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      setSessionsError(errorMessage(error));
+    } finally {
+      setIsSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const profileController = new AbortController();
+    const logsController = new AbortController();
+    const sessionsController = new AbortController();
+
+    void loadProfile(profileController.signal);
+    void loadAuditLogs(logsController.signal);
+    void loadSessions(sessionsController.signal);
+
+    return () => {
+      profileController.abort();
+      logsController.abort();
+      sessionsController.abort();
+    };
+  }, [loadProfile, loadAuditLogs, loadSessions]);
+
+  const mutateProfile = useCallback(
+    async (payload: UpdateMeuPerfilPayload) => {
+      setMutationError(null);
+      setIsUpdatingProfile(true);
+      try {
+        const updated = await updateMeuPerfil(payload);
+        setProfile(updated);
+        await loadAuditLogs();
+        return updated;
+      } catch (error) {
+        if (isAbortError(error)) {
+          return null;
+        }
+        const message = errorMessage(error);
+        setMutationError(message);
+        throw error instanceof Error ? error : new Error(message);
+      } finally {
+        setIsUpdatingProfile(false);
+      }
+    },
+    [loadAuditLogs],
   );
 
-  const addAuditLog = (action: AuditLog["action"], description: string, performedByName?: string) => {
-    setAuditLogs((previous) => [
-      {
-        id: `log-${Date.now()}`,
-        userId: profile.id,
-        action,
-        description,
-        timestamp: new Date(),
-        performedBy: performedByName ?? profile.name,
+  const buildFieldSaveHandler = useCallback(
+    (field: "name" | "title" | "email" | "phone" | "bio" | "office" | "oabNumber" | "oabUf" | "timezone" | "language" | "linkedin" | "website") =>
+      async (rawValue: string) => {
+        await mutateProfile({ [field]: toNullableString(rawValue) } as UpdateMeuPerfilPayload);
       },
-      ...previous,
-    ]);
-  };
+    [mutateProfile],
+  );
 
-  const handleFieldSave = (field: keyof ProfileData, value: string) => {
-    setProfile((prev) => ({ ...prev, [field]: value }));
-    const description = `Campo "${field}" atualizado.`;
-    const performedByName = field === "name" ? value : undefined;
-    const action = field === "email" ? "EMAIL_CHANGE" : "PROFILE_UPDATE";
-    addAuditLog(action, description, performedByName);
-  };
-
-  const handleAddressSave = (field: keyof ProfileData["address"], value: string) => {
-    setProfile((prev) => ({
-      ...prev,
-      address: {
-        ...prev.address,
-        [field]: value,
+  const handleAddressSave = useCallback(
+    (field: "street" | "city" | "state" | "zip") =>
+      async (rawValue: string) => {
+        await mutateProfile({ address: { [field]: toNullableString(rawValue) } });
       },
-    }));
-    addAuditLog("PROFILE_UPDATE", `Endereço atualizado: campo ${field}.`);
-  };
+    [mutateProfile],
+  );
 
-  const handleSpecialtiesSave = (value: string) => {
-    const specialties = value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-    setProfile((prev) => ({ ...prev, specialties }));
-    addAuditLog("PROFILE_UPDATE", "Especialidades atualizadas.");
-  };
+  const handleSpecialtiesSave = useCallback(
+    async (value: string) => {
+      const specialties = value
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+      await mutateProfile({ specialties });
+    },
+    [mutateProfile],
+  );
 
-  const handleHourlyRateSave = (value: string) => {
-    const normalized = value.replace(/\./g, "").replace(",", ".");
-    const parsed = value ? Number(normalized) : undefined;
-    setProfile((prev) => ({ ...prev, hourlyRate: parsed }));
-    addAuditLog("PROFILE_UPDATE", "Tarifa por hora atualizada.");
-  };
+  const handleHourlyRateSave = useCallback(
+    async (value: string) => {
+      if (value.trim().length === 0) {
+        await mutateProfile({ hourlyRate: null });
+        return;
+      }
 
-  const handleNotificationToggle = (
-    field: keyof ProfileData["notifications"],
-    checked: boolean,
-  ) => {
-    const labels = {
-      securityAlerts: "Alertas de segurança",
-      agendaReminders: "Lembretes da agenda",
-      newsletter: "Newsletter",
-    } satisfies Record<keyof ProfileData["notifications"], string>;
+      const normalized = value.replace(/\./g, "").replace(",", ".");
+      const parsed = Number(normalized);
+      if (Number.isNaN(parsed)) {
+        throw new Error("Informe um valor numérico");
+      }
+      await mutateProfile({ hourlyRate: parsed });
+    },
+    [mutateProfile],
+  );
 
-    setProfile((prev) => ({
-      ...prev,
-      notifications: {
-        ...prev.notifications,
-        [field]: checked,
-      },
-    }));
-    addAuditLog(
-      "PROFILE_UPDATE",
-      `${labels[field]} ${checked ? "ativado" : "desativado"}.`,
-    );
-  };
-
-  const handleSecurityToggle = (
-    field: keyof ProfileData["security"],
-    checked: boolean,
-  ) => {
-    const labels = {
-      twoFactor: "Autenticação de dois fatores",
-      loginAlerts: "Alertas de login",
-      deviceApproval: "Aprovação de novos dispositivos",
-    } satisfies Record<keyof ProfileData["security"], string>;
-
-    setProfile((prev) => ({
-      ...prev,
-      security: {
-        ...prev.security,
-        [field]: checked,
-      },
-    }));
-
-    if (field === "twoFactor") {
-      addAuditLog(
-        checked ? "TWO_FACTOR_ENABLED" : "TWO_FACTOR_DISABLED",
-        `${labels[field]} ${checked ? "ativada" : "desativada"}.`,
-      );
-      return;
-    }
-
-    addAuditLog(
-      "PERMISSION_CHANGE",
-      `${labels[field]} ${checked ? "ativado" : "desativado"}.`,
-    );
-  };
-
-  const handleAvatarChange = (file: File | null) => {
-    if (file) {
-      const objectUrl = URL.createObjectURL(file);
-      setAvatarPreview((prev) => {
-        if (prev && prev.startsWith("blob:")) {
-          URL.revokeObjectURL(prev);
+  const handleNotificationToggle = useCallback(
+    async (field: keyof MeuPerfilProfile["notifications"], checked: boolean) => {
+      let previousValue: boolean | undefined;
+      setProfile((prev) => {
+        if (!prev) {
+          previousValue = undefined;
+          return prev;
         }
-        return objectUrl;
+
+        previousValue = prev.notifications[field];
+        return {
+          ...prev,
+          notifications: {
+            ...prev.notifications,
+            [field]: checked,
+          },
+        } satisfies MeuPerfilProfile;
       });
-      setProfile((prev) => ({ ...prev, avatar: objectUrl }));
-      addAuditLog("PROFILE_UPDATE", "Avatar atualizado.");
-    } else {
-      setAvatarPreview((prev) => {
-        if (prev && prev.startsWith("blob:")) {
-          URL.revokeObjectURL(prev);
+
+      try {
+        await mutateProfile({ notifications: { [field]: checked } });
+      } catch (error) {
+        setProfile((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          return {
+            ...prev,
+            notifications: {
+              ...prev.notifications,
+              [field]: previousValue ?? false,
+            },
+          } satisfies MeuPerfilProfile;
+        });
+        throw error;
+      }
+    },
+    [mutateProfile],
+  );
+
+  const handleSecurityToggle = useCallback(
+    async (field: keyof MeuPerfilProfile["security"], checked: boolean) => {
+      let previousValue: boolean | undefined;
+      setProfile((prev) => {
+        if (!prev) {
+          previousValue = undefined;
+          return prev;
         }
-        return undefined;
+
+        previousValue = prev.security[field];
+        return {
+          ...prev,
+          security: {
+            ...prev.security,
+            [field]: checked,
+          },
+        } satisfies MeuPerfilProfile;
       });
-      setProfile((prev) => ({ ...prev, avatar: undefined }));
-      addAuditLog("PROFILE_UPDATE", "Avatar removido.");
-    }
-  };
 
-  const handleRevokeSession = (sessionId: string) => {
-    const session = sessions.find((item) => item.id === sessionId);
-    setSessions((prev) =>
-      prev.map((item) =>
-        item.id === sessionId
-          ? { ...item, isActive: false, lastActivity: new Date() }
-          : item,
-      ),
-    );
-    if (session) {
-      addAuditLog(
-        "STATUS_CHANGE",
-        `Sessão revogada: ${session.device}.`,
-      );
-    }
-  };
+      try {
+        await mutateProfile({ security: { [field]: checked } });
+      } catch (error) {
+        setProfile((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          return {
+            ...prev,
+            security: {
+              ...prev.security,
+              [field]: previousValue ?? false,
+            },
+          } satisfies MeuPerfilProfile;
+        });
+        throw error;
+      }
+    },
+    [mutateProfile],
+  );
 
-  const handleRevokeAllSessions = () => {
-    setSessions((prev) =>
-      prev.map((item) =>
-        item.isActive
-          ? { ...item, isActive: false, lastActivity: new Date() }
-          : item,
-      ),
-    );
-    addAuditLog(
-      "STATUS_CHANGE",
-      "Todas as sessões ativas foram revogadas.",
-    );
-  };
+  const handleAvatarChange = useCallback(
+    async (file: File | null) => {
+      if (file) {
+        const dataUrl = await readFileAsDataUrl(file);
+        await mutateProfile({ avatarUrl: dataUrl });
+        return;
+      }
+      await mutateProfile({ avatarUrl: null });
+    },
+    [mutateProfile],
+  );
+
+  const handleRevokeSession = useCallback(
+    async (sessionId: string) => {
+      setSessionsError(null);
+      try {
+        const session = await revokeMeuPerfilSession(sessionId);
+        setSessions((prev) =>
+          prev.map((item) => (item.id === session.id ? session : item)),
+        );
+        await loadAuditLogs();
+      } catch (error) {
+        const message = errorMessage(error);
+        setSessionsError(message);
+        throw error instanceof Error ? error : new Error(message);
+      }
+    },
+    [loadAuditLogs],
+  );
+
+  const handleRevokeAllSessions = useCallback(async () => {
+    setSessionsError(null);
+    try {
+      await revokeTodasMeuPerfilSessions();
+      await loadSessions();
+      await loadAuditLogs();
+    } catch (error) {
+      const message = errorMessage(error);
+      setSessionsError(message);
+      throw error instanceof Error ? error : new Error(message);
+    }
+  }, [loadAuditLogs, loadSessions]);
+
+  const handleExportData = useCallback(async () => {
+    setExportError(null);
+    setIsExporting(true);
+    try {
+      const [profileData, auditData, sessionsData] = await Promise.all([
+        fetchMeuPerfil(),
+        fetchMeuPerfilAuditLogs({ limit: 100 }),
+        fetchMeuPerfilSessions(),
+      ]);
+
+      const payload = {
+        generatedAt: new Date().toISOString(),
+        profile: profileData,
+        auditLogs: auditData,
+        sessions: sessionsData,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `jusconnect-perfil-${new Date().toISOString()}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(errorMessage(error));
+    } finally {
+      setIsExporting(false);
+    }
+  }, []);
+
+  const initials = useMemo(() => {
+    if (!profile?.name) {
+      return "JP";
+    }
+
+    return profile.name
+      .split(" ")
+      .filter(Boolean)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase();
+  }, [profile?.name]);
 
   return (
     <div className="p-6 space-y-6">
@@ -396,311 +451,441 @@ export default function MeuPerfil() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <ProfileCard title="Identidade Profissional" icon={<UserIcon className="h-5 w-5" />}>
-            <div className="flex flex-col gap-6 md:flex-row">
-              <AvatarUploader
-                currentAvatar={avatarPreview ?? profile.avatar}
-                userName={profile.name}
-                onAvatarChange={handleAvatarChange}
-                size="lg"
-              />
-
-              <div className="grid flex-1 gap-4">
-                <EditableField
-                  label="Nome Completo"
-                  value={profile.name}
-                  onSave={(value) => handleFieldSave("name", value)}
-                  validation={validateRequired}
-                />
-                <EditableField
-                  label="Título Profissional"
-                  value={profile.title}
-                  onSave={(value) => handleFieldSave("title", value)}
-                  validation={validateRequired}
-                />
-                <EditableField
-                  label="E-mail"
-                  type="email"
-                  value={profile.email}
-                  onSave={(value) => handleFieldSave("email", value)}
-                  validation={validateEmail}
-                />
-                <EditableField
-                  label="Telefone"
-                  type="tel"
-                  value={profile.phone}
-                  onSave={(value) => handleFieldSave("phone", value)}
-                  validation={validatePhone}
-                />
-              </div>
-            </div>
-          </ProfileCard>
-
-          <ProfileCard title="Biografia" icon={<FileText className="h-5 w-5" />}>
-            <EditableField
-              label="Sobre você"
-              type="textarea"
-              value={profile.bio}
-              onSave={(value) => handleFieldSave("bio", value)}
-              placeholder="Compartilhe sua experiência, áreas de atuação e principais cases."
-            />
-          </ProfileCard>
-
-          <ProfileCard title="Informações Profissionais" icon={<Briefcase className="h-5 w-5" />}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <EditableField
-                label="Escritório"
-                value={profile.office}
-                onSave={(value) => handleFieldSave("office", value)}
-                validation={validateRequired}
-              />
-              <EditableField
-                label="Tarifa por hora"
-                value={profile.hourlyRate ? profile.hourlyRate.toString() : ""}
-                onSave={handleHourlyRateSave}
-                validation={validateHourlyRate}
-                placeholder="Ex: 450"
-              />
-              <EditableField
-                label="Número da OAB"
-                value={profile.oabNumber ?? ""}
-                onSave={(value) => handleFieldSave("oabNumber", value)}
-              />
-              <EditableField
-                label="UF da OAB"
-                value={profile.oabUf ?? ""}
-                onSave={(value) => handleFieldSave("oabUf", value.toUpperCase())}
-                placeholder="Ex: SP"
-              />
-              <EditableField
-                label="Especialidades"
-                value={specialtiesToString(profile.specialties)}
-                onSave={handleSpecialtiesSave}
-                placeholder="Separe por vírgulas"
-              />
-              <EditableField
-                label="Idioma principal"
-                value={profile.language}
-                onSave={(value) => handleFieldSave("language", value)}
-              />
-              <EditableField
-                label="Fuso horário"
-                value={profile.timezone}
-                onSave={(value) => handleFieldSave("timezone", value)}
-                placeholder="Ex: America/Sao_Paulo"
-              />
-            </div>
-          </ProfileCard>
-
-          <ProfileCard title="Localização" icon={<MapPin className="h-5 w-5" />}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <EditableField
-                label="Endereço"
-                value={profile.address.street}
-                onSave={(value) => handleAddressSave("street", value)}
-                validation={validateRequired}
-              />
-              <EditableField
-                label="Cidade"
-                value={profile.address.city}
-                onSave={(value) => handleAddressSave("city", value)}
-                validation={validateRequired}
-              />
-              <EditableField
-                label="Estado"
-                value={profile.address.state}
-                onSave={(value) => handleAddressSave("state", value.toUpperCase())}
-                validation={validateRequired}
-              />
-              <EditableField
-                label="CEP"
-                value={profile.address.zip}
-                onSave={(value) => handleAddressSave("zip", value)}
-                validation={validateZip}
-                placeholder="00000-000"
-              />
-            </div>
-          </ProfileCard>
-
-          <ProfileCard title="Presença Digital" icon={<Link className="h-5 w-5" />}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <EditableField
-                label="LinkedIn"
-                value={profile.linkedin ?? ""}
-                onSave={(value) => handleFieldSave("linkedin", value)}
-                validation={validateUrl}
-                placeholder="https://www.linkedin.com/in/..."
-              />
-              <EditableField
-                label="Website"
-                value={profile.website ?? ""}
-                onSave={(value) => handleFieldSave("website", value)}
-                validation={validateUrl}
-                placeholder="https://"
-              />
-            </div>
-          </ProfileCard>
-
-          <ProfileCard title="Preferências e Segurança" icon={<Shield className="h-5 w-5" />}>
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">Autenticação de dois fatores</p>
-                    <p className="text-sm text-muted-foreground">
-                      Requer código adicional no login para reforçar sua segurança.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={profile.security.twoFactor}
-                    onCheckedChange={(checked) => handleSecurityToggle("twoFactor", Boolean(checked))}
-                  />
+          <ProfileCard
+            title="Identidade Profissional"
+            icon={<UserIcon className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+            emptyState={<p className="text-sm text-muted-foreground">Nenhuma informação disponível.</p>}
+          >
+            {profile && (
+              <div className="flex flex-col gap-6 md:flex-row">
+                <div className="flex flex-col items-center gap-4">
+                  <AvatarUploader currentAvatar={profile.avatarUrl ?? undefined} userName={profile.name} onAvatarChange={handleAvatarChange} />
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">Alertas de login</p>
-                    <p className="text-sm text-muted-foreground">
-                      Receba notificações ao acessar de novos dispositivos.
-                    </p>
+
+                <div className="flex-1 space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16">
+                      <AvatarImage src={profile.avatarUrl ?? undefined} alt={profile.name} />
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    </Avatar>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h2 className="text-2xl font-semibold text-foreground">{profile.name}</h2>
+                        {profile.office && <Badge variant="outline">{profile.office}</Badge>}
+                      </div>
+                      <p className="text-sm text-muted-foreground">Membro desde {formatDate(profile.memberSince)}</p>
+                    </div>
                   </div>
-                  <Switch
-                    checked={profile.security.loginAlerts}
-                    onCheckedChange={(checked) => handleSecurityToggle("loginAlerts", Boolean(checked))}
-                  />
-                </div>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">Aprovação de dispositivos</p>
-                    <p className="text-sm text-muted-foreground">
-                      Exigir aprovação manual para novos acessos.
-                    </p>
+
+                  {mutationError && <p className="text-sm text-destructive">{mutationError}</p>}
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <EditableField
+                      label="Nome completo"
+                      value={profile.name}
+                      onSave={buildFieldSaveHandler("name")}
+                      validation={validateRequired}
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="Título profissional"
+                      value={profile.title ?? ""}
+                      onSave={buildFieldSaveHandler("title")}
+                      placeholder="Ex: Advogado Sênior"
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="E-mail"
+                      value={profile.email}
+                      onSave={buildFieldSaveHandler("email")}
+                      type="email"
+                      validation={validateEmail}
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="Telefone"
+                      value={profile.phone ?? ""}
+                      onSave={buildFieldSaveHandler("phone")}
+                      type="tel"
+                      validation={validatePhone}
+                      disabled={isUpdatingProfile}
+                    />
                   </div>
-                  <Switch
-                    checked={profile.security.deviceApproval}
-                    onCheckedChange={(checked) => handleSecurityToggle("deviceApproval", Boolean(checked))}
+
+                  <EditableField
+                    label="Biografia"
+                    value={profile.bio ?? ""}
+                    onSave={buildFieldSaveHandler("bio")}
+                    type="textarea"
+                    placeholder="Compartilhe sua experiência profissional"
+                    disabled={isUpdatingProfile}
                   />
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <EditableField
+                      label="Escritório"
+                      value={profile.office ?? ""}
+                      onSave={buildFieldSaveHandler("office")}
+                      placeholder="Ex: JusConnect - Matriz"
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="Especialidades"
+                      value={specialtiesToString(profile.specialties)}
+                      onSave={handleSpecialtiesSave}
+                      placeholder="Separe as especialidades por vírgula"
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="OAB"
+                      value={profile.oabNumber ?? ""}
+                      onSave={buildFieldSaveHandler("oabNumber")}
+                      placeholder="Número da OAB"
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="UF"
+                      value={profile.oabUf ?? ""}
+                      onSave={buildFieldSaveHandler("oabUf")}
+                      placeholder="Estado"
+                      disabled={isUpdatingProfile}
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <EditableField
+                      label="Tarifa por hora"
+                      value={profile.hourlyRate != null ? profile.hourlyRate.toString().replace(".", ",") : ""}
+                      onSave={handleHourlyRateSave}
+                      validation={validateHourlyRate}
+                      placeholder="Ex: 450,00"
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="Fuso horário"
+                      value={profile.timezone ?? ""}
+                      onSave={buildFieldSaveHandler("timezone")}
+                      placeholder="Ex: America/Sao_Paulo"
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="Idioma"
+                      value={profile.language ?? ""}
+                      onSave={buildFieldSaveHandler("language")}
+                      placeholder="Ex: Português (Brasil)"
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="LinkedIn"
+                      value={profile.linkedin ?? ""}
+                      onSave={buildFieldSaveHandler("linkedin")}
+                      placeholder="URL do LinkedIn"
+                      validation={validateUrl}
+                      disabled={isUpdatingProfile}
+                    />
+                    <EditableField
+                      label="Website"
+                      value={profile.website ?? ""}
+                      onSave={buildFieldSaveHandler("website")}
+                      placeholder="URL do seu site"
+                      validation={validateUrl}
+                      disabled={isUpdatingProfile}
+                    />
+                  </div>
                 </div>
               </div>
+            )}
+          </ProfileCard>
 
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">Alertas de segurança</p>
-                    <p className="text-sm text-muted-foreground">
-                      Receba e-mails sobre eventos críticos da conta.
-                    </p>
+          <ProfileCard
+            title="Endereço"
+            icon={<MapPin className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+            emptyState={<p className="text-sm text-muted-foreground">Nenhum endereço cadastrado.</p>}
+          >
+            {profile && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <EditableField
+                  label="Rua"
+                  value={profile.address.street ?? ""}
+                  onSave={handleAddressSave("street")}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
+                  label="Cidade"
+                  value={profile.address.city ?? ""}
+                  onSave={handleAddressSave("city")}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
+                  label="Estado"
+                  value={profile.address.state ?? ""}
+                  onSave={handleAddressSave("state")}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
+                  label="CEP"
+                  value={profile.address.zip ?? ""}
+                  onSave={handleAddressSave("zip")}
+                  validation={validateZip}
+                  disabled={isUpdatingProfile}
+                />
+              </div>
+            )}
+          </ProfileCard>
+
+          <ProfileCard
+            title="Preferências"
+            icon={<Bell className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+          >
+            {profile && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      <span>Alertas de segurança</span>
+                    </div>
+                    <Switch
+                      checked={profile.notifications.securityAlerts}
+                      onCheckedChange={(checked) => handleNotificationToggle("securityAlerts", checked).catch(() => {})}
+                      disabled={isUpdatingProfile}
+                    />
                   </div>
-                  <Switch
-                    checked={profile.notifications.securityAlerts}
-                    onCheckedChange={(checked) => handleNotificationToggle("securityAlerts", Boolean(checked))}
-                  />
+                  <p className="text-xs text-muted-foreground">
+                    Receba notificações sobre atividades suspeitas e novos dispositivos.
+                  </p>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">Lembretes da agenda</p>
-                    <p className="text-sm text-muted-foreground">
-                      Envio automático de lembretes das suas audiências e tarefas.
-                    </p>
+
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      <span>Lembretes da agenda</span>
+                    </div>
+                    <Switch
+                      checked={profile.notifications.agendaReminders}
+                      onCheckedChange={(checked) => handleNotificationToggle("agendaReminders", checked).catch(() => {})}
+                      disabled={isUpdatingProfile}
+                    />
                   </div>
-                  <Switch
-                    checked={profile.notifications.agendaReminders}
-                    onCheckedChange={(checked) => handleNotificationToggle("agendaReminders", Boolean(checked))}
-                  />
+                  <p className="text-xs text-muted-foreground">Seja avisado sobre compromissos e prazos importantes.</p>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">Newsletter mensal</p>
-                    <p className="text-sm text-muted-foreground">
-                      Receba novidades e materiais exclusivos da JusConnect.
-                    </p>
+
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <span>Newsletter</span>
+                    </div>
+                    <Switch
+                      checked={profile.notifications.newsletter}
+                      onCheckedChange={(checked) => handleNotificationToggle("newsletter", checked).catch(() => {})}
+                      disabled={isUpdatingProfile}
+                    />
                   </div>
-                  <Switch
-                    checked={profile.notifications.newsletter}
-                    onCheckedChange={(checked) => handleNotificationToggle("newsletter", Boolean(checked))}
-                  />
+                  <p className="text-xs text-muted-foreground">Receba novidades e materiais exclusivos da JusConnect.</p>
+                </div>
+
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Scale className="h-4 w-4 text-primary" />
+                      <span>Políticas e compliance</span>
+                    </div>
+                    <Switch checked readOnly disabled />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Notificações críticas relacionadas às políticas do escritório são sempre enviadas.
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
+          </ProfileCard>
+
+          <ProfileCard
+            title="Segurança"
+            icon={<Shield className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+          >
+            {profile && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      <span>Autenticação em duas etapas</span>
+                    </div>
+                    <Switch
+                      checked={profile.security.twoFactor}
+                      onCheckedChange={(checked) => handleSecurityToggle("twoFactor", checked).catch(() => {})}
+                      disabled={isUpdatingProfile}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Exige um segundo fator de autenticação para novos acessos.
+                  </p>
+                </div>
+
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-primary" />
+                      <span>Alertas de login</span>
+                    </div>
+                    <Switch
+                      checked={profile.security.loginAlerts}
+                      onCheckedChange={(checked) => handleSecurityToggle("loginAlerts", checked).catch(() => {})}
+                      disabled={isUpdatingProfile}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Seja avisado sempre que uma nova sessão for iniciada.
+                  </p>
+                </div>
+
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Building className="h-4 w-4 text-primary" />
+                      <span>Aprovação de dispositivos</span>
+                    </div>
+                    <Switch
+                      checked={profile.security.deviceApproval}
+                      onCheckedChange={(checked) => handleSecurityToggle("deviceApproval", checked).catch(() => {})}
+                      disabled={isUpdatingProfile}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Novos dispositivos precisam ser autorizados antes de acessar o sistema.
+                  </p>
+                </div>
+
+                <div className="space-y-2 border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <span>Último acesso</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{formatDate(profile.lastLogin)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Manter a autenticação atualizada aumenta a proteção dos seus dados.
+                  </p>
+                </div>
+              </div>
+            )}
           </ProfileCard>
         </div>
 
         <div className="space-y-6">
-          <ProfileCard title="Visão Geral" icon={<Calendar className="h-5 w-5" />}>
-            <div className="flex flex-col items-center gap-4 text-center">
-              <Avatar className="h-20 w-20">
-                <AvatarImage src={profile.avatar} alt={profile.name} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-xl font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="space-y-1">
-                <h2 className="text-xl font-semibold text-foreground">{profile.name}</h2>
-                <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
-                  <Briefcase className="h-4 w-4" />
-                  {profile.title}
-                </p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Building className="h-3 w-3" />
-                  {profile.office}
-                </Badge>
-                {profile.oabNumber && profile.oabUf && (
-                  <Badge variant="secondary" className="flex items-center gap-1">
-                    <Scale className="h-3 w-3" />
-                    OAB {profile.oabNumber}/{profile.oabUf}
-                  </Badge>
-                )}
-              </div>
-
-              {profile.specialties.length > 0 && (
-                <div className="w-full space-y-2">
-                  <p className="text-sm font-medium text-foreground">Especialidades</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {profile.specialties.map((item) => (
-                      <Badge key={item} variant="outline">
-                        {item}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="w-full rounded-lg border bg-muted/30 p-4 text-sm">
+          <ProfileCard
+            title="Resumo Profissional"
+            icon={<Briefcase className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+          >
+            {profile && (
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Tarifa hora</span>
+                  <span className="text-sm text-muted-foreground">Tarifa por hora</span>
                   <span className="font-medium text-foreground">{formatCurrency(profile.hourlyRate)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> Último acesso
+                  <span className="text-sm text-muted-foreground">Especialidades</span>
+                  <span className="font-medium text-foreground text-right">
+                    {profile.specialties.length > 0 ? specialtiesToString(profile.specialties) : "Não informado"}
                   </span>
-                  <span>{formatDate(profile.lastLogin)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> Membro desde
+                  <span className="text-sm text-muted-foreground">Website</span>
+                  <span className="font-medium text-foreground break-all">
+                    {profile.website ? (
+                      <a href={profile.website} target="_blank" rel="noreferrer" className="text-primary underline">
+                        {profile.website}
+                      </a>
+                    ) : (
+                      "Não informado"
+                    )}
                   </span>
-                  <span>{formatDate(profile.memberSince)}</span>
                 </div>
               </div>
+            )}
+          </ProfileCard>
 
-              <Button variant="outline" className="w-full">
-                <Bell className="mr-2 h-4 w-4" /> Configurar notificações
+          <ProfileCard title="Exportar dados" icon={<FileText className="h-5 w-5" /> }>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Baixe uma cópia de todas as suas informações de perfil, histórico de auditoria e sessões ativas.
+              </p>
+              {exportError && <p className="text-sm text-destructive">{exportError}</p>}
+              <Button onClick={() => void handleExportData()} disabled={isExporting} className="w-full">
+                {isExporting ? "Preparando..." : "Exportar dados"}
               </Button>
             </div>
           </ProfileCard>
 
-          <ProfileCard title="Atividade Recente" icon={<Activity className="h-5 w-5" />}>
+          <ProfileCard
+            title="Histórico recente"
+            icon={<Activity className="h-5 w-5" />}
+            isLoading={isAuditLoading}
+            error={auditError}
+            onRetry={() => void loadAuditLogs()}
+          >
             <AuditTimeline logs={auditLogs} maxItems={5} />
           </ProfileCard>
 
-          <ProfileCard title="Sessões e Dispositivos" icon={<Shield className="h-5 w-5" />}>
+          <ProfileCard
+            title="Sessões ativas"
+            icon={<Shield className="h-5 w-5" />}
+            isLoading={isSessionsLoading}
+            error={sessionsError}
+            onRetry={() => void loadSessions()}
+          >
             <SessionsList
               sessions={sessions}
               onRevokeSession={handleRevokeSession}
               onRevokeAllSessions={handleRevokeAllSessions}
+              onReload={() => loadSessions()}
             />
+          </ProfileCard>
+
+          <ProfileCard
+            title="Acesso rápido"
+            icon={<Link className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+            emptyState={<p className="text-sm text-muted-foreground">Sem links disponíveis.</p>}
+          >
+            {profile && (
+              <div className="space-y-2">
+                <Button variant="outline" className="w-full" asChild>
+                  <a href="/configuracoes/usuarios/sessoes" className="flex items-center justify-center gap-2">
+                    <Shield className="h-4 w-4" /> Gerenciar sessões
+                  </a>
+                </Button>
+                {profile.linkedin && (
+                  <Button variant="outline" className="w-full" asChild>
+                    <a href={profile.linkedin} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2">
+                      <Link className="h-4 w-4" /> Perfil no LinkedIn
+                    </a>
+                  </Button>
+                )}
+              </div>
+            )}
           </ProfileCard>
         </div>
       </div>

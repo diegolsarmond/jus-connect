@@ -43,15 +43,19 @@ export interface AuditLog {
   description: string;
   timestamp: Date;
   performedBy: string;
+  performedById?: string | null;
 }
 
 export interface UserSession {
   id: string;
   userId: string;
   device: string;
-  location: string;
+  location: string | null;
   lastActivity: Date;
   isActive: boolean;
+  createdAt?: Date;
+  revokedAt?: Date | null;
+  isCurrent?: boolean;
 }
 
 export interface Role {

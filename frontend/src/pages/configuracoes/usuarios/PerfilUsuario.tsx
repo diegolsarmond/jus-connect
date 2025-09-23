@@ -1,135 +1,142 @@
-import { useState } from "react";
-import { ArrowLeft, Shield, Clock, Activity, MapPin, Smartphone, Monitor } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Briefcase, Calendar, Clock, MapPin, Monitor } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import { User, AuditLog, UserSession } from "@/types/user";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ProfileCard } from "@/components/profile/ProfileCard";
+import { AuditTimeline } from "@/components/profile/AuditTimeline";
+import { SessionsList } from "@/components/profile/SessionsList";
+import {
+  fetchMeuPerfil,
+  fetchMeuPerfilAuditLogs,
+  fetchMeuPerfilSessions,
+  type MeuPerfilProfile,
+} from "@/services/meuPerfil";
+import type { AuditLog, UserSession } from "@/types/user";
 
-// Mock data
-const mockUser: User = {
-  id: "1",
-  name: "Dr. João Silva",
-  email: "joao.silva@escritorio.com.br",
-  phone: "(11) 99999-9999",
-  role: "advogado",
-  escritorio: "Escritório Principal",
-  oab: { numero: "123456", uf: "SP" },
-  especialidades: ["Direito Civil", "Direito Empresarial"],
-  tarifaPorHora: 350,
-  timezone: "America/Sao_Paulo",
-  idioma: "pt-BR",
-  ativo: true,
-  ultimoLogin: new Date("2024-01-15T10:30:00"),
-  createdAt: new Date("2024-01-01"),
-  updatedAt: new Date("2024-01-15"),
+const isAbortError = (error: unknown): error is DOMException =>
+  error instanceof DOMException && error.name === "AbortError";
+
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : "Não foi possível carregar os dados.");
+
+const formatDateTime = (date: Date | null | undefined) => {
+  if (!date) {
+    return "Não informado";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 };
 
-const mockAuditLogs: AuditLog[] = [
-  {
-    id: "1",
-    userId: "1",
-    action: "LOGIN",
-    description: "Login realizado com sucesso",
-    timestamp: new Date("2024-01-15T10:30:00"),
-    performedBy: "Sistema"
-  },
-  {
-    id: "2",
-    userId: "1",
-    action: "PROFILE_UPDATE",
-    description: "Telefone atualizado",
-    timestamp: new Date("2024-01-14T14:20:00"),
-    performedBy: "Admin (Maria Santos)"
-  },
-  {
-    id: "3",
-    userId: "1",
-    action: "ROLE_CHANGE",
-    description: "Role alterado de 'estagiario' para 'advogado'",
-    timestamp: new Date("2024-01-10T09:15:00"),
-    performedBy: "Admin (Carlos Oliveira)"
+const formatCurrency = (value: number | null | undefined) => {
+  if (value == null) {
+    return "Não informado";
   }
-];
-
-const mockSessions: UserSession[] = [
-  {
-    id: "1",
-    userId: "1",
-    device: "Chrome 120.0 - Windows 10",
-    location: "São Paulo, SP - Brasil",
-    lastActivity: new Date("2024-01-15T10:30:00"),
-    isActive: true
-  },
-  {
-    id: "2",
-    userId: "1",
-    device: "Safari 17.2 - iPhone",
-    location: "São Paulo, SP - Brasil",
-    lastActivity: new Date("2024-01-14T18:45:00"),
-    isActive: false
-  }
-];
-
-const roleLabels = {
-  admin: "Administrador",
-  advogado: "Advogado",
-  estagiario: "Estagiário",
-  secretario: "Secretário"
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  }).format(value);
 };
 
-const roleVariants = {
-  admin: "destructive",
-  advogado: "default",
-  estagiario: "secondary",
-  secretario: "outline"
-} as const;
+const specialtiesToString = (specialties: string[]) => (specialties.length > 0 ? specialties.join(", ") : "Não informado");
 
 export default function PerfilUsuario() {
-  const [user] = useState<User>(mockUser);
-  const [auditLogs] = useState<AuditLog[]>(mockAuditLogs);
-  const [sessions] = useState<UserSession[]>(mockSessions);
+  const [profile, setProfile] = useState<MeuPerfilProfile | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
-  const formatDateTime = (date: Date) => {
-    return new Intl.DateTimeFormat('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
-  };
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
-  const getActionLabel = (action: string) => {
-    const labels = {
-      LOGIN: "Login",
-      LOGOUT: "Logout",
-      PROFILE_UPDATE: "Perfil Atualizado",
-      PASSWORD_CHANGE: "Senha Alterada",
-      ROLE_CHANGE: "Role Alterado",
-      STATUS_CHANGE: "Status Alterado",
-      OAB_UPDATE: "OAB Atualizada"
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [isSessionsLoading, setIsSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+
+  const loadProfile = useCallback(async (signal?: AbortSignal) => {
+    setIsProfileLoading(true);
+    setProfileError(null);
+    try {
+      const data = await fetchMeuPerfil({ signal });
+      setProfile(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      setProfileError(errorMessage(error));
+    } finally {
+      setIsProfileLoading(false);
+    }
+  }, []);
+
+  const loadAuditLogs = useCallback(async (signal?: AbortSignal) => {
+    setIsAuditLoading(true);
+    setAuditError(null);
+    try {
+      const data = await fetchMeuPerfilAuditLogs({ signal, limit: 15 });
+      setAuditLogs(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      setAuditError(errorMessage(error));
+    } finally {
+      setIsAuditLoading(false);
+    }
+  }, []);
+
+  const loadSessions = useCallback(async (signal?: AbortSignal) => {
+    setIsSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const data = await fetchMeuPerfilSessions({ signal });
+      setSessions(data);
+    } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+      setSessionsError(errorMessage(error));
+    } finally {
+      setIsSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const profileController = new AbortController();
+    const logsController = new AbortController();
+    const sessionsController = new AbortController();
+
+    void loadProfile(profileController.signal);
+    void loadAuditLogs(logsController.signal);
+    void loadSessions(sessionsController.signal);
+
+    return () => {
+      profileController.abort();
+      logsController.abort();
+      sessionsController.abort();
     };
-    return labels[action as keyof typeof labels] || action;
-  };
+  }, [loadProfile, loadAuditLogs, loadSessions]);
 
-  const getActionColor = (action: string) => {
-    const colors = {
-      LOGIN: "text-green-600",
-      LOGOUT: "text-gray-600",
-      PROFILE_UPDATE: "text-blue-600",
-      PASSWORD_CHANGE: "text-orange-600",
-      ROLE_CHANGE: "text-purple-600",
-      STATUS_CHANGE: "text-red-600",
-      OAB_UPDATE: "text-blue-600"
-    };
-    return colors[action as keyof typeof colors] || "text-gray-600";
-  };
+  const initials = useMemo(() => {
+    if (!profile?.name) {
+      return "US";
+    }
+    return profile.name
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase();
+  }, [profile?.name]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm">
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -137,248 +144,145 @@ export default function PerfilUsuario() {
         </Button>
         <div>
           <h1 className="text-3xl font-bold">Perfil do Usuário</h1>
-          <p className="text-muted-foreground">Visualizar detalhes e histórico</p>
+          <p className="text-muted-foreground">Visualize detalhes, histórico e sessões ativas.</p>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Informações Principais */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Dados Básicos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Informações Básicas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-start gap-6">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback>
-                    {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-
-                <div className="flex-1 space-y-4">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-semibold">{user.name}</h3>
-                      <Badge variant={user.ativo ? "default" : "secondary"}>
-                        {user.ativo ? "Ativo" : "Inativo"}
-                      </Badge>
+          <ProfileCard
+            title="Informações Básicas"
+            icon={<Briefcase className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+            emptyState={<p className="text-sm text-muted-foreground">Nenhuma informação disponível.</p>}
+          >
+            {profile && (
+              <div className="space-y-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                  <Avatar className="h-20 w-20">
+                    <AvatarImage src={profile.avatarUrl ?? undefined} alt={profile.name} />
+                    <AvatarFallback>{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-semibold text-foreground">{profile.name}</h2>
+                    <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                      {profile.email && <span>{profile.email}</span>}
+                      {profile.phone && <span>• {profile.phone}</span>}
                     </div>
-                    <div className="grid gap-2 text-sm text-muted-foreground">
-                      <p>{user.email}</p>
-                      <p>{user.phone}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant={roleVariants[user.role]}>
-                      {roleLabels[user.role]}
-                    </Badge>
-                    <Badge variant="outline">{user.escritorio}</Badge>
-                    {user.oab && (
-                      <Badge variant="outline">
-                        OAB: {user.oab.numero}/{user.oab.uf}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {user.especialidades.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium mb-2">Especialidades:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {user.especialidades.map((especialidade) => (
-                          <Badge key={especialidade} variant="secondary">
-                            {especialidade}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid gap-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Criado em:</span>
-                      <span>{formatDateTime(user.createdAt)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Último login:</span>
-                      <span>{user.ultimoLogin ? formatDateTime(user.ultimoLogin) : "Nunca"}</span>
-                    </div>
-                    {user.tarifaPorHora && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Tarifa/hora:</span>
-                        <span>R$ {user.tarifaPorHora.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Sessões Ativas */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Monitor className="h-5 w-5" />
-                Sessões Ativas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {sessions.map((session) => (
-                  <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${session.isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
-                      <div>
-                        <p className="font-medium">{session.device}</p>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="h-3 w-3" />
-                          <span>{session.location}</span>
-                          <span>•</span>
-                          <Clock className="h-3 w-3" />
-                          <span>{formatDateTime(session.lastActivity)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    {session.isActive && (
-                      <Button variant="outline" size="sm">
-                        Revogar
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Timeline de Auditoria */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Histórico de Auditoria
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {auditLogs.map((log, index) => (
-                  <div key={log.id} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${getActionColor(log.action)} bg-current`} />
-                      {index < auditLogs.length - 1 && (
-                        <div className="w-px h-8 bg-border mt-1" />
+                    <div className="flex flex-wrap gap-2">
+                      {profile.office && <Badge variant="outline">{profile.office}</Badge>}
+                      {profile.oabNumber && profile.oabUf && (
+                        <Badge variant="secondary">OAB {profile.oabNumber}/{profile.oabUf}</Badge>
                       )}
                     </div>
-                    <div className="flex-1 pb-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`font-medium ${getActionColor(log.action)}`}>
-                          {getActionLabel(log.action)}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDateTime(log.timestamp)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-1">
-                        {log.description}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Por: {log.performedBy}
-                      </p>
-                    </div>
                   </div>
-                ))}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <span className="text-xs uppercase text-muted-foreground">Tarifa por hora</span>
+                    <p className="font-medium text-foreground">{formatCurrency(profile.hourlyRate)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs uppercase text-muted-foreground">Especialidades</span>
+                    <p className="font-medium text-foreground">{specialtiesToString(profile.specialties)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs uppercase text-muted-foreground">Fuso horário</span>
+                    <p className="font-medium text-foreground">{profile.timezone ?? "Não informado"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs uppercase text-muted-foreground">Idioma</span>
+                    <p className="font-medium text-foreground">{profile.language ?? "Não informado"}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs uppercase text-muted-foreground">Endereço</span>
+                  <p className="text-sm text-foreground">
+                    {profile.address.street ? `${profile.address.street}, ` : ""}
+                    {profile.address.city ? `${profile.address.city} - ` : ""}
+                    {profile.address.state ?? ""}
+                    {profile.address.zip ? ` • CEP ${profile.address.zip}` : ""}
+                  </p>
+                </div>
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </ProfileCard>
+
+          <ProfileCard
+            title="Atividade"
+            icon={<Calendar className="h-5 w-5" />}
+            isLoading={isProfileLoading}
+            error={profileError}
+            onRetry={() => void loadProfile()}
+          >
+            {profile && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1">
+                  <span className="text-xs uppercase text-muted-foreground">Último login</span>
+                  <p className="font-medium text-foreground">{formatDateTime(profile.lastLogin)}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs uppercase text-muted-foreground">Membro desde</span>
+                  <p className="font-medium text-foreground">{formatDateTime(profile.memberSince)}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs uppercase text-muted-foreground">Alertas de segurança</span>
+                  <p className="font-medium text-foreground">
+                    {profile.notifications.securityAlerts ? "Ativos" : "Desativados"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs uppercase text-muted-foreground">2FA</span>
+                  <p className="font-medium text-foreground">{profile.security.twoFactor ? "Ativo" : "Inativo"}</p>
+                </div>
+              </div>
+            )}
+          </ProfileCard>
         </div>
 
-        {/* Sidebar de Ações */}
         <div className="space-y-6">
-          {/* Ações Rápidas */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Ações</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button className="w-full" size="sm">
-                Editar Perfil
-              </Button>
-              <Button variant="outline" className="w-full" size="sm">
-                Reset Senha
-              </Button>
-              <Button variant="outline" className="w-full" size="sm">
-                Convidar por Email
-              </Button>
-              <Separator />
-              <Button variant="outline" className="w-full" size="sm">
-                {user.ativo ? "Desativar" : "Ativar"} Usuário
-              </Button>
-              <Button variant="destructive" className="w-full" size="sm">
-                Excluir Usuário
-              </Button>
-            </CardContent>
-          </Card>
+          <ProfileCard
+            title="Histórico de Auditoria"
+            icon={<Clock className="h-5 w-5" />}
+            isLoading={isAuditLoading}
+            error={auditError}
+            onRetry={() => void loadAuditLogs()}
+          >
+            <AuditTimeline logs={auditLogs} maxItems={6} />
+          </ProfileCard>
 
-          {/* Permissões */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Permissões
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="text-sm space-y-2">
-                <div className="flex justify-between">
-                  <span>Gerenciar Clientes</span>
-                  <Badge variant="secondary" className="text-xs">✓</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Gerenciar Processos</span>
-                  <Badge variant="secondary" className="text-xs">✓</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Agenda</span>
-                  <Badge variant="secondary" className="text-xs">✓</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Relatórios</span>
-                  <Badge variant="outline" className="text-xs">✗</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span>Configurações</span>
-                  <Badge variant="outline" className="text-xs">✗</Badge>
-                </div>
-              </div>
-              <Button variant="outline" size="sm" className="w-full">
-                Gerenciar Permissões
-              </Button>
-            </CardContent>
-          </Card>
+          <ProfileCard
+            title="Sessões e Dispositivos"
+            icon={<Monitor className="h-5 w-5" />}
+            isLoading={isSessionsLoading}
+            error={sessionsError}
+            onRetry={() => void loadSessions()}
+          >
+            <SessionsList sessions={sessions} onReload={() => loadSessions()} />
+          </ProfileCard>
 
-          {/* Configurações */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Configurações</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Timezone</span>
-                <span>GMT-3</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Idioma</span>
-                <span>Português (BR)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">2FA</span>
-                <Badge variant="outline" className="text-xs">Inativo</Badge>
-              </div>
-            </CardContent>
-          </Card>
+          <ProfileCard
+            title="Localizações Recentes"
+            icon={<MapPin className="h-5 w-5" />}
+            isLoading={isSessionsLoading}
+            error={sessionsError}
+            onRetry={() => void loadSessions()}
+            emptyState={<p className="text-sm text-muted-foreground">Nenhum acesso registrado.</p>}
+          >
+            {sessions.length > 0 && (
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {sessions.slice(0, 5).map((session) => (
+                  <li key={session.id}>
+                    {session.location ?? "Localização não informada"} • {formatDateTime(session.lastActivity)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ProfileCard>
         </div>
       </div>
     </div>

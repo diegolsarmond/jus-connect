@@ -9,13 +9,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 interface AvatarUploaderProps {
   currentAvatar?: string;
   userName: string;
-  onAvatarChange: (file: File | null) => void;
+  onAvatarChange: (file: File | null) => Promise<void> | void;
   size?: "sm" | "md" | "lg";
 }
 
 export function AvatarUploader({ currentAvatar, userName, onAvatarChange, size = "md" }: AvatarUploaderProps) {
   const [preview, setPreview] = useState(currentAvatar);
   const [isOpen, setIsOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -28,31 +30,58 @@ export function AvatarUploader({ currentAvatar, userName, onAvatarChange, size =
     lg: "h-32 w-32"
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        alert("Arquivo muito grande. O tamanho máximo é 5MB.");
+        setError("Arquivo muito grande. O tamanho máximo é 5MB.");
         return;
       }
 
       if (!file.type.startsWith('image/')) {
-        alert("Por favor, selecione apenas arquivos de imagem.");
+        setError("Por favor, selecione apenas arquivos de imagem.");
         return;
       }
 
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
+      reader.onloadend = async () => {
+        const result = reader.result as string;
+        const previousPreview = preview;
+        setPreview(result);
+        setError(null);
+
+        try {
+          const response = onAvatarChange(file);
+          if (response instanceof Promise) {
+            setIsProcessing(true);
+            await response;
+          }
+        } catch (uploadError) {
+          setPreview(previousPreview);
+          setError(uploadError instanceof Error ? uploadError.message : "Não foi possível atualizar o avatar.");
+        } finally {
+          setIsProcessing(false);
+        }
       };
       reader.readAsDataURL(file);
-      onAvatarChange(file);
     }
   };
 
   const handleRemove = () => {
     setPreview(undefined);
-    onAvatarChange(null);
+    setError(null);
+    const response = onAvatarChange(null);
+    if (response instanceof Promise) {
+      setIsProcessing(true);
+      response
+        .catch((removeError) => {
+          setError(removeError instanceof Error ? removeError.message : "Não foi possível remover o avatar.");
+          setPreview(currentAvatar);
+        })
+        .finally(() => {
+          setIsProcessing(false);
+        });
+    }
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -103,26 +132,30 @@ export function AvatarUploader({ currentAvatar, userName, onAvatarChange, size =
                   accept="image/*"
                   onChange={handleFileSelect}
                   className="cursor-pointer file:cursor-pointer"
+                  disabled={isProcessing}
                 />
                 <p className="text-xs text-muted-foreground">
                   Formatos aceitos: PNG, JPG, JPEG. Tamanho máximo: 5MB
                 </p>
+                {error && <p className="text-xs text-destructive">{error}</p>}
               </div>
 
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   className="flex-1"
+                  disabled={isProcessing}
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Enviar Arquivo
                 </Button>
                 {preview && (
-                  <Button 
-                    variant="destructive" 
+                  <Button
+                    variant="destructive"
                     onClick={handleRemove}
                     className="flex-1"
+                    disabled={isProcessing}
                   >
                     <X className="h-4 w-4 mr-2" />
                     Remover
