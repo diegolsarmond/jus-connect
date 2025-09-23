@@ -68,6 +68,7 @@ export interface Flow {
 }
 
 const FLOWS_ENDPOINT = getApiUrl('financial/flows');
+const DEFAULT_FLOW_FETCH_LIMIT = 500;
 
 function extractFlowCollection(payload: unknown): Flow[] | null {
   if (Array.isArray(payload)) {
@@ -91,24 +92,138 @@ function extractFlowCollection(payload: unknown): Flow[] | null {
   return null;
 }
 
-export async function fetchFlows(): Promise<Flow[]> {
-  const res = await fetch(FLOWS_ENDPOINT);
-  ensureOkResponse(res);
+type FlowPageResult = { items: Flow[]; payload: unknown };
 
-  let data: unknown;
+const PAGINATION_TOTAL_KEYS = ['total', 'count', 'totalCount'] as const;
+const PAGINATION_LIMIT_KEYS = ['limit', 'pageSize', 'perPage'] as const;
+
+const parseNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const extractFirstAvailableNumber = (
+  sources: Array<Record<string, unknown> | null | undefined>,
+  keys: readonly string[],
+): number | null => {
+  for (const source of sources) {
+    if (!source) continue;
+
+    for (const key of keys) {
+      if (!(key in source)) continue;
+
+      const candidate = parseNumber(source[key]);
+      if (candidate !== null) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+};
+
+const extractPaginationMeta = (payload: unknown): { total: number | null; limit: number | null } => {
+  if (!payload || typeof payload !== 'object') {
+    return { total: null, limit: null };
+  }
+
+  const record = payload as Record<string, unknown>;
+  const nestedCandidates = [
+    record,
+    record.meta as Record<string, unknown> | undefined,
+    record.pagination as Record<string, unknown> | undefined,
+  ];
+
+  const total = extractFirstAvailableNumber(nestedCandidates, PAGINATION_TOTAL_KEYS);
+  const limit = extractFirstAvailableNumber(nestedCandidates, PAGINATION_LIMIT_KEYS);
+
+  return { total, limit };
+};
+
+const buildFlowsUrl = (limit: number, page: number): string => {
+  const url = new URL(FLOWS_ENDPOINT);
+
+  if (Number.isFinite(limit) && limit > 0) {
+    url.searchParams.set('limit', String(Math.floor(limit)));
+  } else {
+    url.searchParams.delete('limit');
+  }
+
+  if (Number.isFinite(page) && page > 0) {
+    url.searchParams.set('page', String(Math.floor(page)));
+  } else {
+    url.searchParams.delete('page');
+  }
+
+  return url.toString();
+};
+
+const requestFlowsPage = async (limit: number, page: number): Promise<FlowPageResult> => {
+  const response = await fetch(buildFlowsUrl(limit, page));
+  ensureOkResponse(response);
+
+  let payload: unknown;
   try {
-    data = await res.json();
+    payload = await response.json();
   } catch (error) {
     throw new Error('Não foi possível interpretar a resposta do servidor.');
   }
 
-  const collection = extractFlowCollection(data);
+  const collection = extractFlowCollection(payload);
 
   if (!collection) {
     throw new Error('Resposta inválida do servidor ao carregar os lançamentos financeiros.');
   }
 
-  return collection;
+  return { items: collection, payload };
+};
+
+export async function fetchFlows(): Promise<Flow[]> {
+  const initialPage = await requestFlowsPage(DEFAULT_FLOW_FETCH_LIMIT, 1);
+
+  const flows: Flow[] = [...initialPage.items];
+  const { total, limit } = extractPaginationMeta(initialPage.payload);
+
+  const effectiveLimit =
+    typeof limit === 'number' && Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_FLOW_FETCH_LIMIT;
+  const expectedTotal = typeof total === 'number' && Number.isFinite(total) && total >= 0 ? total : null;
+
+  let lastPageSize = flows.length;
+  let currentPage = 1;
+
+  while (true) {
+    const hasMoreByTotal = expectedTotal !== null && flows.length < expectedTotal;
+    const hasMoreByPageSize = expectedTotal === null && lastPageSize >= effectiveLimit;
+
+    if (!hasMoreByTotal && !hasMoreByPageSize) {
+      break;
+    }
+
+    currentPage += 1;
+    const nextPage = await requestFlowsPage(effectiveLimit, currentPage);
+
+    if (nextPage.items.length === 0) {
+      break;
+    }
+
+    flows.push(...nextPage.items);
+    lastPageSize = nextPage.items.length;
+  }
+
+  return flows;
 }
 
 export type CreateFlowPayload = {
