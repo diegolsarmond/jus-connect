@@ -8,7 +8,8 @@ export interface ModuleInfo {
 export interface Plan {
   id: number;
   name: string;
-  price: string;
+  monthlyPrice: string;
+  annualPrice: string;
   modules: string[];
   userLimit: number | null;
   processLimit: number | null;
@@ -19,7 +20,8 @@ export interface Plan {
 
 export type PlanFormState = {
   name: string;
-  price: string;
+  monthlyPrice: string;
+  annualPrice: string;
   modules: string[];
   userLimit: string;
   processLimit: string;
@@ -30,7 +32,8 @@ export type PlanFormState = {
 
 export const initialPlanFormState: PlanFormState = {
   name: "",
-  price: "",
+  monthlyPrice: "",
+  annualPrice: "",
   modules: [],
   userLimit: "",
   processLimit: "",
@@ -94,6 +97,27 @@ const parsePrice = (value: unknown): string => {
   return "";
 };
 
+export const parseDecimal = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const normalized = Number(trimmed.replace(/\./g, "").replace(/,/g, "."));
+    if (Number.isFinite(normalized) && normalized >= 0) {
+      return normalized;
+    }
+  }
+
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+
+  return null;
+};
+
 const parseNumberId = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -136,7 +160,13 @@ export const parsePlan = (raw: unknown): Plan | null => {
   );
 
   const userLimit =
-    parseInteger(data.qtde_usuarios ?? data.userLimit ?? data.limiteUsuarios ?? data.maxUsers) ?? null;
+    parseInteger(
+      data.limite_usuarios ??
+        data.qtde_usuarios ??
+        data.userLimit ??
+        data.limiteUsuarios ??
+        data.maxUsers
+    ) ?? null;
   const processLimit =
     parseInteger(
       data.max_casos ??
@@ -171,7 +201,24 @@ export const parsePlan = (raw: unknown): Plan | null => {
   return {
     id,
     name,
-    price: parsePrice(data.valor ?? data.price ?? data.valor_mensal ?? data.preco),
+    monthlyPrice: parsePrice(
+      data.valor_mensal ??
+        data.valorMensal ??
+        data.preco_mensal ??
+        data.priceMonthly ??
+        data.valor ??
+        data.price ??
+        data.preco
+    ),
+    annualPrice: parsePrice(
+      data.valor_anual ??
+        data.valorAnual ??
+        data.preco_anual ??
+        data.priceYearly ??
+        data.priceAnnual ??
+        data.valor_anualidade ??
+        ""
+    ),
     modules,
     userLimit,
     processLimit,
