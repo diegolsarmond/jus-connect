@@ -1,6 +1,16 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 
-import { __inlineAssetsForTesting, createSimplePdfFromHtml } from "./pdf";
+import {
+  __createTextPdfBlobForTesting,
+  __inlineAssetsForTesting,
+  createSimplePdfFromHtml,
+} from "./pdf";
+
+async function decodePdfToLatin1(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const decoder = new TextDecoder("latin1");
+  return decoder.decode(bytes);
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -117,5 +127,32 @@ describe("createSimplePdfFromHtml", () => {
     const pseudoSelector = `[data-pdf-export-pseudo="${pseudoIdMatch?.[1]}"]::before`;
     expect(capturedHtml).toContain(pseudoSelector);
     expect(capturedHtml).toContain("Prefix");
+  });
+});
+
+describe("createTextPdfBlob", () => {
+  it("encodes accented characters using a single-byte PDF encoding", async () => {
+    const blob = __createTextPdfBlobForTesting("Título", "<p>Olá ação útil</p>");
+    const pdfContent = await decodePdfToLatin1(blob);
+    expect(pdfContent).toContain("(Título) Tj");
+    expect(pdfContent).toContain("(Olá ação útil) Tj");
+    expect(pdfContent).not.toContain("Ã");
+  });
+
+  it("preserves blank lines between paragraphs when DOM APIs are unavailable", async () => {
+    const html = "<p>Primeiro parágrafo.</p><p>Segundo parágrafo.</p>";
+    vi.stubGlobal("document", undefined as unknown as Document);
+    try {
+      const blob = __createTextPdfBlobForTesting("Sem DOM", html);
+      const pdfContent = await decodePdfToLatin1(blob);
+      const firstIndex = pdfContent.indexOf("(Primeiro parágrafo.) Tj");
+      expect(firstIndex).toBeGreaterThan(-1);
+      const blankIndex = pdfContent.indexOf("() Tj", firstIndex + 1);
+      expect(blankIndex).toBeGreaterThan(firstIndex);
+      const secondIndex = pdfContent.indexOf("(Segundo parágrafo.) Tj", blankIndex + 1);
+      expect(secondIndex).toBeGreaterThan(blankIndex);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
