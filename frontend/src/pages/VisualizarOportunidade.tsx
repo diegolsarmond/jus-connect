@@ -56,6 +56,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -421,6 +422,8 @@ interface BillingFormState {
   valor: string;
   juros: string;
   multa: string;
+  hasJuros: boolean;
+  hasMulta: boolean;
   dataFaturamento: string;
   observacoes: string;
   selectedInstallmentIds: number[];
@@ -664,13 +667,15 @@ export default function VisualizarOportunidade() {
   const [billingSubmitting, setBillingSubmitting] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingForm, setBillingForm] = useState<BillingFormState>(() => ({
-    formaPagamento: "",
+    formaPagamento: "Pix",
     formaPagamentoDescricao: "",
     condicaoPagamento: "À vista",
     parcelas: "1",
     valor: "",
     juros: "",
     multa: "",
+    hasJuros: false,
+    hasMulta: false,
     dataFaturamento: new Date().toISOString().slice(0, 10),
     observacoes: "",
     selectedInstallmentIds: [],
@@ -1409,6 +1414,27 @@ export default function VisualizarOportunidade() {
     });
   }, []);
 
+  const formatPercentInputValue = (raw: string) => {
+    const sanitized = raw.replace(/\./g, ",").replace(/[^0-9,]/g, "");
+    if (sanitized.length === 0) {
+      return "";
+    }
+
+    const [integerPartRaw = "", decimalPartRaw = ""] = sanitized.split(",", 2);
+    const trimmedInteger = integerPartRaw.replace(/^0+(?=\d)/, "");
+    const limitedInteger = trimmedInteger.length > 0
+      ? trimmedInteger.slice(0, 3)
+      : integerPartRaw.slice(0, 3);
+    const limitedDecimal = decimalPartRaw.slice(0, 2);
+    const integerDisplay = limitedInteger.length > 0 ? limitedInteger : "0";
+
+    if (limitedDecimal.length > 0) {
+      return `${integerDisplay},${limitedDecimal}%`;
+    }
+
+    return `${integerDisplay}%`;
+  };
+
   // lista de chaves que podem ser copiadas (removi valor_causa e valor_honorarios conforme pedido)
   const shouldShowCopy = (key: string) =>
     [
@@ -1844,7 +1870,7 @@ export default function VisualizarOportunidade() {
           : honorarios;
 
     setBillingForm({
-      formaPagamento: matchedOption ?? (registeredForma ? "Outro" : ""),
+      formaPagamento: matchedOption ?? (registeredForma ? "Outro" : "Pix"),
       formaPagamentoDescricao:
         matchedOption || registeredForma.length === 0 ? "" : registeredForma,
       condicaoPagamento: defaultCondition,
@@ -1859,6 +1885,8 @@ export default function VisualizarOportunidade() {
       valor: formatNumberForInput(computedTotal ?? null),
       juros: "",
       multa: "",
+      hasJuros: false,
+      hasMulta: false,
       dataFaturamento: new Date().toISOString().slice(0, 10),
       observacoes: "",
       selectedInstallmentIds: defaultSelectedIds,
@@ -1911,9 +1939,13 @@ export default function VisualizarOportunidade() {
       return;
     }
 
-    const jurosTexto = billingForm.juros.trim();
     let jurosValor = 0;
-    if (jurosTexto.length > 0) {
+    if (billingForm.hasJuros) {
+      const jurosTexto = billingForm.juros.trim();
+      if (jurosTexto.length === 0) {
+        setBillingError("Informe o percentual de juros.");
+        return;
+      }
       const parsedJuros = parseToNumber(jurosTexto);
       if (parsedJuros === null || Number.isNaN(parsedJuros)) {
         setBillingError("Informe um valor válido para os juros.");
@@ -1926,9 +1958,13 @@ export default function VisualizarOportunidade() {
       jurosValor = parsedJuros;
     }
 
-    const multaTexto = billingForm.multa.trim();
     let multaValor = 0;
-    if (multaTexto.length > 0) {
+    if (billingForm.hasMulta) {
+      const multaTexto = billingForm.multa.trim();
+      if (multaTexto.length === 0) {
+        setBillingError("Informe o percentual da multa.");
+        return;
+      }
       const parsedMulta = parseToNumber(multaTexto);
       if (parsedMulta === null || Number.isNaN(parsedMulta)) {
         setBillingError("Informe um valor válido para a multa.");
@@ -1941,7 +1977,7 @@ export default function VisualizarOportunidade() {
       multaValor = parsedMulta;
     }
 
-    const encargosValor = jurosValor + multaValor;
+    const encargosMultiplier = 1 + jurosValor / 100 + multaValor / 100;
 
     let parcelasValor: number | null = null;
     let baseValor: number | null = null;
@@ -1994,12 +2030,10 @@ export default function VisualizarOportunidade() {
     }
 
     if (baseValor !== null) {
-      valorNumero = baseValor + encargosValor;
-    } else if (valorNumero === null && encargosValor > 0) {
-      valorNumero = encargosValor;
+      valorNumero = baseValor * encargosMultiplier;
     }
 
-    if (valorNumero === null) {
+    if (valorNumero === null || Number.isNaN(valorNumero)) {
       setBillingError("Não foi possível determinar o valor para faturamento.");
       return;
     }
@@ -2015,8 +2049,8 @@ export default function VisualizarOportunidade() {
             ? pendingInstallments.length
             : undefined,
       parcelas_ids: selectedInstallmentIds.length > 0 ? selectedInstallmentIds : undefined,
-      juros: jurosValor > 0 ? jurosValor : undefined,
-      multa: multaValor > 0 ? multaValor : undefined,
+      juros: billingForm.hasJuros ? jurosValor : undefined,
+      multa: billingForm.hasMulta ? multaValor : undefined,
       observacoes:
         billingForm.observacoes.trim().length > 0
           ? billingForm.observacoes.trim()
@@ -2063,21 +2097,27 @@ export default function VisualizarOportunidade() {
   useEffect(() => {
     if (!billingDialogOpen) return;
 
-    const jurosValor = (() => {
+    const jurosPercent = (() => {
+      if (!billingForm.hasJuros) return 0;
       const trimmed = billingForm.juros.trim();
       if (trimmed.length === 0) return 0;
       const parsed = parseToNumber(trimmed);
       return parsed !== null && Number.isFinite(parsed) ? parsed : 0;
     })();
 
-    const multaValor = (() => {
+    const multaPercent = (() => {
+      if (!billingForm.hasMulta) return 0;
       const trimmed = billingForm.multa.trim();
       if (trimmed.length === 0) return 0;
       const parsed = parseToNumber(trimmed);
       return parsed !== null && Number.isFinite(parsed) ? parsed : 0;
     })();
 
-    const extrasTotal = jurosValor + multaValor;
+    const extrasMultiplier = 1 + jurosPercent / 100 + multaPercent / 100;
+    const applyExtras = (amount: number | null) => {
+      if (amount === null || !Number.isFinite(amount)) return null;
+      return amount * extrasMultiplier;
+    };
 
     if (hasPendingInstallments) {
       const sanitizedIds = billingForm.selectedInstallmentIds.filter((id) =>
@@ -2088,10 +2128,9 @@ export default function VisualizarOportunidade() {
           ? sanitizedIds
           : pendingInstallments.slice(0, 1).map((installment) => installment.id);
       const selectedTotal = idsToUse.length > 0 ? sumInstallmentsById(idsToUse) : null;
+      const totalWithExtras = applyExtras(selectedTotal);
       const formattedTotal =
-        selectedTotal !== null
-          ? formatNumberForInput(selectedTotal + extrasTotal)
-          : null;
+        totalWithExtras !== null ? formatNumberForInput(totalWithExtras) : null;
       const parcelasValue = idsToUse.length > 0 ? String(idsToUse.length) : "";
 
       setBillingForm((prev) => {
@@ -2133,7 +2172,7 @@ export default function VisualizarOportunidade() {
       if (!Number.isFinite(parcelasCount) || parcelasCount <= 0) {
         return;
       }
-      const computed =
+      const computedBase =
         calculateInstallmentTotal(parcelasCount) ??
         (() => {
           const honorariosValue = parseToNumber(opportunity?.valor_honorarios);
@@ -2150,22 +2189,29 @@ export default function VisualizarOportunidade() {
           return null;
         })();
 
-      if (computed !== null) {
-        const formatted = formatNumberForInput(computed + extrasTotal);
-        setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
+      if (computedBase !== null) {
+        const totalWithExtras = applyExtras(computedBase);
+        if (totalWithExtras !== null) {
+          const formatted = formatNumberForInput(totalWithExtras);
+          setBillingForm((prev) =>
+            prev.valor === formatted ? prev : { ...prev, valor: formatted },
+          );
+        }
       }
     } else if (billingForm.condicaoPagamento === "À vista") {
       const pendingCount = pendingInstallments.length;
-      const computed =
+      const computedBase =
         pendingCount > 0
           ? calculateInstallmentTotal(pendingCount)
           : parseToNumber(opportunity?.valor_honorarios);
-      if (computed !== null) {
-        const formatted = formatNumberForInput(computed + extrasTotal);
-        setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
-      } else if (extrasTotal > 0) {
-        const formatted = formatNumberForInput(extrasTotal);
-        setBillingForm((prev) => (prev.valor === formatted ? prev : { ...prev, valor: formatted }));
+      if (computedBase !== null) {
+        const totalWithExtras = applyExtras(computedBase);
+        if (totalWithExtras !== null) {
+          const formatted = formatNumberForInput(totalWithExtras);
+          setBillingForm((prev) =>
+            prev.valor === formatted ? prev : { ...prev, valor: formatted },
+          );
+        }
       }
     }
   }, [
@@ -2175,6 +2221,8 @@ export default function VisualizarOportunidade() {
     billingForm.selectedInstallmentIds,
     billingForm.juros,
     billingForm.multa,
+    billingForm.hasJuros,
+    billingForm.hasMulta,
     calculateInstallmentTotal,
     formatNumberForInput,
     hasPendingInstallments,
@@ -3802,6 +3850,76 @@ export default function VisualizarOportunidade() {
               )}
 
               <div className="space-y-2">
+                <Label htmlFor="billing-has-juros">Possui juros?</Label>
+                <div className="flex items-center justify-between rounded-md border border-border/60 bg-background px-3 py-2">
+                  <span className="text-sm text-muted-foreground">
+                    Aplicar juros sobre o valor faturado?
+                  </span>
+                  <Switch
+                    id="billing-has-juros"
+                    checked={billingForm.hasJuros}
+                    onCheckedChange={(checked) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        hasJuros: checked,
+                        juros: checked ? prev.juros : "",
+                      }))
+                    }
+                  />
+                </div>
+                {billingForm.hasJuros && (
+                  <Input
+                    id="billing-juros"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ex.: 2,5%"
+                    value={billingForm.juros}
+                    onChange={(event) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        juros: formatPercentInputValue(event.target.value),
+                      }))
+                    }
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="billing-has-multa">Possui multa?</Label>
+                <div className="flex items-center justify-between rounded-md border border-border/60 bg-background px-3 py-2">
+                  <span className="text-sm text-muted-foreground">
+                    Aplicar multa por atraso?
+                  </span>
+                  <Switch
+                    id="billing-has-multa"
+                    checked={billingForm.hasMulta}
+                    onCheckedChange={(checked) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        hasMulta: checked,
+                        multa: checked ? prev.multa : "",
+                      }))
+                    }
+                  />
+                </div>
+                {billingForm.hasMulta && (
+                  <Input
+                    id="billing-multa"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ex.: 1,0%"
+                    value={billingForm.multa}
+                    onChange={(event) =>
+                      setBillingForm((prev) => ({
+                        ...prev,
+                        multa: formatPercentInputValue(event.target.value),
+                      }))
+                    }
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="billing-valor">Valor a faturar</Label>
                 <Input
                   id="billing-valor"
@@ -3818,47 +3936,13 @@ export default function VisualizarOportunidade() {
                     }))
                   }
                 />
-                {(billingForm.condicaoPagamento === "Parcelado" || hasPendingInstallments) && (
+                {(billingForm.condicaoPagamento === "Parcelado" || hasPendingInstallments ||
+                  billingForm.hasJuros ||
+                  billingForm.hasMulta) && (
                   <p className="text-xs text-muted-foreground">
-                    O valor é calculado automaticamente conforme as parcelas e encargos selecionados.
+                    O valor é calculado automaticamente com base nas parcelas selecionadas e nos percentuais informados.
                   </p>
                 )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="billing-juros">Juros</Label>
-                <Input
-                  id="billing-juros"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={billingForm.juros}
-                  onChange={(event) =>
-                    setBillingForm((prev) => ({
-                      ...prev,
-                      juros: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="billing-multa">Multa</Label>
-                <Input
-                  id="billing-multa"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={billingForm.multa}
-                  onChange={(event) =>
-                    setBillingForm((prev) => ({
-                      ...prev,
-                      multa: event.target.value,
-                    }))
-                  }
-                />
               </div>
 
               <div className="space-y-2 sm:col-span-2">
