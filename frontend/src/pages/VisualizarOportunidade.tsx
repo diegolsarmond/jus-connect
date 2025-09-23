@@ -3926,10 +3926,8 @@ export default function VisualizarOportunidade() {
                 <Label htmlFor="billing-valor">Valor a faturar</Label>
                 <Input
                   id="billing-valor"
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min="0"
-                  step="0.01"
                   readOnly={hasPendingInstallments || billingForm.condicaoPagamento === "Parcelado"}
                   value={billingForm.valor}
                   onChange={(event) =>
