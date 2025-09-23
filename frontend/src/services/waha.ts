@@ -209,22 +209,70 @@ const detectMessageType = (raw: RawRecord | null | undefined): 'text' | 'image' 
   return 'text';
 };
 
+const createDataUrlFromBase64 = (payload: string, mimeType?: string): string | undefined => {
+  const trimmed = payload.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+
+  const normalized = trimmed.replace(/\s+/g, '');
+  const resolvedMime = mimeType && mimeType.trim().length > 0 ? mimeType.trim() : 'application/octet-stream';
+  return `data:${resolvedMime};base64,${normalized}`;
+};
+
 const pickMediaUrl = (raw: RawRecord | null | undefined): string | undefined => {
   if (!raw) {
     return undefined;
   }
 
-  const candidates = ['mediaUrl', 'url', 'mediaURL', 'fileUrl', 'directPath', 'filePath', 'path'];
-  for (const key of candidates) {
-    const candidate = readString(raw, key);
-    if (candidate && candidate.trim().length > 0) {
-      return candidate;
+  const nestedRecords: RawRecord[] = [raw];
+  const media = isRawRecord(raw['media']) ? raw['media'] : null;
+  if (media) {
+    nestedRecords.push(media);
+  }
+  const mediaData = isRawRecord(raw['mediaData']) ? raw['mediaData'] : null;
+  if (mediaData) {
+    nestedRecords.push(mediaData);
+  }
+
+  const urlCandidates = ['mediaUrl', 'url', 'mediaURL', 'fileUrl', 'directPath', 'filePath', 'path'];
+  for (const record of nestedRecords) {
+    for (const key of urlCandidates) {
+      const candidate = readString(record, key);
+      if (candidate && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
     }
   }
+
   const body = readString(raw, 'body');
   if (body && body.startsWith('data:')) {
     return body;
   }
+
+  const base64Candidates = ['data', 'base64', 'base64Data', 'mediaData', 'content'];
+  for (const record of nestedRecords) {
+    for (const key of base64Candidates) {
+      const payload = readString(record, key);
+      if (!payload) {
+        continue;
+      }
+
+      const mimeType =
+        readString(record, 'mimetype') ??
+        readString(record, 'mimeType') ??
+        readString(raw, 'mimetype') ??
+        readString(raw, 'mimeType');
+      const dataUrl = createDataUrlFromBase64(payload, mimeType ?? undefined);
+      if (dataUrl) {
+        return dataUrl;
+      }
+    }
+  }
+
   return undefined;
 };
 
@@ -355,6 +403,9 @@ const sanitizeMessage = (chatId: string, raw: unknown): Message | null => {
     return null;
   }
 
+  const mediaInfo = isRawRecord(raw['media']) ? raw['media'] : null;
+  const mediaData = isRawRecord(raw['mediaData']) ? raw['mediaData'] : null;
+
   const mediaUrl = pickMediaUrl(raw);
   const hasMedia = readBoolean(raw, 'hasMedia');
 
@@ -370,9 +421,23 @@ const sanitizeMessage = (chatId: string, raw: unknown): Message | null => {
     quotedMsgId: readString(raw, 'quotedMsgId') ?? readString(raw, 'quotedMsg') ?? readString(raw, 'quotedMessageId'),
     hasMedia: hasMedia ?? Boolean(mediaUrl),
     mediaUrl,
-    filename: readString(raw, 'filename') ?? readString(raw, 'fileName'),
+    filename:
+      readString(raw, 'filename') ??
+      readString(raw, 'fileName') ??
+      readString(mediaInfo, 'filename') ??
+      readString(mediaInfo, 'fileName') ??
+      readString(mediaData, 'filename') ??
+      readString(mediaData, 'fileName') ??
+      undefined,
     caption: readString(raw, 'caption'),
-    mimeType: readString(raw, 'mimetype') ?? readString(raw, 'mimeType'),
+    mimeType:
+      readString(raw, 'mimetype') ??
+      readString(raw, 'mimeType') ??
+      readString(mediaInfo, 'mimetype') ??
+      readString(mediaInfo, 'mimeType') ??
+      readString(mediaData, 'mimetype') ??
+      readString(mediaData, 'mimeType') ??
+      undefined,
   };
 };
 
