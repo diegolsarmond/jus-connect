@@ -1,11 +1,334 @@
 import { Request, Response } from 'express';
+import type { PoolClient } from 'pg';
 import pool from '../services/db';
-import { verifyPassword } from '../utils/passwordUtils';
+import { hashPassword, verifyPassword } from '../utils/passwordUtils';
 import { signToken } from '../utils/tokenUtils';
 import { authConfig } from '../constants/auth';
 import { fetchPerfilModules } from '../services/moduleService';
+import { SYSTEM_MODULES, normalizeModuleId, sortModules } from '../constants/modules';
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PHONE_LENGTH = 32;
+const DEFAULT_PROFILE_NAME = 'Administrador';
+const DEFAULT_MODULE_IDS = sortModules(SYSTEM_MODULES.map((module) => module.id));
+
+const parseInteger = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isFinite(parsed)) {
+      return Math.trunc(parsed);
+    }
+  }
+
+  return null;
+};
+
+const sanitizePlanModules = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique = new Set<string>();
+  const sanitized: string[] = [];
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+
+    const normalized = normalizeModuleId(entry);
+    if (!normalized || unique.has(normalized)) {
+      continue;
+    }
+
+    unique.add(normalized);
+    sanitized.push(normalized);
+  }
+
+  return sortModules(sanitized);
+};
+
+const fetchDefaultPlanDetails = async (
+  client: PoolClient
+): Promise<{ planId: number | null; modules: string[] }> => {
+  const result = await client.query(
+    `SELECT id, modulos
+       FROM public.planos
+      WHERE ativo IS DISTINCT FROM FALSE
+   ORDER BY id
+      LIMIT 1`
+  );
+
+  if (result.rowCount === 0) {
+    return { planId: null, modules: DEFAULT_MODULE_IDS };
+  }
+
+  const row = result.rows[0] as { id?: unknown; modulos?: unknown };
+  const planId = parseInteger(row.id);
+  const modules = sanitizePlanModules(row.modulos);
+
+  return {
+    planId,
+    modules: modules.length > 0 ? modules : DEFAULT_MODULE_IDS,
+  };
+};
+
+export const register = async (req: Request, res: Response) => {
+  const nameValue = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const emailValue = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+  const companyValue = typeof req.body?.company === 'string' ? req.body.company.trim() : '';
+  const passwordValue = typeof req.body?.password === 'string' ? req.body.password : '';
+  const phoneValueRaw = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+  const phoneDigits = phoneValueRaw.replace(/\D+/g, '');
+  const phoneValue = phoneValueRaw ? phoneValueRaw : null;
+
+  if (!nameValue) {
+    res.status(400).json({ error: 'O nome completo é obrigatório.' });
+    return;
+  }
+
+  if (!companyValue) {
+    res.status(400).json({ error: 'O nome da empresa é obrigatório.' });
+    return;
+  }
+
+  if (!emailValue || !EMAIL_REGEX.test(emailValue)) {
+    res.status(400).json({ error: 'Informe um e-mail válido.' });
+    return;
+  }
+
+  if (passwordValue.length < MIN_PASSWORD_LENGTH) {
+    res
+      .status(400)
+      .json({ error: `A senha deve conter ao menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+    return;
+  }
+
+  if (phoneValue && phoneValue.length > MAX_PHONE_LENGTH) {
+    res
+      .status(400)
+      .json({ error: `O telefone deve conter no máximo ${MAX_PHONE_LENGTH} caracteres.` });
+    return;
+  }
+
+  if (phoneValue && phoneDigits.length > 0 && phoneDigits.length < 10) {
+    res.status(400).json({ error: 'Informe um telefone válido com DDD.' });
+    return;
+  }
+
+  const normalizedEmail = normalizeEmail(emailValue);
+
+  try {
+    const duplicateCheck = await pool.query(
+      'SELECT 1 FROM public.usuarios WHERE LOWER(email) = $1 LIMIT 1',
+      [normalizedEmail]
+    );
+
+    if (duplicateCheck.rowCount > 0) {
+      res.status(409).json({ error: 'E-mail já cadastrado.' });
+      return;
+    }
+
+    const client = await pool.connect();
+    let transactionActive = false;
+
+    try {
+      await client.query('BEGIN');
+      transactionActive = true;
+
+      const duplicateCheckTx = await client.query(
+        'SELECT 1 FROM public.usuarios WHERE LOWER(email) = $1 LIMIT 1',
+        [normalizedEmail]
+      );
+
+      if (duplicateCheckTx.rowCount > 0) {
+        await client.query('ROLLBACK');
+        transactionActive = false;
+        res.status(409).json({ error: 'E-mail já cadastrado.' });
+        return;
+      }
+
+      const { planId, modules } = await fetchDefaultPlanDetails(client);
+
+      const companyLookup = await client.query(
+        `SELECT id, nome_empresa, plano
+           FROM public.empresas
+          WHERE LOWER(nome_empresa) = LOWER($1)
+          LIMIT 1`,
+        [companyValue]
+      );
+
+      let companyId: number;
+      let companyName: string;
+      let companyPlanId: number | null;
+
+      if (companyLookup.rowCount > 0) {
+        const row = companyLookup.rows[0] as {
+          id?: unknown;
+          nome_empresa?: unknown;
+          plano?: unknown;
+        };
+
+        const parsedId = parseInteger(row.id);
+        if (parsedId == null) {
+          throw new Error('ID de empresa inválido retornado do banco de dados.');
+        }
+
+        companyId = parsedId;
+        companyName = typeof row.nome_empresa === 'string' ? row.nome_empresa : companyValue;
+        companyPlanId = parseInteger(row.plano);
+      } else {
+        const insertResult = await client.query(
+          `INSERT INTO public.empresas (nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        RETURNING id, nome_empresa, plano`,
+          [companyValue, null, phoneValue, normalizedEmail, planId, nameValue, true]
+        );
+
+        const inserted = insertResult.rows[0] as {
+          id?: unknown;
+          nome_empresa?: unknown;
+          plano?: unknown;
+        };
+
+        const parsedId = parseInteger(inserted.id);
+        if (parsedId == null) {
+          throw new Error('Falha ao criar a empresa.');
+        }
+
+        companyId = parsedId;
+        companyName = typeof inserted.nome_empresa === 'string' ? inserted.nome_empresa : companyValue;
+        companyPlanId = planId ?? parseInteger(inserted.plano);
+      }
+
+      const existingPerfil = await client.query(
+        `SELECT id, nome, ativo, datacriacao
+           FROM public.perfis
+          WHERE idempresa IS NOT DISTINCT FROM $1
+            AND LOWER(nome) = LOWER($2)
+          LIMIT 1`,
+        [companyId, DEFAULT_PROFILE_NAME]
+      );
+
+      let perfilId: number;
+      let perfilNome: string;
+
+      if (existingPerfil.rowCount > 0) {
+        const perfilRow = existingPerfil.rows[0] as {
+          id?: unknown;
+          nome?: unknown;
+        };
+
+        const parsedPerfilId = parseInteger(perfilRow.id);
+        if (parsedPerfilId == null) {
+          throw new Error('ID de perfil inválido retornado do banco de dados.');
+        }
+
+        perfilId = parsedPerfilId;
+        perfilNome = typeof perfilRow.nome === 'string' ? perfilRow.nome : DEFAULT_PROFILE_NAME;
+
+        await client.query('DELETE FROM public.perfil_modulos WHERE perfil_id = $1', [perfilId]);
+      } else {
+        const perfilInsert = await client.query(
+          `INSERT INTO public.perfis (nome, ativo, datacriacao, idempresa)
+           VALUES ($1, $2, NOW(), $3)
+        RETURNING id, nome`,
+          [DEFAULT_PROFILE_NAME, true, companyId]
+        );
+
+        const perfilRow = perfilInsert.rows[0] as { id?: unknown; nome?: unknown };
+        const parsedPerfilId = parseInteger(perfilRow.id);
+        if (parsedPerfilId == null) {
+          throw new Error('Falha ao criar o perfil administrador.');
+        }
+
+        perfilId = parsedPerfilId;
+        perfilNome = typeof perfilRow.nome === 'string' ? perfilRow.nome : DEFAULT_PROFILE_NAME;
+      }
+
+      if (modules.length > 0) {
+        await client.query(
+          'INSERT INTO public.perfil_modulos (perfil_id, modulo) SELECT $1, unnest($2::text[])',
+          [perfilId, modules]
+        );
+      }
+
+      const hashedPassword = hashPassword(passwordValue);
+
+      const userInsert = await client.query(
+        `INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+      RETURNING id, nome_completo, email, perfil, empresa, status, telefone, datacriacao`,
+        [
+          nameValue,
+          null,
+          normalizedEmail,
+          perfilId,
+          companyId,
+          null,
+          null,
+          true,
+          hashedPassword,
+          phoneValue,
+          null,
+          null,
+        ]
+      );
+
+      const createdUser = userInsert.rows[0];
+
+      await client.query('COMMIT');
+      transactionActive = false;
+
+      res.status(201).json({
+        user: {
+          id: createdUser?.id,
+          nome_completo: createdUser?.nome_completo,
+          email: createdUser?.email,
+          perfil: createdUser?.perfil,
+          empresa: createdUser?.empresa,
+          status: createdUser?.status,
+          telefone: createdUser?.telefone,
+          datacriacao: createdUser?.datacriacao,
+        },
+        empresa: {
+          id: companyId,
+          nome: companyName,
+          plano: companyPlanId,
+        },
+        perfil: {
+          id: perfilId,
+          nome: perfilNome,
+          modulos: modules,
+        },
+      });
+    } catch (error) {
+      if (transactionActive) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error('Falha ao reverter transação de cadastro', rollbackError);
+        }
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Erro ao registrar usuário', error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Não foi possível concluir o cadastro.' });
+    }
+  }
+};
 
 export const login = async (req: Request, res: Response) => {
   const { email, senha } = req.body as { email?: unknown; senha?: unknown };
