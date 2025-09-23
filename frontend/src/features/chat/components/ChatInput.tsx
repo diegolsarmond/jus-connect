@@ -136,7 +136,7 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
   const handleFileInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     if (file) {
-      void sendAttachment(file, file.type.startsWith("image/") ? "image" : "text");
+      void sendAttachment(file, file.type.startsWith("image/") ? "image" : "file");
       event.target.value = "";
     }
   };

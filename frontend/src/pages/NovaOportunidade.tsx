@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm, useFieldArray } from "react-hook-form";
 import { z } from "zod";
@@ -143,6 +143,46 @@ const formatPhone = (value: string): string => {
   }
 
   return `(${ddd}) ${remainder.slice(0, 4)}-${remainder.slice(4)}`;
+};
+
+const parseDateInput = (value: string | null | undefined): Date | null => {
+  if (!value) {
+    return null;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatDateInput = (date: Date): string => {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const getNextMonthDate = (date: Date): Date => {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+
+  const nextMonthStart = new Date(Date.UTC(year, month + 1, 1));
+  const lastDayNextMonth = new Date(Date.UTC(year, month + 2, 0)).getUTCDate();
+  const adjustedDay = Math.min(day, lastDayNextMonth);
+
+  return new Date(
+    Date.UTC(
+      nextMonthStart.getUTCFullYear(),
+      nextMonthStart.getUTCMonth(),
+      adjustedDay
+    )
+  );
 };
 
 const parseSituacaoOptions = (data: unknown[]): Option[] => {
@@ -315,6 +355,17 @@ export default function NovaOportunidade() {
   const faseValue = form.watch("fase");
   const formaPagamento = form.watch("forma_pagamento");
   const processoDistribuido = form.watch("processo_distribuido");
+  const dataCriacaoWatch = form.watch("data_criacao");
+  const prazoProximoWatch = form.watch("prazo_proximo");
+
+  const primeiraParcelaDate = useMemo(() => {
+    const dataCriacao = parseDateInput(dataCriacaoWatch);
+    if (!dataCriacao) {
+      return undefined;
+    }
+
+    return formatDateInput(getNextMonthDate(dataCriacao));
+  }, [dataCriacaoWatch]);
   useEffect(() => {
     if (!faseValue) return;
     const loadEtapas = async () => {
@@ -353,6 +404,27 @@ export default function NovaOportunidade() {
       form.setValue("percentual_honorarios", `${percent}%`);
     }
   }, [valorCausaWatch, valorHonorariosWatch, form]);
+
+  useEffect(() => {
+    if (formaPagamento !== "Parcelado") {
+      return;
+    }
+
+    if (!primeiraParcelaDate) {
+      return;
+    }
+
+    const prazoAtual = form.getValues("prazo_proximo") || "";
+    if (prazoAtual === primeiraParcelaDate) {
+      return;
+    }
+
+    const shouldMarkDirty = prazoAtual.length > 0;
+    form.setValue("prazo_proximo", primeiraParcelaDate, {
+      shouldDirty: shouldMarkDirty,
+      shouldTouch: shouldMarkDirty,
+    });
+  }, [formaPagamento, primeiraParcelaDate, form, prazoProximoWatch]);
 
   useEffect(() => {
     if (processoDistribuido === "sim") return;
@@ -849,7 +921,20 @@ export default function NovaOportunidade() {
                           <FormItem>
                             <FormLabel>Data da Cobrança</FormLabel>
                             <FormControl>
-                              <Input type="date" {...field} />
+                              <Input
+                                type="date"
+                                {...field}
+                                min={
+                                  formaPagamento === "Parcelado"
+                                    ? primeiraParcelaDate
+                                    : undefined
+                                }
+                                max={
+                                  formaPagamento === "Parcelado"
+                                    ? primeiraParcelaDate
+                                    : undefined
+                                }
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

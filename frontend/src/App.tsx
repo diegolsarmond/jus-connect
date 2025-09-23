@@ -23,6 +23,7 @@ import PipelineMenu from "./pages/PipelineMenu";
 import NovaOportunidade from "./pages/NovaOportunidade";
 import VisualizarOportunidade from "./pages/VisualizarOportunidade";
 import EditarOportunidade from "./pages/EditarOportunidade";
+import EditarDocumentoOportunidade from "./pages/EditarDocumentoOportunidade";
 import Agenda from "./pages/Agenda";
 import Tarefas from "./pages/Tarefas";
 import Processos from "./pages/Processos";
@@ -143,6 +144,10 @@ const App = () => (
               <Route
                 path="/pipeline/oportunidade/:id"
                 element={withModule("pipeline", <VisualizarOportunidade />)}
+              />
+              <Route
+                path="/pipeline/oportunidade/:id/documentos/:documentId/editar"
+                element={withModule("pipeline", <EditarDocumentoOportunidade />)}
               />
               <Route
                 path="/pipeline/editar-oportunidade/:id"
