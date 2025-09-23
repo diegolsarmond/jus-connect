@@ -314,6 +314,7 @@ const FinancialFlows = () => {
   const [chargeSummaries, setChargeSummaries] = useState<Record<number, AsaasCharge | null>>({});
   const [chargeStatusHistory, setChargeStatusHistory] = useState<Record<number, AsaasChargeStatus[]>>({});
   const [settleDialogFlow, setSettleDialogFlow] = useState<FlowWithDetails | null>(null);
+
   const [settleDate, setSettleDate] = useState(() => getDefaultPaymentDate());
 
   useEffect(() => {
@@ -749,6 +750,7 @@ const FinancialFlows = () => {
       return;
     }
 
+
     setSettleDialogFlow(null);
     setSettleDate(getDefaultPaymentDate());
   };
@@ -759,6 +761,7 @@ const FinancialFlows = () => {
     }
 
     settleMutation.mutate({ flowId: settleDialogFlow.normalizedId, date: settleDate });
+
   };
 
   const statusOrder: DerivedStatus[] = ['pendente', 'vencido', 'pago'];
@@ -1351,6 +1354,7 @@ const FinancialFlows = () => {
                                       ? 'Somente lançamentos cadastrados no Jus Connect podem ser marcados manualmente como pagos.'
                                       : undefined
                                   }
+
                                 >
                                   Marcar como pago
                                 </Button>

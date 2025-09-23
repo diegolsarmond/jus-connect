@@ -258,6 +258,7 @@ export function normalizeFlowId(id: Flow['id']): string | null {
     return id.toString();
   }
 
+
   if (typeof id !== 'string') {
     return null;
   }
@@ -275,6 +276,7 @@ export function normalizeFlowId(id: Flow['id']): string | null {
   }
 
   return null;
+
 }
 
 export async function settleFlow(id: Flow['id'], pagamentoData: string): Promise<Flow> {

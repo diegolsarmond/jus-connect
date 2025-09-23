@@ -34,6 +34,8 @@ import {
   type IntegrationApiKey,
 } from '@/lib/integrationApiKeys';
 import { createTemplate, getTemplate, updateTemplate } from '@/lib/templates';
+import { createSimplePdfFromHtml } from '@/lib/pdf';
+import { createDocxBlobFromHtml } from '@/lib/docx';
 import type {
   EditorJsonContent,
   EditorJsonNode,
@@ -47,7 +49,7 @@ import { EditorToolbar, type ToolbarAlignment, type ToolbarBlock, type ToolbarSt
 import { SidebarNavigation } from '@/features/document-editor/components/SidebarNavigation';
 import { MetadataModal, type MetadataFormValues } from '@/features/document-editor/components/MetadataModal';
 import { SaveButton } from '@/features/document-editor/components/SaveButton';
-import { Menu, Sparkles } from 'lucide-react';
+import { Download, FileDown, Loader2, Menu, Sparkles } from 'lucide-react';
 import { fetchClientCustomAttributeTypes } from '@/features/document-editor/api/client-custom-attributes';
 import type { ClientCustomAttributeType } from '@/features/document-editor/api/client-custom-attributes';
 
@@ -146,6 +148,17 @@ function cloneVariableMenuItems(items: VariableMenuItem[]): VariableMenuItem[] {
   }));
 }
 
+const slugifyFilename = (value: string): string => {
+  const base = value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^a-zA-Z0-9\s-]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-')
+    .toLowerCase();
+  return base.length > 0 ? base : 'documento';
+};
+
 const fontSizeMap: Record<string, string> = {
   '1': '10px',
   '2': '12px',
@@ -207,6 +220,7 @@ export default function EditorPage() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<number | null>(null);
   const [isGeneratingAiContent, setIsGeneratingAiContent] = useState(false);
+  const [downloadState, setDownloadState] = useState<'pdf' | 'docx' | null>(null);
 
   const editorSectionRef = useRef<HTMLDivElement | null>(null);
   const metadataSectionRef = useRef<HTMLDivElement | null>(null);
@@ -689,6 +703,64 @@ export default function EditorPage() {
     updateToolbarState();
   };
 
+  const handleDownload = useCallback(
+    async (format: 'pdf' | 'docx') => {
+      if (typeof window === 'undefined' || typeof document === 'undefined') {
+        toast({
+          title: 'Função disponível apenas no navegador',
+          description: 'Abra o editor em um navegador para baixar o documento.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const documentTitle = title.trim().length > 0 ? title.trim() : 'Documento';
+      const html = contentHtml && contentHtml.length > 0 ? contentHtml : '<p></p>';
+
+      setDownloadState(format);
+
+      try {
+        const blob =
+          format === 'pdf'
+            ? await createSimplePdfFromHtml(documentTitle, html)
+            : createDocxBlobFromHtml(html);
+
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${slugifyFilename(documentTitle)}.${format}`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Failed to download document', error);
+        toast({
+          title:
+            format === 'pdf'
+              ? 'Não foi possível gerar o PDF'
+              : 'Não foi possível gerar o DOCX',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Tente novamente em instantes.',
+          variant: 'destructive',
+        });
+      } finally {
+        setDownloadState(null);
+      }
+    },
+    [contentHtml, title, toast],
+  );
+
+  const handleDownloadPdf = useCallback(() => {
+    void handleDownload('pdf');
+  }, [handleDownload]);
+
+  const handleDownloadDocx = useCallback(() => {
+    void handleDownload('docx');
+  }, [handleDownload]);
+
   const clientCustomAttributes: ClientCustomAttributeType[] =
     clientCustomAttributeTypesQuery.data ?? EMPTY_CLIENT_CUSTOM_ATTRIBUTES;
   const isLoadingClientAttributes = clientCustomAttributeTypesQuery.isLoading || clientCustomAttributeTypesQuery.isFetching;
@@ -860,6 +932,34 @@ export default function EditorPage() {
                   {isLoadingAiIntegrations ? 'Carregando IA...' : 'Gerar texto com IA'}
                 </Button>
                 <InsertMenu onSelect={handleInsertVariable} items={variableMenuItems} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleDownloadPdf}
+                  disabled={downloadState === 'pdf'}
+                >
+                  {downloadState === 'pdf' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  Baixar PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleDownloadDocx}
+                  disabled={downloadState === 'docx'}
+                >
+                  {downloadState === 'docx' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileDown className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  Baixar DOCX
+                </Button>
               </div>
             </div>
             <EditorToolbar

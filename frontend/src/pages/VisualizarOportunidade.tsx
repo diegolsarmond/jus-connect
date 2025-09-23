@@ -12,6 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getApiBaseUrl } from "@/lib/api";
+import {
+  extractOpportunityDocument,
+  parseOpportunityDocumentsList,
+  type OpportunityDocument,
+} from "@/lib/opportunity-documents";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -70,11 +75,13 @@ import {
   ChevronsUpDown,
   Download,
   ExternalLink,
+  FileDown,
   FileText,
   Loader2,
   Trash,
 } from "lucide-react";
 import { createSimplePdfFromHtml } from "@/lib/pdf";
+import { createDocxBlobFromHtml } from "@/lib/docx";
 
 interface Envolvido {
   nome?: string;
@@ -274,93 +281,6 @@ const sanitizeInteractionEntries = (value: unknown): InteractionEntry[] => {
   });
 
   return entries;
-};
-
-interface OpportunityDocument {
-  id: number;
-  oportunidade_id?: number | null;
-  template_id: number | null;
-  title: string;
-  created_at: string;
-  content_html: string;
-  variables?: Record<string, unknown>;
-  metadata?: unknown;
-}
-
-const normalizeOpportunityDocuments = (payload: unknown): OpportunityDocument[] => {
-  const extractList = (): unknown[] => {
-    if (!payload) return [];
-    if (Array.isArray(payload)) return payload;
-    if (typeof payload === "object") {
-      const documents = (payload as { documents?: unknown }).documents;
-      if (Array.isArray(documents)) return documents;
-    }
-    return [];
-  };
-
-  const items = extractList();
-  return items.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const record = item as Record<string, unknown>;
-
-    const rawId = record["id"];
-    const numericId =
-      typeof rawId === "number"
-        ? rawId
-        : typeof rawId === "string"
-          ? Number.parseInt(rawId, 10)
-          : Number.NaN;
-    if (!Number.isFinite(numericId)) return [];
-
-    const rawTemplateId = record["template_id"];
-    const templateId = (() => {
-      if (typeof rawTemplateId === "number") {
-        return Number.isFinite(rawTemplateId) ? rawTemplateId : null;
-      }
-      if (typeof rawTemplateId === "string") {
-        const parsed = Number.parseInt(rawTemplateId, 10);
-        return Number.isNaN(parsed) ? null : parsed;
-      }
-      return null;
-    })();
-
-    const rawTitle = record["title"];
-    const title =
-      typeof rawTitle === "string" && rawTitle.trim().length > 0
-        ? rawTitle.trim()
-        : `Documento ${numericId}`;
-
-    const rawCreatedAt = record["created_at"];
-    const createdAt =
-      typeof rawCreatedAt === "string" && rawCreatedAt.trim().length > 0
-        ? rawCreatedAt.trim()
-        : new Date().toISOString();
-
-    const rawContent = record["content_html"];
-    const contentHtml =
-      typeof rawContent === "string" && rawContent.trim().length > 0
-        ? rawContent
-        : "<p></p>";
-
-    const rawVariables = record["variables"];
-    const variables =
-      rawVariables && typeof rawVariables === "object" && !Array.isArray(rawVariables)
-        ? (rawVariables as Record<string, unknown>)
-        : undefined;
-
-    return [
-      {
-        id: numericId,
-        oportunidade_id: (record["oportunidade_id"] as number | null | undefined) ?? null,
-        template_id: templateId,
-        title,
-        created_at: createdAt,
-        content_html: contentHtml,
-        variables,
-        metadata: record["metadata"],
-      },
-    ];
-  });
 };
 
 const slugifyFilename = (value: string): string => {
@@ -640,7 +560,7 @@ export default function VisualizarOportunidade() {
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
   const [documentActionState, setDocumentActionState] = useState<
-    { id: number; type: "download" | "open" } | null
+    { id: number; type: "download-pdf" | "download-docx" | "open" } | null
   >(null);
   const [documentToDelete, setDocumentToDelete] = useState<OpportunityDocument | null>(
     null,
@@ -721,7 +641,7 @@ export default function VisualizarOportunidade() {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = (await response.json()) as unknown;
-    return normalizeOpportunityDocuments(payload);
+    return parseOpportunityDocumentsList(payload);
   }, [apiUrl, id]);
 
   const refreshDocuments = useCallback(async () => {
@@ -754,6 +674,26 @@ export default function VisualizarOportunidade() {
     setDocumentTemplatesError(null);
     setDocumentSubmitting(false);
   };
+
+  const navigateToDocumentEditor = useCallback(
+    (doc: OpportunityDocument) => {
+      if (!id) {
+        return;
+      }
+
+      navigate(`/pipeline/oportunidade/${id}/documentos/${doc.id}/editar`, {
+        state: { document: doc },
+      });
+    },
+    [id, navigate],
+  );
+
+  const handleEditDocument = useCallback(
+    (doc: OpportunityDocument) => {
+      navigateToDocumentEditor(doc);
+    },
+    [navigateToDocumentEditor],
+  );
 
   useEffect(() => {
     if (!documentDialogOpen || documentType !== "processo") {
@@ -2379,17 +2319,22 @@ export default function VisualizarOportunidade() {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
-        const created = (await response.json()) as { title?: string } | undefined;
+        const payload = (await response.json()) as unknown;
+        const createdDocument = extractOpportunityDocument(payload);
+        if (!createdDocument) {
+          throw new Error("Resposta inválida do servidor");
+        }
         const createdTitle =
-          created && typeof created.title === "string" && created.title.trim().length > 0
-            ? created.title.trim()
+          typeof createdDocument.title === "string" && createdDocument.title.trim().length > 0
+            ? createdDocument.title.trim()
             : "Documento";
         setSnack({
           open: true,
           message: `${createdTitle} criado com sucesso`,
         });
         setDocumentDialogOpen(false);
-        await refreshDocuments();
+        void refreshDocuments();
+        navigateToDocumentEditor(createdDocument);
       } catch (error) {
         console.error(error);
         setSnack({ open: true, message: "Erro ao criar documento" });
@@ -2477,7 +2422,7 @@ export default function VisualizarOportunidade() {
 
       const blob = await createSimplePdfFromHtml(
         doc.title ?? `Documento ${doc.id}`,
-        doc.content_html ?? "<p></p>",
+        doc.content_html && doc.content_html.length > 0 ? doc.content_html : "<p></p>",
       );
       const url = URL.createObjectURL(blob);
       documentPdfUrlsRef.current.set(doc.id, url);
@@ -2518,27 +2463,48 @@ export default function VisualizarOportunidade() {
     }
   };
 
-  const handleDownloadDocument = async (doc: OpportunityDocument) => {
+  const handleDownloadDocument = async (
+    doc: OpportunityDocument,
+    format: "pdf" | "docx" = "pdf",
+  ) => {
     if (typeof document === "undefined") {
       setSnack({ open: true, message: "Função indisponível neste ambiente" });
       return;
     }
 
-    setDocumentActionState({ id: doc.id, type: "download" });
+    const actionType = format === "pdf" ? "download-pdf" : "download-docx";
+    setDocumentActionState({ id: doc.id, type: actionType });
     try {
-      const url = await ensurePdfUrl(doc);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${slugifyFilename(doc.title)}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+      if (format === "pdf") {
+        const url = await ensurePdfUrl(doc);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${slugifyFilename(doc.title)}.pdf`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      } else {
+        const html = doc.content_html && doc.content_html.length > 0 ? doc.content_html : "<p></p>";
+        const blob = createDocxBlobFromHtml(html);
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${slugifyFilename(doc.title)}.docx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error(error);
       setSnack({ open: true, message: "Erro ao baixar documento" });
     } finally {
       setDocumentActionState(null);
     }
+  };
+
+  const handleDownloadDocumentDocx = (doc: OpportunityDocument) => {
+    void handleDownloadDocument(doc, "docx");
   };
 
   const handleOpenDocumentInNewTab = async (doc: OpportunityDocument) => {
@@ -3123,9 +3089,12 @@ export default function VisualizarOportunidade() {
                             ? doc.title.trim()
                             : `Documento ${doc.id}`;
                         const createdAtText = formatDate(doc.created_at);
-                        const isDownloadLoading =
+                        const isPdfDownloadLoading =
                           documentActionState?.id === doc.id &&
-                          documentActionState?.type === "download";
+                          documentActionState?.type === "download-pdf";
+                        const isDocxDownloadLoading =
+                          documentActionState?.id === doc.id &&
+                          documentActionState?.type === "download-docx";
                         const isOpenLoading =
                           documentActionState?.id === doc.id &&
                           documentActionState?.type === "open";
@@ -3166,18 +3135,34 @@ export default function VisualizarOportunidade() {
                               <Button size="sm" variant="secondary" onClick={() => handleViewDocument(doc)}>
                                 Visualizar
                               </Button>
+                              <Button size="sm" onClick={() => handleEditDocument(doc)}>
+                                Editar
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleDownloadDocument(doc)}
-                                disabled={isDownloadLoading}
+                                disabled={isPdfDownloadLoading}
                               >
-                                {isDownloadLoading ? (
+                                {isPdfDownloadLoading ? (
                                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 ) : (
                                   <Download className="mr-2 h-4 w-4" />
                                 )}
-                                Download
+                                Baixar PDF
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadDocumentDocx(doc)}
+                                disabled={isDocxDownloadLoading}
+                              >
+                                {isDocxDownloadLoading ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <FileDown className="mr-2 h-4 w-4" />
+                                )}
+                                Baixar DOCX
                               </Button>
 
                             </div>
@@ -3545,16 +3530,33 @@ export default function VisualizarOportunidade() {
                     onClick={() => handleDownloadDocument(documentPreview)}
                     disabled={
                       documentActionState?.id === documentPreview.id &&
-                      documentActionState?.type === "download"
+                      documentActionState?.type === "download-pdf"
                     }
                   >
                     {documentActionState?.id === documentPreview.id &&
-                    documentActionState?.type === "download" ? (
+                    documentActionState?.type === "download-pdf" ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Download className="mr-2 h-4 w-4" />
                     )}
                     Baixar PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleDownloadDocumentDocx(documentPreview)}
+                    disabled={
+                      documentActionState?.id === documentPreview.id &&
+                      documentActionState?.type === "download-docx"
+                    }
+                  >
+                    {documentActionState?.id === documentPreview.id &&
+                    documentActionState?.type === "download-docx" ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileDown className="mr-2 h-4 w-4" />
+                    )}
+                    Baixar DOCX
                   </Button>
                   <Button
                     type="button"
