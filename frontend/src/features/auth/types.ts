@@ -1,10 +1,18 @@
-export type SubscriptionStatus = "active" | "trialing" | "inactive";
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "inactive"
+  | "grace_period"
+  | "past_due"
+  | "expired";
 
 export interface AuthSubscription {
   planId: number | null;
   status: SubscriptionStatus;
   startedAt: string | null;
   trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  graceEndsAt: string | null;
 }
 
 export interface AuthUser {

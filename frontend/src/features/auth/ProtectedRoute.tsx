@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { routes } from "@/config/routes";
 import { useAuth } from "./AuthProvider";
+import { evaluateSubscriptionAccess } from "./subscriptionStatus";
 
 const PLAN_SELECTION_PATH = "/meu-plano";
 
@@ -29,8 +30,8 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     return <Navigate to={routes.login} replace state={{ from: location }} />;
   }
 
-  const subscriptionStatus = user?.subscription?.status;
-  const requiresPlanSelection = !subscriptionStatus || subscriptionStatus === "inactive";
+  const { hasAccess } = evaluateSubscriptionAccess(user?.subscription ?? null);
+  const requiresPlanSelection = !hasAccess;
   const isOnPlanRoute = location.pathname.startsWith(PLAN_SELECTION_PATH);
 
   if (requiresPlanSelection && !isOnPlanRoute) {
