@@ -568,6 +568,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
     documentos_anexados,
     criado_por,
     envolvidos,
+    valor_entrada,
   } = req.body;
 
   const auth = getAuthenticatedUser(req, res);
@@ -682,6 +683,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
       qtde_parcelas,
       prazo_proximo,
       empresaId,
+      valor_entrada,
     );
     await client.query('COMMIT');
     res.status(201).json(oportunidade);
@@ -725,6 +727,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
     documentos_anexados,
     criado_por,
     envolvidos,
+    valor_entrada,
   } = req.body;
 
   let client: PoolClient | null = null;
@@ -828,6 +831,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
       qtde_parcelas,
       prazo_proximo,
       typeof oportunidade.idempresa === 'number' ? oportunidade.idempresa : null,
+      valor_entrada,
     );
 
     await client.query('COMMIT');
