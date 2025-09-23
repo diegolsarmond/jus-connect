@@ -333,8 +333,8 @@ export default function Dashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className="xl:col-span-7">
           <CardHeader>
             <CardTitle>Abertura de Processos</CardTitle>
             <CardDescription>Quantidade de processos por mês</CardDescription>
@@ -357,33 +357,58 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Distribuição por Área do Direito</CardTitle>
-            <CardDescription>Processos por área</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={mockAreaDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {mockAreaDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 xl:col-span-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Distribuição por Área do Direito</CardTitle>
+              <CardDescription>Processos por área</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={mockAreaDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, value }) => `${name}: ${value}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {mockAreaDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Crescimento de Clientes</CardTitle>
+              <CardDescription>Número total de clientes ao longo do tempo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={mockMonthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => [value, 'Clientes']} />
+                  <Line
+                    type="monotone"
+                    dataKey="clientes"
+                    stroke="hsl(var(--secondary))"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Churn and Customer Growth */}
@@ -402,29 +427,6 @@ export default function Dashboard() {
                 <Tooltip formatter={(value) => [value, 'Encerrados']} />
                 <Bar dataKey="encerrados" fill="hsl(var(--destructive))" />
               </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Crescimento de Clientes</CardTitle>
-            <CardDescription>Número total de clientes ao longo do tempo</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={mockMonthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [value, 'Clientes']} />
-                <Line
-                  type="monotone"
-                  dataKey="clientes"
-                  stroke="hsl(var(--secondary))"
-                  strokeWidth={2}
-                />
-              </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
