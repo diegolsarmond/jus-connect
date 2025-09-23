@@ -91,7 +91,7 @@ export function AgendaCalendar({
               <div
                 key={date.toString()}
                 className={cn(
-                  "h-24 border border-border rounded-lg p-1 cursor-pointer transition-all hover:bg-accent/50",
+                  "group min-h-[96px] border border-border rounded-lg p-1 cursor-pointer transition-all hover:bg-accent/50",
                   isSelected && "ring-2 ring-primary ring-offset-2",
                   isTodayDate && "bg-primary/5 border-primary/20"
                 )}
@@ -122,8 +122,13 @@ export function AgendaCalendar({
                 </div>
 
                 {/* Appointments for this day */}
-                <div className="space-y-1 overflow-hidden">
-                  {dayAppointments.slice(0, 2).map((appointment) => (
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isSelected ? "max-h-40 overflow-y-auto pr-1" : "overflow-hidden"
+                  )}
+                >
+                  {(isSelected ? dayAppointments : dayAppointments.slice(0, 2)).map((appointment) => (
                     <div
                       key={appointment.id}
                       className={cn(
@@ -135,8 +140,8 @@ export function AgendaCalendar({
                       {appointment.startTime} {appointment.title}
                     </div>
                   ))}
-                  
-                  {dayAppointments.length > 2 && (
+
+                  {!isSelected && dayAppointments.length > 2 && (
                     <div className="text-xs text-muted-foreground p-1">
                       +{dayAppointments.length - 2} mais
                     </div>
