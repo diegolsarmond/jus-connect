@@ -925,6 +925,7 @@ export default function VisualizarProcesso() {
     let cancelled = false;
 
     const fetchDocumentosPublicos = async () => {
+
       setDocumentosLoading(true);
       setDocumentosError(null);
 
@@ -933,6 +934,7 @@ export default function VisualizarProcesso() {
           getApiUrl(`processos/${processoId}/documentos-publicos`),
           { headers: { Accept: "application/json" } },
         );
+
 
         const text = await res.text();
         let json: unknown = null;
@@ -968,6 +970,7 @@ export default function VisualizarProcesso() {
 
         if (!cancelled) {
           setDocumentosPublicos(documentos);
+
         }
       } catch (fetchError) {
         const message =
@@ -977,6 +980,7 @@ export default function VisualizarProcesso() {
         if (!cancelled) {
           setDocumentosError(message);
           setDocumentosPublicos([]);
+
         }
       } finally {
         if (!cancelled) {
@@ -1079,6 +1083,7 @@ export default function VisualizarProcesso() {
           <Skeleton className="h-64 w-full rounded-xl" />
           <Skeleton className="h-64 w-full rounded-xl" />
         </div>
+
       </div>
     );
   }
@@ -1095,6 +1100,7 @@ export default function VisualizarProcesso() {
           <AlertTitle>Erro ao carregar processo</AlertTitle>
           <AlertDescription>
             {error ?? "Não foi possível encontrar os dados deste processo."}
+
           </AlertDescription>
         </Alert>
       </div>

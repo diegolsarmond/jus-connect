@@ -23,5 +23,9 @@ export const RequireModule = ({ module, children }: RequireModuleProps) => {
     return <>{children}</>;
   }
 
+  if (requiredModules.includes("meu-plano")) {
+    return <>{children}</>;
+  }
+
   return <PlanUpgradePrompt module={module} />;
 };

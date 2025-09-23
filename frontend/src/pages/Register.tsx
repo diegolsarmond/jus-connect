@@ -17,6 +17,7 @@ const Register = () => {
     name: "",
     email: "",
     company: "",
+    phone: "",
     password: "",
     confirmPassword: ""
   });
@@ -65,25 +66,15 @@ const Register = () => {
     setIsSubmitting(true);
 
     const payload = {
-      nome_completo: formData.name.trim(),
-      cpf: "",
+      name: formData.name.trim(),
       email: formData.email.trim(),
-      perfil: null,
-      empresa: null,
-      escritorio: null,
-      oab: null,
-      status: true,
-      senha: formData.password,
-      telefone: null,
-      ultimo_login: null,
-      observacoes:
-        formData.company.trim().length > 0
-          ? `Empresa informada no cadastro: ${formData.company.trim()}`
-          : null
+      company: formData.company.trim(),
+      password: formData.password,
+      phone: formData.phone.trim().length > 0 ? formData.phone.trim() : undefined
     };
 
     try {
-      const response = await fetch(getApiUrl("usuarios"), {
+      const response = await fetch(getApiUrl("auth/register"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -99,7 +90,7 @@ const Register = () => {
 
       toast({
         title: "Cadastro realizado!",
-        description: "Sua conta foi criada com sucesso."
+        description: "Sua conta foi criada com sucesso. Você já pode fazer login."
       });
       navigate(routes.login);
     } catch (error) {
@@ -181,6 +172,19 @@ const Register = () => {
                 onChange={handleInputChange}
                 placeholder="Nome da sua empresa"
                 required
+                className="border-primary/20 focus:border-primary"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telefone</Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={handleInputChange}
+                placeholder="(11) 99999-0000"
                 className="border-primary/20 focus:border-primary"
               />
             </div>
