@@ -4,14 +4,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { ChatWindow } from "./ChatWindow";
 import type { ConversationSummary, Message } from "../types";
 
-const mockFetchResponsibles = vi.fn();
 const mockFetchChatTags = vi.fn();
 
 vi.mock("../services/chatApi", async () => {
   const actual = await vi.importActual<typeof import("../services/chatApi")>("../services/chatApi");
   return {
     ...actual,
-    fetchChatResponsibles: mockFetchResponsibles,
     fetchChatTags: mockFetchChatTags,
   };
 });
@@ -49,7 +47,6 @@ describe("ChatWindow responsável selector", () => {
   let root: Root;
 
   beforeEach(() => {
-    mockFetchResponsibles.mockReset();
     mockFetchChatTags.mockReset();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -73,10 +70,6 @@ describe("ChatWindow responsável selector", () => {
   };
 
   it("renders responsible options combining the operator name and role", async () => {
-    mockFetchResponsibles.mockResolvedValue([
-      { id: "1", name: "Ana Paula", role: "Coordenadora" },
-      { id: "2", name: "Bruno Lima" },
-    ]);
     mockFetchChatTags.mockResolvedValue([]);
 
     const handleSend = vi.fn().mockResolvedValue(undefined);
@@ -94,13 +87,15 @@ describe("ChatWindow responsável selector", () => {
           onSendMessage={handleSend}
           onLoadOlder={handleLoadOlder}
           onUpdateConversation={handleUpdate}
+          responsibleOptions={[
+            { id: "1", name: "Ana Paula", role: "Coordenadora" },
+            { id: "2", name: "Bruno Lima" },
+          ]}
         />,
       );
     });
 
     await flushEffects();
-
-    expect(mockFetchResponsibles).toHaveBeenCalledTimes(1);
 
     const selectElements = Array.from(container.querySelectorAll("select"));
     const responsibleSelect = selectElements.find((element) => {

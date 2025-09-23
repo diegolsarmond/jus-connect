@@ -8,6 +8,8 @@ import {
   markConversationRead,
   setTypingState,
   updateConversation as updateConversationRequest,
+  fetchChatResponsibles,
+  type ChatResponsibleOption,
 } from "./services/chatApi";
 import type {
   ConversationSummary,
@@ -39,6 +41,8 @@ export const ChatPage = () => {
   const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(
     null,
   );
+  const [responsibleOptions, setResponsibleOptions] = useState<ChatResponsibleOption[]>([]);
+  const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastContactQueryRef = useRef<string | null>(null);
   const typingActivityRef = useRef<{ conversationId?: string; isTyping: boolean; lastSentAt: number }>({
@@ -130,18 +134,48 @@ export const ChatPage = () => {
     [conversationsQuery.data],
   );
 
-  const responsibleOptions = useMemo(() => {
+  useEffect(() => {
+    let canceled = false;
+
+    const loadResponsibles = async () => {
+      try {
+        setIsLoadingResponsibles(true);
+        const options = await fetchChatResponsibles();
+        if (!canceled) {
+          setResponsibleOptions(options);
+        }
+      } catch (error) {
+        console.error("Falha ao carregar responsáveis", error);
+      } finally {
+        if (!canceled) {
+          setIsLoadingResponsibles(false);
+        }
+      }
+    };
+
+    loadResponsibles();
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  const sidebarResponsibleOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
+    for (const option of responsibleOptions) {
+      map.set(option.id, { id: option.id, name: option.name });
+    }
     for (const conversation of conversations) {
-      if (conversation.responsible) {
-        map.set(conversation.responsible.id, {
-          id: conversation.responsible.id,
-          name: conversation.responsible.name,
-        });
+      const responsible = conversation.responsible;
+      if (!responsible) {
+        continue;
+      }
+      if (!map.has(responsible.id)) {
+        map.set(responsible.id, { id: responsible.id, name: responsible.name });
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [conversations]);
+  }, [responsibleOptions, conversations]);
 
   useEffect(() => {
     if (!selectedConversationId && conversations.length > 0) {
@@ -452,7 +486,7 @@ export const ChatPage = () => {
           searchValue={searchValue}
           onSearchChange={setSearchValue}
           responsibleFilter={responsibleFilter}
-          responsibleOptions={responsibleOptions}
+          responsibleOptions={sidebarResponsibleOptions}
           onResponsibleFilterChange={setResponsibleFilter}
           onSelectConversation={handleSelectConversation}
           onNewConversation={() => setNewConversationOpen(true)}
@@ -471,6 +505,8 @@ export const ChatPage = () => {
           isUpdatingConversation={updateConversationMutation.isPending}
           typingUsers={activeTypingUsers}
           onTypingActivity={handleTypingActivity}
+          responsibleOptions={responsibleOptions}
+          isLoadingResponsibles={isLoadingResponsibles}
         />
       </div>
       <NewConversationModal
