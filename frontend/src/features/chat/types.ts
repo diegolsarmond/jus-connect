@@ -65,6 +65,7 @@ export interface ConversationSummary {
   isPrivate?: boolean;
   internalNotes?: ConversationInternalNote[];
   participants?: ConversationParticipant[];
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ConversationLastMessage {
@@ -94,6 +95,7 @@ export interface ConversationDatasetEntry {
   isPrivate?: boolean;
   internalNotes?: ConversationInternalNote[];
   participants?: ConversationParticipant[];
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ChatDataset {

@@ -32,6 +32,14 @@ import { MessageViewport } from "./MessageViewport";
 import styles from "./ChatWindow.module.css";
 import { DeviceLinkContent } from "./DeviceLinkModal";
 import { fetchChatResponsibles, fetchChatTags, type ChatResponsibleOption } from "../services/chatApi";
+import {
+  createClienteAttribute,
+  deleteClienteAttribute,
+  fetchClienteAttributeTypes,
+  fetchClienteAttributes,
+  type ClienteAttribute,
+  type ClienteAttributeType,
+} from "../services/clientAttributesApi";
 
 const CLIENT_SUGGESTIONS = [
   "Prado & Cia Consultoria",
@@ -70,6 +78,95 @@ const getParticipantInitials = (name: string): string => {
     return name.slice(0, 2).toUpperCase();
   }
   return parts.map((part) => part[0]!.toUpperCase()).join("");
+};
+
+const parseNumericId = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    return normalized > 0 ? normalized : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      const normalized = Math.trunc(parsed);
+      return normalized > 0 ? normalized : null;
+    }
+  }
+  return null;
+};
+
+const extractLinkedClienteId = (conversation?: ConversationSummary): number | null => {
+  if (!conversation) {
+    return null;
+  }
+
+  const directCandidates: unknown[] = [];
+  const conversationRecord = conversation as Record<string, unknown>;
+  for (const key of ["clientId", "clienteId", "cliente_id", "clienteid"]) {
+    if (Object.prototype.hasOwnProperty.call(conversationRecord, key)) {
+      directCandidates.push(conversationRecord[key]);
+    }
+  }
+  for (const candidate of directCandidates) {
+    const parsed = parseNumericId(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  const metadata = conversation.metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+
+  const record = metadata as Record<string, unknown>;
+  const metadataKeys = [
+    "clienteId",
+    "cliente_id",
+    "clienteid",
+    "clientId",
+    "client_id",
+    "customerId",
+    "idCliente",
+    "id_cliente",
+    "idcliente",
+    "linkedClienteId",
+    "linkedClientId",
+  ];
+
+  for (const key of metadataKeys) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      continue;
+    }
+    const parsed = parseNumericId(record[key]);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  const nestedKeys = ["cliente", "client", "customer", "contato", "contact"];
+  for (const nestedKey of nestedKeys) {
+    const nestedValue = record[nestedKey];
+    if (!nestedValue || typeof nestedValue !== "object") {
+      continue;
+    }
+    const nestedRecord = nestedValue as Record<string, unknown>;
+    for (const key of ["id", "clienteId", "cliente_id", "clientId", "client_id"]) {
+      if (!Object.prototype.hasOwnProperty.call(nestedRecord, key)) {
+        continue;
+      }
+      const parsed = parseNumericId(nestedRecord[key]);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
 };
 
 interface ChatWindowProps {
@@ -113,8 +210,17 @@ export const ChatWindow = ({
   const [responsibleOptions, setResponsibleOptions] = useState<ChatResponsibleOption[]>([]);
   const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const [clientInput, setClientInput] = useState("");
-  const [newAttributeLabel, setNewAttributeLabel] = useState("");
+  const [selectedAttributeTypeId, setSelectedAttributeTypeId] = useState("");
   const [newAttributeValue, setNewAttributeValue] = useState("");
+  const [attributeFormError, setAttributeFormError] = useState<string | null>(null);
+  const [attributeTypes, setAttributeTypes] = useState<ClienteAttributeType[]>([]);
+  const [isLoadingAttributeTypes, setIsLoadingAttributeTypes] = useState(false);
+  const [attributeTypesError, setAttributeTypesError] = useState<string | null>(null);
+  const [clienteAttributes, setClienteAttributes] = useState<ClienteAttribute[]>([]);
+  const [isLoadingClienteAttributes, setIsLoadingClienteAttributes] = useState(false);
+  const [clienteAttributesError, setClienteAttributesError] = useState<string | null>(null);
+  const [isSavingClienteAttribute, setIsSavingClienteAttribute] = useState(false);
+  const [deletingAttributeId, setDeletingAttributeId] = useState<number | null>(null);
   const [internalNoteContent, setInternalNoteContent] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -152,6 +258,9 @@ export const ChatWindow = ({
     return `${names[0]} e mais ${names.length - 1} pessoas estão digitando...`;
   }, [typingUsers]);
   const customAttributes = conversation?.customAttributes ?? [];
+  const isClientLinked = Boolean(conversation?.isLinkedToClient && conversation?.clientName);
+  const linkedClienteId = extractLinkedClienteId(conversation);
+  const canManageClienteAttributes = Boolean(isClientLinked && linkedClienteId !== null);
   const internalNotes = conversation?.internalNotes ?? [];
   const participants = conversation?.participants ?? [];
   const visibleParticipants = participants.slice(0, MAX_VISIBLE_PARTICIPANTS);
@@ -171,13 +280,54 @@ export const ChatWindow = ({
     return Array.from(all).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [availableTags, tags]);
   const tagSelectSize = Math.min(Math.max(tagOptions.length, 4), 6);
+  const attributeTypeMap = useMemo(() => {
+    const map = new Map<number, ClienteAttributeType>();
+    for (const type of attributeTypes) {
+      map.set(type.id, type);
+    }
+    return map;
+  }, [attributeTypes]);
+  const displayedAttributes = useMemo(
+    () =>
+      canManageClienteAttributes
+        ? clienteAttributes.map((attribute) => ({
+            id: String(attribute.id),
+            label:
+              attribute.documentTypeName ||
+              attributeTypeMap.get(attribute.documentTypeId)?.name ||
+              `Tipo ${attribute.documentTypeId}`,
+            value: attribute.value,
+            source: "cliente" as const,
+            numericId: attribute.id,
+          }))
+        : customAttributes.map((attribute) => ({
+            id: attribute.id,
+            label: attribute.label,
+            value: attribute.value,
+            source: "conversation" as const,
+            numericId: undefined,
+          })),
+    [attributeTypeMap, canManageClienteAttributes, clienteAttributes, customAttributes],
+  );
 
   useEffect(() => {
     setDetailsOpen(false);
-    if (!conversation) return;
+    if (!conversation) {
+      setClientInput("");
+      setSelectedAttributeTypeId("");
+      setNewAttributeValue("");
+      setClienteAttributes([]);
+      setAttributeFormError(null);
+      setClienteAttributesError(null);
+      setInternalNoteContent("");
+      return;
+    }
     setClientInput(conversation.clientName ?? "");
-    setNewAttributeLabel("");
+    setSelectedAttributeTypeId("");
     setNewAttributeValue("");
+    setClienteAttributes([]);
+    setAttributeFormError(null);
+    setClienteAttributesError(null);
     setInternalNoteContent("");
   }, [conversation]);
 
@@ -230,6 +380,44 @@ export const ChatWindow = ({
   }, []);
 
   useEffect(() => {
+    if (!isClientLinked) {
+      setAttributeTypes([]);
+      setAttributeTypesError(null);
+      return;
+    }
+
+    let canceled = false;
+    const loadAttributeTypes = async () => {
+      try {
+        setIsLoadingAttributeTypes(true);
+        const types = await fetchClienteAttributeTypes();
+        if (!canceled) {
+          setAttributeTypes(types);
+          setAttributeTypesError(null);
+        }
+      } catch (error) {
+        if (!canceled) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Não foi possível carregar os tipos de atributos.";
+          setAttributeTypesError(message);
+          setAttributeTypes([]);
+        }
+      } finally {
+        if (!canceled) {
+          setIsLoadingAttributeTypes(false);
+        }
+      }
+    };
+
+    loadAttributeTypes();
+    return () => {
+      canceled = true;
+    };
+  }, [isClientLinked]);
+
+  useEffect(() => {
     if (!conversation?.responsible) {
       return;
     }
@@ -271,6 +459,44 @@ export const ChatWindow = ({
       return Array.from(merged).sort((a, b) => a.localeCompare(b, "pt-BR"));
     });
   }, [conversation?.tags]);
+
+  useEffect(() => {
+    if (!canManageClienteAttributes || !linkedClienteId) {
+      setClienteAttributes([]);
+      setClienteAttributesError(null);
+      setIsLoadingClienteAttributes(false);
+      return;
+    }
+
+    let canceled = false;
+    const loadClienteAttributes = async () => {
+      try {
+        setIsLoadingClienteAttributes(true);
+        const attributes = await fetchClienteAttributes(linkedClienteId);
+        if (!canceled) {
+          setClienteAttributes(attributes);
+          setClienteAttributesError(null);
+        }
+      } catch (error) {
+        if (!canceled) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Não foi possível carregar os atributos do cliente.";
+          setClienteAttributesError(message);
+        }
+      } finally {
+        if (!canceled) {
+          setIsLoadingClienteAttributes(false);
+        }
+      }
+    };
+
+    loadClienteAttributes();
+    return () => {
+      canceled = true;
+    };
+  }, [canManageClienteAttributes, linkedClienteId, conversation?.id]);
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -398,23 +624,86 @@ export const ChatWindow = ({
   const handleAttributeSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
     if (!conversation) return;
-    const label = newAttributeLabel.trim();
-    const value = newAttributeValue.trim();
-    if (!label || !value) return;
-    const nextAttributes = [
-      ...customAttributes,
-      { id: createId(), label, value },
-    ];
-    await runUpdate({ customAttributes: nextAttributes });
-    setNewAttributeLabel("");
-    setNewAttributeValue("");
+
+    if (!canManageClienteAttributes || !linkedClienteId) {
+      setAttributeFormError(
+        "Vincule esta conversa a um cliente para adicionar atributos personalizados.",
+      );
+      return;
+    }
+
+    const trimmedValue = newAttributeValue.trim();
+    if (!selectedAttributeTypeId) {
+      setAttributeFormError("Selecione um tipo de atributo.");
+      return;
+    }
+
+    if (!trimmedValue) {
+      setAttributeFormError("Informe um valor para o atributo.");
+      return;
+    }
+
+    const numericTypeId = Number(selectedAttributeTypeId);
+    if (!Number.isFinite(numericTypeId)) {
+      setAttributeFormError("Tipo de atributo inválido.");
+      return;
+    }
+
+    try {
+      setAttributeFormError(null);
+      setIsSavingClienteAttribute(true);
+      const created = await createClienteAttribute(linkedClienteId, numericTypeId, trimmedValue);
+      setClienteAttributes((prev) => {
+        const next = [...prev.filter((item) => item.id !== created.id), created];
+        next.sort((a, b) => a.documentTypeName.localeCompare(b.documentTypeName, "pt-BR"));
+        return next;
+      });
+      setClienteAttributesError(null);
+      setSelectedAttributeTypeId("");
+      setNewAttributeValue("");
+    } catch (error) {
+      setAttributeFormError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível adicionar o atributo. Tente novamente.",
+      );
+    } finally {
+      setIsSavingClienteAttribute(false);
+    }
   };
 
   const handleRemoveAttribute = async (attributeId: string) => {
     if (!conversation) return;
-    await runUpdate({
-      customAttributes: customAttributes.filter((attribute) => attribute.id !== attributeId),
-    });
+
+    if (!canManageClienteAttributes || !linkedClienteId) {
+      setAttributeFormError(
+        "Vincule esta conversa a um cliente para remover atributos personalizados.",
+      );
+      return;
+    }
+
+    const attribute = clienteAttributes.find((item) => String(item.id) === attributeId);
+    const numericId = attribute?.id ?? parseNumericId(attributeId);
+    if (!numericId) {
+      setAttributeFormError("Não foi possível identificar o atributo selecionado.");
+      return;
+    }
+
+    try {
+      setAttributeFormError(null);
+      setDeletingAttributeId(numericId);
+      await deleteClienteAttribute(linkedClienteId, numericId);
+      setClienteAttributes((prev) => prev.filter((item) => item.id !== numericId));
+      setClienteAttributesError(null);
+    } catch (error) {
+      setAttributeFormError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível remover o atributo. Tente novamente.",
+      );
+    } finally {
+      setDeletingAttributeId(null);
+    }
   };
 
   const handleTogglePrivate = async () => {
@@ -469,8 +758,6 @@ export const ChatWindow = ({
   }
 
   const detailsPanelId = `chat-details-${conversation.id}`;
-  const isClientLinked = Boolean(conversation?.isLinkedToClient && conversation?.clientName);
-
   return (
     <div
       className={styles.wrapper}
@@ -783,56 +1070,145 @@ export const ChatWindow = ({
 
           <div className={styles.metadataGroup}>
             <span className={styles.metadataLabel}>Atributos personalizados</span>
-            {customAttributes.length === 0 ? (
-              <p className={styles.emptyHint}>Nenhum atributo cadastrado.</p>
+            {canManageClienteAttributes ? (
+              <>
+                {clienteAttributesError && (
+                  <p className={styles.attributeError}>{clienteAttributesError}</p>
+                )}
+                {isLoadingClienteAttributes ? (
+                  <p className={styles.attributeStatus}>Carregando atributos do cliente…</p>
+                ) : displayedAttributes.length === 0 ? (
+                  <p className={styles.emptyHint}>Nenhum atributo cadastrado para o cliente.</p>
+                ) : (
+                  <ul className={styles.attributeList}>
+                    {displayedAttributes.map((attribute) => {
+                      const isDeleting =
+                        attribute.source === "cliente" &&
+                        deletingAttributeId === attribute.numericId;
+                      return (
+                        <li key={attribute.id}>
+                          <div>
+                            <strong>{attribute.label}</strong>
+                            <span>{attribute.value}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttribute(attribute.id)}
+                            aria-label={`Remover atributo ${attribute.label}`}
+                            disabled={
+                              !canManageClienteAttributes ||
+                              isUpdatingConversation ||
+                              isSavingClienteAttribute ||
+                              isLoadingClienteAttributes ||
+                              isDeleting
+                            }
+                          >
+                            <X size={12} aria-hidden="true" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <form onSubmit={handleAttributeSubmit} className={styles.attributeForm}>
+                  <select
+                    className={styles.attributeSelect}
+                    value={selectedAttributeTypeId}
+                    onChange={(event) => {
+                      setSelectedAttributeTypeId(event.target.value);
+                      setAttributeFormError(null);
+                    }}
+                    disabled={
+                      isSavingClienteAttribute ||
+                      isUpdatingConversation ||
+                      isLoadingAttributeTypes ||
+                      attributeTypes.length === 0
+                    }
+                    aria-label="Tipo de atributo do cliente"
+                  >
+                    <option value="">Selecione um tipo de atributo</option>
+                    {attributeTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={newAttributeValue}
+                    onChange={(event) => {
+                      setNewAttributeValue(event.target.value);
+                      if (attributeFormError) {
+                        setAttributeFormError(null);
+                      }
+                    }}
+                    placeholder="Valor"
+                    aria-label="Valor do atributo"
+                    disabled={isSavingClienteAttribute || isUpdatingConversation}
+                  />
+                  <button
+                    type="submit"
+                    disabled={
+                      isSavingClienteAttribute ||
+                      isUpdatingConversation ||
+                      isLoadingClienteAttributes ||
+                      selectedAttributeTypeId === "" ||
+                      newAttributeValue.trim().length === 0 ||
+                      attributeTypes.length === 0
+                    }
+                  >
+                    Adicionar atributo
+                  </button>
+                </form>
+                {isLoadingAttributeTypes && (
+                  <span className={styles.attributeStatus}>Carregando tipos de atributo…</span>
+                )}
+                {attributeTypesError && (
+                  <p className={styles.attributeError}>{attributeTypesError}</p>
+                )}
+                {!isLoadingAttributeTypes &&
+                  attributeTypes.length === 0 &&
+                  !attributeTypesError && (
+                    <p className={styles.attributeStatus}>
+                      Nenhum tipo de atributo disponível. Cadastre tipos de documento para o cliente.
+                    </p>
+                  )}
+                {attributeFormError && (
+                  <p className={styles.attributeError}>{attributeFormError}</p>
+                )}
+              </>
             ) : (
-              <ul className={styles.attributeList}>
-                {customAttributes.map((attribute) => (
-                  <li key={attribute.id}>
-                    <div>
-                      <strong>{attribute.label}</strong>
-                      <span>{attribute.value}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAttribute(attribute.id)}
-                      aria-label={`Remover atributo ${attribute.label}`}
-                      disabled={isUpdatingConversation}
-                    >
-                      <X size={12} aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {displayedAttributes.length === 0 ? (
+                  <p className={styles.emptyHint}>Nenhum atributo cadastrado.</p>
+                ) : (
+                  <ul className={styles.attributeList}>
+                    {displayedAttributes.map((attribute) => (
+                      <li key={attribute.id}>
+                        <div>
+                          <strong>{attribute.label}</strong>
+                          <span>{attribute.value}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttribute(attribute.id)}
+                          aria-label={`Remover atributo ${attribute.label}`}
+                          disabled
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className={styles.attributeStatus}>
+                  Vincule esta conversa a um cliente para gerenciar atributos personalizados.
+                </p>
+                {attributeFormError && (
+                  <p className={styles.attributeError}>{attributeFormError}</p>
+                )}
+              </>
             )}
-            <form onSubmit={handleAttributeSubmit} className={styles.attributeForm}>
-              <input
-                type="text"
-                value={newAttributeLabel}
-                onChange={(event) => setNewAttributeLabel(event.target.value)}
-                placeholder="Nome do atributo"
-                aria-label="Nome do atributo"
-                disabled={isUpdatingConversation}
-              />
-              <input
-                type="text"
-                value={newAttributeValue}
-                onChange={(event) => setNewAttributeValue(event.target.value)}
-                placeholder="Valor"
-                aria-label="Valor do atributo"
-                disabled={isUpdatingConversation}
-              />
-              <button
-                type="submit"
-                disabled={
-                  isUpdatingConversation ||
-                  newAttributeLabel.trim().length === 0 ||
-                  newAttributeValue.trim().length === 0
-                }
-              >
-                Adicionar atributo
-              </button>
-            </form>
           </div>
 
           <div className={styles.metadataGroup}>
