@@ -77,7 +77,7 @@ class ProjudiNotificationProvider {
         const created = [];
         for (const payload of payloads) {
             for (const alert of payload.alerts) {
-                const notification = this.publish({
+                const notification = await this.publish({
                     userId: payload.userId,
                     title: buildNotificationTitle(alert),
                     message: buildNotificationMessage(alert),

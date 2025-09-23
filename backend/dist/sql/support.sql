@@ -2,15 +2,26 @@ CREATE TABLE IF NOT EXISTS support_requests (
   id SERIAL PRIMARY KEY,
   subject TEXT NOT NULL,
   description TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed', 'cancelled')),
+  requester_id INTEGER,
   requester_name TEXT,
   requester_email TEXT,
+  support_agent_id INTEGER,
+  support_agent_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE support_requests ADD COLUMN IF NOT EXISTS requester_id INTEGER;
+ALTER TABLE support_requests ADD COLUMN IF NOT EXISTS requester_name TEXT;
+ALTER TABLE support_requests ADD COLUMN IF NOT EXISTS requester_email TEXT;
+ALTER TABLE support_requests ADD COLUMN IF NOT EXISTS support_agent_id INTEGER;
+ALTER TABLE support_requests ADD COLUMN IF NOT EXISTS support_agent_name TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_support_requests_status ON support_requests (status);
 CREATE INDEX IF NOT EXISTS idx_support_requests_created_at ON support_requests (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_support_requests_requester ON support_requests (requester_id);
+CREATE INDEX IF NOT EXISTS idx_support_requests_support_agent ON support_requests (support_agent_id);
 
 CREATE TABLE IF NOT EXISTS support_request_messages (
   id SERIAL PRIMARY KEY,

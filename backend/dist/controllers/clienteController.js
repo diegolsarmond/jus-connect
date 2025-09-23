@@ -6,6 +6,33 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteCliente = exports.updateCliente = exports.createCliente = exports.countClientesAtivos = exports.getClienteById = exports.listClientes = void 0;
 const db_1 = __importDefault(require("../services/db"));
 const authUser_1 = require("../utils/authUser");
+const asaasCustomerService_1 = __importDefault(require("../services/asaasCustomerService"));
+const asaasCustomerService = new asaasCustomerService_1.default();
+const DEFAULT_ASAAS_STATE = {
+    integrationActive: false,
+    integrationApiKeyId: null,
+    status: 'inactive',
+    customerId: null,
+    syncedAt: null,
+    lastPayload: null,
+    errorMessage: null,
+};
+const triggerAsaasSync = (clienteId, payload) => {
+    const runSync = async () => {
+        try {
+            await asaasCustomerService.updateFromLocal(clienteId, payload);
+        }
+        catch (error) {
+            console.error('Falha ao sincronizar cliente no Asaas:', error);
+        }
+    };
+    if (typeof setImmediate === 'function') {
+        setImmediate(runSync);
+    }
+    else {
+        void Promise.resolve().then(runSync);
+    }
+};
 const listClientes = async (req, res) => {
     try {
         if (!req.auth) {
@@ -108,7 +135,32 @@ const createCliente = async (req, res) => {
             ativo,
             empresaId,
         ]);
-        res.status(201).json(result.rows[0]);
+        const createdCliente = result.rows[0];
+        const syncPayload = {
+            nome,
+            tipo,
+            documento: documentoLimpo,
+            email,
+            telefone: telefoneLimpo,
+            cep,
+            rua,
+            numero,
+            complemento,
+            bairro,
+            cidade,
+            uf,
+        };
+        let asaasIntegration = { ...DEFAULT_ASAAS_STATE };
+        try {
+            asaasIntegration = await asaasCustomerService.ensureCustomer(createdCliente.id);
+            if (asaasIntegration.integrationActive) {
+                triggerAsaasSync(createdCliente.id, syncPayload);
+            }
+        }
+        catch (syncError) {
+            console.error('Falha ao preparar sincronização com Asaas:', syncError);
+        }
+        res.status(201).json({ ...createdCliente, asaasIntegration });
     }
     catch (error) {
         console.error(error);
@@ -156,7 +208,32 @@ const updateCliente = async (req, res) => {
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Cliente não encontrado' });
         }
-        res.json(result.rows[0]);
+        const updatedCliente = result.rows[0];
+        const syncPayload = {
+            nome,
+            tipo,
+            documento: documentoLimpo,
+            email,
+            telefone: telefoneLimpo,
+            cep,
+            rua,
+            numero,
+            complemento,
+            bairro,
+            cidade,
+            uf,
+        };
+        let asaasIntegration = { ...DEFAULT_ASAAS_STATE };
+        try {
+            asaasIntegration = await asaasCustomerService.ensureCustomer(updatedCliente.id);
+            if (asaasIntegration.integrationActive) {
+                triggerAsaasSync(updatedCliente.id, syncPayload);
+            }
+        }
+        catch (syncError) {
+            console.error('Falha ao preparar sincronização com Asaas:', syncError);
+        }
+        res.json({ ...updatedCliente, asaasIntegration });
     }
     catch (error) {
         console.error(error);

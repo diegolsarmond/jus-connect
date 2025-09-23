@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleWahaWebhook = handleWahaWebhook;
 const chatService_1 = __importDefault(require("../services/chatService"));
+const realtime_1 = require("../realtime");
 const chatService = new chatService_1.default();
 const MESSAGE_EVENTS = new Set([
     'message',
@@ -736,11 +737,13 @@ async function handleMessageEvent(event) {
                 timestamp: parsed.timestamp,
                 attachments: parsed.attachments,
             };
-            if (parsed.fromMe) {
-                await chatService.recordOutgoingMessage(recordInput);
-            }
-            else {
-                await chatService.recordIncomingMessage(recordInput);
+            const message = parsed.fromMe
+                ? await chatService.recordOutgoingMessage(recordInput)
+                : await chatService.recordIncomingMessage(recordInput);
+            const conversation = await chatService.getConversationDetails(parsed.conversationId);
+            (0, realtime_1.publishMessageCreated)(message);
+            if (conversation) {
+                (0, realtime_1.publishConversationUpdate)(conversation);
             }
             processed += 1;
         }
@@ -777,9 +780,12 @@ async function handleStatusEvent(event) {
             continue;
         }
         try {
-            const updated = await chatService.updateMessageStatusByExternalId(externalId, status);
-            if (updated) {
-                processed += 1;
+            const updates = await chatService.updateMessageStatusByExternalId(externalId, status);
+            if (updates.length > 0) {
+                processed += updates.length;
+                for (const entry of updates) {
+                    (0, realtime_1.publishMessageStatusUpdate)(entry);
+                }
             }
         }
         catch (error) {

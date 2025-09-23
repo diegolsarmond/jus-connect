@@ -30,7 +30,7 @@ const router = (0, express_1.Router)();
  *         name: status
  *         schema:
  *           type: string
- *           enum: [open, in_progress, resolved, closed]
+ *           enum: [open, in_progress, resolved, closed, cancelled]
  *       - in: query
  *         name: search
  *         schema:
@@ -66,7 +66,7 @@ router.get('/support', supportController_1.listSupportRequests);
  *                 type: string
  *               status:
  *                 type: string
- *                 enum: [open, in_progress, resolved, closed]
+ *                 enum: [open, in_progress, resolved, closed, cancelled]
  *     responses:
  *       201:
  *         description: Solicitação criada
@@ -184,7 +184,7 @@ router.post('/support/:id/messages', supportController_1.createSupportRequestMes
  *                 type: string
  *               status:
  *                 type: string
- *                 enum: [open, in_progress, resolved, closed]
+ *                 enum: [open, in_progress, resolved, closed, cancelled]
  *     responses:
  *       200:
  *         description: Solicitação atualizada

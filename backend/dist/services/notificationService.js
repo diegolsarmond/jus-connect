@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationNotFoundError = void 0;
+exports.__setNotificationDb = __setNotificationDb;
 exports.listNotifications = listNotifications;
 exports.getNotification = getNotification;
 exports.createNotification = createNotification;
@@ -9,11 +13,13 @@ exports.markNotificationAsUnread = markNotificationAsUnread;
 exports.markAllNotificationsAsRead = markAllNotificationsAsRead;
 exports.deleteNotification = deleteNotification;
 exports.getUnreadCount = getUnreadCount;
+exports.getUnreadCountByCategory = getUnreadCountByCategory;
 exports.getNotificationPreferences = getNotificationPreferences;
 exports.updateNotificationPreferences = updateNotificationPreferences;
 exports.clearNotifications = clearNotifications;
 exports.clearPreferences = clearPreferences;
 exports.__resetNotificationState = __resetNotificationState;
+const db_1 = __importDefault(require("./db"));
 class NotificationNotFoundError extends Error {
     constructor(message = 'Notification not found') {
         super(message);
@@ -21,11 +27,62 @@ class NotificationNotFoundError extends Error {
     }
 }
 exports.NotificationNotFoundError = NotificationNotFoundError;
-const notificationsStore = new Map();
-const preferenceStore = new Map();
-let notificationIdCounter = 1;
-function nextNotificationId() {
-    return `ntf-${notificationIdCounter++}`;
+const NOTIFICATION_COLUMNS = `
+  id,
+  user_id,
+  category,
+  type,
+  title,
+  message,
+  metadata,
+  action_url,
+  read,
+  created_at,
+  read_at
+`;
+let database = db_1.default;
+function ensureStringDate(value) {
+    if (!value) {
+        return undefined;
+    }
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return undefined;
+    }
+    return parsed.toISOString();
+}
+function formatNotificationId(id) {
+    return `ntf-${id}`;
+}
+function parseNotificationId(value) {
+    if (!value) {
+        return null;
+    }
+    const trimmed = value.trim();
+    const match = trimmed.match(/^ntf-(\d+)$/i);
+    if (match) {
+        return Number.parseInt(match[1] ?? '', 10);
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+function mapNotificationRow(row) {
+    return {
+        id: formatNotificationId(Number(row.id)),
+        userId: row.user_id,
+        category: row.category,
+        type: row.type ?? 'info',
+        title: row.title,
+        message: row.message,
+        metadata: row.metadata ?? undefined,
+        actionUrl: row.action_url ?? undefined,
+        read: Boolean(row.read),
+        createdAt: ensureStringDate(row.created_at) ?? new Date().toISOString(),
+        readAt: ensureStringDate(row.read_at) ?? undefined,
+    };
 }
 function createDefaultPreferences() {
     return {
@@ -54,41 +111,13 @@ function createDefaultPreferences() {
         },
     };
 }
-function getOrCreateNotificationList(userId) {
-    let notifications = notificationsStore.get(userId);
-    if (!notifications) {
-        notifications = [];
-        notificationsStore.set(userId, notifications);
-    }
-    return notifications;
-}
-function getOrCreatePreferences(userId) {
-    let preferences = preferenceStore.get(userId);
-    if (!preferences) {
-        preferences = createDefaultPreferences();
-        preferenceStore.set(userId, preferences);
-    }
-    return preferences;
-}
-function cloneNotification(notification) {
-    return {
-        ...notification,
-        metadata: notification.metadata ? { ...notification.metadata } : undefined,
-    };
-}
-function cloneNotificationList(notifications) {
-    return notifications.map(cloneNotification);
-}
-function clonePreferences(preferences) {
-    return {
-        email: { ...preferences.email },
-        push: { ...preferences.push },
-        sms: { ...preferences.sms },
-        frequency: { ...preferences.frequency },
-    };
-}
 function mergePreferences(base, updates) {
-    const merged = clonePreferences(base);
+    const merged = {
+        email: { ...base.email },
+        push: { ...base.push },
+        sms: { ...base.sms },
+        frequency: { ...base.frequency },
+    };
     if (updates.email) {
         for (const [key, value] of Object.entries(updates.email)) {
             if (typeof value === 'boolean') {
@@ -119,29 +148,51 @@ function mergePreferences(base, updates) {
     }
     return merged;
 }
-function listNotifications(userId, options = {}) {
-    const notifications = getOrCreateNotificationList(userId);
-    let result = notifications;
+function __setNotificationDb(queryable) {
+    database = queryable;
+}
+async function listNotifications(userId, options = {}) {
+    const conditions = ['user_id = $1'];
+    const params = [userId];
     if (options.category) {
-        result = result.filter((notification) => notification.category === options.category);
+        conditions.push(`category = $${params.length + 1}`);
+        params.push(options.category);
     }
     if (options.onlyUnread) {
-        result = result.filter((notification) => !notification.read);
+        conditions.push('read IS FALSE');
     }
-    if (typeof options.limit === 'number') {
-        result = result.slice(0, Math.max(options.limit, 0));
+    let limitClause = '';
+    if (typeof options.limit === 'number' && options.limit >= 0) {
+        params.push(options.limit);
+        limitClause += ` LIMIT $${params.length}`;
     }
-    return cloneNotificationList(result);
+    if (typeof options.offset === 'number' && options.offset > 0) {
+        params.push(options.offset);
+        limitClause += ` OFFSET $${params.length}`;
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const result = await database.query(`SELECT ${NOTIFICATION_COLUMNS}
+       FROM notifications
+      ${whereClause}
+      ORDER BY created_at DESC, id DESC${limitClause}`, params);
+    return result.rows.map((row) => mapNotificationRow(row));
 }
-function getNotification(userId, notificationId) {
-    const notifications = getOrCreateNotificationList(userId);
-    const notification = notifications.find((item) => item.id === notificationId);
-    if (!notification) {
+async function getNotification(userId, notificationId) {
+    const numericId = parseNotificationId(notificationId);
+    if (!numericId) {
         throw new NotificationNotFoundError();
     }
-    return cloneNotification(notification);
+    const result = await database.query(`SELECT ${NOTIFICATION_COLUMNS}
+       FROM notifications
+      WHERE id = $1
+        AND user_id = $2
+      LIMIT 1`, [numericId, userId]);
+    if (result.rowCount === 0) {
+        throw new NotificationNotFoundError();
+    }
+    return mapNotificationRow(result.rows[0]);
 }
-function createNotification(input) {
+async function createNotification(input) {
     const { userId, title, message, category, metadata, actionUrl } = input;
     const type = input.type ?? 'info';
     if (!userId) {
@@ -150,95 +201,135 @@ function createNotification(input) {
     if (!title || !message || !category) {
         throw new Error('title, message and category are required');
     }
-    const notifications = getOrCreateNotificationList(userId);
-    const notification = {
-        id: nextNotificationId(),
-        userId,
-        title,
-        message,
-        category,
-        type,
-        read: false,
-        createdAt: new Date().toISOString(),
-        actionUrl,
-        metadata: metadata ? { ...metadata } : undefined,
-    };
-    notifications.unshift(notification);
-    return cloneNotification(notification);
+    const result = await database.query(`INSERT INTO notifications (
+       user_id,
+       category,
+       type,
+       title,
+       message,
+       metadata,
+       action_url
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING ${NOTIFICATION_COLUMNS}`, [userId, category, type, title, message, metadata ?? null, actionUrl ?? null]);
+    return mapNotificationRow(result.rows[0]);
 }
-function markNotificationAsRead(userId, notificationId) {
-    const notifications = getOrCreateNotificationList(userId);
-    const notification = notifications.find((item) => item.id === notificationId);
-    if (!notification) {
+async function markNotificationAsRead(userId, notificationId) {
+    const numericId = parseNotificationId(notificationId);
+    if (!numericId) {
         throw new NotificationNotFoundError();
     }
-    if (!notification.read) {
-        notification.read = true;
-        notification.readAt = new Date().toISOString();
-    }
-    return cloneNotification(notification);
-}
-function markNotificationAsUnread(userId, notificationId) {
-    const notifications = getOrCreateNotificationList(userId);
-    const notification = notifications.find((item) => item.id === notificationId);
-    if (!notification) {
+    const result = await database.query(`UPDATE notifications
+        SET read = TRUE,
+            read_at = COALESCE(read_at, NOW())
+      WHERE id = $1
+        AND user_id = $2
+      RETURNING ${NOTIFICATION_COLUMNS}`, [numericId, userId]);
+    if (result.rowCount === 0) {
         throw new NotificationNotFoundError();
     }
-    if (notification.read) {
-        notification.read = false;
-        delete notification.readAt;
-    }
-    return cloneNotification(notification);
+    return mapNotificationRow(result.rows[0]);
 }
-function markAllNotificationsAsRead(userId) {
-    const notifications = getOrCreateNotificationList(userId);
-    const timestamp = new Date().toISOString();
-    notifications.forEach((notification) => {
-        if (!notification.read) {
-            notification.read = true;
-            notification.readAt = timestamp;
-        }
-    });
-    return cloneNotificationList(notifications);
-}
-function deleteNotification(userId, notificationId) {
-    const notifications = getOrCreateNotificationList(userId);
-    const index = notifications.findIndex((item) => item.id === notificationId);
-    if (index === -1) {
+async function markNotificationAsUnread(userId, notificationId) {
+    const numericId = parseNotificationId(notificationId);
+    if (!numericId) {
         throw new NotificationNotFoundError();
     }
-    notifications.splice(index, 1);
+    const result = await database.query(`UPDATE notifications
+        SET read = FALSE,
+            read_at = NULL
+      WHERE id = $1
+        AND user_id = $2
+      RETURNING ${NOTIFICATION_COLUMNS}`, [numericId, userId]);
+    if (result.rowCount === 0) {
+        throw new NotificationNotFoundError();
+    }
+    return mapNotificationRow(result.rows[0]);
 }
-function getUnreadCount(userId) {
-    const notifications = getOrCreateNotificationList(userId);
-    return notifications.reduce((total, notification) => total + (notification.read ? 0 : 1), 0);
+async function markAllNotificationsAsRead(userId) {
+    await database.query(`UPDATE notifications
+        SET read = TRUE,
+            read_at = COALESCE(read_at, NOW())
+      WHERE user_id = $1
+        AND read IS FALSE`, [userId]);
+    const result = await database.query(`SELECT ${NOTIFICATION_COLUMNS}
+       FROM notifications
+      WHERE user_id = $1
+      ORDER BY created_at DESC, id DESC`, [userId]);
+    return result.rows.map((row) => mapNotificationRow(row));
 }
-function getNotificationPreferences(userId) {
-    const preferences = getOrCreatePreferences(userId);
-    return clonePreferences(preferences);
+async function deleteNotification(userId, notificationId) {
+    const numericId = parseNotificationId(notificationId);
+    if (!numericId) {
+        throw new NotificationNotFoundError();
+    }
+    const result = await database.query('DELETE FROM notifications WHERE id = $1 AND user_id = $2', [numericId, userId]);
+    if (result.rowCount === 0) {
+        throw new NotificationNotFoundError();
+    }
 }
-function updateNotificationPreferences(userId, updates) {
-    const current = getOrCreatePreferences(userId);
+async function getUnreadCount(userId, options = {}) {
+    const params = [userId];
+    const conditions = ['user_id = $1', 'read IS FALSE'];
+    if (options.category) {
+        params.push(options.category);
+        conditions.push(`category = $${params.length}`);
+    }
+    const result = await database.query(`SELECT COUNT(*)::int AS count
+       FROM notifications
+      WHERE ${conditions.join(' AND ')}`, params);
+    const countValue = result.rows[0]?.count;
+    return typeof countValue === 'number'
+        ? countValue
+        : Number.parseInt(String(countValue ?? '0'), 10) || 0;
+}
+async function getUnreadCountByCategory(userId) {
+    const result = await database.query(`SELECT category, COUNT(*)::int AS count
+       FROM notifications
+      WHERE user_id = $1
+        AND read IS FALSE
+      GROUP BY category`, [userId]);
+    const counts = {};
+    for (const row of result.rows) {
+        const category = String(row.category ?? '');
+        const countValue = row.count;
+        const numericCount = typeof countValue === 'number'
+            ? countValue
+            : Number.parseInt(String(countValue ?? '0'), 10) || 0;
+        counts[category] = numericCount;
+    }
+    return counts;
+}
+async function getNotificationPreferences(userId) {
+    const result = await database.query('SELECT preferences FROM notification_preferences WHERE user_id = $1', [userId]);
+    if (result.rowCount > 0) {
+        return result.rows[0].preferences;
+    }
+    const defaults = createDefaultPreferences();
+    await database.query('INSERT INTO notification_preferences (user_id, preferences) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING', [userId, defaults]);
+    return defaults;
+}
+async function updateNotificationPreferences(userId, updates) {
+    const current = await getNotificationPreferences(userId);
     const merged = mergePreferences(current, updates);
-    preferenceStore.set(userId, merged);
-    return clonePreferences(merged);
+    await database.query('UPDATE notification_preferences SET preferences = $2 WHERE user_id = $1', [userId, merged]);
+    return merged;
 }
-function clearNotifications(userId) {
+async function clearNotifications(userId) {
     if (userId) {
-        notificationsStore.delete(userId);
+        await database.query('DELETE FROM notifications WHERE user_id = $1', [userId]);
         return;
     }
-    notificationsStore.clear();
-    notificationIdCounter = 1;
+    await database.query('DELETE FROM notifications');
 }
-function clearPreferences(userId) {
+async function clearPreferences(userId) {
     if (userId) {
-        preferenceStore.delete(userId);
+        await database.query('DELETE FROM notification_preferences WHERE user_id = $1', [userId]);
         return;
     }
-    preferenceStore.clear();
+    await database.query('DELETE FROM notification_preferences');
 }
-function __resetNotificationState() {
-    clearNotifications();
-    clearPreferences();
+async function __resetNotificationState() {
+    await database.query('TRUNCATE notifications RESTART IDENTITY');
+    await database.query('TRUNCATE notification_preferences RESTART IDENTITY');
 }

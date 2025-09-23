@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deletePerfil = exports.updatePerfil = exports.createPerfil = exports.listPerfilModules = exports.listPerfis = void 0;
 const db_1 = __importDefault(require("../services/db"));
 const modules_1 = require("../constants/modules");
+const authUser_1 = require("../utils/authUser");
 const formatPerfilRow = (row) => ({
     id: row.id,
     nome: row.nome,
@@ -30,8 +31,19 @@ const parsePerfilId = (value) => {
     }
     return id;
 };
-const listPerfis = async (_req, res) => {
+const listPerfis = async (req, res) => {
     try {
+        if (!req.auth) {
+            return res.status(401).json({ error: 'Token inválido.' });
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(req.auth.userId);
+        if (!empresaLookup.success) {
+            return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            return res.json([]);
+        }
         const result = await db_1.default.query(`SELECT p.id,
               p.nome,
               p.ativo,
@@ -42,8 +54,9 @@ const listPerfis = async (_req, res) => {
               ) AS modulos
          FROM public.perfis p
     LEFT JOIN public.perfil_modulos pm ON pm.perfil_id = p.id
+        WHERE p.idempresa IS NOT DISTINCT FROM $1
      GROUP BY p.id, p.nome, p.ativo, p.datacriacao
-     ORDER BY p.nome`);
+     ORDER BY p.nome`, [empresaId]);
         res.json(result.rows.map(formatPerfilRow));
     }
     catch (error) {
@@ -60,6 +73,19 @@ const createPerfil = async (req, res) => {
     const nomeValue = typeof req.body?.nome === 'string' ? req.body.nome.trim() : '';
     const ativoValue = typeof req.body?.ativo === 'boolean' ? req.body.ativo : true;
     const parsedModules = parseModules(req.body?.modulos);
+    if (!req.auth) {
+        return res.status(401).json({ error: 'Token inválido.' });
+    }
+    const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(req.auth.userId);
+    if (!empresaLookup.success) {
+        return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+    const { empresaId } = empresaLookup;
+    if (empresaId === null) {
+        return res
+            .status(400)
+            .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
     if (!nomeValue) {
         return res.status(400).json({ error: 'O nome do perfil é obrigatório' });
     }
@@ -69,7 +95,7 @@ const createPerfil = async (req, res) => {
     const client = await db_1.default.connect();
     try {
         await client.query('BEGIN');
-        const result = await client.query('INSERT INTO public.perfis (nome, ativo, datacriacao) VALUES ($1, $2, NOW()) RETURNING id, nome, ativo, datacriacao', [nomeValue, ativoValue]);
+        const result = await client.query('INSERT INTO public.perfis (nome, ativo, datacriacao, idempresa) VALUES ($1, $2, NOW(), $3) RETURNING id, nome, ativo, datacriacao', [nomeValue, ativoValue, empresaId]);
         const perfil = result.rows[0];
         if (parsedModules.modules.length > 0) {
             await client.query('INSERT INTO public.perfil_modulos (perfil_id, modulo) SELECT $1, unnest($2::text[])', [perfil.id, parsedModules.modules]);

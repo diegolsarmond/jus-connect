@@ -311,9 +311,19 @@ function mapConversation(row) {
     const tags = parseStringArray(row.tags).sort((a, b) => a.localeCompare(b, 'pt-BR'));
     const customAttributes = parseCustomAttributes(row.custom_attributes);
     const internalNotes = parseInternalNotes(row.internal_notes);
+    let clientId = null;
+    if (typeof row.client_id === 'number' && Number.isFinite(row.client_id)) {
+        clientId = row.client_id;
+    }
+    else if (typeof row.client_id === 'string' && row.client_id.trim()) {
+        const parsed = Number.parseInt(row.client_id, 10);
+        if (Number.isFinite(parsed)) {
+            clientId = parsed;
+        }
+    }
     const clientName = typeof row.client_name === 'string' && row.client_name.trim() ? row.client_name.trim() : null;
     const phoneNumber = typeof row.phone_number === 'string' && row.phone_number.trim() ? row.phone_number.trim() : undefined;
-    const isLinkedToClient = row.is_linked_to_client === true;
+    const isLinkedToClient = row.is_linked_to_client === true || clientId !== null;
     const isPrivate = row.is_private === true;
     const responsible = mapResponsible(row);
     return {
@@ -329,6 +339,7 @@ function mapConversation(row) {
         responsible,
         tags,
         isLinkedToClient,
+        clientId,
         clientName,
         customAttributes,
         isPrivate,
@@ -475,7 +486,7 @@ class ChatService {
     }
     async listConversations() {
         const result = await this.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
               custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
@@ -496,6 +507,7 @@ class ChatService {
                 responsible: mapped.responsible,
                 tags: mapped.tags,
                 isLinkedToClient: mapped.isLinkedToClient,
+                clientId: mapped.clientId,
                 clientName: mapped.clientName,
                 customAttributes: mapped.customAttributes,
                 isPrivate: mapped.isPrivate,
@@ -524,7 +536,7 @@ class ChatService {
     }
     async getConversationDetails(conversationId) {
         const result = await this.query(`SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-              phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+              phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
               custom_attributes, is_private, internal_notes,
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
@@ -564,7 +576,7 @@ class ChatService {
              pinned = EXCLUDED.pinned,
              metadata = EXCLUDED.metadata
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
                  custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`, [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata]);
@@ -582,6 +594,7 @@ class ChatService {
             responsible: mapped.responsible,
             tags: mapped.tags,
             isLinkedToClient: mapped.isLinkedToClient,
+            clientId: mapped.clientId,
             clientName: mapped.clientName,
             customAttributes: mapped.customAttributes,
             isPrivate: mapped.isPrivate,
@@ -668,6 +681,24 @@ class ChatService {
                 throw new ValidationError('clientName must be a string or null');
             }
         }
+        if (has('clientId')) {
+            const clientIdValue = changes.clientId;
+            if (clientIdValue === null) {
+                setNull('client_id');
+                if (!has('isLinkedToClient')) {
+                    addAssignment('is_linked_to_client', false);
+                }
+            }
+            else if (typeof clientIdValue === 'number' && Number.isInteger(clientIdValue) && clientIdValue > 0) {
+                addAssignment('client_id', clientIdValue);
+                if (!has('isLinkedToClient')) {
+                    addAssignment('is_linked_to_client', true);
+                }
+            }
+            else {
+                throw new ValidationError('clientId must be a positive integer or null');
+            }
+        }
         if (has('isLinkedToClient')) {
             const linkValue = changes.isLinkedToClient;
             if (typeof linkValue !== 'boolean') {
@@ -697,7 +728,7 @@ class ChatService {
           SET ${assignments.join(', ')}
         WHERE id = $1
         RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-                  phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                  phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
                   custom_attributes, is_private, internal_notes,
                   unread_count, last_message_id, last_message_preview, last_message_timestamp,
                   last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`, values);
@@ -744,7 +775,7 @@ class ChatService {
               ELSE COALESCE(chat_conversations.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb)
             END
        RETURNING id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
-                 phone_number, responsible_id, responsible_snapshot, tags, client_name, is_linked_to_client,
+                 phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
                  custom_attributes, is_private, internal_notes,
                  unread_count, last_message_id, last_message_preview, last_message_timestamp,
                  last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at`, [conversationId, contactIdentifier, contactName, avatar, shortStatus, description, pinned, metadata]);
@@ -847,14 +878,19 @@ class ChatService {
         WHERE external_id = $1
         RETURNING conversation_id, id`, [externalId, normalizedStatus]);
         if (result.rowCount === 0) {
-            return false;
+            return [];
         }
+        const updates = result.rows.map((row) => ({
+            conversationId: row.conversation_id,
+            messageId: row.id,
+            status: normalizedStatus,
+        }));
         for (const row of result.rows) {
             await this.query(`UPDATE chat_conversations
             SET last_message_status = CASE WHEN last_message_id = $2 THEN $3 ELSE last_message_status END
           WHERE id = $1`, [row.conversation_id, row.id, normalizedStatus]);
         }
-        return true;
+        return updates;
     }
 }
 exports.default = ChatService;

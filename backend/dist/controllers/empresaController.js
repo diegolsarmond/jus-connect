@@ -3,11 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteEmpresa = exports.updateEmpresa = exports.createEmpresa = exports.listEmpresas = void 0;
+exports.deleteEmpresa = exports.updateEmpresa = exports.createEmpresa = exports.getEmpresaById = exports.listEmpresas = void 0;
 const db_1 = __importDefault(require("../services/db"));
+const empresaQueries_1 = require("../services/empresaQueries");
 const listEmpresas = async (_req, res) => {
     try {
-        const result = await db_1.default.query('SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro 	FROM public."vw.empresas";');
+        const result = await (0, empresaQueries_1.queryEmpresas)();
         res.json(result.rows);
     }
     catch (error) {
@@ -16,6 +17,21 @@ const listEmpresas = async (_req, res) => {
     }
 };
 exports.listEmpresas = listEmpresas;
+const getEmpresaById = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await (0, empresaQueries_1.queryEmpresas)('WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Empresa não encontrada' });
+        }
+        res.json(result.rows[0]);
+    }
+    catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+exports.getEmpresaById = getEmpresaById;
 const createEmpresa = async (req, res) => {
     const { nome_empresa, cnpj, telefone, email, plano, responsavel, ativo } = req.body;
     try {

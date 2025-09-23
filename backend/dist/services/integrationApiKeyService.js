@@ -3,11 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ValidationError = exports.API_KEY_ENVIRONMENTS = exports.API_KEY_PROVIDERS = void 0;
+exports.ASAAS_DEFAULT_API_URLS = exports.ValidationError = exports.ESCAVADOR_DEFAULT_API_URL = exports.API_KEY_ENVIRONMENTS = exports.API_KEY_PROVIDERS = void 0;
 const url_1 = require("url");
 const db_1 = __importDefault(require("./db"));
-exports.API_KEY_PROVIDERS = ['gemini', 'openai'];
+exports.API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas', 'escavador'];
 exports.API_KEY_ENVIRONMENTS = ['producao', 'homologacao'];
+exports.ESCAVADOR_DEFAULT_API_URL = 'https://api.escavador.com/api/v2';
 class ValidationError extends Error {
     constructor(message) {
         super(message);
@@ -15,6 +16,19 @@ class ValidationError extends Error {
     }
 }
 exports.ValidationError = ValidationError;
+exports.ASAAS_DEFAULT_API_URLS = {
+    producao: 'https://api.asaas.com/api/v3',
+    homologacao: 'https://sandbox.asaas.com/api/v3',
+};
+function getDefaultApiUrl(provider, environment) {
+    if (provider === 'asaas') {
+        return exports.ASAAS_DEFAULT_API_URLS[environment] ?? null;
+    }
+    if (provider === 'escavador') {
+        return exports.ESCAVADOR_DEFAULT_API_URL;
+    }
+    return null;
+}
 function normalizeProvider(value) {
     if (typeof value !== 'string') {
         throw new ValidationError('Provider is required');
@@ -24,7 +38,7 @@ function normalizeProvider(value) {
         throw new ValidationError('Provider is required');
     }
     if (!exports.API_KEY_PROVIDERS.includes(normalized)) {
-        throw new ValidationError('Provider must be Gemini or OpenAI');
+        throw new ValidationError('Provider must be Gemini, OpenAI, Asaas or Escavador');
     }
     return normalized;
 }
@@ -75,6 +89,13 @@ function normalizeOptionalApiUrl(value) {
         throw new ValidationError('API URL must be a valid URL');
     }
     return normalized;
+}
+function resolveApiUrl(provider, environment, value) {
+    const normalized = normalizeOptionalApiUrl(value);
+    if (normalized) {
+        return normalized;
+    }
+    return getDefaultApiUrl(provider, environment);
 }
 function normalizeLastUsed(value) {
     if (value === undefined || value === null) {
@@ -171,8 +192,8 @@ class IntegrationApiKeyService {
     }
     async create(input) {
         const provider = normalizeProvider(input.provider);
-        const apiUrl = normalizeOptionalApiUrl(input.apiUrl);
         const environment = normalizeEnvironment(input.environment);
+        const apiUrl = resolveApiUrl(provider, environment, input.apiUrl);
         const key = normalizeKey(input.key);
         const active = input.active ?? true;
         const lastUsed = normalizeLastUsed(input.lastUsed);
@@ -185,14 +206,40 @@ class IntegrationApiKeyService {
         const fields = [];
         const values = [];
         let index = 1;
+        let provider;
         if (updates.provider !== undefined) {
-            const provider = normalizeProvider(updates.provider);
+            provider = normalizeProvider(updates.provider);
             fields.push(`provider = $${index}`);
             values.push(provider);
             index += 1;
         }
+        let environment;
+        if (updates.environment !== undefined) {
+            environment = normalizeEnvironment(updates.environment);
+            fields.push(`environment = $${index}`);
+            values.push(environment);
+            index += 1;
+        }
         if (updates.apiUrl !== undefined) {
-            const apiUrl = normalizeOptionalApiUrl(updates.apiUrl);
+            let resolvedProvider = provider;
+            let resolvedEnvironment = environment;
+            if (!resolvedProvider || !resolvedEnvironment) {
+                const currentResult = await this.db.query('SELECT provider, environment FROM integration_api_keys WHERE id = $1', [id]);
+                if (currentResult.rowCount === 0) {
+                    return null;
+                }
+                const currentRow = currentResult.rows[0];
+                if (!resolvedProvider) {
+                    resolvedProvider = normalizeProvider(currentRow.provider);
+                }
+                if (!resolvedEnvironment) {
+                    resolvedEnvironment = normalizeEnvironment(currentRow.environment);
+                }
+            }
+            if (!resolvedProvider || !resolvedEnvironment) {
+                throw new ValidationError('Unable to resolve provider and environment for API URL');
+            }
+            const apiUrl = resolveApiUrl(resolvedProvider, resolvedEnvironment, updates.apiUrl);
             fields.push(`url_api = $${index}`);
             values.push(apiUrl);
             index += 1;
@@ -201,12 +248,6 @@ class IntegrationApiKeyService {
             const key = normalizeKey(updates.key);
             fields.push(`key_value = $${index}`);
             values.push(key);
-            index += 1;
-        }
-        if (updates.environment !== undefined) {
-            const environment = normalizeEnvironment(updates.environment);
-            fields.push(`environment = $${index}`);
-            values.push(environment);
             index += 1;
         }
         if (updates.active !== undefined) {

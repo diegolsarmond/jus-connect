@@ -8,7 +8,7 @@ const db_1 = __importDefault(require("./db"));
 const EMPRESA_QUERY_SOURCES = [
     {
         label: 'view',
-        text: 'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, NULL::timestamp AS atualizacao FROM public."vw.empresas"',
+        text: 'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, NULL::timestamp AS atualizacao FROM public."empresas"',
     },
     {
         label: 'table',

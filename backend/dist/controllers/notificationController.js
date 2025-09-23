@@ -60,23 +60,35 @@ function parseBoolean(value) {
     }
     return undefined;
 }
-function parseLimit(value) {
+function parsePositiveInteger(value) {
     if (typeof value !== 'string' || value.trim() === '') {
         return undefined;
     }
     const parsed = Number.parseInt(value, 10);
-    return Number.isNaN(parsed) ? undefined : parsed;
+    return Number.isNaN(parsed) || parsed <= 0 ? undefined : parsed;
 }
-const listNotificationsHandler = (req, res) => {
+const listNotificationsHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
         const onlyUnread = parseBoolean(req.query.onlyUnread);
-        const limit = parseLimit(req.query.limit);
+        const limit = parsePositiveInteger(req.query.limit) ?? parsePositiveInteger(req.query.pageSize);
+        const offsetParam = parsePositiveInteger(req.query.offset);
+        const page = parsePositiveInteger(req.query.page);
         const category = typeof req.query.category === 'string' ? req.query.category : undefined;
-        const notifications = (0, notificationService_1.listNotifications)(userId, {
+        const offset = (() => {
+            if (typeof offsetParam === 'number') {
+                return offsetParam;
+            }
+            if (typeof page === 'number' && typeof limit === 'number') {
+                return (page - 1) * limit;
+            }
+            return undefined;
+        })();
+        const notifications = await (0, notificationService_1.listNotifications)(userId, {
             onlyUnread: onlyUnread === undefined ? undefined : onlyUnread,
             category,
             limit,
+            offset,
         });
         res.json(notifications);
     }
@@ -86,11 +98,11 @@ const listNotificationsHandler = (req, res) => {
     }
 };
 exports.listNotificationsHandler = listNotificationsHandler;
-const getNotificationHandler = (req, res) => {
+const getNotificationHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
         const { id } = req.params;
-        const notification = (0, notificationService_1.getNotification)(userId, id);
+        const notification = await (0, notificationService_1.getNotification)(userId, id);
         res.json(notification);
     }
     catch (error) {
@@ -102,7 +114,7 @@ const getNotificationHandler = (req, res) => {
     }
 };
 exports.getNotificationHandler = getNotificationHandler;
-const createNotificationHandler = (req, res) => {
+const createNotificationHandler = async (req, res) => {
     try {
         const { userId, title, message, category, type, metadata, actionUrl } = req.body ?? {};
         if (typeof userId !== 'string' || userId.trim() === '') {
@@ -111,7 +123,7 @@ const createNotificationHandler = (req, res) => {
         if (!title || !message || !category) {
             return res.status(400).json({ error: 'title, message and category are required' });
         }
-        const notification = (0, notificationService_1.createNotification)({
+        const notification = await (0, notificationService_1.createNotification)({
             userId,
             title,
             message,
@@ -128,11 +140,11 @@ const createNotificationHandler = (req, res) => {
     }
 };
 exports.createNotificationHandler = createNotificationHandler;
-const markNotificationAsReadHandler = (req, res) => {
+const markNotificationAsReadHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
         const { id } = req.params;
-        const notification = (0, notificationService_1.markNotificationAsRead)(userId, id);
+        const notification = await (0, notificationService_1.markNotificationAsRead)(userId, id);
         res.json(notification);
     }
     catch (error) {
@@ -144,11 +156,11 @@ const markNotificationAsReadHandler = (req, res) => {
     }
 };
 exports.markNotificationAsReadHandler = markNotificationAsReadHandler;
-const markNotificationAsUnreadHandler = (req, res) => {
+const markNotificationAsUnreadHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
         const { id } = req.params;
-        const notification = (0, notificationService_1.markNotificationAsUnread)(userId, id);
+        const notification = await (0, notificationService_1.markNotificationAsUnread)(userId, id);
         res.json(notification);
     }
     catch (error) {
@@ -160,10 +172,10 @@ const markNotificationAsUnreadHandler = (req, res) => {
     }
 };
 exports.markNotificationAsUnreadHandler = markNotificationAsUnreadHandler;
-const markAllNotificationsAsReadHandler = (req, res) => {
+const markAllNotificationsAsReadHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
-        const notifications = (0, notificationService_1.markAllNotificationsAsRead)(userId);
+        const notifications = await (0, notificationService_1.markAllNotificationsAsRead)(userId);
         res.json({ updated: notifications.length, notifications });
     }
     catch (error) {
@@ -172,11 +184,11 @@ const markAllNotificationsAsReadHandler = (req, res) => {
     }
 };
 exports.markAllNotificationsAsReadHandler = markAllNotificationsAsReadHandler;
-const deleteNotificationHandler = (req, res) => {
+const deleteNotificationHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
         const { id } = req.params;
-        (0, notificationService_1.deleteNotification)(userId, id);
+        await (0, notificationService_1.deleteNotification)(userId, id);
         res.status(204).send();
     }
     catch (error) {
@@ -188,11 +200,17 @@ const deleteNotificationHandler = (req, res) => {
     }
 };
 exports.deleteNotificationHandler = deleteNotificationHandler;
-const getUnreadCountHandler = (req, res) => {
+const getUnreadCountHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
-        const unread = (0, notificationService_1.getUnreadCount)(userId);
-        res.json({ unread });
+        const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+        const groupBy = typeof req.query.groupBy === 'string' ? req.query.groupBy.toLowerCase() : undefined;
+        if (groupBy === 'category') {
+            const counts = await (0, notificationService_1.getUnreadCountByCategory)(userId);
+            return res.json({ counts });
+        }
+        const unread = await (0, notificationService_1.getUnreadCount)(userId, { category });
+        res.json({ unread, category: category ?? null });
     }
     catch (error) {
         console.error(error);
@@ -200,10 +218,10 @@ const getUnreadCountHandler = (req, res) => {
     }
 };
 exports.getUnreadCountHandler = getUnreadCountHandler;
-const getNotificationPreferencesHandler = (req, res) => {
+const getNotificationPreferencesHandler = async (req, res) => {
     try {
         const userId = resolveUserId(req);
-        const preferences = (0, notificationService_1.getNotificationPreferences)(userId);
+        const preferences = await (0, notificationService_1.getNotificationPreferences)(userId);
         res.json(preferences);
     }
     catch (error) {
@@ -212,7 +230,7 @@ const getNotificationPreferencesHandler = (req, res) => {
     }
 };
 exports.getNotificationPreferencesHandler = getNotificationPreferencesHandler;
-const updateNotificationPreferencesHandler = (req, res) => {
+const updateNotificationPreferencesHandler = async (req, res) => {
     try {
         const { userId, ...updates } = req.body ?? {};
         if (typeof userId !== 'string' || userId.trim() === '') {
@@ -221,7 +239,7 @@ const updateNotificationPreferencesHandler = (req, res) => {
         if (updates === null || typeof updates !== 'object') {
             return res.status(400).json({ error: 'Request body must contain preference updates' });
         }
-        const updated = (0, notificationService_1.updateNotificationPreferences)(userId, updates);
+        const updated = await (0, notificationService_1.updateNotificationPreferences)(userId, updates);
         res.json(updated);
     }
     catch (error) {

@@ -28,6 +28,17 @@ if (!connectionString) {
         }
     }
 }
+const dockerDbHost = 'base-de-dados_postgres';
+const isRunningInsideContainer = (0, fs_1.existsSync)('/.dockerenv');
+const localDbHostOverride = process.env.LOCAL_DB_HOST;
+if (connectionString &&
+    connectionString.includes(dockerDbHost) &&
+    !process.env.DATABASE_URL) {
+    const replacementHost = localDbHostOverride || (isRunningInsideContainer ? '' : 'localhost');
+    if (replacementHost) {
+        connectionString = connectionString.replace(dockerDbHost, replacementHost);
+    }
+}
 if (!connectionString) {
     throw new Error('Database connection string not provided. Set DATABASE_URL or add appsettings.json.');
 }

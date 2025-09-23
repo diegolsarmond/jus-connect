@@ -40,6 +40,22 @@ const router = (0, express_1.Router)();
  *         data_distribuicao:
  *           type: string
  *           format: date
+ *         ultima_sincronizacao:
+ *           type: string
+ *           format: date-time
+ *         consultas_api_count:
+ *           type: integer
+ *         movimentacoes_count:
+ *           type: integer
+ *         advogados:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: integer
+ *               nome:
+ *                 type: string
  *         criado_em:
  *           type: string
  *           format: date-time
@@ -58,6 +74,37 @@ const router = (0, express_1.Router)();
  *               type: string
  *             tipo:
  *               type: string
+ *     ProcessoDocumentoPublico:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         titulo:
+ *           type: string
+ *         descricao:
+ *           type: string
+ *           nullable: true
+ *         data:
+ *           type: string
+ *           format: date
+ *           nullable: true
+ *         tipo:
+ *           type: string
+ *           nullable: true
+ *         extensao:
+ *           type: string
+ *           nullable: true
+ *         paginas:
+ *           type: integer
+ *           nullable: true
+ *         key:
+ *           type: string
+ *           nullable: true
+ *         links:
+ *           type: object
+ *           additionalProperties:
+ *             type: string
+ *           nullable: true
  */
 /**
  * @swagger
@@ -128,6 +175,38 @@ router.get('/clientes/:clienteId/processos', processoController_1.listProcessosB
 router.get('/processos/:id', processoController_1.getProcessoById);
 /**
  * @swagger
+ * /api/processos/{id}/documentos-publicos:
+ *   get:
+ *     summary: Lista documentos públicos do processo via Escavador
+ *     tags: [Processos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Documentos públicos associados ao processo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 documentos:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/ProcessoDocumentoPublico'
+ *       400:
+ *         description: Identificador inválido ou número de processo ausente
+ *       404:
+ *         description: Processo não encontrado ou sem documentos públicos disponíveis
+ *       503:
+ *         description: Integração do Escavador não configurada ou indisponível
+ */
+router.get('/processos/:id/documentos-publicos', processoController_1.listProcessoDocumentosPublicos);
+/**
+ * @swagger
  * /api/processos:
  *   post:
  *     summary: Cadastra um novo processo
@@ -143,7 +222,6 @@ router.get('/processos/:id', processoController_1.getProcessoById);
  *               - numero
  *               - uf
  *               - municipio
- *               - orgao_julgador
  *             properties:
  *               cliente_id:
  *                 type: integer
@@ -152,8 +230,6 @@ router.get('/processos/:id', processoController_1.getProcessoById);
  *               uf:
  *                 type: string
  *               municipio:
- *                 type: string
- *               orgao_julgador:
  *                 type: string
  *               tipo:
  *                 type: string
@@ -170,6 +246,10 @@ router.get('/processos/:id', processoController_1.getProcessoById);
  *               data_distribuicao:
  *                 type: string
  *                 format: date
+ *               advogados:
+ *                 type: array
+ *                 items:
+ *                   type: integer
  *     responses:
  *       201:
  *         description: Processo criado com sucesso
@@ -183,6 +263,31 @@ router.get('/processos/:id', processoController_1.getProcessoById);
  *         description: Número de processo já cadastrado
  */
 router.post('/processos', processoController_1.createProcesso);
+/**
+ * @swagger
+ * /api/processos/{id}/sincronizar:
+ *   post:
+ *     summary: Sincroniza as movimentações de um processo com a API externa
+ *     tags: [Processos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Processo sincronizado com sucesso
+ *       400:
+ *         description: Dados inválidos para sincronização
+ *       401:
+ *         description: Token inválido
+ *       404:
+ *         description: Processo não encontrado
+ *       502:
+ *         description: Falha ao consultar o provedor externo
+ */
+router.post('/processos/:id/sincronizar', processoController_1.syncProcessoMovimentacoes);
 /**
  * @swagger
  * /api/processos/{id}:
@@ -206,7 +311,6 @@ router.post('/processos', processoController_1.createProcesso);
  *               - numero
  *               - uf
  *               - municipio
- *               - orgao_julgador
  *             properties:
  *               cliente_id:
  *                 type: integer
@@ -215,8 +319,6 @@ router.post('/processos', processoController_1.createProcesso);
  *               uf:
  *                 type: string
  *               municipio:
- *                 type: string
- *               orgao_julgador:
  *                 type: string
  *               tipo:
  *                 type: string
@@ -233,6 +335,10 @@ router.post('/processos', processoController_1.createProcesso);
  *               data_distribuicao:
  *                 type: string
  *                 format: date
+ *               advogados:
+ *                 type: array
+ *                 items:
+ *                   type: integer
  *     responses:
  *       200:
  *         description: Processo atualizado
