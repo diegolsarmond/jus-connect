@@ -347,6 +347,15 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
 
     try {
       const response = await wahaService.getChatInfo(chat.id);
+
+      if (response.status === 404) {
+        console.warn('ℹ️ Informações do chat não encontradas, usando fallback', chat.id);
+        return {
+          ...chat,
+          name: fallbackName,
+        };
+      }
+
       if (response.error) {
         throw new Error(response.error);
       }
