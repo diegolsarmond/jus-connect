@@ -703,7 +703,6 @@ const FinancialFlows = () => {
 
   const settleMutation = useMutation({
     mutationFn: ({ flowId, date }: { flowId: string; date: string }) => settleFlow(flowId, date),
-
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows'] });
       toast({
@@ -734,7 +733,6 @@ const FinancialFlows = () => {
       return;
     }
 
-
     setSettleDialogFlow(flow);
 
     const normalizedPaymentDate = normalizeDateInputValue(flow.pagamento ?? undefined);
@@ -751,6 +749,7 @@ const FinancialFlows = () => {
     if (settleMutation.isPending) {
       return;
     }
+
 
     setSettleDialogFlow(null);
     setSettleDate(getDefaultPaymentDate());

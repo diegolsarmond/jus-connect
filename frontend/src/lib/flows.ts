@@ -247,14 +247,36 @@ export async function createFlow(flow: CreateFlowPayload): Promise<Flow> {
 
 const FLOW_ID_UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const FLOW_ID_INTEGER_REGEX = /^-?\d+$/;
 
 export function normalizeFlowId(id: Flow['id']): string | null {
+  if (typeof id === 'number') {
+    if (!Number.isInteger(id)) {
+      return null;
+    }
+
+    return id.toString();
+  }
+
+
   if (typeof id !== 'string') {
     return null;
   }
 
   const trimmed = id.trim();
-  return FLOW_ID_UUID_REGEX.test(trimmed) ? trimmed : null;
+  if (FLOW_ID_UUID_REGEX.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (FLOW_ID_INTEGER_REGEX.test(trimmed)) {
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed.toString();
+    }
+  }
+
+  return null;
+
 }
 
 export async function settleFlow(id: Flow['id'], pagamentoData: string): Promise<Flow> {

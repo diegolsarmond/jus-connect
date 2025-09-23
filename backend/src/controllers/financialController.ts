@@ -22,14 +22,34 @@ const getAuthenticatedUser = (
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const INTEGER_ID_REGEX = /^-?\d+$/;
 
-const normalizeUuid = (value: unknown): string | null => {
+const normalizeFlowId = (value: unknown): string | number | null => {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value)) {
+      return null;
+    }
+
+    return value;
+  }
+
   if (typeof value !== 'string') {
     return null;
   }
 
   const trimmed = value.trim();
-  return UUID_REGEX.test(trimmed) ? trimmed : null;
+  if (UUID_REGEX.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (INTEGER_ID_REGEX.test(trimmed)) {
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 };
 
 const normalizeOptionalInteger = (value: unknown): number | null => {
@@ -783,8 +803,8 @@ ${baseFinancialFlowsSelect}
 
 export const getFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const flowId = normalizeUuid(id);
-  if (!flowId) {
+  const flowId = normalizeFlowId(id);
+  if (flowId === null) {
     return res.status(400).json({ error: 'Invalid flow id' });
   }
   try {
@@ -887,8 +907,8 @@ export const createFlow = async (req: Request, res: Response) => {
 
 export const updateFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const flowId = normalizeUuid(id);
-  if (!flowId) {
+  const flowId = normalizeFlowId(id);
+  if (flowId === null) {
     return res.status(400).json({ error: 'Invalid flow id' });
   }
   const {
@@ -986,8 +1006,8 @@ export const updateFlow = async (req: Request, res: Response) => {
 
 export const deleteFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const flowId = normalizeUuid(id);
-  if (!flowId) {
+  const flowId = normalizeFlowId(id);
+  if (flowId === null) {
     return res.status(400).json({ error: 'Invalid flow id' });
   }
   try {
@@ -1002,8 +1022,8 @@ export const deleteFlow = async (req: Request, res: Response) => {
 
 export const settleFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const flowId = normalizeUuid(id);
-  if (!flowId) {
+  const flowId = normalizeFlowId(id);
+  if (flowId === null) {
     return res.status(400).json({ error: 'Invalid flow id' });
   }
   const { pagamentoData } = req.body;
@@ -1031,8 +1051,8 @@ export const settleFlow = async (req: Request, res: Response) => {
 
 export const createAsaasChargeForFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const flowId = normalizeUuid(id);
-  if (!flowId) {
+  const flowId = normalizeFlowId(id);
+  if (flowId === null) {
     return res.status(400).json({ error: 'Invalid flow id' });
   }
   const {
