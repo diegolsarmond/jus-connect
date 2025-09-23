@@ -846,6 +846,7 @@ export default function VisualizarProcesso() {
 
     const fetchProcesso = async () => {
       if (!processoId) {
+        setProcesso(null);
         setError("Processo inválido");
         setLoading(false);
         return;
@@ -896,6 +897,7 @@ export default function VisualizarProcesso() {
             ? fetchError.message
             : "Erro ao carregar o processo";
         if (!cancelled) {
+          setProcesso(null);
           setError(message);
         }
       } finally {
@@ -913,23 +915,26 @@ export default function VisualizarProcesso() {
   }, [processoId]);
 
   useEffect(() => {
+    if (!processoId) {
+      setDocumentosPublicos([]);
+      setDocumentosError("Processo inválido");
+      setDocumentosLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     const fetchDocumentosPublicos = async () => {
-      if (!processoId) {
-        setDocumentosPublicos([]);
-        setDocumentosError("Processo inválido");
-        setDocumentosLoading(false);
-        return;
-      }
 
       setDocumentosLoading(true);
       setDocumentosError(null);
 
       try {
-        const res = await fetch(getApiUrl(`processos/${processoId}/documentos-publicos`), {
-          headers: { Accept: "application/json" },
-        });
+        const res = await fetch(
+          getApiUrl(`processos/${processoId}/documentos-publicos`),
+          { headers: { Accept: "application/json" } },
+        );
+
 
         const text = await res.text();
         let json: unknown = null;
@@ -956,25 +961,26 @@ export default function VisualizarProcesso() {
           throw new Error(message);
         }
 
-        if (!json || typeof json !== "object" || !("documentos" in json)) {
-          throw new Error(
-            "Resposta inválida do servidor ao carregar os documentos públicos",
-          );
-        }
+        const documentosPayload =
+          json && typeof json === "object" && "documentos" in json
+            ? (json as { documentos: unknown }).documentos
+            : json;
 
-        const mapped = mapApiDocumentosPublicos((json as { documentos: unknown }).documentos);
+        const documentos = mapApiDocumentosPublicos(documentosPayload);
 
         if (!cancelled) {
-          setDocumentosPublicos(mapped);
+          setDocumentosPublicos(documentos);
+
         }
       } catch (fetchError) {
         const message =
           fetchError instanceof Error
             ? fetchError.message
-            : "Erro ao carregar documentos públicos";
+            : "Erro ao carregar os documentos públicos do processo.";
         if (!cancelled) {
-          setDocumentosPublicos([]);
           setDocumentosError(message);
+          setDocumentosPublicos([]);
+
         }
       } finally {
         if (!cancelled) {
@@ -995,8 +1001,21 @@ export default function VisualizarProcesso() {
       return null;
     }
 
-    return processo.dataDistribuicaoFormatada ?? formatDateToPtBR(processo.dataDistribuicao);
+    return (
+      processo.dataDistribuicaoFormatada ||
+      (processo.dataDistribuicao
+        ? formatDateToPtBR(processo.dataDistribuicao)
+        : null)
+    );
   }, [processo]);
+
+  const criadoEmLabel = useMemo(() => {
+    if (!processo?.criadoEm) {
+      return null;
+    }
+
+    return formatDateTimeToPtBR(processo.criadoEm);
+  }, [processo?.criadoEm]);
 
   const atualizadoEmLabel = useMemo(() => {
     if (!processo?.atualizadoEm) {
@@ -1016,7 +1035,7 @@ export default function VisualizarProcesso() {
 
   const ultimasMovimentacoes = useMemo(() => {
     if (!processo) {
-      return [] as ProcessoMovimentacaoDetalhe[];
+      return [];
     }
 
     return processo.movimentacoes.slice(0, 3);
@@ -1031,86 +1050,40 @@ export default function VisualizarProcesso() {
       };
     }
 
-    const parseDateValue = (value: string | null): number => {
-      if (!value) {
-        return Number.NEGATIVE_INFINITY;
-      }
-
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? Number.NEGATIVE_INFINITY : date.getTime();
-    };
-
-    const sorted = [...documentosPublicos].sort(
-      (a, b) => parseDateValue(b.data) - parseDateValue(a.data),
-    );
-
-    const documentoMaisRecente = sorted[0] ?? documentosPublicos[0];
-    const ultimaData = documentoMaisRecente.data
-      ? formatDateToPtBR(documentoMaisRecente.data)
-      : documentoMaisRecente.dataFormatada ?? null;
+    const [latest] = documentosPublicos;
 
     return {
       total: documentosPublicos.length,
-      ultimaData,
-      ultimoTitulo: documentoMaisRecente.titulo,
+      ultimaData:
+        latest.dataFormatada ??
+        (latest.data ? formatDateToPtBR(latest.data) : null),
+      ultimoTitulo: latest.titulo ?? null,
     };
   }, [documentosPublicos]);
 
   const handleGerarContrato = useCallback(() => {
-    if (!processo) {
+    if (!clienteIdParam || !processoId) {
       return;
     }
 
-    const resolvedClienteId =
-      clienteIdParam ?? (processo.cliente?.id ? String(processo.cliente.id) : null);
-    const resolvedProcessoId = processoId ?? String(processo.id);
+    navigate(`/clientes/${clienteIdParam}/processos/${processoId}/contrato`);
+  }, [clienteIdParam, navigate, processoId]);
 
-    if (!resolvedClienteId || !resolvedProcessoId) {
-      console.warn(
-        "Não foi possível determinar o caminho para gerar o contrato do processo.",
-      );
-      return;
-    }
-
-    navigate(`/clientes/${resolvedClienteId}/processos/${resolvedProcessoId}/contrato`, {
-      state: { processoId: processo.id },
-    });
-  }, [clienteIdParam, navigate, processo, processoId]);
-
-  if (loading) {
+  if (loading && !processo) {
     return (
       <div className="space-y-6 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-72" />
+          <Skeleton className="h-10 w-32" />
+          <div className="space-y-2 lg:w-1/2">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-4 w-3/4" />
           </div>
         </div>
-        <div className="space-y-4">
-          <Skeleton className="h-40 w-full rounded-xl" />
-          <Skeleton className="h-40 w-full rounded-xl" />
-          <Skeleton className="h-40 w-full rounded-xl" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-64 w-full rounded-xl" />
+          <Skeleton className="h-64 w-full rounded-xl" />
         </div>
-      </div>
-    );
-  }
 
-  if (error) {
-    return (
-      <div className="space-y-6 p-6">
-        <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Não foi possível carregar o processo</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
       </div>
     );
   }
@@ -1122,11 +1095,12 @@ export default function VisualizarProcesso() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
-        <Alert>
+        <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Processo não encontrado</AlertTitle>
+          <AlertTitle>Erro ao carregar processo</AlertTitle>
           <AlertDescription>
-            Não foi possível localizar as informações do processo solicitado.
+            {error ?? "Não foi possível encontrar os dados deste processo."}
+
           </AlertDescription>
         </Alert>
       </div>
@@ -1569,6 +1543,7 @@ export default function VisualizarProcesso() {
                         size="sm"
                         className="w-full justify-center"
                         onClick={handleGerarContrato}
+                        disabled={!clienteIdParam || !processoId}
                       >
                         Gerar contrato
                       </Button>
