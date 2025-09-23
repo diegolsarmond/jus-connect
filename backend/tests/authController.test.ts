@@ -261,6 +261,7 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
       rowCount: 1,
     },
     { rows: [], rowCount: 1 },
+
   ];
 
   const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
@@ -306,6 +307,7 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
   );
   assert.ok(updateResponsavelCall, 'expected company responsavel update to be executed');
   assert.deepEqual(updateResponsavelCall?.values, [1234, 777]);
+
 
   assert.equal(poolCalls.length, 1);
   assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
