@@ -20,14 +20,44 @@ interface ApiCompany {
   plano?: number | string | null;
   ativo?: boolean | string | number | null;
   datacadastro?: string | Date | null;
+  recorrencia?: string | null;
+  plano_recorrencia?: string | null;
+  plano_periodicidade?: string | null;
 }
+
+type ApiPlanLimits = {
+  usuarios?: number | string | null;
+  processos?: number | string | null;
+  propostas?: number | string | null;
+};
 
 interface ApiPlan {
   id?: number;
   nome?: string | null;
-  valor?: number | null;
+  valor?: number | string | null;
+  valor_mensal?: number | string | null;
+  valorMensal?: number | string | null;
+  valor_anual?: number | string | null;
+  valorAnual?: number | string | null;
+  preco_mensal?: number | string | null;
+  precoMensal?: number | string | null;
+  preco_anual?: number | string | null;
+  precoAnual?: number | string | null;
   recorrencia?: string | null;
+  limites?: ApiPlanLimits | null;
+  limite_usuarios?: number | string | null;
+  limite_processos?: number | string | null;
+  limite_propostas?: number | string | null;
+  qtde_usuarios?: number | string | null;
+  max_casos?: number | string | null;
+  max_propostas?: number | string | null;
 }
+
+type PlanLimits = {
+  users: number | null;
+  processes: number | null;
+  proposals: number | null;
+};
 
 interface Subscription {
   id: string;
@@ -37,7 +67,10 @@ interface Subscription {
   planId: string | null;
   planName: string;
   planPrice: number | null;
+  planMonthlyPrice: number | null;
+  planAnnualPrice: number | null;
   planRecurrence: PlanRecurrence;
+  planLimits: PlanLimits;
   status: SubscriptionStatus;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
@@ -129,6 +162,37 @@ const parseRecurrence = (value: unknown): PlanRecurrence => {
   }
 
   return null;
+};
+
+const parseNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const sanitized = trimmed.replace(/[^\d.,-]+/g, "").replace(/\.(?=.*\.)/g, "");
+    const normalized = sanitized.replace(",", ".");
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseInteger = (value: unknown): number | null => {
+  const numeric = parseNumber(value);
+  if (numeric == null) {
+    return null;
+  }
+
+  return Math.trunc(numeric);
 };
 
 const addDuration = (start: string | null, recurrence: PlanRecurrence): string | null => {
@@ -229,6 +293,91 @@ const formatPeriodRange = (start: string | null, end: string | null): string => 
   return `${startLabel} - ${endLabel}`;
 };
 
+const RECURRENCE_LABELS: Record<Exclude<PlanRecurrence, null>, string> = {
+  mensal: "Mensal",
+  anual: "Anual",
+  nenhuma: "Sem recorrência",
+};
+
+const formatLimitValue = (value: number | null): string => {
+  if (value == null) {
+    return "Ilimitado";
+  }
+
+  if (Number.isNaN(value)) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("pt-BR").format(value);
+};
+
+const resolvePlanRecurrence = (
+  company: ApiCompany,
+  plan: ApiPlan | undefined,
+  monthlyPrice: number | null,
+  annualPrice: number | null,
+): PlanRecurrence => {
+  const recurrenceCandidates: unknown[] = [
+    company.plano_recorrencia,
+    company.recorrencia,
+    company.plano_periodicidade,
+    plan?.recorrencia,
+  ];
+
+  for (const candidate of recurrenceCandidates) {
+    const parsed = parseRecurrence(candidate);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (annualPrice != null && monthlyPrice == null) {
+    return "anual";
+  }
+
+  if (monthlyPrice != null) {
+    return "mensal";
+  }
+
+  return null;
+};
+
+const extractPlanLimits = (plan: ApiPlan | undefined): PlanLimits => {
+  const rawLimits = (plan?.limites && typeof plan.limites === "object") ? plan.limites : null;
+  const limitsRecord = rawLimits as Record<string, unknown> | null;
+
+  const users =
+    parseInteger(limitsRecord?.usuarios) ??
+    parseInteger(limitsRecord?.users) ??
+    parseInteger(plan?.limite_usuarios) ??
+    parseInteger(plan?.qtde_usuarios);
+
+  const processes =
+    parseInteger(limitsRecord?.processos) ??
+    parseInteger(limitsRecord?.cases) ??
+    parseInteger(limitsRecord?.casos) ??
+    parseInteger(plan?.limite_processos) ??
+    parseInteger(plan?.max_casos);
+
+  const proposals =
+    parseInteger(limitsRecord?.propostas) ??
+    parseInteger(limitsRecord?.proposals) ??
+    parseInteger(plan?.limite_propostas) ??
+    parseInteger(plan?.max_propostas);
+
+  return {
+    users: users ?? null,
+    processes: processes ?? null,
+    proposals: proposals ?? null,
+  };
+};
+
+const getPlanMonthlyPrice = (plan: ApiPlan | undefined): number | null =>
+  parseNumber(plan?.valor_mensal ?? plan?.valorMensal ?? plan?.preco_mensal ?? plan?.precoMensal ?? plan?.valor ?? null);
+
+const getPlanAnnualPrice = (plan: ApiPlan | undefined): number | null =>
+  parseNumber(plan?.valor_anual ?? plan?.valorAnual ?? plan?.preco_anual ?? plan?.precoAnual ?? null);
+
 const formatPlanPrice = (price: number | null, recurrence: PlanRecurrence): string => {
   if (typeof price !== "number" || Number.isNaN(price)) {
     return "Sem valor definido";
@@ -236,6 +385,43 @@ const formatPlanPrice = (price: number | null, recurrence: PlanRecurrence): stri
 
   const suffix = recurrence === "anual" ? "/ano" : recurrence === "mensal" ? "/mês" : "";
   return `${formatCurrency(price)}${suffix}`;
+};
+
+const buildPlanPricingLines = (subscription: Subscription): string[] => {
+  if (!subscription.planId) {
+    return [];
+  }
+
+  const lines: string[] = [];
+
+  if (subscription.planMonthlyPrice != null) {
+    lines.push(`Mensal: ${formatCurrency(subscription.planMonthlyPrice)}`);
+  }
+
+  if (subscription.planAnnualPrice != null) {
+    lines.push(`Anual: ${formatCurrency(subscription.planAnnualPrice)}`);
+  }
+
+  if (subscription.planRecurrence) {
+    const label = RECURRENCE_LABELS[subscription.planRecurrence];
+    if (label) {
+      lines.push(
+        subscription.planRecurrence === "nenhuma"
+          ? `Recorrência: ${label}`
+          : `Recorrência atual: ${label}`,
+      );
+    }
+  }
+
+  if (lines.length === 0 && subscription.planPrice != null) {
+    lines.push(formatPlanPrice(subscription.planPrice, subscription.planRecurrence));
+  }
+
+  if (lines.length === 0) {
+    lines.push("Sem valor definido");
+  }
+
+  return lines;
 };
 
 const formatTrialInfo = (trialEnd: string | null): string => {
@@ -252,8 +438,15 @@ const mapApiCompanyToSubscription = (company: ApiCompany, plansIndex: Map<string
   const plan = planId ? plansIndex.get(planId) : undefined;
 
   const planName = plan?.nome?.trim() || (planId ? `Plano ${planId}` : "Sem plano");
-  const planPrice = typeof plan?.valor === "number" ? plan.valor : null;
-  const recurrence = parseRecurrence(plan?.recorrencia);
+  const planMonthlyPrice = getPlanMonthlyPrice(plan);
+  const planAnnualPrice = getPlanAnnualPrice(plan);
+  const recurrence = resolvePlanRecurrence(company, plan, planMonthlyPrice, planAnnualPrice);
+  const effectivePrice =
+    recurrence === "anual"
+      ? planAnnualPrice ?? (planMonthlyPrice != null ? roundToTwo(planMonthlyPrice * 12) : null)
+      : recurrence === "mensal"
+        ? planMonthlyPrice ?? (planAnnualPrice != null ? roundToTwo(planAnnualPrice / 12) : null)
+        : planMonthlyPrice ?? planAnnualPrice ?? parseNumber(plan?.valor ?? null);
   const currentPeriodStart = toIsoString(company.datacadastro);
   const currentPeriodEnd = addDuration(currentPeriodStart, recurrence);
   const isActive = parseBoolean(company.ativo ?? null);
@@ -264,6 +457,7 @@ const mapApiCompanyToSubscription = (company: ApiCompany, plansIndex: Map<string
     : recurrence && recurrence !== "nenhuma"
       ? currentPeriodEnd
       : null;
+  const planLimits = extractPlanLimits(plan);
 
   return {
     id: `subscription-${company.id}`,
@@ -272,14 +466,17 @@ const mapApiCompanyToSubscription = (company: ApiCompany, plansIndex: Map<string
     companyEmail: company.email?.trim() || "",
     planId,
     planName,
-    planPrice,
+    planPrice: effectivePrice ?? null,
+    planMonthlyPrice,
+    planAnnualPrice,
     planRecurrence: recurrence,
+    planLimits,
     status,
     currentPeriodStart,
     currentPeriodEnd,
     nextCharge,
     trialEnd,
-    mrr: calculateMrr(planPrice, recurrence),
+    mrr: calculateMrr(effectivePrice ?? null, recurrence),
   };
 };
 
@@ -455,7 +652,7 @@ export default function Subscriptions() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{activeSubscriptions}</div>
-            <p className="text-xs text-muted-foreground">Pagando mensalmente</p>
+            <p className="text-xs text-muted-foreground">Cobranças ativas</p>
           </CardContent>
         </Card>
 
@@ -507,6 +704,7 @@ export default function Subscriptions() {
                 <TableRow>
                   <TableHead>Empresa</TableHead>
                   <TableHead>Plano</TableHead>
+                  <TableHead className="hidden xl:table-cell">Limites do Plano</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>MRR</TableHead>
                   <TableHead>Período Atual</TableHead>
@@ -517,19 +715,19 @@ export default function Subscriptions() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
                       Carregando assinaturas...
                     </TableCell>
                   </TableRow>
                 ) : error ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
                       {error}
                     </TableCell>
                   </TableRow>
                 ) : filteredSubscriptions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
                       Nenhuma assinatura encontrada.
                     </TableCell>
                   </TableRow>
@@ -544,9 +742,32 @@ export default function Subscriptions() {
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">{subscription.planName}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {subscription.planId ? formatPlanPrice(subscription.planPrice, subscription.planRecurrence) : "Sem plano"}
-                        </div>
+                        {subscription.planId ? (
+                          <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                            {buildPlanPricingLines(subscription).map((line, index) => (
+                              <div key={`${subscription.id}-pricing-${index}`}>{line}</div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">Sem plano</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden xl:table-cell align-top">
+                        {subscription.planId ? (
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            <div>
+                              <span className="font-medium text-foreground">Usuários:</span> {formatLimitValue(subscription.planLimits.users)}
+                            </div>
+                            <div>
+                              <span className="font-medium text-foreground">Processos:</span> {formatLimitValue(subscription.planLimits.processes)}
+                            </div>
+                            <div>
+                              <span className="font-medium text-foreground">Propostas:</span> {formatLimitValue(subscription.planLimits.proposals)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">--</div>
+                        )}
                       </TableCell>
                       <TableCell>{getStatusBadge(subscription.status)}</TableCell>
                       <TableCell>
