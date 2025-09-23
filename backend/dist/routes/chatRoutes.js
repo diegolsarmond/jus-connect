@@ -99,6 +99,17 @@ const router = (0, express_1.Router)();
  *         lastMessage:
  *           $ref: '#/components/schemas/ConversationLastMessage'
  *           nullable: true
+ *         isLinkedToClient:
+ *           type: boolean
+ *           description: Indica se há um cliente vinculado à conversa
+ *         clientId:
+ *           type: integer
+ *           format: int32
+ *           nullable: true
+ *           description: Identificador do cliente vinculado à conversa
+ *         clientName:
+ *           type: string
+ *           nullable: true
  *     MessagePage:
  *       type: object
  *       properties:
@@ -184,6 +195,23 @@ const router = (0, express_1.Router)();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+/**
+ * @swagger
+ * /api/conversations/stream:
+ *   get:
+ *     summary: Abre uma conexão de eventos em tempo real das conversas
+ *     tags: [Conversas]
+ *     description: |
+ *       Retorna uma conexão usando Server-Sent Events (SSE) para enviar notificações de
+ *       mensagens, atualizações de conversa e indicadores de digitação. É necessário
+ *       incluir o token de autenticação via cabeçalho Authorization.
+ *     responses:
+ *       200:
+ *         description: Conexão estabelecida com sucesso.
+ *       401:
+ *         description: Token inválido ou ausente.
+ */
+router.get('/conversations/stream', chatController_1.streamConversationEventsHandler);
 router.get('/conversations', chatController_1.listConversationsHandler);
 /**
  * @swagger
@@ -256,6 +284,10 @@ router.post('/conversations', chatController_1.createConversationHandler);
  *               clientName:
  *                 type: string
  *                 nullable: true
+ *               clientId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Identificador do cliente vinculado
  *               isLinkedToClient:
  *                 type: boolean
  *               customAttributes:
@@ -421,4 +453,37 @@ router.post('/conversations/:conversationId/messages', chatController_1.sendConv
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/conversations/:conversationId/read', chatController_1.markConversationReadHandler);
+/**
+ * @swagger
+ * /api/conversations/{conversationId}/typing:
+ *   post:
+ *     summary: Atualiza o estado de digitação do operador para a conversa
+ *     tags: [Conversas]
+ *     parameters:
+ *       - in: path
+ *         name: conversationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Identificador da conversa
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               isTyping:
+ *                 type: boolean
+ *                 description: Indica se o usuário está digitando (true) ou não (false)
+ *             required: [isTyping]
+ *     responses:
+ *       202:
+ *         description: Estado de digitação registrado com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       401:
+ *         description: Token inválido ou ausente
+ */
+router.post('/conversations/:conversationId/typing', chatController_1.updateTypingStateHandler);
 exports.default = router;

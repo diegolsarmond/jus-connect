@@ -5,9 +5,31 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteEtiqueta = exports.updateEtiqueta = exports.createEtiqueta = exports.listEtiquetasByFluxoTrabalho = exports.listEtiquetas = void 0;
 const db_1 = __importDefault(require("../services/db"));
-const listEtiquetas = async (_req, res) => {
+const authUser_1 = require("../utils/authUser");
+const getAuthenticatedUser = (req, res) => {
+    if (!req.auth) {
+        res.status(401).json({ error: 'Token inválido.' });
+        return null;
+    }
+    return req.auth;
+};
+const listEtiquetas = async (req, res) => {
     try {
-        const result = await db_1.default.query('SELECT id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho FROM public.etiquetas');
+        const auth = getAuthenticatedUser(req, res);
+        if (!auth) {
+            return;
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(auth.userId);
+        if (!empresaLookup.success) {
+            res.status(empresaLookup.status).json({ error: empresaLookup.message });
+            return;
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            res.json([]);
+            return;
+        }
+        const result = await db_1.default.query('SELECT id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho, idempresa FROM public.etiquetas WHERE idempresa IS NOT DISTINCT FROM $1', [empresaId]);
         res.json(result.rows);
     }
     catch (error) {
@@ -31,7 +53,23 @@ exports.listEtiquetasByFluxoTrabalho = listEtiquetasByFluxoTrabalho;
 const createEtiqueta = async (req, res) => {
     const { nome, ativo, exibe_pipeline = true, ordem, id_fluxo_trabalho } = req.body;
     try {
-        const result = await db_1.default.query('INSERT INTO public.etiquetas (nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho) VALUES ($1, $2, NOW(), $3, $4, $5) RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho', [nome, ativo, exibe_pipeline, ordem, id_fluxo_trabalho]);
+        const auth = getAuthenticatedUser(req, res);
+        if (!auth) {
+            return;
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(auth.userId);
+        if (!empresaLookup.success) {
+            res.status(empresaLookup.status).json({ error: empresaLookup.message });
+            return;
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            res
+                .status(400)
+                .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+            return;
+        }
+        const result = await db_1.default.query('INSERT INTO public.etiquetas (nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho, idempresa) VALUES ($1, $2, NOW(), $3, $4, $5, $6) RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho, idempresa', [nome, ativo, exibe_pipeline, ordem, id_fluxo_trabalho, empresaId]);
         res.status(201).json(result.rows[0]);
     }
     catch (error) {

@@ -35,14 +35,19 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CronJobsService = void 0;
 const projudiNotificationService_1 = __importStar(require("./projudiNotificationService"));
+const asaasChargeSync_1 = __importStar(require("./asaasChargeSync"));
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 hours
 const DEFAULT_OVERLAP_MS = 60 * 1000; // 1 minute
+const DEFAULT_ASAAS_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 class CronJobsService {
-    constructor(service = projudiNotificationService_1.default) {
+    constructor(projudiService = projudiNotificationService_1.default, asaasService = asaasChargeSync_1.default) {
         this.projudiTimer = null;
         this.projudiRunning = false;
-        this.projudiService = service;
+        this.asaasTimer = null;
+        this.asaasRunning = false;
+        this.projudiService = projudiService;
+        this.asaasService = asaasService;
         const intervalMs = this.resolveIntervalFromEnv();
         const lookbackMs = this.resolveLookbackFromEnv();
         const overlapMs = this.resolveOverlapFromEnv();
@@ -53,6 +58,17 @@ class CronJobsService {
             overlapMs,
             nextReference: this.computeInitialReference(lookbackMs),
             lastReferenceUsed: null,
+            lastRunAt: null,
+            lastSuccessAt: null,
+            lastErrorAt: null,
+            lastErrorMessage: undefined,
+            lastResult: undefined,
+            nextRunAt: null,
+            lastManualTriggerAt: null,
+        };
+        this.asaasState = {
+            enabled: false,
+            intervalMs: this.resolveAsaasIntervalFromEnv(),
             lastRunAt: null,
             lastSuccessAt: null,
             lastErrorAt: null,
@@ -130,6 +146,67 @@ class CronJobsService {
             lastManualTriggerAt: formatOptionalDate(this.projudiState.lastManualTriggerAt),
         };
     }
+    startAsaasChargeSyncJob() {
+        if (!this.asaasService.hasValidConfiguration()) {
+            this.stopAsaasChargeSyncJob();
+            return;
+        }
+        this.asaasState.intervalMs = this.resolveAsaasIntervalFromEnv();
+        this.asaasState.enabled = true;
+        if (this.asaasTimer) {
+            clearInterval(this.asaasTimer);
+        }
+        const scheduleNextRun = () => {
+            this.asaasState.nextRunAt = new Date(Date.now() + this.asaasState.intervalMs);
+        };
+        this.asaasTimer = setInterval(() => {
+            void this.runAsaasChargeSync(false).catch((error) => {
+                if (!(error instanceof asaasChargeSync_1.AsaasConfigurationError)) {
+                    console.error('[CronJobs] Falha ao executar sincronização automática do Asaas.', error);
+                }
+            });
+            scheduleNextRun();
+        }, this.asaasState.intervalMs);
+        scheduleNextRun();
+        void this.runAsaasChargeSync(false).catch((error) => {
+            if (!(error instanceof asaasChargeSync_1.AsaasConfigurationError)) {
+                console.error('[CronJobs] Falha ao executar sincronização inicial do Asaas.', error);
+            }
+        });
+    }
+    stopAsaasChargeSyncJob() {
+        if (this.asaasTimer) {
+            clearInterval(this.asaasTimer);
+            this.asaasTimer = null;
+        }
+        this.asaasState.enabled = false;
+        this.asaasState.nextRunAt = null;
+    }
+    async triggerAsaasSyncNow() {
+        if (!this.asaasService.hasValidConfiguration()) {
+            throw new asaasChargeSync_1.AsaasConfigurationError('Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.');
+        }
+        const alreadyRunning = this.asaasRunning;
+        if (!alreadyRunning) {
+            await this.runAsaasChargeSync(true);
+            return { status: this.getAsaasSyncStatus(), triggered: true };
+        }
+        return { status: this.getAsaasSyncStatus(), triggered: false };
+    }
+    getAsaasSyncStatus() {
+        return {
+            enabled: this.asaasState.enabled && this.asaasService.hasValidConfiguration(),
+            running: this.asaasRunning,
+            intervalMs: this.asaasState.intervalMs,
+            lastRunAt: formatOptionalDate(this.asaasState.lastRunAt),
+            lastSuccessAt: formatOptionalDate(this.asaasState.lastSuccessAt),
+            lastErrorAt: formatOptionalDate(this.asaasState.lastErrorAt),
+            lastErrorMessage: this.asaasState.lastErrorMessage,
+            lastResult: this.asaasState.lastResult,
+            nextRunAt: formatOptionalDate(this.asaasState.nextRunAt),
+            lastManualTriggerAt: formatOptionalDate(this.asaasState.lastManualTriggerAt),
+        };
+    }
     async runProjudiSync(manual) {
         if (this.projudiRunning) {
             return;
@@ -161,6 +238,36 @@ class CronJobsService {
         }
         finally {
             this.projudiRunning = false;
+        }
+    }
+    async runAsaasChargeSync(manual) {
+        if (this.asaasRunning) {
+            return;
+        }
+        if (!this.asaasService.hasValidConfiguration()) {
+            this.stopAsaasChargeSyncJob();
+            throw new asaasChargeSync_1.AsaasConfigurationError('Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.');
+        }
+        this.asaasRunning = true;
+        const runStartedAt = new Date();
+        this.asaasState.lastRunAt = runStartedAt;
+        if (manual) {
+            this.asaasState.lastManualTriggerAt = runStartedAt;
+        }
+        try {
+            const result = await this.asaasService.syncPendingCharges();
+            this.asaasState.lastResult = result;
+            this.asaasState.lastSuccessAt = new Date();
+            this.asaasState.lastErrorAt = null;
+            this.asaasState.lastErrorMessage = undefined;
+        }
+        catch (error) {
+            this.asaasState.lastErrorAt = new Date();
+            this.asaasState.lastErrorMessage = error instanceof Error ? error.message : String(error);
+            throw error;
+        }
+        finally {
+            this.asaasRunning = false;
         }
     }
     computeNextReference(_result) {
@@ -217,6 +324,13 @@ class CronJobsService {
             return seconds * 1000;
         }
         return DEFAULT_OVERLAP_MS;
+    }
+    resolveAsaasIntervalFromEnv() {
+        const ms = parsePositiveNumber(process.env.ASAAS_SYNC_INTERVAL_MS);
+        if (ms) {
+            return ms;
+        }
+        return DEFAULT_ASAAS_INTERVAL_MS;
     }
 }
 exports.CronJobsService = CronJobsService;

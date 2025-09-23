@@ -52,7 +52,7 @@ const router = (0, express_1.Router)();
  * @swagger
  * /api/agendas:
  *   get:
- *     summary: Lista todas as agendas
+ *     summary: Lista todas as agendas do usuário autenticado
  *     tags: [Agenda]
  *     responses:
  *       200:
@@ -67,9 +67,26 @@ const router = (0, express_1.Router)();
 router.get('/agendas', agendaController_1.listAgendas);
 /**
  * @swagger
+ * /api/agendas/empresa:
+ *   get:
+ *     summary: Lista todas as agendas da empresa vinculada ao usuário autenticado
+ *     tags: [Agenda]
+ *     responses:
+ *       200:
+ *         description: Lista de agendas da empresa
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Agenda'
+ */
+router.get('/agendas/empresa', agendaController_1.listAgendasByEmpresa);
+/**
+ * @swagger
  * /api/agendas/total-hoje:
  *   get:
- *     summary: Retorna o total de compromissos de hoje
+ *     summary: Retorna o total de compromissos de hoje do usuário autenticado
  *     tags: [Agenda]
  *     responses:
  *       200:

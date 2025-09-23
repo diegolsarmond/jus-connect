@@ -87,7 +87,7 @@ class PjeNotificationProvider {
         const created = [];
         for (const payload of payloads) {
             for (const event of payload.events) {
-                const notification = this.publish(buildPjeNotificationInput(payload, event));
+                const notification = await this.publish(buildPjeNotificationInput(payload, event));
                 this.pending.push(notification);
                 created.push(notification);
             }

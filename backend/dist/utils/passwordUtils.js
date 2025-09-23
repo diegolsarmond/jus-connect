@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyPassword = void 0;
+exports.hashPassword = exports.verifyPassword = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const safeCompare = (a, b) => {
     const bufferA = Buffer.from(a, 'utf8');
@@ -36,3 +36,12 @@ const verifyPassword = async (providedPassword, storedValue) => {
     return safeCompare(providedPassword, storedValue);
 };
 exports.verifyPassword = verifyPassword;
+const hashPassword = (password) => {
+    const salt = crypto_1.default.randomBytes(16).toString('hex');
+    const digest = crypto_1.default
+        .createHash('sha256')
+        .update(`${salt}:${password}`)
+        .digest('hex');
+    return `${SHA256_PREFIX}${salt}:${digest}`;
+};
+exports.hashPassword = hashPassword;

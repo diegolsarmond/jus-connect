@@ -39,7 +39,10 @@ exports.getConversationMessagesHandler = getConversationMessagesHandler;
 exports.sendConversationMessageHandler = sendConversationMessageHandler;
 exports.updateConversationHandler = updateConversationHandler;
 exports.markConversationReadHandler = markConversationReadHandler;
+exports.streamConversationEventsHandler = streamConversationEventsHandler;
+exports.updateTypingStateHandler = updateTypingStateHandler;
 const chatService_1 = __importStar(require("../services/chatService"));
+const realtime_1 = require("../realtime");
 const chatService = new chatService_1.default();
 function parseCreateConversationInput(body) {
     if (!body || typeof body !== 'object') {
@@ -150,6 +153,39 @@ function parseUpdateConversationPayload(body) {
             throw new chatService_1.ValidationError('clientName must be a string or null');
         }
     }
+    if (has('clientId')) {
+        const value = body.clientId;
+        let normalized;
+        if (value === null || value === undefined || (typeof value === 'string' && value.trim().length === 0)) {
+            normalized = null;
+        }
+        else if (typeof value === 'number') {
+            if (!Number.isInteger(value) || value <= 0) {
+                throw new chatService_1.ValidationError('clientId must be a positive integer');
+            }
+            normalized = value;
+        }
+        else if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                normalized = null;
+            }
+            else {
+                const parsed = Number.parseInt(trimmed, 10);
+                if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+                    throw new chatService_1.ValidationError('clientId must be a positive integer');
+                }
+                normalized = parsed;
+            }
+        }
+        else {
+            throw new chatService_1.ValidationError('clientId must be a number, string or null');
+        }
+        payload.clientId = normalized;
+        if (!has('isLinkedToClient')) {
+            payload.isLinkedToClient = normalized !== null;
+        }
+    }
     if (has('isLinkedToClient')) {
         if (typeof body.isLinkedToClient !== 'boolean') {
             throw new chatService_1.ValidationError('isLinkedToClient must be a boolean');
@@ -191,6 +227,7 @@ async function createConversationHandler(req, res) {
         const input = parseCreateConversationInput(req.body);
         const conversation = await chatService.createConversation(input);
         res.status(201).json(conversation);
+        (0, realtime_1.publishConversationUpdate)(conversation);
     }
     catch (error) {
         if (error instanceof chatService_1.ValidationError) {
@@ -226,7 +263,12 @@ async function sendConversationMessageHandler(req, res) {
             type: payload.type,
             attachments: payload.attachments,
         });
+        const conversation = await chatService.getConversationDetails(conversationId);
         res.status(201).json(message);
+        (0, realtime_1.publishMessageCreated)(message);
+        if (conversation) {
+            (0, realtime_1.publishConversationUpdate)(conversation);
+        }
     }
     catch (error) {
         if (error instanceof chatService_1.ValidationError) {
@@ -245,6 +287,7 @@ async function updateConversationHandler(req, res) {
             return res.status(404).json({ error: 'Conversation not found' });
         }
         res.json(updated);
+        (0, realtime_1.publishConversationUpdate)(updated);
     }
     catch (error) {
         if (error instanceof chatService_1.ValidationError) {
@@ -262,9 +305,39 @@ async function markConversationReadHandler(req, res) {
             return res.status(404).json({ error: 'Conversation not found' });
         }
         res.status(204).send();
+        const conversation = await chatService.getConversationDetails(conversationId);
+        (0, realtime_1.publishConversationRead)(conversationId, req.auth?.userId);
+        if (conversation) {
+            (0, realtime_1.publishConversationUpdate)(conversation);
+        }
     }
     catch (error) {
         console.error('Failed to mark conversation as read', error);
         res.status(500).json({ error: 'Internal server error' });
     }
+}
+function streamConversationEventsHandler(req, res) {
+    (0, realtime_1.streamConversations)(req, res);
+}
+function updateTypingStateHandler(req, res) {
+    if (!req.auth) {
+        res.status(401).json({ error: 'Token inválido.' });
+        return;
+    }
+    const { conversationId } = req.params;
+    const isTyping = typeof req.body?.isTyping === 'boolean' ? req.body.isTyping : undefined;
+    if (typeof conversationId !== 'string' || !conversationId.trim()) {
+        res.status(400).json({ error: 'Conversation id is required.' });
+        return;
+    }
+    if (typeof isTyping !== 'boolean') {
+        res.status(400).json({ error: 'isTyping must be a boolean value.' });
+        return;
+    }
+    const payload = (req.auth.payload ?? {});
+    const userName = typeof payload.name === 'string' && payload.name.trim().length > 0
+        ? payload.name.trim()
+        : undefined;
+    (0, realtime_1.updateTypingState)(conversationId, req.auth.userId, userName, isTyping);
+    res.status(202).json({ accepted: true });
 }

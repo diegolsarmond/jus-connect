@@ -32,14 +32,20 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listIntegrationApiKeys = listIntegrationApiKeys;
 exports.getIntegrationApiKey = getIntegrationApiKey;
 exports.createIntegrationApiKey = createIntegrationApiKey;
 exports.updateIntegrationApiKey = updateIntegrationApiKey;
 exports.deleteIntegrationApiKey = deleteIntegrationApiKey;
+exports.validateAsaasIntegration = validateAsaasIntegration;
 const integrationApiKeyService_1 = __importStar(require("../services/integrationApiKeyService"));
+const integrationApiKeyValidationService_1 = __importDefault(require("../services/integrationApiKeyValidationService"));
 const service = new integrationApiKeyService_1.default();
+const validationService = new integrationApiKeyValidationService_1.default();
 function parseIdParam(param) {
     const value = Number(param);
     if (!Number.isInteger(value) || value <= 0) {
@@ -200,6 +206,25 @@ async function deleteIntegrationApiKey(req, res) {
     }
     catch (error) {
         console.error('Failed to delete integration API key:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+}
+async function validateAsaasIntegration(req, res) {
+    const { apiKeyId } = req.body;
+    const parsedId = typeof apiKeyId === 'number'
+        ? apiKeyId
+        : typeof apiKeyId === 'string'
+            ? Number(apiKeyId)
+            : Number.NaN;
+    try {
+        const result = await validationService.validateAsaas(parsedId);
+        return res.json(result);
+    }
+    catch (error) {
+        if (error instanceof integrationApiKeyService_1.ValidationError) {
+            return res.status(400).json({ error: error.message });
+        }
+        console.error('Failed to validate Asaas integration API key:', error);
         return res.status(500).json({ error: 'Internal server error' });
     }
 }

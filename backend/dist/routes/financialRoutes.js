@@ -9,4 +9,5 @@ router.post('/financial/flows', financialController_1.createFlow);
 router.put('/financial/flows/:id', financialController_1.updateFlow);
 router.delete('/financial/flows/:id', financialController_1.deleteFlow);
 router.post('/financial/flows/:id/settle', financialController_1.settleFlow);
+router.post('/financial/flows/:id/asaas-charge', financialController_1.createAsaasChargeForFlow);
 exports.default = router;

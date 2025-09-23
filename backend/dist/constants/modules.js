@@ -8,6 +8,7 @@ exports.SYSTEM_MODULES = [
     { id: 'dashboard', nome: 'Dashboard', categoria: 'Aplicação' },
     { id: 'conversas', nome: 'Conversas', categoria: 'Aplicação' },
     { id: 'clientes', nome: 'Clientes', categoria: 'Aplicação' },
+    { id: 'fornecedores', nome: 'Fornecedores', categoria: 'Aplicação' },
     { id: 'pipeline', nome: 'Pipeline', categoria: 'Aplicação' },
     { id: 'agenda', nome: 'Agenda', categoria: 'Aplicação' },
     { id: 'tarefas', nome: 'Tarefas', categoria: 'Aplicação' },

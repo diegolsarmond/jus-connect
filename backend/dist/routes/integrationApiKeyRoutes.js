@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const integrationApiKeyController_1 = require("../controllers/integrationApiKeyController");
 const aiGenerationController_1 = require("../controllers/aiGenerationController");
+const asaasIntegrationController_1 = require("../controllers/asaasIntegrationController");
 const router = (0, express_1.Router)();
 /**
  * @swagger
@@ -59,7 +60,7 @@ router.get('/integrations/api-keys/:id', integrationApiKeyController_1.getIntegr
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai]
+ *                 enum: [gemini, openai, asaas]
  *               apiUrl:
  *                 type: string
  *                 format: uri
@@ -100,7 +101,7 @@ router.post('/integrations/api-keys', integrationApiKeyController_1.createIntegr
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai]
+ *                 enum: [gemini, openai, asaas]
  *               apiUrl:
  *                 type: string
  *                 format: uri
@@ -142,6 +143,30 @@ router.patch('/integrations/api-keys/:id', integrationApiKeyController_1.updateI
 router.delete('/integrations/api-keys/:id', integrationApiKeyController_1.deleteIntegrationApiKey);
 /**
  * @swagger
+ * /api/integrations/providers/asaas/validate:
+ *   post:
+ *     summary: Testa a conexão com o Asaas utilizando uma chave cadastrada
+ *     tags: [Integrações]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - apiKeyId
+ *             properties:
+ *               apiKeyId:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Resultado da validação da chave
+ *       400:
+ *         description: Requisição inválida ou chave inexistente
+ */
+router.post('/integrations/providers/asaas/validate', integrationApiKeyController_1.validateAsaasIntegration);
+/**
+ * @swagger
  * /api/integrations/ai/generate:
  *   post:
  *     summary: Gera um texto com IA utilizando uma integração cadastrada
@@ -172,4 +197,5 @@ router.delete('/integrations/api-keys/:id', integrationApiKeyController_1.delete
  *         description: Integração não encontrada ou inativa
  */
 router.post('/integrations/ai/generate', aiGenerationController_1.generateTextWithIntegration);
+router.get('/integrations/asaas/credentials/:credentialId/webhook-secret', asaasIntegrationController_1.getAsaasWebhookSecret);
 exports.default = router;

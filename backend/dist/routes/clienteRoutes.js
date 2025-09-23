@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const clienteController_1 = require("../controllers/clienteController");
+const asaasCustomerController_1 = require("../controllers/asaasCustomerController");
 const router = (0, express_1.Router)();
 /**
  * @swagger
@@ -41,8 +42,8 @@ const router = (0, express_1.Router)();
  *           type: string
  *         ativo:
  *           type: boolean
- *         foto:
- *           type: string
+ *         idempresa:
+ *           type: integer
  *         datacadastro:
  *           type: string
  *           format: date-time
@@ -144,8 +145,6 @@ router.get('/clientes/:id', clienteController_1.getClienteById);
  *                 type: string
  *               ativo:
  *                 type: boolean
- *               foto:
- *                 type: string
  *     responses:
  *       201:
  *         description: Cliente criado
@@ -155,6 +154,25 @@ router.get('/clientes/:id', clienteController_1.getClienteById);
  *               $ref: '#/components/schemas/Cliente'
  */
 router.post('/clientes', clienteController_1.createCliente);
+/**
+ * @swagger
+ * /api/asaas/customers/{clienteId}/status:
+ *   get:
+ *     summary: Recupera o status de sincronização do cliente com o Asaas
+ *     tags: [Clientes]
+ *     parameters:
+ *       - in: path
+ *         name: clienteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Status de sincronização
+ *       404:
+ *         description: Cliente não encontrado
+ */
+router.get('/asaas/customers/:clienteId/status', asaasCustomerController_1.getAsaasCustomerStatus);
 /**
  * @swagger
  * /api/clientes/{id}:
@@ -200,8 +218,6 @@ router.post('/clientes', clienteController_1.createCliente);
  *                 type: string
  *               ativo:
  *                 type: boolean
- *               foto:
- *                 type: string
  *     responses:
  *       200:
  *         description: Cliente atualizado

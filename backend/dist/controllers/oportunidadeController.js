@@ -3,8 +3,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteOportunidade = exports.createOportunidadeFaturamento = exports.listOportunidadeParcelas = exports.listOportunidadeFaturamentos = exports.updateOportunidadeEtapa = exports.updateOportunidadeStatus = exports.updateOportunidade = exports.createOportunidade = exports.listEnvolvidosByOportunidade = exports.getOportunidadeById = exports.listOportunidadesByFase = exports.listOportunidades = void 0;
+exports.deleteOportunidade = exports.createOportunidadeFaturamento = exports.__test__ = exports.listOportunidadeParcelas = exports.listOportunidadeFaturamentos = exports.updateOportunidadeEtapa = exports.linkProcessoToOportunidade = exports.updateOportunidadeStatus = exports.updateOportunidade = exports.createOportunidade = exports.listEnvolvidosByOportunidade = exports.getOportunidadeById = exports.listOportunidadesByFase = exports.listOportunidades = void 0;
 const db_1 = __importDefault(require("../services/db"));
+const authUser_1 = require("../utils/authUser");
+const getAuthenticatedUser = (req, res) => {
+    if (!req.auth) {
+        res.status(401).json({ error: 'Token inválido.' });
+        return null;
+    }
+    return req.auth;
+};
 const normalizeDecimal = (input) => {
     if (typeof input === 'number' && Number.isFinite(input)) {
         return input;
@@ -50,6 +58,38 @@ const normalizeText = (input) => {
     }
     return trimmed;
 };
+const parsePositiveIntegerParam = (input) => {
+    if (typeof input !== 'string' && typeof input !== 'number') {
+        return null;
+    }
+    const parsed = Number(input);
+    if (!Number.isFinite(parsed)) {
+        return null;
+    }
+    const normalized = Math.trunc(parsed);
+    return normalized > 0 ? normalized : null;
+};
+const resolveEmpresaIdFromRequest = async (req, res) => {
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+        return { ok: false };
+    }
+    const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(auth.userId);
+    if (!empresaLookup.success) {
+        res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        return { ok: false };
+    }
+    const { empresaId } = empresaLookup;
+    if (empresaId === null) {
+        res.status(404).json({ error: 'Oportunidade não encontrada' });
+        return { ok: false };
+    }
+    return { ok: true, empresaId };
+};
+const ensureOpportunityAccess = async (oportunidadeId, empresaId) => {
+    const result = await db_1.default.query('SELECT 1 FROM public.oportunidades WHERE id = $1 AND idempresa = $2 LIMIT 1', [oportunidadeId, empresaId]);
+    return (result.rowCount ?? 0) > 0;
+};
 const normalizePaymentLabel = (input) => {
     const text = normalizeText(input);
     if (!text) {
@@ -87,24 +127,121 @@ const buildInstallmentValues = (total, count) => {
     }
     return values;
 };
-const resetOpportunityInstallments = async (client, oportunidadeId, values) => {
+const normalizeDateOnly = (input) => {
+    if (input instanceof Date) {
+        if (Number.isNaN(input.getTime())) {
+            return null;
+        }
+        const year = input.getUTCFullYear();
+        const monthIndex = input.getUTCMonth();
+        const day = input.getUTCDate();
+        return new Date(Date.UTC(year, monthIndex, day));
+    }
+    const text = normalizeText(input);
+    if (!text) {
+        return null;
+    }
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+        return null;
+    }
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) {
+        return null;
+    }
+    const candidate = new Date(Date.UTC(year, monthIndex, day));
+    if (candidate.getUTCFullYear() !== year ||
+        candidate.getUTCMonth() !== monthIndex ||
+        candidate.getUTCDate() !== day) {
+        return null;
+    }
+    return candidate;
+};
+const formatDateOnly = (value) => {
+    const year = value.getUTCFullYear().toString().padStart(4, '0');
+    const month = (value.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = value.getUTCDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+const addMonthsPreservingDay = (base, monthsToAdd) => {
+    const desiredDay = base.getUTCDate();
+    const baseMonthIndex = base.getUTCMonth();
+    const baseYear = base.getUTCFullYear();
+    const totalMonths = baseMonthIndex + monthsToAdd;
+    const targetYear = baseYear + Math.floor(totalMonths / 12);
+    const normalizedMonthIndex = ((totalMonths % 12) + 12) % 12;
+    const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, normalizedMonthIndex + 1, 0)).getUTCDate();
+    const day = Math.min(desiredDay, lastDayOfTargetMonth);
+    return new Date(Date.UTC(targetYear, normalizedMonthIndex, day));
+};
+const buildInstallmentDueDates = (count, firstDueDate) => {
+    if (!Number.isFinite(count) || count <= 0) {
+        return [];
+    }
+    if (!firstDueDate) {
+        return Array.from({ length: count }, () => null);
+    }
+    const schedule = [];
+    for (let index = 0; index < count; index += 1) {
+        schedule.push(addMonthsPreservingDay(firstDueDate, index));
+    }
+    return schedule;
+};
+const buildEntryInstallment = (total, entryAmount, dueDate) => {
+    if (!total || !Number.isFinite(total) || total <= 0) {
+        return { entry: null, remainingTotal: total ?? 0 };
+    }
+    if (!entryAmount || !Number.isFinite(entryAmount) || entryAmount <= 0) {
+        return { entry: null, remainingTotal: total };
+    }
+    const totalCents = Math.round(total * 100);
+    const rawEntryCents = Math.round(entryAmount * 100);
+    const entryCents = Math.min(rawEntryCents, totalCents);
+    if (entryCents <= 0) {
+        return { entry: null, remainingTotal: total };
+    }
+    const remainingCents = Math.max(totalCents - entryCents, 0);
+    return {
+        entry: {
+            valor: entryCents / 100,
+            dataPrevista: dueDate,
+        },
+        remainingTotal: remainingCents / 100,
+    };
+};
+const resetOpportunityInstallments = async (client, oportunidadeId, installments, empresaId, entryInstallment = null) => {
     await client.query('DELETE FROM public.oportunidade_parcelas WHERE oportunidade_id = $1', [
         oportunidadeId,
     ]);
-    if (values.length === 0) {
+    const hasEntry = Boolean(entryInstallment);
+    if (!hasEntry && installments.length === 0) {
         return;
     }
-    for (let index = 0; index < values.length; index += 1) {
-        const valorParcela = values[index];
-        await client.query(`INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor)
-       VALUES ($1, $2, $3)`, [oportunidadeId, index + 1, valorParcela]);
+    const empresaValue = empresaId ?? null;
+    if (entryInstallment) {
+        const entryDueDateParam = entryInstallment.dataPrevista !== null
+            ? formatDateOnly(entryInstallment.dataPrevista)
+            : null;
+        await client.query(`INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor, data_prevista, idempresa)
+       VALUES ($1, $2, $3, $4, $5)`, [oportunidadeId, 0, entryInstallment.valor, entryDueDateParam, empresaValue]);
+    }
+    for (let index = 0; index < installments.length; index += 1) {
+        const installment = installments[index];
+        const dueDateParam = installment.dataPrevista !== null ? formatDateOnly(installment.dataPrevista) : null;
+        await client.query(`INSERT INTO public.oportunidade_parcelas (oportunidade_id, numero_parcela, valor, data_prevista, idempresa)
+       VALUES ($1, $2, $3, $4, $5)`, [oportunidadeId, index + 1, installment.valor, dueDateParam, empresaValue]);
     }
 };
-const createOrReplaceOpportunityInstallments = async (client, oportunidadeId, valorHonorarios, formaPagamento, qtdeParcelas) => {
+const createOrReplaceOpportunityInstallments = async (client, oportunidadeId, valorHonorarios, formaPagamento, qtdeParcelas, prazoProximo, empresaId, valorEntrada) => {
     const normalizedPayment = normalizePaymentLabel(formaPagamento);
     const honorarios = normalizeDecimal(valorHonorarios);
+    const entryAmount = normalizeDecimal(valorEntrada);
+    const firstDueDate = normalizeDateOnly(prazoProximo);
+    const { entry, remainingTotal } = buildEntryInstallment(honorarios, entryAmount, firstDueDate);
     if (!honorarios || honorarios <= 0 || !shouldCreateInstallments(normalizedPayment)) {
-        await resetOpportunityInstallments(client, oportunidadeId, []);
+        await resetOpportunityInstallments(client, oportunidadeId, [], empresaId, entry);
         return;
     }
     const parcelasCount = normalizeInteger(qtdeParcelas);
@@ -112,26 +249,46 @@ const createOrReplaceOpportunityInstallments = async (client, oportunidadeId, va
         ? parcelasCount ?? 1
         : 1;
     if (!totalParcelas || totalParcelas <= 0) {
-        await resetOpportunityInstallments(client, oportunidadeId, []);
+        await resetOpportunityInstallments(client, oportunidadeId, [], empresaId, entry);
         return;
     }
-    const values = buildInstallmentValues(honorarios, totalParcelas);
-    await resetOpportunityInstallments(client, oportunidadeId, values);
+    const values = buildInstallmentValues(remainingTotal, totalParcelas);
+    const dueDates = buildInstallmentDueDates(values.length, firstDueDate);
+    const installments = values.map((valor, index) => ({
+        valor,
+        dataPrevista: dueDates[index] ?? null,
+    }));
+    await resetOpportunityInstallments(client, oportunidadeId, installments, empresaId, entry);
 };
-const ensureOpportunityInstallments = async (client, oportunidadeId, valorHonorarios, formaPagamento, qtdeParcelas) => {
+const ensureOpportunityInstallments = async (client, oportunidadeId, valorHonorarios, formaPagamento, qtdeParcelas, prazoProximo, empresaId, valorEntrada) => {
     const existing = await client.query('SELECT id FROM public.oportunidade_parcelas WHERE oportunidade_id = $1 LIMIT 1', [oportunidadeId]);
     if ((existing.rowCount ?? 0) > 0) {
         return;
     }
-    await createOrReplaceOpportunityInstallments(client, oportunidadeId, valorHonorarios, formaPagamento, qtdeParcelas);
+    await createOrReplaceOpportunityInstallments(client, oportunidadeId, valorHonorarios, formaPagamento, qtdeParcelas, prazoProximo, empresaId, valorEntrada);
 };
-const listOportunidades = async (_req, res) => {
+const listOportunidades = async (req, res) => {
     try {
+        const auth = getAuthenticatedUser(req, res);
+        if (!auth) {
+            return;
+        }
+        const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(auth.userId);
+        if (!empresaLookup.success) {
+            res.status(empresaLookup.status).json({ error: empresaLookup.message });
+            return;
+        }
+        const { empresaId } = empresaLookup;
+        if (empresaId === null) {
+            res.json([]);
+            return;
+        }
         const result = await db_1.default.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
-       FROM public.oportunidades`);
+              detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa,
+              valor_entrada
+       FROM public.oportunidades WHERE idempresa = $1`, [empresaId]);
         res.json(result.rows);
     }
     catch (error) {
@@ -142,12 +299,23 @@ const listOportunidades = async (_req, res) => {
 exports.listOportunidades = listOportunidades;
 const listOportunidadesByFase = async (req, res) => {
     const { faseId } = req.params;
+    const parsedFaseId = parsePositiveIntegerParam(faseId);
+    if (parsedFaseId === null) {
+        res.status(400).json({ error: 'Fluxo de trabalho inválido' });
+        return;
+    }
     try {
+        const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+        if (!empresaResolution.ok) {
+            return;
+        }
+        const { empresaId } = empresaResolution;
         const result = await db_1.default.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
-       FROM public.oportunidades WHERE fase_id = $1`, [faseId]);
+              detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao,
+              valor_entrada
+       FROM public.oportunidades WHERE fase_id = $1 AND idempresa = $2`, [parsedFaseId, empresaId]);
         res.json(result.rows);
     }
     catch (error) {
@@ -159,17 +327,27 @@ exports.listOportunidadesByFase = listOportunidadesByFase;
 const getOportunidadeById = async (req, res) => {
     const { id } = req.params;
     try {
+        const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+        if (!empresaResolution.ok) {
+            return;
+        }
+        const parsedId = parsePositiveIntegerParam(id);
+        if (parsedId === null) {
+            res.status(400).json({ error: 'Oportunidade inválida' });
+            return;
+        }
         const oportunidadeResult = await db_1.default.query(`SELECT id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
               vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
               valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-              detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao
-       FROM public.oportunidades WHERE id = $1`, [id]);
+              detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao,
+              valor_entrada
+       FROM public.oportunidades WHERE id = $1 AND idempresa = $2`, [parsedId, empresaResolution.empresaId]);
         if (oportunidadeResult.rowCount === 0) {
             return res.status(404).json({ error: 'Oportunidade não encontrada' });
         }
         const envolvidosResult = await db_1.default.query(`SELECT nome, documento, telefone, endereco, relacao
        FROM public.oportunidade_envolvidos
-       WHERE oportunidade_id = $1`, [id]);
+       WHERE oportunidade_id = $1`, [parsedId]);
         const oportunidade = oportunidadeResult.rows[0];
         oportunidade.envolvidos = envolvidosResult.rows.map((env) => ({
             nome: env.nome,
@@ -188,10 +366,24 @@ const getOportunidadeById = async (req, res) => {
 exports.getOportunidadeById = getOportunidadeById;
 const listEnvolvidosByOportunidade = async (req, res) => {
     const { id } = req.params;
+    const parsedId = parsePositiveIntegerParam(id);
+    if (parsedId === null) {
+        res.status(400).json({ error: 'Oportunidade inválida' });
+        return;
+    }
     try {
+        const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+        if (!empresaResolution.ok) {
+            return;
+        }
+        const hasAccess = await ensureOpportunityAccess(parsedId, empresaResolution.empresaId);
+        if (!hasAccess) {
+            res.status(404).json({ error: 'Oportunidade não encontrada' });
+            return;
+        }
         const result = await db_1.default.query(`SELECT id, oportunidade_id, nome, documento, telefone, endereco, relacao
        FROM public.oportunidade_envolvidos
-       WHERE oportunidade_id = $1`, [id]);
+       WHERE oportunidade_id = $1`, [parsedId]);
         res.json(result.rows);
     }
     catch (error) {
@@ -201,20 +393,50 @@ const listEnvolvidosByOportunidade = async (req, res) => {
 };
 exports.listEnvolvidosByOportunidade = listEnvolvidosByOportunidade;
 const createOportunidade = async (req, res) => {
-    const { tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo, vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id, valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento, detalhes, documentos_anexados, criado_por, envolvidos, } = req.body;
-    const client = await db_1.default.connect();
+    const { tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo, vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id, valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento, detalhes, documentos_anexados, criado_por, envolvidos, valor_entrada, } = req.body;
+    const auth = getAuthenticatedUser(req, res);
+    if (!auth) {
+        return;
+    }
+    const empresaLookup = await (0, authUser_1.fetchAuthenticatedUserEmpresa)(auth.userId);
+    if (!empresaLookup.success) {
+        res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        return;
+    }
+    const { empresaId } = empresaLookup;
+    if (empresaId === null) {
+        res
+            .status(400)
+            .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+        return;
+    }
+    let client = null;
     try {
-        await client.query('BEGIN');
-        const result = await client.query(`INSERT INTO public.oportunidades
+        client = await db_1.default.connect();
+        if (!client) {
+            throw new Error('Não foi possível obter conexão com o banco de dados.');
+        }
+        const dbClient = client;
+        await dbClient.query('BEGIN');
+        const sequenceResult = await dbClient.query(`INSERT INTO public.oportunidade_sequence (empresa_id, atual)
+       VALUES ($1, 1)
+       ON CONFLICT (empresa_id)
+       DO UPDATE SET atual = public.oportunidade_sequence.atual + 1
+       RETURNING atual`, [empresaId]);
+        if (sequenceResult.rowCount === 0) {
+            throw new Error('Não foi possível gerar o sequencial da oportunidade.');
+        }
+        const sequencialEmpresa = sequenceResult.rows[0].atual;
+        const result = await dbClient.query(`INSERT INTO public.oportunidades
        (tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
         vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-        valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-        detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),NOW())
+        valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, valor_entrada, contingenciamento,
+        detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW(),NOW(),$24)
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-                 detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao`, [
+                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, valor_entrada, contingenciamento,
+                 detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa`, [
             tipo_processo_id,
             area_atuacao_id,
             responsavel_id,
@@ -232,14 +454,17 @@ const createOportunidade = async (req, res) => {
             percentual_honorarios,
             forma_pagamento,
             qtde_parcelas,
+            valor_entrada,
             contingenciamento,
             detalhes,
             documentos_anexados,
             criado_por,
+            sequencialEmpresa,
+            empresaId,
         ]);
         const oportunidade = result.rows[0];
         if (Array.isArray(envolvidos) && envolvidos.length > 0) {
-            const queries = envolvidos.map((env) => client.query(`INSERT INTO public.oportunidade_envolvidos
+            const queries = envolvidos.map((env) => dbClient.query(`INSERT INTO public.oportunidade_envolvidos
            (oportunidade_id, nome, documento, telefone, endereco, relacao)
            VALUES ($1, $2, $3, $4, $5, $6)`, [
                 oportunidade.id,
@@ -251,25 +476,35 @@ const createOportunidade = async (req, res) => {
             ]));
             await Promise.all(queries);
         }
-        await createOrReplaceOpportunityInstallments(client, oportunidade.id, valor_honorarios, forma_pagamento, qtde_parcelas);
+        await createOrReplaceOpportunityInstallments(dbClient, oportunidade.id, valor_honorarios, forma_pagamento, qtde_parcelas, prazo_proximo, empresaId, valor_entrada);
         await client.query('COMMIT');
         res.status(201).json(oportunidade);
     }
     catch (error) {
-        await client.query('ROLLBACK');
+        if (client) {
+            try {
+                await client.query('ROLLBACK');
+            }
+            catch (rollbackError) {
+                console.error('Erro ao reverter transação de oportunidade:', rollbackError);
+            }
+        }
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });
     }
     finally {
-        client.release();
+        client?.release();
     }
 };
 exports.createOportunidade = createOportunidade;
 const updateOportunidade = async (req, res) => {
     const { id } = req.params;
-    const { tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo, vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id, valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento, detalhes, documentos_anexados, criado_por, envolvidos, } = req.body;
+    const { tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo, vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id, valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento, detalhes, documentos_anexados, criado_por, envolvidos, valor_entrada, } = req.body;
+    let client = null;
     try {
-        const result = await db_1.default.query(`UPDATE public.oportunidades SET
+        client = await db_1.default.connect();
+        await client.query('BEGIN');
+        const result = await client.query(`UPDATE public.oportunidades SET
          tipo_processo_id = $1,
          area_atuacao_id = $2,
          responsavel_id = $3,
@@ -287,16 +522,17 @@ const updateOportunidade = async (req, res) => {
          percentual_honorarios = $15,
          forma_pagamento = $16,
          qtde_parcelas = $17,
-         contingenciamento = $18,
-         detalhes = $19,
-         documentos_anexados = $20,
-         criado_por = $21,
+         valor_entrada = $18,
+         contingenciamento = $19,
+         detalhes = $20,
+         documentos_anexados = $21,
+         criado_por = $22,
          ultima_atualizacao = NOW()
-       WHERE id = $22
+       WHERE id = $23
        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
-                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, contingenciamento,
-                 detalhes, documentos_anexados, criado_por, data_criacao, ultima_atualizacao`, [
+                 valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas, valor_entrada, contingenciamento,
+                 detalhes, documentos_anexados, criado_por, sequencial_empresa, data_criacao, ultima_atualizacao, idempresa`, [
             tipo_processo_id,
             area_atuacao_id,
             responsavel_id,
@@ -314,6 +550,7 @@ const updateOportunidade = async (req, res) => {
             percentual_honorarios,
             forma_pagamento,
             qtde_parcelas,
+            valor_entrada,
             contingenciamento,
             detalhes,
             documentos_anexados,
@@ -321,11 +558,13 @@ const updateOportunidade = async (req, res) => {
             id,
         ]);
         if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Oportunidade não encontrada' });
+            await client.query('ROLLBACK');
+            res.status(404).json({ error: 'Oportunidade não encontrada' });
+            return;
         }
         if (Array.isArray(envolvidos)) {
-            await db_1.default.query('DELETE FROM public.oportunidade_envolvidos WHERE oportunidade_id = $1', [id]);
-            const queries = envolvidos.map((env) => db_1.default.query(`INSERT INTO public.oportunidade_envolvidos
+            await client.query('DELETE FROM public.oportunidade_envolvidos WHERE oportunidade_id = $1', [id]);
+            const queries = envolvidos.map((env) => client.query(`INSERT INTO public.oportunidade_envolvidos
            (oportunidade_id, nome, documento, telefone, endereco, relacao)
            VALUES ($1, $2, $3, $4, $5, $6)`, [
                 id,
@@ -337,11 +576,25 @@ const updateOportunidade = async (req, res) => {
             ]));
             await Promise.all(queries);
         }
-        res.json(result.rows[0]);
+        const oportunidade = result.rows[0];
+        await createOrReplaceOpportunityInstallments(client, oportunidade.id, valor_honorarios, forma_pagamento, qtde_parcelas, prazo_proximo, typeof oportunidade.idempresa === 'number' ? oportunidade.idempresa : null, valor_entrada);
+        await client.query('COMMIT');
+        res.json(oportunidade);
     }
     catch (error) {
+        if (client) {
+            try {
+                await client.query('ROLLBACK');
+            }
+            catch (rollbackError) {
+                console.error('Erro ao reverter transação de oportunidade:', rollbackError);
+            }
+        }
         console.error(error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+    finally {
+        client?.release();
     }
 };
 exports.updateOportunidade = updateOportunidade;
@@ -371,6 +624,109 @@ const updateOportunidadeStatus = async (req, res) => {
     }
 };
 exports.updateOportunidadeStatus = updateOportunidadeStatus;
+const linkProcessoToOportunidade = async (req, res) => {
+    const { id } = req.params;
+    const { processoId } = req.body;
+    const oportunidadeId = parsePositiveIntegerParam(id);
+    if (oportunidadeId === null) {
+        res.status(400).json({ error: 'Oportunidade inválida' });
+        return;
+    }
+    const processoIdParsed = parsePositiveIntegerParam(processoId);
+    if (processoIdParsed === null) {
+        res.status(400).json({ error: 'processoId inválido' });
+        return;
+    }
+    const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+    if (!empresaResolution.ok) {
+        return;
+    }
+    const { empresaId } = empresaResolution;
+    const hasAccess = await ensureOpportunityAccess(oportunidadeId, empresaId);
+    if (!hasAccess) {
+        res.status(404).json({ error: 'Oportunidade não encontrada' });
+        return;
+    }
+    const processoResult = await db_1.default.query(`SELECT id, numero, municipio, orgao_julgador, status, tipo, oportunidade_id
+       FROM public.processos
+      WHERE id = $1
+        AND idempresa IS NOT DISTINCT FROM $2
+      LIMIT 1`, [processoIdParsed, empresaId]);
+    if (processoResult.rowCount === 0) {
+        res.status(404).json({ error: 'Processo não encontrado' });
+        return;
+    }
+    const processoRow = processoResult.rows[0];
+    if (processoRow.oportunidade_id !== null &&
+        processoRow.oportunidade_id !== oportunidadeId) {
+        res.status(400).json({ error: 'Processo já está vinculado a outra oportunidade' });
+        return;
+    }
+    const numeroValue = normalizeText(typeof processoRow.numero === 'number'
+        ? processoRow.numero.toString()
+        : processoRow.numero);
+    const municipioValue = normalizeText(processoRow.municipio);
+    const orgaoValue = normalizeText(processoRow.orgao_julgador);
+    const statusValue = normalizeText(processoRow.status);
+    const tipoValue = normalizeText(processoRow.tipo);
+    let client = null;
+    try {
+        client = await db_1.default.connect();
+        await client.query('BEGIN');
+        await client.query('UPDATE public.processos SET oportunidade_id = $1, atualizado_em = NOW() WHERE id = $2', [oportunidadeId, processoIdParsed]);
+        const oportunidadeResult = await client.query(`UPDATE public.oportunidades
+          SET numero_processo_cnj = $1,
+              comarca = $2,
+              vara_ou_orgao = $3,
+              ultima_atualizacao = NOW()
+        WHERE id = $4 AND idempresa = $5
+        RETURNING id, tipo_processo_id, area_atuacao_id, responsavel_id, numero_processo_cnj, numero_protocolo,
+                  vara_ou_orgao, comarca, fase_id, etapa_id, prazo_proximo, status_id, solicitante_id,
+                  valor_causa, valor_honorarios, percentual_honorarios, forma_pagamento, qtde_parcelas,
+                  contingenciamento, detalhes, documentos_anexados, criado_por, sequencial_empresa,
+                  data_criacao, ultima_atualizacao, idempresa, valor_entrada`, [numeroValue ?? null, municipioValue ?? null, orgaoValue ?? null, oportunidadeId, empresaId]);
+        if (oportunidadeResult.rowCount === 0) {
+            await client.query('ROLLBACK');
+            res.status(404).json({ error: 'Oportunidade não encontrada' });
+            return;
+        }
+        await client.query('COMMIT');
+        const oportunidadeRow = oportunidadeResult.rows[0];
+        const responsePayload = {
+            ...oportunidadeRow,
+            processo_id: processoIdParsed,
+        };
+        if (statusValue) {
+            responsePayload.status = statusValue;
+        }
+        if (tipoValue) {
+            responsePayload.tipo_processo_nome = tipoValue;
+        }
+        if (!responsePayload.comarca && municipioValue) {
+            responsePayload.comarca = municipioValue;
+        }
+        if (!responsePayload.vara_ou_orgao && orgaoValue) {
+            responsePayload.vara_ou_orgao = orgaoValue;
+        }
+        res.json(responsePayload);
+    }
+    catch (error) {
+        if (client) {
+            try {
+                await client.query('ROLLBACK');
+            }
+            catch (rollbackError) {
+                console.error('Erro ao reverter transação de vinculação de processo:', rollbackError);
+            }
+        }
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+    finally {
+        client?.release();
+    }
+};
+exports.linkProcessoToOportunidade = linkProcessoToOportunidade;
 const updateOportunidadeEtapa = async (req, res) => {
     const { id } = req.params;
     const { etapa_id } = req.body;
@@ -393,12 +749,26 @@ const updateOportunidadeEtapa = async (req, res) => {
 exports.updateOportunidadeEtapa = updateOportunidadeEtapa;
 const listOportunidadeFaturamentos = async (req, res) => {
     const { id } = req.params;
+    const parsedId = parsePositiveIntegerParam(id);
+    if (parsedId === null) {
+        res.status(400).json({ error: 'Oportunidade inválida' });
+        return;
+    }
     try {
+        const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+        if (!empresaResolution.ok) {
+            return;
+        }
+        const hasAccess = await ensureOpportunityAccess(parsedId, empresaResolution.empresaId);
+        if (!hasAccess) {
+            res.status(404).json({ error: 'Oportunidade não encontrada' });
+            return;
+        }
         const result = await db_1.default.query(`SELECT id, oportunidade_id, forma_pagamento, condicao_pagamento, valor, parcelas,
               observacoes, data_faturamento, criado_em
          FROM public.oportunidade_faturamentos
         WHERE oportunidade_id = $1
-        ORDER BY data_faturamento DESC NULLS LAST, id DESC`, [id]);
+        ORDER BY data_faturamento DESC NULLS LAST, id DESC`, [parsedId]);
         res.json(result.rows);
     }
     catch (error) {
@@ -409,12 +779,26 @@ const listOportunidadeFaturamentos = async (req, res) => {
 exports.listOportunidadeFaturamentos = listOportunidadeFaturamentos;
 const listOportunidadeParcelas = async (req, res) => {
     const { id } = req.params;
+    const parsedId = parsePositiveIntegerParam(id);
+    if (parsedId === null) {
+        res.status(400).json({ error: 'Oportunidade inválida' });
+        return;
+    }
     try {
+        const empresaResolution = await resolveEmpresaIdFromRequest(req, res);
+        if (!empresaResolution.ok) {
+            return;
+        }
+        const hasAccess = await ensureOpportunityAccess(parsedId, empresaResolution.empresaId);
+        if (!hasAccess) {
+            res.status(404).json({ error: 'Oportunidade não encontrada' });
+            return;
+        }
         const result = await db_1.default.query(`SELECT id, oportunidade_id, numero_parcela, valor, valor_pago, status, data_prevista,
               quitado_em, faturamento_id, criado_em, atualizado_em
          FROM public.oportunidade_parcelas
         WHERE oportunidade_id = $1
-        ORDER BY numero_parcela ASC`, [id]);
+        ORDER BY numero_parcela ASC`, [parsedId]);
         res.json(result.rows);
     }
     catch (error) {
@@ -423,9 +807,12 @@ const listOportunidadeParcelas = async (req, res) => {
     }
 };
 exports.listOportunidadeParcelas = listOportunidadeParcelas;
+exports.__test__ = {
+    createOrReplaceOpportunityInstallments,
+};
 const createOportunidadeFaturamento = async (req, res) => {
     const { id } = req.params;
-    const { forma_pagamento, condicao_pagamento, valor, parcelas, observacoes, data_faturamento, parcelas_ids, } = req.body;
+    const { forma_pagamento, condicao_pagamento, valor, parcelas, observacoes, data_faturamento, parcelas_ids, juros, multa, } = req.body;
     const formaValue = normalizeText(forma_pagamento);
     if (!formaValue) {
         return res
@@ -457,10 +844,49 @@ const createOportunidadeFaturamento = async (req, res) => {
         faturamentoDate = parsedDate;
     }
     const observations = normalizeText(observacoes);
+    const jurosValor = (() => {
+        if (juros === undefined || juros === null) {
+            return 0;
+        }
+        if (typeof juros === 'string' && juros.trim().length === 0) {
+            return 0;
+        }
+        const parsed = normalizeDecimal(juros);
+        if (parsed === null) {
+            return null;
+        }
+        return parsed;
+    })();
+    if (jurosValor === null) {
+        return res.status(400).json({ error: 'juros inválido.' });
+    }
+    if (jurosValor < 0) {
+        return res.status(400).json({ error: 'juros não pode ser negativo.' });
+    }
+    const multaValor = (() => {
+        if (multa === undefined || multa === null) {
+            return 0;
+        }
+        if (typeof multa === 'string' && multa.trim().length === 0) {
+            return 0;
+        }
+        const parsed = normalizeDecimal(multa);
+        if (parsed === null) {
+            return null;
+        }
+        return parsed;
+    })();
+    if (multaValor === null) {
+        return res.status(400).json({ error: 'multa inválida.' });
+    }
+    if (multaValor < 0) {
+        return res.status(400).json({ error: 'multa não pode ser negativa.' });
+    }
+    const encargosValor = jurosValor + multaValor;
     const client = await db_1.default.connect();
     try {
         await client.query('BEGIN');
-        const opportunityResult = await client.query(`SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios
+        const opportunityResult = await client.query(`SELECT id, forma_pagamento, qtde_parcelas, valor_honorarios, prazo_proximo, idempresa, valor_entrada
          FROM public.oportunidades
         WHERE id = $1`, [id]);
         if (opportunityResult.rowCount === 0) {
@@ -468,7 +894,7 @@ const createOportunidadeFaturamento = async (req, res) => {
             return res.status(404).json({ error: 'Oportunidade não encontrada' });
         }
         const opportunity = opportunityResult.rows[0];
-        await ensureOpportunityInstallments(client, Number(id), opportunity.valor_honorarios, opportunity.forma_pagamento, opportunity.qtde_parcelas);
+        await ensureOpportunityInstallments(client, Number(id), opportunity.valor_honorarios, opportunity.forma_pagamento, opportunity.qtde_parcelas, opportunity.prazo_proximo, typeof opportunity.idempresa === 'number' ? opportunity.idempresa : null, opportunity.valor_entrada);
         const installmentsResult = await client.query(`SELECT id, valor, numero_parcela
          FROM public.oportunidade_parcelas
         WHERE oportunidade_id = $1
@@ -532,6 +958,12 @@ const createOportunidadeFaturamento = async (req, res) => {
             else if (Math.abs(valorToPersist - sum) > 0.009) {
                 valorToPersist = sum;
             }
+            if (valorToPersist !== null) {
+                valorToPersist += encargosValor;
+            }
+        }
+        else if (valorToPersist === null && encargosValor > 0) {
+            valorToPersist = encargosValor;
         }
         const parcelasToPersist = isParcelado
             ? parsedParcelas ?? (installmentsToClose.length > 0 ? installmentsToClose.length : null)

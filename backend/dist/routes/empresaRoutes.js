@@ -32,6 +32,9 @@ const router = (0, express_1.Router)();
  *         datacadastro:
  *           type: string
  *           format: date-time
+ *         atualizacao:
+ *           type: string
+ *           format: date-time
  */
 /**
  * @swagger
@@ -50,6 +53,29 @@ const router = (0, express_1.Router)();
  *                 $ref: '#/components/schemas/Empresa'
  */
 router.get('/empresas', empresaController_1.listEmpresas);
+/**
+ * @swagger
+ * /api/empresas/{id}:
+ *   get:
+ *     summary: Obtém os detalhes de uma empresa específica
+ *     tags: [Empresas]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Empresa encontrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Empresa'
+ *       404:
+ *         description: Empresa não encontrada
+ */
+router.get('/empresas/:id', empresaController_1.getEmpresaById);
 /**
  * @swagger
  * /api/empresas:
