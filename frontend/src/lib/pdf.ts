@@ -201,7 +201,9 @@ function buildTextPdf(pages: string[][]): Uint8Array {
 
   const catalogId = addObject("");
   const pagesId = addObject("");
-  const fontId = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const fontId = addObject(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+  );
 
   const pageIds: number[] = [];
 

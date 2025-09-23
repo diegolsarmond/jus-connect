@@ -139,6 +139,13 @@ describe("createTextPdfBlob", () => {
     expect(pdfContent).not.toContain("Ã");
   });
 
+  it("preserves WinAnsi-only glyphs like bullets in text PDFs", async () => {
+    const blob = __createTextPdfBlobForTesting("List", "<p>• Item</p>");
+    const pdfContent = await decodePdfToLatin1(blob);
+    expect(pdfContent).toContain("(\u0095 Item) Tj");
+    expect(pdfContent).not.toContain("(? Item) Tj");
+  });
+
   it("preserves blank lines between paragraphs when DOM APIs are unavailable", async () => {
     const html = "<p>Primeiro parágrafo.</p><p>Segundo parágrafo.</p>";
     vi.stubGlobal("document", undefined as unknown as Document);
