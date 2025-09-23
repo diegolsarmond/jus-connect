@@ -48,9 +48,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_conversations_last_activity
 CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_created
   ON chat_messages (conversation_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_chat_conversations_client
-  ON chat_conversations (client_id);
-
 CREATE OR REPLACE FUNCTION set_chat_conversations_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -91,3 +88,6 @@ EXCEPTION
     NULL;
 END;
 $$;
+
+CREATE INDEX IF NOT EXISTS idx_chat_conversations_client
+  ON chat_conversations (client_id);
