@@ -1096,10 +1096,7 @@ export default function MeuPlano() {
                   </Button>
                 )}
                 <Button size="lg" variant="ghost" className="rounded-full" asChild>
-                  <Link to={routes.admin.newPlan} className="flex items-center gap-2">
-                    Gerenciar no painel
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+
                 </Button>
               </div>
             </CardContent>

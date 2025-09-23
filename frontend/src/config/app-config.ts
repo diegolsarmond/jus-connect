@@ -78,7 +78,7 @@ const joinPathSegments = (...segments: (string | undefined)[]) => {
 };
 
 export const appConfig: AppConfig = {
-  appName: sanitizeString(import.meta.env.VITE_APP_NAME) ?? "Quantum Jus",
+  appName: sanitizeString(import.meta.env.VITE_APP_NAME) ?? "Quantum Jud",
   environment: import.meta.env.MODE,
   isProduction: import.meta.env.PROD,
   basePath: normalizePath(import.meta.env.VITE_APP_BASE_PATH, "/"),
