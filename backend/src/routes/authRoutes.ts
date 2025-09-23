@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getCurrentUser, login, refreshToken } from '../controllers/authController';
+import { getCurrentUser, login, refreshToken, register } from '../controllers/authController';
 import { authenticateRequest } from '../middlewares/authMiddleware';
 
 const router = Router();
@@ -10,6 +10,61 @@ const router = Router();
  *   - name: Autenticação
  *     description: Endpoints para autenticação de usuários
  */
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Cria uma nova conta administrativa
+ *     tags: [Autenticação]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - company
+ *               - password
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Nome completo do administrador
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               company:
+ *                 type: string
+ *                 description: Nome da empresa a ser criada ou reutilizada
+ *               password:
+ *                 type: string
+ *                 format: password
+ *               phone:
+ *                 type: string
+ *                 description: Telefone de contato (opcional)
+ *     responses:
+ *       201:
+ *         description: Conta criada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                 empresa:
+ *                   type: object
+ *                 perfil:
+ *                   type: object
+ *       400:
+ *         description: Dados inválidos
+ *       409:
+ *         description: E-mail já cadastrado
+ */
+router.post('/auth/register', register);
 
 /**
  * @swagger

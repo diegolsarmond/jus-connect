@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS public.empresas
+  ALTER COLUMN plano DROP NOT NULL;
