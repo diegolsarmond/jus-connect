@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
 import { getApiUrl } from "@/lib/api";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { evaluateSubscriptionAccess } from "@/features/auth/subscriptionStatus";
 
 type RawRecord = Record<string, unknown>;
 
@@ -22,6 +23,9 @@ type PlanOption = {
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
+});
+const graceDateFormatter = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "long",
 });
 
 const toNumber = (value: unknown): number | null => {
@@ -105,6 +109,12 @@ export const PlanSelection = () => {
   const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const subscriptionAccess = useMemo(
+    () => evaluateSubscriptionAccess(user?.subscription ?? null),
+    [user?.subscription],
+  );
+  const blockedReason = subscriptionAccess.hasAccess ? null : subscriptionAccess.reason;
+  const graceDeadline = subscriptionAccess.hasAccess ? null : subscriptionAccess.graceDeadline;
 
   const [plans, setPlans] = useState<PlanOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -166,6 +176,31 @@ export const PlanSelection = () => {
     return null;
   }, [canSubscribe]);
 
+  const headerContent = useMemo(() => {
+    const defaultContent = {
+      icon: <Sparkles className="h-4 w-4" />,
+      badge: "Ative seu período de teste de 14 dias",
+      title: "Selecione um plano para começar",
+      description:
+        "Escolha o plano que melhor atende ao seu escritório. Você poderá explorar todos os recursos antes de decidir.",
+    } as const;
+
+    if (!blockedReason || blockedReason === "missing" || blockedReason === "inactive") {
+      return defaultContent;
+    }
+
+    const formattedDeadline = graceDeadline ? graceDateFormatter.format(graceDeadline) : null;
+
+    return {
+      icon: <AlertTriangle className="h-4 w-4" />,
+      badge: "Regularize sua assinatura",
+      title: "Atualize seu plano para continuar",
+      description: formattedDeadline
+        ? `Seu acesso foi interrompido em ${formattedDeadline}. Regularize o pagamento ou selecione um novo plano para continuar utilizando o JusConnect.`
+        : "Sua assinatura foi desativada. Regularize o pagamento ou selecione um novo plano para continuar utilizando o JusConnect.",
+    } as const;
+  }, [blockedReason, graceDeadline]);
+
   const handleSelectPlan = async (planId: number) => {
     if (!canSubscribe) {
       setError("Usuário não possui empresa vinculada para criar a assinatura.");
@@ -220,12 +255,10 @@ export const PlanSelection = () => {
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-4 py-10">
       <div className="space-y-2 text-center">
         <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1 text-sm font-medium text-primary">
-          <Sparkles className="h-4 w-4" /> Ative seu período de teste de 14 dias
+          {headerContent.icon} {headerContent.badge}
         </span>
-        <h1 className="text-3xl font-bold text-foreground sm:text-4xl">Selecione um plano para começar</h1>
-        <p className="text-muted-foreground">
-          Escolha o plano que melhor atende ao seu escritório. Você poderá explorar todos os recursos antes de decidir.
-        </p>
+        <h1 className="text-3xl font-bold text-foreground sm:text-4xl">{headerContent.title}</h1>
+        <p className="text-muted-foreground">{headerContent.description}</p>
       </div>
 
       {infoMessage && (
