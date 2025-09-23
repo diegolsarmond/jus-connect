@@ -478,7 +478,7 @@ export const register = async (req: Request, res: Response) => {
       const companyLookup = await client.query(
         `SELECT id, nome_empresa, plano
            FROM public.empresas
-          WHERE LOWER(nome_empresa) = LOWER($1)
+          WHERE LOWER(TRIM(nome_empresa)) = LOWER(TRIM($1))
           LIMIT 1`,
         [companyValue]
       );
@@ -500,7 +500,10 @@ export const register = async (req: Request, res: Response) => {
         }
 
         companyId = parsedId;
-        companyName = typeof row.nome_empresa === 'string' ? row.nome_empresa : companyValue;
+        companyName =
+          typeof row.nome_empresa === 'string'
+            ? row.nome_empresa.trim() || companyValue
+            : companyValue;
         companyPlanId = parseInteger(row.plano);
       } else {
         const insertResult = await client.query(
@@ -557,7 +560,10 @@ export const register = async (req: Request, res: Response) => {
         }
 
         companyId = parsedId;
-        companyName = typeof inserted.nome_empresa === 'string' ? inserted.nome_empresa : companyValue;
+        companyName =
+          typeof inserted.nome_empresa === 'string'
+            ? inserted.nome_empresa.trim() || companyValue
+            : companyValue;
         companyPlanId = planId ?? parseInteger(inserted.plano);
       }
 
@@ -565,7 +571,7 @@ export const register = async (req: Request, res: Response) => {
         `SELECT id, nome, ativo, datacriacao
            FROM public.perfis
           WHERE idempresa IS NOT DISTINCT FROM $1
-            AND LOWER(nome) = LOWER($2)
+            AND LOWER(TRIM(nome)) = LOWER(TRIM($2))
           LIMIT 1`,
         [companyId, DEFAULT_PROFILE_NAME]
       );
@@ -585,7 +591,10 @@ export const register = async (req: Request, res: Response) => {
         }
 
         perfilId = parsedPerfilId;
-        perfilNome = typeof perfilRow.nome === 'string' ? perfilRow.nome : DEFAULT_PROFILE_NAME;
+        perfilNome =
+          typeof perfilRow.nome === 'string'
+            ? perfilRow.nome.trim() || DEFAULT_PROFILE_NAME
+            : DEFAULT_PROFILE_NAME;
 
         await client.query('DELETE FROM public.perfil_modulos WHERE perfil_id = $1', [perfilId]);
       } else {
@@ -603,7 +612,10 @@ export const register = async (req: Request, res: Response) => {
         }
 
         perfilId = parsedPerfilId;
-        perfilNome = typeof perfilRow.nome === 'string' ? perfilRow.nome : DEFAULT_PROFILE_NAME;
+        perfilNome =
+          typeof perfilRow.nome === 'string'
+            ? perfilRow.nome.trim() || DEFAULT_PROFILE_NAME
+            : DEFAULT_PROFILE_NAME;
       }
 
       if (modules.length > 0) {
