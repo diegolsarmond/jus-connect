@@ -251,8 +251,38 @@ export async function settleFlow(id: number | string, pagamentoData: string): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pagamentoData }),
   });
-  const data = await res.json();
-  return data.flow;
+
+  let payload: unknown = null;
+  let parseError: unknown = null;
+
+  try {
+    payload = await res.json();
+  } catch (error) {
+    parseError = error;
+  }
+
+  if (!res.ok) {
+    const message =
+      payload &&
+      typeof payload === 'object' &&
+      'error' in payload &&
+      typeof (payload as { error?: unknown }).error === 'string'
+        ? String((payload as { error?: unknown }).error)
+        : 'Não foi possível marcar o lançamento como pago.';
+    throw new Error(message);
+  }
+
+  if (parseError) {
+    throw new Error('Não foi possível interpretar a resposta do servidor ao atualizar o lançamento.');
+  }
+
+  const flow = extractData<Flow>(payload, 'flow');
+
+  if (!flow) {
+    throw new Error('Resposta inválida do servidor ao atualizar o lançamento.');
+  }
+
+  return flow;
 }
 
 function ensureOkResponse(response: Response): Response {
