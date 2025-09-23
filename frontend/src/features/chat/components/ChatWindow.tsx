@@ -321,8 +321,8 @@ export const ChatWindow = ({
   const conversationClientName = conversation?.clientName ?? "";
 
   useEffect(() => {
-    setDetailsOpen(false);
     if (!conversation) {
+      setDetailsOpen(false);
       setClientInput("");
       setSelectedAttributeTypeId("");
       setNewAttributeValue("");
@@ -362,6 +362,7 @@ export const ChatWindow = ({
     previousPanelConversationIdRef.current = conversationId;
 
     if (previousConversationId !== conversationId) {
+      setDetailsOpen(false);
       setClientInput(conversationClientName);
       setNewAttributeLabel("");
       setNewAttributeValue("");
@@ -947,10 +948,25 @@ export const ChatWindow = ({
 
         <div className={styles.viewportWrapper}>
           {isLoading && (
-            <div className={styles.loadingOverlay}>
-              <div className={styles.loadingOverlayContent} role="status" aria-live="polite" aria-busy="true">
-                <span className={styles.loadingSpinner} aria-hidden="true" />
-                <span>Carregando conversa...</span>
+            <div
+              className={styles.loadingOverlay}
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div className={styles.loadingPanel}>
+                <div className={styles.loadingIcon} aria-hidden="true">
+                  <span />
+                </div>
+                <div className={styles.loadingText}>
+                  <strong>Preparando a conversa</strong>
+                  <span>Estamos buscando as mensagens mais recentes.</span>
+                </div>
+                <div className={styles.loadingPreview} aria-hidden="true">
+                  <span className={styles.loadingMessage} data-variant="incoming" />
+                  <span className={styles.loadingMessage} data-variant="outgoing" />
+                  <span className={styles.loadingMessage} data-variant="incoming" />
+                </div>
               </div>
             </div>
           )}
