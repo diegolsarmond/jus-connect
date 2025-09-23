@@ -57,14 +57,14 @@ de ferramentas como ngrok.
 
 Para cenários de homologação rápida ou integração com o frontend publicado, a
 mesma base de código também pode ser executada em modo produção consumindo a
-API hospedada pela Quantum em `https://jusconnec.quantumtecnologia.com.br`.
+API hospedada pela Quantum em `https://quantumjud.quantumtecnologia.com.br`.
 
 - Quando o backend é inicializado sem sobrescrever `FRONTEND_BASE_URL`, ele já
   utiliza essa URL como padrão em fluxos que enviam links por e-mail, como o
   reset de senha.
 - Ao rodar o frontend localmente, defina `VITE_API_URL` (ou utilize o arquivo
   `.env.development` fornecido no projeto do frontend) para apontar os
-  requests para `https://jusconnec.quantumtecnologia.com.br/api`.
+  requests para `https://quantumjud.quantumtecnologia.com.br/api`.
 - Caso precise habilitar novos domínios para consumir a API pública, defina a
   variável `CORS_ALLOWED_ORIGINS` antes de subir o backend.
 
@@ -97,7 +97,7 @@ histórico de auditoria e sessões ativas.
 
 ## CORS
 
-Por padrão o backend libera requisições vindas de `localhost` e do domínio `https://jusconnec.quantumtecnologia.com.br`. Caso precise habilitar outros hosts, defina a variável de ambiente `CORS_ALLOWED_ORIGINS` com uma lista de URLs separadas por vírgula:
+Por padrão o backend libera requisições vindas de `localhost` e dos domínios `https://jusconnec.quantumtecnologia.com.br` e `https://quantumjud.quantumtecnologia.com.br`. Caso precise habilitar outros hosts, defina a variável de ambiente `CORS_ALLOWED_ORIGINS` com uma lista de URLs separadas por vírgula:
 
 ```bash
 CORS_ALLOWED_ORIGINS="https://meusite.com,https://app.meusite.com" npm start
