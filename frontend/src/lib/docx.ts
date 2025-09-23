@@ -3,12 +3,55 @@ const CONTENT_TYPES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
 </Types>`;
 
 const ROOT_RELATIONSHIPS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>`;
+
+const DOCUMENT_RELATIONSHIPS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+</Relationships>`;
+
+const NUMBERING_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:abstractNum w:abstractNumId="1">
+    <w:multiLevelType w:val="hybridMultilevel"/>
+    <w:lvl w:ilvl="0">
+      <w:start w:val="1"/>
+      <w:numFmt w:val="bullet"/>
+      <w:lvlText w:val="•"/>
+      <w:lvlJc w:val="left"/>
+      <w:pPr>
+        <w:ind w:left="720" w:hanging="360"/>
+      </w:pPr>
+      <w:rPr>
+        <w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/>
+      </w:rPr>
+    </w:lvl>
+  </w:abstractNum>
+  <w:num w:numId="1">
+    <w:abstractNumId w:val="1"/>
+  </w:num>
+  <w:abstractNum w:abstractNumId="2">
+    <w:multiLevelType w:val="hybridMultilevel"/>
+    <w:lvl w:ilvl="0">
+      <w:start w:val="1"/>
+      <w:numFmt w:val="decimal"/>
+      <w:lvlText w:val="%1."/>
+      <w:lvlJc w:val="left"/>
+      <w:pPr>
+        <w:ind w:left="720" w:hanging="360"/>
+      </w:pPr>
+    </w:lvl>
+  </w:abstractNum>
+  <w:num w:numId="2">
+    <w:abstractNumId w:val="2"/>
+  </w:num>
+</w:numbering>`;
 
 const SECTION_PROPERTIES =
   '<w:sectPr>' +
@@ -147,57 +190,354 @@ function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function htmlToParagraphBlocks(html: string): string[] {
+interface FormattingOptions {
+  bold?: boolean;
+  italic?: boolean;
+}
+
+interface ParagraphOptions {
+  style?: string;
+  numId?: number;
+  level?: number;
+}
+
+type ListType = 'bullet' | 'decimal';
+
+const HEADING_STYLES: Record<string, string> = {
+  H1: 'Heading1',
+  H2: 'Heading2',
+  H3: 'Heading3',
+  H4: 'Heading4',
+  H5: 'Heading5',
+  H6: 'Heading6',
+};
+
+const LIST_TYPE_TO_NUM_ID: Record<ListType, number> = {
+  bullet: 1,
+  decimal: 2,
+};
+
+function createRunPropertiesXml(formatting: FormattingOptions): string {
+  const properties: string[] = [];
+  if (formatting.bold) {
+    properties.push('<w:b/>');
+  }
+  if (formatting.italic) {
+    properties.push('<w:i/>');
+  }
+
+  return properties.length > 0 ? `<w:rPr>${properties.join('')}</w:rPr>` : '';
+}
+
+function wrapRun(content: string, formatting: FormattingOptions): string {
+  const rPr = createRunPropertiesXml(formatting);
+  return `<w:r>${rPr}${content}</w:r>`;
+}
+
+function createTextRunXml(text: string, formatting: FormattingOptions): string {
+  const escaped = escapeXml(text.replace(/\r\n/g, '\n'));
+  return wrapRun(`<w:t xml:space="preserve">${escaped}</w:t>`, formatting);
+}
+
+function createBreakRunXml(formatting: FormattingOptions): string {
+  return wrapRun('<w:br/>', formatting);
+}
+
+function textNodeToRuns(text: string, formatting: FormattingOptions): string[] {
+  if (!text) {
+    return [];
+  }
+
+  const normalized = text.replace(/\r\n/g, '\n');
+  const segments = normalized.split('\n');
+  const runs: string[] = [];
+
+  segments.forEach((segment, index) => {
+    if (segment.length > 0) {
+      runs.push(createTextRunXml(segment, formatting));
+    }
+    if (index < segments.length - 1) {
+      runs.push(createBreakRunXml(formatting));
+    }
+  });
+
+  return runs;
+}
+
+function collectRunsFromNode(node: Node, formatting: FormattingOptions): string[] {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return textNodeToRuns(node.nodeValue ?? '', formatting);
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return [];
+  }
+
+  const element = node as HTMLElement;
+  const tag = element.tagName.toUpperCase();
+
+  if (tag === 'BR') {
+    return [createBreakRunXml(formatting)];
+  }
+
+  if (tag === 'STRONG' || tag === 'B') {
+    return collectRunsFromNodes(Array.from(element.childNodes), { ...formatting, bold: true });
+  }
+
+  if (tag === 'EM' || tag === 'I') {
+    return collectRunsFromNodes(Array.from(element.childNodes), { ...formatting, italic: true });
+  }
+
+  return collectRunsFromNodes(Array.from(element.childNodes), formatting);
+}
+
+function collectRunsFromNodes(nodes: Node[], formatting: FormattingOptions): string[] {
+  const runs: string[] = [];
+  nodes.forEach(child => {
+    runs.push(...collectRunsFromNode(child, formatting));
+  });
+  return runs;
+}
+
+function createParagraphXml(runs: string[], options: ParagraphOptions = {}): string {
+  const properties: string[] = [];
+
+  if (options.style) {
+    properties.push(`<w:pStyle w:val="${options.style}"/>`);
+  }
+
+  if (typeof options.numId === 'number') {
+    const level = Math.max(0, Math.min(options.level ?? 0, 8));
+    if (!options.style) {
+      properties.push('<w:pStyle w:val="ListParagraph"/>');
+    }
+    properties.push(`<w:numPr><w:ilvl w:val="${level}"/><w:numId w:val="${options.numId}"/></w:numPr>`);
+    const indentLeft = 720 * (level + 1);
+    properties.push(`<w:ind w:left="${indentLeft}" w:hanging="360"/>`);
+  }
+
+  const pPr = properties.length > 0 ? `<w:pPr>${properties.join('')}</w:pPr>` : '';
+  const content = runs.length > 0 ? runs.join('') : '<w:r><w:t/></w:r>';
+  return `<w:p>${pPr}${content}</w:p>`;
+}
+
+function getHeadingStyle(tagName: string): string | undefined {
+  return HEADING_STYLES[tagName as keyof typeof HEADING_STYLES];
+}
+
+function buildParagraphFromNodes(nodes: Node[], options: ParagraphOptions = {}): string {
+  const runs = collectRunsFromNodes(nodes, {});
+  return createParagraphXml(runs, options);
+}
+
+function createParagraphFromElement(element: Element, baseOptions: ParagraphOptions, paragraphs: string[]): void {
+  const tag = element.tagName.toUpperCase();
+  const options: ParagraphOptions = { ...baseOptions };
+  const headingStyle = getHeadingStyle(tag);
+  if (headingStyle) {
+    options.style = headingStyle;
+  }
+
+  paragraphs.push(buildParagraphFromNodes(Array.from(element.childNodes), options));
+}
+
+function processList(listElement: Element, type: ListType, level: number, paragraphs: string[]): void {
+  Array.from(listElement.childNodes).forEach(child => {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      const element = child as Element;
+      if (element.tagName.toUpperCase() === 'LI') {
+        processListItem(element, type, level, paragraphs);
+      } else {
+        processNodes(Array.from(element.childNodes), paragraphs);
+      }
+    } else if (child.nodeType === Node.TEXT_NODE) {
+      const text = child.nodeValue ?? '';
+      if (text.replace(/\u00a0/g, ' ').trim().length > 0) {
+        paragraphs.push(buildParagraphFromNodes([child], {}));
+      }
+    }
+  });
+}
+
+function isParagraphLike(tagName: string): boolean {
+  const normalized = tagName.toUpperCase();
+  return normalized === 'P' || normalized === 'H1' || normalized === 'H2' || normalized === 'H3' || normalized === 'H4' || normalized === 'H5' || normalized === 'H6';
+}
+
+function isInlineElement(tagName: string): boolean {
+  const normalized = tagName.toUpperCase();
+  return (
+    normalized === 'STRONG' ||
+    normalized === 'B' ||
+    normalized === 'EM' ||
+    normalized === 'I' ||
+    normalized === 'SPAN' ||
+    normalized === 'A' ||
+    normalized === 'U'
+  );
+}
+
+function processListItem(listItem: Element, type: ListType, level: number, paragraphs: string[]): void {
+  const inlineBuffer: Node[] = [];
+  let createdParagraph = false;
+  const numId = LIST_TYPE_TO_NUM_ID[type];
+
+  Array.from(listItem.childNodes).forEach(child => {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      const element = child as Element;
+      const tag = element.tagName.toUpperCase();
+
+      if (tag === 'UL') {
+        if (inlineBuffer.length > 0) {
+          paragraphs.push(createParagraphXml(collectRunsFromNodes(inlineBuffer, {}), { numId, level }));
+          inlineBuffer.length = 0;
+          createdParagraph = true;
+        }
+        processList(element, 'bullet', level + 1, paragraphs);
+        return;
+      }
+
+      if (tag === 'OL') {
+        if (inlineBuffer.length > 0) {
+          paragraphs.push(createParagraphXml(collectRunsFromNodes(inlineBuffer, {}), { numId, level }));
+          inlineBuffer.length = 0;
+          createdParagraph = true;
+        }
+        processList(element, 'decimal', level + 1, paragraphs);
+        return;
+      }
+
+      if (isParagraphLike(tag)) {
+        if (inlineBuffer.length > 0) {
+          paragraphs.push(createParagraphXml(collectRunsFromNodes(inlineBuffer, {}), { numId, level }));
+          inlineBuffer.length = 0;
+          createdParagraph = true;
+        }
+        createParagraphFromElement(element, { numId, level }, paragraphs);
+        createdParagraph = true;
+        return;
+      }
+    }
+
+    inlineBuffer.push(child);
+  });
+
+  if (inlineBuffer.length > 0 || !createdParagraph) {
+    paragraphs.push(createParagraphXml(collectRunsFromNodes(inlineBuffer, {}), { numId, level }));
+  }
+}
+
+function processNodes(nodes: Node[], paragraphs: string[]): void {
+  const inlineBuffer: Node[] = [];
+
+  const flushInline = (): void => {
+    if (inlineBuffer.length === 0) {
+      return;
+    }
+    paragraphs.push(createParagraphXml(collectRunsFromNodes(inlineBuffer, {})));
+    inlineBuffer.length = 0;
+  };
+
+  nodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const value = node.nodeValue ?? '';
+      if (!value) {
+        return;
+      }
+      const hasNonBreakingSpace = value.includes('\u00a0');
+      const isWhitespaceOnly = value.trim().length === 0;
+      if (isWhitespaceOnly && !hasNonBreakingSpace && inlineBuffer.length === 0) {
+        return;
+      }
+      inlineBuffer.push(node);
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+
+    const element = node as Element;
+    const tag = element.tagName.toUpperCase();
+
+    if (tag === 'BR' || isInlineElement(tag)) {
+      inlineBuffer.push(element);
+      return;
+    }
+
+    if (tag === 'P' || tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'H4' || tag === 'H5' || tag === 'H6') {
+      flushInline();
+      createParagraphFromElement(element, {}, paragraphs);
+      return;
+    }
+
+    if (tag === 'UL') {
+      flushInline();
+      processList(element, 'bullet', 0, paragraphs);
+      return;
+    }
+
+    if (tag === 'OL') {
+      flushInline();
+      processList(element, 'decimal', 0, paragraphs);
+      return;
+    }
+
+    if (tag === 'LI') {
+      flushInline();
+      processListItem(element, 'bullet', 0, paragraphs);
+      return;
+    }
+
+    flushInline();
+    processNodes(Array.from(element.childNodes), paragraphs);
+  });
+
+  flushInline();
+}
+
+function getRootNodes(html: string): Node[] {
   const input = html ?? '';
+
+  if (typeof DOMParser !== 'undefined') {
+    const parser = new DOMParser();
+    const documentFragment = parser.parseFromString(input, 'text/html');
+    return Array.from(documentFragment.body.childNodes);
+  }
 
   if (typeof document !== 'undefined') {
     const container = document.createElement('div');
     container.innerHTML = input;
-    const textContent = container.innerText.replace(/\r\n/g, '\n');
-    const normalized = textContent.replace(/\u00a0/g, ' ').trim();
-    if (!normalized) {
-      return [];
-    }
-    return normalized
-      .split(/\n{2,}/)
-      .map(block => block.trim())
-      .filter(block => block.length > 0);
+    return Array.from(container.childNodes);
   }
 
-  const fallback = input
+  return [];
+}
+
+function convertHtmlToParagraphXml(html: string): string[] {
+  const nodes = getRootNodes(html);
+  const paragraphs: string[] = [];
+  processNodes(nodes, paragraphs);
+  return paragraphs;
+}
+
+function fallbackHtmlToParagraphBlocks(html: string): string[] {
+  const input = html ?? '';
+
+  const stripped = input
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<br\s*\/?\s*>/gi, '\n')
     .replace(/<[^>]+>/g, '\n')
-    .replace(/\r\n/g, '\n')
-    .replace(/\u00a0/g, ' ');
+    .replace(/\r\n/g, '\n');
 
-  return fallback
+  return stripped
     .split(/\n{2,}/)
-    .map(block => block.trim())
+    .map(block => block.replace(/\u00a0/g, ' ').trim())
     .filter(block => block.length > 0);
 }
 
-function paragraphToXml(paragraph: string): string {
-  if (!paragraph) {
-    return '<w:p><w:r><w:t/></w:r></w:p>';
-  }
-
-  const lines = paragraph.split(/\n+/);
-  const runs: string[] = [];
-
-  lines.forEach((line, index) => {
-    const escaped = escapeXml(line);
-    runs.push(`<w:r><w:t xml:space="preserve">${escaped}</w:t></w:r>`);
-    if (index < lines.length - 1) {
-      runs.push('<w:r><w:br/></w:r>');
-    }
-  });
-
-  return `<w:p>${runs.join('')}</w:p>`;
-}
-
 function buildDocumentXml(paragraphs: string[]): string {
-  const body = paragraphs.length > 0 ? paragraphs.map(paragraphToXml).join('') : '<w:p><w:r><w:t/></w:r></w:p>';
+  const body = paragraphs.length > 0 ? paragraphs.join('') : '<w:p><w:r><w:t/></w:r></w:p>';
 
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -208,12 +548,23 @@ function buildDocumentXml(paragraphs: string[]): string {
 }
 
 export function createDocxBlobFromHtml(html: string): Blob {
-  const paragraphs = htmlToParagraphBlocks(html);
-  const documentXml = buildDocumentXml(paragraphs);
+  let paragraphXml = convertHtmlToParagraphXml(html);
+
+  if (paragraphXml.length === 0 && (typeof DOMParser === 'undefined' && typeof document === 'undefined')) {
+    const fallbackParagraphs = fallbackHtmlToParagraphBlocks(html);
+    paragraphXml = fallbackParagraphs.map(paragraph => {
+      const runs = paragraph ? [createTextRunXml(paragraph, {})] : [];
+      return createParagraphXml(runs);
+    });
+  }
+
+  const documentXml = buildDocumentXml(paragraphXml);
 
   const entries: ZipEntry[] = [
     { filename: '[Content_Types].xml', data: stringToUint8Array(CONTENT_TYPES_XML) },
     { filename: '_rels/.rels', data: stringToUint8Array(ROOT_RELATIONSHIPS_XML) },
+    { filename: 'word/_rels/document.xml.rels', data: stringToUint8Array(DOCUMENT_RELATIONSHIPS_XML) },
+    { filename: 'word/numbering.xml', data: stringToUint8Array(NUMBERING_XML) },
     { filename: 'word/document.xml', data: stringToUint8Array(documentXml) },
   ];
 
