@@ -163,7 +163,29 @@ const normalizeTimestamp = (value: unknown): number | undefined => {
 
 const toLowerCase = (value: unknown): string => (typeof value === 'string' ? value.toLowerCase() : '');
 
-const detectMessageType = (raw: RawRecord | null | undefined): 'text' | 'image' | 'audio' => {
+const documentExtensions = [
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.ppt',
+  '.pptx',
+  '.txt',
+  '.csv',
+  '.zip',
+  '.rar',
+  '.7z',
+  '.tar',
+  '.gz',
+  '.xml',
+  '.json',
+  '.odt',
+  '.ods',
+  '.odp',
+];
+
+const detectMessageType = (raw: RawRecord | null | undefined): 'text' | 'image' | 'audio' | 'document' => {
   if (!raw) {
     return 'text';
   }
@@ -191,6 +213,9 @@ const detectMessageType = (raw: RawRecord | null | undefined): 'text' | 'image' 
   if (typeValue === 'image' || mime.startsWith('image/')) {
     return 'image';
   }
+  if (typeValue === 'sticker') {
+    return 'image';
+  }
   if ([
     '.png',
     '.jpg',
@@ -202,8 +227,24 @@ const detectMessageType = (raw: RawRecord | null | undefined): 'text' | 'image' 
     return 'image';
   }
 
-  if ((raw['hasMedia'] === true || toBoolean(raw['hasMedia']) === true) && !mime) {
-    return 'image';
+  if (typeValue === 'document' || typeValue === 'file') {
+    return 'document';
+  }
+
+  if (typeValue === 'video' || mime.startsWith('video/')) {
+    return 'document';
+  }
+
+  if (mime && !mime.startsWith('image/') && !mime.startsWith('audio/')) {
+    return 'document';
+  }
+
+  if (documentExtensions.some((extension) => fileName.endsWith(extension))) {
+    return 'document';
+  }
+
+  if (raw['hasMedia'] === true || toBoolean(raw['hasMedia']) === true) {
+    return 'document';
   }
 
   return 'text';
@@ -280,7 +321,9 @@ const sanitizeOverviewLastMessage = (raw: RawRecord | null | undefined): ChatOve
       ? 'Imagem'
       : type === 'audio'
         ? 'Mensagem de áudio'
-        : 'Nova conversa';
+        : type === 'document'
+          ? 'Documento'
+          : 'Nova conversa';
 
   return {
     id: readString(raw, 'id'),

@@ -1,11 +1,13 @@
 export type MessageStatus = "sent" | "delivered" | "read";
-export type MessageType = "text" | "image" | "audio";
+export type MessageType = "text" | "image" | "audio" | "file";
 
 export interface MessageAttachment {
   id: string;
-  type: "image" | "audio";
+  type: "image" | "audio" | "file";
   url: string;
   name: string;
+  downloadUrl?: string;
+  mimeType?: string;
 }
 
 export interface Message {
