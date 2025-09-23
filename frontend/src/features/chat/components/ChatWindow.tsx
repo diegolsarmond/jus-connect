@@ -605,8 +605,6 @@ export const ChatWindow = ({
     previousLastMessageRef.current = lastMessageId;
   }, [conversation?.id, messages, stickToBottom]);
 
-  const conversationId = conversation?.id;
-
   useEffect(() => {
     if (!conversationId) return;
     const node = scrollRef.current;

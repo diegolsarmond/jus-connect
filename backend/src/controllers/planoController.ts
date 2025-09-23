@@ -18,6 +18,7 @@ type PlanoRow = {
   sincronizacao_processos_cota: number | string | null;
 };
 
+
 type PlanoResponseRow = Omit<
   PlanoRow,
   |
@@ -28,6 +29,7 @@ type PlanoResponseRow = Omit<
     | 'limite_propostas'
     | 'sincronizacao_processos_habilitada'
     | 'sincronizacao_processos_cota'
+
 > & {
   recursos: string[];
   modulos: string[];
@@ -821,6 +823,7 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     limite_propostas: limitePropostas,
     sincronizacao_processos_habilitada: sincronizacaoProcessosHabilitada,
     sincronizacao_processos_cota: sincronizacaoProcessosCota,
+
   };
 };
 
@@ -845,6 +848,7 @@ export const createPlano = async (req: Request, res: Response) => {
   if (!nome) {
     return res.status(400).json({ error: 'nome é obrigatório' });
   }
+
 
   const valorMensalEntry = pickFirstDefined(body, BODY_VALOR_MENSAL_KEYS);
   let valorMensal: number | string | null;
