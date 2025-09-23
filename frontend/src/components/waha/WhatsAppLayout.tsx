@@ -11,7 +11,10 @@ import type {
   SendMessageInput,
   UpdateConversationPayload,
 } from "@/features/chat/types";
-import { teamMembers } from "@/features/chat/data/teamMembers";
+import {
+  fetchChatResponsibles,
+  type ChatResponsibleOption,
+} from "@/features/chat/services/chatApi";
 import type { ChatOverview, ChatParticipant, Message as WAHAMessage } from "@/types/waha";
 import WAHAService from "@/services/waha";
 import { useToast } from "@/hooks/use-toast";
@@ -114,11 +117,14 @@ const deterministicIndex = (seed: string, length: number) => {
   return Math.abs(hash) % length;
 };
 
-const pickDefaultResponsible = (chatId: string) => {
-  if (!teamMembers.length) {
+const pickDefaultResponsible = (
+  chatId: string,
+  options: ChatResponsibleOption[],
+): ChatResponsibleOption | null => {
+  if (!options.length) {
     return null;
   }
-  return teamMembers[deterministicIndex(chatId, teamMembers.length)] ?? null;
+  return options[deterministicIndex(chatId, options.length)] ?? null;
 };
 
 const pickDefaultTags = (chatId: string) => {
@@ -176,6 +182,7 @@ const mapParticipantToSummary = (
 const mapChatToConversation = (
   chat: ChatOverview,
   overrides?: Partial<ConversationSummary>,
+  responsibleOptions: ChatResponsibleOption[] = [],
 ): ConversationSummary => {
   const fallbackName = WAHAService.extractPhoneFromWhatsAppId(chat.id);
   const normalizedName = chat.name?.trim() || fallbackName || chat.id;
@@ -217,7 +224,7 @@ const mapChatToConversation = (
     pinned: chat.pinned ?? false,
     lastMessage,
     phoneNumber: WAHAService.extractPhoneFromWhatsAppId(chat.id),
-    responsible: pickDefaultResponsible(chat.id),
+    responsible: pickDefaultResponsible(chat.id, responsibleOptions),
     tags: pickDefaultTags(chat.id),
     isLinkedToClient: false,
     clientId: null,
@@ -297,6 +304,8 @@ export const WhatsAppLayout = ({
   const [appointmentPrefill, setAppointmentPrefill] = useState<
     AppointmentCreationPrefill | undefined
   >(undefined);
+  const [responsibleOptions, setResponsibleOptions] = useState<ChatResponsibleOption[]>([]);
+  const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSessionStatusRef = useRef<string | null>(null);
   const { toast } = useToast();
@@ -330,6 +339,32 @@ export const WhatsAppLayout = ({
     isLoadingMoreChats,
     messagePaginationState,
   } = wahaState;
+
+  useEffect(() => {
+    let canceled = false;
+
+    const loadResponsibles = async () => {
+      try {
+        setIsLoadingResponsibles(true);
+        const options = await fetchChatResponsibles();
+        if (!canceled) {
+          setResponsibleOptions(options);
+        }
+      } catch (error) {
+        console.error("Falha ao carregar responsáveis", error);
+      } finally {
+        if (!canceled) {
+          setIsLoadingResponsibles(false);
+        }
+      }
+    };
+
+    loadResponsibles();
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (loading) {
@@ -369,14 +404,31 @@ export const WhatsAppLayout = ({
 
   const conversations = useMemo(() => {
     const mapped = rawChats.map((chat) =>
-      mapChatToConversation(chat, conversationOverrides[chat.id]),
+      mapChatToConversation(chat, conversationOverrides[chat.id], responsibleOptions),
     );
     return mapped.sort((a, b) => {
       const timeA = a.lastMessage ? new Date(a.lastMessage.timestamp).getTime() : 0;
       const timeB = b.lastMessage ? new Date(b.lastMessage.timestamp).getTime() : 0;
       return timeB - timeA;
     });
-  }, [rawChats, conversationOverrides]);
+  }, [rawChats, conversationOverrides, responsibleOptions]);
+
+  const sidebarResponsibleOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const option of responsibleOptions) {
+      map.set(option.id, { id: option.id, name: option.name });
+    }
+    for (const conversation of conversations) {
+      const responsible = conversation.responsible;
+      if (!responsible) {
+        continue;
+      }
+      if (!map.has(responsible.id)) {
+        map.set(responsible.id, { id: responsible.id, name: responsible.name });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [responsibleOptions, conversations]);
 
   const activeConversationId = activeChatId ?? undefined;
 
@@ -483,13 +535,16 @@ export const WhatsAppLayout = ({
     conversationId: string,
     changes: UpdateConversationPayload,
   ) => {
+    const existingConversation = conversations.find((item) => item.id === conversationId);
     setConversationOverrides((previous) => {
       const current = previous[conversationId] ?? {};
       const next: Partial<ConversationSummary> = { ...current };
 
       if ("responsibleId" in changes) {
         const member = changes.responsibleId
-          ? teamMembers.find((item) => item.id === changes.responsibleId) ?? null
+          ? responsibleOptions.find((item) => item.id === changes.responsibleId) ??
+            existingConversation?.responsible ??
+            null
           : null;
         next.responsible = member;
       }
@@ -663,7 +718,7 @@ export const WhatsAppLayout = ({
             searchValue={searchValue}
             onSearchChange={setSearchValue}
             responsibleFilter={responsibleFilter}
-            responsibleOptions={teamMembers}
+            responsibleOptions={sidebarResponsibleOptions}
             onResponsibleFilterChange={setResponsibleFilter}
             onSelectConversation={handleSelectConversation}
             onNewConversation={() => {
@@ -700,6 +755,8 @@ export const WhatsAppLayout = ({
             onOpenDeviceLinkModal={() => setIsDeviceModalOpen(true)}
             onCreateTask={handleOpenTaskDialog}
             onCreateAppointment={handleOpenAppointmentDialog}
+            responsibleOptions={responsibleOptions}
+            isLoadingResponsibles={isLoadingResponsibles}
           />
         </div>
       </div>
