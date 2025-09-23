@@ -12,6 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getApiBaseUrl } from "@/lib/api";
+import {
+  extractOpportunityDocument,
+  parseOpportunityDocumentsList,
+  type OpportunityDocument,
+} from "@/lib/opportunity-documents";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -274,93 +279,6 @@ const sanitizeInteractionEntries = (value: unknown): InteractionEntry[] => {
   });
 
   return entries;
-};
-
-interface OpportunityDocument {
-  id: number;
-  oportunidade_id?: number | null;
-  template_id: number | null;
-  title: string;
-  created_at: string;
-  content_html: string;
-  variables?: Record<string, unknown>;
-  metadata?: unknown;
-}
-
-const normalizeOpportunityDocuments = (payload: unknown): OpportunityDocument[] => {
-  const extractList = (): unknown[] => {
-    if (!payload) return [];
-    if (Array.isArray(payload)) return payload;
-    if (typeof payload === "object") {
-      const documents = (payload as { documents?: unknown }).documents;
-      if (Array.isArray(documents)) return documents;
-    }
-    return [];
-  };
-
-  const items = extractList();
-  return items.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const record = item as Record<string, unknown>;
-
-    const rawId = record["id"];
-    const numericId =
-      typeof rawId === "number"
-        ? rawId
-        : typeof rawId === "string"
-          ? Number.parseInt(rawId, 10)
-          : Number.NaN;
-    if (!Number.isFinite(numericId)) return [];
-
-    const rawTemplateId = record["template_id"];
-    const templateId = (() => {
-      if (typeof rawTemplateId === "number") {
-        return Number.isFinite(rawTemplateId) ? rawTemplateId : null;
-      }
-      if (typeof rawTemplateId === "string") {
-        const parsed = Number.parseInt(rawTemplateId, 10);
-        return Number.isNaN(parsed) ? null : parsed;
-      }
-      return null;
-    })();
-
-    const rawTitle = record["title"];
-    const title =
-      typeof rawTitle === "string" && rawTitle.trim().length > 0
-        ? rawTitle.trim()
-        : `Documento ${numericId}`;
-
-    const rawCreatedAt = record["created_at"];
-    const createdAt =
-      typeof rawCreatedAt === "string" && rawCreatedAt.trim().length > 0
-        ? rawCreatedAt.trim()
-        : new Date().toISOString();
-
-    const rawContent = record["content_html"];
-    const contentHtml =
-      typeof rawContent === "string" && rawContent.trim().length > 0
-        ? rawContent
-        : "<p></p>";
-
-    const rawVariables = record["variables"];
-    const variables =
-      rawVariables && typeof rawVariables === "object" && !Array.isArray(rawVariables)
-        ? (rawVariables as Record<string, unknown>)
-        : undefined;
-
-    return [
-      {
-        id: numericId,
-        oportunidade_id: (record["oportunidade_id"] as number | null | undefined) ?? null,
-        template_id: templateId,
-        title,
-        created_at: createdAt,
-        content_html: contentHtml,
-        variables,
-        metadata: record["metadata"],
-      },
-    ];
-  });
 };
 
 const slugifyFilename = (value: string): string => {
@@ -721,7 +639,7 @@ export default function VisualizarOportunidade() {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = (await response.json()) as unknown;
-    return normalizeOpportunityDocuments(payload);
+    return parseOpportunityDocumentsList(payload);
   }, [apiUrl, id]);
 
   const refreshDocuments = useCallback(async () => {
@@ -754,6 +672,26 @@ export default function VisualizarOportunidade() {
     setDocumentTemplatesError(null);
     setDocumentSubmitting(false);
   };
+
+  const navigateToDocumentEditor = useCallback(
+    (doc: OpportunityDocument) => {
+      if (!id) {
+        return;
+      }
+
+      navigate(`/pipeline/oportunidade/${id}/documentos/${doc.id}/editar`, {
+        state: { document: doc },
+      });
+    },
+    [id, navigate],
+  );
+
+  const handleEditDocument = useCallback(
+    (doc: OpportunityDocument) => {
+      navigateToDocumentEditor(doc);
+    },
+    [navigateToDocumentEditor],
+  );
 
   useEffect(() => {
     if (!documentDialogOpen || documentType !== "processo") {
@@ -2379,17 +2317,22 @@ export default function VisualizarOportunidade() {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
-        const created = (await response.json()) as { title?: string } | undefined;
+        const payload = (await response.json()) as unknown;
+        const createdDocument = extractOpportunityDocument(payload);
+        if (!createdDocument) {
+          throw new Error("Resposta inválida do servidor");
+        }
         const createdTitle =
-          created && typeof created.title === "string" && created.title.trim().length > 0
-            ? created.title.trim()
+          typeof createdDocument.title === "string" && createdDocument.title.trim().length > 0
+            ? createdDocument.title.trim()
             : "Documento";
         setSnack({
           open: true,
           message: `${createdTitle} criado com sucesso`,
         });
         setDocumentDialogOpen(false);
-        await refreshDocuments();
+        void refreshDocuments();
+        navigateToDocumentEditor(createdDocument);
       } catch (error) {
         console.error(error);
         setSnack({ open: true, message: "Erro ao criar documento" });
@@ -3165,6 +3108,9 @@ export default function VisualizarOportunidade() {
                             <div className="flex flex-wrap gap-2">
                               <Button size="sm" variant="secondary" onClick={() => handleViewDocument(doc)}>
                                 Visualizar
+                              </Button>
+                              <Button size="sm" onClick={() => handleEditDocument(doc)}>
+                                Editar
                               </Button>
                               <Button
                                 size="sm"
