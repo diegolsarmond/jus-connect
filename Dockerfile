@@ -19,7 +19,7 @@ RUN if [ -f backend/package-lock.json ]; then \
 
 # instalar dependências do frontend
 RUN if [ -f frontend/package-lock.json ]; then \
-      npm --prefix frontend ci; \
+      npm --prefix frontend ci || npm --prefix frontend install; \
     else \
       npm --prefix frontend install; \
     fi
