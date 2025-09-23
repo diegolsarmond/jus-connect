@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { DatabaseError, type QueryResult } from 'pg';
 import pool from '../services/db';
+import { createNotification } from '../services/notificationService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const VALID_STATUS_NUMBERS = new Set([0, 1, 2, 3]);
@@ -376,7 +377,32 @@ export const createAgenda = async (req: Request, res: Response) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const agenda = result.rows[0];
+
+    try {
+      await createNotification({
+        userId: String(req.auth.userId),
+        title: `Novo compromisso: ${agenda.titulo}`,
+        message: agenda.hora_inicio
+          ? `Evento agendado para ${agenda.data} das ${agenda.hora_inicio} às ${agenda.hora_fim ?? '—'}.`
+          : `Evento agendado para ${agenda.data}.`,
+        category: 'agenda',
+        type: 'info',
+        metadata: {
+          eventId: agenda.id,
+          type: agenda.tipo,
+          clientId: agenda.cliente,
+          status: agenda.status,
+          locationType: agenda.tipo_local,
+          location: agenda.local,
+          reminder: agenda.lembrete,
+        },
+      });
+    } catch (notifyError) {
+      console.error('Falha ao enviar notificação de criação de agenda', notifyError);
+    }
+
+    res.status(201).json(agenda);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -463,7 +489,33 @@ export const updateAgenda = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Agenda não encontrada' });
     }
 
-    res.json(result.rows[0]);
+    const agenda = result.rows[0];
+
+    try {
+      await createNotification({
+        userId: String(req.auth.userId),
+        title: `Compromisso atualizado: ${agenda.titulo}`,
+        message: agenda.hora_inicio
+          ? `Evento atualizado para ${agenda.data} das ${agenda.hora_inicio} às ${agenda.hora_fim ?? '—'}.`
+          : `Evento atualizado para ${agenda.data}.`,
+        category: 'agenda',
+        type: 'info',
+        metadata: {
+          eventId: agenda.id,
+          type: agenda.tipo,
+          clientId: agenda.cliente,
+          status: agenda.status,
+          locationType: agenda.tipo_local,
+          location: agenda.local,
+          reminder: agenda.lembrete,
+          updatedAt: agenda.dataatualizacao,
+        },
+      });
+    } catch (notifyError) {
+      console.error('Falha ao enviar notificação de atualização de agenda', notifyError);
+    }
+
+    res.json(agenda);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

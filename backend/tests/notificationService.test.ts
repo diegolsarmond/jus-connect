@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { initNotificationTestDb } from './helpers/notificationDb';
 import {
   __resetNotificationState,
   createNotification,
@@ -14,21 +15,25 @@ import {
   NotificationNotFoundError,
 } from '../src/services/notificationService';
 
-const USER_ID = 'user-1';
-
-test.beforeEach(() => {
-  __resetNotificationState();
+test.before(async () => {
+  await initNotificationTestDb();
 });
 
-test('createNotification stores unread notifications and lists newest first', () => {
-  const first = createNotification({
+const USER_ID = 'user-1';
+
+test.beforeEach(async () => {
+  await __resetNotificationState();
+});
+
+test('createNotification stores unread notifications and lists newest first', async () => {
+  const first = await createNotification({
     userId: USER_ID,
     title: 'Audiência confirmada',
     message: 'Audiência com o cliente Silva confirmada para amanhã.',
     category: 'agenda',
   });
 
-  const second = createNotification({
+  const second = await createNotification({
     userId: USER_ID,
     title: 'Prazo final do recurso',
     message: 'O prazo final do recurso do processo 2024.000123 vence hoje.',
@@ -36,86 +41,86 @@ test('createNotification stores unread notifications and lists newest first', ()
     type: 'warning',
   });
 
-  const notifications = listNotifications(USER_ID);
+  const notifications = await listNotifications(USER_ID);
 
   assert.strictEqual(notifications.length, 2);
   assert.strictEqual(notifications[0].id, second.id, 'newest notification should come first');
   assert.strictEqual(notifications[1].id, first.id);
   assert.strictEqual(notifications[0].read, false);
-  assert.strictEqual(getUnreadCount(USER_ID), 2);
+  assert.strictEqual(await getUnreadCount(USER_ID), 2);
 });
 
-test('markNotificationAsRead and markNotificationAsUnread toggle state correctly', () => {
-  const notification = createNotification({
+test('markNotificationAsRead and markNotificationAsUnread toggle state correctly', async () => {
+  const notification = await createNotification({
     userId: USER_ID,
     title: 'Documento assinado',
     message: 'O contrato do cliente Lima foi assinado.',
     category: 'documento',
   });
 
-  assert.strictEqual(getUnreadCount(USER_ID), 1);
+  assert.strictEqual(await getUnreadCount(USER_ID), 1);
 
-  const readNotification = markNotificationAsRead(USER_ID, notification.id);
+  const readNotification = await markNotificationAsRead(USER_ID, notification.id);
   assert.strictEqual(readNotification.read, true);
   assert.ok(readNotification.readAt, 'readAt should be set when marking as read');
-  assert.strictEqual(getUnreadCount(USER_ID), 0);
+  assert.strictEqual(await getUnreadCount(USER_ID), 0);
 
-  const unreadNotification = markNotificationAsUnread(USER_ID, notification.id);
+  const unreadNotification = await markNotificationAsUnread(USER_ID, notification.id);
   assert.strictEqual(unreadNotification.read, false);
   assert.strictEqual(unreadNotification.readAt, undefined);
-  assert.strictEqual(getUnreadCount(USER_ID), 1);
+  assert.strictEqual(await getUnreadCount(USER_ID), 1);
 });
 
-test('markAllNotificationsAsRead marks every notification as read', () => {
-  createNotification({
+test('markAllNotificationsAsRead marks every notification as read', async () => {
+  await createNotification({
     userId: USER_ID,
     title: 'Alerta de segurança',
     message: 'Novo acesso detectado a partir de um dispositivo desconhecido.',
     category: 'seguranca',
   });
 
-  createNotification({
+  await createNotification({
     userId: USER_ID,
     title: 'Nova tarefa atribuída',
     message: 'Você foi atribuído à tarefa "Revisar contrato".',
     category: 'tarefas',
   });
 
-  const updated = markAllNotificationsAsRead(USER_ID);
+  const updated = await markAllNotificationsAsRead(USER_ID);
 
   assert.strictEqual(updated.length, 2);
   assert.ok(updated.every((notification) => notification.read));
-  assert.strictEqual(getUnreadCount(USER_ID), 0);
+  assert.strictEqual(await getUnreadCount(USER_ID), 0);
 });
 
-test('deleteNotification removes an existing notification', () => {
-  const first = createNotification({
+test('deleteNotification removes an existing notification', async () => {
+  const first = await createNotification({
     userId: USER_ID,
     title: 'Atualização financeira',
     message: 'Um novo boleto foi emitido.',
     category: 'financeiro',
   });
 
-  const second = createNotification({
+  const second = await createNotification({
     userId: USER_ID,
     title: 'Reunião reagendada',
     message: 'A reunião com o cliente Souza foi reagendada para sexta-feira.',
     category: 'agenda',
   });
 
-  deleteNotification(USER_ID, first.id);
+  await deleteNotification(USER_ID, first.id);
 
-  const remaining = listNotifications(USER_ID);
+  const remaining = await listNotifications(USER_ID);
   assert.strictEqual(remaining.length, 1);
   assert.strictEqual(remaining[0].id, second.id);
 
-  assert.throws(() => deleteNotification(USER_ID, first.id), NotificationNotFoundError);
+  await assert.rejects(() => deleteNotification(USER_ID, first.id), NotificationNotFoundError);
 });
 
-test('updateNotificationPreferences merges nested values without losing defaults', () => {
-  const initial = getNotificationPreferences(USER_ID);
+test('updateNotificationPreferences merges nested values without losing defaults', async () => {
+  const initial = await getNotificationPreferences(USER_ID);
 
-  const updated = updateNotificationPreferences(USER_ID, {
+  const updated = await updateNotificationPreferences(USER_ID, {
     email: { newMessages: false },
     frequency: { emailDigest: 'weekly' },
   });
@@ -125,7 +130,7 @@ test('updateNotificationPreferences merges nested values without losing defaults
   assert.strictEqual(updated.frequency.emailDigest, 'weekly');
   assert.strictEqual(updated.frequency.reminderTiming, initial.frequency.reminderTiming);
 
-  const persisted = getNotificationPreferences(USER_ID);
+  const persisted = await getNotificationPreferences(USER_ID);
   assert.strictEqual(persisted.email.newMessages, false);
   assert.strictEqual(persisted.frequency.emailDigest, 'weekly');
 });
