@@ -108,6 +108,17 @@ const router = Router();
  *         lastMessage:
  *           $ref: '#/components/schemas/ConversationLastMessage'
  *           nullable: true
+ *         isLinkedToClient:
+ *           type: boolean
+ *           description: Indica se há um cliente vinculado à conversa
+ *         clientId:
+ *           type: integer
+ *           format: int32
+ *           nullable: true
+ *           description: Identificador do cliente vinculado à conversa
+ *         clientName:
+ *           type: string
+ *           nullable: true
  *     MessagePage:
  *       type: object
  *       properties:
@@ -287,6 +298,10 @@ router.post('/conversations', createConversationHandler);
  *               clientName:
  *                 type: string
  *                 nullable: true
+ *               clientId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Identificador do cliente vinculado
  *               isLinkedToClient:
  *                 type: boolean
  *               customAttributes:

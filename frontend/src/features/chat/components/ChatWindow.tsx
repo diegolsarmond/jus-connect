@@ -211,6 +211,9 @@ export const ChatWindow = ({
   const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const [clientInput, setClientInput] = useState("");
   const [selectedAttributeTypeId, setSelectedAttributeTypeId] = useState("");
+  const [clientIdInput, setClientIdInput] = useState("");
+  const [clientNameInput, setClientNameInput] = useState("");
+  const [newAttributeLabel, setNewAttributeLabel] = useState("");
   const [newAttributeValue, setNewAttributeValue] = useState("");
   const [attributeFormError, setAttributeFormError] = useState<string | null>(null);
   const [attributeTypes, setAttributeTypes] = useState<ClienteAttributeType[]>([]);
@@ -310,6 +313,11 @@ export const ChatWindow = ({
     [attributeTypeMap, canManageClienteAttributes, clienteAttributes, customAttributes],
   );
 
+  const previousPanelConversationIdRef = useRef<string | undefined>(undefined);
+  const previousClientNameRef = useRef<string>("");
+  const conversationId = conversation?.id;
+  const conversationClientName = conversation?.clientName ?? "";
+
   useEffect(() => {
     setDetailsOpen(false);
     if (!conversation) {
@@ -324,12 +332,48 @@ export const ChatWindow = ({
     }
     setClientInput(conversation.clientName ?? "");
     setSelectedAttributeTypeId("");
+    if (!conversation) return;
+    setClientIdInput(conversation.clientId != null ? String(conversation.clientId) : "");
+    setClientNameInput(conversation.clientName ?? "");
+    setNewAttributeLabel("");
     setNewAttributeValue("");
     setClienteAttributes([]);
     setAttributeFormError(null);
     setClienteAttributesError(null);
     setInternalNoteContent("");
   }, [conversation]);
+
+    if (!conversationId) {
+      setDetailsOpen(false);
+      setClientInput("");
+      setNewAttributeLabel("");
+      setNewAttributeValue("");
+      setInternalNoteContent("");
+      previousPanelConversationIdRef.current = undefined;
+      previousClientNameRef.current = "";
+      return;
+    }
+
+    const previousConversationId = previousPanelConversationIdRef.current;
+    const previousClientName = previousClientNameRef.current;
+    previousPanelConversationIdRef.current = conversationId;
+
+    if (previousConversationId !== conversationId) {
+      setClientInput(conversationClientName);
+      setNewAttributeLabel("");
+      setNewAttributeValue("");
+      setInternalNoteContent("");
+      previousClientNameRef.current = conversationClientName;
+      return;
+    }
+
+    if (previousClientName !== conversationClientName) {
+      previousClientNameRef.current = conversationClientName;
+      setClientInput((current) =>
+        current === previousClientName ? conversationClientName : current,
+      );
+    }
+  }, [conversationClientName, conversationId]);
 
   useEffect(() => {
     let canceled = false;
@@ -608,17 +652,40 @@ export const ChatWindow = ({
   const handleClientSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
     if (!conversation) return;
-    const trimmed = clientInput.trim();
+    const idTrimmed = clientIdInput.trim();
+    const nameTrimmed = clientNameInput.trim();
+
+    let normalizedId: string | null = null;
+    if (idTrimmed.length > 0) {
+      const parsedId = Number.parseInt(idTrimmed, 10);
+      if (!Number.isFinite(parsedId) || parsedId <= 0) {
+        console.warn("ID de cliente inválido:", idTrimmed);
+        return;
+      }
+      normalizedId = String(parsedId);
+      setClientIdInput(String(parsedId));
+    }
+
     await runUpdate({
-      clientName: trimmed.length > 0 ? trimmed : null,
-      isLinkedToClient: trimmed.length > 0,
+      clientId: normalizedId,
+      clientName: normalizedId !== null && nameTrimmed.length > 0 ? nameTrimmed : null,
+      isLinkedToClient: normalizedId !== null,
     });
+
+    if (normalizedId !== null) {
+      if (nameTrimmed.length > 0) {
+        setClientNameInput(nameTrimmed);
+      }
+    } else if (nameTrimmed.length === 0) {
+      setClientNameInput("");
+    }
   };
 
   const handleUnlinkClient = async () => {
     if (!conversation) return;
-    setClientInput("");
-    await runUpdate({ clientName: null, isLinkedToClient: false });
+    setClientIdInput("");
+    setClientNameInput("");
+    await runUpdate({ clientId: null, clientName: null, isLinkedToClient: false });
   };
 
   const handleAttributeSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
@@ -758,6 +825,7 @@ export const ChatWindow = ({
   }
 
   const detailsPanelId = `chat-details-${conversation.id}`;
+  const isClientLinked = Boolean(conversation?.isLinkedToClient && conversation?.clientId != null);
   return (
     <div
       className={styles.wrapper}
@@ -1039,9 +1107,18 @@ export const ChatWindow = ({
             <span className={styles.metadataLabel}>Cliente vinculado</span>
             <form onSubmit={handleClientSubmit} className={styles.inlineForm}>
               <input
+                type="number"
+                value={clientIdInput}
+                onChange={(event) => setClientIdInput(event.target.value)}
+                placeholder="ID do cliente"
+                aria-label="ID do cliente"
+                disabled={isUpdatingConversation}
+                min={1}
+              />
+              <input
                 type="text"
-                value={clientInput}
-                onChange={(event) => setClientInput(event.target.value)}
+                value={clientNameInput}
+                onChange={(event) => setClientNameInput(event.target.value)}
                 list="client-suggestions"
                 placeholder="Nome do cliente"
                 aria-label="Nome do cliente"

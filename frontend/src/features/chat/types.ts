@@ -60,6 +60,7 @@ export interface ConversationSummary {
   responsible?: ConversationResponsible | null;
   tags?: string[];
   isLinkedToClient?: boolean;
+  clientId?: number | null;
   clientName?: string | null;
   customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
@@ -90,6 +91,7 @@ export interface ConversationDatasetEntry {
   responsibleId?: string | null;
   tags?: string[];
   isLinkedToClient?: boolean;
+  clientId?: number | null;
   clientName?: string | null;
   customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
@@ -127,6 +129,7 @@ export interface UpdateConversationPayload {
   tags?: string[];
   phoneNumber?: string;
   isLinkedToClient?: boolean;
+  clientId?: string | number | null;
   clientName?: string | null;
   customAttributes?: ConversationCustomAttribute[];
   isPrivate?: boolean;
