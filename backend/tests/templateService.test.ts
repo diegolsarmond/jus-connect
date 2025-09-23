@@ -51,3 +51,15 @@ test('replaceVariables handles nested markup inside span placeholders', () => {
   assert.strictEqual(result, '<p>Mari recebeu o aviso.</p>');
 });
 
+test('replaceVariables keeps line breaks from fallback content', () => {
+  const content =
+    '<p><span data-variable="endereco.completo">Rua A, 123<br />Bairro Central<br />Cidade/UF</span></p>';
+
+  const result = replaceVariables(content, {});
+
+  assert.strictEqual(
+    result,
+    '<p>Rua A, 123<br />Bairro Central<br />Cidade/UF</p>',
+  );
+});
+

@@ -1,12 +1,35 @@
 const MUSTACHE_VARIABLE_REGEX = /{{\s*([\w\.]+)\s*}}/g;
 const DATA_VARIABLE_SPAN_REGEX = /<span\b[^>]*\bdata-variable\s*=\s*(["'])([\w.]+)\1[^>]*>(.*?)<\/span>/gis;
 const HTML_TAG_REGEX = /<[^>]*>/g;
+const BLOCK_BREAK_TAG_REGEX = /<\/(p|div|section|article|blockquote|h[1-6]|li|tr|table|thead|tbody|tfoot)>/gi;
+const LIST_ITEM_OPEN_TAG_REGEX = /<li\b[^>]*>/gi;
+const LINE_BREAK_TAG_REGEX = /<br\s*\/?\s*>/gi;
 const NBSP_REGEX = /&nbsp;/gi;
 const hasOwn = Object.prototype.hasOwnProperty;
 
 function stripHtmlTags(value: string): string {
   if (!value) return '';
-  return value.replace(HTML_TAG_REGEX, '').replace(NBSP_REGEX, ' ');
+
+  const withLineBreaks = value
+    .replace(NBSP_REGEX, ' ')
+    .replace(LINE_BREAK_TAG_REGEX, '\n')
+    .replace(BLOCK_BREAK_TAG_REGEX, '\n')
+    .replace(LIST_ITEM_OPEN_TAG_REGEX, '\n• ');
+
+  const withoutTags = withLineBreaks.replace(HTML_TAG_REGEX, '');
+
+  const normalizedLineBreaks = withoutTags
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (!normalizedLineBreaks) {
+    return '';
+  }
+
+  return normalizedLineBreaks.replace(/\n/g, '<br />');
 }
 
 export function resolveVariableValue(
