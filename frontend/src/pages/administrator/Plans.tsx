@@ -39,9 +39,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { getApiUrl } from "@/lib/api";
 import { routes } from "@/config/routes";
-import { Plus, Check, Package, Users, FileText } from "lucide-react";
+import { Plus, Check, Package, Users, FileText, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type BillingCadence = "monthly" | "annual" | "none" | "custom";
 
@@ -60,6 +61,14 @@ type Plan = {
 };
 
 type EditableBillingCadence = "monthly" | "annual" | "none";
+
+type StatusFilter = "all" | "active" | "inactive";
+
+const statusFilterLabels: Record<StatusFilter, string> = {
+  all: "Todos os planos",
+  active: "Somente ativos",
+  inactive: "Somente inativos",
+};
 
 type PlanFormState = {
   name: string;
@@ -527,6 +536,8 @@ export default function Plans() {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [planPendingToggle, setPlanPendingToggle] = useState<Plan | null>(null);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const handleEditDialogOpenChange = (open: boolean) => {
     setIsEditDialogOpen(open);
@@ -826,7 +837,34 @@ export default function Plans() {
     };
   }, [plans]);
 
-  const showEmptyState = !loading && plans.length === 0;
+  const filteredPlans = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return plans.filter((plan) => {
+      if (statusFilter === "active" && !plan.isActive) {
+        return false;
+      }
+
+      if (statusFilter === "inactive" && plan.isActive) {
+        return false;
+      }
+
+      if (normalizedSearch) {
+        const haystack = `${plan.name} ${plan.description}`.toLowerCase();
+        const featuresText = plan.features.join(" ").toLowerCase();
+
+        if (!haystack.includes(normalizedSearch) && !featuresText.includes(normalizedSearch)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [plans, searchTerm, statusFilter]);
+
+  const showEmptyState = !loading && !error && plans.length === 0;
+  const showFilteredEmptyState =
+    !loading && !error && plans.length > 0 && filteredPlans.length === 0;
   const toggleDialogMessage = planPendingToggle
     ? [
         `Tem certeza de que deseja ${planPendingToggle.isActive ? "desativar" : "ativar"} o plano ${planPendingToggle.name}?`,
@@ -907,209 +945,279 @@ export default function Plans() {
         </div>
       )}
 
-      {loading ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Carregando planos...
-          </CardContent>
-        </Card>
-      ) : showEmptyState ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Nenhum plano cadastrado até o momento.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {plans.map((plan) => {
-            const billingInfo = billingCycleDescriptions[plan.billingCycle];
-            const userLimit = formatLimit(plan.maxUsers, "usuário", "usuários");
-            const caseLimit = formatLimit(plan.maxCases, "caso", "casos");
-
-            return (
-              <Card key={plan.id} className="relative">
-                {stats.popularPlanId === plan.id && (
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 transform">
-                    <Badge className="bg-primary text-primary-foreground">Mais Popular</Badge>
-                  </div>
-                )}
-
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl">{plan.name}</CardTitle>
-                    {plan.isActive ? (
-                      <Badge variant="default">Ativo</Badge>
-                    ) : (
-                      <Badge variant="secondary">Inativo</Badge>
-                    )}
-                  </div>
-                  <CardDescription>{plan.description}</CardDescription>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold">{plan.priceLabel}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {plan.billingCycle === "none"
-                        ? "valor único"
-                        : `por ${billingInfo.short}`}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Limites:</div>
-                    <div className="text-sm text-muted-foreground">• {userLimit}</div>
-                    <div className="text-sm text-muted-foreground">• {caseLimit}</div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Recursos inclusos:</div>
-                    {plan.features.length > 0 ? (
-                      <div className="space-y-1">
-                        {plan.features.map((feature, index) => (
-                          <div
-                            key={`${plan.id}-feature-${index}`}
-                            className="flex items-center gap-2 text-sm text-muted-foreground"
-                          >
-                            <Check className="h-3 w-3 text-green-500" />
-                            {feature}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Nenhum recurso cadastrado.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2 pt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => handleEditClick(plan)}
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      variant={plan.isActive ? "destructive" : "default"}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => handleTogglePlanStatus(plan)}
-                      disabled={isTogglingStatus && planPendingToggle?.id === plan.id}
-                    >
-                      {plan.isActive ? "Desativar" : "Ativar"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+      <Tabs defaultValue="overview" className="space-y-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex w-full flex-col gap-4 md:flex-row md:items-end">
+            <div className="flex-1 md:max-w-xs">
+              <Label htmlFor="plans-search" className="text-sm font-medium text-muted-foreground">
+                Buscar planos
+              </Label>
+              <div className="relative mt-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="plans-search"
+                  placeholder="Filtrar por nome, descrição ou recurso"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="md:w-56">
+              <Label
+                htmlFor="plans-status-filter"
+                className="text-sm font-medium text-muted-foreground"
+              >
+                Status dos planos
+              </Label>
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+                <SelectTrigger id="plans-status-filter" className="mt-1">
+                  <SelectValue placeholder="Filtrar por status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(statusFilterLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 md:w-auto">
+            <TabsTrigger value="overview" className="whitespace-nowrap">
+              Visão geral
+            </TabsTrigger>
+            <TabsTrigger value="comparison" className="whitespace-nowrap">
+              Comparativo
+            </TabsTrigger>
+          </TabsList>
         </div>
-      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Comparação de Planos</CardTitle>
-          <CardDescription>Visualize as diferenças entre os planos disponíveis</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <TabsContent value="overview" className="space-y-4">
           {loading ? (
-            <p className="text-sm text-muted-foreground">
-              Carregando dados de comparação...
-            </p>
-          ) : plans.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Cadastre um plano para visualizar a comparação.
-            </p>
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                Carregando planos...
+              </CardContent>
+            </Card>
+          ) : showEmptyState ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                Nenhum plano cadastrado até o momento.
+              </CardContent>
+            </Card>
+          ) : showFilteredEmptyState ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                Nenhum plano corresponde aos filtros aplicados. Ajuste a busca ou o status para
+                visualizar os resultados.
+              </CardContent>
+            </Card>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="py-2 text-left">Recurso</th>
-                    {plans.map((plan) => (
-                      <th key={`comparison-${plan.id}`} className="min-w-[140px] py-2 text-center">
-                        {plan.name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b">
-                    <td className="py-2 font-medium">Preço</td>
-                    {plans.map((plan) => (
-                      <td key={`price-${plan.id}`} className="py-2 text-center">
-                        {plan.priceLabel}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="border-b">
-                    <td className="py-2 font-medium">Ciclo de cobrança</td>
-                    {plans.map((plan) => {
-                      const billingInfo = billingCycleDescriptions[plan.billingCycle];
-                      return (
-                        <td key={`cycle-${plan.id}`} className="py-2 text-center">
-                          {billingInfo.description}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="border-b">
-                    <td className="py-2 font-medium">Usuários</td>
-                    {plans.map((plan) => (
-                      <td key={`users-${plan.id}`} className="py-2 text-center">
-                        {plan.maxUsers === null
-                          ? "—"
-                          : plan.maxUsers === -1
-                            ? "Ilimitado"
-                            : plan.maxUsers}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="border-b">
-                    <td className="py-2 font-medium">Casos</td>
-                    {plans.map((plan) => (
-                      <td key={`cases-${plan.id}`} className="py-2 text-center">
-                        {plan.maxCases === null
-                          ? "—"
-                          : plan.maxCases === -1
-                            ? "Ilimitado"
-                            : plan.maxCases}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="border-b">
-                    <td className="py-2 font-medium">Suporte prioritário</td>
-                    {plans.map((plan) => (
-                      <td key={`support-${plan.id}`} className="py-2 text-center">
-                        {hasPrioritarySupport(plan.features) ? (
-                          <Check className="mx-auto h-4 w-4 text-green-500" />
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredPlans.map((plan) => {
+                const billingInfo = billingCycleDescriptions[plan.billingCycle];
+                const userLimit = formatLimit(plan.maxUsers, "usuário", "usuários");
+                const caseLimit = formatLimit(plan.maxCases, "caso", "casos");
+
+                return (
+                  <Card key={plan.id} className="relative">
+                    {stats.popularPlanId === plan.id && (
+                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 transform">
+                        <Badge className="bg-primary text-primary-foreground">Mais Popular</Badge>
+                      </div>
+                    )}
+
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-xl">{plan.name}</CardTitle>
+                        {plan.isActive ? (
+                          <Badge variant="default">Ativo</Badge>
                         ) : (
-                          <span className="text-muted-foreground">-</span>
+                          <Badge variant="secondary">Inativo</Badge>
                         )}
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="py-2 font-medium">Acesso à API</td>
-                    {plans.map((plan) => (
-                      <td key={`api-${plan.id}`} className="py-2 text-center">
-                        {hasApiAccess(plan.features) ? (
-                          <Check className="mx-auto h-4 w-4 text-green-500" />
+                      </div>
+                      <CardDescription>{plan.description}</CardDescription>
+                    </CardHeader>
+
+                    <CardContent className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold">{plan.priceLabel}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {plan.billingCycle === "none"
+                            ? "valor único"
+                            : `por ${billingInfo.short}`}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">Limites:</div>
+                        <div className="text-sm text-muted-foreground">• {userLimit}</div>
+                        <div className="text-sm text-muted-foreground">• {caseLimit}</div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">Recursos inclusos:</div>
+                        {plan.features.length > 0 ? (
+                          <div className="space-y-1">
+                            {plan.features.map((feature, index) => (
+                              <div
+                                key={`${plan.id}-feature-${index}`}
+                                className="flex items-center gap-2 text-sm text-muted-foreground"
+                              >
+                                <Check className="h-3 w-3 text-green-500" />
+                                {feature}
+                              </div>
+                            ))}
+                          </div>
                         ) : (
-                          <span className="text-muted-foreground">-</span>
+                          <p className="text-sm text-muted-foreground">
+                            Nenhum recurso cadastrado.
+                          </p>
                         )}
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
+                      </div>
+
+                      <div className="flex gap-2 pt-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleEditClick(plan)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          variant={plan.isActive ? "destructive" : "default"}
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleTogglePlanStatus(plan)}
+                          disabled={isTogglingStatus && planPendingToggle?.id === plan.id}
+                        >
+                          {plan.isActive ? "Desativar" : "Ativar"}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
+
+        <TabsContent value="comparison">
+          <Card>
+            <CardHeader>
+              <CardTitle>Comparação de Planos</CardTitle>
+              <CardDescription>
+                Visualize as diferenças entre os planos disponíveis e aplicados nos filtros.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-sm text-muted-foreground">
+                  Carregando dados de comparação...
+                </p>
+              ) : showEmptyState ? (
+                <p className="text-sm text-muted-foreground">
+                  Cadastre um plano para visualizar a comparação.
+                </p>
+              ) : showFilteredEmptyState ? (
+                <p className="text-sm text-muted-foreground">
+                  Ajuste a busca ou o status para visualizar a tabela comparativa.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="py-2 text-left">Recurso</th>
+                        {filteredPlans.map((plan) => (
+                          <th
+                            key={`comparison-${plan.id}`}
+                            className="min-w-[140px] py-2 text-center"
+                          >
+                            {plan.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="py-2 font-medium">Preço</td>
+                        {filteredPlans.map((plan) => (
+                          <td key={`price-${plan.id}`} className="py-2 text-center">
+                            {plan.priceLabel}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 font-medium">Ciclo de cobrança</td>
+                        {filteredPlans.map((plan) => {
+                          const billingInfo = billingCycleDescriptions[plan.billingCycle];
+                          return (
+                            <td key={`cycle-${plan.id}`} className="py-2 text-center">
+                              {billingInfo.description}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 font-medium">Usuários</td>
+                        {filteredPlans.map((plan) => (
+                          <td key={`users-${plan.id}`} className="py-2 text-center">
+                            {plan.maxUsers === null
+                              ? "—"
+                              : plan.maxUsers === -1
+                                ? "Ilimitado"
+                                : plan.maxUsers}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 font-medium">Casos</td>
+                        {filteredPlans.map((plan) => (
+                          <td key={`cases-${plan.id}`} className="py-2 text-center">
+                            {plan.maxCases === null
+                              ? "—"
+                              : plan.maxCases === -1
+                                ? "Ilimitado"
+                                : plan.maxCases}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 font-medium">Suporte prioritário</td>
+                        {filteredPlans.map((plan) => (
+                          <td key={`support-${plan.id}`} className="py-2 text-center">
+                            {hasPrioritarySupport(plan.features) ? (
+                              <Check className="mx-auto h-4 w-4 text-green-500" />
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <td className="py-2 font-medium">Acesso à API</td>
+                        {filteredPlans.map((plan) => (
+                          <td key={`api-${plan.id}`} className="py-2 text-center">
+                            {hasApiAccess(plan.features) ? (
+                              <Check className="mx-auto h-4 w-4 text-green-500" />
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
       <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
