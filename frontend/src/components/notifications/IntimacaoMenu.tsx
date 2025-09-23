@@ -1,3 +1,7 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format, formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
@@ -9,6 +13,7 @@ import {
   Clock,
   FileText,
   Gavel,
+  Loader2,
   Mail,
 } from "lucide-react";
 
@@ -17,213 +22,531 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import {
+  fetchNotifications,
+  fetchUnreadNotificationCount,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  markNotificationAsUnread,
+  type Notification,
+  NotificationsApiError,
+} from "@/services/notifications";
 
-const intimacoes = [
-  {
-    id: "1",
-    titulo: "Audiência de conciliação designada",
-    tipo: "Audiência",
-    cliente: "Maria Ferreira",
-    processo: "1002345-67.2023.8.26.0100",
-    orgao: "TJSP · 12ª Vara Cível Central",
-    prazo: "Hoje às 16:00",
-    recebidaHa: "há 2 horas",
-    status: "urgente",
-    descricao: "Confirmar presença da cliente e preparar a defesa prévia.",
-  },
-  {
-    id: "2",
-    titulo: "Despacho solicitando manifestação",
-    tipo: "Despacho",
-    cliente: "João Pedro",
-    processo: "0809987-45.2022.8.19.0001",
-    orgao: "TJRJ · 3ª Vara de Família",
-    prazo: "Em 2 dias",
-    recebidaHa: "há 5 horas",
-    status: "prazo",
-    descricao: "Manifestar sobre proposta de acordo apresentada pela parte contrária.",
-  },
-  {
-    id: "3",
-    titulo: "Publicação de sentença",
-    tipo: "Publicação",
-    cliente: "Construtora Delta",
-    processo: "0004456-12.2021.5.02.0040",
-    orgao: "TRT 2ª Região · 8ª Vara do Trabalho",
-    prazo: "Em 10 dias",
-    recebidaHa: "ontem",
-    status: "pendente",
-    descricao: "Avaliar possibilidade de recurso e comunicar cliente.",
-  },
-  {
-    id: "4",
-    titulo: "Prazo para apresentação de documentos",
-    tipo: "Prazo processual",
-    cliente: "Ana Souza",
-    processo: "5003344-21.2020.4.03.6100",
-    orgao: "TRF3 · 2ª Turma",
-    prazo: "Em 5 dias",
-    recebidaHa: "há 3 dias",
-    status: "respondida",
-    descricao: "Documentação enviada via PJe e protocolo confirmado.",
-  },
-] as const;
+const notificationsQueryKey = ["notifications", "projudi", "list"] as const;
+const unreadQueryKey = ["notifications", "unread-count"] as const;
 
-type Intimacao = (typeof intimacoes)[number];
-type IntimacaoStatus = Intimacao["status"];
-type IntimacaoTipo = Intimacao["tipo"];
+type NotificationKind = "deadline" | "document" | "task" | "hearing" | "movement" | "general";
+type NotificationStatus = "completed" | "in_progress" | "pending";
 
-const statusConfig: Record<
-  IntimacaoStatus,
-  { label: string; icon: LucideIcon; className: string }
-> = {
-  urgente: {
-    label: "Urgente",
+const TYPE_CONFIG: Record<NotificationKind, { icon: LucideIcon; className: string; label: string }> = {
+  deadline: {
+    icon: Calendar,
+    className: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
+    label: "Prazos",
+  },
+  document: {
+    icon: FileText,
+    className: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200",
+    label: "Documentos",
+  },
+  task: {
+    icon: BadgeCheck,
+    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200",
+    label: "Tarefas",
+  },
+  hearing: {
+    icon: Gavel,
+    className: "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200",
+    label: "Audiências",
+  },
+  movement: {
+    icon: Mail,
+    className: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200",
+    label: "Movimentações",
+  },
+  general: {
+    icon: Bell,
+    className: "bg-muted text-foreground dark:bg-muted/40",
+    label: "Atualizações",
+  },
+};
+
+const STATUS_CONFIG: Record<NotificationStatus, { label: string; icon: LucideIcon; className: string }> = {
+  completed: {
+    label: "Cumprida",
+    icon: CheckCircle2,
+    className:
+      "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-200",
+  },
+  in_progress: {
+    label: "Em andamento",
+    icon: Clock,
+    className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/20 dark:text-amber-200",
+  },
+  pending: {
+    label: "Pendente",
     icon: AlertTriangle,
     className:
       "bg-destructive/10 text-destructive border-destructive/20 dark:bg-destructive/20 dark:text-destructive",
   },
-  prazo: {
-    label: "Prazo próximo",
-    icon: Clock,
-    className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/20 dark:text-amber-200",
-  },
-  pendente: {
-    label: "Pendente",
-    icon: Clock,
-    className: "bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-500/20 dark:text-sky-200",
-  },
-  respondida: {
-    label: "Respondida",
-    icon: CheckCircle2,
-    className:
-      "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-200",
-  },
 };
 
-const tipoConfig: Record<IntimacaoTipo, { icon: LucideIcon; className: string }> = {
-  Audiência: {
-    icon: Gavel,
-    className:
-      "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
-  },
-  Despacho: {
-    icon: FileText,
-    className:
-      "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200",
-  },
-  Publicação: {
-    icon: Mail,
-    className:
-      "bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-200",
-  },
-  "Prazo processual": {
-    icon: BadgeCheck,
-    className:
-      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200",
-  },
-};
+const COMPLETED_KEYWORDS = ["cumprid", "conclu", "finaliz", "resolvid"];
+const IN_PROGRESS_KEYWORDS = ["andament", "analise", "aguard", "process"];
+
+interface ToggleNotificationVariables {
+  id: string;
+  read: boolean;
+}
+
+function parseDate(value: string | null | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDueDate(value: string | null | undefined): string | null {
+  const date = parseDate(value);
+  if (!date) {
+    return null;
+  }
+  try {
+    return format(date, "dd/MM/yyyy", { locale: ptBR });
+  } catch (error) {
+    console.warn("Falha ao formatar data de prazo", error);
+    return null;
+  }
+}
+
+function capitalize(value: string): string {
+  if (!value) {
+    return value;
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatRelativeTime(value: string | null | undefined): string | null {
+  const date = parseDate(value);
+  if (!date) {
+    return null;
+  }
+
+  try {
+    const distance = formatDistanceToNow(date, { addSuffix: true, locale: ptBR });
+    return capitalize(distance);
+  } catch (error) {
+    console.warn("Falha ao calcular tempo relativo da notificação", error);
+    return null;
+  }
+}
+
+function readMetadataString(notification: Notification, keys: string[]): string | undefined {
+  const metadata = notification.metadata;
+  if (!metadata) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      return value.toString();
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeText(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function resolveNotificationKind(notification: Notification): NotificationKind {
+  const alertType = readMetadataString(notification, ["alertType", "tipo", "type", "kind"]);
+  if (alertType) {
+    const normalized = normalizeText(alertType);
+
+    if (normalized.includes("prazo") || normalized.includes("deadline")) {
+      return "deadline";
+    }
+
+    if (normalized.includes("doc")) {
+      return "document";
+    }
+
+    if (normalized.includes("tarefa") || normalized.includes("task")) {
+      return "task";
+    }
+
+    if (normalized.includes("audien") || normalized.includes("hearing")) {
+      return "hearing";
+    }
+
+    if (normalized.includes("moviment") || normalized.includes("movement")) {
+      return "movement";
+    }
+  }
+
+  if (notification.category === "projudi") {
+    return "movement";
+  }
+
+  return "general";
+}
+
+function inferStatus(notification: Notification): NotificationStatus {
+  if (notification.read) {
+    return "completed";
+  }
+
+  const statusText = readMetadataString(notification, [
+    "status",
+    "situacao",
+    "situacaoAtual",
+    "state",
+    "progress",
+  ]);
+
+  if (statusText) {
+    const normalized = normalizeText(statusText);
+
+    if (COMPLETED_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+      return "completed";
+    }
+
+    if (IN_PROGRESS_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+      return "in_progress";
+    }
+  }
+
+  if (notification.type === "success") {
+    return "completed";
+  }
+
+  if (notification.type === "warning") {
+    return "in_progress";
+  }
+
+  return "pending";
+}
+
+function buildCategorySummary(notifications: Notification[]) {
+  const counts = new Map<NotificationKind, number>();
+  notifications.forEach((notification) => {
+    const kind = resolveNotificationKind(notification);
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .map(([kind, count]) => ({ kind, count }))
+    .sort((a, b) => b.count - a.count);
+}
 
 export function IntimacaoMenu() {
-  const pendentes = intimacoes.filter((item) => item.status !== "respondida").length;
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [activeNotificationId, setActiveNotificationId] = useState<string | null>(null);
+
+  const notificationsQuery = useQuery({
+    queryKey: notificationsQueryKey,
+    queryFn: ({ signal }) => fetchNotifications({ category: "projudi", limit: 10, signal }),
+    staleTime: 30_000,
+  });
+
+  const unreadQuery = useQuery({
+    queryKey: unreadQueryKey,
+    queryFn: ({ signal }) => fetchUnreadNotificationCount({ signal }),
+    staleTime: 15_000,
+  });
+
+  const notifications = notificationsQuery.data ?? [];
+
+  const unreadCount = useMemo(() => {
+    if (typeof unreadQuery.data === "number") {
+      return unreadQuery.data;
+    }
+
+    return notifications.reduce((total, notification) => total + (notification.read ? 0 : 1), 0);
+  }, [notifications, unreadQuery.data]);
+
+  const categorySummaries = useMemo(() => buildCategorySummary(notifications), [notifications]);
+
+  const toggleNotificationMutation = useMutation({
+    mutationFn: ({ id, read }: ToggleNotificationVariables) =>
+      read ? markNotificationAsRead(id) : markNotificationAsUnread(id),
+    onMutate: ({ id }) => {
+      setActiveNotificationId(id);
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof NotificationsApiError
+          ? error.message
+          : "Não foi possível atualizar a notificação. Tente novamente.";
+      toast({
+        title: "Erro ao atualizar notificação",
+        description: message,
+        variant: "destructive",
+      });
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<Notification[] | undefined>(notificationsQueryKey, (previous) => {
+        if (!previous) {
+          return previous;
+        }
+        return previous.map((item) => (item.id === updated.id ? updated : item));
+      });
+
+      queryClient.setQueryData<number | undefined>(unreadQueryKey, (previous) => {
+        if (typeof previous !== "number") {
+          return updated.read ? 0 : 1;
+        }
+        return updated.read ? Math.max(previous - 1, 0) : previous + 1;
+      });
+    },
+    onSettled: () => {
+      setActiveNotificationId(null);
+    },
+  });
+
+  const markAllMutation = useMutation({
+    mutationFn: () => markAllNotificationsAsRead(),
+    onError: (error: unknown) => {
+      const message =
+        error instanceof NotificationsApiError
+          ? error.message
+          : "Não foi possível marcar as notificações como lidas.";
+      toast({
+        title: "Erro ao atualizar notificações",
+        description: message,
+        variant: "destructive",
+      });
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData<Notification[]>(notificationsQueryKey, result.notifications);
+      queryClient.setQueryData(unreadQueryKey, 0);
+
+      toast({
+        title: "Intimações atualizadas",
+        description:
+          result.updated > 0
+            ? `${result.updated} notificação${result.updated > 1 ? "s" : ""} marcada${
+                result.updated > 1 ? "s" : ""
+              } como lida${result.updated > 1 ? "s" : ""}.`
+            : "Nenhuma intimação pendente.",
+      });
+    },
+  });
+
+  const isLoading = notificationsQuery.isLoading && notifications.length === 0;
+  const isError = notificationsQuery.isError && notifications.length === 0;
+  const errorMessage =
+    notificationsQuery.error instanceof NotificationsApiError
+      ? notificationsQuery.error.message
+      : "Não foi possível carregar as intimações.";
+
+  const hasNotifications = notifications.length > 0;
+  const disableMarkAll = unreadCount === 0 || markAllMutation.isPending;
+
+  const handleToggleNotification = (notification: Notification) => {
+    if (toggleNotificationMutation.isPending || markAllMutation.isPending) {
+      return;
+    }
+
+    toggleNotificationMutation.mutate({ id: notification.id, read: !notification.read });
+  };
+
+  const handleMarkAll = () => {
+    if (disableMarkAll) {
+      return;
+    }
+    markAllMutation.mutate();
+  };
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative" aria-label="Abrir notificações de intimações">
           <Bell className="h-5 w-5" />
-          {pendentes > 0 ? (
+          {unreadCount > 0 ? (
             <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground shadow-sm">
-              {pendentes}
+              {unreadCount}
             </span>
           ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[420px] p-0" align="end">
         <div className="border-b border-border px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
               <p className="text-sm font-semibold">Intimações</p>
-              <p className="text-xs text-muted-foreground">
-                Acompanhe publicações e prazos mais recentes.
-              </p>
+              <p className="text-xs text-muted-foreground">Acompanhe publicações, prazos e movimentações recentes.</p>
+              {categorySummaries.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {categorySummaries.map(({ kind, count }) => {
+                    const config = TYPE_CONFIG[kind];
+                    const TypeIcon = config.icon;
+                    return (
+                      <Badge
+                        key={kind}
+                        variant="outline"
+                        className="flex items-center gap-1 rounded-full border-transparent bg-muted/60 px-2 text-[11px] font-medium text-muted-foreground"
+                      >
+                        <TypeIcon className="h-3.5 w-3.5" />
+                        {config.label} {count}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
             <Badge variant="outline" className="rounded-full px-2 text-xs font-medium">
-              {pendentes} pendente{pendentes === 1 ? "" : "s"}
+              {unreadCount} pendente{unreadCount === 1 ? "" : "s"}
             </Badge>
           </div>
         </div>
         <ScrollArea className="max-h-80">
-          <ul className="divide-y divide-border">
-            {intimacoes.map((intimacao) => {
-              const status = statusConfig[intimacao.status];
-              const tipo = tipoConfig[intimacao.tipo];
-              const TipoIcon = tipo.icon;
-              const StatusIcon = status.icon;
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Carregando intimações...</span>
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+              <p className="text-sm text-muted-foreground">{errorMessage}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => notificationsQuery.refetch()}
+                disabled={notificationsQuery.isFetching}
+              >
+                Tentar novamente
+              </Button>
+            </div>
+          ) : hasNotifications ? (
+            <ul className="divide-y divide-border">
+              {notifications.map((notification) => {
+                const kind = resolveNotificationKind(notification);
+                const typeConfig = TYPE_CONFIG[kind];
+                const TypeIcon = typeConfig.icon;
 
-              return (
-                <li key={intimacao.id}>
-                  <button
-                    type="button"
-                    className="flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus:bg-muted/60 focus:outline-none"
-                  >
-                    <span
-                      className={cn(
-                        "mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm",
-                        tipo.className
-                      )}
-                    >
-                      <TipoIcon className="h-5 w-5" />
-                    </span>
-                    <span className="flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold leading-tight">
-                          {intimacao.titulo}
-                        </p>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "flex items-center gap-1 rounded-full px-2 text-[11px] font-medium",
-                            status.className
-                          )}
-                        >
-                          <StatusIcon className="h-3.5 w-3.5" />
-                          {status.label}
-                        </Badge>
+                const statusKey = inferStatus(notification);
+                const statusConfig = STATUS_CONFIG[statusKey];
+                const StatusIcon = statusConfig.icon;
+
+                const processNumber = readMetadataString(notification, [
+                  "processNumber",
+                  "numeroProcesso",
+                  "processo",
+                  "caseNumber",
+                ]);
+                const dueDate = formatDueDate(
+                  readMetadataString(notification, ["dueDate", "prazo", "deadline", "due_date"]),
+                );
+                const receivedAt = formatRelativeTime(notification.createdAt);
+                const statusLabel =
+                  readMetadataString(notification, ["status", "situacao", "state"]) ?? statusConfig.label;
+
+                const isUpdating =
+                  markAllMutation.isPending ||
+                  (toggleNotificationMutation.isPending && activeNotificationId === notification.id);
+
+                return (
+                  <li key={notification.id} className="px-4 py-3">
+                    <div className="flex gap-3">
+                      <span
+                        className={cn(
+                          "mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm",
+                          typeConfig.className,
+                        )}
+                      >
+                        <TypeIcon className="h-5 w-5" />
+                      </span>
+                      <div className="flex-1 space-y-2">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold leading-tight text-foreground">
+                              {notification.title}
+                            </p>
+                            {notification.message ? (
+                              <p className="text-xs leading-snug text-muted-foreground">
+                                {notification.message}
+                              </p>
+                            ) : null}
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "flex items-center gap-1 rounded-full px-2 text-[11px] font-medium",
+                              statusConfig.className,
+                            )}
+                          >
+                            <StatusIcon className="h-3.5 w-3.5" />
+                            {statusLabel}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                          {processNumber ? <span>Processo {processNumber}</span> : null}
+                          {dueDate ? <span>Prazo {dueDate}</span> : null}
+                          {receivedAt ? <span>Recebida {receivedAt}</span> : null}
+                        </div>
+                        <div className="flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleNotification(notification)}
+                            disabled={isUpdating}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:text-muted-foreground"
+                            data-testid={`notification-${notification.id}-toggle-read`}
+                          >
+                            {isUpdating ? (
+                              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                            ) : null}
+                            {notification.read ? "Marcar como não lida" : "Marcar como lida"}
+                          </button>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        <p className="leading-snug">
-                          Processo {intimacao.processo} · {intimacao.orgao}
-                        </p>
-                        <p className="leading-snug">Cliente: {intimacao.cliente}</p>
-                        <p className="mt-1 leading-relaxed text-foreground">
-                          {intimacao.descricao}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3.5 w-3.5" />
-                          Prazo {intimacao.prazo}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          Recebida {intimacao.recebidaHa}
-                        </span>
-                      </div>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center text-muted-foreground">
+              <CheckCircle2 className="h-6 w-6" />
+              <p className="text-sm font-medium">Nenhuma intimação pendente.</p>
+              <p className="text-xs">Suas notificações recentes aparecerão aqui assim que chegarem.</p>
+            </div>
+          )}
         </ScrollArea>
         <div className="border-t border-border bg-muted/40 px-3 py-2">
-          <Button variant="ghost" className="w-full justify-between text-sm font-medium">
-            Ver todas as intimações
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleMarkAll}
+              disabled={disableMarkAll}
+              data-testid="mark-all-notifications"
+              className="justify-center"
+            >
+              {markAllMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              Marcar todas como lidas
+            </Button>
+            <Button variant="ghost" className="w-full justify-between text-sm font-medium sm:w-auto">
+              Ver todas as intimações
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
   );
 }
+
