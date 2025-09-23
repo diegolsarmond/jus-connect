@@ -1,51 +1,41 @@
 import { Request, Response } from 'express';
-import { sanitizeModuleIds } from '../constants/modules';
+import { normalizeModuleId, sanitizeModuleIds, sortModules } from '../constants/modules';
 import pool from '../services/db';
-
-const RECORRENCIAS_PERMITIDAS = ['mensal', 'anual', 'nenhuma'] as const;
-type Recorrencia = (typeof RECORRENCIAS_PERMITIDAS)[number];
-
-const isRecorrenciaValida = (value: unknown): value is Recorrencia =>
-  typeof value === 'string' && RECORRENCIAS_PERMITIDAS.includes(value as Recorrencia);
 
 type PlanoRow = {
   id: number;
   nome: string;
-  valor: number | string | null;
-  ativo: boolean | null;
+  valor_mensal: number | string | null;
+  valor_anual: number | string | null;
+  ativo: boolean | number | string | null;
   datacadastro: Date | string | null;
-  descricao: string | null;
-  recorrencia: Recorrencia | null;
-  qtde_usuarios: number | string | null;
+  modulos: unknown;
   recursos: unknown;
-  modulos: string[] | null;
-  max_propostas: number | string | null;
-  sincronizacao_processos_habilitada: boolean | null;
-  sincronizacao_processos_limite: number | string | null;
-  max_casos?: number | string | null;
-  maxCases?: number | string | null;
-  sincronizacao_processos_habilitada?: boolean | number | string | null;
-  sincronizacaoProcessosHabilitada?: boolean | number | string | null;
-  sincronizacao_processos_limite?: number | string | null;
-  sincronizacaoProcessosLimite?: number | string | null;
+  limite_processos: number | string | null;
+  limite_usuarios: number | string | null;
+  limite_propostas: number | string | null;
+  sincronizacao_processos_habilitada: boolean | number | string | null;
+  sincronizacao_processos_cota: number | string | null;
 };
 
 type PlanoResponseRow = Omit<
   PlanoRow,
   |
     'recursos'
-    | 'max_casos'
-    | 'maxCases'
     | 'modulos'
-    | 'max_propostas'
+    | 'limite_processos'
+    | 'limite_usuarios'
+    | 'limite_propostas'
     | 'sincronizacao_processos_habilitada'
-    | 'sincronizacao_processos_limite'
+    | 'sincronizacao_processos_cota'
 > & {
   recursos: string[];
-  max_casos: number | null;
-  maxCases: number | null;
-  sincronizacao_processos_habilitada: boolean | null;
-  sincronizacao_processos_limite: number | null;
+  modulos: string[];
+  limite_processos: number | null;
+  limite_usuarios: number | null;
+  limite_propostas: number | null;
+  sincronizacao_processos_habilitada: boolean;
+  sincronizacao_processos_cota: number | null;
 };
 
 const parseBooleanFlag = (value: unknown): boolean | null => {
@@ -133,7 +123,12 @@ const parseNullableInteger = (value: unknown): number | null => {
 
 type RecursosDetails = {
   recursos: string[];
-  maxCasos: number | null;
+  modules: string[];
+  limiteProcessos: number | null;
+  limiteUsuarios: number | null;
+  limitePropostas: number | null;
+  sincronizacaoProcessosHabilitada: boolean | null;
+  sincronizacaoProcessosCota: number | null;
 };
 
 const FEATURE_KEYS = [
@@ -150,20 +145,105 @@ const FEATURE_KEYS = [
   'recurso',
 ] as const;
 
-const MAX_CASES_KEYS = [
+const MODULE_KEYS = [
+  'modules',
+  'modulos',
+  'moduleIds',
+  'listaModulos',
+  'lista_modulos',
+] as const;
+
+const LIMIT_PROCESS_KEYS = [
+  'limite_processos',
+  'limiteProcessos',
+  'processLimit',
   'maxCases',
   'max_casos',
   'maxProcessos',
   'max_processos',
-  'limiteCasos',
-  'limite_casos',
-  'limiteProcessos',
-  'limite_processos',
-  'maximoCasos',
-  'maximo_casos',
-  'maximoProcessos',
-  'maximo_processos',
+  'processos',
 ] as const;
+
+const LIMIT_USER_KEYS = [
+  'limite_usuarios',
+  'limiteUsuarios',
+  'userLimit',
+  'usuarios',
+  'qtde_usuarios',
+  'maxUsers',
+] as const;
+
+const LIMIT_PROPOSAL_KEYS = [
+  'limite_propostas',
+  'limitePropostas',
+  'proposalLimit',
+  'max_propostas',
+  'maxPropostas',
+  'propostas',
+] as const;
+
+const SYNC_ENABLED_KEYS = [
+  'sincronizacao_processos_habilitada',
+  'sincronizacaoProcessosHabilitada',
+  'processSyncEnabled',
+  'syncProcessos',
+] as const;
+
+const SYNC_QUOTA_KEYS = [
+  'sincronizacao_processos_cota',
+  'sincronizacaoProcessosCota',
+  'processSyncQuota',
+  'sincronizacao_processos_limite',
+  'processSyncLimit',
+] as const;
+
+const BODY_MODULE_KEYS = ['modulos', 'modules'] as const;
+const BODY_RECURSOS_KEYS = [
+  'recursos',
+  'features',
+  'items',
+  'lista',
+  'listaRecursos',
+  'lista_recursos',
+] as const;
+const BODY_VALOR_MENSAL_KEYS = ['valor_mensal', 'valorMensal', 'valor'] as const;
+const BODY_VALOR_ANUAL_KEYS = ['valor_anual', 'valorAnual', 'valor_anualidade'] as const;
+const BODY_LIMITE_PROCESSOS_KEYS = [
+  'limite_processos',
+  'limiteProcessos',
+  'processLimit',
+  'max_casos',
+  'maxCases',
+  'maxProcessos',
+] as const;
+const BODY_LIMITE_USUARIOS_KEYS = [
+  'limite_usuarios',
+  'limiteUsuarios',
+  'userLimit',
+  'qtde_usuarios',
+  'maxUsers',
+] as const;
+const BODY_LIMITE_PROPOSTAS_KEYS = [
+  'limite_propostas',
+  'limitePropostas',
+  'proposalLimit',
+  'max_propostas',
+  'maxPropostas',
+] as const;
+const BODY_SYNC_ENABLED_KEYS = [
+  'sincronizacao_processos_habilitada',
+  'sincronizacaoProcessosHabilitada',
+  'processSyncEnabled',
+  'syncProcessos',
+] as const;
+const BODY_SYNC_QUOTA_KEYS = [
+  'sincronizacao_processos_cota',
+  'sincronizacaoProcessosCota',
+  'processSyncQuota',
+  'sincronizacao_processos_limite',
+  'processSyncLimit',
+] as const;
+const BODY_ATIVO_KEYS = ['ativo', 'isActive'] as const;
 
 const toInteger = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -246,6 +326,19 @@ const parseBooleanOrDefault = (
   return parsed;
 };
 
+const pickFirstDefined = (
+  source: Record<string, unknown>,
+  keys: readonly string[]
+): { value: unknown; provided: boolean } => {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      return { value: source[key], provided: true };
+    }
+  }
+
+  return { value: undefined, provided: false };
+};
+
 const parseOptionalIntegerOrDefault = (
   value: unknown,
   fieldName: string,
@@ -271,17 +364,72 @@ const parseOptionalIntegerOrDefault = (
   return parsed;
 };
 
-const parseModulesOrDefault = (
+const parseDecimalValue = (
   value: unknown,
-  fallback: string[],
-  fallbackWasNull: boolean
-): string[] | null => {
+  fieldName: string
+): number | string | null => {
   if (value === undefined) {
-    return fallbackWasNull ? null : fallback;
+    return null;
   }
 
   if (value === null) {
     return null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Error(`${fieldName} deve ser um número válido`);
+    }
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (!Number.isNaN(Number(trimmed))) {
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    const withoutSpaces = trimmed.replace(/\s+/g, '');
+    if (withoutSpaces.includes(',')) {
+      const normalized = withoutSpaces
+        .split('.')
+        .join('')
+        .replace(/,/g, '.');
+      const parsed = Number(normalized);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    const normalized = Number(withoutSpaces);
+    if (Number.isFinite(normalized)) {
+      return normalized;
+    }
+
+    throw new Error(`${fieldName} deve ser um número válido`);
+  }
+
+  throw new Error(`${fieldName} deve ser um número válido`);
+};
+
+const parseModulesOrDefault = (
+  value: unknown,
+  fallback: string[],
+  fallbackWasNull: boolean
+): string[] => {
+  if (value === undefined) {
+    return fallbackWasNull ? [] : fallback;
+  }
+
+  if (value === null) {
+    return [];
   }
 
   try {
@@ -295,26 +443,38 @@ const parseModulesOrDefault = (
   }
 };
 
-const pushFeature = (features: string[], entry: unknown) => {
-  if (entry === null || entry === undefined) {
-    return;
-  }
-
-  const text =
-    typeof entry === 'string'
-      ? entry.trim()
-      : typeof entry === 'number' || typeof entry === 'boolean'
-        ? String(entry)
-        : '';
-
-  if (text) {
-    features.push(text);
-  }
-};
-
 const parseRecursosDetails = (value: unknown): RecursosDetails => {
-  const features: string[] = [];
-  let maxCasos: number | null = null;
+  const featureSet = new Set<string>();
+  const moduleSet = new Set<string>();
+  let limiteProcessos: number | null = null;
+  let limiteUsuarios: number | null = null;
+  let limitePropostas: number | null = null;
+  let sincronizacaoProcessosHabilitada: boolean | null = null;
+  let sincronizacaoProcessosCota: number | null = null;
+  const visited = new Set<unknown>();
+
+  const pushFeature = (entry: unknown) => {
+    if (entry === null || entry === undefined) {
+      return;
+    }
+
+    if (typeof entry === 'string') {
+      const trimmed = entry.trim();
+      if (!trimmed) {
+        return;
+      }
+      featureSet.add(trimmed);
+      const normalizedModule = normalizeModuleId(trimmed);
+      if (normalizedModule) {
+        moduleSet.add(normalizedModule);
+      }
+      return;
+    }
+
+    if (typeof entry === 'number' || typeof entry === 'boolean') {
+      featureSet.add(String(entry));
+    }
+  };
 
   const visit = (input: unknown): void => {
     if (input === null || input === undefined) {
@@ -339,23 +499,48 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
         .split(/[\n;,]+/)
         .map((item) => item.trim())
         .filter(Boolean)
-        .forEach((item) => pushFeature(features, item));
+        .forEach((item) => pushFeature(item));
 
       return;
     }
 
     if (typeof input === 'number' || typeof input === 'boolean') {
-      pushFeature(features, input);
+      pushFeature(input);
       return;
     }
 
     if (Array.isArray(input)) {
-      input.forEach((item) => visit(item));
+      input.forEach((item) => {
+        if (typeof item === 'string') {
+          pushFeature(item);
+          return;
+        }
+
+        if (item && typeof item === 'object') {
+          const candidateId = (item as { id?: unknown }).id;
+          if (typeof candidateId === 'string') {
+            pushFeature(candidateId);
+          }
+        }
+
+        visit(item);
+      });
       return;
     }
 
     if (typeof input === 'object') {
+      if (visited.has(input)) {
+        return;
+      }
+      visited.add(input);
+
       const obj = input as Record<string, unknown>;
+
+      MODULE_KEYS.forEach((key) => {
+        if (key in obj) {
+          visit(obj[key]);
+        }
+      });
 
       FEATURE_KEYS.forEach((key) => {
         if (key in obj) {
@@ -363,100 +548,286 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
         }
       });
 
-      for (const key of MAX_CASES_KEYS) {
-        if (key in obj) {
+      for (const key of LIMIT_PROCESS_KEYS) {
+        if (key in obj && limiteProcessos === null) {
           const parsed = toInteger(obj[key]);
           if (parsed !== null) {
-            maxCasos = parsed;
+            limiteProcessos = parsed;
             break;
           }
         }
       }
 
-      return;
+      for (const key of LIMIT_USER_KEYS) {
+        if (key in obj && limiteUsuarios === null) {
+          const parsed = toInteger(obj[key]);
+          if (parsed !== null) {
+            limiteUsuarios = parsed;
+            break;
+          }
+        }
+      }
+
+      for (const key of LIMIT_PROPOSAL_KEYS) {
+        if (key in obj && limitePropostas === null) {
+          const parsed = toInteger(obj[key]);
+          if (parsed !== null) {
+            limitePropostas = parsed;
+            break;
+          }
+        }
+      }
+
+      for (const key of SYNC_ENABLED_KEYS) {
+        if (key in obj && sincronizacaoProcessosHabilitada === null) {
+          const parsed = parseBooleanFlag(obj[key]);
+          if (parsed !== null) {
+            sincronizacaoProcessosHabilitada = parsed;
+            break;
+          }
+        }
+      }
+
+      for (const key of SYNC_QUOTA_KEYS) {
+        if (key in obj && sincronizacaoProcessosCota === null) {
+          const parsed = parseNullableInteger(obj[key]);
+          if (parsed !== null) {
+            sincronizacaoProcessosCota = parsed;
+            break;
+          }
+        }
+      }
+
+      Object.values(obj).forEach((item) => {
+        if (item && typeof item === 'object') {
+          visit(item);
+        }
+      });
     }
   };
 
   visit(value);
 
-  const uniqueFeatures = Array.from(new Set(features));
+  const modules = moduleSet.size ? sortModules(Array.from(moduleSet)) : [];
+  const recursos = Array.from(featureSet);
 
   return {
-    recursos: uniqueFeatures,
-    maxCasos,
+    recursos,
+    modules,
+    limiteProcessos,
+    limiteUsuarios,
+    limitePropostas,
+    sincronizacaoProcessosHabilitada,
+    sincronizacaoProcessosCota,
   };
 };
 
-const prepareRecursosForStorage = (
-  recursosInput: unknown,
-  maxCasosInput: unknown,
-  fallback: RecursosDetails | null = null
-): string | null => {
-  const fallbackDetails = fallback ?? { recursos: [], maxCasos: null };
+const prepareRecursosForStorage = ({
+  recursosInput,
+  modules,
+  limits,
+  fallback = null,
+}: {
+  recursosInput: unknown;
+  modules: string[];
+  limits: {
+    limiteProcessos: number | null;
+    limiteUsuarios: number | null;
+    limitePropostas: number | null;
+    sincronizacaoProcessosHabilitada: boolean;
+    sincronizacaoProcessosCota: number | null;
+  };
+  fallback?: RecursosDetails | null;
+}): string | null => {
+  const fallbackDetails: RecursosDetails =
+    fallback ?? {
+      recursos: [],
+      modules: [],
+      limiteProcessos: null,
+      limiteUsuarios: null,
+      limitePropostas: null,
+      sincronizacaoProcessosHabilitada: null,
+      sincronizacaoProcessosCota: null,
+    };
 
-  const sourceFeatures = recursosInput === undefined ? fallbackDetails.recursos : recursosInput;
-  const sourceMaxCasos = maxCasosInput === undefined ? fallbackDetails.maxCasos : maxCasosInput;
+  let featureList: string[];
+  if (recursosInput === undefined) {
+    featureList = fallbackDetails.recursos;
+  } else if (recursosInput === null) {
+    featureList = [];
+  } else {
+    featureList = parseRecursosDetails(recursosInput).recursos;
+  }
 
-  const normalized = parseRecursosDetails({
-    features: sourceFeatures,
-    maxCases: sourceMaxCasos,
+  const featureSet = new Set(
+    featureList
+      .map((feature) => (typeof feature === 'string' ? feature.trim() : ''))
+      .filter((feature): feature is string => Boolean(feature))
+  );
+
+  modules.forEach((moduleId) => {
+    if (moduleId) {
+      featureSet.add(moduleId);
+    }
   });
 
-  if (!normalized.recursos.length && normalized.maxCasos === null) {
-    return null;
-  }
+  const normalizedFeatures = Array.from(featureSet);
+  const uniqueModules = modules.length
+    ? sortModules(Array.from(new Set(modules)))
+    : [];
 
   const payload: Record<string, unknown> = {};
 
-  if (normalized.recursos.length) {
-    payload.features = normalized.recursos;
+  if (uniqueModules.length) {
+    payload.modules = uniqueModules;
+    payload.modulos = uniqueModules;
   }
 
-  if (normalized.maxCasos !== null) {
-    payload.maxCases = normalized.maxCasos;
+  if (normalizedFeatures.length) {
+    payload.features = normalizedFeatures;
+    payload.recursos = normalizedFeatures;
+    payload.items = normalizedFeatures;
+    payload.lista = normalizedFeatures;
+  }
+
+  const limitsPayload: Record<string, unknown> = {};
+  if (limits.limiteUsuarios != null) {
+    limitsPayload.usuarios = limits.limiteUsuarios;
+    limitsPayload.limiteUsuarios = limits.limiteUsuarios;
+  }
+
+  if (limits.limiteProcessos != null) {
+    limitsPayload.processos = limits.limiteProcessos;
+    limitsPayload.limiteProcessos = limits.limiteProcessos;
+    payload.maxCases = limits.limiteProcessos;
+    payload.max_casos = limits.limiteProcessos;
+  }
+
+  if (limits.limitePropostas != null) {
+    limitsPayload.propostas = limits.limitePropostas;
+    limitsPayload.limitePropostas = limits.limitePropostas;
+  }
+
+  if (Object.keys(limitsPayload).length) {
+    payload.limites = limitsPayload;
+  }
+
+  payload.sincronizacao_processos_habilitada = limits.sincronizacaoProcessosHabilitada;
+  payload.sincronizacaoProcessosHabilitada = limits.sincronizacaoProcessosHabilitada;
+
+  if (limits.sincronizacaoProcessosCota != null) {
+    payload.sincronizacao_processos_cota = limits.sincronizacaoProcessosCota;
+    payload.sincronizacaoProcessosCota = limits.sincronizacaoProcessosCota;
+  }
+
+  if (
+    !uniqueModules.length &&
+    !normalizedFeatures.length &&
+    Object.keys(limitsPayload).length === 0 &&
+    !limits.sincronizacaoProcessosHabilitada &&
+    limits.sincronizacaoProcessosCota == null
+  ) {
+    return null;
   }
 
   return JSON.stringify(payload);
 };
 
+const parseModulesCollection = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    try {
+      return sortModules(sanitizeModuleIds(value));
+    } catch {
+      return [];
+    }
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parseModulesCollection(parsed);
+    } catch {
+      return parseRecursosDetails(trimmed).modules;
+    }
+  }
+
+  if (value && typeof value === 'object') {
+    return parseRecursosDetails(value).modules;
+  }
+
+  return [];
+};
+
 const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
   const recursosDetalhes = parseRecursosDetails(row.recursos);
-  const explicitMaxCasos =
-    toInteger((row as { max_casos?: unknown }).max_casos) ??
-    toInteger((row as { maxCases?: unknown }).maxCases);
+  const modulesFromColumn = parseModulesCollection(row.modulos);
+  const modules = modulesFromColumn.length
+    ? modulesFromColumn
+    : recursosDetalhes.modules;
 
-  const maxCasos = explicitMaxCasos ?? recursosDetalhes.maxCasos ?? null;
-  const rawSyncEnabled =
-    (row as { sincronizacao_processos_habilitada?: unknown })
-      .sincronizacao_processos_habilitada ??
-    (row as { sincronizacaoProcessosHabilitada?: unknown })
-      .sincronizacaoProcessosHabilitada;
-  const rawSyncLimit =
-    (row as { sincronizacao_processos_limite?: unknown })
-      .sincronizacao_processos_limite ??
-    (row as { sincronizacaoProcessosLimite?: unknown })
-      .sincronizacaoProcessosLimite;
+  const recursos = recursosDetalhes.recursos.length
+    ? recursosDetalhes.recursos
+    : modules;
 
-  const sincronizacaoProcessosHabilitada = parseBooleanFlag(rawSyncEnabled);
-  const sincronizacaoProcessosLimite = parseNullableInteger(rawSyncLimit);
+  const limiteProcessos =
+    parseNullableInteger(row.limite_processos) ??
+    recursosDetalhes.limiteProcessos ??
+    null;
+  const limiteUsuarios =
+    parseNullableInteger(row.limite_usuarios) ??
+    recursosDetalhes.limiteUsuarios ??
+    null;
+  const limitePropostas =
+    parseNullableInteger(row.limite_propostas) ??
+    recursosDetalhes.limitePropostas ??
+    null;
 
+  const sincronizacaoProcessosHabilitada =
+    parseBooleanFlag(row.sincronizacao_processos_habilitada) ??
+    recursosDetalhes.sincronizacaoProcessosHabilitada ??
+    false;
+  const sincronizacaoProcessosCota =
+    parseNullableInteger(row.sincronizacao_processos_cota) ??
+    recursosDetalhes.sincronizacaoProcessosCota ??
+    null;
+
+  const valorMensal =
+    typeof row.valor_mensal === 'number' || typeof row.valor_mensal === 'string'
+      ? row.valor_mensal
+      : null;
+  const valorAnual =
+    typeof row.valor_anual === 'number' || typeof row.valor_anual === 'string'
+      ? row.valor_anual
+      : null;
+
+  const ativo = parseBooleanFlag(row.ativo) ?? true;
 
   return {
-    ...row,
-    ativo: row.ativo ?? true,
-    recursos: recursosDetalhes.recursos,
-    max_casos: maxCasos,
-    maxCases: maxCasos,
+    id: row.id,
+    nome: row.nome,
+    valor_mensal: valorMensal,
+    valor_anual: valorAnual,
+    ativo,
+    datacadastro: row.datacadastro ?? null,
+    recursos,
+    modulos: modules,
+    limite_processos: limiteProcessos,
+    limite_usuarios: limiteUsuarios,
+    limite_propostas: limitePropostas,
     sincronizacao_processos_habilitada: sincronizacaoProcessosHabilitada,
-    sincronizacao_processos_limite: sincronizacaoProcessosLimite,
-
+    sincronizacao_processos_cota: sincronizacaoProcessosCota,
   };
 };
 
 export const listPlanos = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite FROM public.planos'
+      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos'
 
     );
     const formatted = result.rows.map((row) => formatPlanoRow(row as PlanoRow));
@@ -468,98 +839,171 @@ export const listPlanos = async (_req: Request, res: Response) => {
 };
 
 export const createPlano = async (req: Request, res: Response) => {
-  const {
-    nome,
-    valor,
-    ativo = true,
-    descricao,
-    recorrencia = 'nenhuma',
-    qtde_usuarios,
-    recursos,
-    max_casos,
-    maxCases,
-    sincronizacao_processos_habilitada,
-    sincronizacaoProcessosHabilitada,
-    sincronizacao_processos_limite,
-    sincronizacaoProcessosLimite,
+  const body = (req.body ?? {}) as Record<string, unknown>;
 
-  } = req.body;
+  const nome = typeof body.nome === 'string' ? body.nome.trim() : '';
+  if (!nome) {
+    return res.status(400).json({ error: 'nome é obrigatório' });
+  }
 
-  const descricaoValue: string = descricao ?? '';
-  const ativoValue: boolean = ativo ?? true;
-  const qtdeUsuariosValue = qtde_usuarios ?? null;
-  const recursosValue = prepareRecursosForStorage(recursos, max_casos ?? maxCases);
-  const syncEnabledValue =
-    parseBooleanFlag(
-      sincronizacao_processos_habilitada ?? sincronizacaoProcessosHabilitada,
-    );
-  const syncLimitValue = parseNullableInteger(
-    sincronizacao_processos_limite ?? sincronizacaoProcessosLimite,
-  );
-
-  let modulosValue: string[] | null;
+  const valorMensalEntry = pickFirstDefined(body, BODY_VALOR_MENSAL_KEYS);
+  let valorMensal: number | string | null;
   try {
-    modulosValue = parseModulesOrDefault(modulos, [], false);
+    valorMensal = parseDecimalValue(valorMensalEntry.value, 'valor_mensal');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'valor_mensal inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  if (!valorMensalEntry.provided || valorMensal === null) {
+    return res.status(400).json({ error: 'valor_mensal é obrigatório' });
+  }
+
+  const valorAnualEntry = pickFirstDefined(body, BODY_VALOR_ANUAL_KEYS);
+  let valorAnual: number | string | null;
+  try {
+    valorAnual = parseDecimalValue(valorAnualEntry.value, 'valor_anual');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'valor_anual inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  if (!valorAnualEntry.provided || valorAnual === null) {
+    return res.status(400).json({ error: 'valor_anual é obrigatório' });
+  }
+
+  const ativoEntry = pickFirstDefined(body, BODY_ATIVO_KEYS);
+  let ativoValue: boolean;
+  try {
+    ativoValue = parseBooleanOrDefault(ativoEntry.value, 'ativo', true);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'ativo inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  const recursosEntry = pickFirstDefined(body, BODY_RECURSOS_KEYS);
+  const modulosEntry = pickFirstDefined(body, BODY_MODULE_KEYS);
+
+  let modules: string[];
+  try {
+    modules = parseModulesOrDefault(modulosEntry.value, [], false);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'modulos inválidos';
     return res.status(400).json({ error: message });
   }
 
-  let maxPropostasValue: number | null;
+  if (!modules.length) {
+    const recursosModules = recursosEntry.provided
+      ? parseRecursosDetails(recursosEntry.value).modules
+      : [];
+    if (recursosModules.length) {
+      modules = recursosModules;
+    }
+  }
+
+  if (modules.length) {
+    modules = sortModules(Array.from(new Set(modules)));
+  }
+
+  const limiteUsuariosEntry = pickFirstDefined(body, BODY_LIMITE_USUARIOS_KEYS);
+  let limiteUsuarios: number | null;
   try {
-    maxPropostasValue = parseOptionalIntegerOrDefault(max_propostas, 'max_propostas', null);
+    limiteUsuarios = parseOptionalIntegerOrDefault(
+      limiteUsuariosEntry.provided ? limiteUsuariosEntry.value : undefined,
+      'limite_usuarios',
+      null
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'max_propostas inválido';
+    const message = error instanceof Error ? error.message : 'limite_usuarios inválido';
     return res.status(400).json({ error: message });
   }
 
-  let sincronizacaoProcessosHabilitadaValue: boolean;
+  const limiteProcessosEntry = pickFirstDefined(body, BODY_LIMITE_PROCESSOS_KEYS);
+  let limiteProcessos: number | null;
   try {
-    sincronizacaoProcessosHabilitadaValue = parseBooleanOrDefault(
-      sincronizacao_processos_habilitada,
+    limiteProcessos = parseOptionalIntegerOrDefault(
+      limiteProcessosEntry.provided ? limiteProcessosEntry.value : undefined,
+      'limite_processos',
+      null
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'limite_processos inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  const limitePropostasEntry = pickFirstDefined(body, BODY_LIMITE_PROPOSTAS_KEYS);
+  let limitePropostas: number | null;
+  try {
+    limitePropostas = parseOptionalIntegerOrDefault(
+      limitePropostasEntry.provided ? limitePropostasEntry.value : undefined,
+      'limite_propostas',
+      null
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'limite_propostas inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  const syncEnabledEntry = pickFirstDefined(body, BODY_SYNC_ENABLED_KEYS);
+  let syncEnabled: boolean;
+  try {
+    syncEnabled = parseBooleanOrDefault(
+      syncEnabledEntry.value,
       'sincronizacao_processos_habilitada',
       false
     );
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : 'sincronizacao_processos_habilitada inválido';
+      error instanceof Error
+        ? error.message
+        : 'sincronizacao_processos_habilitada inválido';
     return res.status(400).json({ error: message });
   }
 
-  let sincronizacaoProcessosLimiteValue: number | null;
+  const syncQuotaEntry = pickFirstDefined(body, BODY_SYNC_QUOTA_KEYS);
+  let syncQuota: number | null;
   try {
-    sincronizacaoProcessosLimiteValue = parseOptionalIntegerOrDefault(
-      sincronizacao_processos_limite,
-      'sincronizacao_processos_limite',
+    syncQuota = parseOptionalIntegerOrDefault(
+      syncQuotaEntry.provided ? syncQuotaEntry.value : undefined,
+      'sincronizacao_processos_cota',
       null
     );
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : 'sincronizacao_processos_limite inválido';
+      error instanceof Error ? error.message : 'sincronizacao_processos_cota inválido';
     return res.status(400).json({ error: message });
   }
 
-  if (recorrencia !== null && !isRecorrenciaValida(recorrencia)) {
-    return res.status(400).json({ error: 'Recorrência inválida' });
-  }
+  const recursosPayload = prepareRecursosForStorage({
+    recursosInput: recursosEntry.provided ? recursosEntry.value : undefined,
+    modules,
+    limits: {
+      limiteProcessos,
+      limiteUsuarios,
+      limitePropostas,
+      sincronizacaoProcessosHabilitada: syncEnabled,
+      sincronizacaoProcessosCota: syncQuota,
+    },
+  });
 
   try {
     const result = await pool.query(
-      'INSERT INTO public.planos (nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite) VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9) RETURNING id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite',
-
+      'INSERT INTO public.planos (nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota) VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11) RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
       [
         nome,
-        valor,
+        valorMensal,
+        valorAnual,
         ativoValue,
-        descricaoValue,
-        recorrencia,
-        qtdeUsuariosValue,
-        recursosValue,
-        syncEnabledValue,
-        syncLimitValue,
-
+        modules,
+        recursosPayload,
+        limiteProcessos,
+        limiteUsuarios,
+        limitePropostas,
+        syncEnabled,
+        syncQuota,
       ]
     );
+
     const payload = formatPlanoRow(result.rows[0] as PlanoRow);
     res.status(201).json(payload);
   } catch (error) {
@@ -570,26 +1014,11 @@ export const createPlano = async (req: Request, res: Response) => {
 
 export const updatePlano = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const {
-    nome,
-    valor,
-    ativo,
-    descricao,
-    recorrencia,
-    qtde_usuarios,
-    recursos,
-    max_casos,
-    maxCases,
-    modulos,
-    max_propostas,
-    sincronizacao_processos_habilitada,
-    sincronizacao_processos_limite,
-  } = req.body;
+  const body = (req.body ?? {}) as Record<string, unknown>;
 
   try {
     const existingResult = await pool.query(
-      'SELECT id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite FROM public.planos WHERE id = $1',
-
+      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos WHERE id = $1',
       [id]
     );
 
@@ -597,81 +1026,185 @@ export const updatePlano = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Plano não encontrado' });
     }
 
-    const currentPlanoRow = existingResult.rows[0] as PlanoRow;
-    const currentPlano = formatPlanoRow(currentPlanoRow);
-    const currentRecursos = parseRecursosDetails(currentPlanoRow.recursos);
+    const currentRow = existingResult.rows[0] as PlanoRow;
+    const currentPlano = formatPlanoRow(currentRow);
+    const currentRecursos = parseRecursosDetails(currentRow.recursos);
 
-    const hasQtdeUsuarios = Object.prototype.hasOwnProperty.call(req.body, 'qtde_usuarios');
-    const hasRecursos = Object.prototype.hasOwnProperty.call(req.body, 'recursos');
-    const hasMaxCasos =
-      Object.prototype.hasOwnProperty.call(req.body, 'max_casos') ||
-      Object.prototype.hasOwnProperty.call(req.body, 'maxCases');
-    const hasRecorrencia = Object.prototype.hasOwnProperty.call(req.body, 'recorrencia');
-    const hasSyncEnabled =
-      Object.prototype.hasOwnProperty.call(req.body, 'sincronizacao_processos_habilitada') ||
-      Object.prototype.hasOwnProperty.call(req.body, 'sincronizacaoProcessosHabilitada');
-    const hasSyncLimit =
-      Object.prototype.hasOwnProperty.call(req.body, 'sincronizacao_processos_limite') ||
-      Object.prototype.hasOwnProperty.call(req.body, 'sincronizacaoProcessosLimite');
-
-
-    let updatedRecorrencia: Recorrencia | null;
-    if (hasRecorrencia) {
-      if (recorrencia === null) {
-        updatedRecorrencia = null;
-      } else if (recorrencia === undefined) {
-        updatedRecorrencia = currentPlano.recorrencia;
-      } else {
-        updatedRecorrencia = recorrencia;
+    let nomeValue = currentPlano.nome;
+    if (Object.prototype.hasOwnProperty.call(body, 'nome')) {
+      if (typeof body.nome !== 'string' || !body.nome.trim()) {
+        return res.status(400).json({ error: 'nome deve ser um texto não vazio' });
       }
-    } else {
-      updatedRecorrencia = currentPlano.recorrencia;
+      nomeValue = body.nome.trim();
     }
 
-    if (updatedRecorrencia !== null && !isRecorrenciaValida(updatedRecorrencia)) {
-      return res.status(400).json({ error: 'Recorrência inválida' });
+    const valorMensalEntry = pickFirstDefined(body, BODY_VALOR_MENSAL_KEYS);
+    let valorMensalValue: number | string | null =
+      typeof currentRow.valor_mensal === 'number' || typeof currentRow.valor_mensal === 'string'
+        ? currentRow.valor_mensal
+        : null;
+    if (valorMensalEntry.provided) {
+      try {
+        valorMensalValue = parseDecimalValue(valorMensalEntry.value, 'valor_mensal');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'valor_mensal inválido';
+        return res.status(400).json({ error: message });
+      }
     }
 
-    const updatedQtdeUsuarios = hasQtdeUsuarios
-      ? qtde_usuarios ?? null
-      : currentPlano.qtde_usuarios;
+    const valorAnualEntry = pickFirstDefined(body, BODY_VALOR_ANUAL_KEYS);
+    let valorAnualValue: number | string | null =
+      typeof currentRow.valor_anual === 'number' || typeof currentRow.valor_anual === 'string'
+        ? currentRow.valor_anual
+        : null;
+    if (valorAnualEntry.provided) {
+      try {
+        valorAnualValue = parseDecimalValue(valorAnualEntry.value, 'valor_anual');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'valor_anual inválido';
+        return res.status(400).json({ error: message });
+      }
+    }
 
-    const recursosValue = hasRecursos || hasMaxCasos
-      ? prepareRecursosForStorage(
-          hasRecursos ? recursos : currentPlano.recursos,
-          hasMaxCasos ? max_casos ?? maxCases : currentPlano.max_casos,
-          currentRecursos
-        )
-      : ((currentPlanoRow.recursos ?? null) as string | null);
+    const ativoEntry = pickFirstDefined(body, BODY_ATIVO_KEYS);
+    let ativoValue = currentPlano.ativo;
+    if (ativoEntry.provided) {
+      try {
+        ativoValue = parseBooleanOrDefault(ativoEntry.value, 'ativo', currentPlano.ativo);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'ativo inválido';
+        return res.status(400).json({ error: message });
+      }
+    }
 
-    const requestedSyncEnabled =
-      (req.body as Record<string, unknown>).sincronizacao_processos_habilitada ??
-      (req.body as Record<string, unknown>).sincronizacaoProcessosHabilitada;
-    const requestedSyncLimit =
-      (req.body as Record<string, unknown>).sincronizacao_processos_limite ??
-      (req.body as Record<string, unknown>).sincronizacaoProcessosLimite;
+    const recursosEntry = pickFirstDefined(body, BODY_RECURSOS_KEYS);
+    const modulosEntry = pickFirstDefined(body, BODY_MODULE_KEYS);
 
-    const updatedSyncEnabled = hasSyncEnabled
-      ? parseBooleanFlag(requestedSyncEnabled)
-      : currentPlano.sincronizacao_processos_habilitada;
-    const updatedSyncLimit = hasSyncLimit
-      ? parseNullableInteger(requestedSyncLimit)
-      : currentPlano.sincronizacao_processos_limite;
+    let modules = currentPlano.modulos;
+    if (modulosEntry.provided) {
+      try {
+        modules = parseModulesOrDefault(
+          modulosEntry.value,
+          currentPlano.modulos,
+          currentRow.modulos == null
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'modulos inválidos';
+        return res.status(400).json({ error: message });
+      }
+    }
+
+    if (!modules.length) {
+      const fallbackModules = recursosEntry.provided
+        ? parseRecursosDetails(recursosEntry.value).modules
+        : currentRecursos.modules;
+      if (fallbackModules.length) {
+        modules = fallbackModules;
+      }
+    }
+
+    if (modules.length) {
+      modules = sortModules(Array.from(new Set(modules)));
+    }
+
+    const limiteUsuariosEntry = pickFirstDefined(body, BODY_LIMITE_USUARIOS_KEYS);
+    let limiteUsuariosValue: number | null;
+    try {
+      limiteUsuariosValue = parseOptionalIntegerOrDefault(
+        limiteUsuariosEntry.provided ? limiteUsuariosEntry.value : undefined,
+        'limite_usuarios',
+        currentPlano.limite_usuarios
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'limite_usuarios inválido';
+      return res.status(400).json({ error: message });
+    }
+
+    const limiteProcessosEntry = pickFirstDefined(body, BODY_LIMITE_PROCESSOS_KEYS);
+    let limiteProcessosValue: number | null;
+    try {
+      limiteProcessosValue = parseOptionalIntegerOrDefault(
+        limiteProcessosEntry.provided ? limiteProcessosEntry.value : undefined,
+        'limite_processos',
+        currentPlano.limite_processos
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'limite_processos inválido';
+      return res.status(400).json({ error: message });
+    }
+
+    const limitePropostasEntry = pickFirstDefined(body, BODY_LIMITE_PROPOSTAS_KEYS);
+    let limitePropostasValue: number | null;
+    try {
+      limitePropostasValue = parseOptionalIntegerOrDefault(
+        limitePropostasEntry.provided ? limitePropostasEntry.value : undefined,
+        'limite_propostas',
+        currentPlano.limite_propostas
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'limite_propostas inválido';
+      return res.status(400).json({ error: message });
+    }
+
+    const syncEnabledEntry = pickFirstDefined(body, BODY_SYNC_ENABLED_KEYS);
+    let syncEnabledValue = currentPlano.sincronizacao_processos_habilitada;
+    if (syncEnabledEntry.provided) {
+      try {
+        syncEnabledValue = parseBooleanOrDefault(
+          syncEnabledEntry.value,
+          'sincronizacao_processos_habilitada',
+          currentPlano.sincronizacao_processos_habilitada
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'sincronizacao_processos_habilitada inválido';
+        return res.status(400).json({ error: message });
+      }
+    }
+
+    const syncQuotaEntry = pickFirstDefined(body, BODY_SYNC_QUOTA_KEYS);
+    let syncQuotaValue: number | null;
+    try {
+      syncQuotaValue = parseOptionalIntegerOrDefault(
+        syncQuotaEntry.provided ? syncQuotaEntry.value : undefined,
+        'sincronizacao_processos_cota',
+        currentPlano.sincronizacao_processos_cota
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'sincronizacao_processos_cota inválido';
+      return res.status(400).json({ error: message });
+    }
+
+    const recursosPayload = prepareRecursosForStorage({
+      recursosInput: recursosEntry.provided ? recursosEntry.value : undefined,
+      modules,
+      limits: {
+        limiteProcessos: limiteProcessosValue,
+        limiteUsuarios: limiteUsuariosValue,
+        limitePropostas: limitePropostasValue,
+        sincronizacaoProcessosHabilitada: syncEnabledValue,
+        sincronizacaoProcessosCota: syncQuotaValue,
+      },
+      fallback: currentRecursos,
+    });
 
     const result = await pool.query(
-      'UPDATE public.planos SET nome = $1, valor = $2, ativo = $3, descricao = $4, recorrencia = $5, qtde_usuarios = $6, recursos = $7, sincronizacao_processos_habilitada = $8, sincronizacao_processos_limite = $9 WHERE id = $10 RETURNING id, nome, valor, ativo, datacadastro, descricao, recorrencia, qtde_usuarios, recursos, sincronizacao_processos_habilitada, sincronizacao_processos_limite',
-
+      'UPDATE public.planos SET nome = $1, valor_mensal = $2, valor_anual = $3, ativo = $4, modulos = $5, recursos = $6, limite_processos = $7, limite_usuarios = $8, limite_propostas = $9, sincronizacao_processos_habilitada = $10, sincronizacao_processos_cota = $11 WHERE id = $12 RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
       [
-        nome ?? currentPlano.nome,
-        valor ?? currentPlano.valor,
-        ativo ?? currentPlano.ativo,
-        (descricao ?? currentPlano.descricao) ?? '',
-        updatedRecorrencia,
-        updatedQtdeUsuarios,
-        recursosValue,
-        updatedSyncEnabled,
-        updatedSyncLimit,
-
+        nomeValue,
+        valorMensalValue,
+        valorAnualValue,
+        ativoValue,
+        modules,
+        recursosPayload,
+        limiteProcessosValue,
+        limiteUsuariosValue,
+        limitePropostasValue,
+        syncEnabledValue,
+        syncQuotaValue,
         id,
       ]
     );
