@@ -86,6 +86,23 @@ const INITIAL_FORM_STATE: FlowFormState = {
 
 type SupplierOption = CustomerOption & { phone?: string };
 
+const formatDateForInput = (date: Date) => format(date, 'yyyy-MM-dd');
+const getDefaultPaymentDate = () => formatDateForInput(startOfDay(new Date()));
+
+const parseDateValue = (value: string | null | undefined): Date | null => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = parseISO(value);
+  return parsed && isValid(parsed) ? parsed : null;
+};
+
+const normalizeDateInputValue = (value: string | null | undefined): string | null => {
+  const parsed = parseDateValue(value);
+  return parsed ? formatDateForInput(parsed) : null;
+};
+
 function normalizeCustomerOption(entry: unknown): CustomerOption | null {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -288,6 +305,8 @@ const FinancialFlows = () => {
   const [chargeDialogFlow, setChargeDialogFlow] = useState<Flow | null>(null);
   const [chargeSummaries, setChargeSummaries] = useState<Record<number, AsaasCharge | null>>({});
   const [chargeStatusHistory, setChargeStatusHistory] = useState<Record<number, AsaasChargeStatus[]>>({});
+  const [settleDialogFlow, setSettleDialogFlow] = useState<Flow | null>(null);
+  const [settleDate, setSettleDate] = useState(() => getDefaultPaymentDate());
 
   useEffect(() => {
     if (customersError instanceof Error) {
@@ -669,20 +688,59 @@ const FinancialFlows = () => {
   });
 
   const settleMutation = useMutation({
-    mutationFn: (flowId: number | string) =>
-      settleFlow(flowId, format(startOfDay(new Date()), 'yyyy-MM-dd')),
+    mutationFn: ({ flowId, date }: { flowId: number | string; date: string }) => settleFlow(flowId, date),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows'] });
+      toast({
+        title: 'Lançamento atualizado',
+        description: 'O lançamento foi marcado como pago.',
+      });
+      setSettleDialogFlow(null);
+      setSettleDate(getDefaultPaymentDate());
+    },
+    onError: (error: unknown) => {
+      const description =
+        error instanceof Error ? error.message : 'Não foi possível marcar o lançamento como pago.';
+      toast({
+        title: 'Erro ao marcar como pago',
+        description,
+        variant: 'destructive',
+      });
     },
   });
 
-  const handleSettleFlow = (id: number | string) => {
-    if (!settleMutation.isPending) {
-      settleMutation.mutate(id);
+  const handleOpenSettleDialog = (flow: Flow) => {
+    setSettleDialogFlow(flow);
+
+    const normalizedPaymentDate = normalizeDateInputValue(flow.pagamento ?? undefined);
+    if (normalizedPaymentDate) {
+      setSettleDate(normalizedPaymentDate);
+      return;
     }
+
+    const normalizedDueDate = normalizeDateInputValue(flow.vencimento);
+    setSettleDate(normalizedDueDate ?? getDefaultPaymentDate());
+  };
+
+  const handleCloseSettleDialog = () => {
+    if (settleMutation.isPending) {
+      return;
+    }
+
+    setSettleDialogFlow(null);
+    setSettleDate(getDefaultPaymentDate());
+  };
+
+  const handleConfirmSettle = () => {
+    if (!settleDialogFlow || !settleDate || settleMutation.isPending) {
+      return;
+    }
+
+    settleMutation.mutate({ flowId: settleDialogFlow.id, date: settleDate });
   };
 
   const statusOrder: DerivedStatus[] = ['pendente', 'vencido', 'pago'];
+  const settleDialogDueDate = settleDialogFlow ? parseDateValue(settleDialogFlow.vencimento) : null;
 
   if (isLoading) {
     return (
@@ -1264,10 +1322,10 @@ const FinancialFlows = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleSettleFlow(flow.id)}
+                                  onClick={() => handleOpenSettleDialog(flow)}
                                   disabled={settleMutation.isPending}
                                 >
-                                  {settleMutation.isPending ? 'Atualizando...' : 'Marcar como pago'}
+                                  Marcar como pago
                                 </Button>
                               ) : (
                                 <span className="self-center text-xs text-muted-foreground">Pago</span>
@@ -1306,6 +1364,64 @@ const FinancialFlows = () => {
             : 'Nenhum lançamento financeiro cadastrado até o momento.'}
         </Card>
       )}
+
+      <Dialog
+        open={Boolean(settleDialogFlow)}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseSettleDialog();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Marcar como pago</DialogTitle>
+            <DialogDescription>
+              Informe a data em que o lançamento foi pago para manter o histórico atualizado.
+            </DialogDescription>
+          </DialogHeader>
+          {settleDialogFlow ? (
+            <div className="space-y-4">
+              <div className="rounded-md border border-border/50 bg-muted/40 p-3 text-sm">
+                <p className="font-medium leading-snug">{settleDialogFlow.descricao}</p>
+                <p className="text-muted-foreground">
+                  {formatCurrency(settleDialogFlow.valor)}
+                  {settleDialogDueDate
+                    ? ` • vencimento ${formatDayDate(settleDialogDueDate, settleDialogFlow.vencimento ?? undefined)}`
+                    : null}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="settle-date">Data do pagamento</Label>
+                <Input
+                  id="settle-date"
+                  type="date"
+                  value={settleDate}
+                  onChange={(event) => setSettleDate(event.target.value)}
+                  disabled={settleMutation.isPending}
+                />
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCloseSettleDialog}
+              disabled={settleMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmSettle}
+              disabled={!settleDate || settleMutation.isPending}
+            >
+              {settleMutation.isPending ? 'Salvando...' : 'Confirmar pagamento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AsaasChargeDialog
         flow={chargeDialogFlow}
