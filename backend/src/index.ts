@@ -208,8 +208,8 @@ registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-perfis'],
   perfilRoutes
 );
-registerModuleRoutes('configuracoes', planoRoutes);
-registerModuleRoutes('configuracoes', subscriptionRoutes);
+registerModuleRoutes(['configuracoes', 'dashboard'], planoRoutes);
+registerModuleRoutes(['configuracoes', 'dashboard'], subscriptionRoutes);
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-situacao-processo'],
   situacaoProcessoRoutes
@@ -226,17 +226,17 @@ registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-etiquetas'],
   etiquetaRoutes
 );
-registerModuleRoutes('configuracoes', empresaRoutes);
+registerModuleRoutes(['configuracoes', 'dashboard'], empresaRoutes);
 registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);
-registerModuleRoutes('clientes', clienteRoutes);
+registerModuleRoutes(['clientes', 'dashboard'], clienteRoutes);
 registerModuleRoutes('fornecedores', fornecedorRoutes);
-registerModuleRoutes('clientes', clienteAtributoRoutes);
+registerModuleRoutes(['clientes', 'dashboard'], clienteAtributoRoutes);
 registerModuleRoutes('agenda', agendaRoutes);
 registerModuleRoutes('documentos', templateRoutes);
 registerModuleRoutes('documentos', tagRoutes);
 registerModuleRoutes('documentos', documentRoutes);
-registerModuleRoutes('financeiro', financialRoutes);
-registerModuleRoutes('processos', processoRoutes);
+registerModuleRoutes(['financeiro', 'dashboard'], financialRoutes);
+registerModuleRoutes(['processos', 'dashboard'], processoRoutes);
 registerModuleRoutes('pipeline', fluxoTrabalhoRoutes);
 registerModuleRoutes('documentos', uploadRoutes);
 registerModuleRoutes('pipeline', oportunidadeRoutes);
