@@ -15,6 +15,8 @@ test.before(async () => {
   ({ register, login } = await import('../src/controllers/authController'));
 });
 
+const normalizeSql = (query: string): string => query.replace(/\s+/g, ' ').trim();
+
 const createMockResponse = () => {
   const response: Partial<Response> & { statusCode: number; body: unknown } = {
     statusCode: 200,
@@ -191,6 +193,80 @@ const duplicateCheckResponses: QueryResponse[] = [
   assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
   assert.deepEqual(poolCalls[1]?.values, [7]);
   assert.equal(wasReleased(), true);
+});
+
+test('register tolerates trailing spaces when matching existing company and profile', async () => {
+  const { restore: restorePoolQuery } = setupPoolQueryMock([
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const clientResponses: QueryResponse[] = [
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 42, nome_empresa: 'Acme Corp   ', plano: '7' }], rowCount: 1 },
+    { rows: [{ id: 99, nome: 'Administrador   ' }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 555,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          perfil: 99,
+          empresa: 42,
+          status: true,
+          telefone: null,
+          datacriacao: '2024-01-02T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+  ];
+
+  const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
+
+  const req = {
+    body: {
+      name: 'Alice Doe',
+      email: 'alice@example.com',
+      company: 'Acme Corp',
+      password: 'SenhaSegura123',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await register(req, res);
+  } finally {
+    restoreConnect();
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 201);
+
+  const responseBody = res.body as {
+    empresa: { nome: string };
+    perfil: { nome: string };
+  };
+
+  assert.equal(responseBody.empresa.nome, 'Acme Corp');
+  assert.equal(responseBody.perfil.nome, 'Administrador');
+
+  const companyQuery = clientCalls.find((call) => call.text.includes('FROM public.empresas'));
+  assert.ok(companyQuery, 'expected company lookup query to be executed');
+  assert.match(
+    normalizeSql(companyQuery!.text),
+    /LOWER\(TRIM\(nome_empresa\)\)\s*=\s*LOWER\(TRIM\(\$1\)\)/i,
+  );
+
+  const perfilQuery = clientCalls.find((call) => call.text.includes('FROM public.perfis'));
+  assert.ok(perfilQuery, 'expected profile lookup query to be executed');
+  assert.match(normalizeSql(perfilQuery!.text), /LOWER\(TRIM\(nome\)\)\s*=\s*LOWER\(TRIM\(\$2\)\)/i);
+
+  const perfilInsertCall = clientCalls.find((call) => call.text.includes('INSERT INTO public.perfis'));
+  assert.equal(perfilInsertCall, undefined);
 });
 
 test('register returns 409 when email already exists', async () => {
