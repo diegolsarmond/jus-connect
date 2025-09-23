@@ -623,6 +623,15 @@
   color: inherit;
 }
 
+.attributeSelect {
+  flex: 1 1 160px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--background));
+  color: inherit;
+}
+
 .attributeForm button {
   border: none;
   border-radius: 0.75rem;
@@ -643,6 +652,16 @@
 .attributeForm button:not(:disabled):hover,
 .attributeForm button:not(:disabled):focus-visible {
   background: hsl(var(--primary-hover));
+}
+
+.attributeStatus {
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.attributeError {
+  font-size: 0.85rem;
+  color: hsl(var(--destructive));
 }
 
 .noteMeta {
