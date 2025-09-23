@@ -519,6 +519,7 @@ export const register = async (req: Request, res: Response) => {
       let companyId: number;
       let companyName: string;
       let companyPlanId: number | null;
+      let createdCompany = false;
 
       if ((companyLookup.rowCount ?? 0) > 0) {
         const row = companyLookup.rows[0] as {
@@ -564,7 +565,7 @@ export const register = async (req: Request, res: Response) => {
             phoneValue,
             normalizedEmail,
             planId,
-            nameValue,
+            null,
             true,
             trialStartedAt,
             trialEndsAt,
@@ -598,6 +599,7 @@ export const register = async (req: Request, res: Response) => {
             ? inserted.nome_empresa.trim() || companyValue
             : companyValue;
         companyPlanId = planId ?? parseInteger(inserted.plano);
+        createdCompany = true;
       }
 
       const existingPerfil = await client.query(
@@ -680,7 +682,24 @@ export const register = async (req: Request, res: Response) => {
         ]
       );
 
-      const createdUser = userInsert.rows[0];
+      const createdUser = userInsert.rows[0] as {
+        id?: unknown;
+        nome_completo?: unknown;
+        email?: unknown;
+        perfil?: unknown;
+        empresa?: unknown;
+        status?: unknown;
+        telefone?: unknown;
+        datacriacao?: unknown;
+      };
+
+      const createdUserId = parseInteger(createdUser.id);
+      if (createdCompany && createdUserId != null) {
+        await client.query('UPDATE public.empresas SET responsavel = $1 WHERE id = $2', [
+          createdUserId,
+          companyId,
+        ]);
+      }
 
       await client.query('COMMIT');
       transactionActive = false;

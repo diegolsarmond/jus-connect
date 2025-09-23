@@ -134,6 +134,7 @@ const duplicateCheckResponses: QueryResponse[] = [
       ],
       rowCount: 1,
     },
+    { rows: [], rowCount: 1 },
   ];
 
   const { calls: clientCalls, restore: restoreConnect, wasReleased } = setupPoolConnectMock(
@@ -191,6 +192,18 @@ const duplicateCheckResponses: QueryResponse[] = [
   assert.ok((userInsertCall?.values?.[8] as string).startsWith('sha256:'));
   assert.notEqual(userInsertCall?.values?.[8], 'SenhaSegura123');
 
+  const companyInsertCall = clientCalls.find((call) =>
+    call.text.includes('INSERT INTO public.empresas')
+  );
+  assert.ok(companyInsertCall, 'expected company insert to be executed');
+  assert.equal(companyInsertCall?.values?.[5], null);
+
+  const updateResponsavelCall = clientCalls.find((call) =>
+    call.text.includes('UPDATE public.empresas SET responsavel')
+  );
+  assert.ok(updateResponsavelCall, 'expected company responsavel update to be executed');
+  assert.deepEqual(updateResponsavelCall?.values, [123, 42]);
+
   const perfilModuloCall = clientCalls.find((call) =>
     call.text.includes('INSERT INTO public.perfil_modulos')
   );
@@ -247,6 +260,8 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
       ],
       rowCount: 1,
     },
+    { rows: [], rowCount: 1 },
+
   ];
 
   const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
@@ -286,6 +301,13 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
   assert.ok(perfilModuloCall, 'expected perfil_modulos insert to be executed');
   assert.ok(Array.isArray(perfilModuloCall?.values?.[1]));
   assert.ok(((perfilModuloCall?.values?.[1] as unknown[]) ?? []).length > 0);
+
+  const updateResponsavelCall = clientCalls.find((call) =>
+    call.text.includes('UPDATE public.empresas SET responsavel')
+  );
+  assert.ok(updateResponsavelCall, 'expected company responsavel update to be executed');
+  assert.deepEqual(updateResponsavelCall?.values, [1234, 777]);
+
 
   assert.equal(poolCalls.length, 1);
   assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
