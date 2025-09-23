@@ -4,12 +4,14 @@ import { Loader2 } from "lucide-react";
 import { routes } from "@/config/routes";
 import { useAuth } from "./AuthProvider";
 
+const PLAN_SELECTION_PATH = "/meu-plano";
+
 interface ProtectedRouteProps {
   children: ReactElement;
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -25,6 +27,14 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
   if (!isAuthenticated) {
     return <Navigate to={routes.login} replace state={{ from: location }} />;
+  }
+
+  const subscriptionStatus = user?.subscription?.status;
+  const requiresPlanSelection = !subscriptionStatus || subscriptionStatus === "inactive";
+  const isOnPlanRoute = location.pathname.startsWith(PLAN_SELECTION_PATH);
+
+  if (requiresPlanSelection && !isOnPlanRoute) {
+    return <Navigate to={PLAN_SELECTION_PATH} replace state={{ from: location }} />;
   }
 
   return children;

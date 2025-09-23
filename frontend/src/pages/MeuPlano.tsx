@@ -32,6 +32,8 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { routes } from "@/config/routes";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { PlanSelection } from "@/features/plans/PlanSelection";
 import {
   AlertTriangle,
   ArrowRight,
@@ -111,6 +113,17 @@ function normalizeApiRows(data: unknown): unknown[] {
   }
 
   return [];
+}
+
+export default function MeuPlano() {
+  const { user } = useAuth();
+  const subscriptionStatus = user?.subscription?.status;
+
+  if (!subscriptionStatus || subscriptionStatus === "inactive") {
+    return <PlanSelection />;
+  }
+
+  return <MeuPlanoContent />;
 }
 
 function toNumber(value: unknown): number | null {
@@ -431,7 +444,7 @@ function findPlanFromEmpresa(planos: PlanoDetalhe[], empresasRows: unknown[]): P
   return null;
 }
 
-export default function MeuPlano() {
+function MeuPlanoContent() {
   const apiBaseUrl = getApiBaseUrl();
   const { toast } = useToast();
 

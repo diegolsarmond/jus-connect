@@ -11,7 +11,13 @@ import {
 import { getApiBaseUrl } from "@/lib/api";
 import { DEFAULT_TIMEOUT_MS, LAST_ACTIVITY_KEY } from "@/hooks/useAutoLogout";
 import { ApiError, fetchCurrentUser, loginRequest, refreshTokenRequest } from "./api";
-import type { AuthUser, LoginCredentials, LoginResponse } from "./types";
+import type {
+  AuthSubscription,
+  AuthUser,
+  LoginCredentials,
+  LoginResponse,
+  SubscriptionStatus,
+} from "./types";
 
 interface StoredAuthData {
   token: string;
@@ -34,19 +40,138 @@ const STORAGE_KEY = "jus-connect:auth";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const parseOptionalInteger = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    return Number.isNaN(normalized) ? null : normalized;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseBooleanFlag = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (["1", "true", "t", "yes", "y", "sim", "on", "ativo", "ativa"].includes(normalized)) {
+      return true;
+    }
+
+    if (["0", "false", "f", "no", "n", "nao", "não", "off", "inativo", "inativa"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return null;
+};
+
+const parseIsoDate = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return parsed.toISOString();
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
+
+    return value.toISOString();
+  }
+
+  return null;
+};
+
+const sanitizeSubscriptionStatus = (
+  value: unknown,
+  fallback: SubscriptionStatus,
+): SubscriptionStatus => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "active" || normalized === "trialing" || normalized === "inactive") {
+    return normalized;
+  }
+
+  return fallback;
+};
+
+const sanitizeAuthSubscription = (value: unknown): AuthSubscription | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const planId = parseOptionalInteger(record.planId ?? record.plan_id ?? record.plano ?? record.plan);
+  const isActive = parseBooleanFlag(record.isActive ?? record.active ?? record.ativo);
+  const fallback: SubscriptionStatus = planId === null || isActive === false ? "inactive" : "active";
+  const status = sanitizeSubscriptionStatus(record.status, fallback);
+  const startedAt = parseIsoDate(record.startedAt ?? record.startDate ?? record.datacadastro ?? null);
+  const trialEndsAt = parseIsoDate(
+    record.trialEndsAt ?? record.trial_end ?? record.trialEnd ?? record.endsAt ?? record.endDate ?? null,
+  );
+
+  return {
+    planId,
+    status,
+    startedAt,
+    trialEndsAt,
+  };
+};
+
 const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null => {
   if (!user) {
     return null;
   }
 
-  const candidate = user as AuthUser & { modulos?: unknown };
+  const candidate = user as AuthUser & { modulos?: unknown; subscription?: unknown };
   const modules = Array.isArray(candidate.modulos)
     ? candidate.modulos.filter((module): module is string => typeof module === "string")
     : [];
+  const subscription = sanitizeAuthSubscription(candidate.subscription ?? null);
 
   return {
     ...candidate,
     modulos: modules,
+    subscription: subscription ?? null,
   } satisfies AuthUser;
 };
 
@@ -296,12 +421,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const validateToken = async () => {
       try {
         const currentUser = await fetchCurrentUser(stored.token);
-        setUser(currentUser);
-        userRef.current = currentUser;
+        const sanitizedUser = sanitizeAuthUser(currentUser) ?? currentUser;
+        setUser(sanitizedUser);
+        userRef.current = sanitizedUser;
         const persistedExpiresAt = stored.expiresAt ?? decodeTokenExpiration(stored.token);
         writeStoredAuth({
           token: stored.token,
-          user: currentUser,
+          user: sanitizedUser,
           timestamp: Date.now(),
           expiresAt: persistedExpiresAt ?? undefined,
         });
@@ -474,18 +600,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const response = await loginRequest(credentials);
     const loginTimestamp = Date.now();
     const expiresAt = resolveTokenExpiration(response.token, response.expiresIn, loginTimestamp);
+    const sanitizedUser = sanitizeAuthUser(response.user) ?? response.user;
     setToken(response.token);
-    setUser(response.user);
+    setUser(sanitizedUser);
     tokenRef.current = response.token;
-    userRef.current = response.user;
+    userRef.current = sanitizedUser;
     setSessionExpiresAt(expiresAt ?? null);
     writeStoredAuth({
       token: response.token,
-      user: response.user,
+      user: sanitizedUser,
       timestamp: loginTimestamp,
       expiresAt: expiresAt ?? undefined,
     });
-    return response;
+
+    if (!sanitizedUser?.subscription) {
+      try {
+        const refreshedUser = await fetchCurrentUser(response.token);
+        const normalizedRefreshedUser = sanitizeAuthUser(refreshedUser) ?? refreshedUser;
+        setUser(normalizedRefreshedUser);
+        userRef.current = normalizedRefreshedUser;
+        writeStoredAuth({
+          token: response.token,
+          user: normalizedRefreshedUser,
+          timestamp: Date.now(),
+          expiresAt: expiresAt ?? undefined,
+        });
+      } catch (subscriptionError) {
+        console.warn("Failed to load subscription details after login", subscriptionError);
+      }
+    }
+
+    return { ...response, user: sanitizedUser };
   }, []);
 
   const logout = useCallback(() => {
@@ -494,17 +639,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshUser = useCallback(async () => {
     const currentUser = await fetchCurrentUser(tokenRef.current ?? undefined);
-    setUser(currentUser);
-    userRef.current = currentUser;
+    const sanitizedUser = sanitizeAuthUser(currentUser) ?? currentUser;
+    setUser(sanitizedUser);
+    userRef.current = sanitizedUser;
     if (tokenRef.current) {
       writeStoredAuth({
         token: tokenRef.current,
-        user: currentUser,
+        user: sanitizedUser,
         timestamp: Date.now(),
         expiresAt: sessionExpiresAt ?? undefined,
       });
     }
-    return currentUser;
+    return sanitizedUser;
   }, [sessionExpiresAt]);
 
   const value = useMemo<AuthContextValue>(
