@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS chat_conversations (
   responsible_id INTEGER,
   responsible_snapshot JSONB,
   tags JSONB,
+  client_id INTEGER REFERENCES public.clientes (id) ON UPDATE CASCADE ON DELETE SET NULL,
   client_name TEXT,
   is_linked_to_client BOOLEAN NOT NULL DEFAULT FALSE,
   custom_attributes JSONB,
@@ -47,6 +48,9 @@ CREATE INDEX IF NOT EXISTS idx_chat_conversations_last_activity
 CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_created
   ON chat_messages (conversation_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_chat_conversations_client
+  ON chat_conversations (client_id);
+
 CREATE OR REPLACE FUNCTION set_chat_conversations_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -67,8 +71,23 @@ ALTER TABLE chat_conversations
   ADD COLUMN IF NOT EXISTS responsible_id INTEGER,
   ADD COLUMN IF NOT EXISTS responsible_snapshot JSONB,
   ADD COLUMN IF NOT EXISTS tags JSONB,
+  ADD COLUMN IF NOT EXISTS client_id INTEGER,
   ADD COLUMN IF NOT EXISTS client_name TEXT,
   ADD COLUMN IF NOT EXISTS is_linked_to_client BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS custom_attributes JSONB,
   ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS internal_notes JSONB;
+
+DO $$
+BEGIN
+  ALTER TABLE chat_conversations
+    ADD CONSTRAINT chat_conversations_client_fk
+      FOREIGN KEY (client_id)
+      REFERENCES public.clientes (id)
+      ON UPDATE CASCADE
+      ON DELETE SET NULL;
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL;
+END;
+$$;
