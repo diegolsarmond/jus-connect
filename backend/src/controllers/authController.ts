@@ -148,6 +148,7 @@ type UserRowBase = SubscriptionRow & {
   empresa_nome: string | null;
   setor_id: number | null;
   setor_nome: string | null;
+  must_change_password?: unknown;
 };
 
 type LoginUserRow = UserRowBase & {
@@ -763,6 +764,7 @@ export const login = async (req: Request, res: Response) => {
               u.nome_completo,
               u.email,
               u.senha,
+              u.must_change_password,
               u.status,
               u.perfil,
               u.empresa AS empresa_id,
@@ -828,6 +830,9 @@ export const login = async (req: Request, res: Response) => {
       res.status(401).json({ error: 'E-mail ou senha incorretos.' });
       return;
     }
+
+    const mustChangePassword =
+      parseBooleanFlag((user as { must_change_password?: unknown }).must_change_password) ?? false;
 
     const subscriptionResolution =
       user.empresa_id != null
@@ -907,11 +912,139 @@ export const login = async (req: Request, res: Response) => {
         setor_id: user.setor_id,
         setor_nome: user.setor_nome,
         subscription,
+        mustChangePassword,
       },
     });
   } catch (error) {
     console.error('Erro ao realizar login', error);
     res.status(500).json({ error: 'Não foi possível concluir a autenticação.' });
+  }
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return;
+  }
+
+  const temporaryPasswordValue =
+    typeof req.body?.temporaryPassword === 'string'
+      ? req.body.temporaryPassword
+      : typeof req.body?.currentPassword === 'string'
+        ? req.body.currentPassword
+        : '';
+  const newPasswordValue =
+    typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+  const confirmPasswordValue =
+    typeof req.body?.confirmPassword === 'string'
+      ? req.body.confirmPassword
+      : typeof req.body?.passwordConfirmation === 'string'
+        ? req.body.passwordConfirmation
+        : '';
+
+  if (!temporaryPasswordValue) {
+    res.status(400).json({ error: 'Informe a senha provisória enviada por e-mail.' });
+    return;
+  }
+
+  if (!newPasswordValue) {
+    res.status(400).json({ error: 'Informe a nova senha.' });
+    return;
+  }
+
+  if (newPasswordValue.length < MIN_PASSWORD_LENGTH) {
+    res
+      .status(400)
+      .json({ error: `A nova senha deve conter ao menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+    return;
+  }
+
+  if (newPasswordValue !== confirmPasswordValue) {
+    res.status(400).json({ error: 'A confirmação da nova senha não confere.' });
+    return;
+  }
+
+  if (newPasswordValue === temporaryPasswordValue) {
+    res
+      .status(400)
+      .json({ error: 'A nova senha deve ser diferente da senha provisória informada.' });
+    return;
+  }
+
+  const client = await pool.connect();
+  let transactionActive = false;
+
+  try {
+    await client.query('BEGIN');
+    transactionActive = true;
+
+    const userResult = await client.query(
+      `SELECT senha, must_change_password
+         FROM public.usuarios
+        WHERE id = $1
+        FOR UPDATE`,
+      [req.auth.userId]
+    );
+
+    if (userResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      transactionActive = false;
+      res.status(404).json({ error: 'Usuário não encontrado.' });
+      return;
+    }
+
+    const userRow = userResult.rows[0] as { senha: unknown; must_change_password?: unknown };
+
+    if (typeof userRow.senha !== 'string' || userRow.senha.length === 0) {
+      await client.query('ROLLBACK');
+      transactionActive = false;
+      res.status(400).json({ error: 'Senha provisória inválida.' });
+      return;
+    }
+
+    const passwordMatches = await verifyPassword(temporaryPasswordValue, userRow.senha);
+    if (!passwordMatches) {
+      await client.query('ROLLBACK');
+      transactionActive = false;
+      res.status(400).json({ error: 'Senha provisória inválida.' });
+      return;
+    }
+
+    const hashedPassword = hashPassword(newPasswordValue);
+
+    await client.query(
+      `UPDATE public.usuarios
+          SET senha = $1,
+              must_change_password = FALSE
+        WHERE id = $2`,
+      [hashedPassword, req.auth.userId]
+    );
+
+    await client.query(
+      `UPDATE public.password_reset_tokens
+          SET used_at = NOW()
+        WHERE user_id = $1
+          AND used_at IS NULL`,
+      [req.auth.userId]
+    );
+
+    await client.query('COMMIT');
+    transactionActive = false;
+
+    res.json({ message: 'Senha atualizada com sucesso.' });
+  } catch (error) {
+    if (transactionActive) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Falha ao reverter transação de alteração de senha', rollbackError);
+      }
+    }
+
+    console.error('Erro ao atualizar senha do usuário autenticado', error);
+    res.status(500).json({ error: 'Não foi possível atualizar a senha.' });
+  } finally {
+    client.release();
   }
 };
 
@@ -1014,6 +1147,9 @@ export const getCurrentUser = async (req: Request, res: Response) => {
           })
         : null;
 
+    const mustChangePassword =
+      parseBooleanFlag((user as { must_change_password?: unknown }).must_change_password) ?? false;
+
     res.json({
       id: user.id,
       nome_completo: user.nome_completo,
@@ -1026,6 +1162,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       setor_nome: user.setor_nome,
       modulos,
       subscription,
+      mustChangePassword,
     });
   } catch (error) {
     console.error('Erro ao carregar usuário autenticado', error);

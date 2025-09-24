@@ -1,12 +1,26 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { fetchPlanLimitsForCompany, countCompanyResource } from '../services/planLimitsService';
+
 import {
   createPasswordResetRequest,
   generateTemporaryPassword,
 } from '../services/passwordResetService';
 import { hashPassword } from '../utils/passwordUtils';
 import { newUserWelcomeEmailService } from '../services/newUserWelcomeEmailService';
+
+
+let welcomeEmailService = newUserWelcomeEmailService;
+
+export const __setWelcomeEmailServiceForTests = (
+  service: typeof newUserWelcomeEmailService
+) => {
+  welcomeEmailService = service;
+};
+
+export const __resetWelcomeEmailServiceForTests = () => {
+  welcomeEmailService = newUserWelcomeEmailService;
+};
 
 const parseOptionalId = (value: unknown): number | null | 'invalid' => {
   if (value === undefined || value === null) {

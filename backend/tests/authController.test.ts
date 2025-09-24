@@ -8,11 +8,12 @@ process.env.AUTH_TOKEN_SECRET ??= 'test-secret';
 
 let register: typeof import('../src/controllers/authController')['register'];
 let login: typeof import('../src/controllers/authController')['login'];
+let changePassword: typeof import('../src/controllers/authController')['changePassword'];
 
 const planModules = ['configuracoes', 'clientes', 'dashboard'];
 
 test.before(async () => {
-  ({ register, login } = await import('../src/controllers/authController'));
+  ({ register, login, changePassword } = await import('../src/controllers/authController'));
 });
 
 const normalizeSql = (query: string): string => query.replace(/\s+/g, ' ').trim();
@@ -435,6 +436,7 @@ test('login succeeds when subscription is active', async () => {
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
           senha: hashedPassword,
+          must_change_password: false,
           status: true,
           perfil: 15,
           empresa_id: 20,
@@ -486,6 +488,7 @@ test('login succeeds when subscription is active', async () => {
         gracePeriodEndsAt?: string | null;
         isInGoodStanding?: boolean;
       };
+      mustChangePassword?: boolean;
     };
   };
 
@@ -501,6 +504,7 @@ test('login succeeds when subscription is active', async () => {
   );
   assert.equal(payload.user?.subscription?.gracePeriodEndsAt, gracePeriodEndsAt.toISOString());
   assert.equal(payload.user?.subscription?.isInGoodStanding, true);
+  assert.equal(payload.user?.mustChangePassword, false);
 });
 
 test('login rejects when trial period has expired without payment', async () => {
@@ -517,6 +521,7 @@ test('login rejects when trial period has expired without payment', async () => 
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
           senha: hashedPassword,
+          must_change_password: false,
           status: true,
           perfil: 22,
           empresa_id: 30,
@@ -572,6 +577,7 @@ test('login rejects with payment required once grace period expires', async () =
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
           senha: hashedPassword,
+          must_change_password: false,
           status: true,
           perfil: 33,
           empresa_id: 40,
@@ -611,4 +617,87 @@ test('login rejects with payment required once grace period expires', async () =
       'Assinatura expirada após o período de tolerância de 10 dias. Regularize o pagamento para continuar.',
   });
   assert.equal('token' in (res.body as Record<string, unknown>), false);
+});
+
+test('changePassword updates the stored hash and clears the must-change flag', async () => {
+  const temporaryPassword = 'Temp#Senha123';
+  const hashedTemporaryPassword = hashPassword(temporaryPassword);
+  const newPassword = 'NovaSenhaSegura!45';
+
+  const { calls, restore, wasReleased } = setupPoolConnectMock([
+    {
+      rows: [{ senha: hashedTemporaryPassword, must_change_password: true }],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const req = {
+    auth: { userId: 321, payload: {} },
+    body: {
+      temporaryPassword,
+      newPassword,
+      confirmPassword: newPassword,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await changePassword(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { message: 'Senha atualizada com sucesso.' });
+  assert.equal(wasReleased(), true);
+
+  const updateCall = calls.find((call) => call.text.includes('UPDATE public.usuarios'));
+  assert.ok(updateCall, 'expected user update to be executed');
+  assert.equal(updateCall?.values?.[1], 321);
+  const storedHash = updateCall?.values?.[0];
+  assert.equal(typeof storedHash, 'string');
+  assert.ok(typeof storedHash === 'string' && storedHash.startsWith('sha256:'));
+
+  const tokenUpdateCall = calls.find((call) =>
+    call.text.includes('UPDATE public.password_reset_tokens')
+  );
+  assert.ok(tokenUpdateCall, 'expected reset token update to be executed');
+  assert.equal(tokenUpdateCall?.values?.[0], 321);
+});
+
+test('changePassword rejects invalid provisional passwords', async () => {
+  const correctTemporaryPassword = 'Temp#Senha123';
+  const hashedTemporaryPassword = hashPassword(correctTemporaryPassword);
+
+  const { calls, restore } = setupPoolConnectMock([
+    {
+      rows: [{ senha: hashedTemporaryPassword, must_change_password: true }],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    auth: { userId: 555, payload: {} },
+    body: {
+      temporaryPassword: 'OutraSenha123',
+      newPassword: 'NovaSenha!789',
+      confirmPassword: 'NovaSenha!789',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await changePassword(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'Senha provisória inválida.' });
+  const updateCall = calls.find((call) => call.text.includes('UPDATE public.usuarios'));
+  assert.equal(updateCall, undefined);
 });
