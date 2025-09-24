@@ -12,11 +12,19 @@ type QueryResponse = { rows: any[]; rowCount: number };
 let listUsuarios: typeof import('../src/controllers/usuarioController')['listUsuarios'];
 let listUsuariosByEmpresa: typeof import('../src/controllers/usuarioController')['listUsuariosByEmpresa'];
 let getUsuarioById: typeof import('../src/controllers/usuarioController')['getUsuarioById'];
+let createUsuario: typeof import('../src/controllers/usuarioController')['createUsuario'];
+let setWelcomeEmailServiceForTests: typeof import('../src/controllers/usuarioController')['__setWelcomeEmailServiceForTests'];
+let resetWelcomeEmailServiceForTests: typeof import('../src/controllers/usuarioController')['__resetWelcomeEmailServiceForTests'];
 
 test.before(async () => {
-  ({ listUsuarios, listUsuariosByEmpresa, getUsuarioById } = await import(
-    '../src/controllers/usuarioController'
-  ));
+  ({
+    listUsuarios,
+    listUsuariosByEmpresa,
+    getUsuarioById,
+    createUsuario,
+    __setWelcomeEmailServiceForTests: setWelcomeEmailServiceForTests,
+    __resetWelcomeEmailServiceForTests: resetWelcomeEmailServiceForTests,
+  } = await import('../src/controllers/usuarioController'));
 });
 
 const createMockResponse = () => {
@@ -224,6 +232,155 @@ test('getUsuarioById returns 404 when user belongs to another company', async ()
   assert.deepEqual(res.body, { error: 'Usuário não encontrado' });
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1]?.values, ['999', 42]);
+});
+
+test('createUsuario generates a temporary password, stores its hash and sends a welcome email', async () => {
+  const welcomeModule = await import('../src/services/newUserWelcomeEmailService');
+  const capturedCalls: Parameters<
+    (typeof welcomeModule.newUserWelcomeEmailService)['sendWelcomeEmail']
+  >[] = [];
+
+  setWelcomeEmailServiceForTests({
+    async sendWelcomeEmail(params) {
+      capturedCalls.push(params);
+    },
+  });
+
+  const createdRow = {
+    id: 101,
+    nome_completo: 'Novo Usuário',
+    cpf: '00000000000',
+    email: 'novo@example.com',
+    perfil: 'admin',
+    empresa: 5,
+    setor: null,
+    oab: null,
+    status: true,
+    senha: 'sha256:placeholder',
+    telefone: '(11) 90000-0000',
+    ultimo_login: null,
+    observacoes: null,
+    datacriacao: '2024-03-01T12:00:00.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    { rows: [createdRow], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Novo Usuário',
+      cpf: '00000000000',
+      email: 'novo@example.com',
+      perfil: 'admin',
+      empresa: 5,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 90000-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(50),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    resetWelcomeEmailServiceForTests();
+    restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.deepEqual(res.body, createdRow);
+  assert.equal(calls.length, 3);
+
+  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text));
+  assert.ok(insertCall);
+  assert.equal(typeof insertCall.values?.[8], 'string');
+  assert.ok(String(insertCall.values?.[8]).startsWith('sha256:'));
+
+  assert.equal(capturedCalls.length, 1);
+  const [welcomeArgs] = capturedCalls;
+  assert.equal(welcomeArgs?.to, 'novo@example.com');
+  assert.equal(welcomeArgs?.userName, 'Novo Usuário');
+  assert.equal(typeof welcomeArgs?.temporaryPassword, 'string');
+  assert.ok((welcomeArgs?.temporaryPassword ?? '').length > 0);
+});
+
+test('createUsuario cleans up created user when welcome email fails', async () => {
+  let invocationCount = 0;
+
+  setWelcomeEmailServiceForTests({
+    async sendWelcomeEmail() {
+      invocationCount += 1;
+      throw new Error('SMTP indisponível');
+    },
+  });
+
+  const createdRow = {
+    id: 321,
+    nome_completo: 'Novo Usuário',
+    cpf: '00000000000',
+    email: 'falha@example.com',
+    perfil: 'user',
+    empresa: 7,
+    setor: null,
+    oab: null,
+    status: true,
+    senha: 'sha256:placeholder',
+    telefone: '(11) 95555-0000',
+    ultimo_login: null,
+    observacoes: null,
+    datacriacao: '2024-03-01T12:00:00.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 7 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    { rows: [createdRow], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Novo Usuário',
+      cpf: '00000000000',
+      email: 'falha@example.com',
+      perfil: 'user',
+      empresa: 7,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 95555-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(70),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    resetWelcomeEmailServiceForTests();
+    restore();
+  }
+
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body, {
+    error: 'Não foi possível enviar a senha provisória para o novo usuário.',
+  });
+
+  assert.equal(invocationCount, 1);
+  assert.equal(calls.length, 4);
+  assert.match(calls[3]?.text ?? '', /DELETE FROM public\.usuarios/);
+  assert.deepEqual(calls[3]?.values, [321]);
 });
 
 
