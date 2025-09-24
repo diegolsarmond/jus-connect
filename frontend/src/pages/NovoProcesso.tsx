@@ -103,14 +103,14 @@ export default function NovoProcesso() {
 
   if (!client) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <p>Cliente não encontrado</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Nova Oportunidade</h1>
         <p className="text-muted-foreground">Cliente: {client.name}</p>

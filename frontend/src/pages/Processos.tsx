@@ -1494,7 +1494,7 @@ export default function Processos() {
   }, [processos, searchTerm, statusFilter, tipoFilter]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">Processos</h1>

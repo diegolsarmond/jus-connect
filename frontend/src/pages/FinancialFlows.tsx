@@ -769,12 +769,12 @@ const FinancialFlows = () => {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div>
           <Skeleton className="h-9 w-64" />
           <Skeleton className="mt-2 h-5 w-80" />
         </div>
-        <Card className="p-6 space-y-4">
+        <Card className="p-4 sm:p-6 space-y-4">
           <Skeleton className="h-6 w-48" />
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
@@ -790,8 +790,8 @@ const FinancialFlows = () => {
 
   if (isError) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-destructive">
+      <div className="p-4 sm:p-6 space-y-6">
+        <div className="flex items-center gap-3 rounded-lg border border-destructive/50 bg-destructive/10 p-4 sm:p-6 text-destructive">
           <AlertCircle className="h-6 w-6" />
           <div className="space-y-1">
             <h1 className="text-xl font-semibold">Não foi possível carregar os lançamentos financeiros</h1>
@@ -808,7 +808,7 @@ const FinancialFlows = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Lançamentos Financeiros</h1>
         <p className="mt-2 text-muted-foreground">
@@ -861,7 +861,7 @@ const FinancialFlows = () => {
           }
         }}
       >
-        <Card className="space-y-6 p-6">
+        <Card className="space-y-6 p-4 sm:p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold">Resumo mensal do ano selecionado</h2>
@@ -1389,7 +1389,7 @@ const FinancialFlows = () => {
           </Tabs>
         </div>
       ) : (
-        <Card className="p-6 text-center text-muted-foreground">
+        <Card className="p-4 sm:p-6 text-center text-muted-foreground">
           {hasAnyFlow
             ? 'Nenhum lançamento atende aos filtros selecionados. Ajuste os filtros para visualizar outras cobranças.'
             : 'Nenhum lançamento financeiro cadastrado até o momento.'}

@@ -66,23 +66,23 @@ export function HeaderActions() {
   }, [logout, navigate]);
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
       <ModeToggle />
       <IntimacaoMenu />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="flex items-center gap-2">
+          <Button variant="ghost" className="flex min-w-0 items-center gap-2 px-2 py-1.5 sm:px-3">
             <Avatar className="h-8 w-8">
               <AvatarFallback className="bg-primary text-primary-foreground">
                 {getInitials(user?.nome_completo)}
               </AvatarFallback>
             </Avatar>
-            <div className="text-left">
-              <p className="text-sm font-medium truncate max-w-[160px]">
+            <div className="hidden min-w-0 text-left sm:block">
+              <p className="max-w-[160px] truncate text-sm font-medium">
                 {user?.nome_completo ?? "Usuário"}
               </p>
-              <p className="text-xs text-muted-foreground truncate max-w-[160px]">
+              <p className="max-w-[160px] truncate text-xs text-muted-foreground">
                 {user?.email ?? "Conta"}
               </p>
             </div>

@@ -223,7 +223,7 @@ export default function Intimacoes() {
   const hasTypeData = typeData.some((item) => item.value > 0);
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="p-4 sm:p-6 space-y-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold">Intimações</h1>

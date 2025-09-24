@@ -791,7 +791,7 @@ export default function Integracoes() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold text-foreground">Integrações</h1>
         <p className="text-muted-foreground">

@@ -761,7 +761,7 @@ function MeuPlanoContent() {
   const hasMensalPricingAvailable = hasMensalPricing(planoExibido);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold">Meu Plano</h1>
         <p className="text-muted-foreground">
@@ -807,7 +807,7 @@ function MeuPlanoContent() {
               <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
               <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-primary/10 blur-3xl" />
             </div>
-            <CardContent className="relative z-10 space-y-8 p-6 md:p-10">
+            <CardContent className="relative z-10 space-y-8 p-4 sm:p-6 md:p-10">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-2">

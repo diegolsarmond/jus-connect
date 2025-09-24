@@ -1073,7 +1073,7 @@ export default function VisualizarCliente() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <p className="text-muted-foreground">Carregando…</p>
       </div>
     );
@@ -1081,7 +1081,7 @@ export default function VisualizarCliente() {
 
   if (!client) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <p>Cliente não encontrado</p>
       </div>
     );
@@ -1089,7 +1089,7 @@ export default function VisualizarCliente() {
 
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={() => navigate(-1)}>
           Voltar
@@ -1560,7 +1560,7 @@ export default function VisualizarCliente() {
                       </Table>
                     </div>
                   ) : (
-                    <div className="p-6 text-center text-sm text-muted-foreground">
+                    <div className="p-4 sm:p-6 text-center text-sm text-muted-foreground">
                       Nenhuma movimentação financeira cadastrada para este cliente.
                     </div>
                   )}

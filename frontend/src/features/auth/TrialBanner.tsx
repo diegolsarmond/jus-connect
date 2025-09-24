@@ -152,7 +152,7 @@ export function TrialBanner({ className }: TrialBannerProps) {
     <Alert
       variant="destructive"
       className={cn(
-        "relative flex w-full shrink-0 flex-col gap-4 border-b border-t-0 border-destructive/40 bg-destructive/10 px-6 py-4 text-destructive dark:text-destructive-foreground sm:flex-row sm:items-center",
+        "relative flex w-full shrink-0 flex-col gap-4 border-b border-t-0 border-destructive/40 bg-destructive/10 px-4 py-4 text-destructive dark:text-destructive-foreground sm:flex-row sm:items-center sm:px-6",
 
         className,
       )}
