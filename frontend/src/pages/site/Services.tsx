@@ -152,7 +152,7 @@ const ServicesPage = () => {
                   variant="outline_quantum"
                   size="xl"
                   className="bg-white/10 border-white/30 text-white hover:bg-white/80 hover:text-quantum-deep"
-                  onClick={() => window.open("https://wa.me/553193054200?text=Olá! Quero transformar minha operação com a Quantum.", "_blank")}
+                  onClick={() => window.open("https://wa.me/553193054200?text=Olá! Quero transformar minha operação com o Jus Connect.", "_blank")}
                 >
                   Conversar no WhatsApp
                 </Button>
@@ -342,7 +342,7 @@ const ServicesPage = () => {
                   <div className="rounded-xl border border-quantum-light/60 bg-white/80 p-4">
                     <p className="text-lg font-semibold text-foreground">Transforme sua operação com tecnologia sob medida.</p>
                     <p className="text-sm text-muted-foreground">
-                      Agenda estratégica gratuita para mapear oportunidades com especialistas Quantum.
+                      Agenda estratégica gratuita para mapear oportunidades com especialistas Jus Connect.
                     </p>
                     <Button
                       variant="quantum"

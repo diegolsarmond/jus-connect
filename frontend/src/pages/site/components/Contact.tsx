@@ -17,21 +17,21 @@ const Contact = () => {
     () => [
       {
         title: "Fale pelo WhatsApp",
-        description: "Conecte-se com nosso time para tirar dúvidas ou agendar uma demonstração guiada.",
+        description: "Conecte-se com nosso time para tirar dúvidas ou agendar uma demonstração guiada do Jus Connect.",
         icon: MessageCircle,
         actionLabel: "Conversar agora",
-        href: "https://wa.me/553193054200?text=Ol%C3%A1!%20Quero%20conhecer%20a%20Quantum.",
+        href: "https://wa.me/553193054200?text=Ol%C3%A1!%20Quero%20conhecer%20o%20Jus%20Connect.",
       },
       {
         title: "Envie um e-mail",
-        description: "Receba uma proposta personalizada com os módulos e integrações que sua equipe precisa.",
+        description: "Receba uma proposta personalizada com os módulos e integrações que sua equipe jurídica precisa.",
         icon: Mail,
         actionLabel: "Enviar e-mail",
         href: "mailto:contato@quantumtecnologia.com",
       },
       {
         title: "Converse com especialistas",
-        description: "Marque uma reunião para entender como a Quantum pode acelerar seus resultados.",
+        description: "Marque uma reunião para entender como o Jus Connect pode acelerar seus resultados.",
         icon: Phone,
         actionLabel: "Agendar reunião",
         href: "https://cal.com/quantum/agendamento",
@@ -48,11 +48,11 @@ const Contact = () => {
             Vamos conversar
           </span>
           <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
-            Pronto para acelerar sua operação?
+            Pronto para transformar sua gestão jurídica?
           </h2>
           <p className="text-base text-muted-foreground">
-            Preencha o formulário ou escolha um canal preferido. Nosso time responde em até 1 dia útil com um plano aderente
-            ao seu momento.
+            Preencha o formulário ou escolha um canal preferido. Respondemos em até 1 dia útil com um plano aderente à
+            maturidade da sua operação.
           </p>
           <div className="space-y-4">
             {channels.map((channel) => (
