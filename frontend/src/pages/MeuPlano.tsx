@@ -724,6 +724,56 @@ function MeuPlanoContent() {
   const anyMensalPlan = useMemo(() => planosDisponiveis.some((plan) => hasMensalPricing(plan)), [planosDisponiveis]);
   const anyAnualPlan = useMemo(() => planosDisponiveis.some((plan) => hasAnualPricing(plan)), [planosDisponiveis]);
 
+  const planosOrdenados = useMemo(() => {
+    if (planosDisponiveis.length === 0) {
+      return [];
+    }
+
+    const collator = new Intl.Collator("pt-BR", { sensitivity: "base" });
+
+    const getComparablePrice = (plan: PlanoDetalhe): number | null => {
+      const hasMensalPrice = typeof plan.valorMensal === "number" && Number.isFinite(plan.valorMensal);
+      const hasAnualPrice = typeof plan.valorAnual === "number" && Number.isFinite(plan.valorAnual);
+
+      if (pricingMode === "anual") {
+        if (hasAnualPrice) {
+          return plan.valorAnual as number;
+        }
+        if (hasMensalPrice) {
+          return (plan.valorMensal as number) * 12;
+        }
+        return null;
+      }
+
+      if (hasMensalPrice) {
+        return plan.valorMensal as number;
+      }
+      if (hasAnualPrice) {
+        return (plan.valorAnual as number) / 12;
+      }
+      return null;
+    };
+
+    return [...planosDisponiveis].sort((a, b) => {
+      const priceA = getComparablePrice(a);
+      const priceB = getComparablePrice(b);
+
+      if (priceA === null && priceB === null) {
+        return collator.compare(a.nome, b.nome);
+      }
+      if (priceA === null) {
+        return 1;
+      }
+      if (priceB === null) {
+        return -1;
+      }
+      if (priceA !== priceB) {
+        return priceA - priceB;
+      }
+      return collator.compare(a.nome, b.nome);
+    });
+  }, [planosDisponiveis, pricingMode]);
+
   const handlePreviewPlan = useCallback(
     (plan: PlanoDetalhe) => {
       setPreviewPlano(plan);
@@ -955,7 +1005,7 @@ function MeuPlanoContent() {
                       </ToggleGroup>
                       <Carousel className="relative">
                         <CarouselContent>
-                          {planosDisponiveis.map((plano) => {
+                          {planosOrdenados.map((plano) => {
                             const carouselPricing = buildPricingDisplay(plano, pricingMode);
                             const isAtual = planoAtual.id === plano.id;
                             const isPreviewing = previewPlano?.id === plano.id;
