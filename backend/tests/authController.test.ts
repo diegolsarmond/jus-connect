@@ -507,6 +507,50 @@ test('login succeeds when subscription is active', async () => {
   assert.equal(payload.user?.mustChangePassword, false);
 });
 
+test('login rejects when user is inactive', async () => {
+  const password = 'SenhaSegura123';
+  const hashedPassword = hashPassword(password);
+
+  const { restore: restorePoolQuery } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 77,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          senha: hashedPassword,
+          must_change_password: false,
+          status: 'inactive',
+          perfil: 15,
+          empresa_id: 20,
+          empresa_nome: 'Acme Corp',
+          setor_id: 9,
+          setor_nome: 'Jurídico',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    body: {
+      email: 'alice@example.com',
+      senha: password,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await login(req, res);
+  } finally {
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: 'Usuário inativo.' });
+});
+
 test('login rejects when trial period has expired without payment', async () => {
   const password = 'SenhaSegura123';
   const hashedPassword = hashPassword(password);
