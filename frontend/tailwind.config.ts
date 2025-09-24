@@ -80,7 +80,7 @@ export default {
       },
       backgroundImage: {
         "gradient-hero":
-          "linear-gradient(135deg, rgba(26, 28, 36, 0.95) 0%, rgba(75, 85, 99, 0.9) 55%, rgba(24, 24, 27, 0.95) 100%)",
+          "linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--primary) / 0.08) 55%, hsl(var(--accent) / 0.15) 100%)",
         "gradient-quantum":
           "linear-gradient(135deg, rgba(107, 114, 128, 1) 0%, rgba(63, 63, 70, 1) 50%, rgba(24, 24, 27, 1) 100%)",
         "gradient-card":
