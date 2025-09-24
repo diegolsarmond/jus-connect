@@ -540,64 +540,6 @@ const Desenvolvimento = () => {
             </div>
           </div>
 
-          <div className="max-w-5xl mx-auto text-center text-white">
-            <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/20 text-sm font-medium mb-6 animate-pulse-glow">
-              <BadgeCheck className="h-4 w-4 mr-2" />
-              {heroLabel}
-            </div>
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-fade-in">{heroHeadline}</h1>
-            <p className="text-xl md:text-2xl mb-10 text-white/90 max-w-4xl mx-auto leading-relaxed">{heroDescription}</p>
-            <div className="flex flex-wrap gap-4 justify-center">
-              <Button
-                variant="outline_quantum"
-                size="xl"
-                className="bg-white/20 border-white/30 text-white hover:bg-white hover:text-quantum-deep track-link"
-                onClick={() => {
-                  const gtag = getGtag();
-                  gtag?.("event", "project_consultation_click", {
-                    service: "desenvolvimento",
-                  });
-                  document.getElementById("contato")?.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                Quero desenhar meu projeto
-                <ArrowRight className="h-5 w-5 ml-2" />
-              </Button>
-              <Button
-                variant="outline_quantum"
-                size="xl"
-                className="bg-white/20 border-white/30 text-white hover:bg-white hover:text-quantum-deep track-link"
-                onClick={() => {
-                  const gtag = getGtag();
-                  gtag?.("event", "whatsapp_click", {
-                    service: "desenvolvimento",
-                  });
-                  window.open(
-                    "https://wa.me/553193054200?text=Ol\u00e1! Gostaria de saber mais sobre a F\u00e1brica de Software da Quantum Tecnologia.",
-                    "_blank",
-                  );
-                }}
-              >
-                Falar com um especialista
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
-            {heroHighlights.map((highlight, index) => (
-              <Card
-                key={highlight.title}
-                className="bg-white/10 border-white/20 text-white backdrop-blur-sm hover:shadow-quantum transition-all duration-300 group"
-              >
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold group-hover:text-quantum-bright transition-colors">
-                    {highlight.title}
-                  </CardTitle>
-                  <CardDescription className="text-white/80">{highlight.description}</CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
         </div>
       </section>
 
