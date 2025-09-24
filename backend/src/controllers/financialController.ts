@@ -26,7 +26,7 @@ const INTEGER_ID_REGEX = /^-?\d+$/;
 
 const normalizeFlowId = (value: unknown): string | number | null => {
   if (typeof value === 'number') {
-    if (!Number.isInteger(value)) {
+    if (!Number.isInteger(value) || value < 0) {
       return null;
     }
 
@@ -44,7 +44,7 @@ const normalizeFlowId = (value: unknown): string | number | null => {
 
   if (INTEGER_ID_REGEX.test(trimmed)) {
     const parsed = Number.parseInt(trimmed, 10);
-    if (Number.isInteger(parsed)) {
+    if (Number.isInteger(parsed) && parsed >= 0) {
       return parsed;
     }
   }
