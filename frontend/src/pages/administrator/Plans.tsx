@@ -55,7 +55,6 @@ import {
   initialPlanFormState,
   extractCollection,
   parseInteger,
-  parseDecimal,
   sanitizeLimitInput,
   orderModules,
   parseModuleInfo,
@@ -63,6 +62,9 @@ import {
   formatLimit,
   splitFeatureInput,
   buildRecursosPayload,
+  extractCurrencyDigits,
+  formatCurrencyInputValue,
+  parseCurrencyDigits,
 } from "./plans-utils";
 
 interface ModuleMultiSelectProps {
@@ -145,10 +147,69 @@ function ModuleMultiSelect({ modules, selected, onChange, disabled }: ModuleMult
   );
 }
 
+const PRICE_SANITIZE_REGEX = /[^0-9.,-]/g;
+
+const parsePriceCents = (value: string): number | null => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const sanitized = trimmed.replace(PRICE_SANITIZE_REGEX, "");
+  if (!sanitized) {
+    return null;
+  }
+
+  if (sanitized.includes(",")) {
+    const normalized = sanitized.replace(/\./g, "").replace(/,/g, ".");
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) {
+      const cents = Math.round(parsed * 100);
+      return Number.isNaN(cents) ? null : cents;
+    }
+  }
+
+  const normalized = sanitized.replace(/,/g, ".");
+  const parsed = Number(normalized);
+  if (Number.isFinite(parsed)) {
+    const cents = Math.round(parsed * 100);
+    return Number.isNaN(cents) ? null : cents;
+  }
+
+  return null;
+};
+
+const formatPriceForInput = (value: string): string => {
+  if (!value) {
+    return "";
+  }
+
+  const cents = parsePriceCents(value);
+  if (cents == null) {
+    return value.trim();
+  }
+
+  return formatCurrencyInputValue(String(cents));
+};
+
+const formatPriceForDisplay = (value: string): string => {
+  const formatted = formatPriceForInput(value);
+  if (!formatted) {
+    const trimmed = value.trim();
+    return trimmed || "—";
+  }
+
+  return formatted;
+};
+
 const createFormStateFromPlan = (plan: Plan): PlanFormState => ({
   name: plan.name,
-  monthlyPrice: plan.monthlyPrice,
-  annualPrice: plan.annualPrice,
+  monthlyPrice: formatPriceForInput(plan.monthlyPrice),
+  annualPrice: formatPriceForInput(plan.annualPrice),
   modules: [...plan.modules],
   customAvailableFeatures: plan.customAvailableFeatures.join(", "),
   customUnavailableFeatures: plan.customUnavailableFeatures.join(", "),
@@ -341,15 +402,15 @@ export default function Plans() {
     }
 
     const name = editFormState.name.trim();
-    const monthlyPriceInput = editFormState.monthlyPrice.trim();
-    const annualPriceInput = editFormState.annualPrice.trim();
-    if (!name || !monthlyPriceInput || !annualPriceInput) {
+    const monthlyPriceDigits = extractCurrencyDigits(editFormState.monthlyPrice);
+    const annualPriceDigits = extractCurrencyDigits(editFormState.annualPrice);
+    if (!name || !monthlyPriceDigits || !annualPriceDigits) {
       setEditError("Informe o nome, o valor mensal e o valor anual do plano.");
       return;
     }
 
-    const monthlyPriceValue = parseDecimal(monthlyPriceInput);
-    const annualPriceValue = parseDecimal(annualPriceInput);
+    const monthlyPriceValue = parseCurrencyDigits(monthlyPriceDigits);
+    const annualPriceValue = parseCurrencyDigits(annualPriceDigits);
     if (monthlyPriceValue == null || annualPriceValue == null) {
       setEditError("Informe valores numéricos válidos para os preços mensal e anual.");
       return;
@@ -494,11 +555,11 @@ export default function Plans() {
                         <div className="space-y-1 text-sm">
                           <p>
                             <span className="font-medium">Mensal:</span>{" "}
-                            {plan.monthlyPrice || "—"}
+                            {formatPriceForDisplay(plan.monthlyPrice)}
                           </p>
                           <p>
                             <span className="font-medium">Anual:</span>{" "}
-                            {plan.annualPrice || "—"}
+                            {formatPriceForDisplay(plan.annualPrice)}
                           </p>
                         </div>
                       </TableCell>
@@ -582,12 +643,14 @@ export default function Plans() {
                 <Input
                   id="edit-plan-monthly-price"
                   value={editFormState.monthlyPrice}
-                  onChange={(event) =>
+                  inputMode="decimal"
+                  onChange={(event) => {
+                    const digits = extractCurrencyDigits(event.target.value);
                     setEditFormState((prev) => ({
                       ...prev,
-                      monthlyPrice: event.target.value,
-                    }))
-                  }
+                      monthlyPrice: formatCurrencyInputValue(digits),
+                    }));
+                  }}
                   disabled={isSavingEdit}
                 />
               </div>
@@ -596,12 +659,14 @@ export default function Plans() {
                 <Input
                   id="edit-plan-annual-price"
                   value={editFormState.annualPrice}
-                  onChange={(event) =>
+                  inputMode="decimal"
+                  onChange={(event) => {
+                    const digits = extractCurrencyDigits(event.target.value);
                     setEditFormState((prev) => ({
                       ...prev,
-                      annualPrice: event.target.value,
-                    }))
-                  }
+                      annualPrice: formatCurrencyInputValue(digits),
+                    }));
+                  }}
                   disabled={isSavingEdit}
                 />
               </div>
