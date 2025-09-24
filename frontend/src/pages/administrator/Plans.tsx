@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -60,6 +61,8 @@ import {
   parseModuleInfo,
   parsePlan,
   formatLimit,
+  splitFeatureInput,
+  buildRecursosPayload,
 } from "./plans-utils";
 
 interface ModuleMultiSelectProps {
@@ -147,6 +150,8 @@ const createFormStateFromPlan = (plan: Plan): PlanFormState => ({
   monthlyPrice: plan.monthlyPrice,
   annualPrice: plan.annualPrice,
   modules: [...plan.modules],
+  customAvailableFeatures: plan.customAvailableFeatures.join(", "),
+  customUnavailableFeatures: plan.customUnavailableFeatures.join(", "),
   userLimit: plan.userLimit != null ? String(plan.userLimit) : "",
   processLimit: plan.processLimit != null ? String(plan.processLimit) : "",
   proposalLimit: plan.proposalLimit != null ? String(plan.proposalLimit) : "",
@@ -274,6 +279,26 @@ export default function Plans() {
     );
   };
 
+  const renderCustomFeatureBadges = (
+    items: string[],
+    emptyMessage: string,
+    variant: "secondary" | "outline" = "secondary",
+  ) => {
+    if (items.length === 0) {
+      return <span className="text-sm text-muted-foreground">{emptyMessage}</span>;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <Badge key={item} variant={variant} className="whitespace-nowrap">
+            {item}
+          </Badge>
+        ))}
+      </div>
+    );
+  };
+
   const openEditDialog = (plan: Plan) => {
     setEditingPlan(plan);
     setEditFormState(createFormStateFromPlan(plan));
@@ -297,6 +322,16 @@ export default function Plans() {
       ),
     }));
   };
+
+  const editCustomAvailableTopics = useMemo(
+    () => splitFeatureInput(editFormState.customAvailableFeatures),
+    [editFormState.customAvailableFeatures],
+  );
+
+  const editCustomUnavailableTopics = useMemo(
+    () => splitFeatureInput(editFormState.customUnavailableFeatures),
+    [editFormState.customUnavailableFeatures],
+  );
 
   const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -330,6 +365,8 @@ export default function Plans() {
     const processSyncQuota = editFormState.processSyncEnabled
       ? parseInteger(editFormState.processSyncQuota)
       : null;
+    const customAvailable = splitFeatureInput(editFormState.customAvailableFeatures);
+    const customUnavailable = splitFeatureInput(editFormState.customUnavailableFeatures);
 
     const payload: Record<string, unknown> = {
       nome: name,
@@ -337,7 +374,11 @@ export default function Plans() {
       valor_anual: annualPriceValue,
       valor: monthlyPriceValue,
       modulos: orderedModules,
-      recursos: orderedModules,
+      recursos: buildRecursosPayload({
+        modules: orderedModules,
+        customAvailable,
+        customUnavailable,
+      }),
       limite_usuarios: userLimit,
       qtde_usuarios: userLimit,
       limite_processos: processLimit,
@@ -575,6 +616,53 @@ export default function Plans() {
                 disabled={isSavingEdit}
               />
               {renderModuleBadges(editFormState.modules)}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-plan-custom-available">Recursos adicionais disponíveis</Label>
+                <Textarea
+                  id="edit-plan-custom-available"
+                  value={editFormState.customAvailableFeatures}
+                  onChange={(event) =>
+                    setEditFormState((prev) => ({
+                      ...prev,
+                      customAvailableFeatures: event.target.value,
+                    }))
+                  }
+                  disabled={isSavingEdit}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe os itens com vírgula para manter os tópicos organizados.
+                </p>
+                {renderCustomFeatureBadges(
+                  editCustomAvailableTopics,
+                  "Nenhum recurso adicional informado",
+                  "secondary",
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-plan-custom-unavailable">Recursos não incluídos</Label>
+                <Textarea
+                  id="edit-plan-custom-unavailable"
+                  value={editFormState.customUnavailableFeatures}
+                  onChange={(event) =>
+                    setEditFormState((prev) => ({
+                      ...prev,
+                      customUnavailableFeatures: event.target.value,
+                    }))
+                  }
+                  disabled={isSavingEdit}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Liste o que não está disponível neste plano para evitar dúvidas.
+                </p>
+                {renderCustomFeatureBadges(
+                  editCustomUnavailableTopics,
+                  "Nenhum recurso indisponível informado",
+                  "outline",
+                )}
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

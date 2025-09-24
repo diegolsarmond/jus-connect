@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -41,6 +42,8 @@ import {
   extractCurrencyDigits,
   formatCurrencyInputValue,
   parseCurrencyDigits,
+  splitFeatureInput,
+  buildRecursosPayload,
 } from "./plans-utils";
 
 interface ModuleMultiSelectProps {
@@ -140,6 +143,16 @@ export default function NewPlan() {
     });
     return map;
   }, [availableModules]);
+
+  const customAvailableTopics = useMemo(
+    () => splitFeatureInput(formState.customAvailableFeatures),
+    [formState.customAvailableFeatures],
+  );
+
+  const customUnavailableTopics = useMemo(
+    () => splitFeatureInput(formState.customUnavailableFeatures),
+    [formState.customUnavailableFeatures],
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -259,6 +272,8 @@ export default function NewPlan() {
     const processSyncQuota = formState.processSyncEnabled
       ? parseInteger(formState.processSyncQuota)
       : null;
+    const customAvailable = splitFeatureInput(formState.customAvailableFeatures);
+    const customUnavailable = splitFeatureInput(formState.customUnavailableFeatures);
 
     const payload: Record<string, unknown> = {
       nome: name,
@@ -266,7 +281,11 @@ export default function NewPlan() {
       valor_anual: annualPriceValue,
       valor: monthlyPriceValue,
       modulos: orderedModules,
-      recursos: orderedModules,
+      recursos: buildRecursosPayload({
+        modules: orderedModules,
+        customAvailable,
+        customUnavailable,
+      }),
       limite_usuarios: userLimit,
       qtde_usuarios: userLimit,
       limite_processos: processLimit,
@@ -312,6 +331,26 @@ export default function NewPlan() {
         {modules.map((moduleId) => (
           <Badge key={moduleId} variant="secondary">
             {moduleLabelMap.get(moduleId) ?? moduleId}
+          </Badge>
+        ))}
+      </div>
+    );
+  };
+
+  const renderCustomFeatureBadges = (
+    items: string[],
+    emptyMessage: string,
+    variant: "secondary" | "outline" = "secondary",
+  ) => {
+    if (items.length === 0) {
+      return <span className="text-sm text-muted-foreground">{emptyMessage}</span>;
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <Badge key={item} variant={variant} className="whitespace-nowrap">
+            {item}
           </Badge>
         ))}
       </div>
@@ -397,6 +436,55 @@ export default function NewPlan() {
                   <AlertDescription>{fetchError}</AlertDescription>
                 </Alert>
               ) : null}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="plan-custom-available">Recursos adicionais disponíveis</Label>
+                <Textarea
+                  id="plan-custom-available"
+                  placeholder="Ex.: Controle de audiências, Central de tarefas"
+                  value={formState.customAvailableFeatures}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      customAvailableFeatures: event.target.value,
+                    }))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe cada item com vírgula para criarmos os tópicos automaticamente.
+                </p>
+                {renderCustomFeatureBadges(
+                  customAvailableTopics,
+                  "Nenhum recurso adicional informado",
+                  "secondary",
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-custom-unavailable">Recursos não incluídos</Label>
+                <Textarea
+                  id="plan-custom-unavailable"
+                  placeholder="Ex.: Integração com tribunais, Gestão financeira"
+                  value={formState.customUnavailableFeatures}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      customUnavailableFeatures: event.target.value,
+                    }))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Informe o que não está contemplado neste plano para orientar sua equipe.
+                </p>
+                {renderCustomFeatureBadges(
+                  customUnavailableTopics,
+                  "Nenhum recurso indisponível informado",
+                  "outline",
+                )}
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
