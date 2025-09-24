@@ -16,6 +16,21 @@ import { ModeToggle } from "@/components/ui/mode-toggle";
 import { IntimacaoMenu } from "@/components/notifications/IntimacaoMenu";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { routes } from "@/config/routes";
+import { usePlan } from "@/features/plans/PlanProvider";
+import { cn } from "@/lib/utils";
+
+const getPlanDisplayName = (name: string | null | undefined, id: number | null | undefined) => {
+  const normalizedName = typeof name === "string" ? name.trim() : "";
+  if (normalizedName.length > 0) {
+    return normalizedName;
+  }
+
+  if (typeof id === "number" && Number.isFinite(id)) {
+    return `Plano ${id}`;
+  }
+
+  return "Plano não definido";
+};
 
 const getInitials = (name: string | undefined) => {
   if (!name) {
@@ -41,6 +56,7 @@ export function HeaderActions() {
   const location = useLocation();
 
   const { user, logout } = useAuth();
+  const { plan, isLoading, error } = usePlan();
   const canAccessConfiguracoes =
     user?.modulos?.some((moduleId) => moduleId === "configuracoes" || moduleId.startsWith("configuracoes-")) ?? false;
 
@@ -64,6 +80,27 @@ export function HeaderActions() {
     logout();
     navigate(routes.login, { replace: true });
   }, [logout, navigate]);
+
+  const planName = useMemo(
+    () => getPlanDisplayName(plan?.nome, plan?.id),
+    [plan?.id, plan?.nome],
+  );
+
+  const planStatusLabel = useMemo(() => {
+    if (isLoading) {
+      return "Carregando plano...";
+    }
+
+    if (error) {
+      return "Não foi possível carregar o plano";
+    }
+
+    return planName;
+  }, [error, isLoading, planName]);
+
+  const planStatusTone = error
+    ? "text-destructive border-destructive/40 bg-destructive/10"
+    : "text-primary border-primary/30 bg-primary/10";
 
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
@@ -122,6 +159,18 @@ export function HeaderActions() {
           {/*    Configurações*/}
           {/*  </DropdownMenuItem>*/}
           {/*)}*/}
+          <div className="px-2 pb-1 pt-2 text-left">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Plano atual</p>
+            <span
+              className={cn(
+                "mt-1 inline-flex max-w-full items-center gap-2 truncate rounded-full border px-3 py-1 text-xs font-semibold",
+                planStatusTone,
+              )}
+              title={planStatusLabel}
+            >
+              {planStatusLabel}
+            </span>
+          </div>
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
