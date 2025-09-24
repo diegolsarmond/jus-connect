@@ -29,7 +29,7 @@ import {
   FolderCog,
   Gavel,
   Layers,
-  Link,
+  Link as LinkIcon,
   MessageSquare,
   Scale,
   Workflow
@@ -108,7 +108,7 @@ const CRMAdvocacia = () => {
         description: "Atenda clientes sem sair da tela, mantendo histórico unificado e automações de atendimento.",
       },
       {
-        icon: Link,
+        icon: LinkIcon,
         title: "Integrações judiciais e financeiras",
         description: "Receba intimações do PJe, PROJUDI e mais, além de conectar gateways de pagamento ao seu CRM.",
       },
@@ -202,7 +202,7 @@ const CRMAdvocacia = () => {
       ],
     },
     {
-      icon: Link,
+      icon: LinkIcon,
       title: "Integrações judiciais e financeiras",
       description:
         "Sincronize o CRM com PJe, PROJUDI e principais sistemas judiciais, além de gateways de pagamento para receber online.",
