@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,20 +27,18 @@ import {
   CheckCircle2,
   FileText,
   FolderCog,
-  Gauge,
   Gavel,
   Layers,
   Link,
   MessageSquare,
   Scale,
-  ShieldCheck,
-  Users,
   Workflow
 } from "lucide-react";
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchPlanOptions, formatPlanPriceLabel, getComparableMonthlyPrice, type PlanOption } from "@/features/plans/api";
 import { routes } from "@/config/routes";
+
 
 const getGtag = () => {
   if (typeof window === "undefined") {
@@ -93,19 +93,24 @@ const CRMAdvocacia = () => {
   const heroHighlights = useMemo(
     () => [
       {
-        icon: ShieldCheck,
-        title: "Compliance Automatizado",
-        description: "Controle prazos, prorrogações e publicações com alertas inteligentes e trilhas de auditoria.",
+        icon: FolderCog,
+        title: "Gestão de processos e tarefas",
+        description: "Centralize fluxos, prazos, agendas e relatórios para ter domínio total da operação jurídica.",
+      },
+      {
+        icon: FileText,
+        title: "Documentos padrão com IA",
+        description: "Monte modelos inteligentes e utilize a inteligência artificial para elaborar peças e resumos em segundos.",
+      },
+      {
+        icon: MessageSquare,
+        title: "Conversas com WhatsApp integrado",
+        description: "Atenda clientes sem sair da tela, mantendo histórico unificado e automações de atendimento.",
       },
       {
         icon: Link,
-        title: "Integração com Tribunais",
-        description: "Sincronização diária com PJe, Eproc, Projudi e principais sistemas estaduais.",
-      },
-      {
-        icon: Users,
-        title: "Experiência do Cliente",
-        description: "Portal exclusivo com atualização de casos, documentos e pagamentos em tempo real.",
+        title: "Integrações judiciais e financeiras",
+        description: "Receba intimações do PJe, PROJUDI e mais, além de conectar gateways de pagamento ao seu CRM.",
       },
     ],
     [],
@@ -131,7 +136,7 @@ const CRMAdvocacia = () => {
   const heroHeadline = service?.summary ?? "Controle absoluto dos seus processos, clientes e resultados";
   const heroDescription =
     service?.description ??
-    "Uma plataforma criada por especialistas jurídicos para garantir produtividade, conformidade e excelência no relacionamento com o cliente.";
+    "Um CRM completo para escritórios: gestão de processos, tarefas, agendas, relatórios, documentos padrão e fluxos de trabalho com inteligência artificial. Experimente grátis por 14 dias.";
 
   const productivityMetrics = [
     {
@@ -154,32 +159,59 @@ const CRMAdvocacia = () => {
   const modules = [
     {
       icon: FolderCog,
-      title: "Gestão de Processos",
+      title: "Gestão de processos e fluxos",
       description:
-        "Organize processos cíveis, trabalhistas, tributários e consultivos com visões por fase, responsável e status.",
-      features: ["Timeline com publicações", "Controle de tarefas", "Modelos de peças e contratos"]
+        "Controle processos, tarefas e workflows personalizados com checklists, responsáveis e fases totalmente configuráveis.",
+      features: [
+        "Agenda de prazos integrada ao calendário do time",
+        "Relatórios completos por área, cliente e responsável",
+        "Automação de tarefas recorrentes e SLAs",
+      ],
     },
     {
-      icon: MessageSquare,
-      title: "Atendimento Omnicanal",
+      icon: CalendarClock,
+      title: "Agenda e produtividade",
       description:
-        "Integre WhatsApp, e-mail e telefone em conversas registradas automaticamente no dossiê do cliente.",
-      features: ["Respostas assistidas por IA", "Scripts personalizados", "Portal do cliente"]
+        "Conecte compromissos, audiências e follow-ups em uma única agenda colaborativa para nunca perder nenhum prazo.",
+      features: [
+        "Visão semanal, mensal e por responsável",
+        "Alertas inteligentes por e-mail, push e WhatsApp",
+        "Dashboards de desempenho em tempo real",
+      ],
     },
     {
       icon: FileText,
-      title: "Documentos Inteligentes",
+      title: "Documentos padrão com IA jurídica",
       description:
-        "Geração de petições, contratos e relatórios com dados dinâmicos, assinatura eletrônica e versionamento.",
-      features: ["Modelos parametrizados", "Assinatura integrada", "Organização por pastas"]
+        "Construa modelos inteligentes e utilize a IA para elaborar peças, contratos e resumos de processos automaticamente.",
+      features: [
+        "Biblioteca de modelos personalizada",
+        "Preenchimento automático com dados do processo",
+        "Resumos e insights gerados por inteligência artificial",
+      ],
     },
     {
-      icon: Gauge,
-      title: "Performance Financeira",
+      icon: MessageSquare,
+      title: "Conversas com WhatsApp no CRM",
       description:
-        "Acompanhe honorários, provisões, adiantamentos e repasses com dashboards prontos para sócios.",
-      features: ["Fluxo de caixa jurídico", "Rateio por centro de custo", "Alertas de inadimplência"]
-    }
+        "Gerencie atendimentos sem sair da plataforma com o WhatsApp integrado e histórico completo dos clientes.",
+      features: [
+        "Caixa de entrada compartilhada com o time",
+        "Chatbots e respostas assistidas por IA",
+        "Registro automático de conversas e anexos",
+      ],
+    },
+    {
+      icon: Link,
+      title: "Integrações judiciais e financeiras",
+      description:
+        "Sincronize o CRM com PJe, PROJUDI e principais sistemas judiciais, além de gateways de pagamento para receber online.",
+      features: [
+        "Receba intimações e atualizações dentro do CRM",
+        "Consulta automática aos principais tribunais",
+        "Integração com os principais gateways de pagamento",
+      ],
+    },
   ];
 
   const automationFlows = [
@@ -225,6 +257,7 @@ const CRMAdvocacia = () => {
     [],
   );
 
+
   const normalizedPlans = useMemo(
     () =>
       availablePlans.map((plan) => ({
@@ -239,6 +272,7 @@ const CRMAdvocacia = () => {
           typeof plan.annualPrice === "number" ? currencyFormatter.format(plan.annualPrice) : null,
       })),
     [availablePlans, highlightedPlanId, currencyFormatter],
+
   );
 
   const implementationSteps = [
@@ -288,6 +322,7 @@ const CRMAdvocacia = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <TypebotBubble />
       <Header />
 
       <section className="relative overflow-hidden pt-24 pb-20 bg-gradient-hero text-white">
@@ -305,7 +340,8 @@ const CRMAdvocacia = () => {
             <div className="flex flex-wrap justify-center gap-4">
               <Button variant="quantum" size="xl" className="track-link shadow-quantum" onClick={() => handleDemoClick("hero")}
               >
-                Solicitar demonstração
+                              Experimente gratuitamente por 14 dias.
+
                 <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
               <Button
@@ -317,6 +353,7 @@ const CRMAdvocacia = () => {
                 Falar com um especialista
               </Button>
             </div>
+            <p className="mt-4 text-sm text-white/80">Experimente grátis por 14 dias e comprove os resultados.</p>
             {isServiceError && (
               <div className="mt-8 rounded-lg border border-amber-200/60 bg-amber-50/10 p-4 text-sm text-amber-100">
                 Não foi possível carregar os destaques personalizados deste serviço. Exibindo a versão padrão.
@@ -499,6 +536,7 @@ const CRMAdvocacia = () => {
           {isPlansLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {Array.from({ length: 3 }).map((_, index) => (
+
                 <Card key={`plan-skeleton-${index}`} className="border-quantum-light/10 bg-background/50">
                   <CardHeader className="space-y-3">
                     <Skeleton className="h-6 w-1/2" />
@@ -618,6 +656,7 @@ const CRMAdvocacia = () => {
             </Card>
           )}
 
+
         </div>
       </section>
 
@@ -687,7 +726,8 @@ const CRMAdvocacia = () => {
                   className="bg-white/20 border-white/30 text-white hover:bg-white hover:text-quantum-deep track-link"
                   onClick={() => handleDemoClick("final_cta")}
                 >
-                  Solicitar demonstração
+                                  Experimente gratuitamente por 14 dias.
+
                   <ArrowRight className="h-5 w-5 ml-2" />
                 </Button>
                 <Button

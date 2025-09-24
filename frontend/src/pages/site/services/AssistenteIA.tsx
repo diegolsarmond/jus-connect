@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Bot, MessageSquare, Zap, BarChart3, Clock, Shield, ArrowRight, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getGtag } from "@/lib/gtag";
@@ -97,6 +98,7 @@ const AssistenteIA = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <TypebotBubble />
       <Header />
       
       {/* Hero Section */}

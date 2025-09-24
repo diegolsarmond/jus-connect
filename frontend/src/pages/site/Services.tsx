@@ -16,6 +16,7 @@ import {
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildAppPath } from "@/config/app-config";
@@ -116,6 +117,7 @@ const processSteps = [
 const ServicesPage = () => {
   return (
     <div className="min-h-screen bg-background">
+      <TypebotBubble />
       <Header />
 
       <main>

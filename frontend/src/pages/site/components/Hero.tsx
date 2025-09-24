@@ -53,7 +53,7 @@ const Hero = () => {
               <Link to={routes.register}>Começar agora</Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="text-base">
-              <Link to={{ pathname: routes.home, hash: "#contato" }}>Solicitar demonstração</Link>
+                          <Link to={{ pathname: routes.home, hash: "#contato" }}>Experimente gratuitamente por 14 dias.</Link>
             </Button>
           </div>
           <dl className="grid gap-4 sm:grid-cols-3">

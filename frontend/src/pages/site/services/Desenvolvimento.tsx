@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getGtag } from "@/lib/gtag";
@@ -449,6 +450,7 @@ const Desenvolvimento = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <TypebotBubble />
       <Header />
 
       {/* Hero Section */}

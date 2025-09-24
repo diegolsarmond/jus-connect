@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import SimpleBackground from "@/components/ui/SimpleBackground";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +92,7 @@ const BlogPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <TypebotBubble />
       <Header />
       <main className="flex-1">
         <section className="relative overflow-hidden border-b border-border/50">
@@ -408,7 +410,7 @@ const BlogPage = () => {
                       <CardTitle className="text-xl leading-snug group-hover:text-quantum-bright transition-colors">
                         {post.title}
                       </CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground">
+                      <CardDescription className="text-sm text-foreground/80">
                         {post.description}
                       </CardDescription>
                     </CardHeader>

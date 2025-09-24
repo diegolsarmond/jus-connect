@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/carousel";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import {
   ArrowRight,
   BarChart3,
@@ -502,6 +503,7 @@ const CRM = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <TypebotBubble />
       <Header />
 
       {/* Hero Section */}

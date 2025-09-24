@@ -5,7 +5,9 @@ import { Menu, X } from "lucide-react";
 import quantumLogo from "@/assets/quantum-logo.png";
 import { routes } from "@/config/routes";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ui/mode-toggle";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 
 type HeaderNavItem = {
   label: string;
@@ -58,6 +60,33 @@ const isNavItemActive = (href: string | undefined, currentPath: string, currentH
   return currentPath === href;
 };
 
+const formatHref = (to: To): string | undefined => {
+  if (typeof to === "string") {
+    return to;
+  }
+
+  if (typeof to === "object" && to !== null) {
+    const { pathname = "", search = "", hash = "" } = to as {
+      pathname?: string;
+      search?: string;
+      hash?: string;
+    };
+
+    const combined = `${pathname}${search}${hash}`;
+    return combined || undefined;
+  }
+
+  return undefined;
+};
+
+const trackNavigation = (label: string, href: string | undefined, context: string) => {
+  trackEvent("nav_link_click", {
+    label,
+    href,
+    context,
+  });
+};
+
 const Header = () => {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -96,7 +125,14 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/50">
       <div className="container flex h-16 items-center justify-between gap-6 px-4">
-        <Link to={routes.home} className="flex items-center gap-3" onClick={closeMenu}>
+        <Link
+          to={routes.home}
+          className="flex items-center gap-3"
+          onClick={() => {
+            trackNavigation("Logo", routes.home, "desktop");
+            closeMenu();
+          }}
+        >
           <img src={quantumLogo} alt="Quantum Tecnologia" className="h-8 w-8" />
           <span className="font-semibold tracking-tight text-lg text-foreground">Quantum Tecnologia</span>
         </Link>
@@ -150,6 +186,13 @@ const Header = () => {
                           to={resolveNavLink(child.href)}
                           className="block rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                           onFocus={() => openDropdown(item.label)}
+                          onClick={() =>
+                            trackNavigation(
+                              child.label,
+                              child.href,
+                              "desktop-dropdown",
+                            )
+                          }
                         >
                           {child.label}
                         </Link>
@@ -171,6 +214,13 @@ const Header = () => {
                     "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
                     isNavItemActive(item.href, location.pathname, location.hash) && "text-foreground",
                   )}
+                  onClick={() =>
+                    trackNavigation(
+                      item.label,
+                      formatHref(resolvedHref),
+                      "desktop",
+                    )
+                  }
                 >
                   {item.label}
                 </Link>
@@ -182,15 +232,32 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-3">
+          <ModeToggle />
           <Button
             asChild
             variant="ghost"
             className="hidden text-sm font-medium text-muted-foreground hover:text-foreground md:inline-flex"
           >
-            <Link to={{ pathname: routes.home, hash: "#contato" }}>Falar com especialista</Link>
+            <Link
+              to={{ pathname: routes.home, hash: "#contato" }}
+              onClick={() =>
+                trackNavigation(
+                  "Falar com especialista",
+                  `${routes.home}#contato`,
+                  "desktop-cta",
+                )
+              }
+            >
+              Falar com especialista
+            </Link>
           </Button>
           <Button asChild className="text-sm font-semibold">
-            <Link to={routes.login}>Entrar</Link>
+            <Link
+              to={routes.login}
+              onClick={() => trackNavigation("Entrar", routes.login, "desktop-cta")}
+            >
+              Entrar
+            </Link>
           </Button>
           <Button
             type="button"
@@ -208,7 +275,11 @@ const Header = () => {
 
       {isMenuOpen ? (
         <div id="mobile-menu" className="border-t border-border/40 bg-background/95 backdrop-blur md:hidden">
-          <div className="container flex flex-col gap-2 px-4 py-3">
+          <div className="container flex flex-col gap-3 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Tema</span>
+              <ModeToggle />
+            </div>
             {NAV_ITEMS.map((item) =>
               item.children && item.children.length > 0 ? (
                 <div key={item.label} className="flex flex-col gap-1">
@@ -219,7 +290,10 @@ const Header = () => {
                         key={child.label}
                         to={resolveNavLink(child.href)}
                         className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
-                        onClick={closeMenu}
+                        onClick={() => {
+                          trackNavigation(child.label, child.href, "mobile-dropdown");
+                          closeMenu();
+                        }}
                       >
                         {child.label}
                       </Link>
@@ -231,14 +305,26 @@ const Header = () => {
                   key={item.href}
                   to={resolveNavLink(item.href)}
                   className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
-                  onClick={closeMenu}
+                  onClick={() => {
+                    trackNavigation(
+                      item.label,
+                      item.href,
+                      "mobile",
+                    );
+                    closeMenu();
+                  }}
                 >
                   {item.label}
                 </Link>
               ) : null,
             )}
             <Button asChild className="mt-2" onClick={closeMenu}>
-              <Link to={routes.login}>Entrar</Link>
+              <Link
+                to={routes.login}
+                onClick={() => trackNavigation("Entrar", routes.login, "mobile-cta")}
+              >
+                Entrar
+              </Link>
             </Button>
           </div>
         </div>
