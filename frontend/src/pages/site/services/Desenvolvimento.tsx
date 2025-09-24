@@ -18,6 +18,7 @@ import {
   LifeBuoy,
   Lightbulb,
   PenTool,
+
   Puzzle,
   Rocket,
   ServerCog,
@@ -28,6 +29,7 @@ import {
   Timer,
   Users2,
   Workflow,
+
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -38,6 +40,7 @@ import devSquadIllustration from "@/assets/dev-squad-illustration.svg";
 import productJourneyIllustration from "@/assets/product-journey-illustration.svg";
 import integrationMapIllustration from "@/assets/integration-map-illustration.svg";
 import planUpgradeIllustration from "@/assets/plan-upgrade-illustration.svg";
+
 
 const Desenvolvimento = () => {
   const { data: service, isLoading: isServiceLoading, isError: isServiceError } = useServiceBySlug("desenvolvimento");
@@ -211,6 +214,28 @@ const Desenvolvimento = () => {
       icon: LifeBuoy,
       title: "Suporte orientado a SLAs",
       description: "Runbooks, gestão de incidentes e squads de sustentação para evolução contínua.",
+  ];
+
+  const capabilityHighlights = [
+    {
+      icon: Code2,
+      title: "Produtos digitais completos",
+      description: "Concepção ponta a ponta de plataformas, portais e aplicativos com foco em experiência e resultado.",
+      bullets: [
+        "Workshops de discovery e mapeamento de processos",
+        "UX/UI centrado no usuário com design system reutilizável",
+        "Arquitetura orientada a microsserviços e APIs escaláveis",
+      ],
+    },
+    {
+      icon: Puzzle,
+      title: "Integrações e modernização",
+      description: "Modernize sistemas legados, conecte plataformas e automatize operações críticas do negócio.",
+      bullets: [
+        "Integração com ERPs, CRMs, gateways e plataformas proprietárias",
+        "Estratégias de refatoração gradual sem paradas na operação",
+        "APIs, mensageria e automações que conectam toda a jornada",
+      ],
     },
   ];
 
@@ -236,6 +261,15 @@ const Desenvolvimento = () => {
       ],
     },
     {
+      icon: Sparkles,
+      title: "Inovação guiada por dados",
+      description: "Implante produtos digitais inteligentes com analítica, automação e inteligência artificial aplicada.",
+      bullets: [
+        "Prototipação rápida para validar hipóteses de negócio",
+        "Dashboards e relatórios com dados em tempo real",
+        "Machine Learning e IA embarcada para personalizar experiências",
+      ],
+    },
       icon: Sparkles,
       title: "Inovação guiada por dados",
       description: "Implante produtos digitais inteligentes com analítica, automação e inteligência artificial aplicada.",
@@ -448,7 +482,7 @@ const Desenvolvimento = () => {
       <Header />
 
       {/* Hero Section */}
-      <section className="pt-24 pb-16 bg-gradient-hero relative overflow-hidden">
+      <section className="pt-24 pb-20 bg-gradient-hero relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
         <div className="container px-4 relative z-10">
           <div className="grid items-center gap-12 text-white md:grid-cols-[1.1fr,0.9fr]">
@@ -534,7 +568,63 @@ const Desenvolvimento = () => {
                   ))}
                 </div>
               </div>
+          <div className="max-w-5xl mx-auto text-center text-white">
+            <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/20 text-sm font-medium mb-6 animate-pulse-glow">
+              <BadgeCheck className="h-4 w-4 mr-2" />
+              {heroLabel}
             </div>
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-fade-in">{heroHeadline}</h1>
+            <p className="text-xl md:text-2xl mb-10 text-white/90 max-w-4xl mx-auto leading-relaxed">{heroDescription}</p>
+            <div className="flex flex-wrap gap-4 justify-center">
+              <Button
+                variant="outline_quantum"
+                size="xl"
+                className="bg-white/20 border-white/30 text-white hover:bg-white hover:text-quantum-deep track-link"
+                onClick={() => {
+                  const gtag = getGtag();
+                  gtag?.("event", "project_consultation_click", {
+                    service: "desenvolvimento",
+                  });
+                  document.getElementById("contato")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                Quero desenhar meu projeto
+                <ArrowRight className="h-5 w-5 ml-2" />
+              </Button>
+              <Button
+                variant="outline_quantum"
+                size="xl"
+                className="bg-white/20 border-white/30 text-white hover:bg-white hover:text-quantum-deep track-link"
+                onClick={() => {
+                  const gtag = getGtag();
+                  gtag?.("event", "whatsapp_click", {
+                    service: "desenvolvimento",
+                  });
+                  window.open(
+                    "https://wa.me/553193054200?text=Ol\u00e1! Gostaria de saber mais sobre a F\u00e1brica de Software da Quantum Tecnologia.",
+                    "_blank",
+                  );
+                }}
+              >
+                Falar com um especialista
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
+            {heroHighlights.map((highlight, index) => (
+              <Card
+                key={highlight.title}
+                className="bg-white/10 border-white/20 text-white backdrop-blur-sm hover:shadow-quantum transition-all duration-300 group"
+              >
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold group-hover:text-quantum-bright transition-colors">
+                    {highlight.title}
+                  </CardTitle>
+                  <CardDescription className="text-white/80">{highlight.description}</CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
           </div>
         </div>
       </section>
@@ -613,6 +703,7 @@ const Desenvolvimento = () => {
         </div>
       </section>
 
+
       {/* Capabilities Section */}
       <section className="py-20 bg-background">
         <div className="container px-4">
@@ -686,6 +777,7 @@ const Desenvolvimento = () => {
               </div>
             </div>
           </div>
+
         </div>
       </section>
 
@@ -754,6 +846,7 @@ const Desenvolvimento = () => {
       </section>
 
       {/* Case Studies Section */}
+
       <section className="py-20 bg-background">
         <div className="container px-4">
           <div className="text-center mb-16">
@@ -807,6 +900,7 @@ const Desenvolvimento = () => {
         <div className="container px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
+
               Modelos de parceria sob medida
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
@@ -883,6 +977,7 @@ const Desenvolvimento = () => {
           </div>
         </div>
       </section>
+
 
       {/* Methodology Section */}
       <section className="py-20 bg-gradient-to-br from-quantum-light/20 to-background">
@@ -985,6 +1080,7 @@ const Desenvolvimento = () => {
                   </ul>
                 </CardContent>
               </Card>
+
 
               <Card className="bg-gradient-quantum text-white border-0 shadow-quantum">
                 <CardHeader>

@@ -14,6 +14,35 @@ function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
+const LOCAL_HOSTNAME_PATTERNS = [
+  'localhost',
+  '127.0.0.1',
+  '::1',
+];
+
+function isLocalhostUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    const normalizedHostname = hostname.toLowerCase();
+
+    return (
+      LOCAL_HOSTNAME_PATTERNS.includes(normalizedHostname) ||
+      normalizedHostname.endsWith('.localhost')
+    );
+  } catch {
+    return /(^|@|\b)(localhost|127\.0\.0\.1|::1)([:/]|\b)/i.test(url);
+  }
+}
+
+function getWindowOrigin(): string | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  const origin = window.location?.origin;
+  return origin ? normalizeBaseUrl(origin) : undefined;
+}
+
 function stripApiSuffix(url: string): string {
   const normalized = normalizeBaseUrl(url);
   return normalized.toLowerCase().endsWith('/api')
@@ -22,8 +51,24 @@ function stripApiSuffix(url: string): string {
 }
 
 function resolveFallbackBaseUrl(): string {
-  if (rawEnvApiUrl && rawEnvApiUrl.length > 0) {
-    return stripApiSuffix(rawEnvApiUrl);
+  const normalizedEnvUrl =
+    rawEnvApiUrl && rawEnvApiUrl.length > 0
+      ? stripApiSuffix(rawEnvApiUrl)
+      : undefined;
+
+  const windowOrigin = getWindowOrigin();
+
+  if (normalizedEnvUrl) {
+    if (
+      !isDevEnvironment &&
+      windowOrigin &&
+      !isLocalhostUrl(windowOrigin) &&
+      isLocalhostUrl(normalizedEnvUrl)
+    ) {
+      return windowOrigin;
+    }
+
+    return normalizedEnvUrl;
   }
 
   if (isDevEnvironment) {
@@ -33,14 +78,21 @@ function resolveFallbackBaseUrl(): string {
     return 'http://localhost:3001';
   }
 
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return normalizeBaseUrl(window.location.origin);
+  if (windowOrigin) {
+    return windowOrigin;
   }
 
   return PRODUCTION_DEFAULT_API_URL;
 }
 
+type ExecutionContext = "browser" | "server";
+
 let cachedApiBaseUrl: string | undefined;
+let cachedExecutionContext: ExecutionContext | undefined;
+
+function getExecutionContext(): ExecutionContext {
+  return typeof window === "undefined" ? "server" : "browser";
+}
 
 function joinPaths(base: string, path?: string): string {
   const normalizedBase = base.replace(/\/+$/, '');
@@ -59,8 +111,23 @@ function joinPaths(base: string, path?: string): string {
 }
 
 function resolveApiBaseUrl(): string {
-  if (!cachedApiBaseUrl) {
+  const executionContext = getExecutionContext();
+
+  if (!cachedApiBaseUrl || cachedExecutionContext !== executionContext) {
     cachedApiBaseUrl = resolveFallbackBaseUrl();
+    cachedExecutionContext = executionContext;
+  }
+
+  if (executionContext === "browser") {
+    const windowOrigin = getWindowOrigin();
+    if (
+      windowOrigin &&
+      !isLocalhostUrl(windowOrigin) &&
+      cachedApiBaseUrl &&
+      isLocalhostUrl(cachedApiBaseUrl)
+    ) {
+      cachedApiBaseUrl = windowOrigin;
+    }
   }
 
   return cachedApiBaseUrl;
