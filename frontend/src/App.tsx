@@ -66,6 +66,7 @@ import NotFound from "./pages/operator/NotFound";
 import SiteIndex from "./pages/site/Index";
 import SiteServices from "./pages/site/Services";
 import SiteBlog from "./pages/site/Blog";
+import SiteBlogArticle from "./pages/site/BlogArticle";
 import SiteHistory from "./pages/site/NossaHistoria";
 import SiteNotFound from "./pages/site/NotFound";
 import SiteServiceAssistenteIA from "./pages/site/services/AssistenteIA";
@@ -95,6 +96,7 @@ const AdminSubscriptions = lazy(() => import("./pages/administrator/Subscription
 const AdminNewSubscription = lazy(() => import("./pages/administrator/NewSubscription"));
 const AdminUsers = lazy(() => import("./pages/administrator/Users"));
 const AdminNewUser = lazy(() => import("./pages/administrator/NewUser"));
+const AdminBlogPosts = lazy(() => import("./pages/administrator/BlogPosts"));
 const AdminAnalytics = lazy(() => import("./pages/administrator/Analytics"));
 const AdminSupport = lazy(() => import("./pages/administrator/Support"));
 const AdminLogs = lazy(() => import("./pages/administrator/Logs"));
@@ -118,6 +120,7 @@ const App = () => (
             <Routes>
               <Route path={routes.home} element={<SiteIndex />} />
               <Route path="/blog" element={<SiteBlog />} />
+              <Route path="/blog/:slug" element={<SiteBlogArticle />} />
               <Route path="/nossa-historia" element={<SiteHistory />} />
               <Route path="/servicos" element={<SiteServices />} />
               <Route path="/servicos/assistente-ia" element={<SiteServiceAssistenteIA />} />
@@ -325,6 +328,7 @@ const App = () => (
                 <Route path={adminRelativePath.newSubscription} element={<AdminNewSubscription />} />
                 <Route path={adminRelativePath.users} element={<AdminUsers />} />
                 <Route path={adminRelativePath.newUser} element={<AdminNewUser />} />
+                <Route path={adminRelativePath.blog} element={<AdminBlogPosts />} />
                 <Route path={adminRelativePath.analytics} element={<AdminAnalytics />} />
                 <Route path={adminRelativePath.support} element={<AdminSupport />} />
                 <Route path={adminRelativePath.logs} element={<AdminLogs />} />

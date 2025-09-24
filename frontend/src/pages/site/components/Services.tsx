@@ -1,14 +1,5 @@
 import { Link } from "react-router-dom";
-import {
-  Bot,
-  CircuitBoard,
-  Database,
-  Gauge,
-  Layers,
-  MessageSquare,
-  ShieldCheck,
-  Workflow,
-} from "lucide-react";
+import { Bot, CircuitBoard, Database, Layers, ShieldCheck, Workflow } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,8 +17,12 @@ const SERVICES: ServiceCard[] = [
   {
     title: "Assistentes virtuais com IA",
     description:
-      "Chatbots jurídicos especializados que automatizam atendimento, triagem de demandas e coleta de documentos.",
-    highlights: ["Fluxos personalizados", "Integração com WhatsApp e e-mail", "Analytics em tempo real"],
+      "Chatbots inteligentes que automatizam atendimento, qualificação de leads e suporte em múltiplos segmentos.",
+    highlights: [
+      "Fluxos personalizados",
+      "Integração com WhatsApp, e-mail e CRMs com API aberta",
+      "Analytics em tempo real",
+    ],
     icon: Bot,
     href: "/servicos/assistente-ia",
   },
@@ -42,8 +37,12 @@ const SERVICES: ServiceCard[] = [
   {
     title: "CRM para advocacia",
     description:
-      "Pipeline completo para gestão de leads, propostas, contratos e fidelização de clientes jurídicos.",
-    highlights: ["Visão 360º do cliente", "Gestão de tarefas e SLA", "KPIs financeiros e operacionais"],
+      "Plataforma única para gerir processos, tarefas, agendas, documentos padrão, finanças e relacionamento com clientes.",
+    highlights: [
+      "Gestão completa de processos e fluxos de trabalho",
+      "Central de conversas com WhatsApp integrado",
+      "Integração com PJe, PROJUDI e gateways de pagamento",
+    ],
     icon: ShieldCheck,
     href: "/servicos/crm",
   },
@@ -56,35 +55,27 @@ const SERVICES: ServiceCard[] = [
     href: "/servicos/desenvolvimento",
   },
   {
-    title: "Analytics e dados",
+    title: "Consultoria em TI",
     description:
-      "Dashboards executivos, modelos preditivos e governança de dados conectados aos seus indicadores-chave.",
-    highlights: ["Governança de dados", "Indicadores personalizados", "Modelos estatísticos"],
+      "Planejamento e execução de projetos que exigem precisão, estratégia e resultados tangíveis para o seu negócio.",
+    highlights: [
+      "Descoberta e desenho de soluções sob medida",
+      "Arquiteturas robustas e seguras",
+      "Acompanhamento de ponta a ponta",
+    ],
     icon: Database,
     href: "#contato",
   },
   {
-    title: "Integrações avançadas",
+    title: "Servidores personalizados",
     description:
-      "Construção e manutenção de APIs, conectores com tribunais, ERPs e plataformas financeiras.",
-    highlights: ["Integrações REST e SOAP", "Filas de mensagens", "Monitoramento proativo"],
+      "Infraestrutura dedicada com monitoramento, segurança e escalabilidade alinhadas às demandas do seu projeto.",
+    highlights: [
+      "Configurações sob medida",
+      "Monitoramento e suporte especializado",
+      "Opções de alta disponibilidade",
+    ],
     icon: Layers,
-    href: "#contato",
-  },
-  {
-    title: "Comunicação omnichannel",
-    description:
-      "Campanhas automatizadas, chat em tempo real e notificações personalizadas para cada etapa da jornada.",
-    highlights: ["Segmentação inteligente", "Templates aprovados pela OAB", "Engajamento mensurável"],
-    icon: MessageSquare,
-    href: "#contato",
-  },
-  {
-    title: "Performance jurídica",
-    description:
-      "Diagnóstico completo de operação com plano de ação para acelerar produtividade e rentabilidade.",
-    highlights: ["KPIs acionáveis", "Benchmark jurídico", "Roadmap evolutivo"],
-    icon: Gauge,
     href: "#contato",
   },
 ];

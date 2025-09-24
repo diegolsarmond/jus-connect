@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { ArrowRight, Calendar, Clock, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -5,44 +6,19 @@ import SimpleBackground from "@/components/ui/SimpleBackground";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-interface BlogPreview {
-  title: string;
-  description: string;
-  category: string;
-  readTime: string;
-  date: string;
-  href: string;
-}
-
-const BLOG_POSTS: BlogPreview[] = [
-  {
-    title: "Como implementar automações jurídicas com governança",
-    description: "Roadmap para mapear processos, definir integrações críticas e medir impacto em indicadores.",
-    category: "Operações",
-    readTime: "6 min",
-    date: "Out 2024",
-    href: "/blog/automacoes-juridicas",
-  },
-  {
-    title: "Guia completo de CRM para escritórios",
-    description: "Principais pilares para estruturar pipeline, atendimento e fidelização no segmento jurídico.",
-    category: "CRM",
-    readTime: "8 min",
-    date: "Set 2024",
-    href: "/blog/crm-advocacia",
-  },
-  {
-    title: "IA generativa aplicada ao contencioso",
-    description: "Casos reais de uso de IA para síntese de processos, minutas e suporte a audiências.",
-    category: "Inteligência Artificial",
-    readTime: "5 min",
-    date: "Ago 2024",
-    href: "/blog/ia-contencioso",
-  },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import { routes } from "@/config/routes";
+import { useBlogPosts } from "@/hooks/useBlogPosts";
 
 const Blog = () => {
+  const {
+    data: posts = [],
+    isLoading,
+    isError,
+  } = useBlogPosts();
+
+  const highlightedPosts = useMemo(() => posts.slice(0, 3), [posts]);
+
   return (
     <section id="blog" className="relative overflow-hidden bg-background">
       <div className="absolute inset-0" aria-hidden>
@@ -62,33 +38,71 @@ const Blog = () => {
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
-          {BLOG_POSTS.map((post) => (
-            <Card key={post.href} className="flex h-full flex-col border-border/40 bg-background/80 backdrop-blur">
-              <CardHeader className="space-y-3">
-                <Badge variant="secondary" className="w-fit">
-                  {post.category}
-                </Badge>
-                <CardTitle className="text-xl text-foreground">{post.title}</CardTitle>
-                <CardDescription>{post.description}</CardDescription>
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, index) => (
+              <Card key={index} className="border-border/40 bg-background/60">
+                <CardHeader className="space-y-3">
+                  <Skeleton className="h-5 w-24" />
+                  <Skeleton className="h-6 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-1/2" />
+                </CardContent>
+              </Card>
+            ))
+          ) : isError ? (
+            <Card className="md:col-span-3 border-border/40 bg-background/70">
+              <CardHeader>
+                <CardTitle className="text-lg">Não foi possível carregar os artigos</CardTitle>
+                <CardDescription>
+                  Atualize a página para tentar novamente ou acesse o blog completo para ver os conteúdos.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="mt-auto space-y-3 text-sm text-muted-foreground">
-                <div className="flex items-center justify-between text-xs text-muted-foreground/90">
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" aria-hidden /> {post.date}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" aria-hidden /> {post.readTime}
-                  </span>
-                </div>
-                <Button asChild variant="ghost" className="justify-start gap-2 px-0 text-sm font-semibold text-primary">
-                  <Link to={post.href}>
-                    Ler artigo
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Link>
+              <CardContent>
+                <Button asChild variant="quantum">
+                  <Link to={routes.blog}>Ir para o blog</Link>
                 </Button>
               </CardContent>
             </Card>
-          ))}
+          ) : highlightedPosts.length ? (
+            highlightedPosts.map((post) => (
+              <Card key={post.id} className="flex h-full flex-col border-border/40 bg-background/80 backdrop-blur">
+                <CardHeader className="space-y-3">
+                  <Badge variant="secondary" className="w-fit">
+                    {post.category}
+                  </Badge>
+                  <CardTitle className="text-xl text-foreground">{post.title}</CardTitle>
+                  <CardDescription>{post.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="mt-auto space-y-3 text-sm text-muted-foreground">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground/90">
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" aria-hidden /> {post.date}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" aria-hidden /> {post.readTime}
+                    </span>
+                  </div>
+                  <Button asChild variant="ghost" className="justify-start gap-2 px-0 text-sm font-semibold text-primary">
+                    <Link to={routes.blogPost(post.slug)}>
+                      Ler artigo
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <Card className="md:col-span-3 border-border/40 bg-background/70">
+              <CardHeader>
+                <CardTitle className="text-lg">Nenhum artigo publicado ainda</CardTitle>
+                <CardDescription>
+                  Nossa equipe está preparando conteúdos especiais. Enquanto isso, acompanhe as novidades em nossas redes.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
         </div>
       </div>
     </section>

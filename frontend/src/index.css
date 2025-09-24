@@ -196,6 +196,7 @@
         transparent 1px
       ),
       linear-gradient(90deg, rgba(79, 84, 94, 0.08) 1px, transparent 1px);
+
     background-size: 48px 48px;
     background-position: 0 0, 0 0;
   }

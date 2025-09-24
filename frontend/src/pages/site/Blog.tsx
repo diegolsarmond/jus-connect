@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, Calendar, Clock, Filter, Search, Sparkles, Tag, User } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -12,11 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useBlogPosts, type BlogPost } from "@/hooks/useBlogPosts";
 import { cn } from "@/lib/utils";
+import { routes } from "@/config/routes";
 import { trackEvent } from "@/lib/analytics";
 
 const BlogPage = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [activeCategory, setActiveCategory] = useState<string>("Todos");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const { data: blogPosts = [], isLoading, isError } = useBlogPosts();
@@ -86,30 +86,8 @@ const BlogPage = () => {
       post_title: post.title,
       post_category: post.category,
     });
-    navigate({ pathname: location.pathname, hash: post.slug });
+    navigate(routes.blogPost(post.slug));
   };
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !location.hash) {
-      return;
-    }
-
-    const slug = location.hash.replace("#", "");
-    const element = document.getElementById(slug);
-
-    if (!element) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
-      element.classList.add("ring-2", "ring-quantum-bright", "ring-offset-2", "ring-offset-background");
-
-      window.setTimeout(() => {
-        element.classList.remove("ring-2", "ring-quantum-bright", "ring-offset-2", "ring-offset-background");
-      }, 1600);
-    });
-  }, [location.hash]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -233,12 +211,16 @@ const BlogPage = () => {
                 className="group relative overflow-hidden rounded-3xl border-0 bg-gradient-to-br from-background via-background/95 to-quantum-deep/30 shadow-2xl"
               >
                 <div className="absolute inset-0 overflow-hidden">
-                  <img
-                    src={featuredPost.image}
-                    alt={featuredPost.title}
-                    className="h-full w-full object-cover opacity-60 transition-all duration-700 group-hover:scale-105"
-                    loading="lazy"
-                  />
+                  {featuredPost.image ? (
+                    <img
+                      src={featuredPost.image}
+                      alt={featuredPost.title}
+                      className="h-full w-full object-cover opacity-60 transition-all duration-700 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-quantum-deep/40 via-background/60 to-background" aria-hidden />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
                 </div>
                 <div className="relative z-10 p-8 md:p-12 flex flex-col gap-6 text-white">
@@ -394,12 +376,16 @@ const BlogPage = () => {
                     className="group relative overflow-hidden rounded-2xl border-border/60 bg-background/90 backdrop-blur"
                   >
                     <div className="relative h-48 overflow-hidden">
-                      <img
-                        src={post.image}
-                        alt={post.title}
-                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                        loading="lazy"
-                      />
+                      {post.image ? (
+                        <img
+                          src={post.image}
+                          alt={post.title}
+                          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-br from-quantum-deep/20 via-background/60 to-background" aria-hidden />
+                      )}
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background/40 to-transparent p-4">
                         <Badge className="bg-quantum-deep/70 text-white">{post.category}</Badge>
                       </div>
