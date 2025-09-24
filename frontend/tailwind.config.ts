@@ -26,7 +26,6 @@ export default {
           bright: "#9ca3af",
           light: "#e5e7eb",
           cyan: "#d1d5db",
-
         },
         primary: {
           DEFAULT: "hsl(var(--primary))",

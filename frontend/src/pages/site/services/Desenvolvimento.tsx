@@ -637,7 +637,7 @@ const Desenvolvimento = () => {
             <div className="relative">
               <div className="absolute -top-12 -left-12 h-40 w-40 rounded-full bg-quantum-bright/20 blur-3xl"></div>
               <Card className="relative overflow-hidden rounded-3xl border-quantum-light/30 bg-gradient-to-br from-background via-card to-white/40 p-6 backdrop-blur">
-                <div className="rounded-2xl bg-gradient-to-br from-quantum-deep/80 via-quantum-light/40 to-background p-6 text-white shadow-lg">
+                <div className="rounded-2xl bg-gradient-to-br from-quantum-deep/80 via-quantum-light/40 to-background p-6 text-foreground shadow-lg">
                   <img
                     src={productJourneyIllustration}
                     alt="Ilustração do discovery e blueprint digital"
@@ -650,8 +650,10 @@ const Desenvolvimento = () => {
                         <Gauge className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold uppercase tracking-wide">Kick-off em até 3 semanas</p>
-                        <p className="text-sm text-white/80">
+                        <p className="text-sm font-semibold uppercase tracking-wide text-quantum-deep">
+                          Kick-off em até 3 semanas
+                        </p>
+                        <p className="text-sm text-foreground/80">
                           Blueprint estratégico, protótipos navegáveis e plano de releases aprovados para iniciar o desenvolvimento.
                         </p>
                       </div>
@@ -661,8 +663,10 @@ const Desenvolvimento = () => {
                         <Sparkles className="h-5 w-5" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold uppercase tracking-wide">Validação com usuários reais</p>
-                        <p className="text-sm text-white/80">
+                        <p className="text-sm font-semibold uppercase tracking-wide text-quantum-deep">
+                          Validação com usuários reais
+                        </p>
+                        <p className="text-sm text-foreground/80">
                           Testes rápidos, priorização de backlog e métricas claras para direcionar investimentos.
                         </p>
                       </div>
