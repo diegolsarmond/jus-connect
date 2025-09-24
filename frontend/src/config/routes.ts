@@ -4,6 +4,7 @@ const route = (path: string) => path;
 
 export const routes = {
   home: route("/"),
+  dashboard: route("/app"),
   login: route("/login"),
   register: route("/register"),
   forgotPassword: route("/recuperar-senha"),

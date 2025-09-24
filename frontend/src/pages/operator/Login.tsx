@@ -22,7 +22,7 @@ const Login = () => {
   const { login, isAuthenticated, isLoading, user } = useAuth();
   const resolveRedirectPath = useCallback(
     () =>
-      ((location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname) ?? routes.home,
+      ((location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname) ?? routes.dashboard,
     [location],
   );
 
