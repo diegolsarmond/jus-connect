@@ -52,42 +52,68 @@ async function request<TResponse>(endpoint: string, options: RequestOptions = {}
   return (await response.json()) as TResponse;
 }
 
+const trimmedString = z.string().transform((value) => value.trim());
+
+const optionalTrimmedString = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((value) => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  });
+
 export const blogPostSchema = z.object({
   id: z.string().min(1),
-  title: z.string().min(1),
-  description: z.string().min(1),
-  content: z.string().min(1).optional(),
-  author: z.string().min(1),
-  date: z.string().min(1),
-  readTime: z.string().min(1),
-  category: z.string().min(1),
-  image: z.string().url().optional().or(z.literal("")),
-  slug: z.string().min(1),
-  tags: z.array(z.string()),
-  featured: z.boolean().optional(),
+  title: trimmedString.min(1),
+  description: trimmedString.min(1),
+  content: optionalTrimmedString,
+  author: trimmedString.min(1),
+  date: trimmedString.min(1),
+  readTime: trimmedString.min(1),
+  categoryId: z.number().int().positive(),
+  category: trimmedString.optional().transform((value) => value ?? ""),
+  image: optionalTrimmedString,
+  slug: trimmedString.min(1),
+  tags: z.array(trimmedString).transform((tags) => tags.filter((tag) => tag.length > 0)),
+  featured: z.boolean().optional().default(false),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
 
 export type BlogPost = z.infer<typeof blogPostSchema>;
 
-export const blogPostInputSchema = blogPostSchema.partial({
-  id: true,
-  content: true,
-  createdAt: true,
-  updatedAt: true,
-}).required({
-  title: true,
-  description: true,
-  author: true,
-  date: true,
-  readTime: true,
-  category: true,
-  slug: true,
-  tags: true,
+export const blogPostInputSchema = z.object({
+  title: trimmedString.min(1),
+  description: trimmedString.min(1),
+  author: trimmedString.min(1),
+  date: trimmedString.min(1),
+  readTime: trimmedString.min(1),
+  categoryId: z.number().int().positive(),
+  slug: trimmedString.min(1),
+  image: optionalTrimmedString,
+  content: optionalTrimmedString,
+  tags: z.array(trimmedString).transform((tags) => tags.filter((tag) => tag.length > 0)),
+  featured: z.boolean().optional(),
 });
 
 export type BlogPostInput = z.input<typeof blogPostInputSchema>;
+
+export const blogCategorySchema = z.object({
+  id: z.number().int().positive(),
+  name: trimmedString.min(1),
+});
+
+export type BlogCategory = z.infer<typeof blogCategorySchema>;
+
+const categoriaSchema = z.object({
+  id: z.number().int().positive(),
+  nome: trimmedString.min(1),
+  ativo: z.boolean().optional().default(true),
+  datacriacao: optionalTrimmedString,
+});
 
 export const serviceSchema = z.object({
   id: z.string().min(1),
@@ -169,6 +195,16 @@ export const adminApi = {
       method: "DELETE",
     });
   },
+  async listBlogCategories(): Promise<BlogCategory[]> {
+    const data = await request<unknown>("/categorias");
+    const categorias = parseArray(data, categoriaSchema);
+    return categorias
+      .filter((categoria) => categoria.ativo)
+      .map((categoria) => blogCategorySchema.parse({
+        id: categoria.id,
+        name: categoria.nome,
+      }));
+  },
   async listServices(): Promise<Service[]> {
     const data = await request<unknown>("/services");
     return parseArray(data, serviceSchema);
@@ -211,6 +247,11 @@ export const blogPostKeys = {
   list: () => [...blogPostKeys.all],
   detail: (id: string) => [...blogPostKeys.all, id] as const,
   detailBySlug: (slug: string) => [...blogPostKeys.all, "slug", slug] as const,
+};
+
+export const blogCategoryKeys = {
+  all: ["blog-categories"] as const,
+  list: () => [...blogCategoryKeys.all],
 };
 
 export const serviceKeys = {

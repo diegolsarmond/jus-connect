@@ -1,8 +1,14 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
-import { adminApi, blogPostKeys, type BlogPost } from "@/lib/adminApi";
+import {
+  adminApi,
+  blogPostKeys,
+  blogCategoryKeys,
+  type BlogPost,
+  type BlogCategory,
+} from "@/lib/adminApi";
 
-export type { BlogPost };
+export type { BlogPost, BlogCategory };
 
 const FIVE_MINUTES_IN_MS = 1000 * 60 * 5;
 const EMPTY_BLOG_POST_ID_QUERY_KEY = [...blogPostKeys.all, "id", ""] as const;
@@ -40,3 +46,10 @@ export const useBlogPostBySlug = (
     staleTime: FIVE_MINUTES_IN_MS,
   });
 };
+
+export const useBlogCategories = (): UseQueryResult<BlogCategory[], Error> =>
+  useQuery<BlogCategory[], Error>({
+    queryKey: blogCategoryKeys.list(),
+    queryFn: () => adminApi.listBlogCategories(),
+    staleTime: FIVE_MINUTES_IN_MS,
+  });

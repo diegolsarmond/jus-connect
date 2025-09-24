@@ -38,8 +38,12 @@ export const publicBlogPostRoutes = Router();
  *           description: Data de publicação do artigo
  *         readTime:
  *           type: string
+ *         categoryId:
+ *           type: integer
+ *           description: Identificador da categoria relacionada
  *         category:
  *           type: string
+ *           description: Nome da categoria relacionada
  *         image:
  *           type: string
  *           nullable: true
@@ -65,7 +69,7 @@ export const publicBlogPostRoutes = Router();
  *         - author
  *         - date
  *         - readTime
- *         - category
+ *         - categoryId
  *         - slug
  *         - tags
  *       properties:
@@ -80,8 +84,8 @@ export const publicBlogPostRoutes = Router();
  *           format: date-time
  *         readTime:
  *           type: string
- *         category:
- *           type: string
+ *         categoryId:
+ *           type: integer
  *         slug:
  *           type: string
  *           description: Identificador único utilizado na URL do artigo
@@ -97,7 +101,7 @@ export const publicBlogPostRoutes = Router();
  *             type: string
  *         featured:
  *           type: boolean
- */
+*/
 
 /**
  * @swagger

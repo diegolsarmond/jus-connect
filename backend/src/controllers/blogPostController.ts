@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Request, Response } from 'express';
 import pool from '../services/db';
 
-const BLOG_POST_COLUMNS = `
+const BLOG_POST_RETURNING_COLUMNS = `
   id,
   title,
   description,
@@ -19,6 +19,27 @@ const BLOG_POST_COLUMNS = `
   updated_at
 `;
 
+const BLOG_POST_SELECT_BASE = `
+  SELECT
+    bp.id,
+    bp.title,
+    bp.description,
+    bp.content,
+    bp.author,
+    bp.published_at,
+    bp.read_time,
+    bp.category,
+    bp.image,
+    bp.slug,
+    bp.tags,
+    bp.featured,
+    bp.created_at,
+    bp.updated_at,
+    COALESCE(c.nome, '') AS category_name
+  FROM blog_posts bp
+  LEFT JOIN public.categorias c ON c.id = bp.category
+`;
+
 type BlogPostRow = {
   id: string;
   title: string;
@@ -27,7 +48,8 @@ type BlogPostRow = {
   author: string;
   published_at: Date | string | null;
   read_time: string;
-  category: string;
+  category: number | string | null;
+  category_name: string;
   image: string | null;
   slug: string;
   tags: string[] | null;
@@ -49,6 +71,14 @@ const mapBlogPostRow = (row: BlogPostRow) => {
   const createdAt = toIsoString(row.created_at);
   const updatedAt = toIsoString(row.updated_at);
   const date = toIsoString(row.published_at) ?? createdAt ?? updatedAt;
+  const rawCategoryId =
+    typeof row.category === 'number'
+      ? row.category
+      : typeof row.category === 'string'
+        ? Number(row.category)
+        : undefined;
+  const categoryId = Number.isFinite(rawCategoryId) ? (rawCategoryId as number) : undefined;
+  const categoryName = typeof row.category_name === 'string' ? row.category_name.trim() : '';
 
   return {
     id: row.id,
@@ -58,7 +88,8 @@ const mapBlogPostRow = (row: BlogPostRow) => {
     author: row.author,
     date: date ?? new Date().toISOString(),
     readTime: row.read_time,
-    category: row.category,
+    categoryId,
+    category: categoryName.length > 0 ? categoryName : 'Sem categoria',
     image: row.image ?? undefined,
     slug: row.slug,
     tags: Array.isArray(row.tags) ? row.tags : [],
@@ -132,6 +163,28 @@ const parseTags = (value: unknown): string[] => {
   return normalized;
 };
 
+const parseCategoryId = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      throw new ValidationError('O campo "categoryId" é obrigatório.');
+    }
+
+    const parsed = Number(trimmed);
+
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  throw new ValidationError('O campo "categoryId" é obrigatório.');
+};
+
 const parsePublishedAt = (value: unknown): Date => {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) {
@@ -164,7 +217,7 @@ const buildBlogPostPayload = (body: unknown) => {
   const description = ensureNonEmptyString(data.description, 'description');
   const author = ensureNonEmptyString(data.author, 'author');
   const readTime = ensureNonEmptyString(data.readTime ?? data.read_time, 'readTime');
-  const category = ensureNonEmptyString(data.category, 'category');
+  const categoryId = parseCategoryId(data.categoryId ?? data.category);
   const slug = ensureNonEmptyString(data.slug, 'slug');
   const publishedAt = parsePublishedAt(data.date ?? data.publishedAt ?? data.published_at);
   const tags = parseTags(data.tags);
@@ -177,7 +230,7 @@ const buildBlogPostPayload = (body: unknown) => {
     description,
     author,
     readTime,
-    category,
+    categoryId,
     slug,
     publishedAt,
     tags,
@@ -205,7 +258,9 @@ export const listBlogPosts = async (req: Request, res: Response) => {
 
     if (slug) {
       const result = await pool.query(
-        `SELECT ${BLOG_POST_COLUMNS} FROM blog_posts WHERE slug = $1 ORDER BY published_at DESC NULLS LAST, created_at DESC`,
+        `${BLOG_POST_SELECT_BASE}
+         WHERE bp.slug = $1
+         ORDER BY bp.published_at DESC NULLS LAST, bp.created_at DESC`,
         [slug]
       );
       const posts = result.rows.map(mapBlogPostRow);
@@ -214,7 +269,8 @@ export const listBlogPosts = async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `SELECT ${BLOG_POST_COLUMNS} FROM blog_posts ORDER BY published_at DESC NULLS LAST, created_at DESC`
+      `${BLOG_POST_SELECT_BASE}
+       ORDER BY bp.published_at DESC NULLS LAST, bp.created_at DESC`
     );
 
     res.json(result.rows.map(mapBlogPostRow));
@@ -229,7 +285,8 @@ export const getBlogPostById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      `SELECT ${BLOG_POST_COLUMNS} FROM blog_posts WHERE id = $1`,
+      `${BLOG_POST_SELECT_BASE}
+       WHERE bp.id = $1`,
       [id]
     );
 
@@ -250,12 +307,12 @@ export const createBlogPost = async (req: Request, res: Response) => {
     const payload = buildBlogPostPayload(req.body);
     const id = randomUUID();
 
-    const result = await pool.query(
+    await pool.query(
       `INSERT INTO blog_posts (
         id, title, description, content, author, published_at, read_time, category, image, slug, tags, featured
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-      ) RETURNING ${BLOG_POST_COLUMNS}`,
+      )`,
       [
         id,
         payload.title,
@@ -264,7 +321,7 @@ export const createBlogPost = async (req: Request, res: Response) => {
         payload.author,
         payload.publishedAt.toISOString(),
         payload.readTime,
-        payload.category,
+        payload.categoryId,
         payload.image ?? null,
         payload.slug,
         payload.tags,
@@ -272,7 +329,17 @@ export const createBlogPost = async (req: Request, res: Response) => {
       ]
     );
 
-    res.status(201).json(mapBlogPostRow(result.rows[0] as BlogPostRow));
+    const inserted = await pool.query(
+      `${BLOG_POST_SELECT_BASE}
+       WHERE bp.id = $1`,
+      [id]
+    );
+
+    if (inserted.rowCount === 0) {
+      throw new Error('Erro ao recuperar artigo recém-criado.');
+    }
+
+    res.status(201).json(mapBlogPostRow(inserted.rows[0] as BlogPostRow));
   } catch (error) {
     if (handleDatabaseError(error, res)) {
       return;
@@ -307,8 +374,7 @@ export const updateBlogPost = async (req: Request, res: Response) => {
         tags = $10,
         featured = $11,
         updated_at = NOW()
-      WHERE id = $12
-      RETURNING ${BLOG_POST_COLUMNS}`,
+      WHERE id = $12`,
       [
         payload.title,
         payload.description,
@@ -316,7 +382,7 @@ export const updateBlogPost = async (req: Request, res: Response) => {
         payload.author,
         payload.publishedAt.toISOString(),
         payload.readTime,
-        payload.category,
+        payload.categoryId,
         payload.image ?? null,
         payload.slug,
         payload.tags,
@@ -330,7 +396,18 @@ export const updateBlogPost = async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(mapBlogPostRow(result.rows[0] as BlogPostRow));
+    const updatedRow = await pool.query(
+      `${BLOG_POST_SELECT_BASE}
+       WHERE bp.id = $1`,
+      [id]
+    );
+
+    if (updatedRow.rowCount === 0) {
+      res.status(404).json({ error: 'Artigo não encontrado.' });
+      return;
+    }
+
+    res.json(mapBlogPostRow(updatedRow.rows[0] as BlogPostRow));
   } catch (error) {
     if (handleDatabaseError(error, res)) {
       return;
@@ -363,3 +440,4 @@ export const deleteBlogPost = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Erro interno ao remover artigo do blog.' });
   }
 };
+
