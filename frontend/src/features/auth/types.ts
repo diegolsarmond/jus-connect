@@ -27,6 +27,7 @@ export interface AuthUser {
   setor_id: number | null;
   setor_nome: string | null;
   subscription: AuthSubscription | null;
+  mustChangePassword: boolean;
 }
 
 export interface LoginCredentials {

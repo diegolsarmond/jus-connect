@@ -69,7 +69,7 @@ export async function createPasswordResetRequest(user: TargetUser): Promise<void
       typeof previousPasswordRow.senha === 'string' ? previousPasswordRow.senha : null;
 
     await client.query(
-      'UPDATE public.usuarios SET senha = $1 WHERE id = $2',
+      'UPDATE public.usuarios SET senha = $1, must_change_password = TRUE WHERE id = $2',
       [hashedPassword, user.id]
     );
 

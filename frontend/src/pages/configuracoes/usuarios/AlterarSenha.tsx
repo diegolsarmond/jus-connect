@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ArrowLeft, Eye, EyeOff, Shield, Check, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { ProfileCard } from "@/components/profile/ProfileCard";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useNavigate, useLocation, type Location } from "react-router-dom";
+import { routes } from "@/config/routes";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { ApiError, changePasswordRequest } from "@/features/auth/api";
 
 interface PasswordStrength {
   score: number;
@@ -24,6 +30,12 @@ export default function AlterarSenha() {
     confirm: false
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { toast } = useToast();
+  const { user, refreshUser } = useAuth();
 
   // Password strength calculation
   const calculatePasswordStrength = (password: string): PasswordStrength => {
@@ -66,7 +78,36 @@ export default function AlterarSenha() {
 
   const passwordStrength = calculatePasswordStrength(newPassword);
   const passwordsMatch = newPassword && confirmPassword && newPassword === confirmPassword;
-  const isFormValid = currentPassword && newPassword && confirmPassword && passwordsMatch && passwordStrength.score >= 60;
+  const isFormValid = Boolean(
+    currentPassword && newPassword && confirmPassword && passwordsMatch && passwordStrength.score >= 60,
+  );
+
+  const resolveRedirectTarget = useCallback(
+    (wasForcedChange: boolean): string | null => {
+      const state = location.state as { from?: string | Location } | undefined;
+      const from = state?.from;
+
+      if (typeof from === "string" && from.trim()) {
+        return from;
+      }
+
+      if (from && typeof from === "object" && "pathname" in from) {
+        const target = from as Location;
+        const pathname = target.pathname ?? "";
+        const search = target.search ?? "";
+        const hash = target.hash ?? "";
+        const combined = `${pathname}${search}${hash}`;
+        return combined || routes.home;
+      }
+
+      if (wasForcedChange) {
+        return routes.home;
+      }
+
+      return null;
+    },
+    [location.state],
+  );
 
   const togglePasswordVisibility = (field: keyof typeof showPasswords) => {
     setShowPasswords(prev => ({ ...prev, [field]: !prev[field] }));
@@ -77,25 +118,59 @@ export default function AlterarSenha() {
     if (!isFormValid) return;
 
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      console.log("Password changed successfully");
-      // Reset form and show success
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const wasForcedChange = user?.mustChangePassword ?? false;
+
+    try {
+      await changePasswordRequest({
+        temporaryPassword: currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    }, 2000);
+      setSuccessMessage("Senha atualizada com sucesso.");
+      toast({
+        title: "Senha atualizada",
+        description: "Sua nova senha foi aplicada com sucesso.",
+      });
+
+      try {
+        await refreshUser();
+      } catch (refreshError) {
+        console.warn("Falha ao atualizar dados do usuário após troca de senha", refreshError);
+      }
+
+      const redirectTarget = resolveRedirectTarget(wasForcedChange);
+      if (redirectTarget && redirectTarget !== location.pathname) {
+        navigate(redirectTarget, { replace: true });
+      }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setErrorMessage(error.message);
+      } else if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage("Não foi possível atualizar a senha. Tente novamente.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const PasswordInput = ({ 
-    id, 
-    label, 
-    value, 
-    onChange, 
-    showPassword, 
-    onToggleVisibility 
+  const PasswordInput = ({
+    id,
+    label,
+    value,
+    onChange,
+    showPassword,
+    onToggleVisibility,
+    autoComplete,
+    disabled,
   }: {
     id: string;
     label: string;
@@ -103,6 +178,8 @@ export default function AlterarSenha() {
     onChange: (value: string) => void;
     showPassword: boolean;
     onToggleVisibility: () => void;
+    autoComplete?: string;
+    disabled?: boolean;
   }) => (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
@@ -113,6 +190,8 @@ export default function AlterarSenha() {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="pr-10"
+          autoComplete={autoComplete}
+          disabled={disabled}
         />
         <Button
           type="button"
@@ -120,6 +199,7 @@ export default function AlterarSenha() {
           size="sm"
           className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
           onClick={onToggleVisibility}
+          disabled={disabled}
         >
           {showPassword ? (
             <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -133,9 +213,20 @@ export default function AlterarSenha() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+        {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const target = resolveRedirectTarget(false);
+            if (target) {
+              navigate(target, { replace: true });
+            } else {
+              navigate(-1);
+            }
+          }}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Voltar
         </Button>
@@ -152,11 +243,13 @@ export default function AlterarSenha() {
             <form onSubmit={handleSubmit} className="space-y-6">
               <PasswordInput
                 id="current-password"
-                label="Senha Atual *"
+                label="Senha provisória *"
                 value={currentPassword}
                 onChange={setCurrentPassword}
                 showPassword={showPasswords.current}
                 onToggleVisibility={() => togglePasswordVisibility('current')}
+                autoComplete="current-password"
+                disabled={isLoading}
               />
 
               <PasswordInput
@@ -166,6 +259,8 @@ export default function AlterarSenha() {
                 onChange={setNewPassword}
                 showPassword={showPasswords.new}
                 onToggleVisibility={() => togglePasswordVisibility('new')}
+                autoComplete="new-password"
+                disabled={isLoading}
               />
 
               {/* Password Strength */}
@@ -201,6 +296,8 @@ export default function AlterarSenha() {
                 onChange={setConfirmPassword}
                 showPassword={showPasswords.confirm}
                 onToggleVisibility={() => togglePasswordVisibility('confirm')}
+                autoComplete="new-password"
+                disabled={isLoading}
               />
 
               {/* Password Match Validation */}
@@ -217,6 +314,20 @@ export default function AlterarSenha() {
                 </div>
               )}
 
+              {errorMessage ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Não foi possível concluir</AlertTitle>
+                  <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {successMessage ? (
+                <Alert>
+                  <AlertTitle>Senha atualizada</AlertTitle>
+                  <AlertDescription>{successMessage}</AlertDescription>
+                </Alert>
+              ) : null}
+
               <div className="flex gap-3 pt-4">
                 <Button
                   type="submit"
@@ -225,7 +336,19 @@ export default function AlterarSenha() {
                 >
                   {isLoading ? "Alterando..." : "Alterar Senha"}
                 </Button>
-                <Button type="button" variant="outline">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const target = resolveRedirectTarget(false);
+                    if (target) {
+                      navigate(target, { replace: true });
+                    } else {
+                      navigate(-1);
+                    }
+                  }}
+                  disabled={isLoading}
+                >
                   Cancelar
                 </Button>
               </div>

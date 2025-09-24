@@ -164,6 +164,15 @@ const parseSubscription = (value: unknown): AuthSubscription | null => {
   };
 };
 
+const resolveMustChangePassword = (record: Record<string, unknown>): boolean =>
+  parseBooleanFlag(
+    record.mustChangePassword ??
+      record.must_change_password ??
+      record.must_change ??
+      record.must_change_pass ??
+      record.must_change_password_flag,
+  ) ?? false;
+
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
@@ -206,13 +215,16 @@ export const loginRequest = async (
     throw new Error("Resposta de autenticação inválida.");
   }
 
+  const userRecord = data.user as AuthUser & Record<string, unknown>;
+
   return {
     token: data.token,
     expiresIn: data.expiresIn,
     user: {
       ...data.user,
-      modulos: parseModules((data.user as AuthUser & { modulos?: unknown }).modulos),
-      subscription: parseSubscription((data.user as { subscription?: unknown }).subscription),
+      modulos: parseModules(userRecord.modulos),
+      subscription: parseSubscription(userRecord.subscription),
+      mustChangePassword: resolveMustChangePassword(userRecord),
     },
   };
 };
@@ -234,7 +246,8 @@ export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
     throw await buildApiError(response);
   }
 
-  const data = (await response.json()) as AuthUser & { modulos?: unknown };
+  const data = (await response.json()) as (AuthUser & { modulos?: unknown }) &
+    Record<string, unknown>;
   if (typeof data?.id !== "number") {
     throw new Error("Não foi possível carregar os dados do usuário.");
   }
@@ -243,6 +256,7 @@ export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
     ...data,
     modulos: parseModules(data.modulos),
     subscription: parseSubscription((data as { subscription?: unknown }).subscription),
+    mustChangePassword: resolveMustChangePassword(data),
   } satisfies AuthUser;
 };
 
@@ -269,5 +283,36 @@ export const refreshTokenRequest = async (
   return {
     token: data.token,
     expiresIn: typeof data.expiresIn === "number" ? data.expiresIn : undefined,
+  };
+};
+
+export interface ChangePasswordPayload {
+  temporaryPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export const changePasswordRequest = async (
+  payload: ChangePasswordPayload,
+): Promise<{ message: string }> => {
+  const response = await fetch(getApiUrl("auth/change-password"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response);
+  }
+
+  const data = (await response.json()) as { message?: unknown };
+  return {
+    message:
+      typeof data?.message === "string" && data.message.trim().length > 0
+        ? data.message
+        : "Senha atualizada com sucesso.",
   };
 };

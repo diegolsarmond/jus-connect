@@ -193,11 +193,21 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
     ? candidate.modulos.filter((module): module is string => typeof module === "string")
     : [];
   const subscription = sanitizeAuthSubscription(candidate.subscription ?? null);
+  const record = candidate as Record<string, unknown>;
+  const mustChangePassword =
+    parseBooleanFlag(
+      record.mustChangePassword ??
+        record.must_change_password ??
+        record.must_change ??
+        record.must_change_pass ??
+        record.must_change_password_flag,
+    ) ?? false;
 
   return {
     ...candidate,
     modulos: modules,
     subscription: subscription ?? null,
+    mustChangePassword,
   } satisfies AuthUser;
 };
 

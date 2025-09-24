@@ -30,6 +30,14 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     return <Navigate to={routes.login} replace state={{ from: location }} />;
   }
 
+  const mustChangePassword = user?.mustChangePassword ?? false;
+  const isOnForcedPasswordRoute =
+    location.pathname === "/alterar-senha" || /\/configuracoes\/usuarios\/.+\/senha$/.test(location.pathname);
+
+  if (mustChangePassword && !isOnForcedPasswordRoute) {
+    return <Navigate to="/alterar-senha" replace state={{ from: location }} />;
+  }
+
   const { hasAccess } = evaluateSubscriptionAccess(user?.subscription ?? null);
   const requiresPlanSelection = !hasAccess;
   const isOnPlanRoute = location.pathname.startsWith(PLAN_SELECTION_PATH);
