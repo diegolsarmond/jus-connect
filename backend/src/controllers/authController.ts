@@ -154,6 +154,7 @@ type UserRowBase = SubscriptionRow & {
   perfil: number | string | null;
   empresa_id: number | null;
   empresa_nome: string | null;
+  empresa_responsavel_id: number | null;
   setor_id: number | null;
   setor_nome: string | null;
   must_change_password?: unknown;
@@ -864,6 +865,7 @@ export const login = async (req: Request, res: Response) => {
               u.perfil,
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
+              emp.responsavel AS empresa_responsavel_id,
               u.setor AS setor_id,
               esc.nome AS setor_nome,
               emp.plano AS empresa_plano,
@@ -900,6 +902,7 @@ export const login = async (req: Request, res: Response) => {
       perfil: number | string | null;
       empresa_id: number | null;
       empresa_nome: string | null;
+      empresa_responsavel_id: number | null;
       setor_id: number | null;
       setor_nome: string | null;
       empresa_plano?: unknown;
@@ -1033,6 +1036,7 @@ export const login = async (req: Request, res: Response) => {
         modulos,
         empresa_id: user.empresa_id,
         empresa_nome: user.empresa_nome,
+        empresa_responsavel_id: user.empresa_responsavel_id,
         setor_id: user.setor_id,
         setor_nome: user.setor_nome,
         subscription,
@@ -1215,6 +1219,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               u.status,
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
+              emp.responsavel AS empresa_responsavel_id,
               u.setor AS setor_id,
               esc.nome AS setor_nome,
               emp.plano AS empresa_plano,
@@ -1282,6 +1287,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       status: user.status,
       empresa_id: user.empresa_id,
       empresa_nome: user.empresa_nome,
+      empresa_responsavel_id: user.empresa_responsavel_id,
       setor_id: user.setor_id,
       setor_nome: user.setor_nome,
       modulos,

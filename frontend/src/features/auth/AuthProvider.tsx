@@ -193,6 +193,16 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
   const modules = sanitizeModuleList(candidate.modulos);
   const subscription = sanitizeAuthSubscription(candidate.subscription ?? null);
   const record = candidate as Record<string, unknown>;
+  const companyManagerId =
+    parseOptionalInteger(
+      record.empresa_responsavel_id ??
+        record.empresaResponsavelId ??
+        record.companyManagerId ??
+        record.companyResponsibleId ??
+        record.responsavel_empresa ??
+        record.company_responsavel ??
+        null,
+    ) ?? null;
   const mustChangePassword =
     parseBooleanFlag(
       record.mustChangePassword ??
@@ -207,6 +217,7 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
     modulos: modules,
     subscription: subscription ?? null,
     mustChangePassword,
+    empresa_responsavel_id: companyManagerId,
   } satisfies AuthUser;
 };
 
