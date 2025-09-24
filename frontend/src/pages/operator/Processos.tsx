@@ -1510,7 +1510,6 @@ export default function Processos() {
                         >
                           {processo.tipo}
                         </Badge>
-                      </div>
                     </div>
                     <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
                       <span className="flex items-center gap-1.5">
@@ -1668,7 +1667,6 @@ export default function Processos() {
                             Nenhum advogado cadastrado para este processo.
                           </p>
                         )}
-                      </div>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
