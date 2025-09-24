@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { adminRelativePath, routes } from "@/config/routes";
+import { appConfig } from "@/config/app-config";
 import Landing from "./pages/operator/Landing";
 import Clientes from "./pages/operator/Clientes";
 import NovoCliente from "./pages/operator/NovoCliente";
@@ -117,7 +118,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={appConfig.basePath}>
           <Suspense fallback={<LandingFallback />}>
             <Routes>
               <Route path={routes.home} element={<SiteIndex />} />
