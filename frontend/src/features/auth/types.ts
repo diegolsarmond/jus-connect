@@ -24,6 +24,7 @@ export interface AuthUser {
   modulos: string[];
   empresa_id: number | null;
   empresa_nome: string | null;
+  empresa_responsavel_id: number | null;
   setor_id: number | null;
   setor_nome: string | null;
   subscription: AuthSubscription | null;
