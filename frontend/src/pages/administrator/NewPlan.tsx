@@ -35,10 +35,12 @@ import {
   initialPlanFormState,
   extractCollection,
   parseInteger,
-  parseDecimal,
   sanitizeLimitInput,
   orderModules,
   parseModuleInfo,
+  extractCurrencyDigits,
+  formatCurrencyInputValue,
+  parseCurrencyDigits,
 } from "./plans-utils";
 
 interface ModuleMultiSelectProps {
@@ -77,14 +79,14 @@ function ModuleMultiSelect({ modules, selected, onChange, disabled }: ModuleMult
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="justify-between"
+          className="w-full justify-between"
           disabled={disabled || modules.length === 0}
         >
           <span className="truncate text-left">{triggerLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[min(320px,90vw)] p-0">
+      <PopoverContent className="w-[min(420px,90vw)] p-0">
         <Command>
           <CommandInput placeholder="Buscar módulo..." />
           <CommandList>
@@ -206,6 +208,22 @@ export default function NewPlan() {
     }));
   };
 
+  const handleMonthlyPriceChange = (value: string) => {
+    const digits = extractCurrencyDigits(value);
+    setFormState((prev) => ({
+      ...prev,
+      monthlyPrice: formatCurrencyInputValue(digits),
+    }));
+  };
+
+  const handleAnnualPriceChange = (value: string) => {
+    const digits = extractCurrencyDigits(value);
+    setFormState((prev) => ({
+      ...prev,
+      annualPrice: formatCurrencyInputValue(digits),
+    }));
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -214,16 +232,16 @@ export default function NewPlan() {
     }
 
     const name = formState.name.trim();
-    const monthlyPriceInput = formState.monthlyPrice.trim();
-    const annualPriceInput = formState.annualPrice.trim();
-    if (!name || !monthlyPriceInput || !annualPriceInput) {
+    const monthlyPriceDigits = extractCurrencyDigits(formState.monthlyPrice);
+    const annualPriceDigits = extractCurrencyDigits(formState.annualPrice);
+    if (!name || !monthlyPriceDigits || !annualPriceDigits) {
       setSubmitError("Informe o nome, o valor mensal e o valor anual do plano.");
       setSubmitSuccess(null);
       return;
     }
 
-    const monthlyPriceValue = parseDecimal(monthlyPriceInput);
-    const annualPriceValue = parseDecimal(annualPriceInput);
+    const monthlyPriceValue = parseCurrencyDigits(monthlyPriceDigits);
+    const annualPriceValue = parseCurrencyDigits(annualPriceDigits);
     if (monthlyPriceValue == null || annualPriceValue == null) {
       setSubmitError("Informe valores numéricos válidos para os preços mensal e anual.");
       setSubmitSuccess(null);
@@ -335,9 +353,8 @@ export default function NewPlan() {
                   id="plan-monthly-price"
                   placeholder="Ex.: 199,90"
                   value={formState.monthlyPrice}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, monthlyPrice: event.target.value }))
-                  }
+                  inputMode="decimal"
+                  onChange={(event) => handleMonthlyPriceChange(event.target.value)}
                   disabled={submitting}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -350,9 +367,8 @@ export default function NewPlan() {
                   id="plan-annual-price"
                   placeholder="Ex.: 1999,90"
                   value={formState.annualPrice}
-                  onChange={(event) =>
-                    setFormState((prev) => ({ ...prev, annualPrice: event.target.value }))
-                  }
+                  inputMode="decimal"
+                  onChange={(event) => handleAnnualPriceChange(event.target.value)}
                   disabled={submitting}
                 />
                 <p className="text-xs text-muted-foreground">

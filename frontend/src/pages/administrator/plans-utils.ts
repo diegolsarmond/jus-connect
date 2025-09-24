@@ -238,6 +238,41 @@ export const sanitizeLimitInput = (value: string): string => {
   return value.replace(/[^0-9]/g, "");
 };
 
+const DIGIT_ONLY_REGEX = /\D+/g;
+
+const BRAZILIAN_CURRENCY_FORMATTER = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+export const extractCurrencyDigits = (value: string): string => value.replace(DIGIT_ONLY_REGEX, "");
+
+export const formatCurrencyInputValue = (digits: string): string => {
+  if (!digits) {
+    return "";
+  }
+
+  const parsed = Number.parseInt(digits, 10);
+  if (Number.isNaN(parsed)) {
+    return "";
+  }
+
+  return BRAZILIAN_CURRENCY_FORMATTER.format(parsed / 100);
+};
+
+export const parseCurrencyDigits = (digits: string): number | null => {
+  if (!digits) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(digits, 10);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return parsed / 100;
+};
+
 export const orderModules = (modules: string[], available: ModuleInfo[]): string[] => {
   if (modules.length <= 1 || available.length === 0) return [...modules];
   const index = new Map<string, number>();
