@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+
 
 import { HeaderActions } from "@/components/layout/HeaderActions";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+
 import { usePlan } from "@/features/plans/PlanProvider";
 
 const getPlanDisplayName = (name: string | null | undefined, id: number | null | undefined) => {
@@ -49,6 +51,7 @@ export function Header() {
     };
   }, []);
 
+
   const planName = useMemo(
     () => getPlanDisplayName(plan?.nome, plan?.id),
     [plan?.id, plan?.nome],
@@ -82,6 +85,7 @@ export function Header() {
       <div className="flex h-16 flex-wrap items-center gap-3 px-4 sm:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <SidebarTrigger className="text-muted-foreground" />
+
 
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Plano atual</p>
