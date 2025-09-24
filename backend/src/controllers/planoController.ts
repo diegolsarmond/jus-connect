@@ -40,6 +40,10 @@ type PlanoResponseRow = Omit<
   sincronizacao_processos_habilitada: boolean;
   sincronizacao_processos_cota: number | null;
   ativo: boolean;
+  recursos_personalizados: {
+    disponiveis: string[];
+    indisponiveis: string[];
+  };
 };
 
 const parseBooleanFlag = (value: unknown): boolean | null => {
@@ -128,6 +132,8 @@ const parseNullableInteger = (value: unknown): number | null => {
 type RecursosDetails = {
   recursos: string[];
   modules: string[];
+  customAvailable: string[];
+  customUnavailable: string[];
   limiteProcessos: number | null;
   limiteUsuarios: number | null;
   limitePropostas: number | null;
@@ -147,6 +153,32 @@ const FEATURE_KEYS = [
   'value',
   'feature',
   'recurso',
+] as const;
+
+const CUSTOM_RESOURCE_KEYS = [
+  'recursos_personalizados',
+  'customResources',
+  'personalizados',
+] as const;
+
+const CUSTOM_AVAILABLE_KEYS = [
+  'disponiveis',
+  'disponiveisPersonalizados',
+  'available',
+  'included',
+  'inclusos',
+  'incluidos',
+  'availableFeatures',
+] as const;
+
+const CUSTOM_UNAVAILABLE_KEYS = [
+  'indisponiveis',
+  'indisponiveisPersonalizados',
+  'naoDisponiveis',
+  'nao_disponiveis',
+  'notAvailable',
+  'excluded',
+  'excludedFeatures',
 ] as const;
 
 const MODULE_KEYS = [
@@ -450,6 +482,8 @@ const parseModulesOrDefault = (
 const parseRecursosDetails = (value: unknown): RecursosDetails => {
   const featureSet = new Set<string>();
   const moduleSet = new Set<string>();
+  const customAvailableSet = new Set<string>();
+  const customUnavailableSet = new Set<string>();
   let limiteProcessos: number | null = null;
   let limiteUsuarios: number | null = null;
   let limitePropostas: number | null = null;
@@ -479,6 +513,73 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
       featureSet.add(String(entry));
     }
   };
+
+  const collectCustomEntries = (
+    input: unknown,
+    target: Set<string>,
+    { includeInFeatures }: { includeInFeatures: boolean },
+  ) => {
+    const localVisited = new Set<unknown>();
+
+    const register = (entry: string) => {
+      const trimmed = entry.trim();
+      if (!trimmed) {
+        return;
+      }
+      target.add(trimmed);
+      if (includeInFeatures) {
+        featureSet.add(trimmed);
+        const normalizedModule = normalizeModuleId(trimmed);
+        if (normalizedModule) {
+          moduleSet.add(normalizedModule);
+        }
+      }
+    };
+
+    const walk = (current: unknown) => {
+      if (current === null || current === undefined) {
+        return;
+      }
+
+      if (typeof current === 'string') {
+        current
+          .split(/[\n;,]+/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .forEach((item) => register(item));
+        return;
+      }
+
+      if (typeof current === 'number' || typeof current === 'boolean') {
+        register(String(current));
+        return;
+      }
+
+      if (Array.isArray(current)) {
+        current.forEach((item) => walk(item));
+        return;
+      }
+
+      if (typeof current === 'object') {
+        if (localVisited.has(current)) {
+          return;
+        }
+        localVisited.add(current);
+        Object.values(current as Record<string, unknown>).forEach((item) => walk(item));
+      }
+    };
+
+    walk(input);
+  };
+
+  const moduleKeySet = new Set<string>(MODULE_KEYS);
+  const featureKeySet = new Set<string>(FEATURE_KEYS);
+  const limitProcessKeySet = new Set<string>(LIMIT_PROCESS_KEYS);
+  const limitUserKeySet = new Set<string>(LIMIT_USER_KEYS);
+  const limitProposalKeySet = new Set<string>(LIMIT_PROPOSAL_KEYS);
+  const syncEnabledKeySet = new Set<string>(SYNC_ENABLED_KEYS);
+  const syncQuotaKeySet = new Set<string>(SYNC_QUOTA_KEYS);
+  const customResourceKeySet = new Set<string>(CUSTOM_RESOURCE_KEYS);
 
   const visit = (input: unknown): void => {
     if (input === null || input === undefined) {
@@ -539,6 +640,32 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
       visited.add(input);
 
       const obj = input as Record<string, unknown>;
+
+      CUSTOM_RESOURCE_KEYS.forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+          return;
+        }
+        const entry = obj[key];
+        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+          const customObj = entry as Record<string, unknown>;
+          CUSTOM_AVAILABLE_KEYS.forEach((availableKey) => {
+            if (Object.prototype.hasOwnProperty.call(customObj, availableKey)) {
+              collectCustomEntries(customObj[availableKey], customAvailableSet, {
+                includeInFeatures: true,
+              });
+            }
+          });
+          CUSTOM_UNAVAILABLE_KEYS.forEach((unavailableKey) => {
+            if (Object.prototype.hasOwnProperty.call(customObj, unavailableKey)) {
+              collectCustomEntries(customObj[unavailableKey], customUnavailableSet, {
+                includeInFeatures: false,
+              });
+            }
+          });
+        } else {
+          collectCustomEntries(entry, customAvailableSet, { includeInFeatures: true });
+        }
+      });
 
       MODULE_KEYS.forEach((key) => {
         if (key in obj) {
@@ -602,10 +729,20 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
         }
       }
 
-      Object.values(obj).forEach((item) => {
-        if (item && typeof item === 'object') {
-          visit(item);
+      Object.entries(obj).forEach(([key, item]) => {
+        if (customResourceKeySet.has(key)) {
+          return;
         }
+        if (moduleKeySet.has(key) || featureKeySet.has(key)) {
+          return;
+        }
+        if (limitProcessKeySet.has(key) || limitUserKeySet.has(key) || limitProposalKeySet.has(key)) {
+          return;
+        }
+        if (syncEnabledKeySet.has(key) || syncQuotaKeySet.has(key)) {
+          return;
+        }
+        visit(item);
       });
     }
   };
@@ -618,6 +755,8 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
   return {
     recursos,
     modules,
+    customAvailable: Array.from(customAvailableSet),
+    customUnavailable: Array.from(customUnavailableSet),
     limiteProcessos,
     limiteUsuarios,
     limitePropostas,
@@ -647,6 +786,8 @@ const prepareRecursosForStorage = ({
     fallback ?? {
       recursos: [],
       modules: [],
+      customAvailable: [],
+      customUnavailable: [],
       limiteProcessos: null,
       limiteUsuarios: null,
       limitePropostas: null,
@@ -655,12 +796,21 @@ const prepareRecursosForStorage = ({
     };
 
   let featureList: string[];
+  let customAvailableList: string[];
+  let customUnavailableList: string[];
   if (recursosInput === undefined) {
     featureList = fallbackDetails.recursos;
+    customAvailableList = fallbackDetails.customAvailable;
+    customUnavailableList = fallbackDetails.customUnavailable;
   } else if (recursosInput === null) {
     featureList = [];
+    customAvailableList = [];
+    customUnavailableList = [];
   } else {
-    featureList = parseRecursosDetails(recursosInput).recursos;
+    const parsed = parseRecursosDetails(recursosInput);
+    featureList = parsed.recursos;
+    customAvailableList = parsed.customAvailable;
+    customUnavailableList = parsed.customUnavailable;
   }
 
   const featureSet = new Set(
@@ -674,6 +824,22 @@ const prepareRecursosForStorage = ({
       featureSet.add(moduleId);
     }
   });
+
+  const customAvailableNormalized = Array.from(
+    new Set(
+      customAvailableList
+        .map((feature) => (typeof feature === 'string' ? feature.trim() : ''))
+        .filter((feature): feature is string => Boolean(feature))
+    )
+  );
+
+  const customUnavailableNormalized = Array.from(
+    new Set(
+      customUnavailableList
+        .map((feature) => (typeof feature === 'string' ? feature.trim() : ''))
+        .filter((feature): feature is string => Boolean(feature))
+    )
+  );
 
   const normalizedFeatures = Array.from(featureSet);
   const uniqueModules = modules.length
@@ -692,6 +858,13 @@ const prepareRecursosForStorage = ({
     payload.recursos = normalizedFeatures;
     payload.items = normalizedFeatures;
     payload.lista = normalizedFeatures;
+  }
+
+  if (customAvailableNormalized.length || customUnavailableNormalized.length) {
+    payload.recursos_personalizados = {
+      disponiveis: customAvailableNormalized,
+      indisponiveis: customUnavailableNormalized,
+    };
   }
 
   const limitsPayload: Record<string, unknown> = {};
@@ -729,7 +902,9 @@ const prepareRecursosForStorage = ({
     !normalizedFeatures.length &&
     Object.keys(limitsPayload).length === 0 &&
     !limits.sincronizacaoProcessosHabilitada &&
-    limits.sincronizacaoProcessosCota == null
+    limits.sincronizacaoProcessosCota == null &&
+    customAvailableNormalized.length === 0 &&
+    customUnavailableNormalized.length === 0
   ) {
     return null;
   }
@@ -778,6 +953,11 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     ? recursosDetalhes.recursos
     : modules;
 
+  const customResources = {
+    disponiveis: recursosDetalhes.customAvailable,
+    indisponiveis: recursosDetalhes.customUnavailable,
+  };
+
   const limiteProcessos =
     parseNullableInteger(row.limite_processos) ??
     recursosDetalhes.limiteProcessos ??
@@ -825,7 +1005,7 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     limite_propostas: limitePropostas,
     sincronizacao_processos_habilitada: sincronizacaoProcessosHabilitada,
     sincronizacao_processos_cota: sincronizacaoProcessosCota,
-
+    recursos_personalizados: customResources,
   };
 };
 

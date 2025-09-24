@@ -11,6 +11,8 @@ export interface Plan {
   monthlyPrice: string;
   annualPrice: string;
   modules: string[];
+  customAvailableFeatures: string[];
+  customUnavailableFeatures: string[];
   userLimit: number | null;
   processLimit: number | null;
   proposalLimit: number | null;
@@ -23,6 +25,8 @@ export type PlanFormState = {
   monthlyPrice: string;
   annualPrice: string;
   modules: string[];
+  customAvailableFeatures: string;
+  customUnavailableFeatures: string;
   userLimit: string;
   processLimit: string;
   proposalLimit: string;
@@ -35,11 +39,178 @@ export const initialPlanFormState: PlanFormState = {
   monthlyPrice: "",
   annualPrice: "",
   modules: [],
+  customAvailableFeatures: "",
+  customUnavailableFeatures: "",
   userLimit: "",
   processLimit: "",
   proposalLimit: "",
   processSyncEnabled: false,
   processSyncQuota: "",
+};
+
+const FEATURE_SEPARATOR_REGEX = /[,;\n]+/;
+
+const normalizeFeatureList = (entries: string[]): string[] => {
+  const seen = new Set<string>();
+  entries.forEach((entry) => {
+    const trimmed = entry.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (!seen.has(trimmed)) {
+      seen.add(trimmed);
+    }
+  });
+  return Array.from(seen);
+};
+
+const collectFeatureStrings = (value: unknown): string[] => {
+  const seen = new Set<unknown>();
+
+  const walk = (input: unknown): string[] => {
+    if (input === null || input === undefined) {
+      return [];
+    }
+
+    if (typeof input === "string") {
+      return input
+        .split(FEATURE_SEPARATOR_REGEX)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    if (typeof input === "number" || typeof input === "boolean") {
+      const normalized = String(input).trim();
+      return normalized ? [normalized] : [];
+    }
+
+    if (Array.isArray(input)) {
+      return input.flatMap((item) => walk(item));
+    }
+
+    if (typeof input === "object") {
+      if (seen.has(input)) {
+        return [];
+      }
+      seen.add(input);
+      return Object.values(input as Record<string, unknown>).flatMap((item) => walk(item));
+    }
+
+    return [];
+  };
+
+  return walk(value);
+};
+
+const parseCustomResources = (
+  value: unknown,
+): { available: string[]; unavailable: string[] } => {
+  if (!value) {
+    return { available: [], unavailable: [] };
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return { available: normalizeFeatureList(collectFeatureStrings(value)), unavailable: [] };
+  }
+
+  const source = value as Record<string, unknown>;
+
+  const availableCandidates: unknown[] = [
+    source.disponiveis,
+    source.disponiveisPersonalizados,
+    source.available,
+    source.availableFeatures,
+    source.inclusos,
+    source.incluidos,
+    source.recursosDisponiveis,
+    source.recursos_disponiveis,
+  ];
+
+  const unavailableCandidates: unknown[] = [
+    source.indisponiveis,
+    source.indisponiveisPersonalizados,
+    source.naoDisponiveis,
+    source.nao_disponiveis,
+    source.notAvailable,
+    source.excluidos,
+    source.excludedFeatures,
+    source.recursosIndisponiveis,
+    source.recursos_indisponiveis,
+  ];
+
+  const available = normalizeFeatureList(
+    availableCandidates.flatMap((entry) => collectFeatureStrings(entry)),
+  );
+  const unavailable = normalizeFeatureList(
+    unavailableCandidates.flatMap((entry) => collectFeatureStrings(entry)),
+  );
+
+  if (available.length || unavailable.length) {
+    return { available, unavailable };
+  }
+
+  return { available: normalizeFeatureList(collectFeatureStrings(value)), unavailable: [] };
+};
+
+export const splitFeatureInput = (value: string): string[] => {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(FEATURE_SEPARATOR_REGEX)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+export const buildRecursosPayload = ({
+  modules,
+  customAvailable,
+  customUnavailable,
+}: {
+  modules: string[];
+  customAvailable: string[];
+  customUnavailable: string[];
+}): unknown => {
+  const normalizedModules = normalizeFeatureList(modules);
+  const normalizedAvailable = normalizeFeatureList(customAvailable);
+  const normalizedUnavailable = normalizeFeatureList(customUnavailable);
+  const combinedFeatures = normalizeFeatureList([
+    ...normalizedModules,
+    ...normalizedAvailable,
+  ]);
+
+  const shouldReturnArray =
+    normalizedUnavailable.length === 0 &&
+    normalizedAvailable.length === 0 &&
+    combinedFeatures.length === normalizedModules.length &&
+    combinedFeatures.every((item, index) => item === normalizedModules[index]);
+
+  if (shouldReturnArray) {
+    return normalizedModules;
+  }
+
+  const payload: Record<string, unknown> = {};
+
+  if (normalizedModules.length) {
+    payload.modules = normalizedModules;
+    payload.modulos = normalizedModules;
+  }
+
+  if (combinedFeatures.length) {
+    payload.features = combinedFeatures;
+    payload.recursos = combinedFeatures;
+    payload.items = combinedFeatures;
+    payload.lista = combinedFeatures;
+  }
+
+  if (normalizedAvailable.length || normalizedUnavailable.length) {
+    payload.recursos_personalizados = {
+      disponiveis: normalizedAvailable,
+      indisponiveis: normalizedUnavailable,
+    };
+  }
+
+  return payload;
 };
 
 export const extractCollection = (value: unknown): unknown[] => {
@@ -159,6 +330,14 @@ export const parsePlan = (raw: unknown): Plan | null => {
     data.modulos ?? data.modules ?? data.recursos ?? data.features ?? []
   );
 
+  const customResources = parseCustomResources(
+    data.recursos_personalizados ??
+      data.recursosPersonalizados ??
+      data.customResources ??
+      data.personalizados ??
+      null,
+  );
+
   const userLimit =
     parseInteger(
       data.limite_usuarios ??
@@ -220,6 +399,8 @@ export const parsePlan = (raw: unknown): Plan | null => {
         ""
     ),
     modules,
+    customAvailableFeatures: customResources.available,
+    customUnavailableFeatures: customResources.unavailable,
     userLimit,
     processLimit,
     proposalLimit,
