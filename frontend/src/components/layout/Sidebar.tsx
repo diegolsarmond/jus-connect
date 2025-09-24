@@ -19,6 +19,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  Lock,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -53,6 +54,7 @@ interface NavItem {
   children?: NavItem[];
   moduleId?: string;
   badgeKey?: SidebarCounterKey;
+  locked?: boolean;
 }
 
 export function Sidebar() {
@@ -223,26 +225,21 @@ export function Sidebar() {
     counters: sidebarCounters,
   } = useSidebarCounters();
 
-  const filteredNavigation = useMemo<NavItem[]>(() => {
-    const filterItems = (items: NavItem[]): NavItem[] =>
-      items
-        .map((item) => {
-          const filteredChildren = item.children ? filterItems(item.children) : undefined;
-          const hasVisibleChildren = Boolean(filteredChildren && filteredChildren.length > 0);
-          const isAllowed = item.moduleId ? allowedModules.has(item.moduleId) : false;
+  const navigationWithLockState = useMemo<NavItem[]>(() => {
+    const annotate = (items: NavItem[]): NavItem[] =>
+      items.map((item) => {
+        const annotatedChildren = item.children ? annotate(item.children) : undefined;
+        const hasAccessibleChild = annotatedChildren?.some((child) => !child.locked) ?? false;
+        const isModuleAllowed = item.moduleId ? allowedModules.has(item.moduleId) : true;
 
-          if (isAllowed || hasVisibleChildren || (!item.moduleId && !item.children)) {
-            return {
-              ...item,
-              children: filteredChildren,
-            } satisfies NavItem;
-          }
+        return {
+          ...item,
+          children: annotatedChildren,
+          locked: !isModuleAllowed && !hasAccessibleChild,
+        } satisfies NavItem;
+      });
 
-          return null;
-        })
-        .filter((item): item is NavItem => item !== null);
-
-    return filterItems(navigation);
+    return annotate(navigation);
   }, [navigation, allowedModules]);
 
   const isPathActive = (href?: string) => {
@@ -307,8 +304,8 @@ export function Sidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent className="px-2">
-        {filteredNavigation.length > 0 ? (
-          <SidebarMenu>{renderNavItems(filteredNavigation)}</SidebarMenu>
+        {navigationWithLockState.length > 0 ? (
+          <SidebarMenu>{renderNavItems(navigationWithLockState)}</SidebarMenu>
         ) : (
           <div className="px-4 py-6 text-sm text-sidebar-foreground/60">
             Nenhum módulo disponível para o seu perfil.
@@ -354,6 +351,7 @@ function NavItemContent({
   const active = isItemActive(item);
   const [open, setOpen] = useState(active);
 
+  const locked = item.locked ?? false;
   const counter = item.badgeKey ? counters[item.badgeKey] : undefined;
   const shouldRenderBadge = Boolean(
     counter && !counter.isError && (counter.isLoading || typeof counter.count === "number"),
@@ -373,6 +371,14 @@ function NavItemContent({
       {displayValue ?? null}
     </SidebarMenuBadge>
   ) : null;
+  const trailingIndicator = locked ? (
+    <Lock className="h-3.5 w-3.5 text-sidebar-foreground/50" aria-hidden="true" />
+  ) : (
+    badge
+  );
+
+  const lockedTitle = locked ? "Disponível em planos superiores" : undefined;
+  const lockedClassName = locked ? "text-sidebar-foreground/60 hover:text-sidebar-foreground" : undefined;
 
   useEffect(() => {
     if (hasChildren && active) {
@@ -394,14 +400,17 @@ function NavItemContent({
           <CollapsibleTrigger asChild>
             <SidebarMenuButton
               isActive={active}
-              className={cn("justify-between", badge && "relative pr-7")}
+              title={lockedTitle}
+              className={cn("group justify-between", lockedClassName)}
             >
               <span className="flex items-center gap-2">
                 {Icon && <Icon className="h-4 w-4" />}
                 <span className="truncate">{item.name}</span>
               </span>
-              {badge}
-              <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+              <span className="flex items-center gap-2">
+                {trailingIndicator}
+                <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+              </span>
             </SidebarMenuButton>
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -417,11 +426,14 @@ function NavItemContent({
           <SidebarMenuSubButton
             isActive={active}
             size="sm"
-            className={cn("justify-between", badge && "relative pr-6")}
+            title={lockedTitle}
+            className={cn("justify-between", lockedClassName)}
           >
             <span className="truncate">{item.name}</span>
-            {badge}
-            <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+            <span className="flex items-center gap-2">
+              {trailingIndicator}
+              <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+            </span>
           </SidebarMenuSubButton>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -438,12 +450,15 @@ function NavItemContent({
       <SidebarMenuButton asChild isActive={active}>
         <NavLink
           to={item.href ?? "#"}
-          className={cn("flex w-full items-center gap-2", badge && "relative pr-7")}
+          className={cn("group flex w-full items-center gap-2", lockedClassName)}
           onClick={handleClick}
+          title={lockedTitle}
         >
-          {Icon && <Icon className="h-4 w-4" />}
-          <span className="truncate">{item.name}</span>
-          {badge}
+          <span className="flex items-center gap-2">
+            {Icon && <Icon className="h-4 w-4" />}
+            <span className="truncate">{item.name}</span>
+          </span>
+          {trailingIndicator ? <span className="ml-auto flex items-center">{trailingIndicator}</span> : null}
         </NavLink>
       </SidebarMenuButton>
     );
@@ -453,12 +468,15 @@ function NavItemContent({
     <SidebarMenuSubButton asChild isActive={active} size="sm">
       <NavLink
         to={item.href ?? "#"}
-        className={cn("flex w-full items-center gap-2", badge && "relative pr-6")}
+        className={cn("group flex w-full items-center gap-2", lockedClassName)}
         onClick={handleClick}
+        title={lockedTitle}
       >
-        {Icon && <Icon className="h-4 w-4" />}
-        <span className="truncate">{item.name}</span>
-        {badge}
+        <span className="flex items-center gap-2">
+          {Icon && <Icon className="h-4 w-4" />}
+          <span className="truncate">{item.name}</span>
+        </span>
+        {trailingIndicator ? <span className="ml-auto flex items-center">{trailingIndicator}</span> : null}
       </NavLink>
     </SidebarMenuSubButton>
   );
