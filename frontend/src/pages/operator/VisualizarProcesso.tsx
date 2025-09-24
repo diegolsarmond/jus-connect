@@ -5,13 +5,11 @@ import {
   Archive,
   ArrowLeft,
   Calendar,
-  Download,
   Clock,
   FileText,
   Landmark,
   MapPin,
   Newspaper,
-  RefreshCw,
   Users,
 } from "lucide-react";
 
@@ -47,23 +45,6 @@ interface ApiProcessoMovimentacao {
   fonte?: Record<string, unknown> | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
-}
-
-interface ApiProcessoDocumentoPublico {
-  id?: number | string | null;
-  titulo?: string | null;
-  descricao?: string | null;
-  data?: string | null;
-  data_publicacao?: string | null;
-  tipo?: string | null;
-  extensao?: string | null;
-  paginas?: number | string | null;
-  numero_paginas?: number | string | null;
-  key?: string | null;
-  chave?: string | null;
-  links?: unknown;
-  link?: string | null;
-  url?: string | null;
 }
 
 interface ApiProcessoOportunidade {
@@ -136,20 +117,6 @@ interface ProcessoDetalhes {
   ultimaSincronizacao: string | null;
   movimentacoesCount: number;
   movimentacoes: ProcessoMovimentacaoDetalhe[];
-}
-
-interface ProcessoDocumentoPublico {
-  id: string;
-  titulo: string;
-  descricao: string | null;
-  data: string | null;
-  dataFormatada: string | null;
-  tipo: string | null;
-  extensao: string | null;
-  paginas: number | null;
-  key: string | null;
-  links: Record<string, string>;
-  downloadUrl: string | null;
 }
 
 interface ProcessoMovimentacaoDetalhe {
@@ -606,100 +573,7 @@ const normalizeDocumentoLinks = (
 };
 
 
-const mapApiDocumentosPublicos = (
-  value: unknown,
-): ProcessoDocumentoPublico[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
 
-  const documentos: ProcessoDocumentoPublico[] = [];
-
-  value.forEach((item, index) => {
-    if (!item || typeof item !== "object") {
-      return;
-    }
-
-    const raw = item as ApiProcessoDocumentoPublico;
-
-    let id: string | null = null;
-    const idCandidates = [raw.id, raw.key, raw.chave, raw.titulo];
-
-    for (const candidate of idCandidates) {
-      if (typeof candidate === "number" && Number.isFinite(candidate)) {
-        id = String(Math.trunc(candidate));
-        break;
-      }
-
-      if (typeof candidate === "string") {
-        const trimmed = candidate.trim();
-        if (trimmed) {
-          id = trimmed;
-          break;
-        }
-      }
-    }
-
-    if (!id) {
-      id = `documento_${index + 1}`;
-    }
-
-    const titulo = normalizeString(raw.titulo) || `Documento ${index + 1}`;
-    const descricao = normalizeString(raw.descricao) || null;
-    const dataValue =
-      normalizeString(raw.data) || normalizeString(raw.data_publicacao) || null;
-    const dataFormatada = dataValue ? formatDateToPtBR(dataValue) : null;
-    const tipoValue = normalizeString(raw.tipo);
-    const tipo = tipoValue ? tipoValue.toUpperCase() : null;
-    const extensaoValue = normalizeString(raw.extensao);
-    const extensao = extensaoValue
-      ? extensaoValue.replace(/^\./, "").toUpperCase()
-      : null;
-    const paginas = parseOptionalInteger(raw.paginas ?? raw.numero_paginas);
-    const key = normalizeString(raw.key) || normalizeString(raw.chave) || null;
-    const rawLinks = buildDocumentoLinksMap(raw.links, raw.link, raw.url);
-    const links = normalizeDocumentoLinks(rawLinks);
-
-
-    const downloadPrioridades = [
-      "arquivo",
-      "download",
-      "original",
-      "api",
-      "link",
-      "fallback_1",
-    ];
-    let downloadUrl: string | null = null;
-
-    for (const prioridade of downloadPrioridades) {
-      if (links[prioridade]) {
-        downloadUrl = links[prioridade];
-        break;
-      }
-    }
-
-    if (!downloadUrl) {
-      const [firstLink] = Object.values(links);
-      downloadUrl = firstLink ?? null;
-    }
-
-    documentos.push({
-      id,
-      titulo,
-      descricao,
-      data: dataValue,
-      dataFormatada,
-      tipo,
-      extensao,
-      paginas: paginas ?? null,
-      key,
-      links,
-      downloadUrl,
-    });
-  });
-
-  return documentos;
-};
 
 const mapApiProcessoToDetalhes = (
   processo: ApiProcessoResponse,
@@ -834,10 +708,7 @@ export default function VisualizarProcesso() {
   const [loading, setLoading] = useState(true);
   const [processo, setProcesso] = useState<ProcessoDetalhes | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [documentosPublicos, setDocumentosPublicos] = useState<ProcessoDocumentoPublico[]>([]);
-  const [documentosLoading, setDocumentosLoading] = useState(true);
-  const [documentosError, setDocumentosError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"resumo" | "atualizacoes" | "historico">(
+  const [activeTab, setActiveTab] = useState<"resumo" | "historico">(
     "resumo",
   );
 
@@ -914,87 +785,7 @@ export default function VisualizarProcesso() {
     };
   }, [processoId]);
 
-  useEffect(() => {
-    if (!processoId) {
-      setDocumentosPublicos([]);
-      setDocumentosError("Processo inválido");
-      setDocumentosLoading(false);
-      return;
-    }
 
-    let cancelled = false;
-
-    const fetchDocumentosPublicos = async () => {
-
-      setDocumentosLoading(true);
-      setDocumentosError(null);
-
-      try {
-        const res = await fetch(
-          getApiUrl(`processos/${processoId}/documentos-publicos`),
-          { headers: { Accept: "application/json" } },
-        );
-
-
-        const text = await res.text();
-        let json: unknown = null;
-
-        if (text) {
-          try {
-            json = JSON.parse(text);
-          } catch (parseError) {
-            console.error(
-              "Não foi possível interpretar os documentos públicos do processo",
-              parseError,
-            );
-          }
-        }
-
-        if (!res.ok) {
-          const message =
-            json &&
-            typeof json === "object" &&
-            "error" in json &&
-            typeof (json as { error: unknown }).error === "string"
-              ? (json as { error: string }).error
-              : `Não foi possível carregar os documentos públicos (HTTP ${res.status})`;
-          throw new Error(message);
-        }
-
-        const documentosPayload =
-          json && typeof json === "object" && "documentos" in json
-            ? (json as { documentos: unknown }).documentos
-            : json;
-
-        const documentos = mapApiDocumentosPublicos(documentosPayload);
-
-        if (!cancelled) {
-          setDocumentosPublicos(documentos);
-
-        }
-      } catch (fetchError) {
-        const message =
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Erro ao carregar os documentos públicos do processo.";
-        if (!cancelled) {
-          setDocumentosError(message);
-          setDocumentosPublicos([]);
-
-        }
-      } finally {
-        if (!cancelled) {
-          setDocumentosLoading(false);
-        }
-      }
-    };
-
-    fetchDocumentosPublicos();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [processoId]);
 
   const dataDistribuicaoLabel = useMemo(() => {
     if (!processo) {
@@ -1041,25 +832,7 @@ export default function VisualizarProcesso() {
     return processo.movimentacoes.slice(0, 3);
   }, [processo]);
 
-  const documentosResumo = useMemo(() => {
-    if (documentosPublicos.length === 0) {
-      return {
-        total: 0,
-        ultimaData: null,
-        ultimoTitulo: null,
-      };
-    }
 
-    const [latest] = documentosPublicos;
-
-    return {
-      total: documentosPublicos.length,
-      ultimaData:
-        latest.dataFormatada ??
-        (latest.data ? formatDateToPtBR(latest.data) : null),
-      ultimoTitulo: latest.titulo ?? null,
-    };
-  }, [documentosPublicos]);
 
   const handleGerarContrato = useCallback(() => {
     if (!clienteIdParam || !processoId) {
@@ -1127,7 +900,6 @@ export default function VisualizarProcesso() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="w-full justify-start bg-muted/50">
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
-          <TabsTrigger value="atualizacoes">Atualizações</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
 
@@ -1219,39 +991,6 @@ export default function VisualizarProcesso() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">
-                    Sincronização com o Escavador
-                  </CardTitle>
-                  <CardDescription>
-                    Consulte o histórico de importações automáticas realizadas para este processo.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <span className="flex items-center gap-1.5 text-foreground">
-                      <RefreshCw className="h-4 w-4 text-primary" />
-                      {processo.consultasApiCount > 0
-                        ? `${processo.consultasApiCount} sincronizações registradas`
-                        : "Nenhuma sincronização realizada"}
-                    </span>
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      {ultimaSincronizacaoLabel
-                        ? `Última sincronização em ${ultimaSincronizacaoLabel}`
-                        : "Nunca sincronizado"}
-                    </span>
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      {processo.movimentacoesCount} movimentações armazenadas
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Utilize a ação de sincronização na listagem de processos para importar publicações e andamentos diretamente do tribunal.
-                  </p>
-                </CardContent>
-              </Card>
 
               <Card>
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1445,52 +1184,6 @@ export default function VisualizarProcesso() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Documentos</CardTitle>
-                  <CardDescription>
-                    Acompanhe os arquivos públicos sincronizados pelo Escavador.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {documentosLoading ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-6 w-1/2 rounded-md" />
-                      <Skeleton className="h-4 w-2/3 rounded-md" />
-                    </div>
-                  ) : documentosResumo.total === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
-                      Nenhum documento público foi disponibilizado para este processo.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-3xl font-semibold text-foreground">
-                        {documentosResumo.total}
-                      </p>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Documentos sincronizados
-                      </p>
-                      {documentosResumo.ultimaData ? (
-                        <p className="text-xs text-muted-foreground">
-                          Último documento em {documentosResumo.ultimaData}
-                        </p>
-                      ) : null}
-                      {documentosResumo.ultimoTitulo ? (
-                        <p className="text-sm text-foreground">{documentosResumo.ultimoTitulo}</p>
-                      ) : null}
-                    </div>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-center"
-                    onClick={() => setActiveTab("atualizacoes")}
-                    disabled={documentosLoading}
-                  >
-                    Ver documentos
-                  </Button>
-                </CardContent>
-              </Card>
 
               <Card>
                 <CardHeader>
@@ -1559,151 +1252,20 @@ export default function VisualizarProcesso() {
           </div>
         </TabsContent>
 
-        <TabsContent value="atualizacoes" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl font-semibold">Documentos públicos</CardTitle>
-              <CardDescription>
-                Arquivos disponibilizados pelo Escavador para este processo.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {documentosLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-20 w-full rounded-xl" />
-                  <Skeleton className="h-20 w-full rounded-xl" />
-                </div>
-              ) : documentosError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Erro ao carregar documentos públicos</AlertTitle>
-                  <AlertDescription>{documentosError}</AlertDescription>
-                </Alert>
-              ) : documentosPublicos.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
-                  Nenhum documento público foi disponibilizado para este processo até o momento.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {documentosPublicos.map((documento) => {
-                    const paginasLabel =
-                      documento.paginas && documento.paginas > 0
-                        ? `${documento.paginas} ${documento.paginas === 1 ? "página" : "páginas"}`
-                        : null;
-                    const additionalLinks = Object.entries(documento.links).filter(
-                      ([, href]) => href !== documento.downloadUrl,
-                    );
-
-                    return (
-                      <div
-                        key={documento.id}
-                        className="flex flex-col gap-4 rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-base font-semibold text-foreground">
-                              {documento.titulo}
-                            </p>
-                            {documento.extensao ? (
-                              <Badge
-                                variant="outline"
-                                className="rounded-full border-primary/40 bg-primary/5 px-2.5 text-[10px] uppercase tracking-wide text-primary"
-                              >
-                                {documento.extensao}
-                              </Badge>
-                            ) : null}
-                            {documento.tipo ? (
-                              <Badge className="rounded-full bg-secondary px-2.5 text-[10px] uppercase tracking-wide text-secondary-foreground">
-                                {documento.tipo}
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                            {documento.dataFormatada ? (
-                              <span className="flex items-center gap-1.5">
-                                <Calendar className="h-3.5 w-3.5" />
-                                {documento.dataFormatada}
-                              </span>
-                            ) : null}
-                            {paginasLabel ? (
-                              <span className="flex items-center gap-1.5">
-                                <FileText className="h-3.5 w-3.5" />
-                                {paginasLabel}
-                              </span>
-                            ) : null}
-                            {documento.key ? (
-                              <span className="truncate text-xs text-muted-foreground">
-                                Chave: {documento.key}
-                              </span>
-                            ) : null}
-                          </div>
-                          {documento.descricao ? (
-                            <p className="text-sm text-muted-foreground">
-                              {documento.descricao}
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-                          {documento.downloadUrl ? (
-                            <Button asChild>
-                              <a
-                                href={documento.downloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2"
-                              >
-                                <Download className="h-4 w-4" />
-                                Baixar documento
-                              </a>
-                            </Button>
-                          ) : (
-                            <Button variant="outline" disabled className="inline-flex items-center gap-2">
-                              <Download className="h-4 w-4" />
-                              Download indisponível
-                            </Button>
-                          )}
-                          {additionalLinks.length > 0 ? (
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                              {additionalLinks.map(([key, href]) => {
-                                const label = key.replace(/_/g, " ");
-                                return (
-                                  <a
-                                    key={`${documento.id}-${key}`}
-                                    href={href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="underline-offset-2 hover:underline"
-                                  >
-                                    {label}
-                                  </a>
-                                );
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="historico" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl font-semibold">
-                Movimentações sincronizadas
-              </CardTitle>
-              <CardDescription>
-                Acompanhe as publicações e andamentos capturados automaticamente pelo Escavador.
-              </CardDescription>
-            </CardHeader>
+          <TabsContent value="historico" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold">
+                  Movimentações registradas
+                </CardTitle>
+                <CardDescription>
+                  Acompanhe as publicações e andamentos registrados para o processo.
+                </CardDescription>
+              </CardHeader>
             <CardContent className="space-y-6">
               {processo.movimentacoes.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
-                  Nenhuma movimentação foi sincronizada até o momento. Utilize a ação de sincronização na listagem de processos para importar os dados do tribunal.
+                  Nenhuma movimentação foi registrada até o momento.
                 </div>
               ) : (
                 <div className="relative">

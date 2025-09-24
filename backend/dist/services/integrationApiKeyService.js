@@ -3,12 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ASAAS_DEFAULT_API_URLS = exports.ValidationError = exports.ESCAVADOR_DEFAULT_API_URL = exports.API_KEY_ENVIRONMENTS = exports.API_KEY_PROVIDERS = void 0;
+exports.ASAAS_DEFAULT_API_URLS = exports.ValidationError = exports.API_KEY_ENVIRONMENTS = exports.API_KEY_PROVIDERS = void 0;
 const url_1 = require("url");
 const db_1 = __importDefault(require("./db"));
-exports.API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas', 'escavador'];
+exports.API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas'];
 exports.API_KEY_ENVIRONMENTS = ['producao', 'homologacao'];
-exports.ESCAVADOR_DEFAULT_API_URL = 'https://api.escavador.com/api/v2';
 class ValidationError extends Error {
     constructor(message) {
         super(message);
@@ -24,9 +23,6 @@ function getDefaultApiUrl(provider, environment) {
     if (provider === 'asaas') {
         return exports.ASAAS_DEFAULT_API_URLS[environment] ?? null;
     }
-    if (provider === 'escavador') {
-        return exports.ESCAVADOR_DEFAULT_API_URL;
-    }
     return null;
 }
 function normalizeProvider(value) {
@@ -38,7 +34,7 @@ function normalizeProvider(value) {
         throw new ValidationError('Provider is required');
     }
     if (!exports.API_KEY_PROVIDERS.includes(normalized)) {
-        throw new ValidationError('Provider must be Gemini, OpenAI, Asaas or Escavador');
+        throw new ValidationError('Provider must be Gemini, OpenAI or Asaas');
     }
     return normalized;
 }

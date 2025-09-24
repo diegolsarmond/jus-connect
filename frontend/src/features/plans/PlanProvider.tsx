@@ -14,8 +14,6 @@ import { getApiUrl } from "@/lib/api";
 export interface PlanInfo {
   id: number | null;
   nome: string | null;
-  sincronizacaoProcessosHabilitada: boolean;
-  sincronizacaoProcessosLimite: number | null;
   modules: string[];
 }
 
@@ -94,74 +92,6 @@ const toInteger = (value: unknown): number | null => {
   return null;
 };
 
-const toNonNegativeInteger = (value: unknown): number | null => {
-  const parsed = toInteger(value);
-  if (parsed === null || parsed < 0) {
-    return null;
-  }
-  return parsed;
-};
-
-const parseBooleanFlag = (value: unknown): boolean | null => {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      return null;
-    }
-
-    return value !== 0;
-  }
-
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return null;
-    }
-
-    if (
-      [
-        "1",
-        "true",
-        "t",
-        "yes",
-        "y",
-        "sim",
-        "on",
-        "habilitado",
-        "habilitada",
-        "ativo",
-        "ativa",
-      ].includes(normalized)
-    ) {
-      return true;
-    }
-
-    if (
-      [
-        "0",
-        "false",
-        "f",
-        "no",
-        "n",
-        "nao",
-        "não",
-        "off",
-        "desabilitado",
-        "desabilitada",
-        "inativo",
-        "inativa",
-      ].includes(normalized)
-    ) {
-      return false;
-    }
-  }
-
-  return null;
-};
-
 const normalizeText = (value: unknown): string | null => {
   if (typeof value !== "string") {
     return null;
@@ -223,14 +153,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         const planos = extractRows(planosJson).map((row) => {
           const id = toInteger(row.id);
           const nome = normalizeText(row.nome);
-          const syncEnabled = parseBooleanFlag(
-            row.sincronizacao_processos_habilitada ??
-              row.sincronizacaoProcessosHabilitada,
-          );
-          const syncLimit = toNonNegativeInteger(
-            row.sincronizacao_processos_limite ??
-              row.sincronizacaoProcessosLimite,
-          );
           const rawModules = Array.isArray(row.modulos)
             ? row.modulos
             : Array.isArray(row.modules)
@@ -241,8 +163,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
           return {
             id,
             nome,
-            sincronizacaoProcessosHabilitada: syncEnabled ?? true,
-            sincronizacaoProcessosLimite: syncLimit,
             modules,
           } satisfies PlanInfo;
         });
@@ -279,8 +199,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
           selectedPlan = {
             id: parsedPlanId,
             nome: planNameCandidate,
-            sincronizacaoProcessosHabilitada: true,
-            sincronizacaoProcessosLimite: null,
             modules: [],
           };
         }
