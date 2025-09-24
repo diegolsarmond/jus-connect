@@ -21,11 +21,12 @@ export default {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         quantum: {
-          deep: "#0b1f3a",
-          medium: "#1f4ed8",
-          bright: "#38bdf8",
-          light: "#c7d2fe",
-          cyan: "#22d3ee",
+          deep: "#1f2933",
+          medium: "#4b5563",
+          bright: "#9ca3af",
+          light: "#e5e7eb",
+          cyan: "#d1d5db",
+
         },
         primary: {
           DEFAULT: "hsl(var(--primary))",
@@ -80,16 +81,18 @@ export default {
       },
       backgroundImage: {
         "gradient-hero":
-          "linear-gradient(135deg, rgba(11, 31, 58, 0.98) 0%, rgba(31, 78, 216, 0.92) 55%, rgba(8, 20, 40, 0.98) 100%)",
+          "linear-gradient(135deg, rgba(26, 28, 36, 0.95) 0%, rgba(75, 85, 99, 0.9) 55%, rgba(24, 24, 27, 0.95) 100%)",
         "gradient-quantum":
-          "linear-gradient(135deg, rgba(56, 189, 248, 1) 0%, rgba(31, 78, 216, 1) 50%, rgba(15, 23, 42, 1) 100%)",
+          "linear-gradient(135deg, rgba(107, 114, 128, 1) 0%, rgba(63, 63, 70, 1) 50%, rgba(24, 24, 27, 1) 100%)",
         "gradient-card":
-          "linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(11, 31, 58, 0.02) 100%)",
+          "linear-gradient(135deg, rgba(148, 163, 184, 0.08) 0%, rgba(63, 63, 70, 0.02) 100%)",
       },
       boxShadow: {
-        quantum: "0 25px 45px -20px rgba(31, 78, 216, 0.35), 0 12px 30px -12px rgba(11, 31, 58, 0.25)",
-        glow: "0 0 25px rgba(56, 189, 248, 0.35)",
-        soft: "0 10px 30px -20px rgba(15, 23, 42, 0.35)",
+        quantum:
+          "0 25px 45px -20px rgba(75, 85, 99, 0.3), 0 12px 30px -12px rgba(31, 41, 55, 0.25)",
+        glow: "0 0 25px rgba(156, 163, 175, 0.35)",
+        soft: "0 10px 30px -20px rgba(55, 65, 81, 0.35)",
+
       },
       borderRadius: {
         lg: "var(--radius)",
