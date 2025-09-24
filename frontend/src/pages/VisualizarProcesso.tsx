@@ -1071,7 +1071,7 @@ export default function VisualizarProcesso() {
 
   if (loading && !processo) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <Skeleton className="h-10 w-32" />
           <div className="space-y-2 lg:w-1/2">
@@ -1090,7 +1090,7 @@ export default function VisualizarProcesso() {
 
   if (!processo) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Voltar
@@ -1108,7 +1108,7 @@ export default function VisualizarProcesso() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -1274,7 +1274,7 @@ export default function VisualizarProcesso() {
                 </CardHeader>
                 <CardContent>
                   {ultimasMovimentacoes.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
                       Nenhuma movimentação foi registrada até o momento.
                     </div>
                   ) : (
@@ -1401,7 +1401,7 @@ export default function VisualizarProcesso() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
                     Nenhum recurso ou desdobramento cadastrado para este processo.
                   </div>
                 </CardContent>
@@ -1415,7 +1415,7 @@ export default function VisualizarProcesso() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
                     Nenhum processo apensado foi registrado.
                   </div>
                 </CardContent>
@@ -1580,7 +1580,7 @@ export default function VisualizarProcesso() {
                   <AlertDescription>{documentosError}</AlertDescription>
                 </Alert>
               ) : documentosPublicos.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
                   Nenhum documento público foi disponibilizado para este processo até o momento.
                 </div>
               ) : (
@@ -1702,7 +1702,7 @@ export default function VisualizarProcesso() {
             </CardHeader>
             <CardContent className="space-y-6">
               {processo.movimentacoes.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
+                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
                   Nenhuma movimentação foi sincronizada até o momento. Utilize a ação de sincronização na listagem de processos para importar os dados do tribunal.
                 </div>
               ) : (

@@ -28,15 +28,15 @@ export function CRMLayout() {
   useAutoLogout(handleAutoLogout);
   const isConversationsRoute = location.pathname.startsWith("/conversas");
   const rootClassName = cn(
-    "flex w-full",
+    "flex w-full flex-col md:flex-row",
     isConversationsRoute ? "h-dvh overflow-hidden" : "min-h-screen bg-background",
   );
   const containerClassName = cn(
-    "flex-1 flex min-h-0 flex-col",
+    "flex min-h-0 w-full flex-1 flex-col md:min-w-0",
     isConversationsRoute && "h-full",
   );
   const mainClassName = cn(
-    "flex-1 flex flex-col min-h-0",
+    "flex flex-1 flex-col min-h-0 w-full min-w-0",
     isConversationsRoute ? "h-full overflow-hidden" : "overflow-auto",
   );
 

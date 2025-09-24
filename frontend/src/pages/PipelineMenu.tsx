@@ -42,7 +42,7 @@ export default function PipelineMenu() {
   }, [apiUrl]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Pipelines</h1>
@@ -70,7 +70,7 @@ export default function PipelineMenu() {
         ))}
         {menus.length === 0 && (
           <Card>
-            <CardContent className="p-6 text-center text-muted-foreground">
+            <CardContent className="p-4 sm:p-6 text-center text-muted-foreground">
               Nenhum pipeline encontrado
             </CardContent>
           </Card>

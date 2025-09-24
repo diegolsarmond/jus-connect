@@ -105,7 +105,7 @@ export default function VisualizarFornecedor() {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <p className="text-muted-foreground">Carregando…</p>
       </div>
     );
@@ -113,7 +113,7 @@ export default function VisualizarFornecedor() {
 
   if (!supplier) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <Card>
           <CardHeader>
             <CardTitle>Fornecedor não encontrado</CardTitle>
@@ -133,7 +133,7 @@ export default function VisualizarFornecedor() {
     : "bg-muted text-muted-foreground";
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">{supplier.nome}</h1>

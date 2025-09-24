@@ -2773,7 +2773,7 @@ export default function VisualizarOportunidade() {
 
   if (!opportunity) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Oportunidade</h1>
           <Button variant="outline" onClick={() => navigate(-1)}>
@@ -2857,7 +2857,7 @@ export default function VisualizarOportunidade() {
   const headerTitle = opportunity.title ?? `Proposta #${proposalNumber}`;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Header / ações (REMOVIDO Duplicar) */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
