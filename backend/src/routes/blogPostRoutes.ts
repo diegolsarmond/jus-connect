@@ -8,6 +8,7 @@ import {
 } from '../controllers/blogPostController';
 
 const router = Router();
+export const publicBlogPostRoutes = Router();
 
 /**
  * @swagger
@@ -121,7 +122,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/BlogPost'
  */
-router.get('/posts', listBlogPosts);
+publicBlogPostRoutes.get('/posts', listBlogPosts);
 
 /**
  * @swagger
