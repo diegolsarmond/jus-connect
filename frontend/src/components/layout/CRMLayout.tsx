@@ -47,7 +47,7 @@ export function CRMLayout() {
         <div className={containerClassName}>
           <Header />
           <TrialBanner />
-          <main className={mainClassName}>
+          <main className={mainClassName} data-crm-scroll-container>
             <Outlet />
           </main>
         </div>
