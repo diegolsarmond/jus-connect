@@ -4,6 +4,8 @@ const route = (path: string) => path;
 
 export const routes = {
   home: route("/"),
+  blog: route("/blog"),
+  blogPost: (slug: string) => route(`/blog/${slug}`),
   dashboard: route("/app"),
   login: route("/login"),
   register: route("/register"),
@@ -22,6 +24,7 @@ export const routes = {
     newSubscription: route(buildAdminPath("subscriptions", "new")),
     users: route(buildAdminPath("users")),
     newUser: route(buildAdminPath("users", "new")),
+    blog: route(buildAdminPath("blog")),
     analytics: route(buildAdminPath("analytics")),
     support: route(buildAdminPath("support")),
     logs: route(buildAdminPath("logs")),
@@ -51,6 +54,7 @@ export const adminRelativePath = {
   newSubscription: "subscriptions/new",
   users: "users",
   newUser: "users/new",
+  blog: "blog",
   analytics: "analytics",
   support: "support",
   logs: "logs",
