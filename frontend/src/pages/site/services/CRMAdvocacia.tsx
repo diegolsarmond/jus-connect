@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -8,9 +10,17 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious
+} from "@/components/ui/carousel";
 import {
   ArrowRight,
   CalendarClock,
@@ -27,6 +37,8 @@ import {
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchPlanOptions, formatPlanPriceLabel, getComparableMonthlyPrice, type PlanOption } from "@/features/plans/api";
+import { routes } from "@/config/routes";
+
 
 const getGtag = () => {
   if (typeof window === "undefined") {
@@ -236,14 +248,31 @@ const CRMAdvocacia = () => {
     return sorted[0]?.plan.id ?? null;
   }, [availablePlans]);
 
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }),
+    [],
+  );
+
+
   const normalizedPlans = useMemo(
     () =>
       availablePlans.map((plan) => ({
         option: plan,
         priceLabel: formatPlanPriceLabel(plan),
         featured: highlightedPlanId !== null && plan.id === highlightedPlanId,
+        monthlyLabel:
+          typeof plan.monthlyPrice === "number"
+            ? currencyFormatter.format(plan.monthlyPrice)
+            : null,
+        annualLabel:
+          typeof plan.annualPrice === "number" ? currencyFormatter.format(plan.annualPrice) : null,
       })),
-    [availablePlans, highlightedPlanId],
+    [availablePlans, highlightedPlanId, currencyFormatter],
+
   );
 
   const implementationSteps = [
@@ -504,9 +533,10 @@ const CRMAdvocacia = () => {
               Escolha o modelo que melhor se adapta à sua estrutura e conte com nossa equipe para personalizar fluxos e integrações.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {isPlansLoading ? (
-              Array.from({ length: 3 }).map((_, index) => (
+          {isPlansLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {Array.from({ length: 3 }).map((_, index) => (
+
                 <Card key={`plan-skeleton-${index}`} className="border-quantum-light/10 bg-background/50">
                   <CardHeader className="space-y-3">
                     <Skeleton className="h-6 w-1/2" />
@@ -519,75 +549,114 @@ const CRMAdvocacia = () => {
                     <Skeleton className="h-10 w-full" />
                   </CardContent>
                 </Card>
-              ))
-            ) : plansError ? (
-              <Card className="md:col-span-3 border-destructive/30 bg-destructive/10 text-destructive">
-                <CardHeader>
-                  <CardTitle className="text-xl">Planos indisponíveis</CardTitle>
-                  <CardDescription className="text-sm text-destructive">
-                    {plansError}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            ) : normalizedPlans.length > 0 ? (
-              normalizedPlans.map((plan) => {
-                const planSource = `plan_${plan.option.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
-                return (
-                  <Card
-                    key={plan.option.id}
-                    className={`relative overflow-hidden border-quantum-light/20 bg-background/70 backdrop-blur hover:border-quantum-bright/40 transition-all duration-300 ${
-                      plan.featured ? "shadow-quantum ring-2 ring-quantum-bright" : ""
-                    }`}
-                  >
-                    {plan.featured && (
-                      <div className="absolute top-4 right-4 px-3 py-1 text-xs font-semibold uppercase tracking-wide bg-gradient-quantum text-white rounded-full">
-                        Mais escolhido
-                      </div>
-                    )}
-                    <CardHeader className="space-y-3">
-                      <CardTitle className="text-2xl">{plan.option.name}</CardTitle>
-                      <p className="text-quantum-bright text-xl font-semibold">{plan.priceLabel}</p>
-                      {plan.option.description && (
-                        <CardDescription className="text-muted-foreground leading-relaxed">
-                          {plan.option.description}
-                        </CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="rounded-xl border border-quantum-light/20 bg-background/60 p-4">
-                        <p className="text-sm text-muted-foreground">
-                          Compare os recursos completos durante uma apresentação personalizada com o nosso time.
-                        </p>
-                      </div>
-                      <Button
-                        variant={plan.featured ? "quantum" : "outline_quantum"}
-                        size="lg"
-                        className="w-full track-link"
-                        onClick={() => handleDemoClick(planSource)}
+              ))}
+            </div>
+          ) : plansError ? (
+            <Card className="border-destructive/30 bg-destructive/10 text-destructive">
+              <CardHeader>
+                <CardTitle className="text-xl">Planos indisponíveis</CardTitle>
+                <CardDescription className="text-sm text-destructive">{plansError}</CardDescription>
+              </CardHeader>
+            </Card>
+          ) : normalizedPlans.length > 0 ? (
+            <Carousel className="relative">
+              <CarouselContent>
+                {normalizedPlans.map((plan) => {
+                  const planSource = `plan_${plan.option.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+                  return (
+                    <CarouselItem key={plan.option.id} className="md:basis-1/2 lg:basis-1/3">
+                      <Card
+                        className={`relative flex h-full flex-col border-quantum-light/20 bg-background/70 backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:border-quantum-bright/40 ${
+                          plan.featured ? "shadow-quantum ring-2 ring-quantum-bright" : ""
+                        }`}
                       >
-                        Falar com consultor
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            ) : (
-              <Card className="md:col-span-3 border-quantum-light/20 bg-background/70">
-                <CardHeader>
-                  <CardTitle className="text-xl">Planos sob medida</CardTitle>
-                  <CardDescription className="text-sm text-muted-foreground">
-                    Nenhum plano pôde ser carregado no momento. Converse com nossos especialistas para receber uma proposta
-                    personalizada para o seu escritório.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("plan_contact") }>
-                    Falar com consultor
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                        {plan.featured && (
+                          <div className="absolute top-4 right-4 rounded-full bg-gradient-quantum px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                            Mais escolhido
+                          </div>
+                        )}
+                        <CardHeader className="space-y-4">
+                          <div className="space-y-2">
+                            <CardTitle className="text-2xl">{plan.option.name}</CardTitle>
+                            {plan.option.description && (
+                              <CardDescription className="text-muted-foreground leading-relaxed">
+                                {plan.option.description}
+                              </CardDescription>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            {plan.monthlyLabel && (
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-3xl font-bold text-quantum-bright">
+                                  {plan.monthlyLabel}
+                                </span>
+                                <span className="text-sm text-muted-foreground">/mês</span>
+                              </div>
+                            )}
+                            {plan.annualLabel && (
+                              <p className="text-sm text-muted-foreground">
+                                Pagamento anual: {plan.annualLabel} / ano
+                              </p>
+                            )}
+                            {!plan.monthlyLabel && !plan.annualLabel && (
+                              <p className="text-sm text-muted-foreground">Investimento sob consulta.</p>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="flex-1 space-y-3">
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            Inicie agora com 14 dias de acesso completo e suporte especializado para configurar o CRM do seu
+                            escritório.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Cancele quando quiser durante o período de testes.
+                          </p>
+                        </CardContent>
+                        <CardFooter className="mt-auto flex flex-col gap-3">
+                          <Button asChild variant="quantum" size="lg" className="w-full track-link">
+                            <Link
+                              to={`${routes.register}?plan=${plan.option.id}`}
+                              className="flex items-center justify-center gap-2"
+                            >
+                              Quero experimentar grátis por 14 dias
+                              <ArrowRight className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="outline_quantum"
+                            size="lg"
+                            className="w-full track-link"
+                            onClick={() => handleDemoClick(planSource)}
+                          >
+                            Falar com consultor
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    </CarouselItem>
+                  );
+                })}
+              </CarouselContent>
+              <CarouselPrevious className="hidden md:flex" />
+              <CarouselNext className="hidden md:flex" />
+            </Carousel>
+          ) : (
+            <Card className="border-quantum-light/20 bg-background/70">
+              <CardHeader>
+                <CardTitle className="text-xl">Planos sob medida</CardTitle>
+                <CardDescription className="text-sm text-muted-foreground">
+                  Nenhum plano pôde ser carregado no momento. Converse com nossos especialistas para receber uma proposta
+                  personalizada para o seu escritório.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("plan_contact")}>
+                  Falar com consultor
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+
         </div>
       </section>
 

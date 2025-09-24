@@ -393,9 +393,57 @@ const shouldFallbackToDefaultPlan = (error: unknown): boolean => {
   return false;
 };
 
-const fetchDefaultPlanDetails = async (
-  client: PoolClient
+class PlanNotFoundError extends Error {
+  constructor(message?: string) {
+    super(message ?? 'Plano selecionado não encontrado.');
+    this.name = 'PlanNotFoundError';
+  }
+}
+
+const fetchPlanDetails = async (
+  client: PoolClient,
+  requestedPlanId: number | null
 ): Promise<{ planId: number | null; modules: string[] }> => {
+  if (requestedPlanId != null) {
+    try {
+      const planResult = await client.query(
+        `SELECT id, modulos
+           FROM public.planos
+          WHERE id = $1
+            AND ativo IS DISTINCT FROM FALSE
+          LIMIT 1`,
+        [requestedPlanId]
+      );
+
+      if (planResult.rowCount === 0) {
+        throw new PlanNotFoundError();
+      }
+
+      const planRow = planResult.rows[0] as { id?: unknown; modulos?: unknown };
+      const planId = parseInteger(planRow.id);
+      const modules = sanitizePlanModules(planRow.modulos);
+
+      return {
+        planId: planId ?? requestedPlanId,
+        modules: modules.length > 0 ? modules : DEFAULT_MODULE_IDS,
+      };
+    } catch (error) {
+      if (error instanceof PlanNotFoundError) {
+        throw error;
+      }
+
+      if (shouldFallbackToDefaultPlan(error)) {
+        console.warn(
+          'Tabela de planos indisponível durante cadastro. Utilizando módulos padrão.',
+          error
+        );
+        return { planId: null, modules: DEFAULT_MODULE_IDS };
+      }
+
+      throw error;
+    }
+  }
+
   try {
     const result = await client.query(
       `SELECT id, modulos
@@ -435,6 +483,11 @@ export const register = async (req: Request, res: Response) => {
   const phoneValueRaw = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
   const phoneDigits = phoneValueRaw.replace(/\D+/g, '');
   const phoneValue = phoneValueRaw ? phoneValueRaw : null;
+  const rawPlanId =
+    (req.body?.planId ?? req.body?.plan_id ?? req.body?.plan) as unknown;
+  const planSelectionProvided =
+    rawPlanId !== undefined && rawPlanId !== null && String(rawPlanId).trim().length > 0;
+  const requestedPlanId = parseOptionalInteger(rawPlanId);
 
   if (!nameValue) {
     res.status(400).json({ error: 'O nome completo é obrigatório.' });
@@ -443,6 +496,11 @@ export const register = async (req: Request, res: Response) => {
 
   if (!companyValue) {
     res.status(400).json({ error: 'O nome da empresa é obrigatório.' });
+    return;
+  }
+
+  if (!planSelectionProvided) {
+    res.status(400).json({ error: 'Selecione um plano para iniciar o teste gratuito.' });
     return;
   }
 
@@ -467,6 +525,11 @@ export const register = async (req: Request, res: Response) => {
 
   if (phoneValue && phoneDigits.length > 0 && phoneDigits.length < 10) {
     res.status(400).json({ error: 'Informe um telefone válido com DDD.' });
+    return;
+  }
+
+  if (planSelectionProvided && requestedPlanId == null) {
+    res.status(400).json({ error: 'Plano selecionado inválido.' });
     return;
   }
 
@@ -502,12 +565,28 @@ export const register = async (req: Request, res: Response) => {
         return;
       }
 
-      const { planId, modules } = await fetchDefaultPlanDetails(client);
+      let resolvedPlanId: number | null = null;
+      let modules: string[] = DEFAULT_MODULE_IDS;
+
+      try {
+        const planResolution = await fetchPlanDetails(client, requestedPlanId);
+        resolvedPlanId = planResolution.planId;
+        modules = planResolution.modules;
+      } catch (planError) {
+        if (planError instanceof PlanNotFoundError) {
+          await client.query('ROLLBACK');
+          transactionActive = false;
+          res.status(400).json({ error: 'Plano selecionado inválido.' });
+          return;
+        }
+
+        throw planError;
+      }
 
       let defaultCadence: SubscriptionCadence = 'monthly';
-      if (planId != null) {
+      if (resolvedPlanId != null) {
         try {
-          defaultCadence = await resolvePlanCadence(planId, null);
+          defaultCadence = await resolvePlanCadence(resolvedPlanId, null);
         } catch (cadenceError) {
           console.warn('Falha ao determinar recorrência padrão do plano durante cadastro.', cadenceError);
         }
@@ -547,7 +626,15 @@ export const register = async (req: Request, res: Response) => {
           typeof row.nome_empresa === 'string'
             ? row.nome_empresa.trim() || companyValue
             : companyValue;
-        companyPlanId = parseInteger(row.plano);
+        companyPlanId = resolvedPlanId ?? parseInteger(row.plano);
+
+        if (resolvedPlanId != null && companyPlanId !== resolvedPlanId) {
+          await client.query('UPDATE public.empresas SET plano = $1 WHERE id = $2', [
+            resolvedPlanId,
+            companyId,
+          ]);
+          companyPlanId = resolvedPlanId;
+        }
       } else {
         const insertResult = await client.query(
           `INSERT INTO public.empresas (
@@ -573,7 +660,7 @@ export const register = async (req: Request, res: Response) => {
             null,
             phoneValue,
             normalizedEmail,
-            planId,
+            resolvedPlanId,
             null,
             true,
             trialStartedAt,
@@ -607,7 +694,7 @@ export const register = async (req: Request, res: Response) => {
           typeof inserted.nome_empresa === 'string'
             ? inserted.nome_empresa.trim() || companyValue
             : companyValue;
-        companyPlanId = planId ?? parseInteger(inserted.plano);
+        companyPlanId = resolvedPlanId ?? parseInteger(inserted.plano);
         createdCompany = true;
       }
 
