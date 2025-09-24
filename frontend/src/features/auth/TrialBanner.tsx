@@ -153,6 +153,7 @@ export function TrialBanner({ className }: TrialBannerProps) {
       variant="destructive"
       className={cn(
         "relative flex w-full shrink-0 flex-col gap-4 border-b border-t-0 border-destructive/40 bg-destructive/10 px-6 py-4 text-destructive dark:text-destructive-foreground sm:flex-row sm:items-center",
+
         className,
       )}
     >
@@ -175,6 +176,7 @@ export function TrialBanner({ className }: TrialBannerProps) {
           variant="secondary"
           className="bg-background text-destructive hover:bg-background/90 dark:bg-muted dark:text-destructive-foreground dark:hover:bg-muted/90"
         >
+
           <Link to={routes.meuPlano}>Conhecer planos</Link>
         </Button>
         <Button
