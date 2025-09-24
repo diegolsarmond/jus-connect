@@ -20,6 +20,7 @@ import {
   HeadphonesIcon,
   Loader2,
   Settings,
+  Newspaper,
 } from "lucide-react";
 import { HeaderActions } from "@/components/layout/HeaderActions";
 
@@ -50,6 +51,11 @@ const navigation = [
     name: "Usuários",
     href: routes.admin.users,
     icon: Users,
+  },
+  {
+    name: "Blog",
+    href: routes.admin.blog,
+    icon: Newspaper,
   },
   {
     name: "Relatórios",
