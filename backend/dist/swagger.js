@@ -8,7 +8,7 @@ const swaggerOptions = {
     definition: {
         openapi: '3.0.0',
         info: {
-            title: 'Jus Connect API',
+            title: 'Quantum JUD API',
             version: '1.0.0',
         },
         components: {

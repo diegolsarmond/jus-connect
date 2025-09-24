@@ -12,7 +12,7 @@ interface PasswordResetEmailContent {
   text: string;
 }
 
-const DEFAULT_SYSTEM_NAME = process.env.SYSTEM_NAME || 'Jus Connect';
+const DEFAULT_SYSTEM_NAME = process.env.SYSTEM_NAME || 'Quantum JUD';
 
 function formatExpiration(date: Date): string {
   return new Intl.DateTimeFormat('pt-BR', {

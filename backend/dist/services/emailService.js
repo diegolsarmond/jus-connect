@@ -29,7 +29,7 @@ const DEFAULT_SMTP_CONFIG = {
         pass: process.env.SMTP_PASSWORD || process.env.SMTP_PASS || 'C@104rm0nd1994',
     },
 };
-const systemName = process.env.SYSTEM_NAME || 'Jus Connect';
+const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
 const defaultFromAddress = process.env.SMTP_FROM || DEFAULT_SMTP_CONFIG.auth.user;
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 const CRLF = '\r\n';

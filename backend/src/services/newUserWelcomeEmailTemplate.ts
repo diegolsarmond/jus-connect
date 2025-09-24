@@ -2,7 +2,7 @@ import { escapeHtml } from '../utils/html';
 
 const DEFAULT_FRONTEND_BASE_URL =
   process.env.FRONTEND_BASE_URL || 'https://quantumtecnologia.com.br';
-const SYSTEM_NAME = process.env.SYSTEM_NAME || 'Jus Connect';
+const SYSTEM_NAME = process.env.SYSTEM_NAME || 'Quantum JUD';
 
 export interface NewUserWelcomeEmailContent {
   subject: string;
