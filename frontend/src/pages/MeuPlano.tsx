@@ -151,20 +151,103 @@ function toNumber(value: unknown): number | null {
 }
 
 function parseRecursos(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => (typeof item === "string" ? item.trim() : ""))
-      .filter(Boolean);
-  }
+  const seen = new Set<string>();
+  const seenObjects = new Set<object>();
+  const result: string[] = [];
 
-  if (typeof value === "string") {
-    return value
+  const add = (entry: string) => {
+    const normalized = entry.trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  };
+
+  const handleString = (input: string) => {
+    input
       .split(/[\n;,]+/)
       .map((item) => item.trim())
-      .filter(Boolean);
-  }
+      .filter(Boolean)
+      .forEach(add);
+  };
 
-  return [];
+  const visit = (input: unknown): void => {
+    if (input == null) {
+      return;
+    }
+
+    if (typeof input === "string") {
+      handleString(input);
+      return;
+    }
+
+    if (typeof input === "number" || typeof input === "boolean") {
+      add(String(input));
+      return;
+    }
+
+    if (Array.isArray(input)) {
+      input.forEach(visit);
+      return;
+    }
+
+    if (typeof input === "object") {
+      if (seenObjects.has(input as object)) {
+        return;
+      }
+
+      seenObjects.add(input as object);
+
+      const record = input as Record<string, unknown>;
+      const candidateKeys = [
+        "disponiveis",
+        "disponiveisPersonalizados",
+        "available",
+        "availableFeatures",
+        "inclusos",
+        "incluidos",
+        "lista",
+        "items",
+        "features",
+        "recursosDisponiveis",
+        "recursos_disponiveis",
+        "recursos",
+        "modulos",
+        "modules",
+        "rows",
+        "data",
+        "values",
+        "value",
+      ];
+
+      const excludedPattern = /(indispon|unavailable|exclu|negad)/i;
+      let matchedCandidate = false;
+
+      for (const key of candidateKeys) {
+        if (key in record) {
+          matchedCandidate = true;
+          visit(record[key]);
+        }
+      }
+
+      if (!matchedCandidate) {
+        for (const [key, entry] of Object.entries(record)) {
+          if (excludedPattern.test(key)) {
+            continue;
+          }
+
+          if (/^\d+$/.test(key)) {
+            visit(entry);
+          }
+        }
+      }
+    }
+  };
+
+  visit(value);
+
+  return result;
 }
 
 function parseDate(value: unknown): Date | null {
@@ -535,7 +618,20 @@ function MeuPlanoContent() {
                 : typeof raw.detalhes === "string"
                   ? raw.detalhes.trim()
                   : null;
-            const recursos = parseRecursos(raw.recursos);
+            const recursos = parseRecursos([
+              raw.recursos,
+              raw.recursosDisponiveis,
+              raw.recursos_disponiveis,
+              raw.features,
+              raw.items,
+              raw.lista,
+              raw.modules,
+              raw.modulos,
+              raw.recursos_personalizados,
+              raw.recursosPersonalizados,
+              raw.customResources,
+              raw.personalizados,
+            ]);
             const dataCadastro = parseDate((raw.datacadastro ?? raw.data_cadastro) as unknown);
 
             const rawValorMensal = (raw.valor_mensal ?? raw.valorMensal ?? raw.preco_mensal ?? raw.precoMensal) as unknown;
