@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { getApiBaseUrl } from "./api";
+import { getApiUrl } from "./api";
 
 const adminBaseUrlFromEnv = (
   import.meta.env.VITE_ADMIN_API_BASE_URL as string | undefined
@@ -9,8 +9,7 @@ const adminBaseUrlFromEnv = (
 const ensureBaseUrl = () => {
   const baseUrl = adminBaseUrlFromEnv?.length
     ? adminBaseUrlFromEnv
-    : getApiBaseUrl();
-
+    : getApiUrl();
 
   return baseUrl.replace(/\/+$/, "");
 };
