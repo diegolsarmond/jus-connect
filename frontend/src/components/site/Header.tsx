@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, type To, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 
 import quantumLogo from "@/assets/quantum-logo.png";
@@ -28,7 +28,8 @@ const NAV_ITEMS: HeaderNavItem[] = [
   { label: "Contato", href: "#contato" },
 ];
 
-const resolveNavLink = (href: string) => (href.startsWith("#") ? `/${href}` : href);
+const resolveNavLink = (href: string): To =>
+  href.startsWith("#") ? { pathname: routes.home, hash: href } : href;
 
 const Header = () => {
   const location = useLocation();
@@ -68,7 +69,7 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/50">
       <div className="container flex h-16 items-center justify-between gap-6 px-4">
-        <Link to="/" className="flex items-center gap-3" onClick={closeMenu}>
+        <Link to={routes.home} className="flex items-center gap-3" onClick={closeMenu}>
           <img src={quantumLogo} alt="Quantum Tecnologia" className="h-8 w-8" />
           <span className="font-semibold tracking-tight text-lg text-foreground">Quantum Tecnologia</span>
         </Link>
@@ -139,8 +140,12 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-3">
-          <Button asChild variant="ghost" className="hidden text-sm font-medium text-muted-foreground hover:text-foreground md:inline-flex">
-            <Link to="/#contato">Falar com especialista</Link>
+          <Button
+            asChild
+            variant="ghost"
+            className="hidden text-sm font-medium text-muted-foreground hover:text-foreground md:inline-flex"
+          >
+            <Link to={{ pathname: routes.home, hash: "#contato" }}>Falar com especialista</Link>
           </Button>
           <Button asChild className="text-sm font-semibold">
             <Link to={routes.login}>Entrar</Link>

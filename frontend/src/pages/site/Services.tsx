@@ -18,6 +18,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildAppPath } from "@/config/app-config";
 
 const services = [
   {
@@ -301,7 +302,12 @@ const ServicesPage = () => {
                   ))}
                 </div>
                 <div className="mt-10 flex flex-wrap gap-4">
-                  <Button variant="quantum" size="xl" className="track-link" onClick={() => (window.location.href = "/#contato")}> 
+                  <Button
+                    variant="quantum"
+                    size="xl"
+                    className="track-link"
+                    onClick={() => window.location.assign(buildAppPath("#contato"))}
+                  >
                     Planejar projeto
                   </Button>
                   <Button variant="outline_quantum" size="xl" className="track-link" asChild>

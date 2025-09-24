@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getGtag } from "@/lib/gtag";
+import { buildAppPath } from "@/config/app-config";
 
 const AssistenteIA = () => {
   const { data: service, isLoading: isServiceLoading, isError: isServiceError } = useServiceBySlug("assistente-ia");
@@ -267,7 +268,7 @@ const AssistenteIA = () => {
                       service: 'assistente_ia',
                       source: 'cta_section',
                     });
-                    window.location.href = '/#contato';
+                    window.location.assign(buildAppPath("#contato"));
                   }}
                 >
                   Solicitar Orçamento

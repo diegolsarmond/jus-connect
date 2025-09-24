@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { adminRelativePath, routes } from "@/config/routes";
+import { appConfig } from "@/config/app-config";
 import Landing from "./pages/operator/Landing";
 import Clientes from "./pages/operator/Clientes";
 import NovoCliente from "./pages/operator/NovoCliente";
@@ -106,6 +107,7 @@ const AdminSettingsCategories = lazy(() => import("./pages/administrator/setting
 const AdminNotFound = lazy(() => import("./pages/administrator/NotFound"));
 
 const queryClient = new QueryClient();
+const routerBasename = appConfig.basePath === "/" ? undefined : appConfig.basePath;
 
 const withModule = (moduleId: string | string[], element: ReactElement) => (
   <RequireModule module={moduleId}>{element}</RequireModule>
@@ -117,7 +119,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={routerBasename}>
           <Suspense fallback={<LandingFallback />}>
             <Routes>
               <Route path={routes.home} element={<SiteIndex />} />
