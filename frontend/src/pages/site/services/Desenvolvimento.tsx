@@ -214,28 +214,6 @@ const Desenvolvimento = () => {
       icon: LifeBuoy,
       title: "Suporte orientado a SLAs",
       description: "Runbooks, gestão de incidentes e squads de sustentação para evolução contínua.",
-  ];
-
-  const capabilityHighlights = [
-    {
-      icon: Code2,
-      title: "Produtos digitais completos",
-      description: "Concepção ponta a ponta de plataformas, portais e aplicativos com foco em experiência e resultado.",
-      bullets: [
-        "Workshops de discovery e mapeamento de processos",
-        "UX/UI centrado no usuário com design system reutilizável",
-        "Arquitetura orientada a microsserviços e APIs escaláveis",
-      ],
-    },
-    {
-      icon: Puzzle,
-      title: "Integrações e modernização",
-      description: "Modernize sistemas legados, conecte plataformas e automatize operações críticas do negócio.",
-      bullets: [
-        "Integração com ERPs, CRMs, gateways e plataformas proprietárias",
-        "Estratégias de refatoração gradual sem paradas na operação",
-        "APIs, mensageria e automações que conectam toda a jornada",
-      ],
     },
   ];
 
@@ -261,15 +239,6 @@ const Desenvolvimento = () => {
       ],
     },
     {
-      icon: Sparkles,
-      title: "Inovação guiada por dados",
-      description: "Implante produtos digitais inteligentes com analítica, automação e inteligência artificial aplicada.",
-      bullets: [
-        "Prototipação rápida para validar hipóteses de negócio",
-        "Dashboards e relatórios com dados em tempo real",
-        "Machine Learning e IA embarcada para personalizar experiências",
-      ],
-    },
       icon: Sparkles,
       title: "Inovação guiada por dados",
       description: "Implante produtos digitais inteligentes com analítica, automação e inteligência artificial aplicada.",
@@ -478,7 +447,7 @@ const Desenvolvimento = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground">
       <Header />
 
       {/* Hero Section */}
@@ -568,6 +537,9 @@ const Desenvolvimento = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+
           <div className="max-w-5xl mx-auto text-center text-white">
             <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/20 text-sm font-medium mb-6 animate-pulse-glow">
               <BadgeCheck className="h-4 w-4 mr-2" />
@@ -640,7 +612,7 @@ const Desenvolvimento = () => {
               <h2 className="mt-4 text-4xl md:text-5xl font-bold leading-tight">
                 Do entendimento profundo do negócio ao roadmap acionável
               </h2>
-              <p className="mt-4 text-lg text-muted-foreground max-w-2xl">
+              <p className="mt-4 text-lg text-foreground/80 max-w-2xl">
                 Conectamos objetivos estratégicos, jornadas de usuários e capacidade técnica para desenhar produtos digitais que geram impacto mensurável desde o primeiro release.
               </p>
 
@@ -655,7 +627,7 @@ const Desenvolvimento = () => {
                     </div>
                     <div>
                       <h3 className="text-base font-semibold text-foreground">{item.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{item.description}</p>
                     </div>
                   </div>
                 ))}
@@ -711,7 +683,7 @@ const Desenvolvimento = () => {
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
               Como a nossa Fábrica de Software entrega valor
             </h2>
-            <p className="text-xl text-muted-foreground max-w-4xl mx-auto">
+            <p className="text-xl text-foreground/80 max-w-4xl mx-auto">
               Times multidisciplinares conectados ao seu negócio para construir produtos digitais relevantes com previsibilidade e qualidade.
             </p>
           </div>
@@ -728,12 +700,12 @@ const Desenvolvimento = () => {
                     <capability.icon className="h-6 w-6 text-white" />
                   </div>
                   <CardTitle className="text-xl group-hover:text-quantum-bright transition-colors">{capability.title}</CardTitle>
-                  <CardDescription className="text-muted-foreground">{capability.description}</CardDescription>
+                  <CardDescription className="text-foreground/80">{capability.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
                     {capability.bullets.map((bullet) => (
-                      <li key={bullet} className="flex items-start space-x-2 text-sm text-muted-foreground">
+                      <li key={bullet} className="flex items-start space-x-2 text-sm text-foreground/80">
                         <ArrowRight className="h-4 w-4 text-quantum-bright mt-1 flex-shrink-0" />
                         <span>{bullet}</span>
                       </li>
@@ -788,7 +760,7 @@ const Desenvolvimento = () => {
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
               Produtos e plataformas que desenvolvemos
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            <p className="text-xl text-foreground/80 max-w-3xl mx-auto">
               Construímos soluções completas para diferentes segmentos, sempre com foco em gerar impacto real nos resultados.
             </p>
           </div>
@@ -826,14 +798,14 @@ const Desenvolvimento = () => {
                 >
                   <CardHeader>
                     <CardTitle className="text-xl group-hover:text-quantum-bright transition-colors">{solution.title}</CardTitle>
-                    <CardDescription className="text-muted-foreground">{solution.description}</CardDescription>
+                    <CardDescription className="text-foreground/80">{solution.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
                       {solution.features.map((feature) => (
                         <li key={feature} className="flex items-center space-x-2">
                           <CheckCircle className="h-4 w-4 text-quantum-bright flex-shrink-0" />
-                          <span className="text-sm text-muted-foreground">{feature}</span>
+                          <span className="text-sm text-foreground/80">{feature}</span>
                         </li>
                       ))}
                     </ul>
@@ -853,7 +825,7 @@ const Desenvolvimento = () => {
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
               Resultados que transformam operações
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            <p className="text-xl text-foreground/80 max-w-3xl mx-auto">
               Conheça alguns exemplos de plataformas entregues pela Quantum, combinando design centrado no usuário, integrações complexas e métricas de negócio.
             </p>
           </div>
@@ -877,10 +849,10 @@ const Desenvolvimento = () => {
                 </div>
                 <CardHeader className="space-y-2">
                   <CardTitle className="text-xl">{caseStudy.title}</CardTitle>
-                  <CardDescription className="text-muted-foreground">{caseStudy.result}</CardDescription>
+                  <CardDescription className="text-foreground/80">{caseStudy.result}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ul className="space-y-2 text-sm text-muted-foreground">
+                  <ul className="space-y-2 text-sm text-foreground/80">
                     {caseStudy.metrics.map((metric) => (
                       <li key={metric} className="flex items-start gap-2">
                         <CheckCircle className="h-4 w-4 text-quantum-bright mt-0.5 flex-shrink-0" />
@@ -903,7 +875,7 @@ const Desenvolvimento = () => {
 
               Modelos de parceria sob medida
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            <p className="text-xl text-foreground/80 max-w-3xl mx-auto">
               Escolha a abordagem que melhor se adapta ao momento da sua organização. Ajustamos processos, squad e governança conforme a sua necessidade.
             </p>
           </div>
@@ -919,12 +891,12 @@ const Desenvolvimento = () => {
                     <model.icon className="h-6 w-6 text-white" />
                   </div>
                   <CardTitle className="text-xl group-hover:text-quantum-bright transition-colors">{model.title}</CardTitle>
-                  <CardDescription className="text-muted-foreground">{model.description}</CardDescription>
+                  <CardDescription className="text-foreground/80">{model.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
                     {model.highlights.map((highlight) => (
-                      <li key={highlight} className="flex items-start space-x-2 text-sm text-muted-foreground">
+                      <li key={highlight} className="flex items-start space-x-2 text-sm text-foreground/80">
                         <ArrowRight className="h-4 w-4 text-quantum-bright mt-1 flex-shrink-0" />
                         <span>{highlight}</span>
                       </li>
@@ -944,7 +916,7 @@ const Desenvolvimento = () => {
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
               Aceleradores para evoluir continuamente
             </h2>
-            <p className="text-xl text-muted-foreground max-w-4xl mx-auto">
+            <p className="text-xl text-foreground/80 max-w-4xl mx-auto">
               Frameworks, ferramentas e times especializados que potencializam a entrega desde o discovery até a operação do produto.
             </p>
           </div>
@@ -960,10 +932,10 @@ const Desenvolvimento = () => {
                     <service.icon className="h-6 w-6 text-white" />
                   </div>
                   <CardTitle className="text-xl">{service.title}</CardTitle>
-                  <CardDescription className="text-muted-foreground">{service.description}</CardDescription>
+                  <CardDescription className="text-foreground/80">{service.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ul className="space-y-3 text-sm text-muted-foreground">
+                  <ul className="space-y-3 text-sm text-foreground/80">
                     {service.items.map((item) => (
                       <li key={item} className="flex items-start gap-2">
                         <ArrowRight className="mt-1 h-4 w-4 text-quantum-bright flex-shrink-0" />
@@ -986,7 +958,7 @@ const Desenvolvimento = () => {
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
               Metodologia ágil e colaborativa
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            <p className="text-xl text-foreground/80 max-w-3xl mx-auto">
               Da descoberta ao go-live, conduzimos cada etapa com transparência, governança e foco no valor entregue ao usuário final.
             </p>
           </div>
@@ -1002,8 +974,8 @@ const Desenvolvimento = () => {
                     {item.step}
                   </div>
                   <h3 className="font-semibold mb-2 group-hover:text-quantum-bright transition-colors">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-3">{item.description}</p>
-                  <p className="text-sm text-muted-foreground/80">{item.detail}</p>
+                  <p className="text-sm text-foreground/80 mb-3">{item.description}</p>
+                  <p className="text-sm text-foreground/70">{item.detail}</p>
                 </CardContent>
                 {index < methodology.length - 1 && (
                   <div className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2">
@@ -1018,7 +990,7 @@ const Desenvolvimento = () => {
             <Card className="bg-gradient-card border-quantum-light/20">
               <CardHeader>
                 <CardTitle className="text-2xl">Diferenciais da nossa operação</CardTitle>
-                <CardDescription className="text-muted-foreground">
+                <CardDescription className="text-foreground/80">
                   Estrutura, processos e governança pensados para garantir segurança, qualidade e escalabilidade em cada projeto.
                 </CardDescription>
               </CardHeader>
@@ -1029,7 +1001,7 @@ const Desenvolvimento = () => {
                       <item.icon className="h-5 w-5 text-quantum-bright flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="font-medium text-foreground">{item.title}</p>
-                        <p className="text-sm text-muted-foreground">{item.description}</p>
+                        <p className="text-sm text-foreground/80">{item.description}</p>
                       </div>
                     </li>
                   ))}
@@ -1041,7 +1013,7 @@ const Desenvolvimento = () => {
               <Card className="bg-gradient-card border-quantum-light/20">
                 <CardHeader>
                   <CardTitle className="text-xl">Segmentos em que atuamos</CardTitle>
-                  <CardDescription className="text-muted-foreground">
+                  <CardDescription className="text-foreground/80">
                     Conhecimento acumulado em setores regulados e operações complexas para acelerar a curva de aprendizado.
                   </CardDescription>
                 </CardHeader>
@@ -1050,7 +1022,7 @@ const Desenvolvimento = () => {
                     {segments.map((segment) => (
                       <li key={segment} className="flex items-center space-x-2">
                         <Globe className="h-4 w-4 text-quantum-bright flex-shrink-0" />
-                        <span className="text-sm text-muted-foreground">{segment}</span>
+                        <span className="text-sm text-foreground/80">{segment}</span>
                       </li>
                     ))}
                   </ul>
@@ -1060,7 +1032,7 @@ const Desenvolvimento = () => {
               <Card className="bg-gradient-card border-quantum-light/20">
                 <CardHeader>
                   <CardTitle className="text-xl">Qualidade e sustentação contínua</CardTitle>
-                  <CardDescription className="text-muted-foreground">
+                  <CardDescription className="text-foreground/80">
                     Garantimos estabilidade, segurança e evolução permanente com processos e tecnologia dedicados.
                   </CardDescription>
                 </CardHeader>
@@ -1073,7 +1045,7 @@ const Desenvolvimento = () => {
                         </div>
                         <div>
                           <p className="font-medium text-foreground">{item.title}</p>
-                          <p className="text-sm text-muted-foreground">{item.description}</p>
+                          <p className="text-sm text-foreground/80">{item.description}</p>
                         </div>
                       </li>
                     ))}
@@ -1112,7 +1084,7 @@ const Desenvolvimento = () => {
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
               Tecnologia, stack e integrações
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            <p className="text-xl text-foreground/80 max-w-3xl mx-auto">
               Trabalhamos com um ecossistema tecnológico robusto para garantir escalabilidade, segurança e experiências digitais marcantes.
             </p>
           </div>
@@ -1129,7 +1101,7 @@ const Desenvolvimento = () => {
                     <tech.icon className="h-6 w-6 text-white" />
                   </div>
                   <CardTitle className="text-xl group-hover:text-quantum-bright transition-colors">{tech.title}</CardTitle>
-                  <CardDescription className="text-muted-foreground">{tech.description}</CardDescription>
+                  <CardDescription className="text-foreground/80">{tech.description}</CardDescription>
                 </CardHeader>
               </Card>
             ))}
