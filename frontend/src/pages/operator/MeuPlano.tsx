@@ -531,6 +531,8 @@ function findPlanFromEmpresa(planos: PlanoDetalhe[], empresasRows: unknown[]): P
 function MeuPlanoContent() {
   const apiBaseUrl = getApiBaseUrl();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const subscriptionPlanId = toNumber(user?.subscription?.planId ?? null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -679,6 +681,9 @@ function MeuPlanoContent() {
 
         const empresasRows = empresasJson ? normalizeApiRows(empresasJson) : [];
         const planoSelecionado =
+          (subscriptionPlanId !== null
+            ? parsedPlanos.find((item) => item.id === subscriptionPlanId) ?? null
+            : null) ??
           findPlanFromEmpresa(parsedPlanos, empresasRows) ??
           parsedPlanos.find((item) => item.ativo) ??
           parsedPlanos[0];
@@ -726,7 +731,7 @@ function MeuPlanoContent() {
     return () => {
       disposed = true;
     };
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, subscriptionPlanId]);
 
   const planoExibido = previewPlano ?? planoAtual;
 
