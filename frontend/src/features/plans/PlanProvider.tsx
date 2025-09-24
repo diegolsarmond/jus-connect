@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { sanitizeModuleList } from "@/features/auth/moduleUtils";
 import { getApiUrl } from "@/lib/api";
 
 export interface PlanInfo {
@@ -15,6 +16,7 @@ export interface PlanInfo {
   nome: string | null;
   sincronizacaoProcessosHabilitada: boolean;
   sincronizacaoProcessosLimite: number | null;
+  modules: string[];
 }
 
 interface PlanContextValue {
@@ -229,12 +231,19 @@ export function PlanProvider({ children }: { children: ReactNode }) {
             row.sincronizacao_processos_limite ??
               row.sincronizacaoProcessosLimite,
           );
+          const rawModules = Array.isArray(row.modulos)
+            ? row.modulos
+            : Array.isArray(row.modules)
+              ? row.modules
+              : [];
+          const modules = sanitizeModuleList(rawModules);
 
           return {
             id,
             nome,
             sincronizacaoProcessosHabilitada: syncEnabled ?? true,
             sincronizacaoProcessosLimite: syncLimit,
+            modules,
           } satisfies PlanInfo;
         });
 
@@ -272,6 +281,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
             nome: planNameCandidate,
             sincronizacaoProcessosHabilitada: true,
             sincronizacaoProcessosLimite: null,
+            modules: [],
           };
         }
 
