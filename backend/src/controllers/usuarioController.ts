@@ -151,21 +151,6 @@ const fetchAuthenticatedUserEmpresa = async (userId: number): Promise<EmpresaLoo
     empresaId: empresaAtualResult,
   };
 };
-
-
-let welcomeEmailService = newUserWelcomeEmailService;
-
-export const __setWelcomeEmailServiceForTests = (
-  service: typeof newUserWelcomeEmailService
-) => {
-  welcomeEmailService = service;
-};
-
-export const __resetWelcomeEmailServiceForTests = () => {
-  welcomeEmailService = newUserWelcomeEmailService;
-};
-
-
 export const listUsuarios = async (req: Request, res: Response) => {
   try {
     if (!req.auth) {
