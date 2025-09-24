@@ -72,7 +72,7 @@ const moduleCopyMap: Record<string, ModuleCopy> = {
       "Gere relatórios personalizados, acompanhe indicadores chave e compartilhe insights com a liderança.",
   },
   suporte: {
-    title: "Acesse o suporte premium do Jus Connect",
+    title: "Acesse o suporte premium do Quantum JUD",
     description:
       "Priorize chamados, fale com especialistas e garanta que o time tenha a ajuda necessária em cada etapa.",
   },
@@ -82,7 +82,7 @@ const moduleCopyMap: Record<string, ModuleCopy> = {
       "Controle permissões, convites e níveis de acesso com workflows prontos para equipes em crescimento.",
   },
   configuracoes: {
-    title: "Personalize o Jus Connect para o seu escritório",
+    title: "Personalize o Quantum JUD para o seu escritório",
     description:
       "Ative o módulo de configurações para adaptar fluxos, integrações e parametrizações ao seu jeito de trabalhar.",
   },
@@ -104,7 +104,7 @@ const moduleCopyMap: Record<string, ModuleCopy> = {
 };
 
 const fallbackCopy: ModuleCopy = {
-  title: "Libere novos recursos no Jus Connect",
+  title: "Libere novos recursos no Quantum JUD",
   description:
     "Conheça os planos disponíveis e ative funcionalidades que ajudam seu escritório a ganhar eficiência e resultados.",
 };

@@ -85,6 +85,10 @@ export function TrialBanner({ className }: TrialBannerProps) {
   const subscription = user?.subscription ?? null;
   const isTrialing = subscription?.status === "trialing";
   const trialEndsAt = subscription?.trialEndsAt ?? null;
+  const isCompanyResponsible =
+    typeof user?.id === "number" &&
+    typeof user?.empresa_responsavel_id === "number" &&
+    user.id === user.empresa_responsavel_id;
 
   const trialEndsAtDate = useMemo(() => {
     if (!trialEndsAt) {
@@ -142,7 +146,14 @@ export function TrialBanner({ className }: TrialBannerProps) {
     persistDismissal();
   };
 
-  if (!isTrialing || !trialEndsAtDate || isDismissed || remainingMs === null || remainingMs <= 0) {
+  if (
+    !isTrialing ||
+    !trialEndsAtDate ||
+    !isCompanyResponsible ||
+    isDismissed ||
+    remainingMs === null ||
+    remainingMs <= 0
+  ) {
     return null;
   }
 

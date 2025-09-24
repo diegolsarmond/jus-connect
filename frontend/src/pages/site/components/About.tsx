@@ -12,23 +12,23 @@ interface Pillar {
 
 const PILLARS: Pillar[] = [
   {
-    title: "Parceria estratégica",
-    description: "Co-criamos soluções com o seu time, da imersão inicial ao acompanhamento pós-go live.",
+    title: "Onboarding consultivo",
+    description: "Especialistas acompanham cada etapa para adaptar o Jus Connect à sua realidade jurídica.",
     icon: HandshakeIcon,
   },
   {
-    title: "Foco em resultado",
-    description: "Metas claras, indicadores acompanhados semanalmente e entregas incrementais.",
+    title: "Resultados mensuráveis",
+    description: "Metas compartilhadas, indicadores em tempo real e revisões contínuas de performance.",
     icon: Target,
   },
   {
-    title: "Inovação aplicada",
-    description: "IA generativa, automações e analytics a serviço de problemas reais do dia a dia.",
+    title: "Inovação pragmática",
+    description: "IA generativa, automações e analytics aplicados a fluxos que aceleram decisões.",
     icon: Lightbulb,
   },
   {
-    title: "Escala com qualidade",
-    description: "Processos, governança e segurança preparados para operações críticas.",
+    title: "Segurança comprovada",
+    description: "Governança de dados, conformidade regulatória e monitoramento ativo da operação.",
     icon: Rocket,
   },
 ];
@@ -67,32 +67,32 @@ const About = () => {
         <div className="grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-start">
           <div className="space-y-4">
             <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
-              Sobre a Quantum
+              Sobre o Jus Connect
             </span>
             <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
-              Especialistas em transformação digital para operações complexas
+              Plataforma completa para escritórios e departamentos jurídicos
             </h2>
             <p className="text-base text-muted-foreground">
-              Desde 2017, atuamos com squads multidisciplinares combinando estratégia, design e engenharia de software para
-              entregar jornadas digitais que impactam indicadores de crescimento e eficiência operacional.
+              Nasceu dentro da Quantum Tecnologia para organizar equipes jurídicas de alto volume. Hoje o Jus Connect integra
+              relacionamento com clientes, contencioso, finanças e colaboração em uma única experiência digital.
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               <Card className="border-border/40 bg-background/80">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-3xl font-semibold text-foreground">50+</CardTitle>
-                  <CardDescription>projetos digitais entregues</CardDescription>
+                  <CardTitle className="text-3xl font-semibold text-foreground">120+</CardTitle>
+                  <CardDescription>equipes jurídicas conectadas</CardDescription>
                 </CardHeader>
               </Card>
               <Card className="border-border/40 bg-background/80">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-3xl font-semibold text-foreground">200+</CardTitle>
-                  <CardDescription>automações monitoradas</CardDescription>
+                  <CardTitle className="text-3xl font-semibold text-foreground">350+</CardTitle>
+                  <CardDescription>fluxos automatizados em produção</CardDescription>
                 </CardHeader>
               </Card>
               <Card className="border-border/40 bg-background/80">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-3xl font-semibold text-foreground">7</CardTitle>
-                  <CardDescription>anos de evolução contínua</CardDescription>
+                  <CardTitle className="text-3xl font-semibold text-foreground">8</CardTitle>
+                  <CardDescription>anos evoluindo com o setor jurídico</CardDescription>
                 </CardHeader>
               </Card>
             </div>
@@ -100,8 +100,8 @@ const About = () => {
 
           <Card className="border-border/40 bg-background/70">
             <CardHeader>
-              <CardTitle className="text-xl">Nossa filosofia</CardTitle>
-              <CardDescription>Quatro pilares sustentam nossa forma de trabalhar e entregar valor.</CardDescription>
+            <CardTitle className="text-xl">Nossa filosofia</CardTitle>
+            <CardDescription>Quatro pilares sustentam como entregamos valor de forma contínua.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {PILLARS.map((pillar) => (
@@ -121,20 +121,19 @@ const About = () => {
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-foreground">Como trabalhamos</h3>
             <p className="text-sm text-muted-foreground">
-              Kick-off imersivo, discovery colaborativo, desenvolvimento ágil com demos quinzenais e operação assistida após
-              o lançamento.
+              Diagnóstico rápido, implantação guiada por especialistas e roadmap evolutivo revisado a cada ciclo.
             </p>
           </div>
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-foreground">Time multidisciplinar</h3>
             <p className="text-sm text-muted-foreground">
-              Profissionais de estratégia, engenharia de dados, UX e operações garantem visão 360º da solução.
+              Estratégia, dados, UX e operações atuam juntos para suportar missões críticas do jurídico.
             </p>
           </div>
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-foreground">Cultura orientada a dados</h3>
             <p className="text-sm text-muted-foreground">
-              Indicadores claros, análises contínuas e rituais de melhoria para sustentar crescimento previsível.
+              Dashboards unificados, análises recorrentes e planos de ação compartilhados com o cliente.
             </p>
           </div>
         </div>

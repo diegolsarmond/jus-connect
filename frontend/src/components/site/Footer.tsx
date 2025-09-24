@@ -12,11 +12,12 @@ const Footer = () => {
       <div className="container grid gap-8 px-4 py-12 md:grid-cols-[1.5fr_1fr_1fr]">
         <div className="space-y-4">
           <Link to={routes.home} className="flex items-center gap-3">
-            <img src={quantumLogo} alt="Quantum Tecnologia" className="h-10 w-10" />
-            <span className="text-lg font-semibold text-foreground">Quantum Tecnologia</span>
+            <img src={quantumLogo} alt="Jus Connect" className="h-10 w-10" />
+            <span className="text-lg font-semibold text-foreground">Jus Connect</span>
           </Link>
           <p className="max-w-sm text-sm text-muted-foreground">
-            Soluções digitais completas com foco em resultados para equipes jurídicas, financeiras e operacionais.
+            Plataforma jurídica todo-em-um que conecta dados, relacionamento com clientes e automação para equipes que pensam
+            em escala.
           </p>
           <address className="space-y-2 text-sm text-muted-foreground not-italic">
             <div className="flex items-start gap-2">
@@ -104,7 +105,9 @@ const Footer = () => {
 
       <div className="border-t border-border/40 bg-background/60">
         <div className="container flex flex-col items-center justify-between gap-3 px-4 py-4 text-center text-xs text-muted-foreground md:flex-row">
-          <span>&copy; {currentYear} Quantum Tecnologia. Todos os direitos reservados.</span>
+          <span>
+            &copy; {currentYear} Jus Connect. Uma solução Quantum Tecnologia. Todos os direitos reservados.
+          </span>
           <div className="flex gap-4">
             <Link to={routes.privacyPolicy} className="transition hover:text-foreground">
               Política de privacidade

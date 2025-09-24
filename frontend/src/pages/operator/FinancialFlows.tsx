@@ -727,7 +727,7 @@ const FinancialFlows = () => {
     if (!flow.canManuallySettle) {
       toast({
         title: 'Ação indisponível',
-        description: 'Somente lançamentos cadastrados no Jus Connect podem ser marcados manualmente como pagos.',
+        description: 'Somente lançamentos cadastrados no Quantum JUD podem ser marcados manualmente como pagos.',
         variant: 'destructive',
       });
       return;
@@ -1351,7 +1351,7 @@ const FinancialFlows = () => {
                                   disabled={settleMutation.isPending || !flow.canManuallySettle}
                                   title={
                                     !flow.canManuallySettle
-                                      ? 'Somente lançamentos cadastrados no Jus Connect podem ser marcados manualmente como pagos.'
+                                      ? 'Somente lançamentos cadastrados no Quantum JUD podem ser marcados manualmente como pagos.'
                                       : undefined
                                   }
 

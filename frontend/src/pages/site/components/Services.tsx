@@ -86,9 +86,11 @@ const Services = () => {
       <div className="container space-y-12 px-4 py-20">
         <div className="space-y-4 text-center">
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
-            Serviços Quantum
+            Soluções Jus Connect
           </span>
-          <h2 className="text-3xl font-semibold text-foreground md:text-4xl">Tudo o que sua operação precisa para escalar</h2>
+          <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
+            Tudo o que sua operação jurídica precisa para escalar
+          </h2>
           <p className="mx-auto max-w-2xl text-base text-muted-foreground">
             Do primeiro contato à fidelização, conectamos pessoas, processos e tecnologia para garantir uma experiência
             contínua e mensurável.

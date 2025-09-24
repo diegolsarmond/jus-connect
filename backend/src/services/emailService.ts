@@ -42,7 +42,7 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig = {
   },
 };
 
-const systemName = process.env.SYSTEM_NAME || 'Jus Connect';
+const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
 const defaultFromAddress = process.env.SMTP_FROM || DEFAULT_SMTP_CONFIG.auth.user;
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 

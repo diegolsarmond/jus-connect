@@ -47,7 +47,7 @@ import planUpgradeIllustration from "@/assets/plan-upgrade-illustration.svg";
 const Desenvolvimento = () => {
   const { data: service, isLoading: isServiceLoading, isError: isServiceError } = useServiceBySlug("desenvolvimento");
 
-  const heroLabel = service?.title ?? "Fábrica de Software Quantum";
+  const heroLabel = service?.title ?? "Fábrica de Software Jus Connect";
   const heroHeadline = service?.summary ?? "Times especializados para acelerar sua transformação digital";
   const heroDescription =
     service?.description ??
@@ -145,7 +145,7 @@ const Desenvolvimento = () => {
     },
     {
       icon: Workflow,
-      title: "Playbooks ágeis Quantum",
+      title: "Playbooks ágeis Jus Connect",
       description: "Roteiros e cerimônias que estruturam planejamento, execução e governança.",
       items: [
         "Discovery, inception e product framing facilitados",
@@ -322,9 +322,9 @@ const Desenvolvimento = () => {
     {
       icon: Users2,
       title: "Squad dedicada",
-      description: "Equipe multidisciplinar exclusiva com governança ágil Quantum e foco em indicadores de negócio.",
+      description: "Equipe multidisciplinar exclusiva com governança ágil Jus Connect e foco em indicadores de negócio.",
       highlights: [
-        "Product Manager Quantum como ponto focal",
+        "Product Manager Jus Connect como ponto focal",
         "Desenvolvedores full-stack, UX/UI e QA integrados",
         "Backlog priorizado em conjunto a cada sprint",
       ],
@@ -492,7 +492,7 @@ const Desenvolvimento = () => {
                       service: "desenvolvimento",
                     });
                     window.open(
-                      "https://wa.me/553193054200?text=Ol\u00e1! Gostaria de saber mais sobre a F\u00e1brica de Software da Quantum Tecnologia.",
+                      "https://wa.me/553193054200?text=Ol\u00e1! Gostaria de saber mais sobre a F\u00e1brica de Software do Jus Connect.",
                       "_blank",
                     );
                   }}
@@ -775,7 +775,7 @@ const Desenvolvimento = () => {
               Resultados que transformam operações
             </h2>
             <p className="text-xl text-foreground/80 max-w-3xl mx-auto">
-              Conheça alguns exemplos de plataformas entregues pela Quantum, combinando design centrado no usuário, integrações complexas e métricas de negócio.
+              Conheça alguns exemplos de plataformas entregues pelo time do Jus Connect, combinando design centrado no usuário, integrações complexas e métricas de negócio.
             </p>
           </div>
 
@@ -1118,7 +1118,7 @@ const Desenvolvimento = () => {
                       service: "desenvolvimento",
                     });
                     window.open(
-                      "https://wa.me/553193054200?text=Ol\u00e1! Gostaria de ver o portf\u00f3lio de projetos desenvolvidos pela Quantum Tecnologia.",
+                      "https://wa.me/553193054200?text=Ol\u00e1! Gostaria de ver o portf\u00f3lio de projetos desenvolvidos pelo Jus Connect.",
                       "_blank",
                     );
                   }}

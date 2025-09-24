@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildPasswordResetEmail = buildPasswordResetEmail;
-const DEFAULT_SYSTEM_NAME = process.env.SYSTEM_NAME || 'Jus Connect';
+const DEFAULT_SYSTEM_NAME = process.env.SYSTEM_NAME || 'Quantum JUD';
 function formatExpiration(date) {
     return new Intl.DateTimeFormat('pt-BR', {
         day: '2-digit',
