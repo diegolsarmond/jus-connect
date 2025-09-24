@@ -24,6 +24,11 @@ export const SYSTEM_MODULES: SystemModule[] = [
   { id: 'configuracoes-usuarios', nome: 'Configurações - Usuários', categoria: 'Configurações' },
   { id: 'configuracoes-integracoes', nome: 'Configurações - Integrações', categoria: 'Configurações' },
   { id: 'configuracoes-parametros', nome: 'Configurações - Parâmetros', categoria: 'Configurações' },
+  {
+    id: 'configuracoes-conteudo-blog',
+    nome: 'Configurações - Conteúdo - Blog',
+    categoria: 'Configurações',
+  },
   { id: 'configuracoes-parametros-perfis', nome: 'Configurações - Parâmetros - Perfis', categoria: 'Configurações' },
   { id: 'configuracoes-parametros-escritorios', nome: 'Configurações - Parâmetros - Escritórios', categoria: 'Configurações' },
   { id: 'configuracoes-parametros-area-atuacao', nome: 'Configurações - Parâmetros - Área de Atuação', categoria: 'Configurações' },
