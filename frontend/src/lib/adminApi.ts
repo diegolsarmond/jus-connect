@@ -52,7 +52,7 @@ async function request<TResponse>(endpoint: string, options: RequestOptions = {}
   return (await response.json()) as TResponse;
 }
 
-const trimmedString = z.string().transform((value) => value.trim());
+const trimmedString = z.string().trim();
 
 const optionalTrimmedString = z
   .union([z.string(), z.null(), z.undefined()])
