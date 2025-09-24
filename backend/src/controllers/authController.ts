@@ -774,14 +774,15 @@ export const login = async (req: Request, res: Response) => {
               emp.plano AS empresa_plano,
               emp.ativo AS empresa_ativo,
               emp.trial_started_at AS empresa_trial_started_at,
-              COALESCE(emp.trial_ends_at, emp.subscription_trial_ends_at) AS empresa_trial_ends_at,
+              emp.trial_ends_at AS empresa_trial_ends_at,
               emp.current_period_start AS empresa_current_period_start,
-              COALESCE(emp.current_period_end, emp.subscription_current_period_ends_at) AS empresa_current_period_end,
-              COALESCE(emp.grace_expires_at, emp.subscription_grace_period_ends_at) AS empresa_grace_expires_at,
-              emp.subscription_cadence AS empresa_subscription_cadence,
+              emp.current_period_end AS empresa_current_period_end,
+              emp.grace_expires_at AS empresa_grace_expires_at,
               emp.datacadastro AS empresa_datacadastro,
-              COALESCE(emp.subscription_current_period_ends_at, emp.current_period_end) AS empresa_current_period_ends_at,
-              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at
+              to_jsonb(emp) ->> 'subscription_trial_ends_at' AS empresa_subscription_trial_ends_at,
+              to_jsonb(emp) ->> 'subscription_current_period_ends_at' AS empresa_subscription_current_period_ends_at,
+              to_jsonb(emp) ->> 'subscription_grace_period_ends_at' AS empresa_subscription_grace_period_ends_at,
+              to_jsonb(emp) ->> 'subscription_cadence' AS empresa_subscription_cadence
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -816,6 +817,9 @@ export const login = async (req: Request, res: Response) => {
       empresa_grace_expires_at?: unknown;
       empresa_grace_period_ends_at?: unknown;
       empresa_datacadastro?: unknown;
+      empresa_subscription_trial_ends_at?: unknown;
+      empresa_subscription_current_period_ends_at?: unknown;
+      empresa_subscription_grace_period_ends_at?: unknown;
       empresa_subscription_cadence?: unknown;
     };
 
@@ -834,10 +838,29 @@ export const login = async (req: Request, res: Response) => {
     const mustChangePassword =
       parseBooleanFlag((user as { must_change_password?: unknown }).must_change_password) ?? false;
 
+    const subscriptionRow: SubscriptionRow = {
+      empresa_plano: user.empresa_plano,
+      empresa_ativo: user.empresa_ativo,
+      empresa_datacadastro: user.empresa_datacadastro,
+      empresa_trial_started_at: user.empresa_trial_started_at,
+      empresa_trial_ends_at:
+        user.empresa_trial_ends_at ?? user.empresa_subscription_trial_ends_at,
+      empresa_current_period_start: user.empresa_current_period_start,
+      empresa_current_period_end: user.empresa_current_period_end,
+      empresa_current_period_ends_at:
+        user.empresa_current_period_ends_at ??
+        user.empresa_subscription_current_period_ends_at ??
+        user.empresa_current_period_end,
+      empresa_grace_expires_at: user.empresa_grace_expires_at,
+      empresa_grace_period_ends_at:
+        user.empresa_grace_period_ends_at ??
+        user.empresa_subscription_grace_period_ends_at ??
+        user.empresa_grace_expires_at,
+      empresa_subscription_cadence: user.empresa_subscription_cadence,
+    };
+
     const subscriptionResolution =
-      user.empresa_id != null
-        ? resolveSubscriptionPayload(user)
-        : null;
+      user.empresa_id != null ? resolveSubscriptionPayload(subscriptionRow) : null;
 
     const subscriptionAccess = evaluateSubscriptionAccess(subscriptionResolution);
     if (!subscriptionAccess.isAllowed) {
@@ -862,15 +885,20 @@ export const login = async (req: Request, res: Response) => {
     const subscriptionDetails =
       user.empresa_id != null
         ? resolveSubscriptionPayloadFromRow({
-            empresa_plano: user.empresa_plano,
-            empresa_ativo: user.empresa_ativo,
-            trial_started_at: user.empresa_trial_started_at ?? user.empresa_datacadastro,
-            trial_ends_at: user.empresa_trial_ends_at,
-            current_period_start: user.empresa_current_period_start ?? user.empresa_datacadastro,
+            empresa_plano: subscriptionRow.empresa_plano,
+            empresa_ativo: subscriptionRow.empresa_ativo,
+            trial_started_at:
+              subscriptionRow.empresa_trial_started_at ?? subscriptionRow.empresa_datacadastro,
+            trial_ends_at: subscriptionRow.empresa_trial_ends_at,
+            current_period_start:
+              subscriptionRow.empresa_current_period_start ?? subscriptionRow.empresa_datacadastro,
             current_period_end:
-              user.empresa_current_period_end ?? user.empresa_current_period_ends_at,
-            grace_expires_at: user.empresa_grace_expires_at ?? user.empresa_grace_period_ends_at,
-            subscription_cadence: user.empresa_subscription_cadence,
+              subscriptionRow.empresa_current_period_end ??
+              subscriptionRow.empresa_current_period_ends_at,
+            grace_expires_at:
+              subscriptionRow.empresa_grace_expires_at ??
+              subscriptionRow.empresa_grace_period_ends_at,
+            subscription_cadence: subscriptionRow.empresa_subscription_cadence,
           })
         : null;
 

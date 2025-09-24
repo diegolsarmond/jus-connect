@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCurrentUser = exports.refreshToken = exports.login = exports.register = void 0;
+exports.getCurrentUser = exports.refreshToken = exports.changePassword = exports.login = exports.register = void 0;
 const db_1 = __importDefault(require("../services/db"));
 const passwordUtils_1 = require("../utils/passwordUtils");
 const tokenUtils_1 = require("../utils/tokenUtils");
@@ -564,6 +564,7 @@ const login = async (req, res) => {
               u.nome_completo,
               u.email,
               u.senha,
+              u.must_change_password,
               u.status,
               u.perfil,
               u.empresa AS empresa_id,
@@ -573,14 +574,15 @@ const login = async (req, res) => {
               emp.plano AS empresa_plano,
               emp.ativo AS empresa_ativo,
               emp.trial_started_at AS empresa_trial_started_at,
-              COALESCE(emp.trial_ends_at, emp.subscription_trial_ends_at) AS empresa_trial_ends_at,
+              emp.trial_ends_at AS empresa_trial_ends_at,
               emp.current_period_start AS empresa_current_period_start,
-              COALESCE(emp.current_period_end, emp.subscription_current_period_ends_at) AS empresa_current_period_end,
-              COALESCE(emp.grace_expires_at, emp.subscription_grace_period_ends_at) AS empresa_grace_expires_at,
-              emp.subscription_cadence AS empresa_subscription_cadence,
+              emp.current_period_end AS empresa_current_period_end,
+              emp.grace_expires_at AS empresa_grace_expires_at,
               emp.datacadastro AS empresa_datacadastro,
-              COALESCE(emp.subscription_current_period_ends_at, emp.current_period_end) AS empresa_current_period_ends_at,
-              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at
+              to_jsonb(emp) ->> 'subscription_trial_ends_at' AS empresa_subscription_trial_ends_at,
+              to_jsonb(emp) ->> 'subscription_current_period_ends_at' AS empresa_subscription_current_period_ends_at,
+              to_jsonb(emp) ->> 'subscription_grace_period_ends_at' AS empresa_subscription_grace_period_ends_at,
+              to_jsonb(emp) ->> 'subscription_cadence' AS empresa_subscription_cadence
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -600,9 +602,25 @@ const login = async (req, res) => {
             res.status(401).json({ error: 'E-mail ou senha incorretos.' });
             return;
         }
-        const subscriptionResolution = user.empresa_id != null
-            ? resolveSubscriptionPayload(user)
-            : null;
+        const mustChangePassword = parseBooleanFlag(user.must_change_password) ?? false;
+        const subscriptionRow = {
+            empresa_plano: user.empresa_plano,
+            empresa_ativo: user.empresa_ativo,
+            empresa_datacadastro: user.empresa_datacadastro,
+            empresa_trial_started_at: user.empresa_trial_started_at,
+            empresa_trial_ends_at: user.empresa_trial_ends_at ?? user.empresa_subscription_trial_ends_at,
+            empresa_current_period_start: user.empresa_current_period_start,
+            empresa_current_period_end: user.empresa_current_period_end,
+            empresa_current_period_ends_at: user.empresa_current_period_ends_at ??
+                user.empresa_subscription_current_period_ends_at ??
+                user.empresa_current_period_end,
+            empresa_grace_expires_at: user.empresa_grace_expires_at,
+            empresa_grace_period_ends_at: user.empresa_grace_period_ends_at ??
+                user.empresa_subscription_grace_period_ends_at ??
+                user.empresa_grace_expires_at,
+            empresa_subscription_cadence: user.empresa_subscription_cadence,
+        };
+        const subscriptionResolution = user.empresa_id != null ? resolveSubscriptionPayload(subscriptionRow) : null;
         const subscriptionAccess = evaluateSubscriptionAccess(subscriptionResolution);
         if (!subscriptionAccess.isAllowed) {
             res
@@ -618,14 +636,16 @@ const login = async (req, res) => {
         const modulos = await (0, moduleService_1.fetchPerfilModules)(user.perfil);
         const subscriptionDetails = user.empresa_id != null
             ? (0, subscriptionService_1.resolveSubscriptionPayloadFromRow)({
-                empresa_plano: user.empresa_plano,
-                empresa_ativo: user.empresa_ativo,
-                trial_started_at: user.empresa_trial_started_at ?? user.empresa_datacadastro,
-                trial_ends_at: user.empresa_trial_ends_at,
-                current_period_start: user.empresa_current_period_start ?? user.empresa_datacadastro,
-                current_period_end: user.empresa_current_period_end ?? user.empresa_current_period_ends_at,
-                grace_expires_at: user.empresa_grace_expires_at ?? user.empresa_grace_period_ends_at,
-                subscription_cadence: user.empresa_subscription_cadence,
+                empresa_plano: subscriptionRow.empresa_plano,
+                empresa_ativo: subscriptionRow.empresa_ativo,
+                trial_started_at: subscriptionRow.empresa_trial_started_at ?? subscriptionRow.empresa_datacadastro,
+                trial_ends_at: subscriptionRow.empresa_trial_ends_at,
+                current_period_start: subscriptionRow.empresa_current_period_start ?? subscriptionRow.empresa_datacadastro,
+                current_period_end: subscriptionRow.empresa_current_period_end ??
+                    subscriptionRow.empresa_current_period_ends_at,
+                grace_expires_at: subscriptionRow.empresa_grace_expires_at ??
+                    subscriptionRow.empresa_grace_period_ends_at,
+                subscription_cadence: subscriptionRow.empresa_subscription_cadence,
             })
             : null;
         const subscription = subscriptionDetails && subscriptionResolution
@@ -660,6 +680,7 @@ const login = async (req, res) => {
                 setor_id: user.setor_id,
                 setor_nome: user.setor_nome,
                 subscription,
+                mustChangePassword,
             },
         });
     }
@@ -669,6 +690,105 @@ const login = async (req, res) => {
     }
 };
 exports.login = login;
+const changePassword = async (req, res) => {
+    if (!req.auth) {
+        res.status(401).json({ error: 'Token inválido.' });
+        return;
+    }
+    const temporaryPasswordValue = typeof req.body?.temporaryPassword === 'string'
+        ? req.body.temporaryPassword
+        : typeof req.body?.currentPassword === 'string'
+            ? req.body.currentPassword
+            : '';
+    const newPasswordValue = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+    const confirmPasswordValue = typeof req.body?.confirmPassword === 'string'
+        ? req.body.confirmPassword
+        : typeof req.body?.passwordConfirmation === 'string'
+            ? req.body.passwordConfirmation
+            : '';
+    if (!temporaryPasswordValue) {
+        res.status(400).json({ error: 'Informe a senha provisória enviada por e-mail.' });
+        return;
+    }
+    if (!newPasswordValue) {
+        res.status(400).json({ error: 'Informe a nova senha.' });
+        return;
+    }
+    if (newPasswordValue.length < MIN_PASSWORD_LENGTH) {
+        res
+            .status(400)
+            .json({ error: `A nova senha deve conter ao menos ${MIN_PASSWORD_LENGTH} caracteres.` });
+        return;
+    }
+    if (newPasswordValue !== confirmPasswordValue) {
+        res.status(400).json({ error: 'A confirmação da nova senha não confere.' });
+        return;
+    }
+    if (newPasswordValue === temporaryPasswordValue) {
+        res
+            .status(400)
+            .json({ error: 'A nova senha deve ser diferente da senha provisória informada.' });
+        return;
+    }
+    const client = await db_1.default.connect();
+    let transactionActive = false;
+    try {
+        await client.query('BEGIN');
+        transactionActive = true;
+        const userResult = await client.query(`SELECT senha, must_change_password
+         FROM public.usuarios
+        WHERE id = $1
+        FOR UPDATE`, [req.auth.userId]);
+        if (userResult.rowCount === 0) {
+            await client.query('ROLLBACK');
+            transactionActive = false;
+            res.status(404).json({ error: 'Usuário não encontrado.' });
+            return;
+        }
+        const userRow = userResult.rows[0];
+        if (typeof userRow.senha !== 'string' || userRow.senha.length === 0) {
+            await client.query('ROLLBACK');
+            transactionActive = false;
+            res.status(400).json({ error: 'Senha provisória inválida.' });
+            return;
+        }
+        const passwordMatches = await (0, passwordUtils_1.verifyPassword)(temporaryPasswordValue, userRow.senha);
+        if (!passwordMatches) {
+            await client.query('ROLLBACK');
+            transactionActive = false;
+            res.status(400).json({ error: 'Senha provisória inválida.' });
+            return;
+        }
+        const hashedPassword = (0, passwordUtils_1.hashPassword)(newPasswordValue);
+        await client.query(`UPDATE public.usuarios
+          SET senha = $1,
+              must_change_password = FALSE
+        WHERE id = $2`, [hashedPassword, req.auth.userId]);
+        await client.query(`UPDATE public.password_reset_tokens
+          SET used_at = NOW()
+        WHERE user_id = $1
+          AND used_at IS NULL`, [req.auth.userId]);
+        await client.query('COMMIT');
+        transactionActive = false;
+        res.json({ message: 'Senha atualizada com sucesso.' });
+    }
+    catch (error) {
+        if (transactionActive) {
+            try {
+                await client.query('ROLLBACK');
+            }
+            catch (rollbackError) {
+                console.error('Falha ao reverter transação de alteração de senha', rollbackError);
+            }
+        }
+        console.error('Erro ao atualizar senha do usuário autenticado', error);
+        res.status(500).json({ error: 'Não foi possível atualizar a senha.' });
+    }
+    finally {
+        client.release();
+    }
+};
+exports.changePassword = changePassword;
 const refreshToken = (req, res) => {
     if (!req.auth) {
         res.status(401).json({ error: 'Token inválido.' });
@@ -749,6 +869,7 @@ const getCurrentUser = async (req, res) => {
                 subscription_cadence: user.empresa_subscription_cadence,
             })
             : null;
+        const mustChangePassword = parseBooleanFlag(user.must_change_password) ?? false;
         res.json({
             id: user.id,
             nome_completo: user.nome_completo,
@@ -761,6 +882,7 @@ const getCurrentUser = async (req, res) => {
             setor_nome: user.setor_nome,
             modulos,
             subscription,
+            mustChangePassword,
         });
     }
     catch (error) {
