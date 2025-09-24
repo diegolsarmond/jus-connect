@@ -85,7 +85,14 @@ function resolveFallbackBaseUrl(): string {
   return PRODUCTION_DEFAULT_API_URL;
 }
 
+type ExecutionContext = "browser" | "server";
+
 let cachedApiBaseUrl: string | undefined;
+let cachedExecutionContext: ExecutionContext | undefined;
+
+function getExecutionContext(): ExecutionContext {
+  return typeof window === "undefined" ? "server" : "browser";
+}
 
 function joinPaths(base: string, path?: string): string {
   const normalizedBase = base.replace(/\/+$/, '');
@@ -104,8 +111,23 @@ function joinPaths(base: string, path?: string): string {
 }
 
 function resolveApiBaseUrl(): string {
-  if (!cachedApiBaseUrl) {
+  const executionContext = getExecutionContext();
+
+  if (!cachedApiBaseUrl || cachedExecutionContext !== executionContext) {
     cachedApiBaseUrl = resolveFallbackBaseUrl();
+    cachedExecutionContext = executionContext;
+  }
+
+  if (executionContext === "browser") {
+    const windowOrigin = getWindowOrigin();
+    if (
+      windowOrigin &&
+      !isLocalhostUrl(windowOrigin) &&
+      cachedApiBaseUrl &&
+      isLocalhostUrl(cachedApiBaseUrl)
+    ) {
+      cachedApiBaseUrl = windowOrigin;
+    }
   }
 
   return cachedApiBaseUrl;

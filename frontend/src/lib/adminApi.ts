@@ -2,14 +2,16 @@ import { z } from "zod";
 
 import { getApiBaseUrl } from "./api";
 
-const baseUrl =
-  (import.meta.env.VITE_ADMIN_API_BASE_URL as string | undefined)?.trim() ||
-  getApiBaseUrl();
+const adminBaseUrlFromEnv = (
+  import.meta.env.VITE_ADMIN_API_BASE_URL as string | undefined
+)?.trim();
 
 const ensureBaseUrl = () => {
-  if (!baseUrl) {
-    throw new Error("VITE_ADMIN_API_BASE_URL is not defined");
-  }
+  const baseUrl = adminBaseUrlFromEnv?.length
+    ? adminBaseUrlFromEnv
+    : getApiBaseUrl();
+
+
   return baseUrl.replace(/\/+$/, "");
 };
 
