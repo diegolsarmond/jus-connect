@@ -1,20 +1,26 @@
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
   ArrowRight,
   BarChart3,
   Building2,
+  Check,
   FileText,
-  GraduationCap,
   Layers,
   MessageSquare,
   Shield,
-  Stethoscope,
   Users,
   Workflow,
   Zap,
@@ -24,8 +30,185 @@ import {
 } from "lucide-react";
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type GtagFunction = (...args: unknown[]) => void;
+
+type PlanoDisponivel = {
+  id: number;
+  nome: string;
+  ativo: boolean;
+  descricao: string | null;
+  recursos: string[];
+  valorMensal: number | null;
+  valorAnual: number | null;
+  precoMensal: string | null;
+  precoAnual: string | null;
+  descontoAnualPercentual: number | null;
+  economiaAnualFormatada: string | null;
+};
+
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  minimumFractionDigits: 2,
+});
+
+const normalizeApiRows = (data: unknown): unknown[] => {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (data && typeof data === "object") {
+    const rows = (data as { rows?: unknown[] }).rows;
+    if (Array.isArray(rows)) {
+      return rows;
+    }
+
+    const nested = (data as { data?: unknown }).data;
+    if (Array.isArray(nested)) {
+      return nested;
+    }
+
+    if (nested && typeof nested === "object") {
+      const nestedRows = (nested as { rows?: unknown[] }).rows;
+      if (Array.isArray(nestedRows)) {
+        return nestedRows;
+      }
+    }
+  }
+
+  return [];
+};
+
+const toNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const sanitized = trimmed.replace(/[^\d,.-]/g, "").replace(/\.(?=.*\.)/g, "");
+    const normalized = sanitized.replace(",", ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+
+  return null;
+};
+
+const parseRecursos = (value: unknown): string[] => {
+  const seen = new Set<string>();
+  const seenObjects = new Set<object>();
+  const result: string[] = [];
+
+  const add = (entry: string) => {
+    const normalized = entry.trim();
+    if (!normalized) {
+      return;
+    }
+
+    if (seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    result.push(normalized);
+  };
+
+  const visit = (input: unknown) => {
+    if (!input) {
+      return;
+    }
+
+    if (typeof input === "string") {
+      if (!input.trim()) {
+        return;
+      }
+
+      const segments = input
+        .split(/[\n•·\-–;]+/)
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+
+      if (segments.length === 0) {
+        add(input);
+        return;
+      }
+
+      segments.forEach(add);
+      return;
+    }
+
+    if (Array.isArray(input)) {
+      input.forEach(visit);
+      return;
+    }
+
+    if (typeof input === "object") {
+      if (seenObjects.has(input as object)) {
+        return;
+      }
+
+      seenObjects.add(input as object);
+      const record = input as Record<string, unknown>;
+      const candidateKeys = [
+        "disponiveis",
+        "disponiveisPersonalizados",
+        "available",
+        "availableFeatures",
+        "inclusos",
+        "incluidos",
+        "lista",
+        "items",
+        "features",
+        "recursosDisponiveis",
+        "recursos_disponiveis",
+        "recursos",
+        "modulos",
+        "modules",
+        "rows",
+        "data",
+        "values",
+        "value",
+      ];
+
+      const excludedPattern = /(indispon|unavailable|exclu|negad)/i;
+      let matchedCandidate = false;
+
+      for (const key of candidateKeys) {
+        if (key in record) {
+          matchedCandidate = true;
+          visit(record[key]);
+        }
+      }
+
+      if (!matchedCandidate) {
+        for (const [key, entry] of Object.entries(record)) {
+          if (excludedPattern.test(key)) {
+            continue;
+          }
+
+          if (/^\d+$/.test(key)) {
+            visit(entry);
+          }
+        }
+      }
+    }
+  };
+
+  visit(value);
+
+  return result;
+};
 
 const getGtag = (): GtagFunction | undefined => {
   if (typeof window === "undefined") {
@@ -95,26 +278,14 @@ const CRM = () => {
       icon: Scale,
       title: "Advocacia",
       description: "Gestão completa de processos, prazos e relacionamento com clientes e correspondentes.",
-      highlights: ["Integração com tribunais", "Automação de prazos", "Geração de peças e contratos"]
-    },
-    {
-      icon: Stethoscope,
-      title: "Saúde",
-      description: "Conecte atendimento, faturamento e equipes multidisciplinares em uma única visão do paciente.",
-      highlights: ["Agenda unificada", "Protocolos personalizados", "Fluxos de autorização"]
-    },
-    {
-      icon: GraduationCap,
-      title: "Educação",
-      description: "Acompanhe leads, matrículas e retenção em jornadas personalizadas por campus ou unidade.",
-      highlights: ["Automação de onboarding", "Cobrança recorrente", "Comissão por turma"]
+      highlights: ["Integração com tribunais", "Automação de prazos", "Geração de peças e contratos"],
     },
     {
       icon: Building2,
       title: "Mercado Imobiliário",
       description: "Gestão de funil de vendas, propostas e pós-venda para construtoras e imobiliárias.",
-      highlights: ["Integração com portais", "Controle de documentos", "Follow-up automático"]
-    }
+      highlights: ["Integração com portais", "Controle de documentos", "Follow-up automático"],
+    },
   ];
 
   const lawDifferentials = [
@@ -146,6 +317,170 @@ const CRM = () => {
     "Visão 360º da carteira com relatórios executivos semanais",
     "Suporte especializado com onboarding em até 14 dias"
   ];
+
+  const apiBaseUrl = getApiBaseUrl();
+  const [planosDisponiveis, setPlanosDisponiveis] = useState<PlanoDisponivel[]>([]);
+  const [planosLoading, setPlanosLoading] = useState(true);
+  const [planosError, setPlanosError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPlans = async () => {
+      setPlanosLoading(true);
+      setPlanosError(null);
+
+      try {
+        const response = await fetch(joinUrl(apiBaseUrl, "/api/planos"), {
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Falha ao carregar planos (HTTP ${response.status})`);
+        }
+
+        const payload = await response.json();
+        const rows = normalizeApiRows(payload);
+
+        const parsed = rows
+          .map((entry) => {
+            const raw = entry as Record<string, unknown>;
+            const id = toNumber(raw.id);
+            if (id === null) {
+              return null;
+            }
+
+            const nome = typeof raw.nome === "string" ? raw.nome.trim() : null;
+            const ativo = typeof raw.ativo === "boolean" ? raw.ativo : true;
+            const descricaoRaw =
+              typeof raw.descricao === "string"
+                ? raw.descricao.trim()
+                : typeof raw.detalhes === "string"
+                  ? raw.detalhes.trim()
+                  : null;
+
+            const recursos = parseRecursos([
+              raw.recursos,
+              raw.recursosDisponiveis,
+              raw.recursos_disponiveis,
+              raw.features,
+              raw.items,
+              raw.lista,
+              raw.modulos,
+              raw.modules,
+              raw.recursosPersonalizados,
+              raw.customResources,
+            ]);
+
+            const valorMensal = toNumber(
+              raw.valor_mensal ?? raw.valorMensal ?? raw.preco_mensal ?? raw.precoMensal,
+            );
+            const valorAnual = toNumber(
+              raw.valor_anual ?? raw.valorAnual ?? raw.preco_anual ?? raw.precoAnual,
+            );
+
+            const precoMensal =
+              typeof raw.preco_mensal === "string" && raw.preco_mensal.trim()
+                ? raw.preco_mensal.trim()
+                : typeof raw.precoMensal === "string" && raw.precoMensal.trim()
+                  ? raw.precoMensal.trim()
+                  : valorMensal !== null
+                    ? currencyFormatter.format(valorMensal)
+                    : null;
+
+            const precoAnual =
+              typeof raw.preco_anual === "string" && raw.preco_anual.trim()
+                ? raw.preco_anual.trim()
+                : typeof raw.precoAnual === "string" && raw.precoAnual.trim()
+                  ? raw.precoAnual.trim()
+                  : valorAnual !== null
+                    ? currencyFormatter.format(valorAnual)
+                    : null;
+
+            let descontoPercentual: number | null = null;
+            let economiaAnualFormatada: string | null = null;
+
+            if (valorMensal !== null && valorAnual !== null) {
+              const totalMensal = valorMensal * 12;
+              if (totalMensal > 0) {
+                const economia = Math.max(0, totalMensal - valorAnual);
+                if (economia > 0) {
+                  const roundedEconomia = Math.round(economia * 100) / 100;
+                  economiaAnualFormatada = currencyFormatter.format(roundedEconomia);
+                  const percentual = Math.round((roundedEconomia / totalMensal) * 100);
+                  descontoPercentual = Number.isFinite(percentual) && percentual > 0 ? percentual : null;
+                }
+              }
+            }
+
+            const plan: PlanoDisponivel = {
+              id,
+              nome: nome ?? `Plano ${id}`,
+              ativo,
+              descricao: descricaoRaw,
+              recursos,
+              valorMensal,
+              valorAnual,
+              precoMensal,
+              precoAnual,
+              descontoAnualPercentual: descontoPercentual,
+              economiaAnualFormatada,
+            };
+
+            return plan;
+          })
+          .filter((plan): plan is PlanoDisponivel => plan !== null);
+
+        if (!cancelled) {
+          setPlanosDisponiveis(parsed);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPlanosError(error instanceof Error ? error.message : "Não foi possível carregar os planos.");
+          setPlanosDisponiveis([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setPlanosLoading(false);
+        }
+      }
+    };
+
+    void loadPlans();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  const planosAtivos = useMemo(() => planosDisponiveis.filter((plan) => plan.ativo), [planosDisponiveis]);
+
+  const planosOrdenados = useMemo(() => {
+    if (planosAtivos.length === 0) {
+      return [];
+    }
+
+    return [...planosAtivos].sort((a, b) => {
+      const valorA = a.valorMensal ?? (a.valorAnual !== null ? a.valorAnual / 12 : Number.POSITIVE_INFINITY);
+      const valorB = b.valorMensal ?? (b.valorAnual !== null ? b.valorAnual / 12 : Number.POSITIVE_INFINITY);
+      return valorA - valorB;
+    });
+  }, [planosAtivos]);
+
+  const destaquePlanoId = useMemo(() => {
+    if (planosOrdenados.length === 0) {
+      return null;
+    }
+
+    const destaque = planosOrdenados.reduce((acc, plan) => {
+      const accValor = acc.valorMensal ?? (acc.valorAnual !== null ? acc.valorAnual / 12 : 0);
+      const planValor = plan.valorMensal ?? (plan.valorAnual !== null ? plan.valorAnual / 12 : 0);
+      return planValor > accValor ? plan : acc;
+    }, planosOrdenados[0]);
+
+    return destaque.id;
+  }, [planosOrdenados]);
 
   const handleDemoClick = (source: string) => {
     const gtag = getGtag();
@@ -265,10 +600,11 @@ const CRM = () => {
         <div className="container px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
-              Especializado em Diversos Segmentos
+              Especializado em Segmentos Estratégicos
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Construímos experiências únicas para cada mercado com fluxos, integrações e relatórios sob medida.
+              Operações jurídicas e imobiliárias contam com fluxos prontos, integrações profundas e relatórios sob medida para
+              acelerar resultados desde o primeiro mês.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -318,20 +654,178 @@ const CRM = () => {
               <p className="text-lg text-muted-foreground mb-8">
                 Com mais de uma década acompanhando escritórios de diferentes portes, desenvolvemos um CRM que une gestão de processos, atendimento consultivo e inteligência financeira em uma única plataforma.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-                {lawDifferentials.map((item) => (
-                  <Card key={item.title} className="border-quantum-light/20 hover:border-quantum-bright/40 transition-all duration-300 hover:-translate-y-1">
-                    <CardHeader className="pb-3">
-                      <div className="p-3 rounded-full bg-gradient-quantum w-fit mb-3">
-                        <item.icon className="h-5 w-5 text-white" />
-                      </div>
-                      <CardTitle className="text-lg">{item.title}</CardTitle>
-                      <CardDescription className="text-muted-foreground text-sm">
-                        {item.description}
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                ))}
+              <div className="space-y-10 mb-10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {lawDifferentials.map((item) => (
+                    <Card key={item.title} className="border-quantum-light/20 hover:border-quantum-bright/40 transition-all duration-300 hover:-translate-y-1">
+                      <CardHeader className="pb-3">
+                        <div className="p-3 rounded-full bg-gradient-quantum w-fit mb-3">
+                          <item.icon className="h-5 w-5 text-white" />
+                        </div>
+                        <CardTitle className="text-lg">{item.title}</CardTitle>
+                        <CardDescription className="text-muted-foreground text-sm">
+                          {item.description}
+                        </CardDescription>
+                      </CardHeader>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-semibold">Planos disponíveis para escritórios</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Compare modalidades, benefícios e encontre o pacote ideal para o seu time jurídico.
+                    </p>
+                  </div>
+
+                  {planosLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {[0, 1].map((index) => (
+                        <Card
+                          key={index}
+                          className="border-quantum-light/20 bg-background/60 backdrop-blur"
+                        >
+                          <CardHeader className="space-y-4">
+                            <Skeleton className="h-5 w-1/3" />
+                            <Skeleton className="h-8 w-1/2" />
+                            <Skeleton className="h-4 w-full" />
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            {[0, 1, 2].map((item) => (
+                              <div key={item} className="flex items-start gap-3">
+                                <Skeleton className="h-4 w-4 rounded-full" />
+                                <Skeleton className="h-4 w-full" />
+                              </div>
+                            ))}
+                          </CardContent>
+                          <CardFooter>
+                            <Skeleton className="h-10 w-full rounded-full" />
+                          </CardFooter>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : planosOrdenados.length > 0 ? (
+                    <Carousel className="relative">
+                      <CarouselContent>
+                        {planosOrdenados.map((plan) => (
+                          <CarouselItem key={plan.id} className="md:basis-1/2 lg:basis-1/3">
+                            <Card
+                              className={`relative flex h-full flex-col border-quantum-light/20 bg-background/70 backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:border-quantum-bright/40 hover:shadow-quantum ${
+                                destaquePlanoId === plan.id ? "border-quantum-bright/60 shadow-quantum" : ""
+                              }`}
+                            >
+                              {destaquePlanoId === plan.id && (
+                                <span className="absolute top-4 right-4 rounded-full bg-gradient-quantum px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                                  Mais completo
+                                </span>
+                              )}
+                              <CardHeader className="space-y-4">
+                                <div className="space-y-2">
+                                  <CardTitle className="text-2xl">{plan.nome}</CardTitle>
+                                  {plan.descricao && (
+                                    <CardDescription className="text-muted-foreground leading-relaxed">
+                                      {plan.descricao}
+                                    </CardDescription>
+                                  )}
+                                </div>
+                                <div className="space-y-2">
+                                  {plan.precoMensal && (
+                                    <div className="flex items-baseline gap-2">
+                                      <span className="text-3xl font-bold text-quantum-bright">
+                                        {plan.precoMensal}
+                                      </span>
+                                      <span className="text-sm text-muted-foreground">/mês</span>
+                                    </div>
+                                  )}
+                                  {plan.precoAnual && (
+                                    <p className="text-sm text-muted-foreground">
+                                      Plano anual: {plan.precoAnual}
+                                      {plan.descontoAnualPercentual !== null
+                                        ? ` • até ${plan.descontoAnualPercentual}% de economia`
+                                        : plan.economiaAnualFormatada
+                                          ? ` • Economize ${plan.economiaAnualFormatada}`
+                                          : ""}
+                                    </p>
+                                  )}
+                                  {!plan.precoMensal && !plan.precoAnual && (
+                                    <p className="text-sm text-muted-foreground">Investimento sob consulta.</p>
+                                  )}
+                                </div>
+                              </CardHeader>
+                              <CardContent className="flex flex-1 flex-col gap-4">
+                                <div className="space-y-3">
+                                  <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Principais benefícios
+                                  </p>
+                                  <ul className="space-y-2">
+                                    {plan.recursos.length > 0 ? (
+                                      plan.recursos.slice(0, 6).map((feature) => (
+                                        <li key={feature} className="flex items-start gap-3 text-sm text-muted-foreground">
+                                          <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-quantum-bright" />
+                                          <span>{feature}</span>
+                                        </li>
+                                      ))
+                                    ) : (
+                                      <li className="text-sm text-muted-foreground">
+                                        Personalize o pacote com nossos especialistas para incluir os recursos desejados.
+                                      </li>
+                                    )}
+                                  </ul>
+                                </div>
+                              </CardContent>
+                              <CardFooter className="mt-auto flex flex-col gap-3">
+                                <Button
+                                  variant="quantum"
+                                  className="w-full track-link"
+                                  onClick={() => handleDemoClick(`plan_${plan.id}`)}
+                                >
+                                  Solicitar proposta
+                                  <ArrowRight className="h-5 w-5 ml-2" />
+                                </Button>
+                                <Button
+                                  variant="outline_quantum"
+                                  className="w-full track-link"
+                                  onClick={() => handleWhatsappClick(`plan_${plan.id}`)}
+                                >
+                                  Falar no WhatsApp
+                                </Button>
+                              </CardFooter>
+                            </Card>
+                          </CarouselItem>
+                        ))}
+                      </CarouselContent>
+                      <CarouselPrevious className="hidden md:flex" />
+                      <CarouselNext className="hidden md:flex" />
+                    </Carousel>
+                  ) : (
+                    <Card className="border-dashed border-quantum-light/40 bg-background/60 backdrop-blur">
+                      <CardContent className="p-6 space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          {planosError ??
+                            "Nenhum plano público cadastrado no momento. Entre em contato para receber uma proposta personalizada."}
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          <Button
+                            variant="quantum"
+                            className="track-link"
+                            onClick={() => handleDemoClick("planos_vazios")}
+                          >
+                            Solicitar atendimento
+                            <ArrowRight className="h-5 w-5 ml-2" />
+                          </Button>
+                          <Button
+                            variant="outline_quantum"
+                            className="track-link"
+                            onClick={() => handleWhatsappClick("planos_vazios")}
+                          >
+                            Falar no WhatsApp
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               </div>
               <div className="flex flex-wrap gap-4">
                 <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("legal_section")}>
