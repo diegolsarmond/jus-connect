@@ -53,7 +53,7 @@ export function HeaderActions() {
 
   const handleProfileToggle = useCallback(() => {
     if (isOnAdminArea) {
-      navigate(routes.home, { replace: true });
+      navigate(routes.dashboard, { replace: true });
       return;
     }
 
