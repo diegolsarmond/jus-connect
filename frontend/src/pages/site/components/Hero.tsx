@@ -39,14 +39,14 @@ const Hero = () => {
       <div className="container relative z-10 grid gap-12 px-4 pb-24 pt-28 md:grid-cols-[1.4fr_1fr] md:items-center">
         <div className="space-y-8">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-            Plataforma para times jurídicos de alta performance
+            Plataforma para equipes de alta performance
           </span>
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl">
-            Tecnologia, dados e automação para transformar a operação jurídica do seu escritório
+            Tecnologia, dados e automação para impulsionar a operação da sua empresa
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground">
-            Centralize clientes, processos, finanças e comunicação em uma experiência completa. A Quantum conecta IA generativa
-            e fluxo de trabalho para que seu time entregue valor desde o primeiro dia.
+            Centralize clientes, projetos, finanças e comunicação em uma experiência completa. A Quantum conecta IA generativa e
+            fluxo de trabalho para que seu time entregue valor desde o primeiro dia.
           </p>
           <div className="flex flex-wrap items-center gap-4">
             <Button asChild size="lg" className="text-base font-semibold">
@@ -79,7 +79,7 @@ const Hero = () => {
               </div>
               <div className="space-y-3">
                 <div className="rounded-lg border border-border/30 p-3">
-                  <p className="text-sm font-semibold text-foreground">Lead jurídico qualificado</p>
+                  <p className="text-sm font-semibold text-foreground">Lead qualificado</p>
                   <p className="text-xs text-muted-foreground">Fluxo automatizado: captação → qualificação → proposta</p>
                 </div>
                 <div className="rounded-lg border border-border/30 p-3">
@@ -92,8 +92,8 @@ const Hero = () => {
                 </div>
               </div>
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-primary">
-                "Com a Quantum, a gente conseguiu reduzir em 45% o tempo gasto com follow-up e gestão de processos."
-                <p className="mt-2 text-xs text-muted-foreground">— Cliente QuantumJUD</p>
+                "Com a Quantum, a gente conseguiu reduzir em 45% o tempo gasto com follow-up e gestão de demandas."
+                <p className="mt-2 text-xs text-muted-foreground">— Cliente Quantum</p>
               </div>
             </div>
           </div>

@@ -31,7 +31,7 @@ const Contact = () => {
       },
       {
         title: "Converse com especialistas",
-        description: "Marque uma reunião para entender como a Quantum pode acelerar o seu escritório.",
+        description: "Marque uma reunião para entender como a Quantum pode acelerar seus resultados.",
         icon: Phone,
         actionLabel: "Agendar reunião",
         href: "https://cal.com/quantum/agendamento",

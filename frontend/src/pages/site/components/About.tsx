@@ -70,7 +70,7 @@ const About = () => {
               Sobre a Quantum
             </span>
             <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
-              Especialistas em transformação digital com foco em escritórios jurídicos
+              Especialistas em transformação digital para operações complexas
             </h2>
             <p className="text-base text-muted-foreground">
               Desde 2017, atuamos com squads multidisciplinares combinando estratégia, design e engenharia de software para
@@ -128,7 +128,7 @@ const About = () => {
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-foreground">Time multidisciplinar</h3>
             <p className="text-sm text-muted-foreground">
-              Profissionais especialistas em direito, engenharia de dados, UX e operações garantem visão 360º da solução.
+              Profissionais de estratégia, engenharia de dados, UX e operações garantem visão 360º da solução.
             </p>
           </div>
           <div className="space-y-2">
