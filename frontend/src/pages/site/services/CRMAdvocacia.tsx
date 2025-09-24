@@ -315,7 +315,7 @@ const CRMAdvocacia = () => {
       source
     });
     window.open(
-      "https://wa.me/553193054200?text=Olá! Gostaria de conhecer o CRM da Quantum para escritórios de advocacia.",
+      "https://wa.me/553193054200?text=Olá! Gostaria de conhecer o CRM do Jus Connect para escritórios de advocacia.",
       "_blank"
     );
   };
@@ -400,7 +400,7 @@ const CRMAdvocacia = () => {
               Resultados reais para bancas jurídicas
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              O CRM da Quantum combina automação, dados e atendimento consultivo para acelerar o crescimento do seu escritório.
+              O CRM do Jus Connect combina automação, dados e atendimento consultivo para acelerar o crescimento do seu escritório.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

@@ -100,14 +100,14 @@ const BlogPage = () => {
           <div className="container relative z-10 px-4 py-24">
             <div className="flex flex-col gap-6 max-w-3xl">
               <Badge variant="outline" className="w-fit border-quantum-bright/60 text-quantum-bright">
-                Blog Quantum
+                Blog Jus Connect
               </Badge>
               <h1 className="text-4xl md:text-5xl font-bold leading-tight">
-                Insights que conectam tecnologia, estratégia e resultados
+                Insights que conectam tecnologia, estratégia e resultados jurídicos
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground">
                 Explore análises profundas, guias práticos e tendências sobre inteligência artificial, automação e transformação
-                digital para empresas que querem liderar o futuro.
+                digital para escritórios e departamentos jurídicos que querem liderar o futuro.
               </p>
             </div>
 

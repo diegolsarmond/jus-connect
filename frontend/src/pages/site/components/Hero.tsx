@@ -12,18 +12,18 @@ interface Highlight {
 const HIGHLIGHTS: Highlight[] = [
   {
     icon: Sparkles,
-    title: "IA aplicada",
-    description: "Assistentes digitais e automações inteligentes em toda a jornada do cliente.",
+    title: "Dados confiáveis",
+    description: "Centralize processos, publicações e documentos em um painel único.",
   },
   {
     icon: Workflow,
-    title: "Operações integradas",
-    description: "Conectamos CRM, financeiro, documentos e comunicação em um único fluxo.",
+    title: "Fluxos automatizados",
+    description: "Padronize tarefas críticas com automações e playbooks jurídicos.",
   },
   {
     icon: ShieldCheck,
-    title: "Segurança e compliance",
-    description: "Arquitetura confiável com governança de dados e monitoramento contínuo.",
+    title: "Conformidade total",
+    description: "Governança, rastreabilidade e controles alinhados à LGPD.",
   },
 ];
 
@@ -36,14 +36,14 @@ const Hero = () => {
       <div className="container relative z-10 grid gap-12 px-4 pb-24 pt-28">
         <div className="space-y-8">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-            Plataforma para equipes de alta performance
+            Plataforma jurídica inteligente
           </span>
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl">
-            Tecnologia, dados e automação para impulsionar a operação da sua empresa
+            Jus Connect organiza o contencioso e o relacionamento com clientes em um só lugar
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground">
-            Centralize clientes, projetos, finanças e comunicação em uma experiência completa. A Quantum conecta IA generativa e
-            fluxo de trabalho para que seu time entregue valor desde o primeiro dia.
+            Elimine planilhas paralelas, acompanhe indicadores em tempo real e ofereça experiências digitais modernas para o
+            seu escritório ou departamento jurídico.
           </p>
           <dl className="grid gap-4 sm:grid-cols-3">
             {HIGHLIGHTS.map((highlight) => (

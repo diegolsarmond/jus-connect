@@ -8,75 +8,75 @@ import { Lightbulb, Rocket, ShieldCheck, Target, Users } from "lucide-react";
 
 const milestones = [
   {
-    period: "2017",
-    title: "Fundação da Quantum",
+    period: "2016",
+    title: "Origens do Jus Connect",
     description:
-      "Nasce a Quantum Tecnologia com a missão de acelerar a transformação digital de empresas brasileiras.",
+      "A Quantum Tecnologia inicia pesquisas com escritórios e departamentos jurídicos para mapear dores e oportunidades.",
   },
   {
-    period: "2019",
-    title: "Primeiras automações e IA",
+    period: "2018",
+    title: "Primeiros pilotos",
     description:
-      "Implementamos nossos primeiros projetos de automação em escala e assistentes inteligentes baseados em IA.",
+      "Protótipos da plataforma integram publicações de tribunais, CRM e automações de atendimento em um único ambiente.",
   },
   {
-    period: "2021",
-    title: "Expansão Nacional",
+    period: "2020",
+    title: "Lançamento oficial",
     description:
-      "Atingimos clientes em todo o território nacional com squads dedicados e uma operação 100% remota.",
+      "O Jus Connect chega ao mercado com squads consultivos, fluxos prontos e integrações nativas com ecossistemas jurídicos.",
   },
   {
-    period: "2023",
-    title: "Soluções Proprietárias",
+    period: "2022",
+    title: "Expansão de módulos",
     description:
-      "Lançamos produtos próprios como o QuantumJUD, combinando dados jurídicos, automações e analytics avançado.",
+      "Incluímos analytics jurídicos, financial ops e conectores low-code para acelerar projetos personalizados.",
   },
   {
     period: "2024+",
-    title: "Futuro Colaborativo",
+    title: "Evolução contínua",
     description:
-      "Seguimos co-criando com nossos clientes experiências digitais centradas em dados, IA e hiperautomação.",
+      "Seguimos co-criando com clientes, parceiros e comunidade legaltech para ampliar os resultados do Jus Connect.",
   },
 ];
 
 const pillars = [
   {
     icon: Target,
-    title: "Foco em Resultado",
+    title: "Resultados compartilhados",
     description:
-      "Projetos orientados a métricas de negócio, com sprints curtos, entregas contínuas e governança compartilhada.",
+      "Objetivos desenhados com o cliente, sprints quinzenais e indicadores acompanhados em conjunto.",
   },
   {
     icon: Users,
-    title: "Parceria de Longo Prazo",
+    title: "Parceria de longo prazo",
     description:
-      "Trabalhamos lado a lado com times internos, capacitando pessoas e garantindo adoção plena das soluções.",
+      "Trabalhamos lado a lado com o time jurídico, capacitando pessoas e garantindo adoção contínua.",
   },
   {
     icon: Lightbulb,
-    title: "Inovação Aplicada",
+    title: "Inovação aplicada",
     description:
-      "Aplicamos IA generativa, automações e design centrado no usuário para resolver desafios reais do dia a dia.",
+      "IA generativa, automações e UX centrado no usuário para resolver desafios reais do dia a dia jurídico.",
   },
   {
     icon: ShieldCheck,
-    title: "Confiança e Segurança",
+    title: "Confiança e segurança",
     description:
-      "Estruturas robustas de segurança, compliance e privacidade em cada projeto entregue pela Quantum.",
+      "Estruturas robustas de segurança, compliance e privacidade em cada módulo da plataforma.",
   },
 ];
 
 const recognitions = [
   {
-    title: "+50 projetos digitais",
-    description: "Transformações conduzidas para setores jurídico, financeiro, varejo e indústria.",
+    title: "+120 operações jurídicas",
+    description: "Escritórios e departamentos que confiam no Jus Connect para conduzir sua estratégia.",
   },
   {
-    title: "+5 anos de jornada",
+    title: "+8 anos de evolução",
     description: "Experiência acumulada com squads multidisciplinares atuando em escala nacional.",
   },
   {
-    title: "+200 automações ativas",
+    title: "+350 automações ativas",
     description: "Workflows monitorados 24/7 garantindo eficiência operacional para nossos clientes.",
   },
 ];
@@ -97,10 +97,10 @@ const NossaHistoria = () => {
                 Nossa trajetória
               </div>
               <h1 className="mt-6 text-4xl md:text-6xl font-bold leading-tight">
-                Uma história de evolução contínua guiada por tecnologia, pessoas e propósito
+                Uma trajetória construída com escritórios e departamentos jurídicos em todo o Brasil
               </h1>
               <p className="mt-6 text-lg md:text-xl text-white/85">
-                Desde 2017, a Quantum Tecnologia combina estratégia, design e engenharia para construir soluções que aceleram negócios e criam experiências digitais memoráveis.
+                O Jus Connect nasceu para organizar dados jurídicos, relacionamentos e finanças em um único ecossistema. Evoluímos em conjunto com clientes que buscam previsibilidade e escala.
               </p>
               <div className="mt-10 grid gap-6 sm:grid-cols-3">
                 <Card className="border-white/20 bg-white/10 backdrop-blur">
@@ -142,7 +142,7 @@ const NossaHistoria = () => {
                 Marcos da nossa jornada
               </h2>
               <p className="text-lg text-muted-foreground">
-                Crescemos conectando tecnologia e estratégia para gerar resultados sustentáveis em organizações de todos os portes.
+                Crescemos com clientes que buscavam previsibilidade, segurança e produtividade no contencioso e no relacionamento com clientes.
               </p>
             </div>
 
@@ -193,7 +193,7 @@ const NossaHistoria = () => {
             <div className="mb-12 max-w-2xl">
               <h2 className="text-3xl md:text-5xl font-bold mb-4 text-foreground">Reconhecimentos dos nossos clientes</h2>
               <p className="text-lg text-muted-foreground">
-                Cada projeto concluído fortalece nossa parceria com empresas que confiam na Quantum para liderar seus movimentos digitais.
+                Cada projeto concluído fortalece nossa parceria com organizações que confiam no Jus Connect para liderar seus movimentos digitais.
               </p>
             </div>
             <div className="grid gap-6 md:grid-cols-3">
@@ -210,7 +210,7 @@ const NossaHistoria = () => {
               <div>
                 <h3 className="text-3xl font-bold">Pronto para escrever os próximos capítulos com a gente?</h3>
                 <p className="mt-2 text-white/80 text-lg">
-                  Vamos explorar como a Quantum pode impulsionar seus resultados com tecnologia e estratégia.
+                  Vamos explorar como o Jus Connect pode impulsionar seus resultados com tecnologia e estratégia.
                 </p>
               </div>
               <Button
