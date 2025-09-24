@@ -7,6 +7,7 @@ export const routes = {
   login: route("/login"),
   register: route("/register"),
   forgotPassword: route("/recuperar-senha"),
+  meuPlano: route("/meu-plano"),
   admin: {
     root: route(appConfig.adminBasePath),
     dashboard: route(appConfig.adminBasePath),
