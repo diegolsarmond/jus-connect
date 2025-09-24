@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { fetchPlanLimitsForCompany, countCompanyResource } from '../services/planLimitsService';
 import { createPasswordResetRequest } from '../services/passwordResetService';
 
 const parseOptionalId = (value: unknown): number | null | 'invalid' => {
@@ -266,6 +267,16 @@ export const createUsuario = async (req: Request, res: Response) => {
       );
       if (empresaExists.rowCount === 0) {
         return res.status(400).json({ error: 'Empresa informada não existe' });
+      }
+
+      const planLimits = await fetchPlanLimitsForCompany(empresaId);
+      if (planLimits?.limiteUsuarios != null) {
+        const usuariosCount = await countCompanyResource(empresaId, 'usuarios');
+        if (usuariosCount >= planLimits.limiteUsuarios) {
+          return res
+            .status(403)
+            .json({ error: 'Limite de usuários do plano atingido.' });
+        }
       }
     }
 
