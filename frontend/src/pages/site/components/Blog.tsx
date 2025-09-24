@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ArrowRight, Calendar, Clock, Sparkles } from "lucide-react";
+import { ArrowRight, Calendar, Clock, Sparkles, User } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import SimpleBackground from "@/components/ui/SimpleBackground";
@@ -101,13 +101,17 @@ const Blog = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="mt-auto space-y-3 text-sm text-muted-foreground">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground/90">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground/90">
                     <span className="inline-flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5" aria-hidden /> {post.formattedDate}
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" aria-hidden /> {post.readTime}
                     </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-medium text-foreground/80">
+                    <User className="h-3.5 w-3.5 text-primary" aria-hidden />
+                    <span>{post.author}</span>
                   </div>
                   <Button asChild variant="ghost" className="justify-start gap-2 px-0 text-sm font-semibold text-primary">
                     <Link to={routes.blogPost(post.slug)}>

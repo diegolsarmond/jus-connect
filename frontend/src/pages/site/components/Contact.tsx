@@ -109,6 +109,17 @@ const Contact = () => {
                   />
                 </label>
               </div>
+              <label className="text-sm font-medium text-foreground" htmlFor="contact-phone">
+                Telefone
+                <input
+                  id="contact-phone"
+                  name="phone"
+                  type="tel"
+                  required
+                  className="mt-1 w-full rounded-md border border-border/50 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  placeholder="(31) 99305-4200"
+                />
+              </label>
               <label className="text-sm font-medium text-foreground" htmlFor="contact-company">
                 Empresa
                 <input

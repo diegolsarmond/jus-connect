@@ -13,6 +13,8 @@ export const routes = {
   serviceAssistenteIA: route("/servicos/assistente-ia"),
   serviceDesenvolvimento: route("/servicos/desenvolvimento"),
   history: route("/nossa-historia"),
+  privacyPolicy: route("/politica-de-privacidade"),
+  termsOfUse: route("/termos-de-uso"),
   dashboard: route("/app"),
   login: route("/login"),
   register: route("/register"),

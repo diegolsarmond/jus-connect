@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
-import { Github, Linkedin, Mail } from "lucide-react";
+import { Github, Linkedin, Mail, MapPin, Phone } from "lucide-react";
 
 import quantumLogo from "@/assets/quantum-logo.png";
 import { routes } from "@/config/routes";
-import { buildAppPath } from "@/config/app-config";
 
 const currentYear = new Date().getFullYear();
 
@@ -19,6 +18,18 @@ const Footer = () => {
           <p className="max-w-sm text-sm text-muted-foreground">
             Soluções digitais completas com foco em resultados para equipes jurídicas, financeiras e operacionais.
           </p>
+          <address className="space-y-2 text-sm text-muted-foreground not-italic">
+            <div className="flex items-start gap-2">
+              <MapPin className="mt-0.5 h-4 w-4 text-primary" aria-hidden />
+              <span>R. Antônio de Albuquerque, 330 - Sala 901 - Savassi, Belo Horizonte - MG, 30112-010</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-primary" aria-hidden />
+              <a href="tel:+5531993054200" className="transition hover:text-foreground">
+                (31) 99305-4200
+              </a>
+            </div>
+          </address>
           <div className="flex items-center gap-3">
             <a
               href="https://www.linkedin.com/company/quantumtecnologia/"
@@ -95,12 +106,12 @@ const Footer = () => {
         <div className="container flex flex-col items-center justify-between gap-3 px-4 py-4 text-center text-xs text-muted-foreground md:flex-row">
           <span>&copy; {currentYear} Quantum Tecnologia. Todos os direitos reservados.</span>
           <div className="flex gap-4">
-            <a href={buildAppPath("politica-de-privacidade")} className="transition hover:text-foreground">
+            <Link to={routes.privacyPolicy} className="transition hover:text-foreground">
               Política de privacidade
-            </a>
-            <a href={buildAppPath("termos-de-uso")} className="transition hover:text-foreground">
+            </Link>
+            <Link to={routes.termsOfUse} className="transition hover:text-foreground">
               Termos de uso
-            </a>
+            </Link>
           </div>
         </div>
       </div>

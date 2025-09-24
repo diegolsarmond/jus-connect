@@ -9,20 +9,20 @@ interface Feature {
 
 const FEATURES: Feature[] = [
   {
-    title: "Gestão de casos completa",
-    description: "Controle prazos, responsáveis, compromissos e documentos com alertas automáticos de SLA.",
+    title: "Integração com WhatsApp e omnichannel",
+    description: "Centralize atendimentos, notificações e follow-ups em tempo real com histórico completo por cliente.",
   },
   {
-    title: "Fluxos financeiros integrados",
-    description: "Propostas, contratos, faturamento e inadimplência no mesmo pipeline com dashboards prontos.",
+    title: "IA para resumir processos",
+    description: "Receba sínteses automáticas dos andamentos e próximos passos priorizados para cada caso.",
   },
   {
-    title: "Atendimento omnichannel",
-    description: "Histórico de interações em WhatsApp, e-mail e telefone centralizado para cada cliente.",
+    title: "Redação inteligente de documentos",
+    description: "Gere petições, contratos e minutas com modelos dinâmicos alimentados pelos dados do CRM.",
   },
   {
-    title: "Templates e automações",
-    description: "Minutas, notificações e tarefas criadas automaticamente conforme o estágio do processo.",
+    title: "Controle financeiro e cobranças",
+    description: "Fluxos completos de faturamento, alertas de inadimplência e disparos automáticos de cobrança.",
   },
 ];
 
@@ -39,8 +39,8 @@ const CRMAdvogados = () => {
             CRM criado para acelerar escritórios jurídicos e departamentos legais
           </h2>
           <p className="max-w-2xl text-base text-muted-foreground">
-            Estruture sua operação com automações, relatórios financeiros, captação de novos casos e acompanhamento jurídico
-            em um único lugar.
+            Estruture sua operação com atendimentos digitais, inteligência artificial aplicada ao jurídico, finanças conectadas
+            e uma jornada completa do cliente em um único lugar.
           </p>
           <ul className="space-y-3 text-sm text-muted-foreground">
             {FEATURES.map((feature) => (
@@ -59,23 +59,29 @@ const CRMAdvogados = () => {
           <CardHeader>
             <CardTitle className="text-xl">Pipeline jurídico em tempo real</CardTitle>
             <CardDescription>
-              Visualize todo o funil: captação, propostas, contratos, andamento de processos e fidelização.
+              Visualize desde o primeiro contato até o pós-venda com insights inteligentes e fluxos automatizados.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <div className="rounded-lg border border-border/30 p-4">
-              <p className="font-medium text-foreground">Captação com IA</p>
-              <p>Identifique oportunidades prioritárias com scoring automático e qualificações guiadas.</p>
+              <p className="font-medium text-foreground">Captação conectada</p>
+              <p>
+                Capture leads de WhatsApp, formulários e indicações com roteamento automático para o time responsável.
+              </p>
             </div>
             <div className="rounded-lg border border-border/30 p-4">
               <p className="font-medium text-foreground">Controle financeiro</p>
-              <p>Emita contratos, gere cobranças recorrentes e concilie pagamentos em poucos cliques.</p>
+              <p>Planeje honorários, receba alertas de inadimplência e programe cobranças recorrentes sem planilhas.</p>
             </div>
             <div className="rounded-lg border border-border/30 p-4">
-              <p className="font-medium text-foreground">Documentos conectados</p>
+              <p className="font-medium text-foreground">Documentos com IA</p>
               <p>
-                Monte petições e peças jurídicas com templates inteligentes integrados ao repositório e assinatura digital.
+                Geração automática de petições e resumos processuais com revisão assistida e envio direto para assinatura.
               </p>
+            </div>
+            <div className="rounded-lg border border-border/30 p-4">
+              <p className="font-medium text-foreground">Operação guiada por dados</p>
+              <p>Dashboards jurídicos, operacionais e financeiros para priorizar ações e medir performance do time.</p>
             </div>
           </CardContent>
         </Card>

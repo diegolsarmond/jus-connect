@@ -1,10 +1,7 @@
-import { Link } from "react-router-dom";
 import { ShieldCheck, Sparkles, Workflow } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import SimpleBackground from "@/components/ui/SimpleBackground";
-import { Button } from "@/components/ui/button";
-import { routes } from "@/config/routes";
 
 interface Highlight {
   icon: LucideIcon;
@@ -36,7 +33,7 @@ const Hero = () => {
       <div className="absolute inset-0" aria-hidden>
         <SimpleBackground className="opacity-80" />
       </div>
-      <div className="container relative z-10 grid gap-12 px-4 pb-24 pt-28 md:grid-cols-[1.4fr_1fr] md:items-center">
+      <div className="container relative z-10 grid gap-12 px-4 pb-24 pt-28">
         <div className="space-y-8">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
             Plataforma para equipes de alta performance
@@ -48,14 +45,6 @@ const Hero = () => {
             Centralize clientes, projetos, finanças e comunicação em uma experiência completa. A Quantum conecta IA generativa e
             fluxo de trabalho para que seu time entregue valor desde o primeiro dia.
           </p>
-          <div className="flex flex-wrap items-center gap-4">
-            <Button asChild size="lg" className="text-base font-semibold">
-              <Link to={routes.register}>Começar agora</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="text-base">
-                          <Link to={{ pathname: routes.home, hash: "#contato" }}>Experimente gratuitamente por 14 dias.</Link>
-            </Button>
-          </div>
           <dl className="grid gap-4 sm:grid-cols-3">
             {HIGHLIGHTS.map((highlight) => (
               <div
@@ -70,34 +59,6 @@ const Hero = () => {
           </dl>
         </div>
 
-        <div className="relative flex justify-center">
-          <div className="relative rounded-3xl border border-border/30 bg-background/70 p-6 shadow-xl backdrop-blur">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-muted-foreground">Visão do cliente</span>
-                <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">Tempo real</span>
-              </div>
-              <div className="space-y-3">
-                <div className="rounded-lg border border-border/30 p-3">
-                  <p className="text-sm font-semibold text-foreground">Lead qualificado</p>
-                  <p className="text-xs text-muted-foreground">Fluxo automatizado: captação → qualificação → proposta</p>
-                </div>
-                <div className="rounded-lg border border-border/30 p-3">
-                  <p className="text-sm font-semibold text-foreground">Agenda inteligente</p>
-                  <p className="text-xs text-muted-foreground">IA sugere priorização de compromissos e tarefas críticas</p>
-                </div>
-                <div className="rounded-lg border border-border/30 p-3">
-                  <p className="text-sm font-semibold text-foreground">Alertas financeiros</p>
-                  <p className="text-xs text-muted-foreground">Receitas recorrentes, inadimplências e KPIs atualizados</p>
-                </div>
-              </div>
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-primary">
-                "Com a Quantum, a gente conseguiu reduzir em 45% o tempo gasto com follow-up e gestão de demandas."
-                <p className="mt-2 text-xs text-muted-foreground">— Cliente Quantum</p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   );
