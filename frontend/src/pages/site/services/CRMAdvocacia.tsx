@@ -309,7 +309,8 @@ const CRMAdvocacia = () => {
             <div className="flex flex-wrap justify-center gap-4">
               <Button variant="quantum" size="xl" className="track-link shadow-quantum" onClick={() => handleDemoClick("hero")}
               >
-                Solicitar demonstração
+                              Experimente gratuitamente por 14 dias.
+
                 <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
               <Button
@@ -654,7 +655,8 @@ const CRMAdvocacia = () => {
                   className="bg-white/20 border-white/30 text-white hover:bg-white hover:text-quantum-deep track-link"
                   onClick={() => handleDemoClick("final_cta")}
                 >
-                  Solicitar demonstração
+                                  Experimente gratuitamente por 14 dias.
+
                   <ArrowRight className="h-5 w-5 ml-2" />
                 </Button>
                 <Button
