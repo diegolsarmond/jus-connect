@@ -32,8 +32,7 @@ const Blog = () => {
           </span>
           <h2 className="text-3xl font-semibold text-foreground md:text-4xl">Insights para acelerar sua transformação</h2>
           <p className="mx-auto max-w-3xl text-base text-muted-foreground">
-            Artigos, cases e melhores práticas sobre automações, CRM jurídico, experiência do cliente e operação orientada a
-            dados.
+            Artigos, cases e melhores práticas sobre automações, CRM, experiência do cliente e operação orientada a dados.
           </p>
         </div>
 
