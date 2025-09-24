@@ -139,7 +139,27 @@ export default function NovoUsuario() {
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
-        throw new Error("Erro ao criar usuário");
+        let errorMessage = "Erro ao criar usuário";
+        try {
+          const errorResponse = await response.json();
+          if (errorResponse && typeof errorResponse === "object") {
+            const backendMessage = (() => {
+              if (typeof (errorResponse as { error?: unknown }).error === "string") {
+                return (errorResponse as { error?: string }).error;
+              }
+              if (typeof (errorResponse as { message?: unknown }).message === "string") {
+                return (errorResponse as { message?: string }).message;
+              }
+              return undefined;
+            })();
+            if (backendMessage) {
+              errorMessage = backendMessage;
+            }
+          }
+        } catch (parseError) {
+          console.error("Erro ao ler resposta do backend:", parseError);
+        }
+        throw new Error(errorMessage);
       }
       toast({
         title: "Usuário criado",
@@ -148,7 +168,17 @@ export default function NovoUsuario() {
       navigate("/configuracoes/usuarios");
     } catch (error) {
       console.error("Erro ao criar usuário:", error);
-      toast({ title: "Erro ao criar usuário", variant: "destructive" });
+      const message =
+        error instanceof Error && error.message ? error.message : undefined;
+      const fallbackDescription = "Não foi possível criar o usuário.";
+      toast({
+        title: "Erro ao criar usuário",
+        description:
+          message && message !== "Erro ao criar usuário"
+            ? message
+            : fallbackDescription,
+        variant: "destructive",
+      });
     }
   };
 
