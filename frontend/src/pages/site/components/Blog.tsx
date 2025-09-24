@@ -10,6 +10,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { routes } from "@/config/routes";
 import { useBlogPosts } from "@/hooks/useBlogPosts";
 
+const formatPostDateTime = (dateString: string): string => {
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+};
+
 const Blog = () => {
   const {
     data: posts = [],
@@ -17,7 +34,14 @@ const Blog = () => {
     isError,
   } = useBlogPosts();
 
-  const highlightedPosts = useMemo(() => posts.slice(0, 3), [posts]);
+  const highlightedPosts = useMemo(
+    () =>
+      posts.slice(0, 3).map((post) => ({
+        ...post,
+        formattedDate: formatPostDateTime(post.date),
+      })),
+    [posts],
+  );
 
   return (
     <section id="blog" className="relative overflow-hidden bg-background">
@@ -79,7 +103,7 @@ const Blog = () => {
                 <CardContent className="mt-auto space-y-3 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between text-xs text-muted-foreground/90">
                     <span className="inline-flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5" aria-hidden /> {post.date}
+                      <Calendar className="h-3.5 w-3.5" aria-hidden /> {post.formattedDate}
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" aria-hidden /> {post.readTime}
