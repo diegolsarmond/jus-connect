@@ -42,6 +42,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { routes } from "@/config/routes";
 import { getApiBaseUrl } from "@/lib/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useSidebarCounters, type SidebarCounterKey, type SidebarCountersMap } from "@/hooks/useSidebarCounters";
@@ -111,7 +112,7 @@ export function Sidebar() {
 
   const navigation = useMemo<NavItem[]>(
     () => [
-      { name: "Dashboard", href: "/", icon: LayoutDashboard, moduleId: "dashboard" },
+      { name: "Dashboard", href: routes.dashboard, icon: LayoutDashboard, moduleId: "dashboard" },
       {
         name: "Conversas",
         href: "/conversas",
