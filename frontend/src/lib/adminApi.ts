@@ -57,6 +57,7 @@ export const blogPostSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   description: z.string().min(1),
+  content: z.string().min(1).optional(),
   author: z.string().min(1),
   date: z.string().min(1),
   readTime: z.string().min(1),
@@ -73,6 +74,7 @@ export type BlogPost = z.infer<typeof blogPostSchema>;
 
 export const blogPostInputSchema = blogPostSchema.partial({
   id: true,
+  content: true,
   createdAt: true,
   updatedAt: true,
 }).required({

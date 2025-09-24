@@ -26,6 +26,7 @@ export default {
           bright: "#9ca3af",
           light: "#e5e7eb",
           cyan: "#d1d5db",
+
         },
         primary: {
           DEFAULT: "hsl(var(--primary))",
@@ -91,6 +92,7 @@ export default {
           "0 25px 45px -20px rgba(75, 85, 99, 0.3), 0 12px 30px -12px rgba(31, 41, 55, 0.25)",
         glow: "0 0 25px rgba(156, 163, 175, 0.35)",
         soft: "0 10px 30px -20px rgba(55, 65, 81, 0.35)",
+
       },
       borderRadius: {
         lg: "var(--radius)",
