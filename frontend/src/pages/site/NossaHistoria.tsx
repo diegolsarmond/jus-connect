@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import SimpleBackground from "@/components/ui/SimpleBackground";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +84,7 @@ const recognitions = [
 const NossaHistoria = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <TypebotBubble />
       <Header />
 
       <main>

@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, Clock, Share2, Sparkles, Tag } from "lucide-react"
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import SimpleBackground from "@/components/ui/SimpleBackground";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const BlogArticle = () => {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <TypebotBubble />
       <Header />
       <main className="flex-1">
         <section className="relative overflow-hidden border-b border-border/50">
