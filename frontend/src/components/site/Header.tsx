@@ -133,8 +133,8 @@ const Header = () => {
             closeMenu();
           }}
         >
-          <img src={quantumLogo} alt="Quantum Tecnologia" className="h-8 w-8" />
-          <span className="font-semibold tracking-tight text-lg text-foreground">Quantum Tecnologia</span>
+          <img src={quantumLogo} alt="Jus Connect" className="h-8 w-8" />
+          <span className="font-semibold tracking-tight text-lg text-foreground">Jus Connect</span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex" aria-label="Navegação principal">

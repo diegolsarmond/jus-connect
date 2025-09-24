@@ -16,10 +16,11 @@ const PrivacyPolicy = () => {
               <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
                 Política de Privacidade
               </span>
-              <h1 className="text-4xl font-semibold md:text-5xl">Como cuidamos dos seus dados na Quantum</h1>
+              <h1 className="text-4xl font-semibold md:text-5xl">Como tratamos dados no Jus Connect</h1>
               <p className="text-base text-muted-foreground">
-                Este documento descreve as práticas adotadas pela Quantum Tecnologia para coletar, armazenar, utilizar e proteger
-                informações pessoais em conformidade com a Lei Geral de Proteção de Dados (LGPD).
+                Este documento descreve as práticas adotadas pelo Jus Connect, plataforma desenvolvida pela Quantum Tecnologia,
+                para coletar, armazenar, utilizar e proteger informações pessoais em conformidade com a Lei Geral de Proteção de
+                Dados (LGPD).
               </p>
             </div>
           </div>
@@ -57,7 +58,7 @@ const PrivacyPolicy = () => {
             <h2 className="text-2xl font-semibold text-foreground">4. Direitos dos titulares</h2>
             <p>
               Você pode solicitar a qualquer momento a confirmação do tratamento, acesso, correção, anonimização, portabilidade ou
-              exclusão dos seus dados pessoais. Para exercer esses direitos, envie uma solicitação para contato@quantumtecnologia.com.
+              exclusão dos seus dados pessoais. Para exercer esses direitos, envie uma solicitação para privacidade@jusconnect.com.br.
             </p>
           </article>
 
