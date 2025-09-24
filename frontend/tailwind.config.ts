@@ -79,6 +79,8 @@ export default {
                 },
             },
             backgroundImage: {
+                "gradient-primary":
+                    "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-hover)) 100%)",
                 "gradient-hero":
                     "linear-gradient(135deg, rgba(6,55,105,0.95) 0%, rgba(3,94,140,0.90) 55%, rgba(4,37,70,0.95) 100%)",
                 "gradient-quantum":
