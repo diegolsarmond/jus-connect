@@ -72,7 +72,9 @@ const Blog = () => {
                     {post.category}
                   </Badge>
                   <CardTitle className="text-xl text-foreground">{post.title}</CardTitle>
-                  <CardDescription>{post.description}</CardDescription>
+                  <CardDescription className="text-foreground/80">
+                    {post.description}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="mt-auto space-y-3 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between text-xs text-muted-foreground/90">
