@@ -11,6 +11,7 @@ import {
 import { getApiBaseUrl } from "@/lib/api";
 import { DEFAULT_TIMEOUT_MS, LAST_ACTIVITY_KEY } from "@/hooks/useAutoLogout";
 import { ApiError, fetchCurrentUser, loginRequest, refreshTokenRequest } from "./api";
+import { sanitizeModuleList } from "./moduleUtils";
 import type {
   AuthSubscription,
   AuthUser,
@@ -189,9 +190,7 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
   }
 
   const candidate = user as AuthUser & { modulos?: unknown; subscription?: unknown };
-  const modules = Array.isArray(candidate.modulos)
-    ? candidate.modulos.filter((module): module is string => typeof module === "string")
-    : [];
+  const modules = sanitizeModuleList(candidate.modulos);
   const subscription = sanitizeAuthSubscription(candidate.subscription ?? null);
   const record = candidate as Record<string, unknown>;
   const mustChangePassword =
