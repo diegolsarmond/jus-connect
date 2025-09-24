@@ -408,7 +408,7 @@ const BlogPage = () => {
                       <CardTitle className="text-xl leading-snug group-hover:text-quantum-bright transition-colors">
                         {post.title}
                       </CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground">
+                      <CardDescription className="text-sm text-foreground/80">
                         {post.description}
                       </CardDescription>
                     </CardHeader>
