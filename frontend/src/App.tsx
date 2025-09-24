@@ -120,6 +120,7 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter basename={routerBasename}>
+
           <Suspense fallback={<LandingFallback />}>
             <Routes>
               <Route path={routes.home} element={<SiteIndex />} />
