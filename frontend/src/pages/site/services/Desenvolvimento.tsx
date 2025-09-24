@@ -214,28 +214,6 @@ const Desenvolvimento = () => {
       icon: LifeBuoy,
       title: "Suporte orientado a SLAs",
       description: "Runbooks, gestão de incidentes e squads de sustentação para evolução contínua.",
-  ];
-
-  const capabilityHighlights = [
-    {
-      icon: Code2,
-      title: "Produtos digitais completos",
-      description: "Concepção ponta a ponta de plataformas, portais e aplicativos com foco em experiência e resultado.",
-      bullets: [
-        "Workshops de discovery e mapeamento de processos",
-        "UX/UI centrado no usuário com design system reutilizável",
-        "Arquitetura orientada a microsserviços e APIs escaláveis",
-      ],
-    },
-    {
-      icon: Puzzle,
-      title: "Integrações e modernização",
-      description: "Modernize sistemas legados, conecte plataformas e automatize operações críticas do negócio.",
-      bullets: [
-        "Integração com ERPs, CRMs, gateways e plataformas proprietárias",
-        "Estratégias de refatoração gradual sem paradas na operação",
-        "APIs, mensageria e automações que conectam toda a jornada",
-      ],
     },
   ];
 
@@ -261,15 +239,6 @@ const Desenvolvimento = () => {
       ],
     },
     {
-      icon: Sparkles,
-      title: "Inovação guiada por dados",
-      description: "Implante produtos digitais inteligentes com analítica, automação e inteligência artificial aplicada.",
-      bullets: [
-        "Prototipação rápida para validar hipóteses de negócio",
-        "Dashboards e relatórios com dados em tempo real",
-        "Machine Learning e IA embarcada para personalizar experiências",
-      ],
-    },
       icon: Sparkles,
       title: "Inovação guiada por dados",
       description: "Implante produtos digitais inteligentes com analítica, automação e inteligência artificial aplicada.",
