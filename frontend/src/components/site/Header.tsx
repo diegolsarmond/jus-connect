@@ -9,13 +9,20 @@ import { cn } from "@/lib/utils";
 
 type HeaderNavItem = {
   label: string;
-  href: string;
+  href?: string;
+  children?: HeaderNavItem[];
 };
 
 const NAV_ITEMS: HeaderNavItem[] = [
   { label: "Início", href: "#hero" },
   { label: "Serviços", href: "#servicos" },
-  { label: "CRM", href: "#crm" },
+  {
+    label: "Nossos Produtos",
+    children: [
+      { label: "CRMs", href: "#crm" },
+      { label: "Assistentes Virtuais", href: "/servicos/assistente-ia" },
+    ],
+  },
   { label: "Sobre", href: "#sobre" },
   { label: "Blog", href: "#blog" },
   { label: "Contato", href: "#contato" },
@@ -37,18 +44,42 @@ const Header = () => {
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex" aria-label="Navegação principal">
-          {NAV_ITEMS.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                location.pathname === "/" && location.hash === item.href && "text-foreground",
-              )}
-            >
-              {item.label}
-            </a>
-          ))}
+          {NAV_ITEMS.map((item) =>
+            item.children && item.children.length > 0 ? (
+              <div key={item.label} className="group relative">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                >
+                  {item.label}
+                </button>
+                <div className="invisible absolute left-0 top-full z-50 mt-2 min-w-[12rem] rounded-md border border-border/40 bg-background/95 p-1 text-sm opacity-0 shadow-lg transition duration-150 ease-in-out group-hover:visible group-hover:opacity-100">
+                  {item.children.map((child) => (
+                    <a
+                      key={child.label}
+                      href={child.href}
+                      className="block rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      {child.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ) : item.href ? (
+              <a
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                  location.pathname === "/" && location.hash === item.href && "text-foreground",
+                )}
+              >
+                {item.label}
+              </a>
+            ) : null,
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
@@ -75,16 +106,32 @@ const Header = () => {
       {isMenuOpen ? (
         <div id="mobile-menu" className="border-t border-border/40 bg-background/95 backdrop-blur md:hidden">
           <div className="container flex flex-col gap-2 px-4 py-3">
-            {NAV_ITEMS.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
-                onClick={closeMenu}
-              >
-                {item.label}
-              </a>
-            ))}
+            {NAV_ITEMS.map((item) =>
+              item.children && item.children.length > 0 ? (
+                <div key={item.label} className="flex flex-col gap-1">
+                  <span className="px-3 py-2 text-sm font-semibold text-foreground">{item.label}</span>
+                  {item.children.map((child) => (
+                    <a
+                      key={child.label}
+                      href={child.href}
+                      className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
+                      onClick={closeMenu}
+                    >
+                      {child.label}
+                    </a>
+                  ))}
+                </div>
+              ) : item.href ? (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
+                  onClick={closeMenu}
+                >
+                  {item.label}
+                </a>
+              ) : null,
+            )}
             <Button asChild className="mt-2" onClick={closeMenu}>
               <Link to={routes.login}>Entrar</Link>
             </Button>
