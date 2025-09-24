@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 
@@ -7,6 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -48,7 +55,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { adminApi, blogPostKeys, type BlogPost, type BlogPostInput } from "@/lib/adminApi";
-import { useBlogPosts } from "@/hooks/useBlogPosts";
+import { useBlogPosts, useBlogCategories } from "@/hooks/useBlogPosts";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 interface BlogPostFormState {
   title: string;
@@ -56,20 +64,20 @@ interface BlogPostFormState {
   author: string;
   date: string;
   readTime: string;
-  category: string;
+  categoryId: string;
   slug: string;
   tags: string;
   image: string;
   content: string;
 }
 
-const emptyFormState: BlogPostFormState = {
+const DEFAULT_FORM_STATE: BlogPostFormState = {
   title: "",
   description: "",
   author: "",
   date: "",
   readTime: "",
-  category: "",
+  categoryId: "",
   slug: "",
   tags: "",
   image: "",
@@ -82,18 +90,44 @@ const normalizeTags = (value: string): string[] =>
     .map((tag) => tag.trim())
     .filter(Boolean);
 
-const buildInputPayload = (state: BlogPostFormState): BlogPostInput => ({
-  title: state.title.trim(),
-  description: state.description.trim(),
-  author: state.author.trim(),
-  date: state.date.trim(),
-  readTime: state.readTime.trim(),
-  category: state.category.trim(),
-  slug: state.slug.trim(),
-  image: state.image.trim() || undefined,
-  content: state.content.trim() || undefined,
-  tags: normalizeTags(state.tags),
-});
+const getTodayDateValue = (): string => new Date().toISOString().slice(0, 10);
+
+const formatDateForInput = (value: string | undefined): string => {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
+const buildInputPayload = (state: BlogPostFormState): BlogPostInput => {
+  const categoryId = Number(state.categoryId);
+
+  if (!Number.isInteger(categoryId) || categoryId <= 0) {
+    throw new Error("Selecione uma categoria válida antes de salvar o artigo.");
+  }
+
+  const image = state.image.trim();
+  const content = state.content.trim();
+
+  return {
+    title: state.title.trim(),
+    description: state.description.trim(),
+    author: state.author.trim(),
+    date: state.date.trim(),
+    readTime: state.readTime.trim(),
+    categoryId,
+    slug: state.slug.trim(),
+    image: image.length > 0 ? image : undefined,
+    content: content.length > 0 ? content : undefined,
+    tags: normalizeTags(state.tags),
+  };
+};
 
 const formatDisplayDate = (value: string): string => {
   const parsed = new Date(value);
@@ -110,16 +144,24 @@ const formatDisplayDate = (value: string): string => {
 
 const BlogPosts = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const {
     data: posts = [],
     isLoading,
     isError,
   } = useBlogPosts();
+  const {
+    data: categories = [],
+    isLoading: areCategoriesLoading,
+    isError: hasCategoriesError,
+  } = useBlogCategories();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
-  const [formState, setFormState] = useState<BlogPostFormState>(emptyFormState);
+  const [formState, setFormState] = useState<BlogPostFormState>(DEFAULT_FORM_STATE);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedImageName, setSelectedImageName] = useState<string | null>(null);
 
   const sortedPosts = useMemo(
     () =>
@@ -131,8 +173,17 @@ const BlogPosts = () => {
     [posts],
   );
 
-  const resetForm = useCallback(() => {
-    setFormState(emptyFormState);
+  type FormOverrides = Partial<BlogPostFormState> & { imageName?: string | null };
+
+  const resetForm = useCallback((overrides?: FormOverrides) => {
+    const { imageName, ...formOverrides } = overrides ?? {};
+    const mergedState = { ...DEFAULT_FORM_STATE, ...formOverrides };
+
+    setFormState(mergedState);
+
+    const hasImage = mergedState.image.trim().length > 0;
+    setImagePreview(hasImage ? mergedState.image : null);
+    setSelectedImageName(hasImage ? imageName ?? "Imagem atual" : null);
   }, []);
 
   useEffect(() => {
@@ -143,22 +194,73 @@ const BlogPosts = () => {
     }
 
     if (editingPost) {
-      setFormState({
+      resetForm({
         title: editingPost.title,
         description: editingPost.description,
         author: editingPost.author,
-        date: editingPost.date,
+        date: formatDateForInput(editingPost.date),
         readTime: editingPost.readTime,
-        category: editingPost.category,
+        categoryId: editingPost.categoryId ? String(editingPost.categoryId) : "",
         slug: editingPost.slug,
         tags: editingPost.tags.join(", "),
         image: editingPost.image ?? "",
         content: editingPost.content ?? "",
+        imageName: editingPost.image ? "Imagem atual" : null,
       });
-    } else {
-      resetForm();
+      return;
     }
-  }, [editingPost, isDialogOpen, resetForm]);
+
+    resetForm({
+      author: user?.nome_completo ?? "",
+      date: getTodayDateValue(),
+    });
+  }, [editingPost, isDialogOpen, resetForm, user?.nome_completo]);
+
+  const handleImageChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      setFormState((prev) => ({ ...prev, image: "" }));
+      setImagePreview(null);
+      setSelectedImageName(null);
+      event.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        toast({
+          title: "Falha ao carregar imagem",
+          description: "Não foi possível ler o arquivo selecionado. Tente novamente com outra imagem.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setFormState((prev) => ({ ...prev, image: result }));
+      setImagePreview(result);
+      setSelectedImageName(file.name);
+    };
+
+    reader.onerror = () => {
+      toast({
+        title: "Falha ao carregar imagem",
+        description: "Não foi possível ler o arquivo selecionado. Tente novamente.",
+        variant: "destructive",
+      });
+    };
+
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  }, [toast]);
+
+  const handleRemoveImage = useCallback(() => {
+    setFormState((prev) => ({ ...prev, image: "" }));
+    setImagePreview(null);
+    setSelectedImageName(null);
+  }, []);
 
   const createPostMutation = useMutation({
     mutationFn: async (input: BlogPostInput) => adminApi.createPost(input),
@@ -219,14 +321,25 @@ const BlogPosts = () => {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const payload = buildInputPayload(formState);
+    try {
+      const payload = buildInputPayload(formState);
 
-    if (editingPost) {
-      updatePostMutation.mutate({ id: editingPost.id, input: payload });
-      return;
+      if (editingPost) {
+        updatePostMutation.mutate({ id: editingPost.id, input: payload });
+        return;
+      }
+
+      createPostMutation.mutate(payload);
+    } catch (error) {
+      toast({
+        title: "Não foi possível preparar o artigo",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Revise os dados informados e tente novamente.",
+        variant: "destructive",
+      });
     }
-
-    createPostMutation.mutate(payload);
   };
 
   const isSubmitting = createPostMutation.isPending || updatePostMutation.isPending;
@@ -391,21 +504,40 @@ const BlogPosts = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category">Categoria</Label>
-                <Input
-                  id="category"
-                  value={formState.category}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, category: event.target.value }))}
-                  required
-                  placeholder="Ex.: Transformação Digital"
-                />
+                <Select
+                  value={formState.categoryId}
+                  onValueChange={(value) => setFormState((prev) => ({ ...prev, categoryId: value }))}
+                  disabled={areCategoriesLoading || hasCategoriesError}
+                >
+                  <SelectTrigger id="category" className="w-full">
+                    <SelectValue
+                      placeholder={
+                        areCategoriesLoading
+                          ? "Carregando categorias..."
+                          : hasCategoriesError
+                            ? "Não foi possível carregar as categorias"
+                            : "Selecione uma categoria"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={String(category.id)}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {hasCategoriesError ? (
+                  <p className="text-sm text-destructive">Não foi possível carregar as categorias.</p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="author">Autor</Label>
                 <Input
                   id="author"
                   value={formState.author}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, author: event.target.value }))}
-                  required
+                  readOnly
                   placeholder="Nome do especialista"
                 />
               </div>
@@ -413,10 +545,10 @@ const BlogPosts = () => {
                 <Label htmlFor="date">Data de publicação</Label>
                 <Input
                   id="date"
+                  type="date"
                   value={formState.date}
                   onChange={(event) => setFormState((prev) => ({ ...prev, date: event.target.value }))}
                   required
-                  placeholder="2025-01-31"
                 />
               </div>
               <div className="space-y-2">
@@ -440,13 +572,26 @@ const BlogPosts = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="image">Imagem destacada (URL)</Label>
-                <Input
-                  id="image"
-                  value={formState.image}
-                  onChange={(event) => setFormState((prev) => ({ ...prev, image: event.target.value }))}
-                  placeholder="https://exemplo.com/imagem.jpg"
-                />
+                <Label htmlFor="image">Imagem destacada</Label>
+                <Input id="image" type="file" accept="image/*" onChange={handleImageChange} />
+                <p className="text-xs text-muted-foreground">
+                  Faça upload de uma imagem em formato PNG, JPG ou WEBP para destacar o artigo.
+                </p>
+                {selectedImageName ? (
+                  <p className="text-xs text-muted-foreground">Imagem selecionada: {selectedImageName}</p>
+                ) : null}
+                {imagePreview ? (
+                  <div className="flex items-start gap-3">
+                    <img
+                      src={imagePreview}
+                      alt="Pré-visualização da imagem destacada"
+                      className="h-20 w-20 rounded-md border object-cover"
+                    />
+                    <Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage}>
+                      Remover imagem
+                    </Button>
+                  </div>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tags">Tags (separe com vírgula)</Label>
