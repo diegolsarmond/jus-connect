@@ -57,11 +57,19 @@ const parseBooleanFlag = (value: unknown): boolean | null => {
       return null;
     }
 
-    if (['1', 'true', 't', 'yes', 'y', 'sim', 'on', 'ativo', 'ativa'].includes(normalized)) {
+    if (
+      ['1', 'true', 't', 'yes', 'y', 'sim', 'on', 'ativo', 'ativa', 'active'].includes(
+        normalized
+      )
+    ) {
       return true;
     }
 
-    if (['0', 'false', 'f', 'no', 'n', 'nao', 'não', 'off', 'inativo', 'inativa'].includes(normalized)) {
+    if (
+      ['0', 'false', 'f', 'no', 'n', 'nao', 'não', 'off', 'inativo', 'inativa', 'inactive'].includes(
+        normalized
+      )
+    ) {
       return false;
     }
   }
@@ -801,7 +809,7 @@ export const login = async (req: Request, res: Response) => {
       nome_completo: string;
       email: string;
       senha: string | null;
-      status: boolean | null;
+      status: unknown;
       perfil: number | string | null;
       empresa_id: number | null;
       empresa_nome: string | null;
@@ -823,7 +831,8 @@ export const login = async (req: Request, res: Response) => {
       empresa_subscription_cadence?: unknown;
     };
 
-    if (user.status === false) {
+    const isUserActive = parseBooleanFlag(user.status);
+    if (isUserActive === false) {
       res.status(403).json({ error: 'Usuário inativo.' });
       return;
     }

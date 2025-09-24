@@ -266,6 +266,18 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   const { calls, restore } = setupQueryMock([
     { rows: [{ empresa: 5 }], rowCount: 1 },
     { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
     { rows: [createdRow], rowCount: 1 },
   ]);
 
@@ -297,9 +309,14 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
 
   assert.equal(res.statusCode, 201);
   assert.deepEqual(res.body, createdRow);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 
-  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text));
+  const planLimitsCall = calls.find((call) =>
+    /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
+  );
+  assert.ok(planLimitsCall);
+
+  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
   assert.ok(insertCall);
   assert.equal(typeof insertCall.values?.[8], 'string');
   assert.ok(String(insertCall.values?.[8]).startsWith('sha256:'));
@@ -342,6 +359,18 @@ test('createUsuario cleans up created user when welcome email fails', async () =
   const { calls, restore } = setupQueryMock([
     { rows: [{ empresa: 7 }], rowCount: 1 },
     { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
     { rows: [createdRow], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ]);
@@ -378,9 +407,13 @@ test('createUsuario cleans up created user when welcome email fails', async () =
   });
 
   assert.equal(invocationCount, 1);
-  assert.equal(calls.length, 4);
-  assert.match(calls[3]?.text ?? '', /DELETE FROM public\.usuarios/);
-  assert.deepEqual(calls[3]?.values, [321]);
+  assert.equal(calls.length, 5);
+  const planLimitsCall = calls.find((call) =>
+    /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
+  );
+  assert.ok(planLimitsCall);
+  assert.match(calls[4]?.text ?? '', /DELETE FROM public\.usuarios/);
+  assert.deepEqual(calls[4]?.values, [321]);
 });
 
 
