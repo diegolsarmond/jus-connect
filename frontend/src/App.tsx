@@ -70,11 +70,13 @@ import SiteBlog from "./pages/site/Blog";
 import SiteBlogArticle from "./pages/site/BlogArticle";
 import SiteHistory from "./pages/site/NossaHistoria";
 import SiteNotFound from "./pages/site/NotFound";
+import SitePrivacyPolicy from "./pages/site/PrivacyPolicy";
 import SiteServiceAssistenteIA from "./pages/site/services/AssistenteIA";
 import SiteServiceAutomacoes from "./pages/site/services/Automacoes";
 import SiteServiceCRM from "./pages/site/services/CRM";
 import SiteServiceCRMAdvocacia from "./pages/site/services/CRMAdvocacia";
 import SiteServiceDesenvolvimento from "./pages/site/services/Desenvolvimento";
+import SiteTermsOfUse from "./pages/site/TermsOfUse";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 import { RequireModule } from "@/features/auth/RequireModule";
@@ -133,6 +135,8 @@ const App = () => (
               <Route path="/servicos/crm" element={<SiteServiceCRM />} />
               <Route path="/servicos/crm-advocacia" element={<SiteServiceCRMAdvocacia />} />
               <Route path="/servicos/desenvolvimento" element={<SiteServiceDesenvolvimento />} />
+              <Route path="/politica-de-privacidade" element={<SitePrivacyPolicy />} />
+              <Route path="/termos-de-uso" element={<SiteTermsOfUse />} />
               <Route path={routes.login} element={<Login />} />
               <Route path={routes.register} element={<Register />} />
               <Route path={routes.forgotPassword} element={<RecuperarSenha />} />
