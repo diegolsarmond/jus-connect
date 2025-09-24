@@ -45,22 +45,28 @@ const toIsoString = (value: Date | string | null | undefined): string | undefine
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
-const mapBlogPostRow = (row: BlogPostRow) => ({
-  id: row.id,
-  title: row.title,
-  description: row.description,
-  content: row.content ?? undefined,
-  author: row.author,
-  date: toIsoString(row.published_at),
-  readTime: row.read_time,
-  category: row.category,
-  image: row.image ?? undefined,
-  slug: row.slug,
-  tags: Array.isArray(row.tags) ? row.tags : [],
-  featured: row.featured ?? false,
-  createdAt: toIsoString(row.created_at),
-  updatedAt: toIsoString(row.updated_at),
-});
+const mapBlogPostRow = (row: BlogPostRow) => {
+  const createdAt = toIsoString(row.created_at);
+  const updatedAt = toIsoString(row.updated_at);
+  const date = toIsoString(row.published_at) ?? createdAt ?? updatedAt;
+
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    content: row.content ?? undefined,
+    author: row.author,
+    date: date ?? new Date().toISOString(),
+    readTime: row.read_time,
+    category: row.category,
+    image: row.image ?? undefined,
+    slug: row.slug,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    featured: row.featured ?? false,
+    createdAt,
+    updatedAt,
+  };
+};
 
 class ValidationError extends Error {}
 
