@@ -14,21 +14,48 @@ type HeaderNavItem = {
 };
 
 const NAV_ITEMS: HeaderNavItem[] = [
-  { label: "Início", href: "#hero" },
-  { label: "Serviços", href: "#servicos" },
+  { label: "Início", href: routes.home },
+  { label: "Serviços", href: routes.services },
   {
     label: "Nossos Produtos",
     children: [
-      { label: "CRMs", href: "#crm" },
-      { label: "Assistentes Virtuais", href: "/servicos/assistente-ia" },
+      { label: "Suíte de CRM", href: routes.serviceCRM },
+      { label: "CRM para Advocacia", href: routes.serviceCRMAdvocacia },
+      { label: "Assistentes Virtuais com IA", href: routes.serviceAssistenteIA },
+      { label: "Automações Inteligentes", href: routes.serviceAutomacoes },
+      { label: "Desenvolvimento Sob Medida", href: routes.serviceDesenvolvimento },
     ],
   },
-  { label: "Sobre", href: "#sobre" },
-  { label: "Blog", href: "#blog" },
+  { label: "Sobre", href: routes.history },
+  { label: "Blog", href: routes.blog },
   { label: "Contato", href: "#contato" },
 ];
 
 const resolveNavLink = (href: string) => (href.startsWith("#") ? `/${href}` : href);
+
+const isNavItemActive = (href: string | undefined, currentPath: string, currentHash: string) => {
+  if (!href) {
+    return false;
+  }
+
+  if (href.startsWith("http")) {
+    return false;
+  }
+
+  if (href.startsWith("#")) {
+    return currentPath === routes.home && currentHash === href;
+  }
+
+  if (href === routes.home) {
+    return currentPath === routes.home && currentHash === "";
+  }
+
+  if (href.startsWith("/")) {
+    return currentPath === href || currentPath.startsWith(`${href}/`);
+  }
+
+  return currentPath === href;
+};
 
 const Header = () => {
   const location = useLocation();
@@ -74,68 +101,83 @@ const Header = () => {
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex" aria-label="Navegação principal">
-          {NAV_ITEMS.map((item) =>
-            item.children && item.children.length > 0 ? (
-              <div
-                key={item.label}
-                className="relative"
-                onMouseEnter={() => openDropdown(item.label)}
-                onMouseLeave={scheduleCloseDropdown}
-                onFocus={() => openDropdown(item.label)}
-                onBlur={(event) => {
-                  const nextTarget = event.relatedTarget as Node | null;
-                  if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
-                    scheduleCloseDropdown();
-                  }
-                }}
-              >
+          {NAV_ITEMS.map((item) => {
+            if (item.children && item.children.length > 0) {
+              const isDropdownActive = item.children.some((child) =>
+                isNavItemActive(child.href, location.pathname, location.hash),
+              );
 
-                <button
-                  type="button"
-                  className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                  aria-haspopup="menu"
-                  aria-expanded={activeDropdown === item.label}
+              return (
+                <div
+                  key={item.label}
+                  className="relative"
+                  onMouseEnter={() => openDropdown(item.label)}
+                  onMouseLeave={scheduleCloseDropdown}
+                  onFocus={() => openDropdown(item.label)}
+                  onBlur={(event) => {
+                    const nextTarget = event.relatedTarget as Node | null;
+                    if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+                      scheduleCloseDropdown();
+                    }
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                      isDropdownActive && "text-foreground",
+                    )}
+                    aria-haspopup="menu"
+                    aria-expanded={activeDropdown === item.label}
+                  >
+                    {item.label}
+                  </button>
+                  <div
+                    className={cn(
+                      "pointer-events-auto absolute left-0 top-full z-50 mt-2 min-w-[12rem] rounded-md border border-border/40 bg-background/95 p-1 text-sm shadow-lg transition duration-150 ease-in-out",
+                      activeDropdown === item.label
+                        ? "visible translate-y-0 opacity-100"
+                        : "invisible translate-y-1 opacity-0",
+                    )}
+                    role="menu"
+                    aria-hidden={activeDropdown !== item.label}
+                  >
+                    {item.children.map((child) =>
+                      child.href ? (
+                        <Link
+                          key={child.href ?? child.label}
+                          to={resolveNavLink(child.href)}
+                          className="block rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          onFocus={() => openDropdown(item.label)}
+                        >
+                          {child.label}
+                        </Link>
+                      ) : null,
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            if (item.href) {
+              const resolvedHref = resolveNavLink(item.href);
+
+              return (
+                <Link
+                  key={item.href ?? item.label}
+                  to={resolvedHref}
+                  className={cn(
+                    "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
+                    isNavItemActive(item.href, location.pathname, location.hash) && "text-foreground",
+                  )}
                 >
                   {item.label}
-                </button>
-                <div
-                  className={cn(
-                    "pointer-events-auto absolute left-0 top-full z-50 mt-2 min-w-[12rem] rounded-md border border-border/40 bg-background/95 p-1 text-sm shadow-lg transition duration-150 ease-in-out",
-                    activeDropdown === item.label
-                      ? "visible translate-y-0 opacity-100"
-                      : "invisible translate-y-1 opacity-0",
-                  )}
-                  role="menu"
-                  aria-hidden={activeDropdown !== item.label}
-                >
+                </Link>
+              );
+            }
 
-                  {item.children.map((child) =>
-                    child.href ? (
-                      <Link
-                        key={child.label}
-                        to={resolveNavLink(child.href)}
-                        className="block rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        onFocus={() => openDropdown(item.label)}
-                      >
-                        {child.label}
-                      </Link>
-                    ) : null,
-                  )}
-                </div>
-              </div>
-            ) : item.href ? (
-              <Link
-                key={item.href}
-                to={resolveNavLink(item.href)}
-                className={cn(
-                  "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                  location.pathname === "/" && location.hash === item.href && "text-foreground",
-                )}
-              >
-                {item.label}
-              </Link>
-            ) : null,
-          )}
+            return null;
+          })}
         </nav>
 
         <div className="flex items-center gap-3">
