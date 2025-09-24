@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { WhatsAppLayout } from "../components/waha";
+import { WhatsAppLayout } from "../../components/waha";
 
 const Conversas = () => {
   const navigate = useNavigate();
