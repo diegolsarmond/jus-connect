@@ -19,7 +19,7 @@ const Login = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, isLoading } = useAuth();
+  const { login, isAuthenticated, isLoading, user } = useAuth();
   const resolveRedirectPath = useCallback(
     () =>
       ((location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname) ?? routes.home,
@@ -28,9 +28,14 @@ const Login = () => {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
+      if (user?.mustChangePassword) {
+        navigate("/alterar-senha", { replace: true, state: { from: resolveRedirectPath() } });
+        return;
+      }
+
       navigate(resolveRedirectPath(), { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate, resolveRedirectPath]);
+  }, [isAuthenticated, isLoading, navigate, resolveRedirectPath, user]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -38,8 +43,12 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      await login({ email, senha: password });
-      navigate(resolveRedirectPath(), { replace: true });
+      const response = await login({ email, senha: password });
+      if (response.user.mustChangePassword) {
+        navigate("/alterar-senha", { replace: true, state: { from: resolveRedirectPath() } });
+      } else {
+        navigate(resolveRedirectPath(), { replace: true });
+      }
     } catch (error) {
       if (error instanceof Error) {
         setErrorMessage(error.message);

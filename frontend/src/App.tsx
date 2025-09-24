@@ -164,6 +164,7 @@ const App = () => (
               </Route>
               <Route path="/financeiro/lancamentos" element={withModule("financeiro", <FinancialFlows />)} />
               <Route path="/relatorios" element={withModule("relatorios", <Relatorios />)} />
+              <Route path="/alterar-senha" element={<AlterarSenha />} />
               <Route path="/meu-perfil" element={<MeuPerfil />} />
               <Route path="/meu-plano" element={withModule("meu-plano", <MeuPlano />)} />
               <Route path="/suporte" element={withModule("suporte", <Suporte />)} />

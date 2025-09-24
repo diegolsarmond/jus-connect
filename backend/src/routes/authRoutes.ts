@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { getCurrentUser, login, refreshToken, register } from '../controllers/authController';
+import {
+  changePassword,
+  getCurrentUser,
+  login,
+  refreshToken,
+  register,
+} from '../controllers/authController';
 import { authenticateRequest } from '../middlewares/authMiddleware';
 
 const router = Router();
@@ -118,6 +124,53 @@ router.post('/auth/register', register);
  *         description: Credenciais inválidas
  */
 router.post('/auth/login', login);
+
+/**
+ * @swagger
+ * /api/auth/change-password:
+ *   post:
+ *     summary: Atualiza a senha utilizando a senha provisória fornecida
+ *     tags: [Autenticação]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - temporaryPassword
+ *               - newPassword
+ *               - confirmPassword
+ *             properties:
+ *               temporaryPassword:
+ *                 type: string
+ *                 format: password
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *               confirmPassword:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       200:
+ *         description: Senha atualizada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Dados inválidos ou senha provisória incorreta
+ *       401:
+ *         description: Token ausente ou inválido
+ *       404:
+ *         description: Usuário não encontrado
+ */
+router.post('/auth/change-password', authenticateRequest, changePassword);
 
 /**
  * @swagger

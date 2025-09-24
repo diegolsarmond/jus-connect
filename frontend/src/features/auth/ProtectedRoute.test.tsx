@@ -35,6 +35,7 @@ describe("ProtectedRoute", () => {
       isAuthenticated: true,
       isLoading: false,
       user: {
+        mustChangePassword: false,
         subscription: { status: "inactive" },
       },
     } as unknown as ReturnType<typeof useAuth>);
@@ -60,6 +61,37 @@ describe("ProtectedRoute", () => {
     expect(container.textContent).toContain("Seleção de plano");
   });
 
+  it("redirects users that must update their password", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        mustChangePassword: true,
+        subscription: { status: "active" },
+      },
+    } as unknown as ReturnType<typeof useAuth>);
+
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/clientes"]}>
+          <Routes>
+            <Route
+              path="/clientes"
+              element={
+                <ProtectedRoute>
+                  <div>Área restrita</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/alterar-senha" element={<div>Alterar Senha</div>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain("Alterar Senha");
+  });
+
   it("allows access when the subscription is within the grace period", () => {
     const now = new Date("2024-06-15T12:00:00.000Z");
     vi.setSystemTime(now);
@@ -68,6 +100,7 @@ describe("ProtectedRoute", () => {
       isAuthenticated: true,
       isLoading: false,
       user: {
+        mustChangePassword: false,
         subscription: {
           status: "grace_period",
           planId: 1,
@@ -108,6 +141,7 @@ describe("ProtectedRoute", () => {
       isAuthenticated: true,
       isLoading: false,
       user: {
+        mustChangePassword: false,
         subscription: {
           status: "past_due",
           planId: 1,
