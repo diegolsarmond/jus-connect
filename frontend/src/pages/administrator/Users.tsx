@@ -9,6 +9,13 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
@@ -39,6 +46,7 @@ type ApiUser = {
 type ApiProfile = {
   id?: number | string | null;
   nome?: string | null;
+  descricao?: string | null;
   ativo?: boolean | number | string | null;
 };
 
@@ -57,8 +65,8 @@ type DisplayUser = {
 type EditFormState = {
   displayName: string;
   email: string;
-  companyName: string;
-  role: string;
+  companyId: string;
+  roleId: string;
   isActive: boolean;
 };
 
@@ -123,6 +131,12 @@ type ApiCompany = {
   razao_social?: string | null;
   nome_fantasia?: string | null;
   empresa_nome?: string | null;
+  email?: string | null;
+};
+
+type SelectOption = {
+  id: string;
+  label: string;
 };
 
 const isNonEmptyString = (value: unknown): value is string => {
@@ -153,6 +167,34 @@ const extractIdLikeValue = (value: unknown): string | null => {
   }
 
   return null;
+};
+
+const extractCollection = <T,>(payload: unknown): T[] => {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+
+  if (payload && typeof payload === "object") {
+    const record = payload as { rows?: unknown; data?: unknown };
+
+    if (Array.isArray(record.rows)) {
+      return record.rows as T[];
+    }
+
+    if (Array.isArray(record.data)) {
+      return record.data as T[];
+    }
+
+    if (record.data && typeof record.data === "object") {
+      const nested = record.data as { rows?: unknown };
+
+      if (Array.isArray(nested.rows)) {
+        return nested.rows as T[];
+      }
+    }
+  }
+
+  return [];
 };
 
 const extractCompanyIdFromValue = (
@@ -294,31 +336,7 @@ const parseCompanyPayload = (payload: unknown): ApiCompany | null => {
 };
 
 const extractProfilesFromPayload = (payload: unknown): ApiProfile[] => {
-  if (Array.isArray(payload)) {
-    return payload as ApiProfile[];
-  }
-
-  if (payload && typeof payload === "object") {
-    const record = payload as { rows?: unknown; data?: unknown };
-
-    if (Array.isArray(record.rows)) {
-      return record.rows as ApiProfile[];
-    }
-
-    if (Array.isArray(record.data)) {
-      return record.data as ApiProfile[];
-    }
-
-    if (record.data && typeof record.data === "object") {
-      const nested = record.data as { rows?: unknown };
-
-      if (Array.isArray(nested.rows)) {
-        return nested.rows as ApiProfile[];
-      }
-    }
-  }
-
-  return [];
+  return extractCollection<ApiProfile>(payload);
 };
 
 const resolveCompanyNameFromData = (company: ApiCompany | null): string | null => {
@@ -344,6 +362,48 @@ const resolveCompanyNameFromData = (company: ApiCompany | null): string | null =
   }
 
   return null;
+};
+
+const mapCompanyToOption = (company: ApiCompany, index: number): SelectOption | null => {
+  const id =
+    extractIdLikeValue(company.id) ??
+    extractIdLikeValue((company as { empresa_id?: unknown }).empresa_id) ??
+    extractIdLikeValue((company as { empresa?: unknown }).empresa);
+
+  if (!id) {
+    return null;
+  }
+
+  const name = resolveCompanyNameFromData(company);
+  const emailCandidate =
+    typeof company.email === "string" && company.email.trim().length > 0
+      ? company.email.trim()
+      : null;
+
+  const label = name ?? emailCandidate ?? `Empresa ${index + 1}`;
+
+  return { id, label } satisfies SelectOption;
+};
+
+const mapProfileToOption = (profile: ApiProfile, index: number): SelectOption | null => {
+  const id =
+    extractIdLikeValue(profile.id) ??
+    extractIdLikeValue((profile as { perfil?: unknown }).perfil);
+
+  if (!id) {
+    return null;
+  }
+
+  const nameCandidate =
+    typeof profile.nome === "string" && profile.nome.trim().length > 0
+      ? profile.nome.trim()
+      : typeof profile.descricao === "string" && profile.descricao.trim().length > 0
+        ? profile.descricao.trim()
+        : null;
+
+  const label = nameCandidate ?? `Perfil ${index + 1}`;
+
+  return { id, label } satisfies SelectOption;
 };
 
 const resolveCompanyNameFromUser = (
@@ -395,12 +455,16 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState<EditFormState>({
     displayName: "",
     email: "",
-    companyName: "",
-    role: "",
+    companyId: "",
+    roleId: "",
     isActive: true,
   });
   const [companyNames, setCompanyNames] = useState<Record<string, string>>({});
   const [profileNames, setProfileNames] = useState<Record<string, string>>({});
+  const [companyOptions, setCompanyOptions] = useState<SelectOption[]>([]);
+  const [profileOptions, setProfileOptions] = useState<SelectOption[]>([]);
+  const [isLoadingCompanyOptions, setIsLoadingCompanyOptions] = useState(false);
+  const [isLoadingProfileOptions, setIsLoadingProfileOptions] = useState(false);
 
   const { toast } = useToast();
 
@@ -470,6 +534,7 @@ export default function UsersPage() {
     let isActive = true;
 
     const loadProfiles = async () => {
+      setIsLoadingProfileOptions(true);
       try {
         const response = await fetch(getApiUrl("perfis"), {
           headers: { Accept: "application/json" },
@@ -488,22 +553,29 @@ export default function UsersPage() {
 
         const profiles = extractProfilesFromPayload(payload);
         const nextProfiles: Record<string, string> = {};
+        const nextProfileOptions = profiles
+          .map(mapProfileToOption)
+          .filter((option): option is SelectOption => option !== null)
+          .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
-        profiles.forEach((profile) => {
-          const profileId = extractIdLikeValue(profile.id);
-
-          if (!profileId) {
-            return;
-          }
-
-          const name = typeof profile.nome === "string" ? profile.nome.trim() : "";
-
-          if (name) {
-            nextProfiles[profileId] = name;
-          }
+        nextProfileOptions.forEach((option) => {
+          nextProfiles[option.id] = option.label;
         });
 
-        setProfileNames(nextProfiles);
+        setProfileNames((previous) => {
+          if (Object.keys(nextProfiles).length === 0) {
+            return previous;
+          }
+
+          const combined = { ...previous };
+
+          Object.entries(nextProfiles).forEach(([id, label]) => {
+            combined[id] = label;
+          });
+
+          return combined;
+        });
+        setProfileOptions(nextProfileOptions);
       } catch (fetchError) {
         if (controller.signal.aborted) {
           return;
@@ -514,10 +586,81 @@ export default function UsersPage() {
         }
 
         console.error("Erro ao carregar perfis:", fetchError);
+      } finally {
+        if (isActive) {
+          setIsLoadingProfileOptions(false);
+        }
       }
     };
 
     void loadProfiles();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let isActive = true;
+
+    const loadCompanies = async () => {
+      setIsLoadingCompanyOptions(true);
+
+      try {
+        const response = await fetch(getApiUrl("empresas"), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Falha ao carregar empresas (${response.status}).`);
+        }
+
+        const payload = await response.json();
+
+        if (!isActive) {
+          return;
+        }
+
+        const companies = extractCollection<ApiCompany>(payload);
+        const nextCompanyOptions = companies
+          .map(mapCompanyToOption)
+          .filter((option): option is SelectOption => option !== null)
+          .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+        if (nextCompanyOptions.length > 0) {
+          setCompanyNames((previous) => {
+            const combined = { ...previous };
+
+            nextCompanyOptions.forEach((option) => {
+              combined[option.id] = option.label;
+            });
+
+            return combined;
+          });
+        }
+
+        setCompanyOptions(nextCompanyOptions);
+      } catch (fetchError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+          return;
+        }
+
+        console.error("Erro ao carregar empresas:", fetchError);
+      } finally {
+        if (isActive) {
+          setIsLoadingCompanyOptions(false);
+        }
+      }
+    };
+
+    void loadCompanies();
 
     return () => {
       isActive = false;
@@ -680,18 +823,35 @@ export default function UsersPage() {
       setEditForm({
         displayName: "",
         email: "",
-        companyName: "",
-        role: "",
+        companyId: "",
+        roleId: "",
         isActive: true,
       });
       return;
     }
 
     const rawUser = usersById.get(editUser.id);
-    const { name: resolvedCompanyName } = resolveCompanyNameFromUser(
+    const { id: resolvedCompanyId, name: resolvedCompanyName } = resolveCompanyNameFromUser(
       rawUser,
       companyNames,
     );
+
+    if (
+      resolvedCompanyId &&
+      resolvedCompanyName &&
+      resolvedCompanyName !== "Sem empresa"
+    ) {
+      setCompanyNames((previous) => {
+        if (previous[resolvedCompanyId]) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [resolvedCompanyId]: resolvedCompanyName,
+        };
+      });
+    }
 
     const name =
       typeof rawUser?.nome_completo === "string" && rawUser.nome_completo.trim().length > 0
@@ -701,29 +861,35 @@ export default function UsersPage() {
       typeof rawUser?.email === "string" && rawUser.email.trim().length > 0
         ? rawUser.email.trim()
         : editUser.email;
-    const company =
-      resolvedCompanyName === "Sem empresa"
-        ? ""
-        : resolvedCompanyName;
-    const { name: resolvedProfileName } = resolveProfileNameFromUser(
+    const companyId = resolvedCompanyId ?? "";
+    const { id: resolvedProfileId, name: resolvedProfileName } = resolveProfileNameFromUser(
       rawUser,
       profileNames,
     );
-    const normalizedRole =
-      resolvedProfileName === "Sem perfil" ? "" : resolvedProfileName;
-    const role =
-      normalizedRole.length > 0
-        ? normalizedRole
-        : editUser.role === "Sem perfil"
-          ? ""
-          : editUser.role;
+    if (
+      resolvedProfileId &&
+      resolvedProfileName &&
+      resolvedProfileName !== "Sem perfil"
+    ) {
+      setProfileNames((previous) => {
+        if (previous[resolvedProfileId]) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [resolvedProfileId]: resolvedProfileName,
+        };
+      });
+    }
+    const roleId = resolvedProfileId ?? "";
     const isActive = editUser.isActive;
 
     setEditForm({
       displayName: name,
       email,
-      companyName: company,
-      role,
+      companyId,
+      roleId,
       isActive,
     });
   }, [companyNames, editUser, profileNames, usersById]);
@@ -780,6 +946,54 @@ export default function UsersPage() {
     ? `${stats.activePercentage.toFixed(1)}% do total`
     : "0% do total";
 
+  const companySelectPlaceholder = isLoadingCompanyOptions
+    ? "Carregando empresas..."
+    : companyOptions.length === 0
+      ? "Nenhuma empresa disponível"
+      : "Selecione a empresa";
+
+  const profileSelectPlaceholder = isLoadingProfileOptions
+    ? "Carregando perfis..."
+    : profileOptions.length === 0
+      ? "Nenhum perfil disponível"
+      : "Selecione o perfil";
+
+  const extraCompanyOption = useMemo(() => {
+    if (!editForm.companyId) {
+      return null;
+    }
+
+    if (companyOptions.some((option) => option.id === editForm.companyId)) {
+      return null;
+    }
+
+    const label = companyNames[editForm.companyId];
+
+    if (label && label.trim().length > 0) {
+      return { id: editForm.companyId, label: label.trim() } satisfies SelectOption;
+    }
+
+    return { id: editForm.companyId, label: `Empresa ${editForm.companyId}` } satisfies SelectOption;
+  }, [companyNames, companyOptions, editForm.companyId]);
+
+  const extraProfileOption = useMemo(() => {
+    if (!editForm.roleId) {
+      return null;
+    }
+
+    if (profileOptions.some((option) => option.id === editForm.roleId)) {
+      return null;
+    }
+
+    const label = profileNames[editForm.roleId];
+
+    if (label && label.trim().length > 0) {
+      return { id: editForm.roleId, label: label.trim() } satisfies SelectOption;
+    }
+
+    return { id: editForm.roleId, label: `Perfil ${editForm.roleId}` } satisfies SelectOption;
+  }, [editForm.roleId, profileNames, profileOptions]);
+
   const handleRetry = useCallback(() => {
     void fetchUsers();
   }, [fetchUsers]);
@@ -809,8 +1023,16 @@ export default function UsersPage() {
 
       const normalizedName = editForm.displayName.trim();
       const normalizedEmail = editForm.email.trim();
-      const normalizedCompany = editForm.companyName.trim();
-      const normalizedRole = editForm.role.trim();
+      const normalizedCompanyId = editForm.companyId.trim();
+      const normalizedRoleId = editForm.roleId.trim();
+      const normalizedCompanyName =
+        normalizedCompanyId.length > 0
+          ? (companyNames[normalizedCompanyId]?.trim() ?? `Empresa ${normalizedCompanyId}`)
+          : "";
+      const normalizedRoleName =
+        normalizedRoleId.length > 0
+          ? (profileNames[normalizedRoleId]?.trim() ?? `Perfil ${normalizedRoleId}`)
+          : "";
 
       setUsers((previous) =>
         previous.map((user, index) => {
@@ -822,8 +1044,12 @@ export default function UsersPage() {
             ...user,
             nome_completo: normalizedName.length > 0 ? normalizedName : null,
             email: normalizedEmail.length > 0 ? normalizedEmail : null,
-            empresa: normalizedCompany.length > 0 ? normalizedCompany : null,
-            perfil: normalizedRole.length > 0 ? normalizedRole : null,
+            empresa_id: normalizedCompanyId.length > 0 ? normalizedCompanyId : null,
+            empresa: normalizedCompanyName.length > 0 ? normalizedCompanyName : null,
+            empresa_nome: normalizedCompanyName.length > 0 ? normalizedCompanyName : null,
+            idperfil: normalizedRoleId.length > 0 ? normalizedRoleId : null,
+            perfil: normalizedRoleName.length > 0 ? normalizedRoleName : null,
+            perfil_nome: normalizedRoleName.length > 0 ? normalizedRoleName : null,
             status: editForm.isActive,
           } satisfies ApiUser;
         })
@@ -836,7 +1062,7 @@ export default function UsersPage() {
 
       setEditUserId(null);
     },
-    [editForm, editUserId, toast]
+    [companyNames, editForm, editUserId, profileNames, toast]
   );
 
   return (
@@ -1186,22 +1412,62 @@ export default function UsersPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="edit-user-company">Empresa</Label>
-                <Input
-                  id="edit-user-company"
-                  value={editForm.companyName}
-                  onChange={(event) => handleEditFormChange("companyName", event.target.value)}
-                  placeholder="Empresa do usuário"
-                />
+                <Select
+                  value={editForm.companyId}
+                  onValueChange={(value) => handleEditFormChange("companyId", value)}
+                  disabled={isLoadingCompanyOptions && companyOptions.length === 0}
+                >
+                  <SelectTrigger id="edit-user-company">
+                    <SelectValue placeholder={companySelectPlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {extraCompanyOption ? (
+                      <SelectItem value={extraCompanyOption.id}>
+                        {extraCompanyOption.label}
+                      </SelectItem>
+                    ) : null}
+                    {companyOptions.length === 0 && !extraCompanyOption ? (
+                      <SelectItem disabled value="__no_companies__">
+                        Nenhuma empresa disponível
+                      </SelectItem>
+                    ) : null}
+                    {companyOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="edit-user-role">Perfil</Label>
-                <Input
-                  id="edit-user-role"
-                  value={editForm.role}
-                  onChange={(event) => handleEditFormChange("role", event.target.value)}
-                  placeholder="Perfil do usuário"
-                />
+                <Select
+                  value={editForm.roleId}
+                  onValueChange={(value) => handleEditFormChange("roleId", value)}
+                  disabled={isLoadingProfileOptions && profileOptions.length === 0}
+                >
+                  <SelectTrigger id="edit-user-role">
+                    <SelectValue placeholder={profileSelectPlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {extraProfileOption ? (
+                      <SelectItem value={extraProfileOption.id}>
+                        {extraProfileOption.label}
+                      </SelectItem>
+                    ) : null}
+                    {profileOptions.length === 0 && !extraProfileOption ? (
+                      <SelectItem disabled value="__no_profiles__">
+                        Nenhum perfil disponível
+                      </SelectItem>
+                    ) : null}
+                    {profileOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex items-center justify-between rounded-md border p-3">
