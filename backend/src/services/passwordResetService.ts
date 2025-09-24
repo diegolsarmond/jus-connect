@@ -15,7 +15,7 @@ interface TargetUser {
   email: string;
 }
 
-function generateTemporaryPassword(length = 12): string {
+export function generateTemporaryPassword(length = 12): string {
   const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$%';
   const bytes = crypto.randomBytes(length);
   let password = '';

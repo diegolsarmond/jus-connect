@@ -119,6 +119,7 @@ router.get(['/usuarios/:id', '/users/:id'], getUsuarioById);
  *   post:
  *     summary: Cria um novo usuário
  *     tags: [Usuarios]
+ *     description: A senha inicial é gerada automaticamente e enviada por e-mail ao usuário.
  *     requestBody:
  *       required: true
  *       content:
@@ -142,8 +143,6 @@ router.get(['/usuarios/:id', '/users/:id'], getUsuarioById);
  *                 type: string
  *               status:
  *                 type: boolean
- *               senha:
- *                 type: string
  *               telefone:
  *                 type: string
  *               ultimo_login:
