@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
 
+import { usePlan } from "@/features/plans/PlanProvider";
+
 import { PlanUpgradePrompt } from "./PlanUpgradePrompt";
 import { useAuth } from "./AuthProvider";
 import { createNormalizedModuleSet, normalizeModuleId } from "./moduleUtils";
@@ -9,30 +11,55 @@ interface RequireModuleProps {
   children: ReactNode;
 }
 
+const useOptionalPlan = (): ReturnType<typeof usePlan> | null => {
+  try {
+    return usePlan();
+  } catch {
+    return null;
+  }
+};
+
 export const RequireModule = ({ module, children }: RequireModuleProps) => {
   const { user, isLoading } = useAuth();
+  const planContext = useOptionalPlan();
 
   if (isLoading) {
     return null;
   }
 
   const modules = createNormalizedModuleSet(user?.modulos ?? []);
+  const planModulesRaw = planContext?.plan?.modules;
+  const planModules = Array.isArray(planModulesRaw) ? planModulesRaw : [];
+  const normalizedPlanModules = createNormalizedModuleSet(planModules);
   const requiredModules = Array.isArray(module) ? module : [module];
   const normalizedRequiredModules = requiredModules
     .map((moduleId) => normalizeModuleId(moduleId))
     .filter((moduleId): moduleId is string => Boolean(moduleId));
 
-  const hasAccess =
+  const hasDefinedPlanModules = planModules.length > 0;
+  const userHasRequiredModule =
     normalizedRequiredModules.length === 0 ||
     normalizedRequiredModules.some((moduleId) => modules.has(moduleId));
+  const planIncludesRequiredModule =
+    normalizedRequiredModules.length === 0 ||
+    normalizedRequiredModules.some((moduleId) =>
+      normalizedPlanModules.has(moduleId),
+    );
 
-  if (hasAccess) {
+  const hasAccess =
+    normalizedRequiredModules.length === 0 ||
+    (userHasRequiredModule && (!hasDefinedPlanModules || planIncludesRequiredModule));
+
+  if (hasAccess || requiredModules.includes("meu-plano")) {
     return <>{children}</>;
   }
 
-  if (requiredModules.includes("meu-plano")) {
-    return <>{children}</>;
+  const shouldShowUpgradePrompt =
+    hasDefinedPlanModules && userHasRequiredModule && !planIncludesRequiredModule;
+
+  if (shouldShowUpgradePrompt) {
+    return <PlanUpgradePrompt module={module} />;
   }
 
-  return <PlanUpgradePrompt module={module} />;
+  return null;
 };
