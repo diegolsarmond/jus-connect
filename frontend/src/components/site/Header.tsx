@@ -5,6 +5,7 @@ import { Menu, X } from "lucide-react";
 import quantumLogo from "@/assets/quantum-logo.png";
 import { routes } from "@/config/routes";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ui/mode-toggle";
 import { cn } from "@/lib/utils";
 
 type HeaderNavItem = {
@@ -182,6 +183,7 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-3">
+          <ModeToggle />
           <Button
             asChild
             variant="ghost"
@@ -208,7 +210,11 @@ const Header = () => {
 
       {isMenuOpen ? (
         <div id="mobile-menu" className="border-t border-border/40 bg-background/95 backdrop-blur md:hidden">
-          <div className="container flex flex-col gap-2 px-4 py-3">
+          <div className="container flex flex-col gap-3 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Tema</span>
+              <ModeToggle />
+            </div>
             {NAV_ITEMS.map((item) =>
               item.children && item.children.length > 0 ? (
                 <div key={item.label} className="flex flex-col gap-1">
