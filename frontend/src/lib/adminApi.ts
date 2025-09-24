@@ -11,6 +11,7 @@ const ensureBaseUrl = () => {
     ? adminBaseUrlFromEnv
     : getApiBaseUrl();
 
+
   return baseUrl.replace(/\/+$/, "");
 };
 
