@@ -8,6 +8,7 @@ import { useAutoLogout } from "@/hooks/useAutoLogout";
 import { useCallback } from "react";
 import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { TrialBanner } from "@/features/auth/TrialBanner";
 
 export function CRMLayout() {
   const location = useLocation();
@@ -44,8 +45,8 @@ export function CRMLayout() {
       <div className={rootClassName}>
         <Sidebar />
         <div className={containerClassName}>
-
           <Header />
+          <TrialBanner />
           <main className={mainClassName}>
             <Outlet />
           </main>
