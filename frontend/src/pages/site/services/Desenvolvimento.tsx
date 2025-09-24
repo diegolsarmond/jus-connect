@@ -537,6 +537,9 @@ const Desenvolvimento = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+
           <div className="max-w-5xl mx-auto text-center text-white">
             <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/20 text-sm font-medium mb-6 animate-pulse-glow">
               <BadgeCheck className="h-4 w-4 mr-2" />
