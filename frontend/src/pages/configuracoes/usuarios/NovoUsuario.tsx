@@ -45,7 +45,6 @@ const formSchema = z.object({
     .email("Email inválido")
     .refine((email) => !existingEmails.includes(email), "Email já cadastrado"),
   perfilId: z.string().min(1, "Perfil é obrigatório"),
-  password: z.string().min(6, "Mínimo de 6 caracteres").optional(),
   phone: z.string().optional(),
 });
 
@@ -67,7 +66,6 @@ export default function NovoUsuario() {
       name: "",
       email: "",
       perfilId: "",
-      password: "",
       phone: "",
     },
   });
@@ -117,11 +115,6 @@ export default function NovoUsuario() {
       return;
     }
 
-    let password = data.password;
-    if (!password) {
-      password = Math.random().toString(36).slice(-8);
-    }
-
     const perfilId = Number(data.perfilId);
     const empresaId = user.empresa_id ?? null;
 
@@ -133,7 +126,6 @@ export default function NovoUsuario() {
       empresa: empresaId,
       oab: null,
       status: true,
-      senha: password,
       telefone: data.phone || null,
       ultimo_login: null,
       observacoes: null,
@@ -149,14 +141,10 @@ export default function NovoUsuario() {
       if (!response.ok) {
         throw new Error("Erro ao criar usuário");
       }
-      if (!data.password) {
-        toast({
-          title: "Usuário criado",
-          description: `Senha temporária enviada para ${data.email}`,
-        });
-      } else {
-        toast({ title: "Usuário criado" });
-      }
+      toast({
+        title: "Usuário criado",
+        description: `Uma senha provisória será enviada automaticamente por e-mail para ${data.email}.`,
+      });
       navigate("/configuracoes/usuarios");
     } catch (error) {
       console.error("Erro ao criar usuário:", error);
@@ -172,6 +160,11 @@ export default function NovoUsuario() {
           <p className="text-muted-foreground">Cadastre um novo usuário</p>
         </div>
       </div>
+
+      <p className="text-sm text-muted-foreground">
+        A senha provisória será gerada automaticamente e enviada por e-mail ao usuário
+        após o cadastro.
+      </p>
 
       <Card>
         <CardHeader>
@@ -228,20 +221,6 @@ export default function NovoUsuario() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Senha inicial</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="Opcional" {...field} />
-                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
