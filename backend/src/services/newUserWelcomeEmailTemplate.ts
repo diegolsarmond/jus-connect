@@ -1,7 +1,7 @@
 import { escapeHtml } from '../utils/html';
 
 const DEFAULT_FRONTEND_BASE_URL =
-  process.env.FRONTEND_BASE_URL || 'https://quantumjud.quantumtecnologia.com.br';
+  process.env.FRONTEND_BASE_URL || 'https://quantumtecnologia.com.br';
 const SYSTEM_NAME = process.env.SYSTEM_NAME || 'Jus Connect';
 
 export interface NewUserWelcomeEmailContent {
@@ -19,7 +19,7 @@ function buildFrontendBaseUrl(): string {
   const trimmed = DEFAULT_FRONTEND_BASE_URL.trim();
 
   if (trimmed.length === 0) {
-    return 'https://quantumjud.quantumtecnologia.com.br';
+    return 'https://quantumtecnologia.com.br';
   }
 
   return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;

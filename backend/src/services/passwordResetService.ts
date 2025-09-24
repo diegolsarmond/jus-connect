@@ -6,7 +6,7 @@ import { buildPasswordResetEmail } from './passwordResetEmailTemplate';
 
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const DEFAULT_FRONTEND_BASE_URL =
-  process.env.FRONTEND_BASE_URL || 'https://quantumjud.quantumtecnologia.com.br';
+  process.env.FRONTEND_BASE_URL || 'https://quantumtecnologia.com.br';
 const PASSWORD_RESET_PATH = process.env.PASSWORD_RESET_PATH || '/redefinir-senha';
 
 interface TargetUser {

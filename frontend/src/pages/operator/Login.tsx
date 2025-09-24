@@ -182,7 +182,7 @@ const Login = () => {
         {/*      <strong>Credenciais de demonstração:</strong>*/}
         {/*    </p>*/}
         {/*    <p className="text-xs text-center text-muted-foreground">*/}
-        {/*      Email: admin@quantumjud.com<br />*/}
+        {/*      Email: admin@com<br />*/}
         {/*      Senha: demo123*/}
         {/*    </p>*/}
         {/*  </CardContent>*/}

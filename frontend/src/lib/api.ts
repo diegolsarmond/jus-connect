@@ -3,7 +3,7 @@ const envApiUrlCandidates = [
   import.meta.env.VITE_API_BASE_URL as string | undefined,
 ];
 
-const PRODUCTION_DEFAULT_API_URL = 'https://quantumjud.quantumtecnologia.com.br';
+const PRODUCTION_DEFAULT_API_URL = 'https://quantumtecnologia.com.br';
 
 const rawEnvApiUrl = envApiUrlCandidates
   .map((value) => value?.trim())

@@ -68,8 +68,7 @@ const defaultAllowedOrigins = [
     'http://localhost:8080',
     'http://127.0.0.1:8080',
     'http://localhost:4200',
-    'https://jusconnec.quantumtecnologia.com.br',
-    'https://quantumjud.quantumtecnologia.com.br',
+    'https://quantumtecnologia.com.br',
 ];
 const additionalAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
     .split(',')

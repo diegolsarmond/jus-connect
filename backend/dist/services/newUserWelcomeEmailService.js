@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.newUserWelcomeEmailService = void 0;
 const emailService_1 = require("./emailService");
 const DEFAULT_SYSTEM_NAME = process.env.SYSTEM_NAME || 'Jus Connect';
-const DEFAULT_FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://quantumjud.quantumtecnologia.com.br';
+const DEFAULT_FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://quantumtecnologia.com.br';
 const DEFAULT_LOGIN_PATH = process.env.LOGIN_PATH || '/login';
 function buildLoginUrl() {
     const baseUrl = DEFAULT_FRONTEND_BASE_URL.endsWith('/')
