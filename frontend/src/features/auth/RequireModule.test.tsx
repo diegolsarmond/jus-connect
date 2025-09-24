@@ -43,8 +43,6 @@ describe("RequireModule", () => {
       plan: {
         id: 1,
         nome: "Plano Básico",
-        sincronizacaoProcessosHabilitada: true,
-        sincronizacaoProcessosLimite: null,
         modules: ["clientes"],
       },
       isLoading: false,
@@ -80,8 +78,6 @@ describe("RequireModule", () => {
       plan: {
         id: 1,
         nome: "Plano Básico",
-        sincronizacaoProcessosHabilitada: true,
-        sincronizacaoProcessosLimite: null,
         modules: ["clientes"],
       },
       isLoading: false,
@@ -113,8 +109,6 @@ describe("RequireModule", () => {
       plan: {
         id: 1,
         nome: "Plano Completo",
-        sincronizacaoProcessosHabilitada: true,
-        sincronizacaoProcessosLimite: null,
         modules: ["conversas", "clientes"],
       },
       isLoading: false,

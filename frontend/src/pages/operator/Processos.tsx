@@ -59,13 +59,11 @@ import {
   Landmark,
   Loader2,
   MapPin,
-  RefreshCw,
   Search,
   Users as UsersIcon,
   Eye,
   ChevronsUpDown,
 } from "lucide-react";
-import { usePlan } from "@/features/plans/PlanProvider";
 
 interface ProcessoCliente {
   id: number;
@@ -243,7 +241,7 @@ const formatDateToPtBR = (value: string | null | undefined): string => {
 
 const formatDateTimeToPtBR = (value: string | null | undefined): string => {
   if (!value) {
-    return "Nunca sincronizado";
+    return "Sem registros";
   }
 
   const date = new Date(value);
@@ -511,82 +509,6 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
   };
 };
 
-interface ProcessosSyncActionProps {
-  allowsSync: boolean;
-  syncLimit: number | null;
-  processo: Processo;
-  isSyncing: boolean;
-  onSync: (processoId: number) => void;
-}
-
-export function ProcessosSyncAction({
-  allowsSync,
-  syncLimit,
-  processo,
-  isSyncing,
-  onSync,
-}: ProcessosSyncActionProps) {
-  const limitReached =
-    syncLimit !== null && processo.consultasApiCount >= syncLimit;
-
-  const button = (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={() => onSync(processo.id)}
-      disabled={isSyncing || limitReached}
-    >
-      {isSyncing ? (
-        <>
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Sincronizando...
-        </>
-      ) : (
-        <>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Sincronizar processo
-        </>
-      )}
-    </Button>
-  );
-
-  if (!allowsSync) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge
-            variant="outline"
-            className="flex cursor-default items-center gap-1 px-3 py-1 text-xs"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Sincronização indisponível
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          Plano atual não permite sincronizar processos automaticamente.
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  if (limitReached) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">
-            {button}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>
-          {`Limite de sincronizações atingido (${processo.consultasApiCount}/${syncLimit}).`}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return button;
-}
-
 const getStatusBadgeClassName = (status: string) => {
   const normalized = status.toLowerCase();
 
@@ -641,12 +563,6 @@ export default function Processos() {
   const [processosError, setProcessosError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingProcess, setCreatingProcess] = useState(false);
-  const [syncingProcessId, setSyncingProcessId] = useState<number | null>(null);
-  const { plan } = usePlan();
-
-  const planAllowsSync = plan?.sincronizacaoProcessosHabilitada ?? true;
-  const planSyncLimit = plan?.sincronizacaoProcessosLimite ?? null;
-
   useEffect(() => {
     let cancelled = false;
 
@@ -1307,118 +1223,6 @@ export default function Processos() {
     }
   };
 
-  const handleSyncProcess = useCallback(
-    async (processoId: number) => {
-      if (syncingProcessId === processoId) {
-        return;
-      }
-
-      if (!planAllowsSync) {
-        toast({
-          title: "Sincronização indisponível",
-          description:
-            "Seu plano atual não permite sincronizar processos com o Escavador.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const processoAtual = processos.find(
-        (processo) => processo.id === processoId,
-      );
-
-      if (
-        planSyncLimit !== null &&
-        processoAtual &&
-        processoAtual.consultasApiCount >= planSyncLimit
-      ) {
-        toast({
-          title: "Limite de sincronizações atingido",
-          description: `Limite de sincronizações do plano atingido (${processoAtual.consultasApiCount}/${planSyncLimit}).`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setSyncingProcessId(processoId);
-
-      try {
-        const res = await fetch(getApiUrl(`processos/${processoId}/sincronizar`), {
-          method: "POST",
-          headers: { Accept: "application/json" },
-        });
-
-        let json: unknown = null;
-        try {
-          json = await res.json();
-        } catch (error) {
-          console.error("Não foi possível interpretar a resposta de sincronização", error);
-        }
-
-        if (!res.ok) {
-          const message =
-            json && typeof json === "object" &&
-            "error" in json &&
-            typeof (json as { error?: unknown }).error === "string"
-              ? String((json as { error: string }).error)
-              : `Não foi possível sincronizar o processo (HTTP ${res.status})`;
-          throw new Error(message);
-        }
-
-        const processoPayload =
-          (json as { processo?: ApiProcesso | null })?.processo ?? (json as ApiProcesso | null);
-
-        if (!processoPayload || typeof processoPayload !== "object") {
-          throw new Error(
-            "Resposta inválida do servidor ao sincronizar o processo",
-          );
-        }
-
-        const mapped = mapApiProcessoToProcesso(processoPayload as ApiProcesso);
-
-        setProcessos((prev) =>
-          prev.map((processo) => (processo.id === mapped.id ? mapped : processo)),
-        );
-
-        const movimentacoesInfo =
-          (json as {
-            movimentacoes?: { novas?: unknown; total?: unknown } | null;
-          })?.movimentacoes ?? null;
-
-        if (movimentacoesInfo && typeof movimentacoesInfo === "object") {
-          const novas = parseApiInteger(
-            (movimentacoesInfo as { novas?: unknown }).novas,
-          );
-          const total = parseApiInteger(
-            (movimentacoesInfo as { total?: unknown }).total,
-          );
-
-          toast({
-            title: "Processo sincronizado com sucesso",
-            description:
-              novas > 0
-                ? `${novas} novas movimentações registradas (total: ${total}).`
-                : `Nenhuma nova movimentação encontrada (total registrado: ${total}).`,
-          });
-        } else {
-          toast({ title: "Processo sincronizado com sucesso" });
-        }
-      } catch (error) {
-        console.error(error);
-        const message =
-          error instanceof Error ? error.message : "Erro ao sincronizar o processo";
-        toast({
-          title: "Erro ao sincronizar processo",
-          description: message,
-          variant: "destructive",
-        });
-      } finally {
-        setSyncingProcessId(null);
-      }
-    },
-    [syncingProcessId, toast, planAllowsSync, planSyncLimit, processos],
-  );
-
   const handleViewProcessDetails = useCallback(
     (processoToView: Processo) => {
       const clienteId = processoToView.cliente?.id ?? null;
@@ -1664,23 +1468,17 @@ export default function Processos() {
       ) : (
         <Accordion type="multiple" className="space-y-4">
           {filteredProcessos.map((processo) => {
-            const ultimaSincronizacaoLabel = formatDateTimeToPtBR(
-              processo.ultimaSincronizacao,
-            );
-            const sincronizacoesLabel =
-              processo.consultasApiCount === 1
-                ? "1 sincronização registrada"
-                : processo.consultasApiCount > 1
-                  ? `${processo.consultasApiCount} sincronizações registradas`
-                  : "Nenhuma sincronização registrada";
+            const clienteDocumento =
+              processo.cliente?.documento?.trim() || "Documento não informado";
+            const clientePapel = processo.cliente?.papel?.trim();
+            const ultimaAtualizacaoLabel =
+              processo.ultimaSincronizacao
+                ? formatDateTimeToPtBR(processo.ultimaSincronizacao)
+                : "Sem registros recentes";
             const movimentacoesLabel =
               processo.movimentacoesCount === 1
                 ? "1 movimentação registrada"
                 : `${processo.movimentacoesCount} movimentações registradas`;
-            const clienteDocumento =
-              processo.cliente?.documento?.trim() || "Documento não informado";
-            const clientePapel = processo.cliente?.papel?.trim();
-            const isSyncing = syncingProcessId === processo.id;
 
             return (
               <AccordionItem
@@ -1720,8 +1518,8 @@ export default function Processos() {
                         Distribuído em {processo.dataDistribuicao}
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <RefreshCw className="h-3.5 w-3.5 text-primary" />
-                        Última sincronização: {ultimaSincronizacaoLabel}
+                        <Clock className="h-3.5 w-3.5 text-primary" />
+                        Última atualização: {ultimaAtualizacaoLabel}
                       </span>
                       <span className="flex items-center gap-1.5">
                         <FileText className="h-3.5 w-3.5 text-primary" />
@@ -1871,24 +1669,6 @@ export default function Processos() {
                           </p>
                         )}
                       </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Sincronização com o Escavador
-                        </p>
-                        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1.5 text-foreground">
-                            <RefreshCw className="h-4 w-4 text-primary" />
-                            {sincronizacoesLabel}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            {ultimaSincronizacaoLabel}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <FileText className="h-4 w-4 text-muted-foreground" />
-                            {movimentacoesLabel}
-                          </span>
-                        </div>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1904,13 +1684,6 @@ export default function Processos() {
                           <Eye className="mr-2 h-4 w-4" />
                           Visualizar detalhes
                         </Button>
-                        <ProcessosSyncAction
-                          allowsSync={planAllowsSync}
-                          syncLimit={planSyncLimit}
-                          processo={processo}
-                          isSyncing={isSyncing}
-                          onSync={handleSyncProcess}
-                        />
                       </div>
                     </div>
                   </div>
