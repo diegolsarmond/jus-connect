@@ -7,6 +7,7 @@ import {
 } from '../controllers/planoController';
 
 const router = Router();
+export const publicPlanoRoutes = Router();
 
 /**
  * @swagger
@@ -60,7 +61,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Plano'
  */
-router.get('/planos', listPlanos);
+publicPlanoRoutes.get('/planos', listPlanos);
 
 /**
  * @swagger
