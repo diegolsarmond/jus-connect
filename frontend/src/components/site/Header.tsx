@@ -28,6 +28,8 @@ const NAV_ITEMS: HeaderNavItem[] = [
   { label: "Contato", href: "#contato" },
 ];
 
+const resolveNavLink = (href: string) => (href.startsWith("#") ? `/${href}` : href);
+
 const Header = () => {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -107,37 +109,38 @@ const Header = () => {
                   aria-hidden={activeDropdown !== item.label}
                 >
 
-                  {item.children.map((child) => (
-                    <a
-                      key={child.label}
-                      href={child.href}
-                      className="block rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      onFocus={() => openDropdown(item.label)}
-
-                    >
-                      {child.label}
-                    </a>
-                  ))}
+                  {item.children.map((child) =>
+                    child.href ? (
+                      <Link
+                        key={child.label}
+                        to={resolveNavLink(child.href)}
+                        className="block rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        onFocus={() => openDropdown(item.label)}
+                      >
+                        {child.label}
+                      </Link>
+                    ) : null,
+                  )}
                 </div>
               </div>
             ) : item.href ? (
-              <a
+              <Link
                 key={item.href}
-                href={item.href}
+                to={resolveNavLink(item.href)}
                 className={cn(
                   "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
                   location.pathname === "/" && location.hash === item.href && "text-foreground",
                 )}
               >
                 {item.label}
-              </a>
+              </Link>
             ) : null,
           )}
         </nav>
 
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" className="hidden text-sm font-medium text-muted-foreground hover:text-foreground md:inline-flex">
-            <Link to="#contato">Falar com especialista</Link>
+            <Link to="/#contato">Falar com especialista</Link>
           </Button>
           <Button asChild className="text-sm font-semibold">
             <Link to={routes.login}>Entrar</Link>
@@ -163,26 +166,28 @@ const Header = () => {
               item.children && item.children.length > 0 ? (
                 <div key={item.label} className="flex flex-col gap-1">
                   <span className="px-3 py-2 text-sm font-semibold text-foreground">{item.label}</span>
-                  {item.children.map((child) => (
-                    <a
-                      key={child.label}
-                      href={child.href}
-                      className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
-                      onClick={closeMenu}
-                    >
-                      {child.label}
-                    </a>
-                  ))}
+                  {item.children.map((child) =>
+                    child.href ? (
+                      <Link
+                        key={child.label}
+                        to={resolveNavLink(child.href)}
+                        className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
+                        onClick={closeMenu}
+                      >
+                        {child.label}
+                      </Link>
+                    ) : null,
+                  )}
                 </div>
               ) : item.href ? (
-                <a
+                <Link
                   key={item.href}
-                  href={item.href}
+                  to={resolveNavLink(item.href)}
                   className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
                   onClick={closeMenu}
                 >
                   {item.label}
-                </a>
+                </Link>
               ) : null,
             )}
             <Button asChild className="mt-2" onClick={closeMenu}>
