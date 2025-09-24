@@ -87,6 +87,7 @@ const Header = () => {
                   }
                 }}
               >
+
                 <button
                   type="button"
                   className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -105,12 +106,14 @@ const Header = () => {
                   role="menu"
                   aria-hidden={activeDropdown !== item.label}
                 >
+
                   {item.children.map((child) => (
                     <a
                       key={child.label}
                       href={child.href}
                       className="block rounded-md px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       onFocus={() => openDropdown(item.label)}
+
                     >
                       {child.label}
                     </a>

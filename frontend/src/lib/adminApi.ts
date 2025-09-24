@@ -1,12 +1,16 @@
 import { z } from "zod";
 
-const baseUrl = (import.meta.env.VITE_ADMIN_API_BASE_URL as string | undefined) ?? "http://localhost:3001";
+import { getApiBaseUrl } from "./api";
+
+const baseUrl =
+  (import.meta.env.VITE_ADMIN_API_BASE_URL as string | undefined)?.trim() ||
+  getApiBaseUrl();
 
 const ensureBaseUrl = () => {
   if (!baseUrl) {
     throw new Error("VITE_ADMIN_API_BASE_URL is not defined");
   }
-  return baseUrl.replace(/\/$/, "");
+  return baseUrl.replace(/\/+$/, "");
 };
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
