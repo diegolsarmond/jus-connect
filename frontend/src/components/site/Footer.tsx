@@ -72,19 +72,19 @@ const Footer = () => {
           <h3 className="text-sm font-semibold text-foreground">Empresa</h3>
           <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
             <li>
-              <a href="#servicos" className="transition hover:text-foreground">
+              <Link to="/#servicos" className="transition hover:text-foreground">
                 Serviços
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="#sobre" className="transition hover:text-foreground">
+              <Link to="/#sobre" className="transition hover:text-foreground">
                 Quem somos
-              </a>
+              </Link>
             </li>
             <li>
-              <a href="#contato" className="transition hover:text-foreground">
+              <Link to="/#contato" className="transition hover:text-foreground">
                 Contato
-              </a>
+              </Link>
             </li>
           </ul>
         </div>
