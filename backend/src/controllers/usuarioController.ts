@@ -1,11 +1,14 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { fetchPlanLimitsForCompany, countCompanyResource } from '../services/planLimitsService';
+
 import {
   createPasswordResetRequest,
   generateTemporaryPassword,
 } from '../services/passwordResetService';
 import { hashPassword } from '../utils/passwordUtils';
 import { newUserWelcomeEmailService } from '../services/newUserWelcomeEmailService';
+
 
 let welcomeEmailService = newUserWelcomeEmailService;
 
@@ -150,6 +153,19 @@ const fetchAuthenticatedUserEmpresa = async (userId: number): Promise<EmpresaLoo
 };
 
 
+let welcomeEmailService = newUserWelcomeEmailService;
+
+export const __setWelcomeEmailServiceForTests = (
+  service: typeof newUserWelcomeEmailService
+) => {
+  welcomeEmailService = service;
+};
+
+export const __resetWelcomeEmailServiceForTests = () => {
+  welcomeEmailService = newUserWelcomeEmailService;
+};
+
+
 export const listUsuarios = async (req: Request, res: Response) => {
   try {
     if (!req.auth) {
@@ -282,6 +298,16 @@ export const createUsuario = async (req: Request, res: Response) => {
       );
       if (empresaExists.rowCount === 0) {
         return res.status(400).json({ error: 'Empresa informada não existe' });
+      }
+
+      const planLimits = await fetchPlanLimitsForCompany(empresaId);
+      if (planLimits?.limiteUsuarios != null) {
+        const usuariosCount = await countCompanyResource(empresaId, 'usuarios');
+        if (usuariosCount >= planLimits.limiteUsuarios) {
+          return res
+            .status(403)
+            .json({ error: 'Limite de usuários do plano atingido.' });
+        }
       }
     }
 

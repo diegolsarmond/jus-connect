@@ -3,9 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetUsuarioSenha = exports.deleteUsuario = exports.updateUsuario = exports.createUsuario = exports.getUsuarioById = exports.listUsuariosByEmpresa = exports.listUsuarios = void 0;
+exports.resetUsuarioSenha = exports.deleteUsuario = exports.updateUsuario = exports.createUsuario = exports.getUsuarioById = exports.listUsuariosByEmpresa = exports.listUsuarios = exports.__resetWelcomeEmailServiceForTests = exports.__setWelcomeEmailServiceForTests = void 0;
 const db_1 = __importDefault(require("../services/db"));
+const planLimitsService_1 = require("../services/planLimitsService");
 const passwordResetService_1 = require("../services/passwordResetService");
+const passwordUtils_1 = require("../utils/passwordUtils");
+const newUserWelcomeEmailService_1 = require("../services/newUserWelcomeEmailService");
 const parseOptionalId = (value) => {
     if (value === undefined || value === null) {
         return null;
@@ -99,6 +102,15 @@ const fetchAuthenticatedUserEmpresa = async (userId) => {
         empresaId: empresaAtualResult,
     };
 };
+let welcomeEmailService = newUserWelcomeEmailService_1.newUserWelcomeEmailService;
+const __setWelcomeEmailServiceForTests = (service) => {
+    welcomeEmailService = service;
+};
+exports.__setWelcomeEmailServiceForTests = __setWelcomeEmailServiceForTests;
+const __resetWelcomeEmailServiceForTests = () => {
+    welcomeEmailService = newUserWelcomeEmailService_1.newUserWelcomeEmailService;
+};
+exports.__resetWelcomeEmailServiceForTests = __resetWelcomeEmailServiceForTests;
 const listUsuarios = async (req, res) => {
     try {
         if (!req.auth) {
@@ -161,7 +173,7 @@ const getUsuarioById = async (req, res) => {
 };
 exports.getUsuarioById = getUsuarioById;
 const createUsuario = async (req, res) => {
-    const { nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, } = req.body;
+    const { nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, } = req.body;
     try {
         if (!req.auth) {
             return res.status(401).json({ error: 'Token inválido.' });
@@ -195,6 +207,15 @@ const createUsuario = async (req, res) => {
             if (empresaExists.rowCount === 0) {
                 return res.status(400).json({ error: 'Empresa informada não existe' });
             }
+            const planLimits = await (0, planLimitsService_1.fetchPlanLimitsForCompany)(empresaId);
+            if (planLimits?.limiteUsuarios != null) {
+                const usuariosCount = await (0, planLimitsService_1.countCompanyResource)(empresaId, 'usuarios');
+                if (usuariosCount >= planLimits.limiteUsuarios) {
+                    return res
+                        .status(403)
+                        .json({ error: 'Limite de usuários do plano atingido.' });
+                }
+            }
         }
         const setorIdResult = parseOptionalId(setor);
         if (setorIdResult === 'invalid') {
@@ -209,21 +230,53 @@ const createUsuario = async (req, res) => {
                     .json({ error: 'Setor informado não existe' });
             }
         }
+        const normalizedEmail = typeof email === 'string' ? email.trim() : '';
+        if (normalizedEmail.length === 0) {
+            return res.status(400).json({ error: 'E-mail é obrigatório para criação de usuário.' });
+        }
+        const temporaryPassword = (0, passwordResetService_1.generateTemporaryPassword)();
+        const hashedPassword = (0, passwordUtils_1.hashPassword)(temporaryPassword);
         const result = await db_1.default.query('INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao', [
             nome_completo,
             cpf,
-            email,
+            normalizedEmail,
             perfil,
             empresaId,
             setorId,
             oab,
             parsedStatus,
-            senha,
+            hashedPassword,
             telefone,
             ultimo_login,
             observacoes,
         ]);
-        res.status(201).json(result.rows[0]);
+        const createdUser = result.rows[0];
+        const userNameForEmail = typeof nome_completo === 'string' && nome_completo.trim().length > 0
+            ? nome_completo
+            : 'Usuário';
+        try {
+            await welcomeEmailService.sendWelcomeEmail({
+                to: normalizedEmail,
+                userName: userNameForEmail,
+                temporaryPassword,
+            });
+        }
+        catch (emailError) {
+            console.error('Erro ao enviar senha provisória para novo usuário', emailError);
+            const createdUserId = parseOptionalId(createdUser?.id);
+            if (createdUserId !== 'invalid' && createdUserId !== null) {
+                try {
+                    await db_1.default.query('DELETE FROM public.usuarios WHERE id = $1', [createdUserId]);
+                }
+                catch (cleanupError) {
+                    console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
+                }
+            }
+            return res
+                .status(500)
+                .json({ error: 'Não foi possível enviar a senha provisória para o novo usuário.' });
+        }
+        res.status(201).json(createdUser);
     }
     catch (error) {
         console.error(error);

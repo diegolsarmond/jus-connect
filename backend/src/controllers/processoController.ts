@@ -3,6 +3,10 @@ import { PoolClient } from 'pg';
 import IntegrationApiKeyService, {
   ESCAVADOR_DEFAULT_API_URL,
 } from '../services/integrationApiKeyService';
+import {
+  fetchPlanLimitsForCompany,
+  countCompanyResource,
+} from '../services/planLimitsService';
 
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
@@ -1011,6 +1015,19 @@ export const createProcesso = async (req: Request, res: Response) => {
       return res
         .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    const planLimits = await fetchPlanLimitsForCompany(empresaId);
+    if (planLimits?.limiteProcessos != null) {
+      const processosCount = await countCompanyResource(
+        empresaId,
+        'processos',
+      );
+      if (processosCount >= planLimits.limiteProcessos) {
+        return res
+          .status(403)
+          .json({ error: 'Limite de processos do plano atingido.' });
+      }
     }
 
     const clienteExists = await pool.query(

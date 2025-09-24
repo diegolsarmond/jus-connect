@@ -38,6 +38,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteProcesso = exports.listProcessoDocumentosPublicos = exports.syncProcessoMovimentacoes = exports.updateProcesso = exports.createProcesso = exports.getProcessoById = exports.listProcessosByCliente = exports.listProcessos = void 0;
 const integrationApiKeyService_1 = __importStar(require("../services/integrationApiKeyService"));
+const planLimitsService_1 = require("../services/planLimitsService");
 const db_1 = __importDefault(require("../services/db"));
 const notificationService_1 = require("../services/notificationService");
 const authUser_1 = require("../utils/authUser");
@@ -788,6 +789,15 @@ const createProcesso = async (req, res) => {
             return res
                 .status(400)
                 .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+        }
+        const planLimits = await (0, planLimitsService_1.fetchPlanLimitsForCompany)(empresaId);
+        if (planLimits?.limiteProcessos != null) {
+            const processosCount = await (0, planLimitsService_1.countCompanyResource)(empresaId, 'processos');
+            if (processosCount >= planLimits.limiteProcessos) {
+                return res
+                    .status(403)
+                    .json({ error: 'Limite de processos do plano atingido.' });
+            }
         }
         const clienteExists = await db_1.default.query('SELECT 1 FROM public.clientes WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2', [parsedClienteId, empresaId]);
         if (clienteExists.rowCount === 0) {

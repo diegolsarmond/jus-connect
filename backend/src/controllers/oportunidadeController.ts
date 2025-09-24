@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import type { PoolClient } from 'pg';
 import pool from '../services/db';
+import {
+  fetchPlanLimitsForCompany,
+  countCompanyResource,
+} from '../services/planLimitsService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const getAuthenticatedUser = (
@@ -607,6 +611,17 @@ export const createOportunidade = async (req: Request, res: Response) => {
     }
 
     const dbClient = client;
+
+    const planLimits = await fetchPlanLimitsForCompany(empresaId);
+    if (planLimits?.limitePropostas != null) {
+      const propostasCount = await countCompanyResource(empresaId, 'propostas');
+      if (propostasCount >= planLimits.limitePropostas) {
+        res
+          .status(403)
+          .json({ error: 'Limite de propostas do plano atingido.' });
+        return;
+      }
+    }
 
     await dbClient.query('BEGIN');
     const sequenceResult = await dbClient.query(
