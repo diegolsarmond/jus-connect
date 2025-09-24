@@ -97,11 +97,11 @@ export default function AlterarSenha() {
         const search = target.search ?? "";
         const hash = target.hash ?? "";
         const combined = `${pathname}${search}${hash}`;
-        return combined || routes.home;
+        return combined || routes.dashboard;
       }
 
       if (wasForcedChange) {
-        return routes.home;
+        return routes.dashboard;
       }
 
       return null;
