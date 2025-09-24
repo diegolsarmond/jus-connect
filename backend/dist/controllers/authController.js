@@ -266,22 +266,45 @@ const sanitizePlanModules = (value) => {
     }
     return (0, modules_1.sortModules)(sanitized);
 };
-const fetchDefaultPlanDetails = async (client) => {
-    const result = await client.query(`SELECT id, modulos
-       FROM public.planos
-      WHERE ativo IS DISTINCT FROM FALSE
-   ORDER BY id
-      LIMIT 1`);
-    if (result.rowCount === 0) {
-        return { planId: null, modules: DEFAULT_MODULE_IDS };
+const shouldFallbackToDefaultPlan = (error) => {
+    if (!error || typeof error !== 'object') {
+        return false;
     }
-    const row = result.rows[0];
-    const planId = parseInteger(row.id);
-    const modules = sanitizePlanModules(row.modulos);
-    return {
-        planId,
-        modules: modules.length > 0 ? modules : DEFAULT_MODULE_IDS,
-    };
+    const { code, message } = error;
+    if (typeof code === 'string' && ['42P01', '42703', '42501'].includes(code)) {
+        return true;
+    }
+    if (typeof message === 'string') {
+        const normalized = message.toLowerCase();
+        return normalized.includes('planos') && normalized.includes('does not exist');
+    }
+    return false;
+};
+const fetchDefaultPlanDetails = async (client) => {
+    try {
+        const result = await client.query(`SELECT id, modulos
+         FROM public.planos
+        WHERE ativo IS DISTINCT FROM FALSE
+     ORDER BY id
+        LIMIT 1`);
+        if (result.rowCount === 0) {
+            return { planId: null, modules: DEFAULT_MODULE_IDS };
+        }
+        const row = result.rows[0];
+        const planId = parseInteger(row.id);
+        const modules = sanitizePlanModules(row.modulos);
+        return {
+            planId,
+            modules: modules.length > 0 ? modules : DEFAULT_MODULE_IDS,
+        };
+    }
+    catch (error) {
+        if (shouldFallbackToDefaultPlan(error)) {
+            console.warn('Tabela de planos indisponível durante cadastro. Utilizando módulos padrão.', error);
+            return { planId: null, modules: DEFAULT_MODULE_IDS };
+        }
+        throw error;
+    }
 };
 const register = async (req, res) => {
     const nameValue = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
@@ -353,11 +376,12 @@ const register = async (req, res) => {
             const graceExpiresAt = trialEndsAt;
             const companyLookup = await client.query(`SELECT id, nome_empresa, plano
            FROM public.empresas
-          WHERE LOWER(nome_empresa) = LOWER($1)
+          WHERE LOWER(TRIM(nome_empresa)) = LOWER(TRIM($1))
           LIMIT 1`, [companyValue]);
             let companyId;
             let companyName;
             let companyPlanId;
+            let createdCompany = false;
             if ((companyLookup.rowCount ?? 0) > 0) {
                 const row = companyLookup.rows[0];
                 const parsedId = parseInteger(row.id);
@@ -365,7 +389,10 @@ const register = async (req, res) => {
                     throw new Error('ID de empresa inválido retornado do banco de dados.');
                 }
                 companyId = parsedId;
-                companyName = typeof row.nome_empresa === 'string' ? row.nome_empresa : companyValue;
+                companyName =
+                    typeof row.nome_empresa === 'string'
+                        ? row.nome_empresa.trim() || companyValue
+                        : companyValue;
                 companyPlanId = parseInteger(row.plano);
             }
             else {
@@ -392,7 +419,7 @@ const register = async (req, res) => {
                     phoneValue,
                     normalizedEmail,
                     planId,
-                    nameValue,
+                    null,
                     true,
                     trialStartedAt,
                     trialEndsAt,
@@ -407,13 +434,17 @@ const register = async (req, res) => {
                     throw new Error('Falha ao criar a empresa.');
                 }
                 companyId = parsedId;
-                companyName = typeof inserted.nome_empresa === 'string' ? inserted.nome_empresa : companyValue;
+                companyName =
+                    typeof inserted.nome_empresa === 'string'
+                        ? inserted.nome_empresa.trim() || companyValue
+                        : companyValue;
                 companyPlanId = planId ?? parseInteger(inserted.plano);
+                createdCompany = true;
             }
             const existingPerfil = await client.query(`SELECT id, nome, ativo, datacriacao
            FROM public.perfis
           WHERE idempresa IS NOT DISTINCT FROM $1
-            AND LOWER(nome) = LOWER($2)
+            AND LOWER(TRIM(nome)) = LOWER(TRIM($2))
           LIMIT 1`, [companyId, DEFAULT_PROFILE_NAME]);
             let perfilId;
             let perfilNome;
@@ -424,7 +455,10 @@ const register = async (req, res) => {
                     throw new Error('ID de perfil inválido retornado do banco de dados.');
                 }
                 perfilId = parsedPerfilId;
-                perfilNome = typeof perfilRow.nome === 'string' ? perfilRow.nome : DEFAULT_PROFILE_NAME;
+                perfilNome =
+                    typeof perfilRow.nome === 'string'
+                        ? perfilRow.nome.trim() || DEFAULT_PROFILE_NAME
+                        : DEFAULT_PROFILE_NAME;
                 await client.query('DELETE FROM public.perfil_modulos WHERE perfil_id = $1', [perfilId]);
             }
             else {
@@ -437,7 +471,10 @@ const register = async (req, res) => {
                     throw new Error('Falha ao criar o perfil administrador.');
                 }
                 perfilId = parsedPerfilId;
-                perfilNome = typeof perfilRow.nome === 'string' ? perfilRow.nome : DEFAULT_PROFILE_NAME;
+                perfilNome =
+                    typeof perfilRow.nome === 'string'
+                        ? perfilRow.nome.trim() || DEFAULT_PROFILE_NAME
+                        : DEFAULT_PROFILE_NAME;
             }
             if (modules.length > 0) {
                 await client.query('INSERT INTO public.perfil_modulos (perfil_id, modulo) SELECT $1, unnest($2::text[])', [perfilId, modules]);
@@ -460,6 +497,13 @@ const register = async (req, res) => {
                 null,
             ]);
             const createdUser = userInsert.rows[0];
+            const createdUserId = parseInteger(createdUser.id);
+            if (createdCompany && createdUserId != null) {
+                await client.query('UPDATE public.empresas SET responsavel = $1 WHERE id = $2', [
+                    createdUserId,
+                    companyId,
+                ]);
+            }
             await client.query('COMMIT');
             transactionActive = false;
             res.status(201).json({

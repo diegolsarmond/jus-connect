@@ -1,7 +1,12 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { fetchPlanLimitsForCompany, countCompanyResource } from '../services/planLimitsService';
-import { createPasswordResetRequest } from '../services/passwordResetService';
+import {
+  createPasswordResetRequest,
+  generateTemporaryPassword,
+} from '../services/passwordResetService';
+import { hashPassword } from '../utils/passwordUtils';
+import { newUserWelcomeEmailService } from '../services/newUserWelcomeEmailService';
 
 const parseOptionalId = (value: unknown): number | null | 'invalid' => {
   if (value === undefined || value === null) {
@@ -134,6 +139,19 @@ const fetchAuthenticatedUserEmpresa = async (userId: number): Promise<EmpresaLoo
 };
 
 
+let welcomeEmailService = newUserWelcomeEmailService;
+
+export const __setWelcomeEmailServiceForTests = (
+  service: typeof newUserWelcomeEmailService
+) => {
+  welcomeEmailService = service;
+};
+
+export const __resetWelcomeEmailServiceForTests = () => {
+  welcomeEmailService = newUserWelcomeEmailService;
+};
+
+
 export const listUsuarios = async (req: Request, res: Response) => {
   try {
     if (!req.auth) {
@@ -217,7 +235,6 @@ export const createUsuario = async (req: Request, res: Response) => {
     setor,
     oab,
     status,
-    senha,
     telefone,
     ultimo_login,
     observacoes,
@@ -298,24 +315,64 @@ export const createUsuario = async (req: Request, res: Response) => {
       }
     }
 
+    const normalizedEmail = typeof email === 'string' ? email.trim() : '';
+
+    if (normalizedEmail.length === 0) {
+      return res.status(400).json({ error: 'E-mail é obrigatório para criação de usuário.' });
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const hashedPassword = hashPassword(temporaryPassword);
+
     const result = await pool.query(
       'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
         cpf,
-        email,
+        normalizedEmail,
         perfil,
         empresaId,
         setorId,
         oab,
         parsedStatus,
-        senha,
+        hashedPassword,
         telefone,
         ultimo_login,
         observacoes,
       ]
     );
-    res.status(201).json(result.rows[0]);
+
+    const createdUser = result.rows[0];
+    const userNameForEmail =
+      typeof nome_completo === 'string' && nome_completo.trim().length > 0
+        ? nome_completo
+        : 'Usuário';
+
+    try {
+      await welcomeEmailService.sendWelcomeEmail({
+        to: normalizedEmail,
+        userName: userNameForEmail,
+        temporaryPassword,
+      });
+    } catch (emailError) {
+      console.error('Erro ao enviar senha provisória para novo usuário', emailError);
+
+      const createdUserId = parseOptionalId((createdUser as { id?: unknown })?.id);
+
+      if (createdUserId !== 'invalid' && createdUserId !== null) {
+        try {
+          await pool.query('DELETE FROM public.usuarios WHERE id = $1', [createdUserId]);
+        } catch (cleanupError) {
+          console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
+        }
+      }
+
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível enviar a senha provisória para o novo usuário.' });
+    }
+
+    res.status(201).json(createdUser);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

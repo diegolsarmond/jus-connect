@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteOportunidade = exports.createOportunidadeFaturamento = exports.__test__ = exports.listOportunidadeParcelas = exports.listOportunidadeFaturamentos = exports.updateOportunidadeEtapa = exports.linkProcessoToOportunidade = exports.updateOportunidadeStatus = exports.updateOportunidade = exports.createOportunidade = exports.listEnvolvidosByOportunidade = exports.getOportunidadeById = exports.listOportunidadesByFase = exports.listOportunidades = void 0;
 const db_1 = __importDefault(require("../services/db"));
+const planLimitsService_1 = require("../services/planLimitsService");
 const authUser_1 = require("../utils/authUser");
 const getAuthenticatedUser = (req, res) => {
     if (!req.auth) {
@@ -417,6 +418,16 @@ const createOportunidade = async (req, res) => {
             throw new Error('Não foi possível obter conexão com o banco de dados.');
         }
         const dbClient = client;
+        const planLimits = await (0, planLimitsService_1.fetchPlanLimitsForCompany)(empresaId);
+        if (planLimits?.limitePropostas != null) {
+            const propostasCount = await (0, planLimitsService_1.countCompanyResource)(empresaId, 'propostas');
+            if (propostasCount >= planLimits.limitePropostas) {
+                res
+                    .status(403)
+                    .json({ error: 'Limite de propostas do plano atingido.' });
+                return;
+            }
+        }
         await dbClient.query('BEGIN');
         const sequenceResult = await dbClient.query(`INSERT INTO public.oportunidade_sequence (empresa_id, atual)
        VALUES ($1, 1)
