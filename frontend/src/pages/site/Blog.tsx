@@ -122,7 +122,7 @@ const BlogPage = () => {
               <Button
                 variant="quantum"
                 size="lg"
-                onClick={() => navigate("/#contato")}
+                onClick={() => navigate({ pathname: routes.home, hash: "#contato" })}
                 className="justify-self-start md:justify-self-end"
               >
                 Fale com um especialista
@@ -267,7 +267,7 @@ const BlogPage = () => {
                     <Button
                       variant="outline_quantum"
                       size="lg"
-                      onClick={() => navigate("/#contato")}
+                      onClick={() => navigate({ pathname: routes.home, hash: "#contato" })}
                       className="border-white/40 text-white hover:text-white hover:bg-white/10"
                     >
                       Falar com especialistas

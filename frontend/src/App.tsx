@@ -107,6 +107,7 @@ const AdminSettingsCategories = lazy(() => import("./pages/administrator/setting
 const AdminNotFound = lazy(() => import("./pages/administrator/NotFound"));
 
 const queryClient = new QueryClient();
+const routerBasename = appConfig.basePath === "/" ? undefined : appConfig.basePath;
 
 const withModule = (moduleId: string | string[], element: ReactElement) => (
   <RequireModule module={moduleId}>{element}</RequireModule>
@@ -118,7 +119,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter basename={appConfig.basePath}>
+        <BrowserRouter basename={routerBasename}>
+
           <Suspense fallback={<LandingFallback />}>
             <Routes>
               <Route path={routes.home} element={<SiteIndex />} />

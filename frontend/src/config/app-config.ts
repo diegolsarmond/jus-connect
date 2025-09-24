@@ -87,4 +87,5 @@ export const appConfig: AppConfig = {
   enableMockData: parseBoolean(import.meta.env.VITE_ENABLE_MOCKS, true),
 };
 
+export const buildAppPath = (...segments: string[]) => joinPathSegments(appConfig.basePath, ...segments);
 export const buildAdminPath = (...segments: string[]) => joinPathSegments(appConfig.adminBasePath, ...segments);

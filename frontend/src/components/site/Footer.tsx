@@ -3,6 +3,7 @@ import { Github, Linkedin, Mail } from "lucide-react";
 
 import quantumLogo from "@/assets/quantum-logo.png";
 import { routes } from "@/config/routes";
+import { buildAppPath } from "@/config/app-config";
 
 const currentYear = new Date().getFullYear();
 
@@ -11,7 +12,7 @@ const Footer = () => {
     <footer className="border-t border-border/40 bg-background/80">
       <div className="container grid gap-8 px-4 py-12 md:grid-cols-[1.5fr_1fr_1fr]">
         <div className="space-y-4">
-          <Link to="/" className="flex items-center gap-3">
+          <Link to={routes.home} className="flex items-center gap-3">
             <img src={quantumLogo} alt="Quantum Tecnologia" className="h-10 w-10" />
             <span className="text-lg font-semibold text-foreground">Quantum Tecnologia</span>
           </Link>
@@ -72,17 +73,17 @@ const Footer = () => {
           <h3 className="text-sm font-semibold text-foreground">Empresa</h3>
           <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
             <li>
-              <Link to="/#servicos" className="transition hover:text-foreground">
+              <Link to={{ pathname: routes.home, hash: "#servicos" }} className="transition hover:text-foreground">
                 Serviços
               </Link>
             </li>
             <li>
-              <Link to="/#sobre" className="transition hover:text-foreground">
+              <Link to={{ pathname: routes.home, hash: "#sobre" }} className="transition hover:text-foreground">
                 Quem somos
               </Link>
             </li>
             <li>
-              <Link to="/#contato" className="transition hover:text-foreground">
+              <Link to={{ pathname: routes.home, hash: "#contato" }} className="transition hover:text-foreground">
                 Contato
               </Link>
             </li>
@@ -94,10 +95,10 @@ const Footer = () => {
         <div className="container flex flex-col items-center justify-between gap-3 px-4 py-4 text-center text-xs text-muted-foreground md:flex-row">
           <span>&copy; {currentYear} Quantum Tecnologia. Todos os direitos reservados.</span>
           <div className="flex gap-4">
-            <a href="/politica-de-privacidade" className="transition hover:text-foreground">
+            <a href={buildAppPath("politica-de-privacidade")} className="transition hover:text-foreground">
               Política de privacidade
             </a>
-            <a href="/termos-de-uso" className="transition hover:text-foreground">
+            <a href={buildAppPath("termos-de-uso")} className="transition hover:text-foreground">
               Termos de uso
             </a>
           </div>

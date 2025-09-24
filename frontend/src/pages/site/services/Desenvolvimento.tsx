@@ -36,6 +36,7 @@ import Footer from "@/components/Footer";
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getGtag } from "@/lib/gtag";
+import { buildAppPath } from "@/config/app-config";
 import devSquadIllustration from "@/assets/dev-squad-illustration.svg";
 import productJourneyIllustration from "@/assets/product-journey-illustration.svg";
 import integrationMapIllustration from "@/assets/integration-map-illustration.svg";
@@ -1099,7 +1100,7 @@ const Desenvolvimento = () => {
                       service: "desenvolvimento",
                       source: "cta_section",
                     });
-                    window.location.href = "/#contato";
+                    window.location.assign(buildAppPath("#contato"));
                   }}
                 >
                   Solicitar proposta personalizada
