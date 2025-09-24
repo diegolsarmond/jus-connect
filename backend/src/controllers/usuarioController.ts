@@ -324,7 +324,7 @@ export const createUsuario = async (req: Request, res: Response) => {
     const hashedPassword = hashPassword(temporaryPassword);
 
     const result = await pool.query(
-      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
+      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
         cpf,
