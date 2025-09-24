@@ -1,5 +1,5 @@
-import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,8 @@ import { routes } from "@/config/routes";
 import { appConfig } from "@/config/app-config";
 import { Loader2 } from "lucide-react";
 import { getApiUrl } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { fetchPlanOptions, formatPlanPriceLabel, type PlanOption } from "@/features/plans/api";
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -24,6 +26,66 @@ const Register = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchParams] = useSearchParams();
+  const planFromUrl = searchParams.get("plan");
+  const [planOptions, setPlanOptions] = useState<PlanOption[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>("");
+  const [isPlansLoading, setIsPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    const loadPlans = async () => {
+      setIsPlansLoading(true);
+      setPlansError(null);
+
+      try {
+        const plans = await fetchPlanOptions(controller.signal);
+        if (!active) {
+          return;
+        }
+
+        setPlanOptions(plans);
+
+        if (plans.length === 0) {
+          setSelectedPlanId("");
+          return;
+        }
+
+        const normalizedParam = planFromUrl ? planFromUrl.trim() : "";
+        const matched = plans.find((plan) => String(plan.id) === normalizedParam);
+        const fallback = matched ?? plans[0];
+        setSelectedPlanId(String(fallback.id));
+      } catch (error) {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) {
+          return;
+        }
+
+        console.error("Falha ao carregar planos disponíveis para cadastro", error);
+        setPlansError("Não foi possível carregar os planos disponíveis no momento.");
+        setPlanOptions([]);
+        setSelectedPlanId("");
+      } finally {
+        if (active) {
+          setIsPlansLoading(false);
+        }
+      }
+    };
+
+    void loadPlans();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [planFromUrl]);
+
+  const selectedPlan = useMemo(
+    () => planOptions.find((plan) => String(plan.id) === selectedPlanId) ?? null,
+    [planOptions, selectedPlanId],
+  );
 
   const extractErrorMessage = async (response: Response) => {
     try {
@@ -54,6 +116,25 @@ const Register = () => {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    if (!selectedPlanId) {
+      toast({
+        variant: "destructive",
+        title: "Plano obrigatório",
+        description: "Selecione um plano para iniciar o teste gratuito.",
+      });
+      return;
+    }
+
+    const parsedPlanId = Number.parseInt(selectedPlanId, 10);
+    if (!Number.isFinite(parsedPlanId)) {
+      toast({
+        variant: "destructive",
+        title: "Plano inválido",
+        description: "O plano selecionado é inválido. Atualize a página e tente novamente.",
+      });
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       toast({
         variant: "destructive",
@@ -70,7 +151,8 @@ const Register = () => {
       email: formData.email.trim(),
       company: formData.company.trim(),
       password: formData.password,
-      phone: formData.phone.trim().length > 0 ? formData.phone.trim() : undefined
+      phone: formData.phone.trim().length > 0 ? formData.phone.trim() : undefined,
+      planId: parsedPlanId,
     };
 
     try {
@@ -147,7 +229,46 @@ const Register = () => {
                 className="border-primary/20 focus:border-primary"
               />
             </div>
-            
+
+            <div className="space-y-2">
+              <Label htmlFor="planId">Plano que deseja testar</Label>
+              <Select
+                value={selectedPlanId}
+                onValueChange={setSelectedPlanId}
+                disabled={isPlansLoading || planOptions.length === 0}
+              >
+                <SelectTrigger
+                  id="planId"
+                  className="border-primary/20 focus:border-primary"
+                >
+                  <SelectValue
+                    placeholder={
+                      isPlansLoading ? "Carregando planos..." : "Selecione o plano do teste"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {planOptions.map((plan) => (
+                    <SelectItem key={plan.id} value={String(plan.id)}>
+                      {`${plan.name} • ${formatPlanPriceLabel(plan)}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {plansError ? (
+                <p className="text-sm text-destructive">{plansError}</p>
+              ) : selectedPlan ? (
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {selectedPlan.description ??
+                    "Você terá acesso a todos os recursos desse plano durante 14 dias sem custo."}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Escolha o plano para liberar seu teste gratuito de 14 dias.
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -217,7 +338,16 @@ const Register = () => {
               />
             </div>
             
-            <Button type="submit" className="w-full bg-gradient-primary hover:opacity-90" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              className="w-full bg-gradient-primary hover:opacity-90"
+              disabled={
+                isSubmitting ||
+                isPlansLoading ||
+                planOptions.length === 0 ||
+                !selectedPlanId
+              }
+            >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />

@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -7,9 +8,17 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious
+} from "@/components/ui/carousel";
 import {
   ArrowRight,
   CalendarClock,
@@ -28,6 +37,8 @@ import {
 } from "lucide-react";
 import { useServiceBySlug } from "@/hooks/useServices";
 import { Skeleton } from "@/components/ui/skeleton";
+import { fetchPlanOptions, formatPlanPriceLabel, getComparableMonthlyPrice, type PlanOption } from "@/features/plans/api";
+import { routes } from "@/config/routes";
 
 const getGtag = () => {
   if (typeof window === "undefined") {
@@ -39,6 +50,45 @@ const getGtag = () => {
 
 const CRMAdvocacia = () => {
   const { data: service, isLoading: isServiceLoading, isError: isServiceError } = useServiceBySlug("crm/advocacia");
+  const [availablePlans, setAvailablePlans] = useState<PlanOption[]>([]);
+  const [isPlansLoading, setIsPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    const loadPlans = async () => {
+      setIsPlansLoading(true);
+      setPlansError(null);
+
+      try {
+        const plans = await fetchPlanOptions(controller.signal);
+        if (!active) {
+          return;
+        }
+        setAvailablePlans(plans);
+      } catch (err) {
+        if (!active || (err instanceof DOMException && err.name === "AbortError")) {
+          return;
+        }
+        console.error(err);
+        setPlansError("Não foi possível carregar os planos disponíveis no momento.");
+        setAvailablePlans([]);
+      } finally {
+        if (active) {
+          setIsPlansLoading(false);
+        }
+      }
+    };
+
+    void loadPlans();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   const heroHighlights = useMemo(
     () => [
@@ -153,42 +203,43 @@ const CRMAdvocacia = () => {
     }
   ];
 
-  const plans = [
-    {
-      name: "Starter Jurídico",
-      price: "A partir de R$ 499/mês",
-      description: "Ideal para escritórios boutique e equipes enxutas em fase de estruturação digital.",
-      features: [
-        "Até 10 usuários inclusos",
-        "Integração com PJe e Projudi",
-        "Automação básica de prazos",
-        "Suporte via chat comercial"
-      ]
-    },
-    {
-      name: "Professional",
-      price: "A partir de R$ 899/mês",
-      description: "Para bancas em crescimento que precisam de eficiência operacional e previsibilidade.",
-      featured: true,
-      features: [
-        "Usuários ilimitados",
-        "Fluxos automatizados avançados",
-        "BI jurídico com dashboards executivos",
-        "Suporte prioritário e onboarding assistido"
-      ]
-    },
-    {
-      name: "Enterprise",
-      price: "Sob consulta",
-      description: "Projetado para departamentos jurídicos e redes com múltiplas unidades pelo país.",
-      features: [
-        "Arquitetura dedicada e SSO",
-        "Integração com ERPs e SAP",
-        "SLA sob medida",
-        "Consultoria estratégica contínua"
-      ]
+  const highlightedPlanId = useMemo(() => {
+    if (availablePlans.length === 0) {
+      return null;
     }
-  ];
+
+    const sorted = [...availablePlans]
+      .map((plan) => ({ plan, monthly: getComparableMonthlyPrice(plan) }))
+      .filter((entry) => entry.monthly !== null)
+      .sort((a, b) => (b.monthly ?? 0) - (a.monthly ?? 0));
+
+    return sorted[0]?.plan.id ?? null;
+  }, [availablePlans]);
+
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }),
+    [],
+  );
+
+  const normalizedPlans = useMemo(
+    () =>
+      availablePlans.map((plan) => ({
+        option: plan,
+        priceLabel: formatPlanPriceLabel(plan),
+        featured: highlightedPlanId !== null && plan.id === highlightedPlanId,
+        monthlyLabel:
+          typeof plan.monthlyPrice === "number"
+            ? currencyFormatter.format(plan.monthlyPrice)
+            : null,
+        annualLabel:
+          typeof plan.annualPrice === "number" ? currencyFormatter.format(plan.annualPrice) : null,
+      })),
+    [availablePlans, highlightedPlanId, currencyFormatter],
+  );
 
   const implementationSteps = [
     {
@@ -445,47 +496,128 @@ const CRMAdvocacia = () => {
               Escolha o modelo que melhor se adapta à sua estrutura e conte com nossa equipe para personalizar fluxos e integrações.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {plans.map((plan) => (
-              <Card
-                key={plan.name}
-                className={`relative overflow-hidden border-quantum-light/20 bg-background/70 backdrop-blur hover:border-quantum-bright/40 transition-all duration-300 ${
-                  plan.featured ? "shadow-quantum ring-2 ring-quantum-bright" : ""
-                }`}
-              >
-                {plan.featured && (
-                  <div className="absolute top-4 right-4 px-3 py-1 text-xs font-semibold uppercase tracking-wide bg-gradient-quantum text-white rounded-full">
-                    Mais escolhido
-                  </div>
-                )}
-                <CardHeader className="space-y-3">
-                  <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                  <p className="text-quantum-bright text-xl font-semibold">{plan.price}</p>
-                  <CardDescription className="text-muted-foreground leading-relaxed">
-                    {plan.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-3">
-                    {plan.features.map((feature) => (
-                      <div key={feature} className="flex items-start space-x-3">
-                        <CheckCircle2 className="h-5 w-5 text-quantum-bright flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-muted-foreground">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    variant={plan.featured ? "quantum" : "outline_quantum"}
-                    size="lg"
-                    className="w-full track-link"
-                    onClick={() => handleDemoClick(`plan_${plan.name.toLowerCase().replace(/\s+/g, "_")}`)}
-                  >
-                    Falar com consultor
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {isPlansLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Card key={`plan-skeleton-${index}`} className="border-quantum-light/10 bg-background/50">
+                  <CardHeader className="space-y-3">
+                    <Skeleton className="h-6 w-1/2" />
+                    <Skeleton className="h-5 w-1/3" />
+                    <Skeleton className="h-20 w-full" />
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-10 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : plansError ? (
+            <Card className="border-destructive/30 bg-destructive/10 text-destructive">
+              <CardHeader>
+                <CardTitle className="text-xl">Planos indisponíveis</CardTitle>
+                <CardDescription className="text-sm text-destructive">{plansError}</CardDescription>
+              </CardHeader>
+            </Card>
+          ) : normalizedPlans.length > 0 ? (
+            <Carousel className="relative">
+              <CarouselContent>
+                {normalizedPlans.map((plan) => {
+                  const planSource = `plan_${plan.option.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+                  return (
+                    <CarouselItem key={plan.option.id} className="md:basis-1/2 lg:basis-1/3">
+                      <Card
+                        className={`relative flex h-full flex-col border-quantum-light/20 bg-background/70 backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:border-quantum-bright/40 ${
+                          plan.featured ? "shadow-quantum ring-2 ring-quantum-bright" : ""
+                        }`}
+                      >
+                        {plan.featured && (
+                          <div className="absolute top-4 right-4 rounded-full bg-gradient-quantum px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                            Mais escolhido
+                          </div>
+                        )}
+                        <CardHeader className="space-y-4">
+                          <div className="space-y-2">
+                            <CardTitle className="text-2xl">{plan.option.name}</CardTitle>
+                            {plan.option.description && (
+                              <CardDescription className="text-muted-foreground leading-relaxed">
+                                {plan.option.description}
+                              </CardDescription>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            {plan.monthlyLabel && (
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-3xl font-bold text-quantum-bright">
+                                  {plan.monthlyLabel}
+                                </span>
+                                <span className="text-sm text-muted-foreground">/mês</span>
+                              </div>
+                            )}
+                            {plan.annualLabel && (
+                              <p className="text-sm text-muted-foreground">
+                                Pagamento anual: {plan.annualLabel} / ano
+                              </p>
+                            )}
+                            {!plan.monthlyLabel && !plan.annualLabel && (
+                              <p className="text-sm text-muted-foreground">Investimento sob consulta.</p>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="flex-1 space-y-3">
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            Inicie agora com 14 dias de acesso completo e suporte especializado para configurar o CRM do seu
+                            escritório.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Cancele quando quiser durante o período de testes.
+                          </p>
+                        </CardContent>
+                        <CardFooter className="mt-auto flex flex-col gap-3">
+                          <Button asChild variant="quantum" size="lg" className="w-full track-link">
+                            <Link
+                              to={`${routes.register}?plan=${plan.option.id}`}
+                              className="flex items-center justify-center gap-2"
+                            >
+                              Quero experimentar grátis por 14 dias
+                              <ArrowRight className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="outline_quantum"
+                            size="lg"
+                            className="w-full track-link"
+                            onClick={() => handleDemoClick(planSource)}
+                          >
+                            Falar com consultor
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    </CarouselItem>
+                  );
+                })}
+              </CarouselContent>
+              <CarouselPrevious className="hidden md:flex" />
+              <CarouselNext className="hidden md:flex" />
+            </Carousel>
+          ) : (
+            <Card className="border-quantum-light/20 bg-background/70">
+              <CardHeader>
+                <CardTitle className="text-xl">Planos sob medida</CardTitle>
+                <CardDescription className="text-sm text-muted-foreground">
+                  Nenhum plano pôde ser carregado no momento. Converse com nossos especialistas para receber uma proposta
+                  personalizada para o seu escritório.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("plan_contact")}>
+                  Falar com consultor
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
         </div>
       </section>
 
