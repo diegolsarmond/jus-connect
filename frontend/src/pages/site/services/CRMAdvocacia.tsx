@@ -523,14 +523,26 @@ const CRMAdvocacia = () => {
         </div>
       </section>
 
-      <section id="planos" className="py-20 bg-gradient-to-br from-quantum-light/20 via-background to-background">
-        <div className="container px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
+      <section
+        id="planos"
+        className="relative overflow-hidden py-24 bg-gradient-to-br from-background via-quantum-light/10 to-background"
+      >
+        <div className="absolute inset-0 opacity-60">
+          <div className="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-quantum-cyan/30 blur-3xl" />
+          <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-quantum-bright/20 blur-3xl" />
+        </div>
+        <div className="absolute inset-y-0 left-1/2 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent opacity-60" />
+        <div className="container relative z-10 px-4">
+          <div className="text-center mb-16 space-y-6">
+            <div className="inline-flex items-center px-5 py-2 text-sm font-semibold tracking-wide uppercase rounded-full border border-quantum-light/30 bg-background/80 backdrop-blur">
+              <Layers className="h-4 w-4 mr-2 text-quantum-bright" />
+              Escolha o plano ideal
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold bg-gradient-quantum bg-clip-text text-transparent">
               Planos que evoluem com o seu escritório
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Escolha o modelo que melhor se adapta à sua estrutura e conte com nossa equipe para personalizar fluxos e integrações.
+            <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              Comece em minutos com acesso completo à plataforma, suporte consultivo e infraestrutura preparada para escalar de acordo com o ritmo do seu escritório.
             </p>
           </div>
           {isPlansLoading ? (
@@ -562,22 +574,30 @@ const CRMAdvocacia = () => {
             <Carousel className="relative">
               <CarouselContent>
                 {normalizedPlans.map((plan) => {
-                  const planSource = `plan_${plan.option.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+                  const normalizedName = plan.option.name ?? "custom";
+                  const planSource = `plan_${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+                  const planInitial = normalizedName.charAt(0).toUpperCase();
                   return (
                     <CarouselItem key={plan.option.id} className="md:basis-1/2 lg:basis-1/3">
                       <Card
-                        className={`relative flex h-full flex-col border-quantum-light/20 bg-background/70 backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:border-quantum-bright/40 ${
-                          plan.featured ? "shadow-quantum ring-2 ring-quantum-bright" : ""
+                        className={`group relative flex h-full flex-col overflow-hidden border border-quantum-light/20 bg-background/75 backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:border-quantum-bright/50 ${
+                          plan.featured ? "shadow-quantum" : ""
                         }`}
                       >
+                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-quantum opacity-75" />
                         {plan.featured && (
-                          <div className="absolute top-4 right-4 rounded-full bg-gradient-quantum px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                          <div className="absolute top-6 right-6 rounded-full bg-background/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-quantum-bright shadow-lg ring-1 ring-quantum-bright/40">
                             Mais escolhido
                           </div>
                         )}
-                        <CardHeader className="space-y-4">
-                          <div className="space-y-2">
-                            <CardTitle className="text-2xl">{plan.option.name}</CardTitle>
+                        <CardHeader className="space-y-5 pt-10">
+                          <div className="space-y-3">
+                            <CardTitle className="text-2xl flex items-center gap-2">
+                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-quantum-light/20 text-quantum-bright text-sm font-semibold">
+                                {planInitial}
+                              </span>
+                              {plan.option.name}
+                            </CardTitle>
                             {plan.option.description && (
                               <CardDescription className="text-muted-foreground leading-relaxed">
                                 {plan.option.description}
@@ -587,7 +607,7 @@ const CRMAdvocacia = () => {
                           <div className="space-y-2">
                             {plan.monthlyLabel && (
                               <div className="flex items-baseline gap-2">
-                                <span className="text-3xl font-bold text-quantum-bright">
+                                <span className="text-4xl font-bold text-quantum-bright">
                                   {plan.monthlyLabel}
                                 </span>
                                 <span className="text-sm text-muted-foreground">/mês</span>
@@ -603,14 +623,14 @@ const CRMAdvocacia = () => {
                             )}
                           </div>
                         </CardHeader>
-                        <CardContent className="flex-1 space-y-3">
-                          <p className="text-sm text-muted-foreground leading-relaxed">
-                            Inicie agora com 14 dias de acesso completo e suporte especializado para configurar o CRM do seu
-                            escritório.
-                          </p>
-                          <p className="text-xs text-muted-foreground">
+                        <CardContent className="flex-1 space-y-4">
+                          <div className="rounded-lg border border-quantum-light/20 bg-background/60 p-4 text-sm leading-relaxed text-muted-foreground">
+                            Inicie agora com 14 dias de acesso completo, templates prontos e especialistas auxiliando a configuração do CRM para o seu escritório.
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <CheckCircle2 className="h-4 w-4 text-quantum-bright" />
                             Cancele quando quiser durante o período de testes.
-                          </p>
+                          </div>
                         </CardContent>
                         <CardFooter className="mt-auto flex flex-col gap-3">
                           <Button asChild variant="quantum" size="lg" className="w-full track-link">
@@ -618,42 +638,64 @@ const CRMAdvocacia = () => {
                               to={`${routes.register}?plan=${plan.option.id}`}
                               className="flex items-center justify-center gap-2"
                             >
-                              Quero experimentar grátis por 14 dias
+                              Personalizar este plano
                               <ArrowRight className="h-4 w-4" />
                             </Link>
                           </Button>
                           <Button
+                            asChild
                             variant="outline_quantum"
                             size="lg"
-                            className="w-full track-link"
-                            onClick={() => handleDemoClick(planSource)}
+                            className="w-full track-link bg-white/5 backdrop-blur hover:bg-white hover:text-quantum-deep"
                           >
-                            Falar com consultor
+                            <a
+                              href="https://quantumtecnologia.com.br/register"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center gap-2"
+                            >
+                              Experimente grátis por 14 dias
+                              <ArrowRight className="h-4 w-4" />
+                            </a>
                           </Button>
                         </CardFooter>
                       </Card>
-                    </CarouselItem>
-                  );
-                })}
+                  </CarouselItem>
+                );
+              })}
               </CarouselContent>
               <CarouselPrevious className="hidden md:flex" />
               <CarouselNext className="hidden md:flex" />
             </Carousel>
           ) : (
-            <Card className="border-quantum-light/20 bg-background/70">
-              <CardHeader>
-                <CardTitle className="text-xl">Planos sob medida</CardTitle>
-                <CardDescription className="text-sm text-muted-foreground">
-                  Nenhum plano pôde ser carregado no momento. Converse com nossos especialistas para receber uma proposta
-                  personalizada para o seu escritório.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("plan_contact")}>
-                  Falar com consultor
-                </Button>
-              </CardContent>
-            </Card>
+              <Card className="relative overflow-hidden border-quantum-light/20 bg-background/80 backdrop-blur">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-quantum opacity-75" />
+                <CardHeader>
+                  <CardTitle className="text-xl">Planos sob medida</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">
+                    Nenhum plano pôde ser carregado no momento. Converse com nossos especialistas para receber uma proposta
+                    personalizada para o seu escritório.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    asChild
+                    variant="quantum"
+                    size="lg"
+                    className="track-link"
+                  >
+                    <a
+                      href="https://quantumtecnologia.com.br/register"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2"
+                    >
+                      Experimente grátis por 14 dias
+                      <ArrowRight className="h-4 w-4" />
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
           )}
 
 
