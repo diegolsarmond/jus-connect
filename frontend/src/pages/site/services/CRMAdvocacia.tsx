@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import TypebotBubble from "@/components/site/TypebotBubble";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -237,6 +238,7 @@ const CRMAdvocacia = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <TypebotBubble />
       <Header />
 
       <section className="relative overflow-hidden pt-24 pb-20 bg-gradient-hero text-white">
