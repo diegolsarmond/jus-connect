@@ -100,7 +100,9 @@ const AdminBlogPosts = lazy(() => import("./pages/administrator/BlogPosts"));
 const AdminAnalytics = lazy(() => import("./pages/administrator/Analytics"));
 const AdminSupport = lazy(() => import("./pages/administrator/Support"));
 const AdminLogs = lazy(() => import("./pages/administrator/Logs"));
-const AdminSettings = lazy(() => import("./pages/administrator/Settings"));
+const AdminSettingsLayout = lazy(() => import("./pages/administrator/settings/Layout"));
+const AdminSettingsOverview = lazy(() => import("./pages/administrator/settings/Overview"));
+const AdminSettingsCategories = lazy(() => import("./pages/administrator/settings/Categories"));
 const AdminNotFound = lazy(() => import("./pages/administrator/NotFound"));
 
 const queryClient = new QueryClient();
@@ -332,7 +334,13 @@ const App = () => (
                 <Route path={adminRelativePath.analytics} element={<AdminAnalytics />} />
                 <Route path={adminRelativePath.support} element={<AdminSupport />} />
                 <Route path={adminRelativePath.logs} element={<AdminLogs />} />
-                <Route path={adminRelativePath.settings} element={<AdminSettings />} />
+                <Route path={adminRelativePath.settings} element={<AdminSettingsLayout />}>
+                  <Route index element={<AdminSettingsOverview />} />
+                  <Route
+                    path="parametros/categorias"
+                    element={<AdminSettingsCategories />}
+                  />
+                </Route>
                 <Route path="*" element={<AdminNotFound />} />
               </Route>
               <Route path="*" element={<SiteNotFound />} />

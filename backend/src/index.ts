@@ -10,6 +10,7 @@ import perfilRoutes from './routes/perfilRoutes';
 import planoRoutes from './routes/planoRoutes';
 import subscriptionRoutes from './routes/subscriptionRoutes';
 import situacaoClienteRoutes from './routes/situacaoClienteRoutes';
+import categoriaRoutes from './routes/categoriaRoutes';
 import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
 import situacaoPropostaRoutes from './routes/situacaoPropostaRoutes';
 import etiquetaRoutes from './routes/etiquetaRoutes';
@@ -226,6 +227,10 @@ registerModuleRoutes(
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-etiquetas'],
   etiquetaRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-categorias'],
+  categoriaRoutes
 );
 registerModuleRoutes(['configuracoes', 'dashboard'], empresaRoutes);
 registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);

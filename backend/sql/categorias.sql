@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS public.categorias (
+  id SERIAL PRIMARY KEY,
+  nome TEXT NOT NULL UNIQUE,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  datacriacao TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_categorias_nome ON public.categorias (nome);
