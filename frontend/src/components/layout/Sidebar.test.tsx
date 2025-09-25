@@ -8,6 +8,7 @@ import { Sidebar } from "./Sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useSidebarCounters, type SidebarCountersMap } from "@/hooks/useSidebarCounters";
+import { usePlan } from "@/features/plans/PlanProvider";
 
 vi.mock("@/features/auth/AuthProvider", () => ({
   useAuth: vi.fn(),
@@ -15,6 +16,10 @@ vi.mock("@/features/auth/AuthProvider", () => ({
 
 vi.mock("@/hooks/useSidebarCounters", () => ({
   useSidebarCounters: vi.fn(),
+}));
+
+vi.mock("@/features/plans/PlanProvider", () => ({
+  usePlan: vi.fn(),
 }));
 
 describe("Sidebar", () => {
@@ -41,11 +46,21 @@ describe("Sidebar", () => {
     vi.mocked(useSidebarCounters).mockReturnValue({ counters, refetchAll: vi.fn() });
   };
 
+  const mockPlanContext = (modules: string[] = []) => {
+    vi.mocked(usePlan).mockReturnValue({
+      plan: { id: 1, nome: "Teste", modules },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>);
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+    mockPlanContext();
     vi.mocked(useAuth).mockReturnValue({
       user: {
         modulos: ["dashboard", "conversas", "agenda", "tarefas"],
@@ -110,5 +125,34 @@ describe("Sidebar", () => {
     expect(container.querySelector('[aria-label^="Contador de Conversas"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Contador de Agenda"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Contador de Tarefas"]')).toBeNull();
+  });
+
+  it("hides menu items that are not allowed for the user's profile", () => {
+    mockCounters({
+      messages: { count: 0, isError: false, isLoading: false, isFetching: false },
+      agenda: { count: 0, isError: false, isLoading: false, isFetching: false },
+      tasks: { count: 0, isError: false, isLoading: false, isFetching: false },
+    });
+
+    renderSidebar();
+
+    expect(container.querySelector('a[href="/clientes"]')).toBeNull();
+    expect(container.querySelector('a[href="/financeiro/lancamentos"]')).toBeNull();
+  });
+
+  it("shows a lock indicator when access is restricted by the current plan", () => {
+    mockPlanContext(["dashboard", "agenda"]);
+    mockCounters({
+      messages: { count: 0, isError: false, isLoading: false, isFetching: false },
+      agenda: { count: 0, isError: false, isLoading: false, isFetching: false },
+      tasks: { count: 0, isError: false, isLoading: false, isFetching: false },
+    });
+
+    renderSidebar();
+
+    const tasksLink = container.querySelector('a[href="/tarefas"]');
+
+    expect(tasksLink).not.toBeNull();
+    expect(tasksLink?.getAttribute("title")).toBe("Disponível em planos superiores");
   });
 });
