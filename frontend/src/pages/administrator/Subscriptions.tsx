@@ -9,11 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { routes } from "@/config/routes";
 import { getApiUrl } from "@/lib/api";
+import {
+  evaluateCompanySubscription,
+  resolveCompanySubscriptionCadence,
+  type CompanySubscriptionSource,
+} from "@/lib/companySubscription";
 
 type SubscriptionStatus = "active" | "trial" | "inactive";
 type PlanRecurrence = "mensal" | "anual" | "nenhuma" | null;
 
-interface ApiCompany {
+interface ApiCompany extends CompanySubscriptionSource {
   id: number;
   nome_empresa?: string | null;
   email?: string | null;
@@ -124,33 +129,6 @@ const toIsoString = (value: unknown): string | null => {
   return null;
 };
 
-const parseBoolean = (value: unknown): boolean | null => {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    if (value === 1) {
-      return true;
-    }
-    if (value === 0) {
-      return false;
-    }
-  }
-
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["true", "t", "1", "yes", "y", "s", "sim"].includes(normalized)) {
-      return true;
-    }
-    if (["false", "f", "0", "no", "n", "nao", "não"].includes(normalized)) {
-      return false;
-    }
-  }
-
-  return null;
-};
-
 const parseRecurrence = (value: unknown): PlanRecurrence => {
   if (typeof value !== "string") {
     return null;
@@ -232,18 +210,6 @@ const calculateTrialEnd = (start: string | null): string | null => {
   return endDate.toISOString();
 };
 
-const resolveStatus = (isActive: boolean | null, planId: string | null): SubscriptionStatus => {
-  if (isActive === false) {
-    return "inactive";
-  }
-
-  if (planId) {
-    return "active";
-  }
-
-  return "trial";
-};
-
 const roundToTwo = (value: number): number => Math.round(value * 100) / 100;
 
 const calculateMrr = (price: number | null, recurrence: PlanRecurrence): number => {
@@ -317,12 +283,12 @@ const resolvePlanRecurrence = (
   monthlyPrice: number | null,
   annualPrice: number | null,
 ): PlanRecurrence => {
-  const recurrenceCandidates: unknown[] = [
-    company.plano_recorrencia,
-    company.recorrencia,
-    company.plano_periodicidade,
-    plan?.recorrencia,
-  ];
+  const cadence = resolveCompanySubscriptionCadence(company);
+  if (cadence) {
+    return cadence;
+  }
+
+  const recurrenceCandidates: unknown[] = [plan?.recorrencia];
 
   for (const candidate of recurrenceCandidates) {
     const parsed = parseRecurrence(candidate);
@@ -331,12 +297,12 @@ const resolvePlanRecurrence = (
     }
   }
 
-  if (annualPrice != null && monthlyPrice == null) {
-    return "anual";
+  if (monthlyPrice != null && annualPrice == null) {
+    return "mensal";
   }
 
-  if (monthlyPrice != null) {
-    return "mensal";
+  if (monthlyPrice == null && annualPrice != null) {
+    return "anual";
   }
 
   return null;
@@ -434,7 +400,8 @@ const formatTrialInfo = (trialEnd: string | null): string => {
 };
 
 const mapApiCompanyToSubscription = (company: ApiCompany, plansIndex: Map<string, ApiPlan>): Subscription => {
-  const planId = company.plano != null ? String(company.plano) : null;
+  const evaluation = evaluateCompanySubscription(company);
+  const { planId, status } = evaluation;
   const plan = planId ? plansIndex.get(planId) : undefined;
 
   const planName = plan?.nome?.trim() || (planId ? `Plano ${planId}` : "Sem plano");
@@ -447,17 +414,19 @@ const mapApiCompanyToSubscription = (company: ApiCompany, plansIndex: Map<string
       : recurrence === "mensal"
         ? planMonthlyPrice ?? (planAnnualPrice != null ? roundToTwo(planAnnualPrice / 12) : null)
         : planMonthlyPrice ?? planAnnualPrice ?? parseNumber(plan?.valor ?? null);
-  const currentPeriodStart = toIsoString(company.datacadastro);
-  const currentPeriodEnd = addDuration(currentPeriodStart, recurrence);
-  const isActive = parseBoolean(company.ativo ?? null);
-  const status = resolveStatus(isActive, planId);
-  const trialEnd = status === "trial" ? calculateTrialEnd(currentPeriodStart) : null;
+
+  const currentPeriodStart = evaluation.currentPeriodStart ?? toIsoString(company.datacadastro);
+  const derivedPeriodEnd = addDuration(currentPeriodStart, recurrence);
+  const currentPeriodEnd = evaluation.currentPeriodEnd ?? derivedPeriodEnd;
+  const trialEnd =
+    evaluation.trialEndsAt ?? (status === "trial" ? calculateTrialEnd(evaluation.trialStartedAt ?? currentPeriodStart) : null);
+  const planLimits = extractPlanLimits(plan);
+
   const nextCharge = status === "trial"
     ? trialEnd
     : recurrence && recurrence !== "nenhuma"
-      ? currentPeriodEnd
+      ? currentPeriodEnd ?? evaluation.gracePeriodEndsAt
       : null;
-  const planLimits = extractPlanLimits(plan);
 
   return {
     id: `subscription-${company.id}`,

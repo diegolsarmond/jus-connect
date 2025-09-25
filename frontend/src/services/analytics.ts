@@ -1,5 +1,9 @@
 import { getApiUrl } from "@/lib/api";
 import { fetchFlows, type Flow } from "@/lib/flows";
+import {
+  evaluateCompanySubscription,
+  type CompanySubscriptionSource,
+} from "@/lib/companySubscription";
 
 const JSON_HEADERS: HeadersInit = { Accept: "application/json" };
 
@@ -20,7 +24,7 @@ interface ApiCliente {
   datacadastro?: unknown;
 }
 
-interface ApiEmpresa {
+interface ApiEmpresa extends CompanySubscriptionSource {
   id?: unknown;
   nome_empresa?: unknown;
   plano?: unknown;
@@ -498,18 +502,6 @@ async function fetchCollection<T>(path: string, signal?: AbortSignal): Promise<T
   }
 }
 
-function resolveCompanyStatus(active: boolean | null, planId: string | null): "active" | "inactive" | "trial" {
-  if (active === false) {
-    return "inactive";
-  }
-
-  if (planId) {
-    return "active";
-  }
-
-  return "trial";
-}
-
 function getPlanMonthlyValue(plan: ApiPlano): number {
   const directValue = normalizeNumber(plan.valor);
   if (directValue !== null) {
@@ -883,12 +875,12 @@ export async function loadAdminDashboardAnalytics(signal?: AbortSignal): Promise
   const revenuePerMonth = new Map<string, number>();
 
   empresas.forEach((empresa) => {
-    const planId = normalizeString(empresa.plano);
+    const evaluation = evaluateCompanySubscription(empresa);
+    const planId = evaluation.planId ?? normalizeString(empresa.plano);
     const plan = planId ? planIndex.get(planId) : undefined;
     const planName = getPlanName(plan, planId);
     const monthlyValue = plan ? getPlanMonthlyValue(plan) : 0;
-    const activeFlag = normalizeBoolean(empresa.ativo);
-    const status = resolveCompanyStatus(activeFlag, planId);
+    const status = evaluation.status;
 
     if (status === "active") {
       activeSubscriptions += 1;

@@ -8,11 +8,11 @@ const db_1 = __importDefault(require("./db"));
 const EMPRESA_QUERY_SOURCES = [
     {
         label: 'view',
-        text: 'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, NULL::timestamp AS atualizacao FROM public."empresas"',
+        text: 'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, trial_started_at, trial_ends_at, current_period_start, current_period_end, grace_expires_at, subscription_trial_ends_at, subscription_current_period_ends_at, subscription_grace_period_ends_at, subscription_cadence, NULL::timestamp AS atualizacao FROM public."empresas"',
     },
     {
         label: 'table',
-        text: 'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, NULL::timestamp AS atualizacao FROM public.empresas',
+        text: 'SELECT id, nome_empresa, cnpj, telefone, email, plano, responsavel, ativo, datacadastro, trial_started_at, trial_ends_at, current_period_start, current_period_end, grace_expires_at, subscription_trial_ends_at, subscription_current_period_ends_at, subscription_grace_period_ends_at, subscription_cadence, NULL::timestamp AS atualizacao FROM public.empresas',
     },
 ];
 const isRecoverableEmpresasError = (error) => {
