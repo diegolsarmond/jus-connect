@@ -158,6 +158,7 @@ type UserRowBase = SubscriptionRow & {
   setor_id: number | null;
   setor_nome: string | null;
   must_change_password?: unknown;
+  perfil_ver_todas_conversas?: unknown;
 };
 
 type LoginUserRow = UserRowBase & {
@@ -731,10 +732,10 @@ export const register = async (req: Request, res: Response) => {
         await client.query('DELETE FROM public.perfil_modulos WHERE perfil_id = $1', [perfilId]);
       } else {
         const perfilInsert = await client.query(
-          `INSERT INTO public.perfis (nome, ativo, datacriacao, idempresa)
-           VALUES ($1, $2, NOW(), $3)
+          `INSERT INTO public.perfis (nome, ativo, datacriacao, idempresa, ver_todas_conversas)
+           VALUES ($1, $2, NOW(), $3, $4)
         RETURNING id, nome`,
-          [DEFAULT_PROFILE_NAME, true, companyId]
+          [DEFAULT_PROFILE_NAME, true, companyId, true]
         );
 
         const perfilRow = perfilInsert.rows[0] as { id?: unknown; nome?: unknown };
@@ -863,6 +864,7 @@ export const login = async (req: Request, res: Response) => {
               u.must_change_password,
               u.status,
               u.perfil,
+              per.ver_todas_conversas AS perfil_ver_todas_conversas,
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
               emp.responsavel AS empresa_responsavel_id,
@@ -883,6 +885,7 @@ export const login = async (req: Request, res: Response) => {
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
+         LEFT JOIN public.perfis per ON per.id = u.perfil
         WHERE LOWER(u.email) = $1
         LIMIT 1`,
       [normalizedEmail]
@@ -936,6 +939,8 @@ export const login = async (req: Request, res: Response) => {
 
     const mustChangePassword =
       parseBooleanFlag((user as { must_change_password?: unknown }).must_change_password) ?? false;
+    const viewAllConversations =
+      parseBooleanFlag((user as { perfil_ver_todas_conversas?: unknown }).perfil_ver_todas_conversas) ?? true;
 
     const subscriptionRow: SubscriptionRow = {
       empresa_plano: user.empresa_plano,
@@ -1041,6 +1046,7 @@ export const login = async (req: Request, res: Response) => {
         setor_nome: user.setor_nome,
         subscription,
         mustChangePassword,
+        viewAllConversations,
       },
     });
   } catch (error) {
@@ -1216,6 +1222,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               u.nome_completo,
               u.email,
               u.perfil,
+              per.ver_todas_conversas AS perfil_ver_todas_conversas,
               u.status,
               u.empresa AS empresa_id,
               emp.nome_empresa AS empresa_nome,
@@ -1236,6 +1243,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
+         LEFT JOIN public.perfis per ON per.id = u.perfil
         WHERE u.id = $1
         LIMIT 1`,
       [req.auth.userId]
@@ -1278,6 +1286,8 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 
     const mustChangePassword =
       parseBooleanFlag((user as { must_change_password?: unknown }).must_change_password) ?? false;
+    const viewAllConversations =
+      parseBooleanFlag((user as { perfil_ver_todas_conversas?: unknown }).perfil_ver_todas_conversas) ?? true;
 
     res.json({
       id: user.id,
@@ -1293,6 +1303,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       modulos,
       subscription,
       mustChangePassword,
+      viewAllConversations,
     });
   } catch (error) {
     console.error('Erro ao carregar usuário autenticado', error);

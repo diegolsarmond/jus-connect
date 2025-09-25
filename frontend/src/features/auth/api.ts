@@ -173,6 +173,15 @@ const resolveMustChangePassword = (record: Record<string, unknown>): boolean =>
       record.must_change_password_flag,
   ) ?? false;
 
+const parseViewAllConversations = (record: Record<string, unknown>): boolean =>
+  parseBooleanFlag(
+    record.viewAllConversations ??
+      record.visualizarTodasConversas ??
+      record.verTodasConversas ??
+      record.perfilVerTodasConversas ??
+      record.perfil_ver_todas_conversas,
+  ) ?? true;
+
 const parseErrorMessage = async (response: Response) => {
   try {
     const data = await response.json();
@@ -225,6 +234,7 @@ export const loginRequest = async (
       modulos: parseModules(userRecord.modulos),
       subscription: parseSubscription(userRecord.subscription),
       mustChangePassword: resolveMustChangePassword(userRecord),
+      viewAllConversations: parseViewAllConversations(userRecord),
     },
   };
 };
@@ -257,6 +267,7 @@ export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
     modulos: parseModules(data.modulos),
     subscription: parseSubscription((data as { subscription?: unknown }).subscription),
     mustChangePassword: resolveMustChangePassword(data),
+    viewAllConversations: parseViewAllConversations(data),
   } satisfies AuthUser;
 };
 

@@ -29,6 +29,7 @@ export interface AuthUser {
   setor_nome: string | null;
   subscription: AuthSubscription | null;
   mustChangePassword: boolean;
+  viewAllConversations: boolean;
 }
 
 export interface LoginCredentials {

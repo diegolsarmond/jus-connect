@@ -13,12 +13,15 @@ const formatPerfilRow = (row: {
   ativo: boolean;
   datacriacao: Date;
   modulos?: string[] | null;
+  view_all_conversations?: boolean | null;
 }) => ({
   id: row.id,
   nome: row.nome,
   ativo: row.ativo,
   datacriacao: row.datacriacao,
   modulos: row.modulos ? sortModules(row.modulos) : [],
+  viewAllConversations:
+    row.view_all_conversations == null ? true : Boolean(row.view_all_conversations),
 });
 
 const parseModules = (value: unknown): { ok: true; modules: string[] } | { ok: false; error: string } => {
@@ -30,6 +33,52 @@ const parseModules = (value: unknown): { ok: true; modules: string[] } | { ok: f
       error instanceof Error ? error.message : 'Não foi possível processar os módulos informados';
     return { ok: false, error: message };
   }
+};
+
+const parseViewAllConversations = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+    if (
+      normalized === '1' ||
+      normalized === 'true' ||
+      normalized === 't' ||
+      normalized === 'yes' ||
+      normalized === 'y' ||
+      normalized === 'sim' ||
+      normalized === 'on' ||
+      normalized === 'ativo' ||
+      normalized === 'ativa'
+    ) {
+      return true;
+    }
+    if (
+      normalized === '0' ||
+      normalized === 'false' ||
+      normalized === 'f' ||
+      normalized === 'no' ||
+      normalized === 'n' ||
+      normalized === 'nao' ||
+      normalized === 'não' ||
+      normalized === 'off' ||
+      normalized === 'inativo' ||
+      normalized === 'inativa'
+    ) {
+      return false;
+    }
+  }
+  return null;
 };
 
 const parsePerfilId = (value: string): number | null => {
@@ -63,6 +112,7 @@ export const listPerfis = async (req: Request, res: Response) => {
               p.nome,
               p.ativo,
               p.datacriacao,
+              p.ver_todas_conversas AS view_all_conversations,
               COALESCE(
                 array_agg(pm.modulo ORDER BY pm.modulo) FILTER (WHERE pm.modulo IS NOT NULL),
                 '{}'
@@ -70,7 +120,7 @@ export const listPerfis = async (req: Request, res: Response) => {
          FROM public.perfis p
     LEFT JOIN public.perfil_modulos pm ON pm.perfil_id = p.id
         WHERE p.idempresa IS NOT DISTINCT FROM $1
-     GROUP BY p.id, p.nome, p.ativo, p.datacriacao
+     GROUP BY p.id, p.nome, p.ativo, p.datacriacao, p.ver_todas_conversas
      ORDER BY p.nome`,
       [empresaId]
     );
@@ -88,6 +138,9 @@ export const listPerfilModules = async (_req: Request, res: Response) => {
 export const createPerfil = async (req: Request, res: Response) => {
   const nomeValue = typeof req.body?.nome === 'string' ? req.body.nome.trim() : '';
   const ativoValue = typeof req.body?.ativo === 'boolean' ? req.body.ativo : true;
+  const viewAllConversationsValue =
+    parseViewAllConversations(req.body?.viewAllConversations ?? req.body?.visualizarTodasConversas ?? req.body?.verTodasConversas) ??
+    true;
   const parsedModules = parseModules(req.body?.modulos);
 
   if (!req.auth) {
@@ -121,11 +174,17 @@ export const createPerfil = async (req: Request, res: Response) => {
     await client.query('BEGIN');
 
     const result = await client.query(
-      'INSERT INTO public.perfis (nome, ativo, datacriacao, idempresa) VALUES ($1, $2, NOW(), $3) RETURNING id, nome, ativo, datacriacao',
-      [nomeValue, ativoValue, empresaId]
+      'INSERT INTO public.perfis (nome, ativo, datacriacao, idempresa, ver_todas_conversas) VALUES ($1, $2, NOW(), $3, $4) RETURNING id, nome, ativo, datacriacao, ver_todas_conversas AS view_all_conversations',
+      [nomeValue, ativoValue, empresaId, viewAllConversationsValue]
     );
 
-    const perfil = result.rows[0];
+    const perfil = result.rows[0] as {
+      id: number;
+      nome: string;
+      ativo: boolean;
+      datacriacao: Date;
+      view_all_conversations?: boolean | null;
+    };
 
     if (parsedModules.modules.length > 0) {
       await client.query(
@@ -136,9 +195,18 @@ export const createPerfil = async (req: Request, res: Response) => {
 
     await client.query('COMMIT');
 
+    const persistedViewAll =
+      perfil.view_all_conversations == null
+        ? viewAllConversationsValue
+        : Boolean(perfil.view_all_conversations);
+
     res.status(201).json({
-      ...perfil,
+      id: perfil.id,
+      nome: perfil.nome,
+      ativo: perfil.ativo,
+      datacriacao: perfil.datacriacao,
       modulos: parsedModules.modules,
+      viewAllConversations: persistedViewAll,
     });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -157,6 +225,9 @@ export const updatePerfil = async (req: Request, res: Response) => {
 
   const nomeValue = typeof req.body?.nome === 'string' ? req.body.nome.trim() : '';
   const ativoValue = typeof req.body?.ativo === 'boolean' ? req.body.ativo : true;
+  const viewAllConversationsValue =
+    parseViewAllConversations(req.body?.viewAllConversations ?? req.body?.visualizarTodasConversas ?? req.body?.verTodasConversas) ??
+    true;
   const parsedModules = parseModules(req.body?.modulos);
 
   if (!nomeValue) {
@@ -172,8 +243,8 @@ export const updatePerfil = async (req: Request, res: Response) => {
     await client.query('BEGIN');
 
     const result = await client.query(
-      'UPDATE public.perfis SET nome = $1, ativo = $2 WHERE id = $3 RETURNING id, nome, ativo, datacriacao',
-      [nomeValue, ativoValue, parsedId]
+      'UPDATE public.perfis SET nome = $1, ativo = $2, ver_todas_conversas = $3 WHERE id = $4 RETURNING id, nome, ativo, datacriacao, ver_todas_conversas AS view_all_conversations',
+      [nomeValue, ativoValue, viewAllConversationsValue, parsedId]
     );
 
     if (result.rowCount === 0) {
@@ -192,9 +263,26 @@ export const updatePerfil = async (req: Request, res: Response) => {
 
     await client.query('COMMIT');
 
+    const updated = result.rows[0] as {
+      id: number;
+      nome: string;
+      ativo: boolean;
+      datacriacao: Date;
+      view_all_conversations?: boolean | null;
+    };
+
+    const persistedViewAll =
+      updated.view_all_conversations == null
+        ? viewAllConversationsValue
+        : Boolean(updated.view_all_conversations);
+
     res.json({
-      ...result.rows[0],
+      id: updated.id,
+      nome: updated.nome,
+      ativo: updated.ativo,
+      datacriacao: updated.datacriacao,
       modulos: parsedModules.modules,
+      viewAllConversations: persistedViewAll,
     });
   } catch (error) {
     await client.query('ROLLBACK');

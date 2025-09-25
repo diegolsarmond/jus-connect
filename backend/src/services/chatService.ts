@@ -770,7 +770,17 @@ export default class ChatService {
     };
   }
 
-  async listConversations(): Promise<ConversationSummary[]> {
+  async listConversations(options?: { responsibleId?: number }): Promise<ConversationSummary[]> {
+    const filters: string[] = [];
+    const values: unknown[] = [];
+
+    if (options?.responsibleId != null) {
+      values.push(options.responsibleId);
+      filters.push(`responsible_id = $${values.length}`);
+    }
+
+    const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
     const result = await this.query(
       `SELECT id, contact_identifier, contact_name, contact_avatar, short_status, description, pinned,
               phone_number, responsible_id, responsible_snapshot, tags, client_id, client_name, is_linked_to_client,
@@ -778,7 +788,9 @@ export default class ChatService {
               unread_count, last_message_id, last_message_preview, last_message_timestamp,
               last_message_sender, last_message_type, last_message_status, metadata, created_at, updated_at
          FROM chat_conversations
-         ORDER BY COALESCE(last_message_timestamp, updated_at, created_at) DESC`
+         ${whereClause}
+         ORDER BY COALESCE(last_message_timestamp, updated_at, created_at) DESC`,
+      values
     );
 
     return (result.rows as ConversationRow[]).map((row) => {

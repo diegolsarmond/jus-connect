@@ -424,6 +424,8 @@ export const WhatsAppLayout = ({
   const lastSessionStatusRef = useRef<string | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const currentUserId = user ? String(user.id) : null;
+  const restrictToAssigned = user?.viewAllConversations === false;
   const companyNameFromAuth = useMemo(() => {
     const value = user?.empresa_nome;
     if (typeof value !== "string") {
@@ -487,6 +489,12 @@ export const WhatsAppLayout = ({
   }, [loading]);
 
   useEffect(() => {
+    if (restrictToAssigned && responsibleFilter === "unassigned") {
+      setResponsibleFilter("all");
+    }
+  }, [restrictToAssigned, responsibleFilter]);
+
+  useEffect(() => {
     if (hasStartedLoading && !loading) {
       setHasLoadedOnce(true);
     }
@@ -529,8 +537,10 @@ export const WhatsAppLayout = ({
 
   const sidebarResponsibleOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
-    for (const option of responsibleOptions) {
-      map.set(option.id, { id: option.id, name: option.name });
+    if (!restrictToAssigned) {
+      for (const option of responsibleOptions) {
+        map.set(option.id, { id: option.id, name: option.name });
+      }
     }
     for (const conversation of conversations) {
       const responsible = conversation.responsible;
@@ -541,8 +551,13 @@ export const WhatsAppLayout = ({
         map.set(responsible.id, { id: responsible.id, name: responsible.name });
       }
     }
+    if (restrictToAssigned && currentUserId && user?.nome_completo) {
+      if (!map.has(currentUserId)) {
+        map.set(currentUserId, { id: currentUserId, name: user.nome_completo });
+      }
+    }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [responsibleOptions, conversations]);
+  }, [responsibleOptions, conversations, restrictToAssigned, currentUserId, user?.nome_completo]);
 
   const activeConversationId = activeChatId ?? undefined;
 
@@ -865,6 +880,7 @@ export const WhatsAppLayout = ({
             onLoadMore={() => {
               void loadMoreChats();
             }}
+            allowUnassignedFilter={!restrictToAssigned}
           />
         </div>
 

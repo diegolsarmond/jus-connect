@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -25,6 +27,7 @@ interface PerfilItem {
   id: number;
   nome: string;
   modulos: string[];
+  viewAllConversations: boolean;
 }
 
 const extractCollection = (data: unknown): unknown[] => {
@@ -82,6 +85,36 @@ const parseNumberId = (value: unknown): number | null => {
   return null;
 };
 
+const parseViewAllConversations = (value: unknown, fallback: boolean): boolean => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return fallback;
+    }
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return fallback;
+    }
+
+    if (["1", "true", "t", "yes", "y", "sim", "on", "ativo", "ativa"].includes(normalized)) {
+      return true;
+    }
+
+    if (["0", "false", "f", "no", "n", "nao", "não", "off", "inativo", "inativa"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return fallback;
+};
+
 export default function Perfis() {
   const apiUrl = getApiBaseUrl();
 
@@ -92,11 +125,13 @@ export default function Perfis() {
 
   const [newName, setNewName] = useState("");
   const [newModules, setNewModules] = useState<string[]>([]);
+  const [newViewAllConversations, setNewViewAllConversations] = useState(true);
   const [savingNew, setSavingNew] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState("");
   const [editingModules, setEditingModules] = useState<string[]>([]);
+  const [editingViewAllConversations, setEditingViewAllConversations] = useState(true);
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -161,7 +196,16 @@ export default function Perfis() {
                     ? data.name
                     : "";
             const modulos = orderModules(normalizeModuleIds(data.modulos), parsedModules);
-            return { id, nome, modulos } satisfies PerfilItem;
+            const viewAllConversations = parseViewAllConversations(
+              data.viewAllConversations ??
+                data.visualizarTodasConversas ??
+                data.verTodasConversas ??
+                data.view_all_conversations ??
+                (data as { perfilVerTodasConversas?: unknown }).perfilVerTodasConversas ??
+                (data as { perfil_ver_todas_conversas?: unknown }).perfil_ver_todas_conversas,
+              true,
+            );
+            return { id, nome, modulos, viewAllConversations } satisfies PerfilItem;
           })
           .filter((item): item is PerfilItem => item !== null);
 
@@ -215,6 +259,7 @@ export default function Perfis() {
       nome,
       ativo: true,
       modulos: orderModules(newModules, availableModules),
+      visualizarTodasConversas: newViewAllConversations,
     };
 
     try {
@@ -234,15 +279,24 @@ export default function Perfis() {
       const data = await response.json();
       const createdModules = orderModules(normalizeModuleIds((data as Record<string, unknown>)?.modulos), availableModules);
       const parsedId = parseNumberId((data as Record<string, unknown>)?.id);
+      const createdViewAll = parseViewAllConversations(
+        (data as Record<string, unknown>)?.viewAllConversations ??
+          (data as Record<string, unknown>)?.visualizarTodasConversas ??
+          (data as Record<string, unknown>)?.verTodasConversas ??
+          (data as Record<string, unknown>)?.view_all_conversations,
+        newViewAllConversations,
+      );
       const created: PerfilItem = {
         id: parsedId ?? Date.now(),
         nome: typeof data?.nome === "string" ? data.nome : nome,
         modulos: createdModules,
+        viewAllConversations: createdViewAll,
       };
 
       setProfiles((prev) => sortProfilesByName([...prev, created]));
       setNewName("");
       setNewModules([]);
+      setNewViewAllConversations(true);
     } catch (err) {
       console.error(err);
       setError("Não foi possível criar o perfil.");
@@ -256,6 +310,7 @@ export default function Perfis() {
     setEditingId(profile.id);
     setEditingName(profile.nome);
     setEditingModules(orderModules(profile.modulos, availableModules));
+    setEditingViewAllConversations(profile.viewAllConversations);
   };
 
   const cancelEdit = () => {
@@ -263,6 +318,7 @@ export default function Perfis() {
     setEditingId(null);
     setEditingName("");
     setEditingModules([]);
+    setEditingViewAllConversations(true);
   };
 
   const handleSaveEdit = async () => {
@@ -277,6 +333,7 @@ export default function Perfis() {
       nome,
       ativo: true,
       modulos: orderModules(editingModules, availableModules),
+      visualizarTodasConversas: editingViewAllConversations,
     };
 
     try {
@@ -295,6 +352,13 @@ export default function Perfis() {
 
       const data = await response.json();
       const updatedModules = orderModules(normalizeModuleIds((data as Record<string, unknown>)?.modulos), availableModules);
+      const updatedViewAll = parseViewAllConversations(
+        (data as Record<string, unknown>)?.viewAllConversations ??
+          (data as Record<string, unknown>)?.visualizarTodasConversas ??
+          (data as Record<string, unknown>)?.verTodasConversas ??
+          (data as Record<string, unknown>)?.view_all_conversations,
+        editingViewAllConversations,
+      );
 
       setProfiles((prev) =>
         sortProfilesByName(
@@ -304,6 +368,7 @@ export default function Perfis() {
                   ...item,
                   nome: typeof data?.nome === "string" ? data.nome : nome,
                   modulos: updatedModules,
+                  viewAllConversations: updatedViewAll,
                 }
               : item
           )
@@ -313,6 +378,7 @@ export default function Perfis() {
       setEditingId(null);
       setEditingName("");
       setEditingModules([]);
+      setEditingViewAllConversations(true);
     } catch (err) {
       console.error(err);
       setError("Não foi possível salvar as alterações do perfil.");
@@ -408,6 +474,21 @@ export default function Perfis() {
         {renderModuleCheckboxes(newModules, (moduleId, checked) => {
           setNewModules((prev) => updateSelection(prev, moduleId, checked));
         }, 'new')}
+        <div className="flex items-start gap-3">
+          <Switch
+            id="new-view-all-conversations"
+            checked={newViewAllConversations}
+            onCheckedChange={(value) => setNewViewAllConversations(value === true)}
+          />
+          <div>
+            <Label htmlFor="new-view-all-conversations" className="text-sm font-medium">
+              Visualizar todas as conversas
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Desative para limitar o acesso às conversas atribuídas ao usuário.
+            </p>
+          </div>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -418,6 +499,7 @@ export default function Perfis() {
           <TableRow>
             <TableHead className="w-56">Nome</TableHead>
             <TableHead>Módulos</TableHead>
+            <TableHead className="w-64">Conversas</TableHead>
             <TableHead className="w-32">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -437,6 +519,29 @@ export default function Perfis() {
                       setEditingModules((prev) => updateSelection(prev, moduleId, checked));
                     }, `edit-${profile.id}`)
                   : renderModuleBadges(profile.modulos)}
+              </TableCell>
+              <TableCell>
+                {editingId === profile.id ? (
+                  <div className="flex items-start gap-3">
+                    <Switch
+                      id={`edit-view-all-${profile.id}`}
+                      checked={editingViewAllConversations}
+                      onCheckedChange={(value) => setEditingViewAllConversations(value === true)}
+                    />
+                    <div>
+                      <Label htmlFor={`edit-view-all-${profile.id}`} className="text-sm font-medium">
+                        Visualizar todas as conversas
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Desative para limitar o acesso às conversas atribuídas ao usuário.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    {profile.viewAllConversations ? "Todas as conversas" : "Somente atribuídas"}
+                  </span>
+                )}
               </TableCell>
               <TableCell className="flex gap-2">
                 {editingId === profile.id ? (
@@ -477,7 +582,7 @@ export default function Perfis() {
           ))}
           {!loading && profiles.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} className="text-center text-muted-foreground">
+              <TableCell colSpan={4} className="text-center text-muted-foreground">
                 Nenhum perfil cadastrado
               </TableCell>
             </TableRow>

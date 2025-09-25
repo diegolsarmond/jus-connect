@@ -14,6 +14,7 @@ import {
   streamConversations,
   updateTypingState,
 } from '../realtime';
+import { fetchUserConversationVisibility } from '../utils/authUser';
 
 const chatService = new ChatService();
 
@@ -198,9 +199,23 @@ function parseUpdateConversationPayload(body: any): UpdateConversationInput {
   return payload;
 }
 
-export async function listConversationsHandler(_req: Request, res: Response) {
+export async function listConversationsHandler(req: Request, res: Response) {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return;
+  }
+
   try {
-    const conversations = await chatService.listConversations();
+    const visibility = await fetchUserConversationVisibility(req.auth.userId);
+
+    if (!visibility.success) {
+      res.status(visibility.status).json({ error: visibility.message });
+      return;
+    }
+
+    const conversations = await chatService.listConversations(
+      visibility.viewAllConversations ? undefined : { responsibleId: req.auth.userId }
+    );
     res.json(conversations);
   } catch (error) {
     console.error('Failed to list conversations', error);
