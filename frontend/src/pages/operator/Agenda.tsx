@@ -348,6 +348,7 @@ export default function Agenda() {
     idByType: new Map<AppointmentType, number>(),
   }));
   const [isSavingAppointment, setIsSavingAppointment] = useState(false);
+  const [isCancellingAppointment, setIsCancellingAppointment] = useState(false);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -597,30 +598,88 @@ export default function Agenda() {
     setAppointmentToCancel(appointment);
   };
 
-  const handleConfirmCancelAppointment = () => {
-    if (!appointmentToCancel) return;
+  const handleConfirmCancelAppointment = async () => {
+    if (!appointmentToCancel || isCancellingAppointment) return;
 
-    const cancellationDate = new Date();
+    setIsCancellingAppointment(true);
 
-    setAppointments((prev) =>
-      prev.map((apt) =>
-        apt.id === appointmentToCancel.id
-          ? { ...apt, status: 'cancelado', updatedAt: cancellationDate }
-          : apt
-      )
-    );
-    setViewingAppointment((current) =>
-      current && current.id === appointmentToCancel.id
-        ? { ...current, status: 'cancelado', updatedAt: cancellationDate }
-        : current
-    );
+    try {
+      const cancellationDate = new Date();
+      const parsedClientId = toNumericId(appointmentToCancel.clientId);
+      const normalizedStartTime = ensureTimeString(appointmentToCancel.startTime);
+      const normalizedEndTime = appointmentToCancel.endTime
+        ? ensureTimeString(appointmentToCancel.endTime)
+        : undefined;
+      const payload = {
+        titulo: appointmentToCancel.title,
+        tipo: tipoEventoContext.idByType.get(appointmentToCancel.type) ?? null,
+        descricao: appointmentToCancel.description ?? null,
+        data: formatDateFn(appointmentToCancel.date, 'yyyy-MM-dd'),
+        hora_inicio: normalizedStartTime,
+        hora_fim: normalizedEndTime ?? null,
+        cliente: parsedClientId ?? null,
+        tipo_local: meetingFormatToTipoLocal(appointmentToCancel.meetingFormat),
+        local:
+          appointmentToCancel.meetingFormat === 'presencial'
+            ? appointmentToCancel.location ?? null
+            : null,
+        lembrete: appointmentToCancel.reminders,
+        status: 0,
+      };
 
-    toast({
-      title: 'Agendamento cancelado',
-      description: `${appointmentToCancel.title} foi cancelado.`,
-    });
+      const response = await fetch(
+        joinUrl(apiUrl, `/api/agendas/${appointmentToCancel.id}`),
+        {
+          method: 'PUT',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        },
+      );
 
-    setAppointmentToCancel(null);
+      if (!response.ok) {
+        throw new Error(`Failed to cancel agenda (${response.status})`);
+      }
+
+      const updatedRow: AgendaResponse = await response.json();
+      const fallbackAppointment: Partial<Appointment> = {
+        ...appointmentToCancel,
+        status: 'cancelado',
+        updatedAt: cancellationDate,
+      };
+      const updatedAppointment = mapAgendaResponseToAppointment(
+        updatedRow,
+        tipoEventoContext,
+        fallbackAppointment,
+      );
+
+      setAppointments((prev) =>
+        sortAppointments(
+          prev.map((apt) => (apt.id === updatedAppointment.id ? updatedAppointment : apt)),
+        ),
+      );
+      setViewingAppointment((current) =>
+        current && current.id === updatedAppointment.id ? updatedAppointment : current,
+      );
+
+      toast({
+        title: 'Agendamento cancelado',
+        description: `${updatedAppointment.title} foi cancelado.`,
+      });
+
+      setAppointmentToCancel(null);
+    } catch (error) {
+      console.error('Erro ao cancelar agendamento:', error);
+      toast({
+        title: 'Erro ao cancelar agendamento',
+        description: 'Não foi possível cancelar o agendamento. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCancellingAppointment(false);
+    }
   };
 
   const formatFullDate = (date: Date) =>
@@ -851,8 +910,11 @@ export default function Agenda() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmCancelAppointment}>
-              Confirmar cancelamento
+            <AlertDialogAction
+              onClick={handleConfirmCancelAppointment}
+              disabled={isCancellingAppointment}
+            >
+              {isCancellingAppointment ? 'Cancelando...' : 'Confirmar cancelamento'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
