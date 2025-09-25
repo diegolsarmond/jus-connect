@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -532,6 +532,7 @@ function MeuPlanoContent() {
   const apiBaseUrl = getApiBaseUrl();
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const subscriptionPlanId = toNumber(user?.subscription?.planId ?? null);
 
   const [loading, setLoading] = useState(true);
@@ -875,7 +876,7 @@ function MeuPlanoContent() {
     });
   }, [planosDisponiveis, pricingMode]);
 
-  const handlePreviewPlan = useCallback(
+  const handlePlanSelection = useCallback(
     (plan: PlanoDetalhe) => {
       setPreviewPlano(plan);
       setDialogOpen(false);
@@ -889,12 +890,29 @@ function MeuPlanoContent() {
         return current;
       });
       toast({
-        title: `Pré-visualizando ${plan.nome}`,
-        description:
-          "Os valores e limites exibidos foram atualizados com base neste plano. Finalize em Configurações > Planos para confirmar a alteração.",
+        title: `Plano ${plan.nome} selecionado`,
+        description: "Revise as opções de pagamento para confirmar a alteração do seu plano.",
+      });
+      navigate(routes.meuPlanoPayment, {
+        state: {
+          plan: {
+            id: plan.id,
+            nome: plan.nome,
+            descricao: plan.descricao,
+            recursos: plan.recursos,
+            valorMensal: plan.valorMensal,
+            valorAnual: plan.valorAnual,
+            precoMensal: plan.precoMensal,
+            precoAnual: plan.precoAnual,
+            descontoAnualPercentual: plan.descontoAnualPercentual,
+            economiaAnual: plan.economiaAnual,
+            economiaAnualFormatada: plan.economiaAnualFormatada,
+          },
+          pricingMode,
+        },
       });
     },
-    [toast],
+    [navigate, pricingMode, toast],
   );
 
   const resetPreview = useCallback(() => {
@@ -1078,7 +1096,7 @@ function MeuPlanoContent() {
                     <DialogHeader>
                       <DialogTitle>Escolha um novo plano</DialogTitle>
                       <DialogDescription>
-                        Compare os planos disponíveis e pré-visualize como cada opção se encaixa nas necessidades do seu time.
+                        Compare os planos disponíveis e avance para a etapa de pagamento da opção que melhor atende às necessidades do seu time.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6">
@@ -1231,17 +1249,10 @@ function MeuPlanoContent() {
                                           ? "bg-white text-slate-950 hover:bg-white/90"
                                           : "bg-primary text-primary-foreground hover:bg-primary/90",
                                       )}
-                                      onClick={() => handlePreviewPlan(plano)}
+                                      onClick={() => handlePlanSelection(plano)}
                                       disabled={isAtual && !previewPlano}
                                     >
-                                      {isSelecionado ? "Visualizando" : "Pré-visualizar"}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      className="w-full border-white/30 bg-white/10 text-white hover:bg-white/20"
-                                      asChild
-                                    >
-                                      <Link to={routes.admin.newPlan}>Gerenciar no painel</Link>
+                                      Escolher este plano
                                     </Button>
                                   </CardFooter>
                                 </Card>
@@ -1260,9 +1271,6 @@ function MeuPlanoContent() {
                     Voltar ao plano atual
                   </Button>
                 )}
-                <Button size="lg" variant="ghost" className="rounded-full" asChild>
-
-                </Button>
               </div>
             </CardContent>
           </Card>
