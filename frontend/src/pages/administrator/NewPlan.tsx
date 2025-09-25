@@ -44,6 +44,7 @@ import {
   parseCurrencyDigits,
   splitFeatureInput,
   buildRecursosPayload,
+  ensureDefaultModules,
 } from "./plans-utils";
 
 interface ModuleMultiSelectProps {
@@ -175,7 +176,7 @@ export default function NewPlan() {
           .filter((item): item is ModuleInfo => item !== null);
 
         if (!disposed) {
-          setAvailableModules(parsedModules);
+          setAvailableModules(ensureDefaultModules(parsedModules));
         }
       } catch (error) {
         if (!disposed) {

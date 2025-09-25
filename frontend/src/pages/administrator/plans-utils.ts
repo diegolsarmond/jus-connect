@@ -5,6 +5,30 @@ export interface ModuleInfo {
   categoria?: string;
 }
 
+const STATIC_MODULES: ModuleInfo[] = [
+  {
+    id: "arquivos",
+    nome: "Meus Arquivos",
+  },
+];
+
+export const ensureDefaultModules = (modules: ModuleInfo[]): ModuleInfo[] => {
+  if (modules.length === 0) {
+    return [...STATIC_MODULES];
+  }
+
+  const knownIds = new Set(modules.map((module) => module.id));
+  const augmented = [...modules];
+
+  STATIC_MODULES.forEach((module) => {
+    if (!knownIds.has(module.id)) {
+      augmented.push(module);
+    }
+  });
+
+  return augmented;
+};
+
 export interface Plan {
   id: number;
   name: string;

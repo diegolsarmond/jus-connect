@@ -23,6 +23,30 @@ interface ModuleInfo {
   categoria?: string;
 }
 
+const STATIC_MODULES: ModuleInfo[] = [
+  {
+    id: "arquivos",
+    nome: "Meus Arquivos",
+  },
+];
+
+const ensureDefaultModules = (modules: ModuleInfo[]): ModuleInfo[] => {
+  if (modules.length === 0) {
+    return [...STATIC_MODULES];
+  }
+
+  const knownIds = new Set(modules.map((module) => module.id));
+  const augmented = [...modules];
+
+  STATIC_MODULES.forEach((module) => {
+    if (!knownIds.has(module.id)) {
+      augmented.push(module);
+    }
+  });
+
+  return augmented;
+};
+
 interface PerfilItem {
   id: number;
   nome: string;
@@ -178,7 +202,9 @@ export default function Perfis() {
           })
           .filter((item): item is ModuleInfo => item !== null);
 
-        setAvailableModules(parsedModules);
+        const augmentedModules = ensureDefaultModules(parsedModules);
+
+        setAvailableModules(augmentedModules);
 
         const rawProfiles = extractCollection(await profilesRes.json());
         const parsedProfiles = rawProfiles
@@ -195,7 +221,7 @@ export default function Perfis() {
                   : typeof data.name === "string"
                     ? data.name
                     : "";
-            const modulos = orderModules(normalizeModuleIds(data.modulos), parsedModules);
+            const modulos = orderModules(normalizeModuleIds(data.modulos), augmentedModules);
             const viewAllConversations = parseViewAllConversations(
               data.viewAllConversations ??
                 data.visualizarTodasConversas ??
