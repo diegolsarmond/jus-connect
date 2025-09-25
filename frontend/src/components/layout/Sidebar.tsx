@@ -46,8 +46,18 @@ import {
 import { routes } from "@/config/routes";
 import { getApiBaseUrl } from "@/lib/api";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { usePlan } from "@/features/plans/PlanProvider";
 import { useSidebarCounters, type SidebarCounterKey, type SidebarCountersMap } from "@/hooks/useSidebarCounters";
 import { cn } from "@/lib/utils";
+import { createNormalizedModuleSet, normalizeModuleId } from "@/features/auth/moduleUtils";
+
+const useOptionalPlan = (): ReturnType<typeof usePlan> | null => {
+  try {
+    return usePlan();
+  } catch {
+    return null;
+  }
+};
 
 interface NavItem {
   name: string;
@@ -64,7 +74,17 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const { user, logout: authLogout } = useAuth();
-  const allowedModules = useMemo(() => new Set(user?.modulos ?? []), [user?.modulos]);
+  const allowedModules = useMemo(
+    () => createNormalizedModuleSet(user?.modulos ?? []),
+    [user?.modulos],
+  );
+  const planContext = useOptionalPlan();
+  const planModules = planContext?.plan?.modules ?? null;
+  const normalizedPlanModules = useMemo(
+    () => createNormalizedModuleSet(planModules ?? []),
+    [planModules],
+  );
+  const hasPlanRestrictions = normalizedPlanModules.size > 0;
   const [pipelineMenus, setPipelineMenus] = useState<NavItem[]>([]);
   const hasPipelineAccess = allowedModules.has("pipeline");
 
@@ -229,21 +249,40 @@ export function Sidebar() {
   } = useSidebarCounters();
 
   const navigationWithLockState = useMemo<NavItem[]>(() => {
-    const annotate = (items: NavItem[]): NavItem[] =>
-      items.map((item) => {
-        const annotatedChildren = item.children ? annotate(item.children) : undefined;
-        const hasAccessibleChild = annotatedChildren?.some((child) => !child.locked) ?? false;
-        const isModuleAllowed = item.moduleId ? allowedModules.has(item.moduleId) : true;
+    const annotate = (items: NavItem[]): NavItem[] => {
+      const result: NavItem[] = [];
 
-        return {
+      for (const item of items) {
+        const annotatedChildren = item.children ? annotate(item.children) : undefined;
+        const hasVisibleChild = Boolean(annotatedChildren && annotatedChildren.length > 0);
+        const normalizedModuleId = normalizeModuleId(item.moduleId);
+        const isModuleAllowed = normalizedModuleId ? allowedModules.has(normalizedModuleId) : true;
+
+        if (!isModuleAllowed && !hasVisibleChild) {
+          continue;
+        }
+
+        const baseLocked = item.locked ?? false;
+        const isModuleIncludedInPlan =
+          !hasPlanRestrictions || normalizedModuleId === null
+            ? true
+            : normalizedPlanModules.has(normalizedModuleId);
+        const locked =
+          baseLocked ||
+          (isModuleAllowed && hasPlanRestrictions && normalizedModuleId !== null && !isModuleIncludedInPlan);
+
+        result.push({
           ...item,
-          children: annotatedChildren,
-          locked: !isModuleAllowed && !hasAccessibleChild,
-        } satisfies NavItem;
-      });
+          children: hasVisibleChild ? annotatedChildren : undefined,
+          locked,
+        });
+      }
+
+      return result;
+    };
 
     return annotate(navigation);
-  }, [navigation, allowedModules]);
+  }, [allowedModules, hasPlanRestrictions, navigation, normalizedPlanModules]);
 
   const isPathActive = (href?: string) => {
     if (!href) return false;
