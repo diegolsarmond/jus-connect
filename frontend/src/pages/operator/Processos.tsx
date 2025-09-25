@@ -412,6 +412,7 @@ const INSTANCIA_OPTIONS = [
   "Superior Tribunal de Justiça (STJ)",
   "Supremo Tribunal Federal (STF)",
   INSTANCIA_OUTRO_VALUE,
+
 ];
 
 const createEmptyProcessForm = (): ProcessFormState => ({
@@ -2068,6 +2069,7 @@ export default function Processos() {
                   />
                 </div>
               ) : null}
+
             </div>
             <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-distribution-date">Data da distribuição</Label>
