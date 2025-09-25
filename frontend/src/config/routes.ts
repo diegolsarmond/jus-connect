@@ -20,6 +20,7 @@ export const routes = {
   register: route("/register"),
   forgotPassword: route("/recuperar-senha"),
   meuPlano: route("/meu-plano"),
+  meuPlanoPayment: route("/meu-plano/gerenciar-pagamento"),
   admin: {
     root: route(appConfig.adminBasePath),
     dashboard: route(appConfig.adminBasePath),

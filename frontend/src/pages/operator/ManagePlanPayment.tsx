@@ -1,0 +1,375 @@
+import { useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  CreditCard,
+  QrCode,
+  Receipt,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
+
+import { routes } from "@/config/routes";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  minimumFractionDigits: 2,
+});
+
+type PricingMode = "mensal" | "anual";
+
+type SelectedPlanState = {
+  plan?: {
+    id: number;
+    nome: string;
+    descricao: string | null;
+    recursos: string[];
+    valorMensal: number | null;
+    valorAnual: number | null;
+    precoMensal: string | null;
+    precoAnual: string | null;
+    descontoAnualPercentual: number | null;
+    economiaAnual: number | null;
+    economiaAnualFormatada: string | null;
+  };
+  pricingMode?: PricingMode;
+};
+
+const getFormattedPrice = (display: string | null, numeric: number | null) => {
+  if (typeof display === "string" && display.trim().length > 0) {
+    return display;
+  }
+
+  if (typeof numeric === "number" && Number.isFinite(numeric)) {
+    return currencyFormatter.format(numeric);
+  }
+
+  return null;
+};
+
+const ManagePlanPayment = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const state = (location.state ?? {}) as SelectedPlanState;
+  const selectedPlan = state.plan ?? null;
+  const pricingMode: PricingMode = state.pricingMode ?? "mensal";
+
+  const formattedPrice = useMemo(() => {
+    if (!selectedPlan) {
+      return null;
+    }
+
+    return pricingMode === "anual"
+      ? getFormattedPrice(selectedPlan.precoAnual, selectedPlan.valorAnual)
+      : getFormattedPrice(selectedPlan.precoMensal, selectedPlan.valorMensal);
+  }, [pricingMode, selectedPlan]);
+
+  const alternatePrice = useMemo(() => {
+    if (!selectedPlan) {
+      return null;
+    }
+
+    return pricingMode === "anual"
+      ? getFormattedPrice(selectedPlan.precoMensal, selectedPlan.valorMensal)
+      : getFormattedPrice(selectedPlan.precoAnual, selectedPlan.valorAnual);
+  }, [pricingMode, selectedPlan]);
+
+  const cadenceLabel = pricingMode === "anual" ? "ano" : "mês";
+  const alternateCadence = pricingMode === "anual" ? "mês" : "ano";
+  const features = selectedPlan?.recursos ?? [];
+
+  if (!selectedPlan) {
+    return (
+      <div className="p-4 sm:p-6 space-y-6">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={() => navigate(routes.meuPlano)}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Voltar para planos
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Gerenciar pagamento</h1>
+            <p className="text-muted-foreground">
+              Escolha um plano primeiro para avançar para a etapa de pagamento.
+            </p>
+          </div>
+        </div>
+
+        <Alert className="border-destructive/40 bg-destructive/10">
+          <AlertTitle>Nenhum plano selecionado</AlertTitle>
+          <AlertDescription>
+            Acesse a tela de planos e selecione a opção desejada para revisar os detalhes de pagamento.
+          </AlertDescription>
+        </Alert>
+
+        <Button className="rounded-full" onClick={() => navigate(routes.meuPlano)}>
+          Escolher um plano
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <Button variant="ghost" className="w-fit rounded-full" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
+        </Button>
+        <div className="space-y-1 text-left sm:text-right">
+          <h1 className="text-3xl font-bold">Gerenciar pagamento do plano</h1>
+          <p className="text-muted-foreground">
+            Revise os detalhes do plano escolhido e informe os dados de cobrança para concluir a troca.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="space-y-6">
+          <Card className="rounded-3xl border border-primary/20 bg-primary/5">
+            <CardHeader className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Badge className="rounded-full bg-primary/20 text-primary">Plano selecionado</Badge>
+                  <CardTitle className="mt-2 text-2xl">{selectedPlan.nome}</CardTitle>
+                  <CardDescription>
+                    Revise os benefícios incluídos antes de confirmar a alteração do plano.
+                  </CardDescription>
+                </div>
+                {formattedPrice && (
+                  <div className="rounded-2xl bg-white/70 px-5 py-3 text-center shadow-sm">
+                    <p className="text-xs font-medium uppercase tracking-wider text-primary/70">
+                      {pricingMode === "anual" ? "Cobrança anual" : "Cobrança mensal"}
+                    </p>
+                    <p className="text-3xl font-semibold text-primary">{formattedPrice}</p>
+                    <p className="text-xs text-muted-foreground">por {cadenceLabel}</p>
+                    {alternatePrice && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        equivalente a {alternatePrice} por {alternateCadence}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {selectedPlan.descricao && (
+                <div className="rounded-2xl bg-white/70 p-4 text-sm text-slate-700 shadow-sm">
+                  {selectedPlan.descricao}
+                </div>
+              )}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold uppercase tracking-wide text-primary/80">
+                  Principais recursos inclusos
+                </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {features.length > 0 ? (
+                    features.slice(0, 6).map((feature) => (
+                      <div
+                        key={feature}
+                        className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-white/80 p-3 text-sm text-slate-700"
+                      >
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+                        <span>{feature}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-primary/30 bg-white/50 p-4 text-sm text-muted-foreground">
+                      Nenhum recurso foi listado para este plano ainda.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border border-border/60">
+            <CardHeader>
+              <CardTitle>Forma de pagamento</CardTitle>
+              <CardDescription>Escolha o método que será utilizado para efetivar a troca de plano.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup defaultValue="cartao" className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/80 p-4">
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem id="payment-cartao" value="cartao" />
+                    <div>
+                      <Label htmlFor="payment-cartao" className="font-medium">
+                        Cartão corporativo
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Pagamento imediato e renovação automática.
+                      </p>
+                    </div>
+                  </div>
+                  <CreditCard className="h-5 w-5 text-muted-foreground" />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/80 p-4">
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem id="payment-boleto" value="boleto" />
+                    <div>
+                      <Label htmlFor="payment-boleto" className="font-medium">
+                        Boleto bancário
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Receba o boleto por e-mail após a confirmação.
+                      </p>
+                    </div>
+                  </div>
+                  <Receipt className="h-5 w-5 text-muted-foreground" />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/80 p-4">
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem id="payment-pix" value="pix" />
+                    <div>
+                      <Label htmlFor="payment-pix" className="font-medium">
+                        PIX empresarial
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Chave disponibilizada imediatamente para pagamento.
+                      </p>
+                    </div>
+                  </div>
+                  <QrCode className="h-5 w-5 text-muted-foreground" />
+                </div>
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border border-border/60">
+            <CardHeader>
+              <CardTitle>Dados de faturamento</CardTitle>
+              <CardDescription>Informe as informações que constarão na cobrança emitida.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="company-name">Razão social</Label>
+                  <Input id="company-name" placeholder="Nome jurídico da empresa" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="company-doc">CNPJ</Label>
+                  <Input id="company-doc" placeholder="00.000.000/0000-00" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="billing-email">E-mail para cobrança</Label>
+                <Input id="billing-email" type="email" placeholder="financeiro@suaempresa.com" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="billing-notes">Observações adicionais</Label>
+                <Textarea
+                  id="billing-notes"
+                  placeholder="Informe instruções de faturamento ou referências internas."
+                  rows={4}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          <Card className="rounded-3xl border border-border/60">
+            <CardHeader>
+              <CardTitle>Resumo da cobrança</CardTitle>
+              <CardDescription>Confirme os valores antes de concluir a alteração do plano.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Plano</span>
+                  <span className="font-semibold text-foreground">{selectedPlan.nome}</span>
+                </div>
+                <Separator className="my-4" />
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Assinatura {pricingMode === "anual" ? "anual" : "mensal"}</span>
+                    <span className="font-semibold text-foreground">{formattedPrice ?? "—"}</span>
+                  </div>
+                  {alternatePrice && (
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Equivalente {alternateCadence}</span>
+                      <span>{alternatePrice}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {pricingMode === "anual" && selectedPlan.economiaAnualFormatada && (
+                <div className="flex items-center justify-between rounded-2xl border border-emerald-200/60 bg-emerald-50 p-4 text-sm text-emerald-700">
+                  <span>Economia estimada no ano</span>
+                  <span className="font-semibold">{selectedPlan.economiaAnualFormatada}</span>
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-border/60 bg-background/80 p-4 text-sm text-muted-foreground">
+                <p>
+                  Após a confirmação, o novo plano será ativado automaticamente e um comprovante será enviado ao e-mail
+                  cadastrado.
+                </p>
+                <p className="mt-3 flex items-center gap-2 text-emerald-600">
+                  <ShieldCheck className="h-4 w-4" />
+                  Transação protegida com segurança bancária.
+                </p>
+              </div>
+            </CardContent>
+            <CardFooter className="flex flex-col gap-2">
+              <Button size="lg" className="w-full rounded-full">
+                Confirmar alteração de plano
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full rounded-full"
+                onClick={() => navigate(routes.meuPlano)}
+              >
+                Cancelar e voltar
+              </Button>
+            </CardFooter>
+          </Card>
+
+          <Card className="rounded-3xl border border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle>Próximos passos</CardTitle>
+              <CardDescription>Acompanhe o status da troca de plano na área de assinaturas.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-700">
+              <div className="flex items-start gap-3">
+                <Wallet className="mt-0.5 h-4 w-4 text-primary" />
+                <div>
+                  <p className="font-semibold">Confirmação do pagamento</p>
+                  <p>Assim que o pagamento for aprovado, atualizaremos automaticamente o seu plano.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-4 w-4 text-primary" />
+                <div>
+                  <p className="font-semibold">Recibos e notas</p>
+                  <p>Os documentos fiscais serão enviados por e-mail e ficarão disponíveis para download.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ManagePlanPayment;

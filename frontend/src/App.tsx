@@ -35,6 +35,7 @@ import FinancialFlows from "./pages/operator/FinancialFlows";
 import Relatorios from "./pages/operator/Relatorios";
 import MeuPerfil from "./pages/operator/MeuPerfil";
 import MeuPlano from "./pages/operator/MeuPlano";
+import ManagePlanPayment from "./pages/operator/ManagePlanPayment";
 import Suporte from "./pages/operator/Suporte";
 import Conversas from "./pages/operator/Conversas";
 import AreaAtuacao from "./pages/operator/configuracoes/parametros/AreaAtuacao";
@@ -198,6 +199,10 @@ const App = () => (
                 <Route path="/alterar-senha" element={<AlterarSenha />} />
                 <Route path="/meu-perfil" element={<MeuPerfil />} />
                 <Route path="/meu-plano" element={withModule("meu-plano", <MeuPlano />)} />
+                <Route
+                  path={routes.meuPlanoPayment}
+                  element={withModule("meu-plano", <ManagePlanPayment />)}
+                />
                 <Route path="/suporte" element={withModule("suporte", <Suporte />)} />
                 <Route
                   path="/configuracoes"
