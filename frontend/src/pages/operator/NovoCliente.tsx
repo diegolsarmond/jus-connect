@@ -113,7 +113,7 @@ export default function NovoCliente() {
           tipo: values.type === "pj" ? "2" : "1",
           documento: values.cpf.replace(/\D/g, ""),
           email: values.email || null,
-           telefone: values.phone ? values.phone.replace(/\D/g, "") : null,
+          telefone: values.phone ? values.phone.replace(/\D/g, "") : null,
           cep: values.cep || null,
           rua: values.street || null,
           numero: values.number || null,
@@ -126,13 +126,28 @@ export default function NovoCliente() {
         }),
       });
       if (!response.ok) {
-        throw new Error("Failed to create client");
+        const errorPayload = await response.json().catch(() => null);
+
+        const duplicateDocument =
+          response.status === 409 ||
+          (typeof errorPayload?.error === "string" &&
+            errorPayload.error.toLowerCase().includes("documento"));
+
+        const errorMessage = duplicateDocument
+          ? "Já existe cliente com o CPF informado."
+          : "Erro ao criar cliente";
+
+        throw new Error(errorMessage);
       }
       toast({ title: "Cliente cadastrado com sucesso" });
       navigate("/clientes");
     } catch (error) {
       console.error("Erro ao criar cliente:", error);
-      toast({ title: "Erro ao criar cliente", variant: "destructive" });
+      toast({
+        title:
+          error instanceof Error ? error.message : "Erro ao criar cliente",
+        variant: "destructive",
+      });
     }
   };
 
