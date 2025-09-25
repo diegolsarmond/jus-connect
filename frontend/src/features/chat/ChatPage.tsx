@@ -56,6 +56,7 @@ export const ChatPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const currentUserId = user ? String(user.id) : null;
+  const restrictToAssigned = user?.viewAllConversations === false;
   const [typingUsersByConversation, setTypingUsersByConversation] = useState<
     Record<string, TypingUser[]>
   >({});
@@ -135,6 +136,12 @@ export const ChatPage = () => {
   );
 
   useEffect(() => {
+    if (restrictToAssigned && responsibleFilter === "unassigned") {
+      setResponsibleFilter("all");
+    }
+  }, [restrictToAssigned, responsibleFilter]);
+
+  useEffect(() => {
     let canceled = false;
 
     const loadResponsibles = async () => {
@@ -162,8 +169,10 @@ export const ChatPage = () => {
 
   const sidebarResponsibleOptions = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
-    for (const option of responsibleOptions) {
-      map.set(option.id, { id: option.id, name: option.name });
+    if (!restrictToAssigned) {
+      for (const option of responsibleOptions) {
+        map.set(option.id, { id: option.id, name: option.name });
+      }
     }
     for (const conversation of conversations) {
       const responsible = conversation.responsible;
@@ -174,8 +183,13 @@ export const ChatPage = () => {
         map.set(responsible.id, { id: responsible.id, name: responsible.name });
       }
     }
+    if (restrictToAssigned && currentUserId && user?.nome_completo) {
+      if (!map.has(currentUserId)) {
+        map.set(currentUserId, { id: currentUserId, name: user.nome_completo });
+      }
+    }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [responsibleOptions, conversations]);
+  }, [responsibleOptions, conversations, restrictToAssigned, currentUserId, user?.nome_completo]);
 
   useEffect(() => {
     if (!selectedConversationId && conversations.length > 0) {
@@ -492,6 +506,7 @@ export const ChatPage = () => {
           onNewConversation={() => setNewConversationOpen(true)}
           searchInputRef={searchInputRef}
           loading={conversationsQuery.isLoading}
+          allowUnassignedFilter={!restrictToAssigned}
         />
         <ChatWindow
           conversation={selectedConversation}

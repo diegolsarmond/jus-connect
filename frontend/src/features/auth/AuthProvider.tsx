@@ -211,6 +211,14 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
         record.must_change_pass ??
         record.must_change_password_flag,
     ) ?? false;
+  const viewAllConversations =
+    parseBooleanFlag(
+      record.viewAllConversations ??
+        record.visualizarTodasConversas ??
+        record.verTodasConversas ??
+        record.perfilVerTodasConversas ??
+        record.perfil_ver_todas_conversas,
+    ) ?? true;
 
   return {
     ...candidate,
@@ -218,6 +226,7 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
     subscription: subscription ?? null,
     mustChangePassword,
     empresa_responsavel_id: companyManagerId,
+    viewAllConversations,
   } satisfies AuthUser;
 };
 

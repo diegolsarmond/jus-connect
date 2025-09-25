@@ -148,6 +148,7 @@ const duplicateCheckResponses: QueryResponse[] = [
       email: 'alice@example.com',
       company: 'Acme Corp',
       password: 'SenhaSegura123',
+      planId: 7,
       phone: '(11) 99999-0000',
     },
   } as unknown as Request;
@@ -273,6 +274,7 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
       email: 'alice@example.com',
       company: 'Acme Corp',
       password: 'SenhaSegura123',
+      planId: 7,
     },
   } as unknown as Request;
 
@@ -317,11 +319,12 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
 test('register tolerates trailing spaces when matching existing company and profile', async () => {
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     { rows: [], rowCount: 0 },
+    { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
   ]);
 
   const clientResponses: QueryResponse[] = [
     { rows: [], rowCount: 0 },
-    { rows: [], rowCount: 0 },
+    { rows: [{ id: 7, modulos: planModules }], rowCount: 1 },
     { rows: [{ id: 42, nome_empresa: 'Acme Corp   ', plano: '7' }], rowCount: 1 },
     { rows: [{ id: 99, nome: 'Administrador   ' }], rowCount: 1 },
     { rows: [], rowCount: 0 },
@@ -351,6 +354,7 @@ test('register tolerates trailing spaces when matching existing company and prof
       email: 'alice@example.com',
       company: 'Acme Corp',
       password: 'SenhaSegura123',
+      planId: 7,
     },
   } as unknown as Request;
 
@@ -403,6 +407,7 @@ test('register returns 409 when email already exists', async () => {
       email: 'alice@example.com',
       company: 'Acme Corp',
       password: 'SenhaSegura123',
+      planId: 7,
     },
   } as unknown as Request;
 
