@@ -27,7 +27,7 @@ interface ParsedWebhookMessage {
   contactAvatar?: string | null;
 
   content: string;
-  type: 'text' | 'image';
+  type: 'text' | 'image' | 'audio' | 'file';
   timestamp?: Date;
   externalId?: string;
   messageId?: string;
@@ -141,6 +141,28 @@ const MESSAGE_MEDIA_KEYS = [
   'viewOnceMessage',
   'viewOnceMessageV2',
 ];
+
+const AUDIO_EXTENSIONS = ['.ogg', '.oga', '.opus', '.mp3', '.m4a', '.aac', '.wav', '.webm', '.3gp'];
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.heic', '.heif', '.bmp', '.svg', '.avif'];
+const DOCUMENT_EXTENSIONS = [
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.ppt',
+  '.pptx',
+  '.txt',
+  '.csv',
+  '.zip',
+  '.rar',
+  '.7z',
+  '.tar',
+  '.gz',
+  '.xml',
+  '.json',
+];
+const DOCUMENT_MIME_PREFIXES = ['application/pdf', 'application/msword', 'application/vnd', 'application/zip', 'application/x-zip'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -281,6 +303,28 @@ function getMimeExtension(mimeType: string | undefined): string | undefined {
     'image/bmp': 'bmp',
     'image/svg+xml': 'svg',
     'image/avif': 'avif',
+    'audio/ogg': 'ogg',
+    'audio/opus': 'opus',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/aac': 'aac',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/webm': 'webm',
+    'audio/3gpp': '3gp',
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+    'application/pdf': 'pdf',
+    'application/zip': 'zip',
+    'application/x-zip-compressed': 'zip',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'application/vnd.ms-powerpoint': 'ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+    'text/plain': 'txt',
+    'text/csv': 'csv',
   };
   return mapping[normalized];
 }
@@ -381,6 +425,7 @@ function extractAvatarFromValue(value: unknown, visited: Set<unknown> = new Set(
 
 interface AttachmentCandidate {
   url: string;
+  downloadUrl?: string;
   name?: string;
   mimeType?: string;
 }
@@ -665,15 +710,20 @@ function extractKeyId(value: unknown): string | undefined {
 }
 
 function extractMediaCandidate(source: Record<string, unknown>): AttachmentCandidate | null {
-  const url =
-    readUrl(source['mediaUrl']) ??
+  const downloadUrl =
     readUrl(source['downloadUrl']) ??
     readUrl(source['fileUrl']) ??
     readUrl(source['directUrl']) ??
+    readUrl(source['directPath']) ??
+    readUrl(source['path']);
+
+  const url =
+    readUrl(source['mediaUrl']) ??
     readUrl(source['url']) ??
     readUrl(source['imageUrl']) ??
     readUrl(source['previewUrl']) ??
-    readUrl(source['streamUrl']);
+    readUrl(source['streamUrl']) ??
+    downloadUrl;
   if (!url) {
     return null;
   }
@@ -691,7 +741,7 @@ function extractMediaCandidate(source: Record<string, unknown>): AttachmentCandi
     readString(source['mimeType']) ??
     readString(source['contentType']);
 
-  return { url, name, mimeType };
+  return { url, downloadUrl: downloadUrl ?? url, name, mimeType };
 }
 
 function extractAttachmentCandidates(payload: Record<string, unknown>): AttachmentCandidate[] {
@@ -762,29 +812,56 @@ function extractAttachmentCandidates(payload: Record<string, unknown>): Attachme
   return candidates;
 }
 
+function resolveCandidateType(
+  candidate: AttachmentCandidate,
+  fallback: MessageAttachment['type'],
+): MessageAttachment['type'] {
+  const mime = candidate.mimeType?.toLowerCase() ?? '';
+  const name = candidate.name?.toLowerCase() ?? '';
+
+  if (mime.startsWith('audio/')) {
+    return 'audio';
+  }
+  if (mime.startsWith('image/')) {
+    return 'image';
+  }
+  if (mime.startsWith('video/') || DOCUMENT_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix))) {
+    return 'file';
+  }
+
+  if (name) {
+    if (AUDIO_EXTENSIONS.some((extension) => name.endsWith(extension))) {
+      return 'audio';
+    }
+    if (IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension))) {
+      return 'image';
+    }
+    if (DOCUMENT_EXTENSIONS.some((extension) => name.endsWith(extension))) {
+      return 'file';
+    }
+  }
+
+  return fallback;
+}
+
 function deriveAttachments(
   payload: Record<string, unknown>,
-  type: 'text' | 'image',
+  type: 'text' | 'image' | 'audio' | 'file',
   messageId?: string,
   externalId?: string,
   conversationId?: string,
 ): MessageAttachment[] | undefined {
-  if (type !== 'image') {
-    return undefined;
-  }
-
   const candidates = extractAttachmentCandidates(payload);
   if (candidates.length === 0) {
     return undefined;
   }
 
-  const fallbackLabel =
-    sanitizeFileName(
-      readString(payload['fileName']) ??
-        readString(payload['filename']) ??
-        readString(payload['caption']) ??
-        readString(payload['name']),
-    ) ?? 'imagem';
+  const payloadFallbackLabel = sanitizeFileName(
+    readString(payload['fileName']) ??
+      readString(payload['filename']) ??
+      readString(payload['caption']) ??
+      readString(payload['name']),
+  );
 
   const baseIdentifierRaw =
     (typeof messageId === 'string' && messageId.trim() ? messageId.trim() : undefined) ??
@@ -796,21 +873,32 @@ function deriveAttachments(
     `media-${Date.now()}`;
 
   const baseIdentifier = baseIdentifierRaw.replace(/\s+/g, '-');
+  const fallbackType: MessageAttachment['type'] = type === 'audio' ? 'audio' : type === 'image' ? 'image' : type === 'file' ? 'file' : 'file';
 
   return candidates.map((candidate, index) => {
+    const resolvedType = resolveCandidateType(candidate, fallbackType);
     const extension = getMimeExtension(candidate.mimeType);
+    const fallbackLabel =
+      payloadFallbackLabel ??
+      (resolvedType === 'audio'
+        ? 'mensagem-audio'
+        : resolvedType === 'image'
+          ? 'imagem'
+          : 'documento');
     const name = buildAttachmentName(candidate.name, fallbackLabel, extension, index + 1, candidates.length);
     return {
       id: `${baseIdentifier}-${index + 1}`,
-      type: 'image',
+      type: resolvedType,
       url: candidate.url,
+      downloadUrl: candidate.downloadUrl ?? candidate.url,
       name,
+      mimeType: candidate.mimeType,
     };
   });
 }
 
 
-function deriveMessageContent(payload: Record<string, unknown>, type: 'text' | 'image'): string {
+function deriveMessageContent(payload: Record<string, unknown>, type: 'text' | 'image' | 'audio' | 'file'): string {
   const text = payload.text as Record<string, unknown> | undefined;
   const message = payload.message as Record<string, unknown> | undefined;
   const extended = message?.extendedTextMessage as Record<string, unknown> | undefined;
@@ -826,17 +914,58 @@ function deriveMessageContent(payload: Record<string, unknown>, type: 'text' | '
     return baseContent;
   }
 
-  return type === 'image' ? 'Imagem recebida' : 'Mensagem recebida';
+  if (type === 'image') {
+    return 'Imagem recebida';
+  }
+  if (type === 'audio') {
+    return 'Mensagem de áudio';
+  }
+  if (type === 'file') {
+    return 'Documento recebido';
+  }
+  return 'Mensagem recebida';
 }
 
-function determineMessageType(payload: Record<string, unknown>): 'text' | 'image' {
+function determineMessageType(payload: Record<string, unknown>): 'text' | 'image' | 'audio' | 'file' {
   const type = readString(payload.type) ?? readString(payload.messageType);
   if (!type) {
+    const mime = readString(payload.mimeType) ?? readString(payload.mimetype);
+    const name = readString(payload.fileName) ?? readString(payload.filename);
+    if (mime) {
+      const normalizedMime = mime.toLowerCase();
+      if (normalizedMime.startsWith('audio/')) {
+        return 'audio';
+      }
+      if (normalizedMime.startsWith('image/')) {
+        return 'image';
+      }
+      if (normalizedMime.startsWith('video/') || DOCUMENT_MIME_PREFIXES.some((prefix) => normalizedMime.startsWith(prefix))) {
+        return 'file';
+      }
+    }
+    if (name) {
+      const normalizedName = name.toLowerCase();
+      if (AUDIO_EXTENSIONS.some((extension) => normalizedName.endsWith(extension))) {
+        return 'audio';
+      }
+      if (IMAGE_EXTENSIONS.some((extension) => normalizedName.endsWith(extension))) {
+        return 'image';
+      }
+      if (DOCUMENT_EXTENSIONS.some((extension) => normalizedName.endsWith(extension))) {
+        return 'file';
+      }
+    }
     return 'text';
   }
   const normalized = type.toLowerCase();
-  if (['image', 'sticker', 'document', 'video', 'audio'].includes(normalized)) {
+  if (['audio', 'ptt', 'voice'].includes(normalized)) {
+    return 'audio';
+  }
+  if (['image', 'sticker'].includes(normalized)) {
     return 'image';
+  }
+  if (['document', 'file', 'video'].includes(normalized)) {
+    return 'file';
   }
   return 'text';
 }
