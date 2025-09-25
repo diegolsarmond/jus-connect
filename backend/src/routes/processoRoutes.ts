@@ -7,6 +7,10 @@ import {
   updateProcesso,
   deleteProcesso,
 } from '../controllers/processoController';
+import {
+  triggerManualJuditSync,
+  getJuditRequestStatus,
+} from '../controllers/juditProcessController';
 
 const router = Router();
 
@@ -156,6 +160,53 @@ router.get('/processos/:id', getProcessoById);
 
 /**
  * @swagger
+
+/**
+ * @swagger
+ * /api/processos/{id}/judit/sync:
+ *   post:
+ *     summary: Força sincronização manual do processo via Judit
+ *     tags: [Processos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Dados da request acionada
+ *       400:
+ *         description: Parâmetros inválidos
+ *       401:
+ *         description: Não autorizado
+ */
+router.post('/processos/:id/judit/sync', triggerManualJuditSync);
+
+/**
+ * @swagger
+ * /api/processos/{id}/judit/requests/{requestId}:
+ *   get:
+ *     summary: Consulta status e resultado de uma request Judit
+ *     tags: [Processos]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *       - in: path
+ *         name: requestId
+ *         schema:
+ *           type: string
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Status da request
+ *       404:
+ *         description: Request não encontrada
+ */
+router.get('/processos/:id/judit/requests/:requestId', getJuditRequestStatus);
 
 /**
  * @swagger
