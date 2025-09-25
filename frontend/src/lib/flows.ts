@@ -251,7 +251,7 @@ const FLOW_ID_INTEGER_REGEX = /^-?\d+$/;
 
 export function normalizeFlowId(id: Flow['id']): string | null {
   if (typeof id === 'number') {
-    if (!Number.isInteger(id)) {
+    if (!Number.isInteger(id) || id < 0) {
       return null;
     }
 
@@ -270,7 +270,7 @@ export function normalizeFlowId(id: Flow['id']): string | null {
 
   if (FLOW_ID_INTEGER_REGEX.test(trimmed)) {
     const parsed = Number.parseInt(trimmed, 10);
-    if (Number.isFinite(parsed)) {
+    if (Number.isFinite(parsed) && parsed >= 0) {
       return parsed.toString();
     }
   }
