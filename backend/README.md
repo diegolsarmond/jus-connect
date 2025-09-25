@@ -73,9 +73,19 @@ utilizar a imagem Docker disponibilizada na raiz do monorepo.
 
 # Rodando testes
 
+Os testes automatizados ficam em `backend/tests/` e utilizam o runner nativo do
+Node (`node --test`) carregado via `tsx`. Para executá-los, basta instalar as
+dependências e rodar:
+
 ```bash
+npm install
 npm test
 ```
+
+O script `npm test` configura um `DATABASE_URL` fictício e todos os cenários
+mockam dependências externas (JUDIT, Postgres, etc.), portanto não é necessário
+ter serviços auxiliares em execução. Caso queira filtrar algum teste específico,
+use `npm test -- --test-name-pattern="<trecho-do-nome>"`.
 
 
 arquivos estáticos do aplicativo React na rota raiz.
