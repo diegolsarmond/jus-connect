@@ -103,14 +103,14 @@ function ModuleMultiSelect({ modules, selected, onChange, disabled }: ModuleMult
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="justify-between"
+          className="w-full justify-between"
           disabled={disabled || modules.length === 0}
         >
           <span className="truncate text-left">{triggerLabel}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[min(320px,90vw)] p-0">
+      <PopoverContent className="w-[min(520px,90vw)] p-0">
         <Command>
           <CommandInput placeholder="Buscar módulo..." />
           <CommandList>
