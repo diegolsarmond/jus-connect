@@ -31,6 +31,7 @@ import Processos from "./pages/operator/Processos";
 import Intimacoes from "./pages/operator/Intimacoes";
 import LibraryPage from "./pages/operator/LibraryPage";
 import EditorPage from "./pages/operator/EditorPage";
+import MeusArquivos from "./pages/operator/MeusArquivos";
 import FinancialFlows from "./pages/operator/FinancialFlows";
 import Relatorios from "./pages/operator/Relatorios";
 import MeuPerfil from "./pages/operator/MeuPerfil";
@@ -194,6 +195,7 @@ const App = () => (
                   <Route path="editor/novo" element={withModule("documentos", <EditorPage />)} />
                   <Route path="editor/:id" element={withModule("documentos", <EditorPage />)} />
                 </Route>
+                <Route path="/arquivos" element={withModule("arquivos", <MeusArquivos />)} />
                 <Route path="/financeiro/lancamentos" element={withModule("financeiro", <FinancialFlows />)} />
                 <Route path="/relatorios" element={withModule("relatorios", <Relatorios />)} />
                 <Route path="/alterar-senha" element={<AlterarSenha />} />
