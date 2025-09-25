@@ -7,8 +7,12 @@ import {
 
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
-import { Processo } from '../models/processo';
+import { Processo, ProcessoJuditRequest } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import juditProcessService, {
+  JuditConfigurationError,
+  type JuditRequestRecord,
+} from '../services/juditProcessService';
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -406,6 +410,67 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
   return movimentacoes;
 };
 
+type RawJuditRequest = {
+  request_id?: string | null;
+  status?: string | null;
+  source?: string | null;
+  result?: unknown;
+  criado_em?: string | null;
+  atualizado_em?: string | null;
+};
+
+const parseJuditRequest = (value: unknown): ProcessoJuditRequest | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const raw = value as RawJuditRequest;
+
+  const requestId = typeof raw.request_id === 'string' ? raw.request_id.trim() : '';
+  const status = typeof raw.status === 'string' ? raw.status.trim() : '';
+  const source = typeof raw.source === 'string' && raw.source.trim() ? raw.source.trim() : 'unknown';
+  const criadoEm = typeof raw.criado_em === 'string' ? raw.criado_em : null;
+  const atualizadoEm = typeof raw.atualizado_em === 'string' ? raw.atualizado_em : null;
+
+  if (!requestId || !status || !criadoEm || !atualizadoEm) {
+    return null;
+  }
+
+  let parsedResult: unknown = null;
+
+  if (raw.result !== undefined) {
+    if (typeof raw.result === 'string' && raw.result.trim()) {
+      try {
+        parsedResult = JSON.parse(raw.result);
+      } catch {
+        parsedResult = raw.result;
+      }
+    } else {
+      parsedResult = raw.result;
+    }
+  }
+
+  return {
+    request_id: requestId,
+    status,
+    source,
+    result: parsedResult,
+    criado_em: criadoEm,
+    atualizado_em: atualizadoEm,
+  };
+};
+
+const mapRequestRecordToProcesso = (
+  record: JuditRequestRecord
+): ProcessoJuditRequest => ({
+  request_id: record.requestId,
+  status: record.status,
+  source: record.source,
+  result: record.result ?? null,
+  criado_em: record.createdAt,
+  atualizado_em: record.updatedAt,
+});
+
 const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 
 const MOVIMENTACOES_BASE_QUERY = `
@@ -530,6 +595,8 @@ const baseProcessoSelect = `
     p.atualizado_em,
     p.ultima_sincronizacao,
     p.consultas_api_count,
+    p.judit_tracking_id,
+    p.judit_tracking_hour_range,
     c.nome AS cliente_nome,
     c.documento AS cliente_documento,
     c.tipo AS cliente_tipo,
@@ -547,7 +614,21 @@ const baseProcessoSelect = `
       SELECT COUNT(*)::int
       FROM public.processo_movimentacoes pm
       WHERE pm.processo_id = p.id
-    ) AS movimentacoes_count
+    ) AS movimentacoes_count,
+    (
+      SELECT jsonb_build_object(
+        'request_id', r.request_id,
+        'status', r.status,
+        'source', r.source,
+        'result', r.result,
+        'criado_em', r.criado_em,
+        'atualizado_em', r.atualizado_em
+      )
+      FROM public.processo_judit_requests r
+      WHERE r.processo_id = p.id
+      ORDER BY r.atualizado_em DESC
+      LIMIT 1
+    ) AS judit_last_request
   FROM public.processos p
   LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
   LEFT JOIN public.clientes c ON c.id = p.cliente_id
@@ -594,6 +675,9 @@ const mapProcessoRow = (row: any): Processo => {
     ultima_sincronizacao: normalizeTimestamp(row.ultima_sincronizacao),
     consultas_api_count: parseInteger(row.consultas_api_count),
     movimentacoes_count: parseInteger(row.movimentacoes_count),
+    judit_tracking_id: normalizeString(row.judit_tracking_id),
+    judit_tracking_hour_range: normalizeString(row.judit_tracking_hour_range),
+    judit_last_request: parseJuditRequest(row.judit_last_request),
     cliente: row.cliente_id
       ? {
           id: row.cliente_id,
@@ -722,6 +806,44 @@ export const getProcessoById = async (req: Request, res: Response) => {
 
     const processo = mapProcessoRow(result.rows[0]);
     processo.movimentacoes = await fetchProcessoMovimentacoes(parsedId);
+
+    if (juditProcessService.isEnabled()) {
+      try {
+        const tracking = await juditProcessService.ensureTrackingForProcess(
+          processo.id,
+          processo.numero,
+          {
+            trackingId: processo.judit_tracking_id ?? null,
+            hourRange: processo.judit_tracking_hour_range ?? null,
+          }
+        );
+
+        if (tracking) {
+          processo.judit_tracking_id = tracking.tracking_id;
+          processo.judit_tracking_hour_range =
+            typeof tracking.hour_range === 'string'
+              ? tracking.hour_range
+              : processo.judit_tracking_hour_range ?? null;
+        }
+
+        const requestRecord = await juditProcessService.triggerRequestForProcess(
+          processo.id,
+          processo.numero,
+          {
+            source: 'details',
+            skipIfPending: true,
+          }
+        );
+
+        if (requestRecord) {
+          processo.judit_last_request = mapRequestRecordToProcesso(requestRecord);
+        }
+      } catch (error) {
+        if (!(error instanceof JuditConfigurationError)) {
+          console.error('[Processos] Falha ao acionar sincronização com a Judit.', error);
+        }
+      }
+    }
 
     res.json(processo);
   } catch (error) {
