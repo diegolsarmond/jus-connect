@@ -72,6 +72,47 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   assert.deepEqual(result, expected);
 });
 
+test('IntegrationApiKeyService.create normalizes Judit provider and omits default URL', async () => {
+  const insertedRow = {
+    id: 5,
+    provider: 'judit',
+    url_api: null,
+    key_value: 'judit_token_value',
+    environment: 'homologacao',
+    active: true,
+    last_used: null,
+    created_at: '2024-01-05T00:00:00.000Z',
+    updated_at: '2024-01-05T00:00:00.000Z',
+  };
+
+  const pool = new FakePool([
+    { rows: [insertedRow], rowCount: 1 },
+  ]);
+
+  const service = new IntegrationApiKeyService(pool as any);
+
+  const payload: CreateIntegrationApiKeyInput = {
+    provider: '  JuDiT  ',
+    key: '  judit_token_value  ',
+    environment: ' Homologacao ',
+  };
+
+  const result = await service.create(payload);
+
+  assert.deepEqual(pool.calls[0].values, [
+    'judit',
+    null,
+    'judit_token_value',
+    'homologacao',
+    true,
+    null,
+  ]);
+
+  assert.equal(result.provider, 'judit');
+  assert.equal(result.apiUrl, null);
+  assert.equal(result.environment, 'homologacao');
+});
+
 test('IntegrationApiKeyService.create assigns default API URL for Asaas in produção', async () => {
   const insertedRow = {
     id: 2,

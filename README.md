@@ -61,6 +61,24 @@ em `integration_api_keys`:
 Não são necessárias variáveis de ambiente adicionais além das credenciais
 registradas na tabela.
 
+### Integração com JUDIT
+
+Para consumir os recursos do JUDIT utilizando credenciais gerenciadas em
+`integration_api_keys`:
+
+1. Execute `psql -f sql/integration_api_keys.sql` para atualizar o `CHECK`
+   de provedores com o valor `judit`, caso ainda não tenha aplicado o script
+   recentemente.
+2. Cadastre uma chave com `provider` igual a `judit` (via API ou pela tela de
+   integrações), informando o token fornecido pelo JUDIT e o ambiente desejado.
+3. Se necessário auditar os acessos, utilize a consulta administrativa
+   [`backend/sql/queries/judit_credentials_audit.sql`](backend/sql/queries/judit_credentials_audit.sql)
+   para listar todas as credenciais cadastradas, com datas de uso e status.
+
+O backend não define URL padrão para o JUDIT; mantenha o campo `apiUrl` em
+branco para usar a configuração padrão do provedor ou preencha manualmente
+quando um endpoint específico for exigido.
+
 ## Frontend
 
 ```bash
