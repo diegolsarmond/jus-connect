@@ -390,6 +390,27 @@ const formatPropostaLabel = (
   return `Proposta #${numero}/${ano}${solicitanteNome ? ` - ${solicitanteNome}` : ""}`;
 };
 
+const INSTANCIA_OPTIONS = [
+  "1ª Vara Cível",
+  "2ª Vara Cível",
+  "Vara Criminal",
+  "Vara de Família",
+  "Vara da Fazenda Pública",
+  "Juizado Especial Cível",
+  "Juizado Especial Criminal",
+  "Vara do Trabalho",
+  "Tribunal de Justiça (TJ) — 2ª Instância",
+  "Tribunal Regional Federal (TRF) — 2ª Instância",
+  "Tribunal Regional do Trabalho (TRT) — 2ª Instância",
+  "Tribunal Regional Eleitoral (TRE) — 2ª Instância",
+  "Turma Recursal (Juizados)",
+  "Tribunal Superior do Trabalho (TST)",
+  "Tribunal Superior Eleitoral (TSE)",
+  "Superior Tribunal de Justiça (STJ)",
+  "Supremo Tribunal Federal (STF)",
+  "Outro / Especificar",
+];
+
 const createEmptyProcessForm = (): ProcessFormState => ({
   numero: "",
   uf: "",
@@ -1997,17 +2018,26 @@ export default function Processos() {
             </div>
             <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-instancia">Instância do processo</Label>
-              <Input
-                id="process-instancia"
-                placeholder="Ex.: 1ª Vara Cível"
+              <Select
                 value={processForm.instancia}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setProcessForm((prev) => ({
                     ...prev,
-                    instancia: event.target.value,
+                    instancia: value,
                   }))
                 }
-              />
+              >
+                <SelectTrigger id="process-instancia">
+                  <SelectValue placeholder="Selecione a instância" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INSTANCIA_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-distribution-date">Data da distribuição</Label>
