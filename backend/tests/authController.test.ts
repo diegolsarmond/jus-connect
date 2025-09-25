@@ -103,6 +103,69 @@ const setupPoolConnectMock = (responses: QueryResult[]) => {
   };
 };
 
+test('register requires plan selection before proceeding', async () => {
+  const { calls, restore: restorePoolQuery } = setupPoolQueryMock([]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
+    throw new Error('connect should not be invoked when plan selection is missing');
+  });
+
+  const req = {
+    body: {
+      name: 'Alice Doe',
+      email: 'alice@example.com',
+      company: 'Acme Corp',
+      password: 'SenhaSegura123',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await register(req, res);
+  } finally {
+    restorePoolQuery();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'Selecione um plano para iniciar o teste gratuito.' });
+  assert.equal(calls.length, 0);
+  assert.equal(connectMock.mock.callCount(), 0);
+});
+
+test('register rejects unparseable plan selection', async () => {
+  const { calls, restore: restorePoolQuery } = setupPoolQueryMock([]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
+    throw new Error('connect should not be invoked when plan selection is invalid');
+  });
+
+  const req = {
+    body: {
+      name: 'Alice Doe',
+      email: 'alice@example.com',
+      company: 'Acme Corp',
+      password: 'SenhaSegura123',
+      planId: 'not-a-number',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await register(req, res);
+  } finally {
+    restorePoolQuery();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'Plano selecionado inválido.' });
+  assert.equal(calls.length, 0);
+  assert.equal(connectMock.mock.callCount(), 0);
+});
+
 test('register creates company, profile and user atomically', async () => {
 const duplicateCheckResponses: QueryResponse[] = [
   { rows: [], rowCount: 0 },
