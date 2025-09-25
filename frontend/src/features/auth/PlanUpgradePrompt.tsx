@@ -61,6 +61,11 @@ const moduleCopyMap: Record<string, ModuleCopy> = {
     description:
       "Acesse modelos, edite contratos e colabore em tempo real com o módulo de Documentos avançado.",
   },
+  arquivos: {
+    title: "Organize arquivos com segurança em um só lugar",
+    description:
+      "Conheça os planos disponíveis e habilite o Meus Arquivos para armazenar, compartilhar e colaborar com o time.",
+  },
   financeiro: {
     title: "Domine os números do escritório",
     description:
