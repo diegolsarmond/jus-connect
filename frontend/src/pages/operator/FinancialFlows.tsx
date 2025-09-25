@@ -1348,13 +1348,13 @@ const FinancialFlows = () => {
                                   size="sm"
                                   variant="outline_quantum"
                                   onClick={() => handleOpenSettleDialog(flow)}
-                                  disabled={settleMutation.isPending || !flow.canManuallySettle}
+                                  disabled={settleMutation.isPending}
                                   title={
                                     !flow.canManuallySettle
                                       ? 'Somente lançamentos cadastrados no Quantum JUD podem ser marcados manualmente como pagos.'
                                       : undefined
                                   }
-
+                                  aria-disabled={settleMutation.isPending || !flow.canManuallySettle}
                                 >
                                   Marcar como pago
                                 </Button>
