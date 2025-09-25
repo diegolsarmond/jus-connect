@@ -557,7 +557,7 @@ function MeuPlanoContent() {
 
       const planosUrl = joinUrl(apiBaseUrl, "/api/planos");
       const empresasUrl = joinUrl(apiBaseUrl, "/api/empresas");
-      const usuariosUrl = joinUrl(apiBaseUrl, "/api/usuarios");
+      const usuariosUrl = joinUrl(apiBaseUrl, "/api/usuarios/empresa");
       const clientesUrl = joinUrl(apiBaseUrl, "/api/clientes/ativos/total");
 
       try {
