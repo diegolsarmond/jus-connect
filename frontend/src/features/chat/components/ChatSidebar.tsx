@@ -20,6 +20,7 @@ interface ChatSidebarProps {
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
   allowUnassignedFilter?: boolean;
+  isResponsibleFilterLocked?: boolean;
 }
 
 export const ChatSidebar = ({
@@ -38,6 +39,7 @@ export const ChatSidebar = ({
   onLoadMore,
   isLoadingMore = false,
   allowUnassignedFilter = true,
+  isResponsibleFilterLocked = false,
 }: ChatSidebarProps) => {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const filtered = useMemo(() => {
@@ -142,9 +144,12 @@ export const ChatSidebar = ({
             className={styles.filterSelect}
             value={responsibleFilter}
             onChange={(event) => onResponsibleFilterChange(event.target.value)}
+            disabled={isResponsibleFilterLocked}
           >
-            <option value="all">Todos</option>
-            {allowUnassignedFilter && <option value="unassigned">Sem responsável</option>}
+            {!isResponsibleFilterLocked && <option value="all">Todos</option>}
+            {!isResponsibleFilterLocked && allowUnassignedFilter && (
+              <option value="unassigned">Sem responsável</option>
+            )}
             {responsibleOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.name}

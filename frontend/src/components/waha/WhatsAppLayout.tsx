@@ -489,10 +489,17 @@ export const WhatsAppLayout = ({
   }, [loading]);
 
   useEffect(() => {
-    if (restrictToAssigned && responsibleFilter === "unassigned") {
+    if (!restrictToAssigned) {
+      return;
+    }
+    if (currentUserId) {
+      setResponsibleFilter((previous) => (previous === currentUserId ? previous : currentUserId));
+      return;
+    }
+    if (responsibleFilter !== "all") {
       setResponsibleFilter("all");
     }
-  }, [restrictToAssigned, responsibleFilter]);
+  }, [restrictToAssigned, currentUserId, responsibleFilter]);
 
   useEffect(() => {
     if (hasStartedLoading && !loading) {
@@ -536,11 +543,16 @@ export const WhatsAppLayout = ({
   }, [rawChats, conversationOverrides, responsibleOptions]);
 
   const sidebarResponsibleOptions = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
-    if (!restrictToAssigned) {
-      for (const option of responsibleOptions) {
-        map.set(option.id, { id: option.id, name: option.name });
+    if (restrictToAssigned) {
+      if (currentUserId && user?.nome_completo) {
+        return [{ id: currentUserId, name: user.nome_completo }];
       }
+      return [];
+    }
+
+    const map = new Map<string, { id: string; name: string }>();
+    for (const option of responsibleOptions) {
+      map.set(option.id, { id: option.id, name: option.name });
     }
     for (const conversation of conversations) {
       const responsible = conversation.responsible;
@@ -549,11 +561,6 @@ export const WhatsAppLayout = ({
       }
       if (!map.has(responsible.id)) {
         map.set(responsible.id, { id: responsible.id, name: responsible.name });
-      }
-    }
-    if (restrictToAssigned && currentUserId && user?.nome_completo) {
-      if (!map.has(currentUserId)) {
-        map.set(currentUserId, { id: currentUserId, name: user.nome_completo });
       }
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
@@ -881,6 +888,7 @@ export const WhatsAppLayout = ({
               void loadMoreChats();
             }}
             allowUnassignedFilter={!restrictToAssigned}
+            isResponsibleFilterLocked={restrictToAssigned}
           />
         </div>
 
