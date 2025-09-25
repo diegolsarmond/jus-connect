@@ -1,8 +1,12 @@
 import { Badge } from "@/components/ui/badge";
+import {
+  evaluateCompanySubscription,
+  type CompanySubscriptionSource,
+} from "@/lib/companySubscription";
 
 export type CompanyStatus = "active" | "inactive" | "trial";
 
-export interface ApiCompany {
+export interface ApiCompany extends CompanySubscriptionSource {
   id: number;
   nome_empresa?: string | null;
   cnpj?: string | null;
@@ -144,19 +148,9 @@ const normalizeBoolean = (value: unknown): boolean | null => {
   return null;
 };
 
-export const resolveCompanyStatus = (
-  status: boolean | null | undefined,
-  planId: string | null,
-): CompanyStatus => {
-  if (status === false) {
-    return "inactive";
-  }
-
-  if (planId) {
-    return "active";
-  }
-
-  return "trial";
+export const resolveCompanyStatus = (company: CompanySubscriptionSource): CompanyStatus => {
+  const { status } = evaluateCompanySubscription(company);
+  return status;
 };
 
 const buildPlansIndex = (plans: ApiPlan[]): Map<string, ApiPlan> => {
@@ -217,11 +211,12 @@ export const mapApiCompanyToCompany = (
   plansIndex: Map<string, ApiPlan>,
   usersIndex?: Map<string, ApiUser>,
 ): Company => {
-  const planId = company.plano != null ? String(company.plano) : null;
+  const evaluation = evaluateCompanySubscription(company);
+  const planId = evaluation.planId;
   const plan = planId ? plansIndex.get(planId) : undefined;
   const managerId = company.responsavel != null ? String(company.responsavel) : null;
   const normalizedActive = normalizeBoolean(company.ativo);
-  const status = resolveCompanyStatus(normalizedActive, planId);
+  const status = resolveCompanyStatus(company);
 
   const managerNameFromApi =
     typeof company.responsavel === "string" && company.responsavel.trim().length > 0
@@ -244,7 +239,7 @@ export const mapApiCompanyToCompany = (
     status,
     managerId,
     managerName,
-    isActive: normalizedActive ?? status !== "inactive",
+    isActive: evaluation.isActive ?? normalizedActive ?? status !== "inactive",
     createdAt: toIsoString(company.datacadastro),
     lastActivity: toIsoString(company.atualizacao) ?? toIsoString(company.datacadastro),
   };
