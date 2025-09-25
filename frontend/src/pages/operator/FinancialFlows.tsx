@@ -1346,7 +1346,7 @@ const FinancialFlows = () => {
                               {flow.computedStatus !== 'pago' ? (
                                 <Button
                                   size="sm"
-                                  variant="outline"
+                                  variant="outline_quantum"
                                   onClick={() => handleOpenSettleDialog(flow)}
                                   disabled={settleMutation.isPending || !flow.canManuallySettle}
                                   title={
