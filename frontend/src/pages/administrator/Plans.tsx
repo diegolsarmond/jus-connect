@@ -617,7 +617,7 @@ export default function Plans() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar plano</DialogTitle>
             <DialogDescription>Atualize as informações do plano selecionado.</DialogDescription>
