@@ -209,6 +209,7 @@ interface ProcessFormState {
   propostaId: string;
   dataDistribuicao: string;
   instancia: string;
+  instanciaOutro: string;
 }
 
 const formatProcessNumber = (value: string) => {
@@ -390,6 +391,8 @@ const formatPropostaLabel = (
   return `Proposta #${numero}/${ano}${solicitanteNome ? ` - ${solicitanteNome}` : ""}`;
 };
 
+const INSTANCIA_OUTRO_VALUE = "Outro / Especificar";
+
 const INSTANCIA_OPTIONS = [
   "1ª Vara Cível",
   "2ª Vara Cível",
@@ -408,7 +411,8 @@ const INSTANCIA_OPTIONS = [
   "Tribunal Superior Eleitoral (TSE)",
   "Superior Tribunal de Justiça (STJ)",
   "Supremo Tribunal Federal (STF)",
-  "Outro / Especificar",
+  INSTANCIA_OUTRO_VALUE,
+
 ];
 
 const createEmptyProcessForm = (): ProcessFormState => ({
@@ -420,6 +424,7 @@ const createEmptyProcessForm = (): ProcessFormState => ({
   propostaId: "",
   dataDistribuicao: "",
   instancia: "",
+  instanciaOutro: "",
 });
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
@@ -1178,7 +1183,10 @@ export default function Processos() {
         advogados: advogadosPayload,
       };
 
-      const instanciaPayload = processForm.instancia.trim();
+      const instanciaPayload =
+        processForm.instancia === INSTANCIA_OUTRO_VALUE
+          ? processForm.instanciaOutro.trim()
+          : processForm.instancia.trim();
       if (instanciaPayload) {
         payload.orgao_julgador = instanciaPayload;
       }
@@ -1262,11 +1270,14 @@ export default function Processos() {
     [navigate, toast],
   );
 
+  const isInstanciaOutroSelected = processForm.instancia === INSTANCIA_OUTRO_VALUE;
+
   const isCreateDisabled =
     !processForm.numero ||
     !processForm.uf ||
     !processForm.municipio ||
     !processForm.clienteId ||
+    (isInstanciaOutroSelected && processForm.instanciaOutro.trim().length === 0) ||
     creatingProcess;
 
   const filteredProcessos = useMemo(() => {
@@ -2002,42 +2013,63 @@ export default function Processos() {
                 </p>
               )}
             </div>
-            <div className="space-y-2 sm:col-span-2 md:col-span-1">
-              <Label htmlFor="process-number">Número do processo</Label>
-              <Input
-                id="process-number"
-                placeholder="0000000-00.0000.0.00.0000"
-                value={processForm.numero}
-                onChange={(event) =>
-                  setProcessForm((prev) => ({
-                    ...prev,
-                    numero: formatProcessNumber(event.target.value),
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2 md:col-span-1">
-              <Label htmlFor="process-instancia">Instância do processo</Label>
-              <Select
-                value={processForm.instancia}
-                onValueChange={(value) =>
-                  setProcessForm((prev) => ({
-                    ...prev,
-                    instancia: value,
-                  }))
-                }
-              >
-                <SelectTrigger id="process-instancia">
-                  <SelectValue placeholder="Selecione a instância" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INSTANCIA_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-4 sm:col-span-2 md:col-span-1">
+              <div className="space-y-2">
+                <Label htmlFor="process-number">Número do processo</Label>
+                <Input
+                  id="process-number"
+                  placeholder="0000000-00.0000.0.00.0000"
+                  value={processForm.numero}
+                  onChange={(event) =>
+                    setProcessForm((prev) => ({
+                      ...prev,
+                      numero: formatProcessNumber(event.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="process-instancia">Instância do processo</Label>
+                <Select
+                  value={processForm.instancia}
+                  onValueChange={(value) =>
+                    setProcessForm((prev) => ({
+                      ...prev,
+                      instancia: value,
+                      instanciaOutro:
+                        value === INSTANCIA_OUTRO_VALUE ? prev.instanciaOutro : "",
+                    }))
+                  }
+                >
+                  <SelectTrigger id="process-instancia">
+                    <SelectValue placeholder="Selecione a instância" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INSTANCIA_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {isInstanciaOutroSelected ? (
+                <div className="space-y-2">
+                  <Label htmlFor="process-instancia-outro">Especificar instância</Label>
+                  <Input
+                    id="process-instancia-outro"
+                    placeholder="Descreva a instância"
+                    value={processForm.instanciaOutro}
+                    onChange={(event) =>
+                      setProcessForm((prev) => ({
+                        ...prev,
+                        instanciaOutro: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              ) : null}
+
             </div>
             <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-distribution-date">Data da distribuição</Label>
