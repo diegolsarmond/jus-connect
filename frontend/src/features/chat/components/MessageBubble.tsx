@@ -2,7 +2,7 @@ import { forwardRef } from "react";
 import { CheckCheck, Download, FileText } from "lucide-react";
 import clsx from "clsx";
 import type { Message } from "../types";
-import { formatTime } from "../utils/format";
+import { formatMessageTimestamp } from "../utils/format";
 import styles from "./MessageBubble.module.css";
 
 interface MessageBubbleProps {
@@ -110,7 +110,7 @@ export const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(
             <p className={styles.text}>{message.content}</p>
           )}
           <div className={styles.meta}>
-            <time dateTime={message.timestamp}>{formatTime(message.timestamp)}</time>
+            <time dateTime={message.timestamp}>{formatMessageTimestamp(message.timestamp)}</time>
             {isOwnMessage && (
               <span className={styles.statusIcon} aria-label={`Status: ${message.status}`}>
                 <CheckCheck size={16} aria-hidden="true" />
