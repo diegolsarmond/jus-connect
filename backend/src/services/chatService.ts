@@ -1,16 +1,19 @@
+import { randomUUID } from 'node:crypto';
 import { QueryResultRow } from 'pg';
 import pool from './db';
 import { ensureChatSchema } from './chatSchema';
 
 export type ChatMessageSender = 'me' | 'contact';
 export type ChatMessageStatus = 'sent' | 'delivered' | 'read';
-export type ChatMessageType = 'text' | 'image' | 'audio';
+export type ChatMessageType = 'text' | 'image' | 'audio' | 'file';
 
 export interface MessageAttachment {
   id: string;
-  type: 'image' | 'audio';
+  type: 'image' | 'audio' | 'file';
   url: string;
   name: string;
+  downloadUrl?: string;
+  mimeType?: string;
 }
 
 export interface ChatMessage {
@@ -224,11 +227,108 @@ function normalizeStatus(value: string | null | undefined): ChatMessageStatus {
 }
 
 function normalizeMessageType(value: string | null | undefined): ChatMessageType {
-  if (value === 'image' || value === 'audio') {
-    return value;
+  if (typeof value !== 'string') {
+    return 'text';
   }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === 'image' || normalized === 'audio') {
+    return normalized;
+  }
+
+  if (normalized === 'file' || normalized === 'document' || normalized === 'video') {
+    return 'file';
+  }
+
   return 'text';
 }
+
+const AUDIO_EXTENSIONS = ['.ogg', '.oga', '.opus', '.mp3', '.m4a', '.aac', '.wav', '.webm', '.3gp'];
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.heic', '.heif', '.bmp', '.svg', '.avif'];
+const DOCUMENT_EXTENSIONS = [
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.ppt',
+  '.pptx',
+  '.txt',
+  '.csv',
+  '.zip',
+  '.rar',
+  '.7z',
+  '.tar',
+  '.gz',
+  '.xml',
+  '.json',
+];
+
+const DOCUMENT_MIME_PREFIXES = ['application/pdf', 'application/msword', 'application/vnd', 'application/zip', 'application/x-zip'];
+
+const toTrimmedString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const detectAttachmentType = (
+  rawType: unknown,
+  rawMime: unknown,
+  rawName: string | undefined,
+  fallback: MessageAttachment['type'],
+): MessageAttachment['type'] => {
+  const normalizedType = typeof rawType === 'string' ? rawType.trim().toLowerCase() : '';
+  const normalizedMime = typeof rawMime === 'string' ? rawMime.trim().toLowerCase() : '';
+  const normalizedName = rawName?.toLowerCase() ?? '';
+
+  if (normalizedType === 'audio' || normalizedType === 'ptt' || normalizedType === 'voice') {
+    return 'audio';
+  }
+  if (normalizedType === 'image' || normalizedType === 'sticker') {
+    return 'image';
+  }
+  if (normalizedType === 'document' || normalizedType === 'file' || normalizedType === 'video') {
+    return 'file';
+  }
+
+  if (normalizedMime.startsWith('audio/')) {
+    return 'audio';
+  }
+  if (normalizedMime.startsWith('image/')) {
+    return 'image';
+  }
+  if (normalizedMime.startsWith('video/') || DOCUMENT_MIME_PREFIXES.some((prefix) => normalizedMime.startsWith(prefix))) {
+    return 'file';
+  }
+
+  if (normalizedName) {
+    if (AUDIO_EXTENSIONS.some((extension) => normalizedName.endsWith(extension))) {
+      return 'audio';
+    }
+    if (IMAGE_EXTENSIONS.some((extension) => normalizedName.endsWith(extension))) {
+      return 'image';
+    }
+    if (DOCUMENT_EXTENSIONS.some((extension) => normalizedName.endsWith(extension))) {
+      return 'file';
+    }
+  }
+
+  return fallback;
+};
+
+const getAttachmentFallbackName = (type: MessageAttachment['type']): string => {
+  if (type === 'audio') {
+    return 'Mensagem de áudio';
+  }
+  if (type === 'image') {
+    return 'Imagem';
+  }
+  return 'Documento';
+};
 
 const sanitizeAttachment = (value: unknown): MessageAttachment | null => {
   if (!value || typeof value !== 'object') {
@@ -238,20 +338,40 @@ const sanitizeAttachment = (value: unknown): MessageAttachment | null => {
   const attachment = value as {
     id?: unknown;
     url?: unknown;
+    downloadUrl?: unknown;
     name?: unknown;
+    filename?: unknown;
+    fileName?: unknown;
     type?: unknown;
+    mimeType?: unknown;
+    mimetype?: unknown;
   };
 
-  const id = typeof attachment.id === 'string' ? attachment.id : undefined;
-  const url = typeof attachment.url === 'string' ? attachment.url : undefined;
-  const name = typeof attachment.name === 'string' ? attachment.name : undefined;
-  const type = attachment.type === 'audio' ? 'audio' : 'image';
+  const idRaw = toTrimmedString(attachment.id);
+  const urlRaw = toTrimmedString(attachment.url) ?? toTrimmedString(attachment.downloadUrl);
+  const downloadUrlRaw = toTrimmedString(attachment.downloadUrl) ?? undefined;
+  const nameRaw =
+    toTrimmedString(attachment.name) ??
+    toTrimmedString(attachment.fileName) ??
+    toTrimmedString(attachment.filename);
+  const mimeTypeRaw = toTrimmedString(attachment.mimeType) ?? toTrimmedString(attachment.mimetype);
 
-  if (!id || !url || !name) {
+  if (!urlRaw) {
     return null;
   }
 
-  return { id, url, name, type };
+  const resolvedType = detectAttachmentType(attachment.type, mimeTypeRaw, nameRaw, 'file');
+  const name = nameRaw ?? getAttachmentFallbackName(resolvedType);
+  const id = idRaw ?? `att-${randomUUID()}`;
+
+  return {
+    id,
+    type: resolvedType,
+    url: urlRaw,
+    downloadUrl: downloadUrlRaw ?? urlRaw,
+    name,
+    mimeType: mimeTypeRaw ?? undefined,
+  };
 };
 
 function parseAttachments(value: unknown): MessageAttachment[] | undefined {
@@ -298,14 +418,23 @@ function buildPreview(
   type: ChatMessageType,
   attachments?: MessageAttachment[] | null,
 ): string {
+  const primaryAttachment = attachments && attachments.length > 0 ? attachments[0] : undefined;
+
   if (type === 'image') {
-    const name = attachments && attachments.length > 0 ? attachments[0]!.name : undefined;
+    const name = primaryAttachment?.name;
     return name ? `Imagem • ${name}` : 'Imagem recebida';
   }
+
   if (type === 'audio') {
-    const name = attachments && attachments.length > 0 ? attachments[0]!.name : undefined;
+    const name = primaryAttachment?.name;
     return name ? `Mensagem de áudio • ${name}` : 'Mensagem de áudio';
   }
+
+  if (type === 'file') {
+    const name = primaryAttachment?.name;
+    return name ? `Documento • ${name}` : 'Documento';
+  }
+
   const normalized = content.trim();
   if (!normalized) {
     return 'Mensagem';
@@ -665,15 +794,22 @@ function normalizeBoolean(value: unknown, defaultValue: boolean): boolean {
   return defaultValue;
 }
 
-function normalizeMessageContent(value: string | undefined): string {
-  if (typeof value !== 'string') {
-    throw new ValidationError('Message content is required');
+function normalizeMessageContent(value: string | undefined, fallback?: string): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
   }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new ValidationError('Message content is required');
+
+  if (typeof fallback === 'string') {
+    const trimmedFallback = fallback.trim();
+    if (trimmedFallback) {
+      return trimmedFallback;
+    }
   }
-  return trimmed;
+
+  throw new ValidationError('Message content is required');
 }
 
 function normalizeTimestamp(value: Date | string | undefined): Date {
@@ -1130,11 +1266,20 @@ export default class ChatService {
       throw new ValidationError('Conversation not found');
     }
 
-    const content = normalizeMessageContent(input.content);
     const type = normalizeMessageType(input.type);
+    const attachments = normalizeAttachments(input.attachments);
+    const fallbackContent = attachments && attachments.length > 0
+      ? attachments[0]!.name
+      : type === 'audio'
+        ? 'Mensagem de áudio'
+        : type === 'image'
+          ? 'Imagem recebida'
+          : type === 'file'
+            ? 'Documento'
+            : undefined;
+    const content = normalizeMessageContent(input.content, fallbackContent);
     const status = normalizeStatus(input.status);
     const timestamp = normalizeTimestamp(input.timestamp);
-    const attachments = normalizeAttachments(input.attachments);
     const externalId = typeof input.externalId === 'string' && input.externalId.trim()
       ? input.externalId.trim()
       : null;
