@@ -1,5 +1,5 @@
 # ---------- Build stage ----------
-FROM node:20-bullseye AS builder
+FROM node:20 AS builder
 WORKDIR /app
 
 ENV CI=true
@@ -37,7 +37,7 @@ RUN npm --prefix frontend run build
 # NOTE: The build agents running our Docker image do not have credentials to
 # pull images that require token-based access. Using the non-slim variant keeps
 # the base image public while remaining Debian-based for compatibility.
-FROM node:20-bullseye AS runtime
+FROM node:20 AS runtime
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
 ENV PORT=3000
