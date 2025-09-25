@@ -18,6 +18,28 @@ const getPlanDisplayName = (name: string | null | undefined, id: number | null |
   return "Plano não definido";
 };
 
+interface PlanStatusProps {
+  label: string;
+  toneClass: string;
+}
+
+function PlanStatus({ label, toneClass }: PlanStatusProps) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Plano atual</p>
+      <span
+        className={cn(
+          "mt-1 inline-flex max-w-full items-center gap-2 truncate rounded-full border px-3 py-1 text-sm font-semibold",
+          toneClass,
+        )}
+        title={label}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export function Header() {
   const { plan, isLoading, error } = usePlan();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -83,18 +105,8 @@ export function Header() {
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <SidebarTrigger className="text-muted-foreground" />
 
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Plano atual</p>
-            <span
-              className={cn(
-                "mt-1 inline-flex max-w-full items-center gap-2 truncate rounded-full border px-3 py-1 text-sm font-semibold",
-                planStatusTone,
-              )}
-              title={planStatusLabel}
-            >
-              {planStatusLabel}
-            </span>
-          </div>
+          {/* Plano exibido diretamente no cabeçalho para rápido acesso */}
+          <PlanStatus label={planStatusLabel} toneClass={planStatusTone} />
         </div>
 
         {/* Actions */}
