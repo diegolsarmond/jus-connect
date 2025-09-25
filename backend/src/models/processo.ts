@@ -23,6 +23,62 @@ export interface ProcessoMovimentacao {
   atualizado_em?: string | null;
 }
 
+export interface ProcessoSyncIntegrationInfo {
+  id: number;
+  provider: string;
+  environment: string;
+  apiUrl: string | null;
+  active: boolean;
+}
+
+export interface ProcessoSync {
+  id: number;
+  processoId: number | null;
+  integrationApiKeyId: number | null;
+  integration?: ProcessoSyncIntegrationInfo | null;
+  remoteRequestId: string | null;
+  requestType: string;
+  requestedBy: number | null;
+  requestedAt: string;
+  requestPayload: unknown;
+  requestHeaders: unknown;
+  status: string;
+  statusReason: string | null;
+  completedAt: string | null;
+  metadata: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProcessoSyncResponse {
+  id: number;
+  processoId: number | null;
+  processSyncId: number | null;
+  integrationApiKeyId: number | null;
+  integration?: ProcessoSyncIntegrationInfo | null;
+  deliveryId: string | null;
+  source: string;
+  statusCode: number | null;
+  receivedAt: string;
+  payload: unknown;
+  headers: unknown;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface ProcessoSyncAudit {
+  id: number;
+  processoId: number | null;
+  processSyncId: number | null;
+  processResponseId: number | null;
+  integrationApiKeyId: number | null;
+  integration?: ProcessoSyncIntegrationInfo | null;
+  eventType: string;
+  eventDetails: unknown;
+  observedAt: string;
+  createdAt: string;
+}
+
 export interface ProcessoOportunidadeResumo {
   id: number;
   sequencial_empresa: number | null;
@@ -70,4 +126,7 @@ export interface Processo {
   oportunidade?: ProcessoOportunidadeResumo | null;
   advogados: ProcessoAdvogado[];
   movimentacoes?: ProcessoMovimentacao[];
+  juditSyncs?: ProcessoSync[];
+  juditResponses?: ProcessoSyncResponse[];
+  juditAuditTrail?: ProcessoSyncAudit[];
 }

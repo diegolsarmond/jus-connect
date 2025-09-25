@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -11,9 +44,11 @@ const tipoEventoRoutes_1 = __importDefault(require("./routes/tipoEventoRoutes"))
 const tipoProcessoRoutes_1 = __importDefault(require("./routes/tipoProcessoRoutes"));
 const escritorioRoutes_1 = __importDefault(require("./routes/escritorioRoutes"));
 const perfilRoutes_1 = __importDefault(require("./routes/perfilRoutes"));
-const planoRoutes_1 = __importDefault(require("./routes/planoRoutes"));
+const planoRoutes_1 = __importStar(require("./routes/planoRoutes"));
+const planPaymentRoutes_1 = __importDefault(require("./routes/planPaymentRoutes"));
 const subscriptionRoutes_1 = __importDefault(require("./routes/subscriptionRoutes"));
 const situacaoClienteRoutes_1 = __importDefault(require("./routes/situacaoClienteRoutes"));
+const categoriaRoutes_1 = __importDefault(require("./routes/categoriaRoutes"));
 const situacaoProcessoRoutes_1 = __importDefault(require("./routes/situacaoProcessoRoutes"));
 const situacaoPropostaRoutes_1 = __importDefault(require("./routes/situacaoPropostaRoutes"));
 const etiquetaRoutes_1 = __importDefault(require("./routes/etiquetaRoutes"));
@@ -25,6 +60,7 @@ const agendaRoutes_1 = __importDefault(require("./routes/agendaRoutes"));
 const templateRoutes_1 = __importDefault(require("./routes/templateRoutes"));
 const tagRoutes_1 = __importDefault(require("./routes/tagRoutes"));
 const documentRoutes_1 = __importDefault(require("./routes/documentRoutes"));
+const blogPostRoutes_1 = __importStar(require("./routes/blogPostRoutes"));
 const financialRoutes_1 = __importDefault(require("./routes/financialRoutes"));
 const processoRoutes_1 = __importDefault(require("./routes/processoRoutes"));
 const fluxoTrabalhoRoutes_1 = __importDefault(require("./routes/fluxoTrabalhoRoutes"));
@@ -49,6 +85,7 @@ const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const swagger_1 = __importDefault(require("./swagger"));
 const cronJobs_1 = __importDefault(require("./services/cronJobs"));
 const chatSchema_1 = require("./services/chatSchema");
+const processSyncSchema_1 = require("./services/processSyncSchema");
 const supportSchema_1 = require("./services/supportSchema");
 const authMiddleware_1 = require("./middlewares/authMiddleware");
 const moduleAuthorization_1 = require("./middlewares/moduleAuthorization");
@@ -68,6 +105,7 @@ const defaultAllowedOrigins = [
     'http://localhost:8080',
     'http://127.0.0.1:8080',
     'http://localhost:4200',
+    'https://jusconnec.quantumtecnologia.com.br',
     'https://quantumtecnologia.com.br',
 ];
 const additionalAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
@@ -155,10 +193,12 @@ registerModuleRoutes(['configuracoes-parametros', 'configuracoes-parametros-escr
 registerModuleRoutes(['configuracoes-parametros', 'configuracoes-parametros-perfis'], perfilRoutes_1.default);
 registerModuleRoutes(['configuracoes', 'dashboard'], planoRoutes_1.default);
 registerModuleRoutes(['configuracoes', 'dashboard'], subscriptionRoutes_1.default);
+registerModuleRoutes('meu-plano', planPaymentRoutes_1.default);
 registerModuleRoutes(['configuracoes-parametros', 'configuracoes-parametros-situacao-processo'], situacaoProcessoRoutes_1.default);
 registerModuleRoutes(['configuracoes-parametros', 'configuracoes-parametros-situacao-cliente'], situacaoClienteRoutes_1.default);
 registerModuleRoutes(['configuracoes-parametros', 'configuracoes-parametros-situacao-proposta'], situacaoPropostaRoutes_1.default);
 registerModuleRoutes(['configuracoes-parametros', 'configuracoes-parametros-etiquetas'], etiquetaRoutes_1.default);
+registerModuleRoutes(['configuracoes-parametros', 'configuracoes-parametros-categorias'], categoriaRoutes_1.default);
 registerModuleRoutes(['configuracoes', 'dashboard'], empresaRoutes_1.default);
 registerModuleRoutes('configuracoes-usuarios', usuarioRoutes_1.default);
 registerModuleRoutes(['clientes', 'dashboard'], clienteRoutes_1.default);
@@ -168,6 +208,7 @@ registerModuleRoutes('agenda', agendaRoutes_1.default);
 registerModuleRoutes('documentos', templateRoutes_1.default);
 registerModuleRoutes('documentos', tagRoutes_1.default);
 registerModuleRoutes('documentos', documentRoutes_1.default);
+registerModuleRoutes(['configuracoes', 'configuracoes-conteudo-blog'], blogPostRoutes_1.default);
 registerModuleRoutes(['financeiro', 'dashboard'], financialRoutes_1.default);
 registerModuleRoutes(['processos', 'dashboard'], processoRoutes_1.default);
 registerModuleRoutes('pipeline', fluxoTrabalhoRoutes_1.default);
@@ -184,6 +225,8 @@ registerModuleRoutes('conversas', chatRoutes_1.default);
 protectedApiRouter.use(userProfileRoutes_1.default);
 app.use('/api', wahaWebhookRoutes_1.default);
 app.use('/api', asaasWebhookRoutes_1.default);
+app.use('/api', blogPostRoutes_1.publicBlogPostRoutes);
+app.use('/api', planoRoutes_1.publicPlanoRoutes);
 app.use('/api', authRoutes_1.default);
 app.use('/api', protectedApiRouter);
 app.use('/api/v1', authMiddleware_1.authenticateRequest, usuarioRoutes_1.default);
@@ -233,7 +276,7 @@ else {
 }
 async function startServer() {
     try {
-        await Promise.all([(0, chatSchema_1.ensureChatSchema)(), (0, supportSchema_1.ensureSupportSchema)()]);
+        await Promise.all([(0, chatSchema_1.ensureChatSchema)(), (0, supportSchema_1.ensureSupportSchema)(), (0, processSyncSchema_1.ensureProcessSyncSchema)()]);
     }
     catch (error) {
         console.error('Failed to initialize application storage schema', error);

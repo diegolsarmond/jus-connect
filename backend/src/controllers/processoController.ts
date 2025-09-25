@@ -7,6 +7,7 @@ import {
 
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
+import { listProcessResponses, listProcessSyncs, listSyncAudits } from '../services/juditProcessService';
 import { Processo, ProcessoJuditRequest } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import juditProcessService, {
@@ -807,6 +808,15 @@ export const getProcessoById = async (req: Request, res: Response) => {
     const processo = mapProcessoRow(result.rows[0]);
     processo.movimentacoes = await fetchProcessoMovimentacoes(parsedId);
 
+    const [juditSyncs, juditResponses, juditAuditTrail] = await Promise.all([
+      listProcessSyncs(parsedId),
+      listProcessResponses(parsedId),
+      listSyncAudits(parsedId),
+    ]);
+
+    processo.juditSyncs = juditSyncs;
+    processo.juditResponses = juditResponses;
+    processo.juditAuditTrail = juditAuditTrail;
     if (juditProcessService.isEnabled()) {
       try {
         const tracking = await juditProcessService.ensureTrackingForProcess(
