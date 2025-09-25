@@ -79,6 +79,37 @@ O backend não define URL padrão para o JUDIT; mantenha o campo `apiUrl` em
 branco para usar a configuração padrão do provedor ou preencha manualmente
 quando um endpoint específico for exigido.
 
+### Estrutura de sincronização de processos
+
+Os eventos de requisição e resposta do JUDIT são persistidos automaticamente
+pelas novas tabelas:
+
+- `process_sync`: fila de solicitações abertas pelo CRM. Depende de
+  `public.processos(id)`, `public.integration_api_keys(id)` e opcionalmente
+  `public.usuarios(id)`.
+- `process_response`: armazenamentos de webhooks e callbacks recebidos. Possui
+  FKs para `process_sync`, `processos` e `integration_api_keys`.
+- `sync_audit`: trilha de auditoria consolidada que referencia as duas tabelas
+  anteriores e mantém metadados do evento.
+
+> 💡 Execute `psql -f sql/process_sync.sql`, `psql -f sql/process_response.sql`
+> e `psql -f sql/sync_audit.sql` em bancos legados antes de iniciar o backend
+> para garantir a criação idempotente da estrutura.
+
+Para relacionar processos existentes, é possível criar um histórico inicial
+preenchendo `process_sync` manualmente. Exemplo:
+
+```sql
+INSERT INTO process_sync (processo_id, integration_api_key_id, remote_request_id, request_type)
+SELECT p.id, ik.id, CONCAT('retrofit-', p.id), 'retrofit'
+FROM public.processos p
+JOIN public.integration_api_keys ik ON ik.provider = 'judit'
+WHERE p.numero = '0000000-00.0000.0.00.0000';
+```
+
+Após a inserção, o próximo webhook do JUDIT será associado ao registro via
+`remote_request_id` ou pelo número do processo.
+
 ## Frontend
 
 ```bash

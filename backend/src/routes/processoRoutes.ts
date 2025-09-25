@@ -81,8 +81,153 @@ const router = Router();
  *               type: string
  *             tipo:
  *               type: string
+ *         judit_syncs:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/ProcessoSync'
+ *         judit_responses:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/ProcessoSyncResponse'
+ *         judit_audit_trail:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/ProcessoSyncAudit'
+ *     ProcessoSyncIntegration:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         provider:
+ *           type: string
+ *         environment:
+ *           type: string
+ *         apiUrl:
+ *           type: string
+ *           nullable: true
+ *         active:
+ *           type: boolean
+ *     ProcessoSync:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         processoId:
+ *           type: integer
+ *           nullable: true
+ *         integrationApiKeyId:
+ *           type: integer
+ *           nullable: true
+ *         integration:
+ *           $ref: '#/components/schemas/ProcessoSyncIntegration'
+ *         remoteRequestId:
+ *           type: string
+ *           nullable: true
+ *         requestType:
+ *           type: string
+ *         requestedBy:
+ *           type: integer
+ *           nullable: true
+ *         requestedAt:
+ *           type: string
+ *           format: date-time
+ *         requestPayload:
+ *           type: object
+ *           additionalProperties: true
+ *         requestHeaders:
+ *           type: object
+ *           nullable: true
+ *           additionalProperties: true
+ *         status:
+ *           type: string
+ *         statusReason:
+ *           type: string
+ *           nullable: true
+ *         completedAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *         metadata:
+ *           type: object
+ *           additionalProperties: true
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *     ProcessoSyncResponse:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         processoId:
+ *           type: integer
+ *           nullable: true
+ *         processSyncId:
+ *           type: integer
+ *           nullable: true
+ *         integrationApiKeyId:
+ *           type: integer
+ *           nullable: true
+ *         integration:
+ *           $ref: '#/components/schemas/ProcessoSyncIntegration'
+ *         deliveryId:
+ *           type: string
+ *           nullable: true
+ *         source:
+ *           type: string
+ *         statusCode:
+ *           type: integer
+ *           nullable: true
+ *         receivedAt:
+ *           type: string
+ *           format: date-time
+ *         payload:
+ *           type: object
+ *           additionalProperties: true
+ *         headers:
+ *           type: object
+ *           nullable: true
+ *           additionalProperties: true
+ *         errorMessage:
+ *           type: string
+ *           nullable: true
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *     ProcessoSyncAudit:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *         processoId:
+ *           type: integer
+ *           nullable: true
+ *         processSyncId:
+ *           type: integer
+ *           nullable: true
+ *         processResponseId:
+ *           type: integer
+ *           nullable: true
+ *         integrationApiKeyId:
+ *           type: integer
+ *           nullable: true
+ *         integration:
+ *           $ref: '#/components/schemas/ProcessoSyncIntegration'
+ *         eventType:
+ *           type: string
+ *         eventDetails:
+ *           type: object
+ *           additionalProperties: true
+ *         observedAt:
+ *           type: string
+ *           format: date-time
+ *         createdAt:
+ *           type: string
+ *           format: date-time
 
- */
+*/
 
 /**
  * @swagger
