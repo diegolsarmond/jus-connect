@@ -16,6 +16,7 @@ export const SYSTEM_MODULES: SystemModule[] = [
   { id: 'processos', nome: 'Processos', categoria: 'Aplicação' },
   { id: 'intimacoes', nome: 'Intimações', categoria: 'Aplicação' },
   { id: 'documentos', nome: 'Documentos', categoria: 'Aplicação' },
+  { id: 'arquivos', nome: 'Arquivos', categoria: 'Aplicação' },
   { id: 'financeiro', nome: 'Financeiro', categoria: 'Aplicação' },
   { id: 'relatorios', nome: 'Relatórios', categoria: 'Aplicação' },
   { id: 'meu-plano', nome: 'Meu Plano', categoria: 'Aplicação' },
