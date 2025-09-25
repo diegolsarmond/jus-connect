@@ -974,6 +974,17 @@ export const login = async (req: Request, res: Response) => {
       return;
     }
 
+    try {
+      await pool.query(
+        `UPDATE public.usuarios
+            SET ultimo_login = NOW()
+          WHERE id = $1`,
+        [user.id]
+      );
+    } catch (updateLastLoginError) {
+      console.error('Falha ao atualizar ultimo_login do usuário', updateLastLoginError);
+    }
+
     const token = signToken(
       {
         sub: user.id,

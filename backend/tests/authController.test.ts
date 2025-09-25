@@ -522,6 +522,10 @@ test('login succeeds when subscription is active', async () => {
       rowCount: 1,
     },
     {
+      rows: [],
+      rowCount: 0,
+    },
+    {
       rows: planModules.map((modulo) => ({ modulo })),
       rowCount: planModules.length,
     },
