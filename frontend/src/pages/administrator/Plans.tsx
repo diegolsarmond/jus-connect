@@ -65,6 +65,7 @@ import {
   extractCurrencyDigits,
   formatCurrencyInputValue,
   parseCurrencyDigits,
+  ensureDefaultModules,
 } from "./plans-utils";
 
 interface ModuleMultiSelectProps {
@@ -276,13 +277,15 @@ export default function Plans() {
         .map((entry) => parseModuleInfo(entry))
         .filter((item): item is ModuleInfo => item !== null);
 
+      const augmentedModules = ensureDefaultModules(parsedModules);
+
       const plansPayload = extractCollection(await plansResponse.json());
       const parsedPlans = plansPayload
         .map((entry) => parsePlan(entry))
         .filter((item): item is Plan => item !== null);
 
-      setAvailableModules(parsedModules);
-      setPlans(normalizePlans(parsedPlans, parsedModules));
+      setAvailableModules(augmentedModules);
+      setPlans(normalizePlans(parsedPlans, augmentedModules));
     } catch (err) {
       console.error(err);
       setAvailableModules([]);
