@@ -63,6 +63,7 @@ import {
   Users as UsersIcon,
   Eye,
   ChevronsUpDown,
+  RefreshCw,
 } from "lucide-react";
 
 interface ProcessoCliente {
@@ -100,6 +101,11 @@ export interface Processo {
   ultimaSincronizacao: string | null;
   consultasApiCount: number;
   movimentacoesCount: number;
+  juditTrackingId: string | null;
+  juditTrackingHourRange: string | null;
+  juditLastRequest: ProcessoJuditRequest | null;
+  trackingSummary: ProcessoTrackingSummary | null;
+  responseData: ProcessoResponseData | null;
 }
 
 interface Uf {
@@ -166,6 +172,9 @@ interface ApiProcesso {
   ultima_sincronizacao?: string | null;
   consultas_api_count?: number | string | null;
   movimentacoes_count?: number | string | null;
+  judit_tracking_id?: string | null;
+  judit_tracking_hour_range?: string | null;
+  judit_last_request?: ApiProcessoJuditRequest | null;
 }
 
 interface ApiProcessoAdvogado {
@@ -198,6 +207,58 @@ interface PropostaOption {
   solicitante?: string | null;
   sequencial?: number | null;
   dataCriacao?: string | null;
+}
+
+interface ApiProcessoJuditRequest {
+  request_id?: string | null;
+  status?: string | null;
+  source?: string | null;
+  result?: unknown;
+  criado_em?: string | null;
+  atualizado_em?: string | null;
+}
+
+interface ProcessoJuditRequest {
+  requestId: string;
+  status: string;
+  source: string;
+  result: unknown;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+interface ProcessoTrackingStep {
+  name: string | null;
+  label: string | null;
+  description: string | null;
+  updatedAt: string | null;
+}
+
+interface ProcessoTrackingIncrement {
+  id: string;
+  type: string | null;
+  description: string | null;
+  occurredAt: string | null;
+  raw: unknown;
+}
+
+interface ProcessoTrackingSummary {
+  status: string | null;
+  phase: string | null;
+  lastStep: ProcessoTrackingStep | null;
+  tags: string[];
+  updatedAt: string | null;
+  increments: ProcessoTrackingIncrement[];
+  raw: Record<string, unknown> | null;
+}
+
+interface ProcessoResponseData {
+  cover: Record<string, unknown> | null;
+  partes: Record<string, unknown>[];
+  movimentacoes: Record<string, unknown>[];
+  anexos: Record<string, unknown>[];
+  metadata: Record<string, unknown> | null;
+  raw: Record<string, unknown> | null;
 }
 
 interface ProcessFormState {
@@ -335,6 +396,417 @@ const parseOptionalInteger = (value: unknown): number | null => {
   return null;
 };
 
+const parseOptionalString = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+
+  return null;
+};
+
+const ensureArray = <T,>(value: unknown): T[] => {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value === null || value === undefined) {
+    return [];
+  }
+
+  return [value as T];
+};
+
+const toRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+};
+
+const parseJuditResultPayload = (value: unknown): Record<string, unknown> | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      return toRecord(parsed);
+    } catch (error) {
+      console.error("Não foi possível interpretar o payload de tracking da Judit", error);
+      return null;
+    }
+  }
+
+  return toRecord(value);
+};
+
+const parseTrackingTags = (value: unknown): string[] => {
+  const tags = new Set<string>();
+  const entries = ensureArray<unknown>(value);
+
+  for (const entry of entries) {
+    if (typeof entry === "string") {
+      const normalized = entry.trim();
+      if (normalized) {
+        tags.add(normalized);
+      }
+      continue;
+    }
+
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const label =
+      parseOptionalString(record.label) ||
+      parseOptionalString(record.nome) ||
+      parseOptionalString(record.name) ||
+      parseOptionalString(record.valor) ||
+      parseOptionalString(record.value);
+
+    if (label) {
+      tags.add(label);
+    }
+  }
+
+  return Array.from(tags);
+};
+
+const parseTrackingStep = (value: unknown): ProcessoTrackingStep | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    return {
+      name: normalized,
+      label: normalized,
+      description: null,
+      updatedAt: null,
+    };
+  }
+
+  if (typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const name =
+    parseOptionalString(record.name) ||
+    parseOptionalString(record.nome) ||
+    parseOptionalString(record.codigo) ||
+    parseOptionalString(record.id) ||
+    null;
+  const label =
+    parseOptionalString(record.label) ||
+    parseOptionalString(record.descricao) ||
+    parseOptionalString(record.description) ||
+    parseOptionalString(record.nome) ||
+    name;
+  const description =
+    parseOptionalString(record.descricao) ||
+    parseOptionalString(record.description) ||
+    null;
+  const updatedAt =
+    parseOptionalString(
+      record.updated_at ??
+        record.updatedAt ??
+        record.atualizado_em ??
+        record.data ??
+        record.timestamp ??
+        record.occurred_at ??
+        record.occurredAt,
+    ) ?? null;
+
+  if (!name && !label) {
+    return null;
+  }
+
+  return { name: name ?? label ?? null, label: label ?? name ?? null, description, updatedAt };
+};
+
+const parseTrackingIncrements = (value: unknown): ProcessoTrackingIncrement[] => {
+  const increments: ProcessoTrackingIncrement[] = [];
+  const entries = ensureArray<unknown>(value);
+
+  entries.forEach((entry, index) => {
+    if (entry && typeof entry === "object") {
+      const record = entry as Record<string, unknown>;
+      const id =
+        parseOptionalString(record.id) ||
+        parseOptionalString(record.codigo) ||
+        parseOptionalString(record.reference) ||
+        `${index}`;
+      const type =
+        parseOptionalString(record.type) ||
+        parseOptionalString(record.event) ||
+        parseOptionalString(record.category) ||
+        parseOptionalString(record.tipo) ||
+        null;
+      const description =
+        parseOptionalString(record.description) ||
+        parseOptionalString(record.descricao) ||
+        parseOptionalString(record.details) ||
+        parseOptionalString(record.message) ||
+        parseOptionalString(record.titulo) ||
+        parseOptionalString(record.title) ||
+        null;
+      const occurredAt =
+        parseOptionalString(
+          record.occurred_at ??
+            record.occurredAt ??
+            record.data ??
+            record.timestamp ??
+            record.created_at ??
+            record.criado_em,
+        ) ?? null;
+
+      increments.push({
+        id,
+        type,
+        description,
+        occurredAt,
+        raw: record,
+      });
+
+      return;
+    }
+
+    const text = parseOptionalString(entry);
+    if (text) {
+      increments.push({
+        id: `${index}`,
+        type: null,
+        description: text,
+        occurredAt: null,
+        raw: entry,
+      });
+    }
+  });
+
+  return increments;
+};
+
+const mapApiJuditRequest = (
+  value: ApiProcessoJuditRequest | null | undefined,
+): ProcessoJuditRequest | null => {
+  if (!value) {
+    return null;
+  }
+
+  const requestId = parseOptionalString(value.request_id);
+  if (!requestId) {
+    return null;
+  }
+
+  const status = parseOptionalString(value.status) ?? "pending";
+  const source = parseOptionalString(value.source) ?? "system";
+  const createdAt = parseOptionalString(value.criado_em) ?? null;
+  const updatedAt = parseOptionalString(value.atualizado_em) ?? createdAt ?? null;
+
+  return {
+    requestId,
+    status,
+    source,
+    result: value.result ?? null,
+    createdAt,
+    updatedAt,
+  };
+};
+
+const parseTrackingSummaryFromResult = (
+  result: unknown,
+): ProcessoTrackingSummary | null => {
+  const payload = parseJuditResultPayload(result);
+  if (!payload) {
+    return null;
+  }
+
+  const trackingSource =
+    toRecord(payload.tracking) ??
+    toRecord(payload.tracking_status) ??
+    toRecord(payload.sync) ??
+    payload;
+
+  const status =
+    parseOptionalString(payload.status) ||
+    parseOptionalString(payload.request_status) ||
+    parseOptionalString(trackingSource.status) ||
+    parseOptionalString(trackingSource.state) ||
+    null;
+
+  const phase =
+    parseOptionalString(trackingSource.phase) ||
+    parseOptionalString(trackingSource.fase) ||
+    parseOptionalString(payload.phase) ||
+    parseOptionalString(payload.fase) ||
+    null;
+
+  const lastStep = parseTrackingStep(
+    trackingSource.last_step ??
+      trackingSource.lastStep ??
+      payload.last_step ??
+      payload.lastStep,
+  );
+
+  const updatedAt =
+    parseOptionalString(
+      trackingSource.updated_at ??
+        trackingSource.updatedAt ??
+        trackingSource.last_update ??
+        trackingSource.atualizado_em ??
+        payload.updated_at ??
+        payload.updatedAt ??
+        payload.last_update ??
+        payload.atualizado_em ??
+        payload.synced_at,
+    ) ?? null;
+
+  const tags = parseTrackingTags(
+    trackingSource.tags ??
+      trackingSource.etiquetas ??
+      payload.tags ??
+      payload.etiquetas ??
+      null,
+  );
+
+  const increments = parseTrackingIncrements(
+    trackingSource.increments ?? payload.increments ?? null,
+  );
+
+  return {
+    status,
+    phase,
+    lastStep,
+    tags,
+    updatedAt,
+    increments,
+    raw: payload,
+  };
+};
+
+const parseResponseDataFromResult = (
+  result: unknown,
+): ProcessoResponseData | null => {
+  const payload = parseJuditResultPayload(result);
+  if (!payload) {
+    return null;
+  }
+
+  const responseData =
+    toRecord(payload.response_data) ??
+    toRecord(payload.responseData) ??
+    toRecord(payload.data) ??
+    toRecord(payload.payload);
+
+  if (!responseData) {
+    return null;
+  }
+
+  const cover = toRecord(responseData.cover ?? responseData.capa ?? null);
+  const partes = ensureArray<unknown>(responseData.partes ?? responseData.parties ?? null)
+    .map(toRecord)
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const movimentacoes = ensureArray<unknown>(
+    responseData.movimentacoes ??
+      responseData.movements ??
+      responseData.movs ??
+      responseData.events ??
+      null,
+  )
+    .map(toRecord)
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const anexos = ensureArray<unknown>(
+    responseData.anexos ?? responseData.attachments ?? responseData.documents ?? null,
+  )
+    .map(toRecord)
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const metadata =
+    toRecord(responseData.metadata ?? responseData.metadados ?? responseData.meta ?? null) ??
+    null;
+
+  return {
+    cover,
+    partes,
+    movimentacoes,
+    anexos,
+    metadata,
+    raw: responseData,
+  };
+};
+
+const formatResponseKey = (key: string): string => {
+  return key
+    .replace(/[_\s]+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase())
+    .trim();
+};
+
+const formatResponseValue = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "Não informado";
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : "Não informado";
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+      ? value.toLocaleString("pt-BR")
+      : String(value);
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Sim" : "Não";
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleString("pt-BR");
+  }
+
+  if (Array.isArray(value)) {
+    const rendered = value
+      .map((item) => formatResponseValue(item))
+      .filter((item) => item && item !== "Não informado");
+    return rendered.length > 0 ? rendered.join(", ") : "Não informado";
+  }
+
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      console.error("Não foi possível serializar valor de metadado", error);
+      return "Não informado";
+    }
+  }
+
+  return String(value);
+};
+
 const normalizeClienteTipo = (value: string | null | undefined): string => {
   if (!value) {
     return "";
@@ -435,6 +907,14 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
     "Não informado";
 
+  const juditLastRequest = mapApiJuditRequest(processo.judit_last_request);
+  const trackingSummary = juditLastRequest
+    ? parseTrackingSummaryFromResult(juditLastRequest.result)
+    : null;
+  const responseData = juditLastRequest
+    ? parseResponseDataFromResult(juditLastRequest.result)
+    : null;
+
   const oportunidadeResumo = processo.oportunidade ?? null;
   const oportunidadeId = parseOptionalInteger(
     processo.oportunidade_id ?? oportunidadeResumo?.id ?? null,
@@ -510,12 +990,15 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
         }
       : null;
 
+  const statusLabel =
+    trackingSummary?.status?.trim() || processo.status?.trim() || "Não informado";
+
   return {
     id: processo.id,
     numero: processo.numero,
     dataDistribuicao:
       formatDateToPtBR(processo.data_distribuicao || processo.criado_em),
-    status: processo.status?.trim() || "Não informado",
+    status: statusLabel,
     tipo: processo.tipo?.trim() || "Não informado",
     cliente: {
       id: clienteResumo?.id ?? processo.cliente_id,
@@ -532,6 +1015,11 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     ultimaSincronizacao: processo.ultima_sincronizacao ?? null,
     consultasApiCount: parseApiInteger(processo.consultas_api_count),
     movimentacoesCount: parseApiInteger(processo.movimentacoes_count),
+    juditTrackingId: processo.judit_tracking_id ?? null,
+    juditTrackingHourRange: processo.judit_tracking_hour_range ?? null,
+    juditLastRequest,
+    trackingSummary,
+    responseData,
   };
 };
 
@@ -589,6 +1077,8 @@ export default function Processos() {
   const [processosError, setProcessosError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingProcess, setCreatingProcess] = useState(false);
+  const [syncingProcessIds, setSyncingProcessIds] = useState<number[]>([]);
+  const [syncErrors, setSyncErrors] = useState<Record<number, string | null>>({});
   useEffect(() => {
     let cancelled = false;
 
@@ -1035,6 +1525,37 @@ export default function Processos() {
   }, [loadProcessos, toast]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const POLLING_INTERVAL = 30000;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const data = await loadProcessos();
+        if (!cancelled) {
+          setProcessos(data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Erro ao atualizar processos em segundo plano", error);
+        }
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, POLLING_INTERVAL);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [loadProcessos]);
+
+  useEffect(() => {
     if (
       processForm.clienteId &&
       !clientes.some((cliente) => String(cliente.id) === processForm.clienteId)
@@ -1252,6 +1773,124 @@ export default function Processos() {
     }
   };
 
+  const handleManualSync = useCallback(
+    async (processoToSync: Processo) => {
+      setSyncingProcessIds((prev) =>
+        prev.includes(processoToSync.id) ? prev : [...prev, processoToSync.id],
+      );
+      setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: null }));
+
+      try {
+        const res = await fetch(getApiUrl(`processos/${processoToSync.id}/judit/sync`), {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        });
+
+        const text = await res.text();
+        let json: unknown = null;
+
+        if (text) {
+          try {
+            json = JSON.parse(text);
+          } catch (error) {
+            console.error(
+              "Não foi possível interpretar a resposta de sincronização manual",
+              error,
+            );
+          }
+        }
+
+        if (!res.ok) {
+          const message =
+            json && typeof json === "object" && "error" in (json as { error?: unknown })
+              ? String((json as { error?: unknown }).error ?? "Falha ao sincronizar processo")
+              : `Não foi possível sincronizar o processo (HTTP ${res.status})`;
+          throw new Error(message);
+        }
+
+        const payload = (json ?? {}) as {
+          tracking?: Record<string, unknown> | null;
+          request?: ApiProcessoJuditRequest | null;
+        };
+
+        const trackingRecord = toRecord(payload.tracking ?? null);
+        const requestMapped = mapApiJuditRequest(payload.request ?? null);
+
+        let trackingSummary = processoToSync.trackingSummary;
+        let responseData = processoToSync.responseData;
+
+        if (requestMapped) {
+          trackingSummary =
+            parseTrackingSummaryFromResult(requestMapped.result) ?? trackingSummary;
+          responseData =
+            parseResponseDataFromResult(requestMapped.result) ?? responseData;
+        }
+
+        setProcessos((prev) =>
+          prev.map((item) => {
+            if (item.id !== processoToSync.id) {
+              return item;
+            }
+
+            const trackingStatus =
+              parseOptionalString(trackingRecord?.status) ??
+              trackingSummary?.status ??
+              item.status;
+            const updatedAt =
+              trackingSummary?.updatedAt ?? item.trackingSummary?.updatedAt ?? null;
+
+            return {
+              ...item,
+              juditTrackingId:
+                parseOptionalString(
+                  trackingRecord?.tracking_id ?? trackingRecord?.id ?? null,
+                ) ?? item.juditTrackingId,
+              juditTrackingHourRange:
+                parseOptionalString(trackingRecord?.hour_range) ??
+                item.juditTrackingHourRange,
+              juditLastRequest: requestMapped ?? item.juditLastRequest,
+              trackingSummary: trackingSummary ?? item.trackingSummary,
+              responseData: responseData ?? item.responseData,
+              status: trackingStatus || item.status,
+              ultimaSincronizacao: updatedAt ?? item.ultimaSincronizacao,
+            };
+          }),
+        );
+
+        try {
+          const refreshed = await loadProcessos();
+          setProcessos(refreshed);
+        } catch (refreshError) {
+          console.error(
+            "Falha ao atualizar lista após sincronização manual",
+            refreshError,
+          );
+        }
+
+        toast({
+          title: "Sincronização solicitada",
+          description:
+            "Estamos consultando a Judit para atualizar os dados deste processo.",
+        });
+      } catch (error) {
+        console.error(error);
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Não foi possível acionar a sincronização manual.";
+        setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: message }));
+        toast({
+          title: "Erro ao sincronizar processo",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setSyncingProcessIds((prev) => prev.filter((id) => id !== processoToSync.id));
+      }
+    },
+    [loadProcessos, toast],
+  );
+
   const handleViewProcessDetails = useCallback(
     (processoToView: Processo) => {
       const clienteId = processoToView.cliente?.id ?? null;
@@ -1307,6 +1946,10 @@ export default function Processos() {
         processo.advogados.map((adv) => adv.nome).join(" "),
         processo.proposta?.label,
         processo.proposta?.solicitante ?? null,
+        processo.trackingSummary?.status ?? null,
+        processo.trackingSummary?.phase ?? null,
+        processo.trackingSummary?.lastStep?.label ?? null,
+        processo.trackingSummary?.tags.join(" ") ?? null,
       ];
 
       const hasTextMatch = searchPool.some((value) => {
@@ -1503,14 +2146,26 @@ export default function Processos() {
             const clienteDocumento =
               processo.cliente?.documento?.trim() || "Documento não informado";
             const clientePapel = processo.cliente?.papel?.trim();
-            const ultimaAtualizacaoLabel =
-              processo.ultimaSincronizacao
+            const trackingUpdatedAt = processo.trackingSummary?.updatedAt ?? null;
+            const ultimaAtualizacaoLabel = trackingUpdatedAt
+              ? formatDateTimeToPtBR(trackingUpdatedAt)
+              : processo.ultimaSincronizacao
                 ? formatDateTimeToPtBR(processo.ultimaSincronizacao)
                 : "Sem registros recentes";
             const movimentacoesLabel =
               processo.movimentacoesCount === 1
                 ? "1 movimentação registrada"
                 : `${processo.movimentacoesCount} movimentações registradas`;
+            const trackingPhase = processo.trackingSummary?.phase?.trim() || null;
+            const trackingTags = processo.trackingSummary?.tags ?? [];
+            const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
+            const trackingLastStepLabel =
+              trackingLastStep?.label ?? trackingLastStep?.name ?? null;
+            const trackingLastStepDescription = trackingLastStep?.description ?? null;
+            const trackingLastStepUpdatedAt = trackingLastStep?.updatedAt ?? null;
+            const trackingIncrements = processo.trackingSummary?.increments ?? [];
+            const isSyncing = syncingProcessIds.includes(processo.id);
+            const syncError = syncErrors[processo.id] ?? null;
 
             return (
               <AccordionItem
@@ -1529,34 +2184,76 @@ export default function Processos() {
                           {processo.cliente.nome} · {processo.classeJudicial}
                         </CardDescription>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClassName(processo.status)}`}
-                        >
-                          {processo.status}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${getTipoBadgeClassName(processo.tipo)}`}
-                        >
-                          {processo.tipo}
-                        </Badge>
-                    </div>
-                    <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-primary" />
-                        Distribuído em {processo.dataDistribuicao}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-primary" />
-                        Última atualização: {ultimaAtualizacaoLabel}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5 text-primary" />
-                        {movimentacoesLabel}
-                      </span>
-                    </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClassName(processo.status)}`}
+                          >
+                            {processo.status}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${getTipoBadgeClassName(processo.tipo)}`}
+                          >
+                            {processo.tipo}
+                          </Badge>
+                          {trackingPhase ? (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full border-purple-200 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-700"
+                            >
+                              Fase: {trackingPhase}
+                            </Badge>
+                          ) : null}
+                          {trackingTags.map((tag, index) => (
+                            <Badge
+                              key={`${processo.id}-tag-${index}-${tag}`}
+                              variant="outline"
+                              className="rounded-full border-primary/30 bg-primary/5 px-3 py-1 text-xs font-medium text-primary"
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-primary" />
+                          Distribuído em {processo.dataDistribuicao}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          Última atualização: {ultimaAtualizacaoLabel}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <FileText className="h-3.5 w-3.5 text-primary" />
+                          {movimentacoesLabel}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <ChevronsUpDown className="h-3.5 w-3.5 text-primary" />
+                          {trackingLastStepLabel ? (
+                            trackingLastStepDescription || trackingLastStepUpdatedAt ? (
+                              <Tooltip>
+                                <TooltipTrigger className="text-left">Etapa atual: {trackingLastStepLabel}</TooltipTrigger>
+                                <TooltipContent className="max-w-xs space-y-1">
+                                  {trackingLastStepDescription ? (
+                                    <p className="text-xs text-muted-foreground">{trackingLastStepDescription}</p>
+                                  ) : null}
+                                  {trackingLastStepUpdatedAt ? (
+                                    <p className="text-xs text-muted-foreground">
+                                      Atualizado em {formatDateTimeToPtBR(trackingLastStepUpdatedAt)}
+                                    </p>
+                                  ) : null}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <>Etapa atual: {trackingLastStepLabel}</>
+                            )
+                          ) : (
+                            <>Etapa atual: Não informada</>
+                          )}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </AccordionTrigger>
@@ -1675,7 +2372,254 @@ export default function Processos() {
                           </Badge>
                         </div>
                       </div>
+                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Última solicitação Judit
+                        </p>
+                        <div className="mt-3 space-y-1 text-sm text-foreground">
+                          {processo.juditLastRequest ? (
+                            <>
+                              <p className="font-medium text-foreground">
+                                #{processo.juditLastRequest.requestId} · {processo.juditLastRequest.status}
+                              </p>
+                              {processo.juditLastRequest.updatedAt ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Atualizado em {formatDateTimeToPtBR(processo.juditLastRequest.updatedAt)}
+                                </p>
+                              ) : null}
+                              <p className="text-xs text-muted-foreground">
+                                Origem: {processo.juditLastRequest.source}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Nenhuma solicitação registrada até o momento.
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     </div>
+                    {processo.responseData ? (
+                      <div className="space-y-4">
+                        {processo.responseData.cover ? (
+                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Capa do processo
+                            </p>
+                            <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                              {Object.entries(processo.responseData.cover).map(([key, value]) => (
+                                <div key={`${processo.id}-cover-${key}`} className="space-y-1">
+                                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {formatResponseKey(key)}
+                                  </dt>
+                                  <dd className="text-sm text-foreground break-words">
+                                    {formatResponseValue(value)}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
+                        ) : null}
+                        {processo.responseData.partes.length > 0 ? (
+                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Partes identificadas
+                            </p>
+                            <div className="mt-3 space-y-3">
+                              {processo.responseData.partes.map((parte, index) => {
+                                const parteNome =
+                                  parseOptionalString(parte.nome) ??
+                                  parseOptionalString(parte.name) ??
+                                  parseOptionalString(parte.parte) ??
+                                  `Parte ${index + 1}`;
+                                const ignoredKeys = new Set([
+                                  "nome",
+                                  "name",
+                                  "parte",
+                                  "id",
+                                ]);
+                                return (
+                                  <div
+                                    key={`${processo.id}-parte-${index}-${parteNome}`}
+                                    className="rounded-md border border-border/40 bg-background/60 p-3"
+                                  >
+                                    <p className="text-sm font-medium text-foreground">{parteNome}</p>
+                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                                      {Object.entries(parte)
+                                        .filter(([key]) => !ignoredKeys.has(key))
+                                        .map(([key, value]) => (
+                                          <div key={`${processo.id}-parte-${index}-${key}`} className="space-y-1">
+                                            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                              {formatResponseKey(key)}
+                                            </dt>
+                                            <dd className="text-xs text-foreground break-words">
+                                              {formatResponseValue(value)}
+                                            </dd>
+                                          </div>
+                                        ))}
+                                    </dl>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                        {processo.responseData.movimentacoes.length > 0 ? (
+                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Movimentações recentes (Judit)
+                            </p>
+                            <div className="mt-3 space-y-3">
+                              {processo.responseData.movimentacoes.map((movimentacao, index) => {
+                                const descricao =
+                                  parseOptionalString(movimentacao.descricao) ??
+                                  parseOptionalString(movimentacao.description) ??
+                                  parseOptionalString(movimentacao.titulo) ??
+                                  parseOptionalString(movimentacao.title) ??
+                                  `Movimentação ${index + 1}`;
+                                const dataMovimentacao =
+                                  parseOptionalString(movimentacao.data) ??
+                                  parseOptionalString(movimentacao.date) ??
+                                  parseOptionalString(movimentacao.timestamp);
+                                return (
+                                  <div
+                                    key={`${processo.id}-mov-${index}-${descricao}`}
+                                    className="rounded-md border border-border/40 bg-background/60 p-3"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-sm font-medium text-foreground">{descricao}</p>
+                                      {dataMovimentacao ? (
+                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                          {formatDateTimeToPtBR(dataMovimentacao)}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                                      {Object.entries(movimentacao)
+                                        .filter(([key]) => !["descricao", "description", "titulo", "title", "data", "date", "timestamp"].includes(key))
+                                        .map(([key, value]) => (
+                                          <div key={`${processo.id}-mov-${index}-${key}`} className="space-y-1">
+                                            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                              {formatResponseKey(key)}
+                                            </dt>
+                                            <dd className="text-xs text-foreground break-words">
+                                              {formatResponseValue(value)}
+                                            </dd>
+                                          </div>
+                                        ))}
+                                    </dl>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                        {processo.responseData.anexos.length > 0 ? (
+                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Anexos recebidos
+                            </p>
+                            <div className="mt-3 space-y-3">
+                              {processo.responseData.anexos.map((anexo, index) => {
+                                const titulo =
+                                  parseOptionalString(anexo.titulo) ??
+                                  parseOptionalString(anexo.title) ??
+                                  parseOptionalString(anexo.nome) ??
+                                  `Anexo ${index + 1}`;
+                                const href =
+                                  parseOptionalString(anexo.url) ??
+                                  parseOptionalString(anexo.href) ??
+                                  parseOptionalString(anexo.link);
+                                return (
+                                  <div
+                                    key={`${processo.id}-anexo-${index}-${titulo}`}
+                                    className="rounded-md border border-border/40 bg-background/60 p-3"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-sm font-medium text-foreground">{titulo}</p>
+                                      {href ? (
+                                        <a
+                                          href={href}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-xs font-medium text-primary hover:underline"
+                                        >
+                                          Abrir documento
+                                        </a>
+                                      ) : null}
+                                    </div>
+                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                                      {Object.entries(anexo)
+                                        .filter(([key]) => !["titulo", "title", "nome", "url", "href", "link"].includes(key))
+                                        .map(([key, value]) => (
+                                          <div key={`${processo.id}-anexo-${index}-${key}`} className="space-y-1">
+                                            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                              {formatResponseKey(key)}
+                                            </dt>
+                                            <dd className="text-xs text-foreground break-words">
+                                              {formatResponseValue(value)}
+                                            </dd>
+                                          </div>
+                                        ))}
+                                    </dl>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                        {processo.responseData.metadata ? (
+                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Metadados adicionais
+                            </p>
+                            <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                              {Object.entries(processo.responseData.metadata).map(([key, value]) => (
+                                <div key={`${processo.id}-metadata-${key}`} className="space-y-1">
+                                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                    {formatResponseKey(key)}
+                                  </dt>
+                                  <dd className="text-xs text-foreground break-words">
+                                    {formatResponseValue(value)}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {trackingIncrements.length > 0 ? (
+                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Incrementos recentes recebidos
+                        </p>
+                        <ul className="mt-3 space-y-3 text-sm text-foreground">
+                          {trackingIncrements.map((increment, index) => (
+                            <li
+                              key={`${processo.id}-increment-${increment.id}-${index}`}
+                              className="space-y-1"
+                            >
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                {increment.type ? (
+                                  <span className="font-medium text-foreground">{increment.type}</span>
+                                ) : null}
+                                {increment.occurredAt ? (
+                                  <span>{formatDateTimeToPtBR(increment.occurredAt)}</span>
+                                ) : null}
+                              </div>
+                              <p className="text-sm text-foreground">
+                                {increment.description
+                                  ? increment.description
+                                  : typeof increment.raw === "string"
+                                    ? increment.raw
+                                    : "Atualização registrada pelo webhook."}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                     <div className="grid gap-4 lg:grid-cols-[1.5fr,1fr]">
                       <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1710,6 +2654,24 @@ export default function Processos() {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => handleManualSync(processo)}
+                          disabled={isSyncing}
+                        >
+                          {isSyncing ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Sincronizando...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Sincronizar
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => handleViewProcessDetails(processo)}
                         >
                           <Eye className="mr-2 h-4 w-4" />
@@ -1717,6 +2679,9 @@ export default function Processos() {
                         </Button>
                       </div>
                     </div>
+                    {syncError ? (
+                      <p className="text-xs text-destructive">{syncError}</p>
+                    ) : null}
                   </div>
                 </AccordionContent>
               </AccordionItem>
