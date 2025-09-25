@@ -9,6 +9,7 @@ type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
 
 let listFlows: typeof import('../src/controllers/financialController')['listFlows'];
+let settleFlow: typeof import('../src/controllers/financialController')['settleFlow'];
 let __internal: typeof import('../src/controllers/financialController')['__internal'];
 
 const financialFlowColumnsResponse: QueryResponse = {
@@ -64,7 +65,7 @@ const financialFlowColumnsWithoutFornecedorResponse: QueryResponse = {
 
 
 test.before(async () => {
-  ({ listFlows, __internal } = await import('../src/controllers/financialController'));
+  ({ listFlows, settleFlow, __internal } = await import('../src/controllers/financialController'));
 });
 
 test.afterEach(() => {
@@ -835,4 +836,145 @@ test('listFlows retries without opportunity tables when privileges are missing',
   assert.deepEqual(calls[5]?.values, [DEFAULT_EMPRESA_ID]);
 
 
+});
+
+test('settleFlow marks opportunity installment as paid', async () => {
+  const installmentId = 45;
+  const paymentDate = '2024-05-15';
+  const updatedRow = {
+    id: installmentId,
+    oportunidade_id: 90,
+    numero_parcela: 2,
+    valor: 150,
+    valor_pago: 150,
+    status: 'quitado',
+    data_prevista: '2024-05-10',
+    quitado_em: new Date('2024-05-15T00:00:00.000Z'),
+    faturamento_id: null,
+    criado_em: new Date('2024-01-01T00:00:00.000Z'),
+    atualizado_em: new Date('2024-05-15T12:00:00.000Z'),
+    idempresa: DEFAULT_EMPRESA_ID,
+  };
+
+  const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
+    {
+      rows: [
+        {
+          id: installmentId,
+          valor: '150.00',
+          status: 'pendente',
+          idempresa: DEFAULT_EMPRESA_ID,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [updatedRow], rowCount: 1 },
+  ]);
+
+  const req = {
+    params: { id: `-${installmentId}` },
+    body: { pagamentoData: paymentDate },
+    auth: { userId: 7 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await settleFlow(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { parcela: updatedRow });
+
+  assert.equal(calls.length, 3);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.deepEqual(calls[0]?.values, [7]);
+  assert.match(calls[1]?.text ?? '', /FROM public\.oportunidade_parcelas/);
+  assert.deepEqual(calls[1]?.values, [installmentId]);
+  assert.match(calls[2]?.text ?? '', /UPDATE public\.oportunidade_parcelas/);
+  assert.equal(calls[2]?.values?.[0], installmentId);
+  assert.equal(calls[2]?.values?.[1], 150);
+  assert.ok(calls[2]?.values?.[2] instanceof Date);
+  assert.equal((calls[2]?.values?.[2] as Date).toISOString().slice(0, 10), paymentDate);
+});
+
+test('settleFlow rejects already paid opportunity installments', async () => {
+  const installmentId = 51;
+
+  const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
+    {
+      rows: [
+        {
+          id: installmentId,
+          valor: 80,
+          status: 'quitado',
+          idempresa: DEFAULT_EMPRESA_ID,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    params: { id: `-${installmentId}` },
+    body: { pagamentoData: '2024-03-01' },
+    auth: { userId: 9 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await settleFlow(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, { error: 'A parcela já está quitada.' });
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.match(calls[1]?.text ?? '', /FROM public\.oportunidade_parcelas/);
+});
+
+test('settleFlow enforces company ownership for opportunity installments', async () => {
+  const installmentId = 61;
+
+  const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
+    {
+      rows: [
+        {
+          id: installmentId,
+          valor: 120,
+          status: 'pendente',
+          idempresa: 999,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    params: { id: `-${installmentId}` },
+    body: { pagamentoData: '2024-02-10' },
+    auth: { userId: 4 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await settleFlow(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: 'Parcela indisponível para este usuário.' });
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.match(calls[1]?.text ?? '', /FROM public\.oportunidade_parcelas/);
 });

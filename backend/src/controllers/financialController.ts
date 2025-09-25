@@ -23,6 +23,7 @@ const getAuthenticatedUser = (
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const INTEGER_ID_REGEX = /^-?\d+$/;
+const OPPORTUNITY_INSTALLMENT_PAID_STATUSES = new Set(['quitado', 'quitada', 'pago', 'paga']);
 
 const normalizeFlowId = (value: unknown): string | number | null => {
   if (typeof value === 'number') {
@@ -1020,8 +1021,199 @@ export const deleteFlow = async (req: Request, res: Response) => {
   }
 };
 
+const parseOpportunityInstallmentId = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value >= 0) {
+      return null;
+    }
+
+    return Math.abs(value);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || !INTEGER_ID_REGEX.test(trimmed)) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed) || parsed >= 0) {
+      return null;
+    }
+
+    return Math.abs(parsed);
+  }
+
+  return null;
+};
+
+const parseDateOnlyInput = (value: unknown): Date | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const candidate = /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00:00` : trimmed;
+  const parsed = new Date(candidate);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const normalizeEmpresaIdValue = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isInteger(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const isOpportunityInstallmentPaid = (status: unknown): boolean => {
+  if (typeof status !== 'string') {
+    return false;
+  }
+
+  const normalized = status.trim().toLowerCase();
+  return normalized.length > 0 && OPPORTUNITY_INSTALLMENT_PAID_STATUSES.has(normalized);
+};
+
+const settleOpportunityInstallment = async (
+  req: Request,
+  res: Response,
+  installmentId: number,
+  pagamentoData: unknown,
+): Promise<void> => {
+  const auth = getAuthenticatedUser(req, res);
+  if (!auth) {
+    return;
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return;
+  }
+
+  const { empresaId } = empresaLookup;
+
+  if (empresaId === null) {
+    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    return;
+  }
+
+  const paymentDate = (() => {
+    if (pagamentoData === undefined || pagamentoData === null) {
+      return new Date();
+    }
+
+    const parsed = parseDateOnlyInput(pagamentoData);
+    if (!parsed) {
+      res.status(400).json({ error: 'Data de pagamento inválida.' });
+      return null;
+    }
+
+    return parsed;
+  })();
+
+  if (!paymentDate) {
+    return;
+  }
+
+  try {
+    const installmentResult = await pool.query(
+      `SELECT id, valor, status, idempresa
+         FROM public.oportunidade_parcelas
+        WHERE id = $1`,
+      [installmentId],
+    );
+
+    if (installmentResult.rowCount === 0) {
+      res.status(404).json({ error: 'Parcela de oportunidade não encontrada.' });
+      return;
+    }
+
+    const installmentRow = installmentResult.rows[0] as {
+      valor?: unknown;
+      status?: unknown;
+      idempresa?: unknown;
+    };
+
+    const installmentEmpresaId = normalizeEmpresaIdValue(installmentRow.idempresa);
+
+    if (installmentEmpresaId === null || installmentEmpresaId !== empresaId) {
+      res.status(403).json({ error: 'Parcela indisponível para este usuário.' });
+      return;
+    }
+
+    if (isOpportunityInstallmentPaid(installmentRow.status)) {
+      res.status(409).json({ error: 'A parcela já está quitada.' });
+      return;
+    }
+
+    const rawValor = installmentRow.valor;
+    const valorNumero =
+      typeof rawValor === 'number'
+        ? rawValor
+        : typeof rawValor === 'string'
+          ? Number.parseFloat(rawValor)
+          : Number(rawValor ?? 0);
+
+    const valorPago = Number.isFinite(valorNumero) ? Number(valorNumero) : 0;
+
+    const updateResult = await pool.query(
+      `UPDATE public.oportunidade_parcelas
+          SET status = 'quitado',
+              valor_pago = $2,
+              quitado_em = $3,
+              atualizado_em = NOW()
+        WHERE id = $1
+        RETURNING id, oportunidade_id, numero_parcela, valor, valor_pago, status, data_prevista, quitado_em, faturamento_id, criado_em, atualizado_em, idempresa`,
+      [installmentId, valorPago, paymentDate],
+    );
+
+    if (updateResult.rowCount === 0) {
+      res.status(404).json({ error: 'Parcela de oportunidade não encontrada.' });
+      return;
+    }
+
+    res.json({ parcela: updateResult.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const settleFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const opportunityInstallmentId = parseOpportunityInstallmentId(id);
+
+  if (opportunityInstallmentId !== null) {
+    await settleOpportunityInstallment(req, res, opportunityInstallmentId, req.body?.pagamentoData);
+    return;
+  }
+
   const flowId = normalizeFlowId(id);
   if (flowId === null) {
     return res.status(400).json({ error: 'Invalid flow id' });
