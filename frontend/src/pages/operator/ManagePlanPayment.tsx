@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   CheckCircle2,
   CreditCard,
+  Copy,
+  Loader2,
   QrCode,
   Receipt,
   ShieldCheck,
@@ -27,6 +29,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useToast } from "@/components/ui/use-toast";
+import { createPlanPayment, PlanPaymentMethod, PlanPaymentResult } from "@/features/plans/api";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -65,12 +69,29 @@ const getFormattedPrice = (display: string | null, numeric: number | null) => {
   return null;
 };
 
+const sanitizeDigits = (value: string): string => value.replace(/\D+/g, "");
+
+const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD", string> = {
+  PIX: "PIX empresarial",
+  BOLETO: "Boleto bancário",
+  CREDIT_CARD: "Cartão corporativo",
+};
+
 const ManagePlanPayment = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const state = (location.state ?? {}) as SelectedPlanState;
   const selectedPlan = state.plan ?? null;
   const pricingMode: PricingMode = state.pricingMode ?? "mensal";
+  const { toast } = useToast();
+  const [paymentMethod, setPaymentMethod] = useState<PlanPaymentMethod>("pix");
+  const [companyName, setCompanyName] = useState("");
+  const [companyDocument, setCompanyDocument] = useState("");
+  const [billingEmail, setBillingEmail] = useState("");
+  const [billingNotes, setBillingNotes] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [paymentResult, setPaymentResult] = useState<PlanPaymentResult | null>(null);
 
   const formattedPrice = useMemo(() => {
     if (!selectedPlan) {
@@ -95,6 +116,170 @@ const ManagePlanPayment = () => {
   const cadenceLabel = pricingMode === "anual" ? "ano" : "mês";
   const alternateCadence = pricingMode === "anual" ? "mês" : "ano";
   const features = selectedPlan?.recursos ?? [];
+
+  const handlePaymentMethodChange = useCallback((value: string) => {
+    if (value === "pix" || value === "boleto" || value === "cartao") {
+      setPaymentMethod(value as PlanPaymentMethod);
+      setError(null);
+    }
+  }, []);
+
+  const pixPayload = paymentResult?.charge.pixPayload ?? null;
+  const pixQrCodeRaw = paymentResult?.charge.pixQrCode ?? null;
+  const boletoLink = paymentResult?.charge.boletoUrl ?? paymentResult?.charge.invoiceUrl ?? null;
+
+  const pixImageSrc = useMemo(() => {
+    if (!pixQrCodeRaw) {
+      return null;
+    }
+    return pixQrCodeRaw.startsWith("data:image") ? pixQrCodeRaw : `data:image/png;base64,${pixQrCodeRaw}`;
+  }, [pixQrCodeRaw]);
+
+  const chargeAmountLabel = useMemo(() => {
+    if (paymentResult?.charge.amount && Number.isFinite(paymentResult.charge.amount)) {
+      return currencyFormatter.format(paymentResult.charge.amount);
+    }
+    return formattedPrice;
+  }, [formattedPrice, paymentResult?.charge.amount]);
+
+  const dueDateLabel = useMemo(() => {
+    if (!paymentResult?.charge.dueDate) {
+      return null;
+    }
+    const parsed = new Date(paymentResult.charge.dueDate);
+    if (Number.isNaN(parsed.getTime())) {
+      return paymentResult.charge.dueDate;
+    }
+    return new Intl.DateTimeFormat("pt-BR").format(parsed);
+  }, [paymentResult?.charge.dueDate]);
+
+  const handleCopy = useCallback(
+    async (value: string | null) => {
+      if (!value) {
+        toast({
+          title: "Conteúdo indisponível",
+          description: "O Asaas ainda não retornou o código para copiar.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        toast({
+          title: "Copiar não suportado",
+          description: "Seu navegador não permite copiar automaticamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(value);
+        toast({
+          title: "Conteúdo copiado",
+          description: "Cole o código no aplicativo do seu banco para pagar.",
+        });
+      } catch (copyError) {
+        toast({
+          title: "Erro ao copiar",
+          description:
+            copyError instanceof Error ? copyError.message : "Não foi possível copiar o conteúdo para a área de transferência.",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast],
+  );
+
+  const handleOpenBoleto = useCallback(() => {
+    if (!boletoLink) {
+      toast({
+        title: "Boleto indisponível",
+        description: "O Asaas ainda não disponibilizou o boleto para download.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      window.open(boletoLink, "_blank", "noopener,noreferrer");
+    }
+  }, [boletoLink, toast]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!selectedPlan) {
+      return;
+    }
+
+    if (paymentMethod === "cartao") {
+      toast({
+        title: "Cartão corporativo em breve",
+        description: "Por enquanto, utilize PIX ou boleto para concluir a alteração de plano.",
+      });
+      return;
+    }
+
+    if (!companyName.trim() || !companyDocument.trim() || !billingEmail.trim()) {
+      const message = "Preencha razão social, documento e e-mail para gerar a cobrança.";
+      setError(message);
+      toast({
+        title: "Dados obrigatórios",
+        description: message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const result = await createPlanPayment({
+        planId: selectedPlan.id,
+        pricingMode,
+        paymentMethod,
+        billing: {
+          companyName: companyName.trim(),
+          document: sanitizeDigits(companyDocument),
+          email: billingEmail.trim(),
+          notes: billingNotes.trim() ? billingNotes.trim() : undefined,
+        },
+      });
+
+      setPaymentResult(result);
+      toast({
+        title: "Cobrança gerada com sucesso",
+        description: "Utilize as informações abaixo para concluir o pagamento do plano.",
+      });
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error ? submitError.message : "Não foi possível criar a cobrança no Asaas.";
+      setError(message);
+      toast({
+        title: "Falha ao gerar cobrança",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    billingEmail,
+    billingNotes,
+    companyDocument,
+    companyName,
+    paymentMethod,
+    pricingMode,
+    selectedPlan,
+    toast,
+  ]);
+
+  const isConfirmDisabled =
+    paymentMethod === "cartao" ||
+    isSubmitting ||
+    !companyName.trim() ||
+    !companyDocument.trim() ||
+    !billingEmail.trim();
 
   if (!selectedPlan) {
     return (
@@ -131,15 +316,22 @@ const ManagePlanPayment = () => {
         <Button variant="ghost" className="w-fit rounded-full" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Voltar
         </Button>
-        <div className="space-y-1 text-left sm:text-right">
-          <h1 className="text-3xl font-bold">Gerenciar pagamento do plano</h1>
-          <p className="text-muted-foreground">
-            Revise os detalhes do plano escolhido e informe os dados de cobrança para concluir a troca.
-          </p>
-        </div>
+      <div className="space-y-1 text-left sm:text-right">
+        <h1 className="text-3xl font-bold">Gerenciar pagamento do plano</h1>
+        <p className="text-muted-foreground">
+          Revise os detalhes do plano escolhido e informe os dados de cobrança para concluir a troca.
+        </p>
       </div>
+    </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+    {error && (
+      <Alert variant="destructive">
+        <AlertTitle>Não foi possível gerar a cobrança</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )}
+
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-6">
           <Card className="rounded-3xl border border-primary/20 bg-primary/5">
             <CardHeader className="flex flex-col gap-4">
@@ -204,13 +396,23 @@ const ManagePlanPayment = () => {
               <CardDescription>Escolha o método que será utilizado para efetivar a troca de plano.</CardDescription>
             </CardHeader>
             <CardContent>
-              <RadioGroup defaultValue="cartao" className="space-y-3">
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/80 p-4">
+              <RadioGroup
+                value={paymentMethod}
+                onValueChange={handlePaymentMethodChange}
+                className="space-y-3"
+              >
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/60 p-4 opacity-60">
                   <div className="flex items-center gap-3">
-                    <RadioGroupItem id="payment-cartao" value="cartao" />
+                    <RadioGroupItem id="payment-cartao" value="cartao" disabled />
                     <div>
-                      <Label htmlFor="payment-cartao" className="font-medium">
+                      <Label
+                        htmlFor="payment-cartao"
+                        className="font-medium flex items-center gap-2 text-muted-foreground"
+                      >
                         Cartão corporativo
+                        <Badge variant="outline" className="text-xs uppercase tracking-wide">
+                          Em breve
+                        </Badge>
                       </Label>
                       <p className="text-sm text-muted-foreground">
                         Pagamento imediato e renovação automática.
@@ -220,7 +422,13 @@ const ManagePlanPayment = () => {
                   <CreditCard className="h-5 w-5 text-muted-foreground" />
                 </div>
 
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/80 p-4">
+                <div
+                  className={`flex items-center justify-between gap-3 rounded-2xl border p-4 transition ${
+                    paymentMethod === "boleto"
+                      ? "border-primary/60 bg-primary/5"
+                      : "border-border/60 bg-background/80"
+                  }`}
+                >
                   <div className="flex items-center gap-3">
                     <RadioGroupItem id="payment-boleto" value="boleto" />
                     <div>
@@ -235,7 +443,13 @@ const ManagePlanPayment = () => {
                   <Receipt className="h-5 w-5 text-muted-foreground" />
                 </div>
 
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/80 p-4">
+                <div
+                  className={`flex items-center justify-between gap-3 rounded-2xl border p-4 transition ${
+                    paymentMethod === "pix"
+                      ? "border-primary/60 bg-primary/5"
+                      : "border-border/60 bg-background/80"
+                  }`}
+                >
                   <div className="flex items-center gap-3">
                     <RadioGroupItem id="payment-pix" value="pix" />
                     <div>
@@ -262,16 +476,32 @@ const ManagePlanPayment = () => {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="company-name">Razão social</Label>
-                  <Input id="company-name" placeholder="Nome jurídico da empresa" />
+                  <Input
+                    id="company-name"
+                    placeholder="Nome jurídico da empresa"
+                    value={companyName}
+                    onChange={(event) => setCompanyName(event.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="company-doc">CNPJ</Label>
-                  <Input id="company-doc" placeholder="00.000.000/0000-00" />
+                  <Input
+                    id="company-doc"
+                    placeholder="00.000.000/0000-00"
+                    value={companyDocument}
+                    onChange={(event) => setCompanyDocument(event.target.value)}
+                  />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="billing-email">E-mail para cobrança</Label>
-                <Input id="billing-email" type="email" placeholder="financeiro@suaempresa.com" />
+                <Input
+                  id="billing-email"
+                  type="email"
+                  placeholder="financeiro@suaempresa.com"
+                  value={billingEmail}
+                  onChange={(event) => setBillingEmail(event.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="billing-notes">Observações adicionais</Label>
@@ -279,6 +509,8 @@ const ManagePlanPayment = () => {
                   id="billing-notes"
                   placeholder="Informe instruções de faturamento ou referências internas."
                   rows={4}
+                  value={billingNotes}
+                  onChange={(event) => setBillingNotes(event.target.value)}
                 />
               </div>
             </CardContent>
@@ -331,18 +563,119 @@ const ManagePlanPayment = () => {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-2">
-              <Button size="lg" className="w-full rounded-full">
-                Confirmar alteração de plano
+              <Button
+                size="lg"
+                className="w-full rounded-full"
+                onClick={handleSubmit}
+                disabled={isConfirmDisabled}
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processando…
+                  </span>
+                ) : (
+                  "Confirmar alteração de plano"
+                )}
               </Button>
               <Button
                 variant="outline"
                 className="w-full rounded-full"
                 onClick={() => navigate(routes.meuPlano)}
+                disabled={isSubmitting}
               >
                 Cancelar e voltar
               </Button>
             </CardFooter>
           </Card>
+
+          {paymentResult && (
+            <Card className="rounded-3xl border border-primary/30 bg-primary/5">
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle>Instruções de pagamento</CardTitle>
+                  {paymentResult.charge.status && (
+                    <Badge className="rounded-full border border-primary/40 bg-white/90 text-primary">
+                      {paymentResult.charge.status}
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription>
+                  Utilize as informações abaixo para concluir o pagamento via {PAYMENT_METHOD_LABELS[paymentResult.paymentMethod]}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="space-y-2 rounded-2xl border border-primary/20 bg-white/80 p-4 text-sm text-slate-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Método selecionado</span>
+                    <span className="font-semibold text-primary">
+                      {PAYMENT_METHOD_LABELS[paymentResult.paymentMethod]}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Valor da cobrança</span>
+                    <span className="font-semibold text-primary">{chargeAmountLabel ?? "—"}</span>
+                  </div>
+                  {dueDateLabel && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Vencimento</span>
+                      <span className="font-medium text-foreground">{dueDateLabel}</span>
+                    </div>
+                  )}
+                </div>
+
+                {paymentResult.paymentMethod === "PIX" ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-primary">Código PIX copia e cola</h3>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => handleCopy(pixPayload)}
+                      >
+                        <Copy className="h-4 w-4" /> Copiar código
+                      </Button>
+                    </div>
+                    <div className="rounded-2xl border border-primary/20 bg-white/90 p-3 text-sm text-muted-foreground break-all">
+                      {pixPayload ?? "O Asaas ainda está gerando o código PIX."}
+                    </div>
+                    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-primary/30 bg-white/80 p-4">
+                      {pixImageSrc ? (
+                        <img src={pixImageSrc} alt="QR Code PIX" className="h-40 w-40" />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">QR Code ainda não disponível.</p>
+                      )}
+                      <p className="text-xs text-muted-foreground text-center">
+                        Escaneie o código ou utilize o copiar e colar para realizar o pagamento.
+                      </p>
+                    </div>
+                  </div>
+                ) : paymentResult.paymentMethod === "BOLETO" ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Enviamos o boleto para {billingEmail || "o e-mail cadastrado"}. Você também pode abrir o documento abaixo.
+                    </p>
+                    <Button type="button" className="w-full rounded-full" onClick={handleOpenBoleto}>
+                      <Receipt className="mr-2 h-4 w-4" /> Abrir boleto
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Estamos preparando a integração com cartão de crédito. Entre em contato com o suporte para processar este pagamento.
+                  </p>
+                )}
+
+                <Alert className="border-primary/30 bg-primary/5 text-primary">
+                  <AlertTitle>Após o pagamento</AlertTitle>
+                  <AlertDescription>
+                    Assim que o Asaas confirmar o recebimento nós atualizaremos automaticamente o seu plano e enviaremos o comprovante para {billingEmail || "o e-mail cadastrado"}.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="rounded-3xl border border-primary/20 bg-primary/5">
             <CardHeader>

@@ -8,6 +8,7 @@ import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
 import escritorioRoutes from './routes/escritorioRoutes';
 import perfilRoutes from './routes/perfilRoutes';
 import planoRoutes, { publicPlanoRoutes } from './routes/planoRoutes';
+import planPaymentRoutes from './routes/planPaymentRoutes';
 import subscriptionRoutes from './routes/subscriptionRoutes';
 import situacaoClienteRoutes from './routes/situacaoClienteRoutes';
 import categoriaRoutes from './routes/categoriaRoutes';
@@ -212,6 +213,7 @@ registerModuleRoutes(
 );
 registerModuleRoutes(['configuracoes', 'dashboard'], planoRoutes);
 registerModuleRoutes(['configuracoes', 'dashboard'], subscriptionRoutes);
+registerModuleRoutes('meu-plano', planPaymentRoutes);
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-situacao-processo'],
   situacaoProcessoRoutes

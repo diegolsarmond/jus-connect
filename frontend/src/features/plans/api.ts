@@ -117,3 +117,191 @@ export const getComparableMonthlyPrice = (plan: PlanOption): number | null => {
 
   return null;
 };
+
+export type PlanPaymentMethod = "pix" | "boleto" | "cartao";
+
+export type PlanPaymentPayload = {
+  planId: number;
+  pricingMode: "mensal" | "anual";
+  paymentMethod: PlanPaymentMethod;
+  billing: {
+    companyName: string;
+    document: string;
+    email: string;
+    notes?: string;
+  };
+};
+
+export type PlanPaymentCharge = {
+  id: number | null;
+  financialFlowId: number | null;
+  asaasChargeId: string | null;
+  billingType: "PIX" | "BOLETO" | "CREDIT_CARD";
+  status: string | null;
+  dueDate: string | null;
+  amount: number | null;
+  invoiceUrl: string | null;
+  boletoUrl: string | null;
+  pixPayload: string | null;
+  pixQrCode: string | null;
+  cardLast4: string | null;
+  cardBrand: string | null;
+};
+
+export type PlanPaymentFlow = {
+  id: number | null;
+  description: string | null;
+  value: number | null;
+  dueDate: string | null;
+  status: string | null;
+};
+
+export type PlanPaymentResult = {
+  plan: {
+    id: number | null;
+    nome: string | null;
+    pricingMode: "mensal" | "anual";
+    price: number | null;
+  };
+  paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD";
+  charge: PlanPaymentCharge;
+  flow: PlanPaymentFlow;
+};
+
+const normalizeString = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeCharge = (payload: unknown): PlanPaymentCharge => {
+  if (!payload || typeof payload !== "object") {
+    return {
+      id: null,
+      financialFlowId: null,
+      asaasChargeId: null,
+      billingType: "PIX",
+      status: null,
+      dueDate: null,
+      amount: null,
+      invoiceUrl: null,
+      boletoUrl: null,
+      pixPayload: null,
+      pixQrCode: null,
+      cardLast4: null,
+      cardBrand: null,
+    } satisfies PlanPaymentCharge;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const amount = toNumber(record.value ?? record.amount ?? record.valor);
+
+  const billingTypeRaw = normalizeString(record.billingType);
+  const billingType: "PIX" | "BOLETO" | "CREDIT_CARD" =
+    billingTypeRaw === "BOLETO"
+      ? "BOLETO"
+      : billingTypeRaw === "CREDIT_CARD"
+        ? "CREDIT_CARD"
+        : "PIX";
+
+  return {
+    id: toNumber(record.id),
+    financialFlowId: toNumber(record.financialFlowId ?? record.financial_flow_id),
+    asaasChargeId: normalizeString(record.asaasChargeId ?? record.asaas_charge_id),
+    billingType,
+    status: normalizeString(record.status),
+    dueDate: normalizeString(record.dueDate ?? record.due_date),
+    amount,
+    invoiceUrl: normalizeString(record.invoiceUrl ?? record.invoice_url),
+    boletoUrl: normalizeString(record.boletoUrl ?? record.bankSlipUrl ?? record.boleto_url),
+    pixPayload: normalizeString(record.pixPayload ?? record.pix_payload ?? record.pixCopiaECola),
+    pixQrCode: normalizeString(record.pixQrCode ?? record.pix_qr_code ?? record.pixQrCodeImage),
+    cardLast4: normalizeString(record.cardLast4 ?? record.card_last4 ?? record.cardLastDigits),
+    cardBrand: normalizeString(record.cardBrand ?? record.card_brand ?? record.brand),
+  } satisfies PlanPaymentCharge;
+};
+
+const normalizeFlow = (payload: unknown): PlanPaymentFlow => {
+  if (!payload || typeof payload !== "object") {
+    return {
+      id: null,
+      description: null,
+      value: null,
+      dueDate: null,
+      status: null,
+    } satisfies PlanPaymentFlow;
+  }
+
+  const record = payload as Record<string, unknown>;
+  return {
+    id: toNumber(record.id),
+    description: normalizeString(record.descricao ?? record.description),
+    value: toNumber(record.valor ?? record.value),
+    dueDate: normalizeString(record.vencimento ?? record.dueDate ?? record.due_date),
+    status: normalizeString(record.status),
+  } satisfies PlanPaymentFlow;
+};
+
+const normalizePlanInfo = (payload: unknown, fallbackId: number): PlanPaymentResult["plan"] => {
+  if (!payload || typeof payload !== "object") {
+    return {
+      id: fallbackId,
+      nome: null,
+      pricingMode: "mensal",
+      price: null,
+    } satisfies PlanPaymentResult["plan"];
+  }
+
+  const record = payload as Record<string, unknown>;
+  const pricingModeRaw = normalizeString(record.pricingMode ?? record.cadence);
+  const pricingMode: "mensal" | "anual" = pricingModeRaw === "anual" ? "anual" : "mensal";
+
+  return {
+    id: toNumber(record.id) ?? fallbackId,
+    nome: normalizeString(record.nome ?? record.name),
+    pricingMode,
+    price: toNumber(record.price ?? record.valor),
+  } satisfies PlanPaymentResult["plan"];
+};
+
+export async function createPlanPayment(payload: PlanPaymentPayload): Promise<PlanPaymentResult> {
+  const response = await fetch(getApiUrl("plan-payments"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const errorMessage =
+      (data && typeof data === "object" && typeof (data as { error?: unknown }).error === "string"
+        ? ((data as { error?: unknown }).error as string)
+        : null) ?? `Falha ao gerar cobrança (HTTP ${response.status}).`;
+    throw new Error(errorMessage);
+  }
+
+  const payloadRecord = (data ?? {}) as Record<string, unknown>;
+
+  const paymentMethodRaw = normalizeString(payloadRecord.paymentMethod);
+  const paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" =
+    paymentMethodRaw === "BOLETO"
+      ? "BOLETO"
+      : paymentMethodRaw === "CREDIT_CARD"
+        ? "CREDIT_CARD"
+        : "PIX";
+
+  return {
+    plan: normalizePlanInfo(payloadRecord.plan, payload.planId),
+    paymentMethod,
+    charge: normalizeCharge(payloadRecord.charge),
+    flow: normalizeFlow(payloadRecord.flow),
+  } satisfies PlanPaymentResult;
+}
