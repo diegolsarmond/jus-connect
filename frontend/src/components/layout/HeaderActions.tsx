@@ -11,11 +11,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { IntimacaoMenu } from "@/components/notifications/IntimacaoMenu";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { routes } from "@/config/routes";
+import { useQuery } from "@tanstack/react-query";
+import { fetchMeuPerfil } from "@/services/meuPerfil";
 
 const getInitials = (name: string | undefined) => {
   if (!name) {
@@ -41,6 +43,12 @@ export function HeaderActions() {
   const location = useLocation();
 
   const { user, logout } = useAuth();
+  const { data: profile } = useQuery({
+    queryKey: ["meu-perfil", "header"],
+    queryFn: () => fetchMeuPerfil(),
+    enabled: Boolean(user),
+    staleTime: 5 * 60 * 1000,
+  });
   const canAccessConfiguracoes =
     user?.modulos?.some((moduleId) => moduleId === "configuracoes" || moduleId.startsWith("configuracoes-")) ?? false;
 
@@ -65,6 +73,9 @@ export function HeaderActions() {
     navigate(routes.login, { replace: true });
   }, [logout, navigate]);
 
+  const avatarAlt = profile?.name ?? user?.nome_completo ?? "Usuário";
+  const avatarSrc = profile?.avatarUrl?.trim() ? profile.avatarUrl : undefined;
+
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
       <ModeToggle />
@@ -74,16 +85,17 @@ export function HeaderActions() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="flex min-w-0 items-center gap-2 px-2 py-1.5 sm:px-3">
             <Avatar className="h-8 w-8">
+              <AvatarImage src={avatarSrc} alt={avatarAlt} />
               <AvatarFallback className="bg-primary text-primary-foreground">
                 {getInitials(user?.nome_completo)}
               </AvatarFallback>
             </Avatar>
             <div className="hidden min-w-0 text-left sm:block">
               <p className="max-w-[160px] truncate text-sm font-medium">
-                {user?.nome_completo ?? "Usuário"}
+                {profile?.name ?? user?.nome_completo ?? "Usuário"}
               </p>
               <p className="max-w-[160px] truncate text-xs text-muted-foreground">
-                {user?.email ?? "Conta"}
+                {profile?.email ?? user?.email ?? "Conta"}
               </p>
             </div>
           </Button>
