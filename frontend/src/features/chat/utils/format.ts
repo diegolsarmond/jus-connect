@@ -14,10 +14,24 @@ const intlFull = new Intl.DateTimeFormat("pt-BR", {
   year: "numeric",
 });
 
+const intlDateTime = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export const formatTime = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--:--";
   return intlTime.format(date);
+};
+
+export const formatMessageTimestamp = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--/--/---- --:--";
+  return intlDateTime.format(date);
 };
 
 export const formatConversationTimestamp = (value: string) => {
