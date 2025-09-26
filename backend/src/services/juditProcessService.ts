@@ -148,6 +148,28 @@ function normalizeStatus(value: unknown, fallback: string): string {
   return normalized ?? fallback;
 }
 
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0') {
+      return false;
+    }
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  return fallback;
+}
+
 function normalizeRequestType(value: unknown): string | null {
   const normalized = normalizeOptionalString(value);
   if (!normalized) {
@@ -820,6 +842,7 @@ interface TriggerRequestOptions {
   source: JuditRequestSource;
   actorUserId?: number | null;
   skipIfPending?: boolean;
+  onDemand?: boolean | null;
   withAttachments?: boolean;
   client?: PoolClient;
 }
@@ -1140,6 +1163,7 @@ export class JuditProcessService {
           search_key: processNumber,
         },
         with_attachments: false,
+        on_demand: false,
       }),
     });
   }
@@ -1266,6 +1290,7 @@ export class JuditProcessService {
     const shouldRelease = !options.client;
     const manageTransaction = !options.client;
     const requestType = normalizeRequestType(options.source ?? 'system') ?? 'system';
+    const onDemand = normalizeBoolean(options.onDemand, requestType === 'manual');
 
     try {
       if (manageTransaction) {
@@ -1333,7 +1358,8 @@ export class JuditProcessService {
           search_key: processNumber,
         },
         with_attachments: includeAttachments,
-      };
+        on_demand: onDemand,
+      } as const;
 
       const response = await this.requestWithRetry<JuditRequestResponse>(
         config,
@@ -1364,6 +1390,7 @@ export class JuditProcessService {
             source: options.source ?? 'system',
             result,
             trackingId: response.tracking_id ?? null,
+            onDemand,
           },
         },
         client,
@@ -1392,6 +1419,7 @@ export class JuditProcessService {
             requestId,
             status,
             source: options.source ?? 'system',
+            onDemand,
           },
         },
         client,

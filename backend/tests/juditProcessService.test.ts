@@ -511,8 +511,8 @@ test('Judit request lifecycle stores polling response and process_response entry
           search_type: 'lawsuit_cnj',
           search_key: '0000000-00.0000.0.00.0000',
         },
-
         with_attachments: true,
+        on_demand: true,
       });
       return new Response(JSON.stringify({
         request_id: 'req-flow',
@@ -547,6 +547,7 @@ test('Judit request lifecycle stores polling response and process_response entry
   assert.equal(triggerRecord?.requestId, 'req-flow');
   assert.equal(triggerRecord?.status, 'pending');
   assert.equal(triggerRecord?.processSyncId, 777);
+  assert.equal((triggerRecord?.metadata as any).onDemand, true);
   assert.ok(requestClient.calls.some((call) => /INSERT INTO public\.process_sync/i.test(call.text)));
 
   const statusResponse = await service.getRequestStatusFromApi('req-flow');

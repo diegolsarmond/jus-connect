@@ -17,6 +17,28 @@ const mapRecordToResponse = (record: JuditRequestRecord) => ({
   atualizado_em: record.updatedAt,
 });
 
+const parseOptionalBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0') {
+      return false;
+    }
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  return undefined;
+};
+
 const VALID_REQUEST_SOURCES: ReadonlyArray<JuditRequestSource> = [
   'details',
   'manual',
@@ -98,12 +120,16 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
       }
     );
 
+    const body = (req.body && typeof req.body === 'object') ? (req.body as Record<string, unknown>) : {};
+    const onDemandFlag = parseOptionalBoolean(body.onDemand ?? body.on_demand);
+
     const requestRecord = await juditProcessService.triggerRequestForProcess(
       processo.id,
       processo.numero,
       {
         source: 'manual',
         actorUserId: req.auth.userId,
+        onDemand: onDemandFlag,
         withAttachments: typeof withAttachments === 'boolean' ? withAttachments : undefined,
       }
     );
