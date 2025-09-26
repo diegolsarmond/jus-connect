@@ -9,6 +9,8 @@ type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
 
 let listFlows: typeof import('../src/controllers/financialController')['listFlows'];
+let createFlow: typeof import('../src/controllers/financialController')['createFlow'];
+let updateFlow: typeof import('../src/controllers/financialController')['updateFlow'];
 let settleFlow: typeof import('../src/controllers/financialController')['settleFlow'];
 let __internal: typeof import('../src/controllers/financialController')['__internal'];
 
@@ -64,8 +66,17 @@ const financialFlowColumnsWithoutFornecedorResponse: QueryResponse = {
 };
 
 
+const financialAccountColumnsResponse: QueryResponse = {
+  rows: [
+    { column_name: 'id' },
+    { column_name: 'empresa' },
+  ],
+  rowCount: 2,
+};
+
+
 test.before(async () => {
-  ({ listFlows, settleFlow, __internal } = await import('../src/controllers/financialController'));
+  ({ listFlows, createFlow, updateFlow, settleFlow, __internal } = await import('../src/controllers/financialController'));
 });
 
 test.afterEach(() => {
@@ -73,6 +84,7 @@ test.afterEach(() => {
   __internal.resetFinancialFlowEmpresaColumnCache();
   __internal.resetFinancialFlowClienteColumnCache();
   __internal.resetFinancialFlowFornecedorColumnCache();
+  __internal.resetFinancialAccountTableCache();
 });
 
 const createMockResponse = () => {
@@ -118,6 +130,32 @@ const setupQueryMock = (responses: (QueryResponse | Error)[]) => {
   };
 
   return { calls, restore };
+};
+
+const setupClientMock = (responses: (QueryResponse | Error)[]) => {
+  const calls: QueryCall[] = [];
+  const query = test.mock.fn(async (text: string, values?: unknown[]) => {
+    calls.push({ text, values });
+
+    if (responses.length === 0) {
+      throw new Error('Unexpected client query invocation');
+    }
+
+    const next = responses.shift()!;
+    if (next instanceof Error) {
+      throw next;
+    }
+
+    return next;
+  });
+
+  const release = test.mock.fn(() => {});
+
+  return {
+    client: { query, release },
+    calls,
+    release,
+  };
 };
 
 test('listFlows combines financial and opportunity flows', async () => {
@@ -836,6 +874,246 @@ test('listFlows retries without opportunity tables when privileges are missing',
   assert.deepEqual(calls[5]?.values, [DEFAULT_EMPRESA_ID]);
 
 
+});
+
+test('createFlow rejects missing contaId', async () => {
+  const { restore } = setupQueryMock([]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
+    throw new Error('connect should not be invoked when contaId is invalid');
+  });
+
+  const req = {
+    body: {
+      tipo: 'receita',
+      descricao: 'Mensalidade',
+      valor: 120,
+      vencimento: '2024-07-01',
+    },
+    auth: { userId: 10 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createFlow(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, {
+    error: 'contaId é obrigatório e deve ser um inteiro positivo.',
+  });
+  assert.equal(connectMock.mock.callCount(), 0);
+});
+
+test('createFlow validates contaId ownership before inserting', async () => {
+  const contaId = 5;
+
+  const insertedRow = {
+    id: 40,
+    tipo: 'receita',
+    descricao: 'Mensalidade',
+    valor: 120,
+    vencimento: '2024-07-01',
+    pagamento: null,
+    status: 'pendente',
+    conta_id: contaId,
+    cliente_id: null,
+    fornecedor_id: null,
+  };
+
+  const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
+    financialAccountColumnsResponse,
+    { rows: [{ id: contaId }], rowCount: 1 },
+  ]);
+
+  const clientSetup = setupClientMock([
+    { rows: [], rowCount: 0 },
+    { rows: [insertedRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => clientSetup.client as unknown as any);
+
+  const req = {
+    body: {
+      contaId,
+      tipo: 'receita',
+      descricao: 'Mensalidade',
+      valor: 120,
+      vencimento: '2024-07-01',
+    },
+    auth: { userId: 11 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createFlow(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.deepEqual(res.body, { flow: insertedRow, charge: null });
+
+  assert.equal(calls.length, 3);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.match(calls[1]?.text ?? '', /information_schema\.columns/);
+  assert.match(calls[2]?.text ?? '', /FROM "public"\."financeiro_contas"/);
+
+  assert.equal(clientSetup.calls.length, 3);
+  assert.equal(clientSetup.calls[0]?.text, 'BEGIN');
+  assert.match(clientSetup.calls[1]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.equal(clientSetup.calls[1]?.values?.[5], contaId);
+  assert.equal(clientSetup.calls[2]?.text, 'COMMIT');
+  assert.equal(clientSetup.release.mock.callCount(), 1);
+});
+
+test('createFlow rejects contaId that does not belong to the company', async () => {
+  const contaId = 9;
+
+  const { calls, restore } = setupQueryMock([
+    empresaLookupResponse,
+    financialAccountColumnsResponse,
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
+    throw new Error('connect should not be invoked when contaId is invalid for the company');
+  });
+
+  const req = {
+    body: {
+      contaId,
+      tipo: 'receita',
+      descricao: 'Mensalidade',
+      valor: 130,
+      vencimento: '2024-07-15',
+    },
+    auth: { userId: 12 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createFlow(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'Conta inválida para a empresa autenticada.' });
+  assert.equal(connectMock.mock.callCount(), 0);
+  assert.equal(calls.length, 3);
+  assert.match(calls[2]?.text ?? '', /FROM "public"\."financeiro_contas"/);
+});
+
+test('updateFlow preserves conta_id returned by the database', async () => {
+  const flowId = 42;
+  const contaId = 7;
+
+  const updatedRow = {
+    id: flowId,
+    tipo: 'receita',
+    descricao: 'Atualizado',
+    valor: 200,
+    vencimento: '2024-08-10',
+    pagamento: null,
+    status: 'pendente',
+    conta_id: contaId,
+    cliente_id: null,
+    fornecedor_id: null,
+  };
+
+  const clientSetup = setupClientMock([
+    { rows: [], rowCount: 0 },
+    { rows: [updatedRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => clientSetup.client as unknown as any);
+
+  const { restore } = setupQueryMock([]);
+
+  const req = {
+    params: { id: `${flowId}` },
+    body: {
+      tipo: 'receita',
+      descricao: 'Atualizado',
+      valor: 200,
+      vencimento: '2024-08-10',
+      pagamento: null,
+      status: 'pendente',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await updateFlow(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { flow: updatedRow, charge: null });
+  assert.equal(clientSetup.calls.length, 3);
+  assert.match(clientSetup.calls[1]?.text ?? '', /UPDATE financial_flows/);
+  assert.equal((res.body as { flow: { conta_id: number } }).flow.conta_id, contaId);
+  assert.equal(clientSetup.release.mock.callCount(), 1);
+});
+
+test('settleFlow preserves conta_id when settling a manual flow', async () => {
+  const flowId = 70;
+  const contaId = 4;
+  const pagamentoData = '2024-07-20';
+
+  const updatedFlow = {
+    id: flowId,
+    tipo: 'receita',
+    descricao: 'Mensalidade',
+    valor: 150,
+    vencimento: '2024-07-01',
+    pagamento: pagamentoData,
+    status: 'pago',
+    conta_id: contaId,
+    cliente_id: null,
+    fornecedor_id: null,
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ external_provider: null }], rowCount: 1 },
+    { rows: [updatedFlow], rowCount: 1 },
+  ]);
+
+  const req = {
+    params: { id: `${flowId}` },
+    body: { pagamentoData },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await settleFlow(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { flow: updatedFlow });
+  assert.equal((res.body as { flow: { conta_id: number } }).flow.conta_id, contaId);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /SELECT external_provider/);
+  assert.match(calls[1]?.text ?? '', /UPDATE financial_flows SET pagamento=/);
+  assert.deepEqual(calls[1]?.values, [pagamentoData, flowId]);
 });
 
 test('settleFlow marks opportunity installment as paid', async () => {

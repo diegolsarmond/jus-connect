@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import type { QueryResult } from 'pg';
+import type { PoolClient, QueryResult } from 'pg';
 import pool from '../services/db';
 import type { Flow } from '../models/flow';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
@@ -81,6 +81,7 @@ const OPPORTUNITY_TABLES_CACHE_TTL_MS = 5 * 60 * 1000;
 const FINANCIAL_FLOW_EMPRESA_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
 const FINANCIAL_FLOW_CLIENTE_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
 const FINANCIAL_FLOW_FORNECEDOR_COLUMN_CACHE_TTL_MS = 5 * 60 * 1000;
+const FINANCIAL_ACCOUNT_TABLE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 type FinancialFlowEmpresaColumn = string;
 type FinancialFlowClienteColumn = string;
@@ -99,6 +100,13 @@ const FINANCIAL_FLOW_FORNECEDOR_CANDIDATES = [
   'fornecedorid',
   'idfornecedor',
   'fornecedor',
+] as const;
+
+const FINANCIAL_ACCOUNT_TABLE_CANDIDATES = [
+  { schema: 'public', table: 'financeiro_contas' },
+  { schema: 'public', table: 'contas_financeiras' },
+  { schema: 'public', table: 'financial_accounts' },
+  { schema: 'public', table: 'contas' },
 ] as const;
 
 
@@ -125,6 +133,16 @@ let financialFlowColumnsPromise:
   | Promise<FinancialFlowColumnsLookup | null>
   | null = null;
 
+type FinancialAccountTableInfo = {
+  schema: string;
+  table: string;
+  empresaColumn: string;
+};
+
+let financialAccountTableInfo: FinancialAccountTableInfo | null = null;
+let financialAccountTableCheckedAt: number | null = null;
+let financialAccountTablePromise: Promise<FinancialAccountTableInfo | null> | null = null;
+
 const updateFinancialFlowColumnsLookup = (
   value: FinancialFlowColumnsLookup | null,
 ) => {
@@ -143,6 +161,19 @@ const resetFinancialFlowColumnsLookup = () => {
   financialFlowFornecedorColumn = null;
   financialFlowFornecedorColumnCheckedAt = null;
 
+};
+
+const updateFinancialAccountTableInfo = (
+  value: FinancialAccountTableInfo | null,
+) => {
+  financialAccountTableInfo = value;
+  financialAccountTableCheckedAt = Date.now();
+};
+
+const resetFinancialAccountTableCache = () => {
+  financialAccountTableInfo = null;
+  financialAccountTableCheckedAt = null;
+  financialAccountTablePromise = null;
 };
 
 const updateOpportunityTablesAvailability = (value: boolean) => {
@@ -355,6 +386,7 @@ export const __internal = {
   resetFinancialFlowEmpresaColumnCache,
   resetFinancialFlowClienteColumnCache,
   resetFinancialFlowFornecedorColumnCache,
+  resetFinancialAccountTableCache,
 
 };
 
@@ -398,6 +430,87 @@ const determineFinancialFlowFornecedorColumn = async (): Promise<FinancialFlowFo
 
   return financialFlowFornecedorColumn;
 
+};
+
+const determineFinancialAccountTable = async (): Promise<FinancialAccountTableInfo | null> => {
+  if (
+    financialAccountTableInfo !== null &&
+    financialAccountTableCheckedAt !== null &&
+    Date.now() - financialAccountTableCheckedAt < FINANCIAL_ACCOUNT_TABLE_CACHE_TTL_MS
+  ) {
+    return financialAccountTableInfo;
+  }
+
+  if (financialAccountTablePromise) {
+    return financialAccountTablePromise;
+  }
+
+  financialAccountTablePromise = (async () => {
+    for (const candidate of FINANCIAL_ACCOUNT_TABLE_CANDIDATES) {
+      const columnsResult = await pool.query<{ column_name?: unknown }>(
+        `SELECT column_name
+           FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2`,
+        [candidate.schema, candidate.table],
+      );
+
+      if (columnsResult.rowCount === 0) {
+        continue;
+      }
+
+      let empresaColumn: string | null = null;
+      let hasIdColumn = false;
+
+      for (const row of columnsResult.rows) {
+        if (empresaColumn && hasIdColumn) {
+          break;
+        }
+
+        const columnName =
+          typeof row.column_name === 'string' && row.column_name.trim().length > 0
+            ? row.column_name.trim()
+            : null;
+
+        if (!columnName) {
+          continue;
+        }
+
+        const normalized = columnName.toLowerCase();
+
+        if (!hasIdColumn && normalized === 'id') {
+          hasIdColumn = true;
+        }
+
+        if (!empresaColumn) {
+          const match = FINANCIAL_FLOW_EMPRESA_CANDIDATES.find(
+            (candidateColumn) => normalized === candidateColumn,
+          );
+
+          if (match) {
+            empresaColumn = columnName;
+          }
+        }
+      }
+
+      if (hasIdColumn && empresaColumn) {
+        const info: FinancialAccountTableInfo = {
+          schema: candidate.schema,
+          table: candidate.table,
+          empresaColumn,
+        };
+
+        updateFinancialAccountTableInfo(info);
+        return info;
+      }
+    }
+
+    updateFinancialAccountTableInfo(null);
+    return null;
+  })().finally(() => {
+    financialAccountTablePromise = null;
+  });
+
+  return financialAccountTablePromise;
 };
 
 export const listFlows = async (req: Request, res: Response) => {
@@ -819,7 +932,13 @@ export const getFlow = async (req: Request, res: Response) => {
 };
 
 export const createFlow = async (req: Request, res: Response) => {
+  const auth = getAuthenticatedUser(req, res);
+  if (!auth) {
+    return;
+  }
+
   const {
+    contaId,
     tipo,
     descricao,
     valor,
@@ -837,12 +956,66 @@ export const createFlow = async (req: Request, res: Response) => {
     externalReferenceId,
     metadata,
     remoteIp,
-  } = req.body;
+  } = req.body ?? {};
 
-  const client = await pool.connect();
+  const normalizedContaId = normalizeOptionalInteger(contaId);
+
+  if (normalizedContaId === null || normalizedContaId <= 0) {
+    res.status(400).json({ error: 'contaId é obrigatório e deve ser um inteiro positivo.' });
+    return;
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return;
+  }
+
+  const { empresaId } = empresaLookup;
+
+  if (empresaId === null) {
+    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    return;
+  }
+
+  const accountTableInfo = await determineFinancialAccountTable();
+
+  if (!accountTableInfo) {
+    console.warn('Não foi possível determinar tabela de contas financeiras para validação.');
+    res.status(500).json({ error: 'Não foi possível validar a conta informada.' });
+    return;
+  }
+
+  let accountResult: QueryResult | null = null;
 
   try {
+    accountResult = await pool.query(
+      `SELECT id
+         FROM ${quoteIdentifier(accountTableInfo.schema)}.${quoteIdentifier(accountTableInfo.table)}
+        WHERE id = $1 AND ${quoteIdentifier(accountTableInfo.empresaColumn)} = $2
+        LIMIT 1`,
+      [normalizedContaId, empresaId],
+    );
+  } catch (error) {
+    console.error('Failed to validate contaId for createFlow:', error);
+    res.status(500).json({ error: 'Não foi possível validar a conta informada.' });
+    return;
+  }
+
+  if (accountResult.rowCount === 0) {
+    res.status(400).json({ error: 'Conta inválida para a empresa autenticada.' });
+    return;
+  }
+
+  let client: PoolClient | null = null;
+  let transactionStarted = false;
+
+  try {
+    client = await pool.connect();
     await client.query('BEGIN');
+    transactionStarted = true;
+
     const tipoText = typeof tipo === 'string' ? tipo.trim().toLowerCase() : '';
     const isDespesa = tipoText === 'despesa';
     const normalizedTipo: Flow['tipo'] = isDespesa ? 'despesa' : 'receita';
@@ -851,8 +1024,17 @@ export const createFlow = async (req: Request, res: Response) => {
     const clienteIdForInsert = isDespesa ? null : normalizedClienteId;
     const fornecedorIdForInsert = isDespesa ? normalizedFornecedorId : null;
     const inserted = await client.query(
-      'INSERT INTO financial_flows (tipo, descricao, valor, vencimento, status, cliente_id, fornecedor_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [normalizedTipo, descricao, valor, vencimento, 'pendente', clienteIdForInsert, fornecedorIdForInsert],
+      'INSERT INTO financial_flows (tipo, descricao, valor, vencimento, status, conta_id, cliente_id, fornecedor_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [
+        normalizedTipo,
+        descricao,
+        valor,
+        vencimento,
+        'pendente',
+        normalizedContaId,
+        clienteIdForInsert,
+        fornecedorIdForInsert,
+      ],
     );
 
     let flow = inserted.rows[0];
@@ -892,17 +1074,28 @@ export const createFlow = async (req: Request, res: Response) => {
     await client.query('COMMIT');
     res.status(201).json({ flow, charge });
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (client && transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Failed to rollback transaction after createFlow error:', rollbackError);
+      }
+    }
+
     if (err instanceof AsaasValidationError) {
-      return res.status(400).json({ error: err.message });
+      res.status(400).json({ error: err.message });
+      return;
     }
     if (err instanceof ChargeConflictError) {
-      return res.status(409).json({ error: err.message });
+      res.status(409).json({ error: err.message });
+      return;
     }
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 };
 
