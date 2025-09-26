@@ -18,6 +18,9 @@ const mapRecordToResponse = (record: JuditRequestRecord) => ({
 
 export const triggerManualJuditSync = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { withAttachments } = (req.body ?? {}) as {
+    withAttachments?: unknown;
+  };
   const processoId = Number(id);
 
   if (!Number.isInteger(processoId) || processoId <= 0) {
@@ -79,6 +82,7 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
       {
         source: 'manual',
         actorUserId: req.auth.userId,
+        withAttachments: typeof withAttachments === 'boolean' ? withAttachments : undefined,
       }
     );
 
