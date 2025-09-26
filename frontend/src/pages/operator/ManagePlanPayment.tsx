@@ -71,10 +71,11 @@ const getFormattedPrice = (display: string | null, numeric: number | null) => {
 
 const sanitizeDigits = (value: string): string => value.replace(/\D+/g, "");
 
-const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD", string> = {
+const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD", string> = {
   PIX: "PIX empresarial",
   BOLETO: "Boleto bancário",
   CREDIT_CARD: "Cartão corporativo",
+  DEBIT_CARD: "Cartão corporativo (débito)",
 };
 
 const ManagePlanPayment = () => {
@@ -118,7 +119,7 @@ const ManagePlanPayment = () => {
   const features = selectedPlan?.recursos ?? [];
 
   const handlePaymentMethodChange = useCallback((value: string) => {
-    if (value === "pix" || value === "boleto" || value === "cartao") {
+    if (value === "pix" || value === "boleto" || value === "cartao" || value === "debito") {
       setPaymentMethod(value as PlanPaymentMethod);
       setError(null);
     }

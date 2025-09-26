@@ -214,6 +214,95 @@ test('AsaasChargeService.createCharge maps credit card responses to paid status'
   assert.equal(payload.creditCardToken, 'tok_abc');
 });
 
+test('AsaasChargeService.createCharge sends debit card payloads with token metadata', async () => {
+  const chargeResponse = {
+    id: 'debit_321',
+    status: 'PENDING',
+    creditCardData: {
+      creditCardNumberLast4: '4321',
+      creditCardBrand: 'MASTERCARD',
+    },
+  };
+
+  const insertedRow = {
+    id: 92,
+    financial_flow_id: 12,
+    cliente_id: 77,
+    integration_api_key_id: 3,
+    asaas_charge_id: 'debit_321',
+    billing_type: 'DEBIT_CARD',
+    status: 'PENDING',
+    due_date: '2024-04-01',
+    value: '510.00',
+    invoice_url: null,
+    pix_payload: null,
+    pix_qr_code: null,
+    boleto_url: null,
+    card_last4: '4321',
+    card_brand: 'MASTERCARD',
+    created_at: '2024-03-20T12:00:00.000Z',
+    updated_at: '2024-03-20T12:00:00.000Z',
+  };
+
+  const updatedFlow = {
+    id: 12,
+    tipo: 'receita',
+    descricao: 'Consultoria',
+    valor: '510.00',
+    vencimento: '2024-04-01',
+    status: 'pendente',
+    external_provider: 'asaas',
+    external_reference_id: 'debit_321',
+  };
+
+  const db = new FakeDb([
+    { rows: [], rowCount: 0 },
+    { rows: [insertedRow], rowCount: 1 },
+    { rows: [updatedFlow], rowCount: 1 },
+  ]);
+
+  const fakeClient = new FakeAsaasClient(chargeResponse);
+  const service = new AsaasChargeService(db as any, async () => fakeClient);
+
+  const input = createChargeInput({
+    financialFlowId: 12,
+    billingType: 'DEBIT_CARD',
+    cardToken: 'tok_debit_123',
+    clienteId: 77,
+    integrationApiKeyId: 3,
+  });
+
+  const result = await service.createCharge(input, { asaasClient: fakeClient, dbClient: db as any });
+
+  assert.equal(fakeClient.payloads.length, 1);
+  const sentPayload = fakeClient.payloads[0] as any;
+  assert.equal(sentPayload.billingType, 'DEBIT_CARD');
+  assert.equal(sentPayload.creditCardToken, 'tok_debit_123');
+
+  assert.equal(result.charge.billingType, 'DEBIT_CARD');
+  assert.equal(result.charge.cardLast4, '4321');
+  assert.equal(result.charge.cardBrand, 'MASTERCARD');
+});
+
+test('AsaasChargeService.createCharge requires cardToken for debit card charges', async () => {
+  const service = new AsaasChargeService(new FakeDb([{ rows: [], rowCount: 0 }]) as any, async () => {
+    throw new Error('Client should not be called when validation fails');
+  });
+
+  await assert.rejects(
+    () =>
+      service.createCharge(
+        createChargeInput({ billingType: 'DEBIT_CARD', cardToken: undefined }),
+        {},
+      ),
+    (error) => {
+      assert.ok(error instanceof ValidationError);
+      assert.equal(error.message, 'cardToken é obrigatório para cobranças via cartão');
+      return true;
+    },
+  );
+});
+
 test('AsaasChargeService.createCharge fails when charge already exists', async () => {
   const db = new FakeDb([{ rows: [{ id: 1 }], rowCount: 1 }]);
   const fakeClient = new FakeAsaasClient({ id: 'duplicate', status: 'PENDING' });
