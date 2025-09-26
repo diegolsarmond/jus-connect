@@ -8,8 +8,20 @@ import { IntegrationApiKey, ValidationError, ASAAS_DEFAULT_API_URLS } from '../s
 class FakeIntegrationApiKeyService {
   constructor(private readonly items: Map<number, IntegrationApiKey> = new Map()) {}
 
-  async findById(id: number): Promise<IntegrationApiKey | null> {
-    return this.items.get(id) ?? null;
+  async findById(
+    id: number,
+    scope: { empresaId: number },
+  ): Promise<IntegrationApiKey | null> {
+    const item = this.items.get(id);
+    if (!item) {
+      return null;
+    }
+
+    if (item.global || item.empresaId === scope.empresaId) {
+      return item;
+    }
+
+    return null;
   }
 }
 
@@ -20,9 +32,9 @@ test('validateAsaas rejects invalid identifiers', async () => {
     throw new Error('fetch should not be called');
   });
 
-  await assert.rejects(() => service.validateAsaas(0), ValidationError);
-  await assert.rejects(() => service.validateAsaas(-1), ValidationError);
-  await assert.rejects(() => service.validateAsaas(Number.NaN), ValidationError);
+  await assert.rejects(() => service.validateAsaas(0, { empresaId: 1 }), ValidationError);
+  await assert.rejects(() => service.validateAsaas(-1, { empresaId: 1 }), ValidationError);
+  await assert.rejects(() => service.validateAsaas(Number.NaN, { empresaId: 1 }), ValidationError);
 });
 
 function createApiKey(overrides: Partial<IntegrationApiKey> = {}): IntegrationApiKey {
@@ -34,6 +46,8 @@ function createApiKey(overrides: Partial<IntegrationApiKey> = {}): IntegrationAp
     environment: 'producao',
     active: true,
     lastUsed: null,
+    empresaId: 1,
+    global: false,
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
     ...overrides,
@@ -46,7 +60,7 @@ test('validateAsaas rejects when API key does not exist', async () => {
     throw new Error('fetch should not be called');
   });
 
-  await assert.rejects(() => validator.validateAsaas(42), ValidationError);
+  await assert.rejects(() => validator.validateAsaas(42, { empresaId: 1 }), ValidationError);
 });
 
 test('validateAsaas rejects when provider is not Asaas', async () => {
@@ -56,7 +70,7 @@ test('validateAsaas rejects when provider is not Asaas', async () => {
     throw new Error('fetch should not be called');
   });
 
-  await assert.rejects(() => validator.validateAsaas(apiKey.id), ValidationError);
+  await assert.rejects(() => validator.validateAsaas(apiKey.id, { empresaId: 1 }), ValidationError);
 });
 
 test('validateAsaas uses stored URL when present and returns success on OK response', async () => {
@@ -74,7 +88,7 @@ test('validateAsaas uses stored URL when present and returns success on OK respo
     };
   });
 
-  const result = await validator.validateAsaas(apiKey.id);
+  const result = await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.deepEqual(result, { success: true } satisfies ValidateAsaasIntegrationResult);
   assert.equal(calls.length, 1);
   const call = calls[0];
@@ -98,7 +112,7 @@ test('validateAsaas falls back to default URL when apiUrl is null', async () => 
     };
   });
 
-  const result = await validator.validateAsaas(apiKey.id);
+  const result = await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.equal(result.success, true);
   const expectedBase = ASAAS_DEFAULT_API_URLS.homologacao;
   const call = calls[0];
@@ -119,7 +133,7 @@ test('validateAsaas normalizes sandbox base URLs without API path', async () => 
     };
   });
 
-  await validator.validateAsaas(apiKey.id);
+  await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.equal(calls.length, 1);
   const call = calls[0];
   const url = typeof call.input === 'string' ? call.input : call.input.toString();
@@ -139,7 +153,7 @@ test('validateAsaas normalizes sandbox API base without version suffix', async (
     };
   });
 
-  await validator.validateAsaas(apiKey.id);
+  await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.equal(calls.length, 1);
   const call = calls[0];
   const url = typeof call.input === 'string' ? call.input : call.input.toString();
@@ -155,7 +169,7 @@ test('validateAsaas returns failure with message from API payload', async () => 
     json: async () => ({ message: 'Token inválido' }),
   }));
 
-  const result = await validator.validateAsaas(apiKey.id);
+  const result = await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.deepEqual(result, { success: false, message: 'Token inválido' });
 });
 
@@ -173,7 +187,7 @@ test('validateAsaas extracts first validation error when response contains an ar
     }),
   }));
 
-  const result = await validator.validateAsaas(apiKey.id);
+  const result = await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.deepEqual(result, { success: false, message: 'Primeiro erro' });
 });
 
@@ -186,7 +200,7 @@ test('validateAsaas returns default message when API payload is empty', async ()
     json: async () => ({}),
   }));
 
-  const result = await validator.validateAsaas(apiKey.id);
+  const result = await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.deepEqual(result, { success: false, message: 'Asaas API request failed with status 502' });
 });
 
@@ -197,7 +211,7 @@ test('validateAsaas returns connection failure when fetch rejects', async () => 
     throw new Error('timeout');
   });
 
-  const result = await validator.validateAsaas(apiKey.id);
+  const result = await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
   assert.equal(result.success, false);
   assert.ok(result.message?.includes('timeout'));
 });
@@ -209,5 +223,27 @@ test('validateAsaas throws when API URL is invalid', async () => {
     throw new Error('fetch should not be reached');
   });
 
-  await assert.rejects(() => validator.validateAsaas(apiKey.id), ValidationError);
+  await assert.rejects(async () => {
+    await validator.validateAsaas(apiKey.id, { empresaId: apiKey.empresaId ?? 1 });
+  }, error => {
+    assert.ok(error instanceof ValidationError);
+    assert.equal(error.message, 'Invalid Asaas API URL configured');
+    return true;
+  });
+});
+
+test('validateAsaas rejects when API key belongs to another empresa and is not global', async () => {
+  const apiKey = createApiKey({ empresaId: 50, global: false });
+  const fakeService = new FakeIntegrationApiKeyService(new Map([[apiKey.id, apiKey]]));
+  const validator = new IntegrationApiKeyValidationService(fakeService, async () => {
+    throw new Error('fetch should not be reached');
+  });
+
+  await assert.rejects(async () => {
+    await validator.validateAsaas(apiKey.id, { empresaId: 999 });
+  }, error => {
+    assert.ok(error instanceof ValidationError);
+    assert.equal(error.message, 'Asaas API key not found');
+    return true;
+  });
 });
