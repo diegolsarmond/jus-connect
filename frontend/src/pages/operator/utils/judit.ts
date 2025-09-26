@@ -477,7 +477,33 @@ export const formatResponseKey = (key: string): string => {
     .trim();
 };
 
-export const formatResponseValue = (value: unknown): string => {
+export interface MetadataEntry {
+  key: string;
+  label: string;
+  value: string | MetadataEntry[];
+}
+
+export type FormattedMetadataValue = string | MetadataEntry[];
+
+const isStructuredRecord = (value: unknown): value is Record<string, unknown> => {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+};
+
+const buildMetadataEntriesFromRecord = (record: Record<string, unknown>): MetadataEntry[] => {
+  return Object.entries(record).map(([childKey, childValue]) => ({
+    key: childKey,
+    label: formatResponseKey(childKey),
+    value: formatResponseValue(childValue),
+  }));
+};
+
+export const isMetadataEntryList = (
+  value: FormattedMetadataValue,
+): value is MetadataEntry[] => {
+  return Array.isArray(value);
+};
+
+export const formatResponseValue = (value: unknown): FormattedMetadataValue => {
   if (value === null || value === undefined) {
     return "Não informado";
   }
@@ -502,19 +528,35 @@ export const formatResponseValue = (value: unknown): string => {
   }
 
   if (Array.isArray(value)) {
-    const rendered = value
-      .map((item) => formatResponseValue(item))
-      .filter((item) => item && item !== "Não informado");
-    return rendered.length > 0 ? rendered.join(", ") : "Não informado";
+    const hasStructuredItems = value.some((item) => {
+      if (item === null || item === undefined) {
+        return false;
+      }
+
+      if (item instanceof Date) {
+        return false;
+      }
+
+      return Array.isArray(item) || isStructuredRecord(item);
+    });
+
+    if (!hasStructuredItems) {
+      const rendered = value
+        .map((item) => formatResponseValue(item))
+        .filter((item): item is string => typeof item === "string" && item !== "Não informado");
+
+      return rendered.length > 0 ? rendered.join(", ") : "Não informado";
+    }
+
+    return value.map((item, index) => ({
+      key: `${index}`,
+      label: `Item ${index + 1}`,
+      value: formatResponseValue(item),
+    }));
   }
 
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value);
-    } catch (error) {
-      console.error("Não foi possível serializar valor de metadado", error);
-      return "Não informado";
-    }
+  if (isStructuredRecord(value)) {
+    return buildMetadataEntriesFromRecord(value);
   }
 
   return String(value);
