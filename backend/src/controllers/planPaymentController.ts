@@ -436,7 +436,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
 
   let integration;
   try {
-    integration = await resolveAsaasIntegration();
+    integration = await resolveAsaasIntegration(empresaId);
   } catch (error) {
     if (error instanceof AsaasIntegrationNotConfiguredError) {
       res.status(503).json({ error: 'Integração com o Asaas não está configurada.' });

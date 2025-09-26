@@ -13,6 +13,8 @@ test.before(async () => {
   AsaasApiError = module.AsaasApiError;
 });
 
+const EMPRESA_ID = 77;
+
 type QueryResponse = { rows: any[]; rowCount: number };
 
 type QueryCall = { text: string; values?: unknown[] };
@@ -40,7 +42,7 @@ test('ensureCustomer returns inactive state when Asaas integration is disabled',
     throw new Error('HTTP client should not be instantiated');
   });
 
-  const state = await service.ensureCustomer(10);
+  const state = await service.ensureCustomer(10, EMPRESA_ID);
   assert.deepEqual(state, {
     integrationActive: false,
     integrationApiKeyId: null,
@@ -52,6 +54,7 @@ test('ensureCustomer returns inactive state when Asaas integration is disabled',
   });
   assert.equal(pool.calls.length, 1);
   assert.match(pool.calls[0]?.text ?? '', /FROM public\.integration_api_keys/);
+  assert.deepEqual(pool.calls[0]?.values, ['asaas', EMPRESA_ID]);
 });
 
 test('updateFromLocal creates remote customer when mapping does not exist', async () => {
@@ -120,7 +123,7 @@ test('updateFromLocal creates remote customer when mapping does not exist', asyn
     uf: 'SP',
   };
 
-  const state = await service.updateFromLocal(25, localData);
+  const state = await service.updateFromLocal(25, EMPRESA_ID, localData);
 
   assert.ok(createCalled);
   assert.equal(state.integrationActive, true);
@@ -199,7 +202,7 @@ test('updateFromLocal updates existing remote customer and records responses', a
     uf: 'RJ',
   };
 
-  const state = await service.updateFromLocal(40, localData);
+  const state = await service.updateFromLocal(40, EMPRESA_ID, localData);
 
   assert.ok(updateCalled);
   assert.equal(state.status, 'synced');
@@ -270,7 +273,7 @@ test('updateFromLocal stores error information when Asaas API rejects request', 
     uf: null,
   };
 
-  const state = await service.updateFromLocal(55, localData);
+  const state = await service.updateFromLocal(55, EMPRESA_ID, localData);
 
   assert.equal(state.status, 'error');
   assert.equal(state.integrationApiKeyId, 5);

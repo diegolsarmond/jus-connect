@@ -22,6 +22,8 @@ class FakePool {
   }
 }
 
+const EMPRESA_ID = 42;
+
 test('resolveAsaasIntegration returns sandbox base URL when environment is homologacao', async () => {
   const pool = new FakePool([
     {
@@ -39,14 +41,13 @@ test('resolveAsaasIntegration returns sandbox base URL when environment is homol
     },
   ]);
 
-  const integration = await resolveAsaasIntegration(pool as any);
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any);
 
   assert.equal(integration.accessToken, 'sandbox-token');
   assert.equal(integration.baseUrl, ASAAS_DEFAULT_BASE_URLS.homologacao);
   assert.equal(integration.environment, 'homologacao');
   assert.match(pool.calls[0].text, /FROM integration_api_keys/);
-  assert.deepEqual(pool.calls[0].params, ['asaas']);
-  assert.match(pool.calls[0].text, /global IS TRUE/);
+  assert.deepEqual(pool.calls[0].params, ['asaas', EMPRESA_ID]);
 });
 
 test('resolveAsaasIntegration prioritizes custom API URL for production', async () => {
@@ -66,7 +67,7 @@ test('resolveAsaasIntegration prioritizes custom API URL for production', async 
     },
   ]);
 
-  const integration = await resolveAsaasIntegration(pool as any);
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any);
 
   assert.equal(integration.accessToken, 'live-token');
   assert.equal(integration.baseUrl, 'https://custom.asaas.com/api/v3');
@@ -90,7 +91,7 @@ test('resolveAsaasIntegration appends API path when missing for known Asaas host
     },
   ]);
 
-  const integration = await resolveAsaasIntegration(pool as any);
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any);
 
   assert.equal(integration.baseUrl, 'https://sandbox.asaas.com/api/v3');
 });
@@ -112,7 +113,7 @@ test('resolveAsaasIntegration completes API version when only /api is provided',
     },
   ]);
 
-  const integration = await resolveAsaasIntegration(pool as any);
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any);
 
   assert.equal(integration.baseUrl, 'https://sandbox.asaas.com/api/v3');
 });
@@ -129,7 +130,10 @@ test('resolveAsaasIntegration throws a specific error when no active credential 
     },
   ]);
 
-  await assert.rejects(() => resolveAsaasIntegration(pool as any), AsaasIntegrationNotConfiguredError);
+  await assert.rejects(
+    () => resolveAsaasIntegration(EMPRESA_ID, pool as any),
+    AsaasIntegrationNotConfiguredError,
+  );
   assert.equal(pool.calls.length, 2);
   assert.match(pool.calls[0].text, /global IS TRUE/);
 });
@@ -157,7 +161,7 @@ test('resolveAsaasIntegration falls back to legacy credential when no global exi
 
   const warnMock = test.mock.method(console, 'warn');
 
-  const integration = await resolveAsaasIntegration(pool as any);
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any);
 
   assert.equal(integration.accessToken, 'legacy-token');
   assert.equal(integration.baseUrl, 'https://fallback.asaas.com/api/v3');
@@ -190,7 +194,10 @@ test('resolveAsaasIntegration does not fallback when disabled', async () => {
 
   const warnMock = test.mock.method(console, 'warn');
 
-  await assert.rejects(() => resolveAsaasIntegration(pool as any), AsaasIntegrationNotConfiguredError);
+  await assert.rejects(
+    () => resolveAsaasIntegration(EMPRESA_ID, pool as any),
+    AsaasIntegrationNotConfiguredError,
+  );
   assert.equal(pool.calls.length, 1);
   assert.match(pool.calls[0].text, /global IS TRUE/);
   assert.ok(
@@ -224,8 +231,9 @@ test('createAsaasClient builds client instance with resolved credentials', async
     },
   ]);
 
-  const client = await createAsaasClient(pool as any, { fetchImpl: async () => new Response(null, { status: 204 }) });
+  const client = await createAsaasClient(EMPRESA_ID, pool as any, {
+    fetchImpl: async () => new Response(null, { status: 204 }),
+  });
   assert.equal(typeof client, 'object');
   assert.equal(pool.calls.length, 1);
 });
-

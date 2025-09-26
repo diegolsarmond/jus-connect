@@ -103,12 +103,14 @@ test('AsaasChargeService.createCharge persists PIX charge and updates flow', asy
     { rows: [updatedFlow], rowCount: 1 },
   ]);
 
-  const service = new AsaasChargeService(db as any, async () => fakeClient);
-
-  const result = await service.createCharge(createChargeInput(), {
-    asaasClient: fakeClient,
-    dbClient: db as any,
+  const service = new AsaasChargeService(db as any, async (options) => {
+    assert.equal(options.integrationApiKeyId, 7);
+    assert.equal(options.financialFlowId, 10);
+    assert.strictEqual(options.db, db);
+    return fakeClient;
   });
+
+  const result = await service.createCharge(createChargeInput());
 
   assert.equal(db.calls.length, 3);
 
@@ -191,7 +193,12 @@ test('AsaasChargeService.createCharge maps credit card responses to paid status'
   ]);
 
   const fakeClient = new FakeAsaasClient(chargeResponse);
-  const service = new AsaasChargeService(db as any, async () => fakeClient);
+  const service = new AsaasChargeService(db as any, async (options) => {
+    assert.equal(options.integrationApiKeyId, null);
+    assert.equal(options.financialFlowId, 11);
+    assert.strictEqual(options.db, db);
+    return fakeClient;
+  });
 
   const input = createChargeInput({
     financialFlowId: 11,
@@ -204,7 +211,7 @@ test('AsaasChargeService.createCharge maps credit card responses to paid status'
     asaasCustomerId: 'cus_001',
   });
 
-  const result = await service.createCharge(input, { asaasClient: fakeClient, dbClient: db as any });
+  const result = await service.createCharge(input);
 
   assert.equal(result.flow.status, 'pago');
   assert.equal(result.charge.cardLast4, '1234');
@@ -262,7 +269,12 @@ test('AsaasChargeService.createCharge sends debit card payloads with token metad
   ]);
 
   const fakeClient = new FakeAsaasClient(chargeResponse);
-  const service = new AsaasChargeService(db as any, async () => fakeClient);
+  const service = new AsaasChargeService(db as any, async (options) => {
+    assert.equal(options.integrationApiKeyId, 3);
+    assert.equal(options.financialFlowId, 12);
+    assert.strictEqual(options.db, db);
+    return fakeClient;
+  });
 
   const input = createChargeInput({
     financialFlowId: 12,
@@ -272,7 +284,7 @@ test('AsaasChargeService.createCharge sends debit card payloads with token metad
     integrationApiKeyId: 3,
   });
 
-  const result = await service.createCharge(input, { asaasClient: fakeClient, dbClient: db as any });
+  const result = await service.createCharge(input);
 
   assert.equal(fakeClient.payloads.length, 1);
   const sentPayload = fakeClient.payloads[0] as any;
@@ -309,7 +321,7 @@ test('AsaasChargeService.createCharge fails when charge already exists', async (
   const service = new AsaasChargeService(db as any, async () => fakeClient);
 
   await assert.rejects(
-    () => service.createCharge(createChargeInput(), { asaasClient: fakeClient, dbClient: db as any }),
+    () => service.createCharge(createChargeInput()),
     ChargeConflictError,
   );
 });
@@ -328,8 +340,53 @@ test('AsaasChargeService.createCharge validates customer identifier', async () =
           value: 100,
           dueDate: '2024-04-01',
         },
-        { asaasClient: fakeClient, dbClient: db as any },
       ),
     ValidationError,
   );
+});
+
+test('AsaasChargeService.createCharge rejects integration key outside company scope', async () => {
+  const db = new FakeDb([
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 200, idempresa: 50 }], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 9,
+          provider: 'asaas',
+          key_value: 'company-b-token',
+          url_api: null,
+          idempresa: 99,
+          global: false,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const service = new AsaasChargeService(db as any);
+
+  await assert.rejects(
+    () =>
+      service.createCharge(
+        createChargeInput({
+          financialFlowId: 200,
+          integrationApiKeyId: 9,
+        }),
+      ),
+    (error) => {
+      assert.ok(error instanceof ValidationError);
+      assert.equal(
+        error.message,
+        'Chave de integração do Asaas não pertence à empresa do fluxo financeiro',
+      );
+      return true;
+    },
+  );
+
+  assert.equal(db.calls.length, 3);
+  assert.match(db.calls[1]?.text ?? '', /FROM\s+financial_flows/i);
+  assert.match(db.calls[2]?.text ?? '', /FROM\s+integration_api_keys/i);
+  assert.deepEqual(db.calls[1]?.values, [200]);
+  assert.deepEqual(db.calls[2]?.values, [9]);
 });
