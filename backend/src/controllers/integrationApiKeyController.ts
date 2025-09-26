@@ -7,9 +7,37 @@ import IntegrationApiKeyService, {
 import IntegrationApiKeyValidationService from '../services/integrationApiKeyValidationService';
 import juditProcessService from '../services/juditProcessService';
 import cronJobs from '../services/cronJobs';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const service = new IntegrationApiKeyService();
 const validationService = new IntegrationApiKeyValidationService();
+
+async function resolveEmpresaId(req: Request, res: Response): Promise<number | null> {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  try {
+    const lookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!lookup.success) {
+      res.status(lookup.status).json({ error: lookup.message });
+      return null;
+    }
+
+    if (lookup.empresaId === null) {
+      res.status(400).json({ error: 'Usuário não está vinculado a uma empresa.' });
+      return null;
+    }
+
+    return lookup.empresaId;
+  } catch (error) {
+    console.error('Failed to resolve authenticated user empresa:', error);
+    res.status(500).json({ error: 'Internal server error' });
+    return null;
+  }
+}
 
 function parseIdParam(param: string): number | null {
   const value = Number(param);
@@ -61,9 +89,14 @@ function toOptionalString(value: unknown, field: string): string | null | undefi
   throw new ValidationError(`${field} must be a string or null`);
 }
 
-export async function listIntegrationApiKeys(_req: Request, res: Response) {
+export async function listIntegrationApiKeys(req: Request, res: Response) {
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
+  }
+
   try {
-    const items = await service.list();
+    const items = await service.list({ empresaId });
     return res.json(items);
   } catch (error) {
     console.error('Failed to list integration API keys:', error);
@@ -78,8 +111,13 @@ export async function getIntegrationApiKey(req: Request, res: Response) {
     return res.status(400).json({ error: 'Invalid API key id' });
   }
 
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
+  }
+
   try {
-    const apiKey = await service.findById(apiKeyId);
+    const apiKey = await service.findById(apiKeyId, { empresaId });
     if (!apiKey) {
       return res.status(404).json({ error: 'API key not found' });
     }
@@ -91,6 +129,11 @@ export async function getIntegrationApiKey(req: Request, res: Response) {
 }
 
 export async function createIntegrationApiKey(req: Request, res: Response) {
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
+  }
+
   const { provider, apiUrl, key, environment, active, lastUsed } = req.body as {
     provider?: string;
     apiUrl?: unknown;
@@ -122,6 +165,8 @@ export async function createIntegrationApiKey(req: Request, res: Response) {
       input.lastUsed = parsedLastUsed;
     }
 
+    input.empresaId = empresaId;
+
     const created = await service.create(input);
     juditProcessService.invalidateConfigurationCache();
     await cronJobs.refreshJuditIntegration();
@@ -140,6 +185,11 @@ export async function updateIntegrationApiKey(req: Request, res: Response) {
 
   if (!apiKeyId) {
     return res.status(400).json({ error: 'Invalid API key id' });
+  }
+
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
   }
 
   const { provider, apiUrl, key, environment, active, lastUsed } = req.body as UpdateIntegrationApiKeyInput & {
@@ -175,7 +225,7 @@ export async function updateIntegrationApiKey(req: Request, res: Response) {
       updates.lastUsed = parsedLastUsed;
     }
 
-    const updated = await service.update(apiKeyId, updates);
+    const updated = await service.update(apiKeyId, updates, { empresaId });
     if (!updated) {
       return res.status(404).json({ error: 'API key not found' });
     }
@@ -198,8 +248,13 @@ export async function deleteIntegrationApiKey(req: Request, res: Response) {
     return res.status(400).json({ error: 'Invalid API key id' });
   }
 
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
+  }
+
   try {
-    const deleted = await service.delete(apiKeyId);
+    const deleted = await service.delete(apiKeyId, { empresaId });
     if (!deleted) {
       return res.status(404).json({ error: 'API key not found' });
     }
@@ -222,8 +277,13 @@ export async function validateAsaasIntegration(req: Request, res: Response) {
         ? Number(apiKeyId)
         : Number.NaN;
 
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
+  }
+
   try {
-    const result = await validationService.validateAsaas(parsedId);
+    const result = await validationService.validateAsaas(parsedId, { empresaId });
     return res.json(result);
   } catch (error) {
     if (error instanceof ValidationError) {

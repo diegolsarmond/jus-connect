@@ -104,12 +104,15 @@ export default class IntegrationApiKeyValidationService {
     })
   ) {}
 
-  async validateAsaas(apiKeyId: number): Promise<ValidateAsaasIntegrationResult> {
+  async validateAsaas(
+    apiKeyId: number,
+    scope: { empresaId: number },
+  ): Promise<ValidateAsaasIntegrationResult> {
     if (!Number.isInteger(apiKeyId) || apiKeyId <= 0) {
       throw new ValidationError('Invalid API key id');
     }
 
-    const apiKey = await this.apiKeyService.findById(apiKeyId);
+    const apiKey = await this.apiKeyService.findById(apiKeyId, scope);
     if (!apiKey) {
       throw new ValidationError('Asaas API key not found');
     }
