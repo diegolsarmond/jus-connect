@@ -1,59 +1,111 @@
 import { describe, expect, it } from "vitest";
 
-import { isParteInteressada, filtrarPartesInteressadas } from "./partes";
+import { filtrarPartesInteressadas, isParteInteressada } from "./partes";
 
 describe("isParteInteressada", () => {
-  it("identifica partes interessadas com base no campo role", () => {
-    const parte = { nome: "Maria", role: "Parte Interessada" };
-
-    expect(isParteInteressada(parte)).toBe(true);
+  it("identifica valores textuais com indicador de parte interessada", () => {
+    expect(
+      isParteInteressada({
+        role: "Parte Interessada",
+      }),
+    ).toBe(true);
   });
 
-  it("identifica partes interessadas com base em campos aninhados", () => {
-    const parte = {
-      nome: "Empresa X",
-      detalhes: {
-        participacao: "Interessada Principal",
-      },
-    };
+  it("reconhece diferentes campos e variações de escrita", () => {
+    expect(
+      isParteInteressada({
+        tipo: "Interessado",
+        side: "Autor",
+      }),
+    ).toBe(true);
 
-    expect(isParteInteressada(parte)).toBe(true);
+    expect(
+      isParteInteressada({
+        side: "INTERESTED",
+      }),
+    ).toBe(true);
   });
 
-  it("reconhece indicadores booleanos fornecidos pelo backend", () => {
-    const parte = { nome: "Carlos", is_interested: true };
+  it("detecta identificadores booleanos em campos sinalizados", () => {
+    expect(
+      isParteInteressada({
+        is_interested: true,
+      }),
+    ).toBe(true);
 
-    expect(isParteInteressada(parte)).toBe(true);
+    expect(
+      isParteInteressada({
+        interested_flag: "Sim",
+      }),
+    ).toBe(true);
   });
 
-  it("considera arrays com descrições de interesse", () => {
-    const parte = {
-      nome: "Fulano",
-      labels: ["Testemunha", "Parte Interessada"],
-    };
+  it("analisa estruturas aninhadas", () => {
+    expect(
+      isParteInteressada({
+        metadata: {
+          participation: "Parte interessada",
+        },
+      }),
+    ).toBe(true);
 
-    expect(isParteInteressada(parte)).toBe(true);
+    expect(
+      isParteInteressada({
+        labels: ["autor", "parte interessada"],
+      }),
+    ).toBe(true);
   });
 
-  it("retorna falso quando nenhum indicador é encontrado", () => {
-    const parte = { nome: "Beltrano", role: "Autor" };
-
-    expect(isParteInteressada(parte)).toBe(false);
+  it("retorna falso quando nenhum identificador é encontrado", () => {
+    expect(
+      isParteInteressada({
+        role: "Autor",
+        tipo: "Requerido",
+      }),
+    ).toBe(false);
   });
 });
 
 describe("filtrarPartesInteressadas", () => {
-  it("filtra apenas as partes interessadas", () => {
+  it("filtra arrays heterogêneos retornando apenas partes interessadas", () => {
     const partes = [
-      { nome: "Maria", role: "Parte Interessada" },
-      { nome: "João", role: "Réu" },
-      { nome: "Empresa X", detalhes: { participacao: "Interessada" } },
+      { role: "Autor" },
+      { role: "Parte interessada" },
+      null,
+      undefined,
+      { side: "INTERESTED" },
+      { tipo: "Requerido" },
     ];
 
     expect(filtrarPartesInteressadas(partes)).toEqual([
-      { nome: "Maria", role: "Parte Interessada" },
-      { nome: "Empresa X", detalhes: { participacao: "Interessada" } },
+      { role: "Parte interessada" },
+      { side: "INTERESTED" },
     ]);
   });
-});
 
+  it("aceita respostas no formato de objeto com arrays aninhados", () => {
+    const partes = {
+      principal: { role: "Autor" },
+      interessados: [
+        { tipo: "Interessado" },
+        { dados: { categoria: "Parte interessada" } },
+      ],
+      outros: {
+        semInteresse: { role: "Réu" },
+      },
+    };
+
+    const resultado = filtrarPartesInteressadas(partes);
+
+    expect(resultado).toHaveLength(2);
+    expect(resultado).toEqual([
+      { tipo: "Interessado" },
+      { dados: { categoria: "Parte interessada" } },
+    ]);
+  });
+
+  it("retorna array vazio quando nenhum dado é fornecido", () => {
+    expect(filtrarPartesInteressadas(undefined)).toEqual([]);
+    expect(filtrarPartesInteressadas(null)).toEqual([]);
+  });
+});

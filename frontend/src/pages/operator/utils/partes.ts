@@ -72,8 +72,16 @@ const valueContainsInterested = (
   allowBooleanMatches: boolean,
 ): boolean => {
   if (typeof value === "string") {
-    return stringMatchesInterested(value) ||
-      (allowBooleanMatches && coerceBoolean(value));
+    const trimmedValue = value.trim();
+
+    if (!trimmedValue) {
+      return false;
+    }
+
+    return (
+      stringMatchesInterested(trimmedValue) ||
+      (allowBooleanMatches && coerceBoolean(trimmedValue))
+    );
   }
 
   if (typeof value === "boolean" || typeof value === "number") {
@@ -109,8 +117,34 @@ export const isParteInteressada = (parte: unknown): boolean => {
   );
 };
 
-export const filtrarPartesInteressadas = <T extends unknown>(
-  partes: T[],
-): T[] =>
-  partes.filter((parte) => isParteInteressada(parte));
+type ParteRecord = Record<string, unknown>;
+
+const collectPartesFromValue = (value: unknown): ParteRecord[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectPartesFromValue(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  return [value as ParteRecord];
+};
+
+const normalizarPartes = (partes: unknown): ParteRecord[] => {
+  if (Array.isArray(partes)) {
+    return partes.flatMap((parte) => collectPartesFromValue(parte));
+  }
+
+  if (partes && typeof partes === "object") {
+    return Object.values(partes as Record<string, unknown>).flatMap((value) =>
+      collectPartesFromValue(value),
+    );
+  }
+
+  return [];
+};
+
+export const filtrarPartesInteressadas = (partes: unknown): ParteRecord[] =>
+  normalizarPartes(partes).filter((parte) => isParteInteressada(parte));
 
