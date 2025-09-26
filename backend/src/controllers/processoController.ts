@@ -852,6 +852,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
           {
             source: 'details',
             skipIfPending: true,
+            withAttachments: true,
           }
         );
 

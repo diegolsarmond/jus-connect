@@ -121,8 +121,12 @@ async function loadPlan(planId: number): Promise<PlanRow | null> {
   return result.rows[0];
 }
 
+type EmpresaCustomerRow = {
+  asaas_customer_id: string | null;
+};
+
 async function findEmpresaAsaasCustomerId(empresaId: number): Promise<string | null> {
-  const result = await pool.query<{ asaas_customer_id: unknown }>(
+  const result = await pool.query<EmpresaCustomerRow>(
     'SELECT asaas_customer_id FROM public.empresas WHERE id = $1 LIMIT 1',
     [empresaId],
   );
@@ -140,19 +144,16 @@ async function findEmpresaAsaasCustomerId(empresaId: number): Promise<string | n
   return null;
 }
 
-async function persistEmpresaAsaasCustomerId(
-  empresaId: number,
-  customerId: string,
-): Promise<void> {
+async function persistEmpresaAsaasCustomerId(empresaId: number, customerId: string): Promise<void> {
   const normalizedId = customerId.trim();
   if (!normalizedId) {
     throw new Error('Cannot persist empty Asaas customer identifier');
   }
 
-  const result = await pool.query('UPDATE public.empresas SET asaas_customer_id = $1 WHERE id = $2', [
-    normalizedId,
-    empresaId,
-  ]);
+  const result = await pool.query(
+    'UPDATE public.empresas SET asaas_customer_id = $1 WHERE id = $2',
+    [normalizedId, empresaId],
+  );
 
   if (result.rowCount === 0) {
     throw new Error('Empresa não encontrada para vincular cliente do Asaas.');
@@ -469,21 +470,13 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     return;
   }
 
-  const normalizedCustomerId = customerId.trim();
-  if (!normalizedCustomerId) {
-    res.status(502).json({ error: 'Não foi possível preparar o cliente no Asaas.' });
-    return;
-  }
-
   try {
-    await persistEmpresaAsaasCustomerId(empresaId, normalizedCustomerId);
+    await persistEmpresaAsaasCustomerId(empresaId, customerId);
   } catch (error) {
     console.error('Falha ao persistir vínculo de cliente Asaas para empresa', error);
     res.status(500).json({ error: 'Não foi possível vincular o cliente do Asaas à empresa.' });
     return;
   }
-
-  customerId = normalizedCustomerId;
 
   const subscriptionCycle = pricingMode === 'anual' ? 'ANNUAL' : 'MONTHLY';
 
