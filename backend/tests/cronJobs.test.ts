@@ -58,6 +58,41 @@ test('refreshJuditIntegration schedules timers when integration is enabled', asy
   await waitForAsyncTasks();
 });
 
+test('refreshJuditIntegration re-arms timers after being disabled', async () => {
+  const cron = createCronJobs([true, true, true, true], false);
+
+  await waitForAsyncTasks();
+
+  const schedules = (cron as any).juditSchedules as Array<{
+    timer: ReturnType<typeof setTimeout> | null;
+    nextRunAt: Date | null;
+  }>;
+
+  for (const schedule of schedules) {
+    assert.notEqual(schedule.timer, null, 'Expected Judit timer to start armed');
+  }
+
+  sequence = [false];
+  await cron.refreshJuditIntegration();
+  await waitForAsyncTasks();
+
+  for (const schedule of schedules) {
+    assert.equal(schedule.timer, null, 'Expected Judit timer to be cleared when disabled');
+  }
+
+  sequence = [true, true, true, true];
+  await cron.refreshJuditIntegration();
+  await waitForAsyncTasks();
+
+  for (const schedule of schedules) {
+    assert.notEqual(schedule.timer, null, 'Expected Judit timer to be re-armed when enabled again');
+  }
+
+  sequence = [false];
+  await cron.refreshJuditIntegration();
+  await waitForAsyncTasks();
+});
+
 test('refreshJuditIntegration clears timers when integration is disabled', async () => {
   const cron = createCronJobs([true, true, true, true], false);
 
