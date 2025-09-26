@@ -42,13 +42,47 @@ function normalizeEnvironment(value: string | null): AsaasEnvironment {
 }
 
 function normalizeBaseUrl(environment: AsaasEnvironment, apiUrl: string | null): string {
-  if (apiUrl) {
-    const trimmed = apiUrl.trim();
-    if (trimmed) {
-      return trimmed.replace(/\/$/, '');
-    }
+  const fallback = ASAAS_DEFAULT_BASE_URLS[environment];
+
+  if (!apiUrl) {
+    return fallback;
   }
-  return ASAAS_DEFAULT_BASE_URLS[environment];
+
+  const trimmed = apiUrl.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
+
+  try {
+    const parsed = new URL(withoutTrailingSlash);
+    if (parsed.hostname.endsWith('asaas.com')) {
+      const pathname = parsed.pathname ?? '';
+
+      if (/\/api\/v\d+$/i.test(pathname)) {
+        return withoutTrailingSlash;
+      }
+
+      if (/\/api$/i.test(pathname)) {
+        return `${withoutTrailingSlash}/v3`;
+      }
+
+      if (!pathname || pathname === '/') {
+        return `${withoutTrailingSlash}/api/v3`;
+      }
+
+      if (!/\/api\//i.test(pathname)) {
+        return `${withoutTrailingSlash}/api/v3`;
+      }
+
+      return withoutTrailingSlash;
+    }
+  } catch (error) {
+    return fallback;
+  }
+
+  return withoutTrailingSlash;
 }
 
 function normalizeToken(token: string | null): string {
