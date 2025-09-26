@@ -41,6 +41,15 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import AttachmentsSummaryCard from "@/components/process/AttachmentsSummaryCard";
 import { getApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -770,6 +779,391 @@ interface ProcessoAttachmentsSectionProps {
 }
 
 const ATTACHMENT_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
+const HISTORY_PAGE_SIZE_OPTIONS = [5, 10, 20, 30];
+
+const EN_US_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "long",
+  day: "2-digit",
+  year: "numeric",
+});
+
+const EN_US_WEEKDAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+});
+
+const EN_US_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const EXCERPT_CHARACTER_LIMIT = 320;
+
+const MOVEMENT_TRANSLATION_RULES: {
+  pattern: RegExp;
+  translation: string;
+  keepRest?: boolean;
+}[] = [
+  { pattern: /^Pet[ií]ção Inicial\b/i, translation: "Initial petition" },
+  { pattern: /^Pet[ií]ção\b/i, translation: "Petition", keepRest: true },
+  { pattern: /^Juntada\b/i, translation: "Document filing", keepRest: true },
+  { pattern: /^Decis[aã]o\b/i, translation: "Decision", keepRest: true },
+  { pattern: /^Despacho\b/i, translation: "Order", keepRest: true },
+  { pattern: /^Intima[cç][aã]o\b/i, translation: "Notice", keepRest: true },
+  { pattern: /^Cita[cç][aã]o\b/i, translation: "Service of process", keepRest: true },
+  { pattern: /^Certid[aã]o\b/i, translation: "Certificate", keepRest: true },
+  { pattern: /^Contest[aã]?[cç][aã]o\b/i, translation: "Defense brief", keepRest: true },
+  { pattern: /^Impugna[cç][aã]o\b/i, translation: "Objection", keepRest: true },
+  {
+    pattern: /^Manifest[aã]?[cç][aã]o da Advocacia P[uú]blica\b/i,
+    translation: "Public attorney statement",
+    keepRest: true,
+  },
+  { pattern: /^Manifest[aã]?[cç][aã]o\b/i, translation: "Statement", keepRest: true },
+  {
+    pattern: /^Arquivado Definitivamente\b/i,
+    translation: "Case archived permanently",
+  },
+  { pattern: /^Recebidos os autos\b/i, translation: "Case files received" },
+  { pattern: /^Conclusos para despacho\b/i, translation: "Submitted for order" },
+  {
+    pattern: /^Classe Processual alterada\b/i,
+    translation: "Case class updated",
+    keepRest: true,
+  },
+  {
+    pattern: /^Expedi[cç][aã]o de comunica[cç][aã]o via sistema\b/i,
+    translation: "Communication issued via system",
+  },
+  {
+    pattern: /^Decorrido prazo de\s*/i,
+    translation: "Deadline expired for ",
+    keepRest: true,
+  },
+  {
+    pattern: /^Remetidos os Autos\b/i,
+    translation: "Case files forwarded",
+    keepRest: true,
+  },
+  {
+    pattern: /^Proferido despacho de mero expediente\b/i,
+    translation: "Routine order issued",
+  },
+];
+
+const SECONDARY_TRANSLATIONS: { pattern: RegExp; replacement: string }[] = [
+  {
+    pattern: /Aviso de Recebimento/gi,
+    replacement: "Return receipt",
+  },
+  {
+    pattern: /Turma Recursal/gi,
+    replacement: "Appellate panel",
+  },
+  {
+    pattern: /Juizado Especial/gi,
+    replacement: "Small claims court",
+  },
+  {
+    pattern: /Perdas e Danos/gi,
+    replacement: "Losses and damages",
+  },
+  {
+    pattern: /Indeniza[cç][aã]o por Dano Moral/gi,
+    replacement: "Moral damages claim",
+  },
+];
+
+const JUDGE_KEYWORDS = [
+  "despacho",
+  "decisao",
+  "decisão",
+  "sentenca",
+  "sentença",
+  "acordao",
+  "acórdão",
+  "relator",
+  "relatório",
+  "relatorio",
+  "juiz",
+  "magistrado",
+  "poder judiciario",
+];
+
+interface TimelineEntry {
+  id: string;
+  dateKey: string;
+  dateLabel: string;
+  weekdayLabel: string | null;
+  timeLabel: string | null;
+  type: string;
+  publicationType: string | null;
+  classification: string | null;
+  source: string | null;
+  recordedAt: string | null;
+  updatedAt: string | null;
+  content: string | null;
+  excerpt: string | null;
+  hasMoreContent: boolean;
+  isJudgeDocument: boolean;
+}
+
+interface TimelineGroup {
+  dateKey: string;
+  dateLabel: string;
+  weekdayLabel: string | null;
+  items: TimelineEntry[];
+}
+
+const translateLabelToEnglish = (value: string | null | undefined): string => {
+  if (!value) {
+    return "Not informed";
+  }
+
+  let result = value.trim();
+
+  if (!result) {
+    return "Not informed";
+  }
+
+  for (const rule of MOVEMENT_TRANSLATION_RULES) {
+    if (rule.pattern.test(result)) {
+      if (rule.keepRest) {
+        const matched = result.match(rule.pattern)?.[0] ?? "";
+        const rest = result.slice(matched.length).trim();
+        result = rest ? `${rule.translation} — ${rest}` : rule.translation;
+      } else {
+        result = rule.translation;
+      }
+      break;
+    }
+  }
+
+  for (const replacement of SECONDARY_TRANSLATIONS) {
+    if (replacement.pattern.test(result)) {
+      result = result.replace(replacement.pattern, replacement.replacement);
+    }
+  }
+
+  const normalized = result.charAt(0).toUpperCase() + result.slice(1);
+  return normalized;
+};
+
+const parseDateFromKnownFormats = (
+  ...values: (string | null | undefined)[]
+): Date | null => {
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const parsedTimestamp = Date.parse(trimmed);
+    if (!Number.isNaN(parsedTimestamp)) {
+      return new Date(parsedTimestamp);
+    }
+
+    const match = trimmed.match(
+      /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/,
+    );
+
+    if (match) {
+      const [, day, month, year, hour = "0", minute = "0", second = "0"] = match;
+      return new Date(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+        Number(second),
+      );
+    }
+  }
+
+  return null;
+};
+
+const formatDateLabel = (date: Date | null): string => {
+  if (!date) {
+    return "Date not available";
+  }
+
+  return EN_US_DATE_FORMATTER.format(date);
+};
+
+const formatWeekdayLabel = (date: Date | null): string | null => {
+  if (!date) {
+    return null;
+  }
+
+  return EN_US_WEEKDAY_FORMATTER.format(date);
+};
+
+const formatTimeLabel = (date: Date | null): string | null => {
+  if (!date) {
+    return null;
+  }
+
+  return EN_US_TIME_FORMATTER.format(date);
+};
+
+const dedupeMovements = (
+  movements: ProcessoMovimentacaoDetalhe[],
+): ProcessoMovimentacaoDetalhe[] => {
+  const seenIds = new Set<string>();
+  const seenContent = new Set<string>();
+  const result: ProcessoMovimentacaoDetalhe[] = [];
+
+  movements.forEach((movement) => {
+    if (!movement.id) {
+      return;
+    }
+
+    const normalizedId = movement.id.trim();
+    const normalizedContentKey = [
+      (movement.data ?? "").slice(0, 10),
+      movement.tipo.trim().toLowerCase(),
+      (movement.conteudo ?? "").replace(/\s+/g, " ").toLowerCase(),
+      (movement.textoCategoria ?? "").replace(/\s+/g, " ").toLowerCase(),
+    ].join("|");
+
+    if (seenIds.has(normalizedId) || seenContent.has(normalizedContentKey)) {
+      return;
+    }
+
+    seenIds.add(normalizedId);
+    seenContent.add(normalizedContentKey);
+    result.push(movement);
+  });
+
+  return result;
+};
+
+const buildSourceDescription = (
+  fonte: ProcessoMovimentacaoDetalhe["fonte"],
+): string | null => {
+  if (!fonte) {
+    return null;
+  }
+
+  const parts = [
+    fonte.nome ? translateLabelToEnglish(fonte.nome) : fonte.sigla ?? null,
+    fonte.tipo ? translateLabelToEnglish(fonte.tipo) : null,
+    fonte.caderno ? translateLabelToEnglish(fonte.caderno) : null,
+    fonte.grauFormatado
+      ? translateLabelToEnglish(fonte.grauFormatado)
+      : fonte.grau
+        ? translateLabelToEnglish(fonte.grau)
+        : null,
+  ].filter(Boolean) as string[];
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return parts.join(" · ");
+};
+
+const isJudgeMovement = (movement: ProcessoMovimentacaoDetalhe): boolean => {
+  const content = [
+    movement.tipo,
+    movement.tipoPublicacao,
+    movement.classificacao?.nome ?? null,
+    movement.conteudo ?? null,
+    movement.textoCategoria ?? null,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return JUDGE_KEYWORDS.some((keyword) => content.includes(keyword));
+};
+
+const createTimelineEntries = (
+  movements: ProcessoMovimentacaoDetalhe[],
+): TimelineEntry[] => {
+  if (movements.length === 0) {
+    return [];
+  }
+
+  const uniqueMovements = dedupeMovements(movements);
+
+  const sortedMovements = [...uniqueMovements].sort((a, b) => {
+    const dateA =
+      parseDateFromKnownFormats(a.data, a.criadoEm, a.atualizadoEm)?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const dateB =
+      parseDateFromKnownFormats(b.data, b.criadoEm, b.atualizadoEm)?.getTime() ?? Number.NEGATIVE_INFINITY;
+
+    return dateB - dateA;
+  });
+
+  return sortedMovements.map((movement) => {
+    const movementDate = parseDateFromKnownFormats(
+      movement.data,
+      movement.dataFormatada,
+      movement.criadoEm,
+    );
+
+    const excerpt = movement.conteudo
+      ? movement.conteudo.length > EXCERPT_CHARACTER_LIMIT
+        ? `${movement.conteudo.slice(0, EXCERPT_CHARACTER_LIMIT - 1).trimEnd()}…`
+        : movement.conteudo
+      : null;
+
+    return {
+      id: movement.id,
+      dateKey: movementDate ? movementDate.toISOString().slice(0, 10) : "unknown",
+      dateLabel: formatDateLabel(movementDate),
+      weekdayLabel: formatWeekdayLabel(movementDate),
+      timeLabel: formatTimeLabel(movementDate),
+      type: translateLabelToEnglish(movement.tipo),
+      publicationType: movement.tipoPublicacao
+        ? translateLabelToEnglish(movement.tipoPublicacao)
+        : null,
+      classification: movement.classificacao?.nome
+        ? translateLabelToEnglish(movement.classificacao.nome)
+        : null,
+      source: buildSourceDescription(movement.fonte),
+      recordedAt: formatDateTimeOrNull(movement.criadoEm),
+      updatedAt: formatDateTimeOrNull(movement.atualizadoEm),
+      content: movement.conteudo,
+      excerpt,
+      hasMoreContent:
+        typeof movement.conteudo === "string" && movement.conteudo.length > EXCERPT_CHARACTER_LIMIT,
+      isJudgeDocument: isJudgeMovement(movement),
+    } satisfies TimelineEntry;
+  });
+};
+
+const groupTimelineEntries = (entries: TimelineEntry[]): TimelineGroup[] => {
+  const groups: TimelineGroup[] = [];
+  const groupMap = new Map<string, TimelineGroup>();
+
+  entries.forEach((entry) => {
+    const key = entry.dateKey;
+    const existing = groupMap.get(key);
+
+    if (existing) {
+      existing.items.push(entry);
+      return;
+    }
+
+    const newGroup: TimelineGroup = {
+      dateKey: key,
+      dateLabel: entry.dateLabel,
+      weekdayLabel: entry.weekdayLabel,
+      items: [entry],
+    };
+
+    groupMap.set(key, newGroup);
+    groups.push(newGroup);
+  });
+
+  return groups;
+};
 
 const buildPaginationRange = (
   currentPage: number,
@@ -1134,14 +1528,25 @@ export default function VisualizarProcesso() {
   const totalAttachments = anexos.length;
   const [attachmentsPage, setAttachmentsPage] = useState(1);
   const [attachmentsPageSize, setAttachmentsPageSize] = useState(10);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(10);
+  const [selectedMovement, setSelectedMovement] = useState<TimelineEntry | null>(null);
 
   useEffect(() => {
     setAttachmentsPage(1);
   }, [processo?.id]);
 
   useEffect(() => {
+    setHistoryPage(1);
+  }, [processo?.id]);
+
+  useEffect(() => {
     setAttachmentsPage(1);
   }, [attachmentsPageSize]);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyPageSize]);
 
   const attachmentsTotalPages = useMemo(() => {
     if (totalAttachments === 0) {
@@ -1150,6 +1555,24 @@ export default function VisualizarProcesso() {
 
     return Math.max(1, Math.ceil(totalAttachments / attachmentsPageSize));
   }, [attachmentsPageSize, totalAttachments]);
+
+  const timelineEntries = useMemo(() => {
+    if (!processo) {
+      return [];
+    }
+
+    return createTimelineEntries(processo.movimentacoes);
+  }, [processo]);
+
+  const totalTimelineEntries = timelineEntries.length;
+
+  const historyTotalPages = useMemo(() => {
+    if (totalTimelineEntries === 0) {
+      return 1;
+    }
+
+    return Math.max(1, Math.ceil(totalTimelineEntries / historyPageSize));
+  }, [historyPageSize, totalTimelineEntries]);
 
   useEffect(() => {
     setAttachmentsPage((previous) => {
@@ -1165,6 +1588,20 @@ export default function VisualizarProcesso() {
     });
   }, [attachmentsTotalPages]);
 
+  useEffect(() => {
+    setHistoryPage((previous) => {
+      if (previous > historyTotalPages) {
+        return historyTotalPages;
+      }
+
+      if (previous < 1) {
+        return 1;
+      }
+
+      return previous;
+    });
+  }, [historyTotalPages]);
+
   const paginatedAttachments = useMemo(() => {
     if (totalAttachments === 0) {
       return [];
@@ -1175,6 +1612,39 @@ export default function VisualizarProcesso() {
 
     return anexos.slice(start, end);
   }, [anexos, attachmentsPage, attachmentsPageSize, totalAttachments]);
+
+  const paginatedTimelineEntries = useMemo(() => {
+    if (totalTimelineEntries === 0) {
+      return [];
+    }
+
+    const start = (historyPage - 1) * historyPageSize;
+    const end = start + historyPageSize;
+
+    return timelineEntries.slice(start, end);
+  }, [historyPage, historyPageSize, timelineEntries, totalTimelineEntries]);
+
+  const timelineGroups = useMemo(
+    () => groupTimelineEntries(paginatedTimelineEntries),
+    [paginatedTimelineEntries],
+  );
+
+  const hasTimelineEntries = totalTimelineEntries > 0;
+  const historyPaginationRange = useMemo(
+    () => buildPaginationRange(historyPage, historyTotalPages),
+    [historyPage, historyTotalPages],
+  );
+
+  const historyDisplayStart = !hasTimelineEntries
+    ? 0
+    : (historyPage - 1) * historyPageSize + 1;
+  const historyDisplayEnd = !hasTimelineEntries
+    ? 0
+    : Math.min(historyDisplayStart + paginatedTimelineEntries.length - 1, totalTimelineEntries);
+  const lastPaginatedEntryId =
+    paginatedTimelineEntries.length > 0
+      ? paginatedTimelineEntries[paginatedTimelineEntries.length - 1].id
+      : null;
 
   const partesBrutas = processo?.responseData?.partes;
   const partesInteressadas = useMemo(
@@ -1201,6 +1671,32 @@ export default function VisualizarProcesso() {
     const nextSize = Number.isFinite(size) && size > 0 ? Math.floor(size) : 10;
 
     setAttachmentsPageSize((currentSize) => {
+      if (currentSize === nextSize) {
+        return currentSize;
+      }
+
+      return nextSize;
+    });
+  }, []);
+
+  const handleHistoryPageChange = useCallback(
+    (page: number) => {
+      setHistoryPage((current) => {
+        const nextPage = Math.min(
+          Math.max(Number.isFinite(page) ? page : current, 1),
+          historyTotalPages,
+        );
+
+        return nextPage;
+      });
+    },
+    [historyTotalPages],
+  );
+
+  const handleHistoryPageSizeChange = useCallback((size: number) => {
+    const nextSize = Number.isFinite(size) && size > 0 ? Math.floor(size) : 10;
+
+    setHistoryPageSize((currentSize) => {
       if (currentSize === nextSize) {
         return currentSize;
       }
@@ -1855,136 +2351,270 @@ export default function VisualizarProcesso() {
 
         <TabsContent value="historico" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-xl font-semibold">
-                Movimentações registradas
-              </CardTitle>
+            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-xl font-semibold">Case timeline</CardTitle>
                 <CardDescription>
-                  Acompanhe as publicações e andamentos registrados para o processo.
+                  Explore a chronological view of the official updates recorded for this lawsuit.
                 </CardDescription>
-              </CardHeader>
+              </div>
+              {hasTimelineEntries ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium uppercase tracking-wide">Items per page</span>
+                  <Select
+                    value={String(historyPageSize)}
+                    onValueChange={(value) => {
+                      const parsed = Number(value);
+                      if (!Number.isFinite(parsed) || parsed <= 0) {
+                        return;
+                      }
+                      handleHistoryPageSizeChange(parsed);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[90px] text-xs" aria-label="Items per page">
+                      <SelectValue placeholder={`${historyPageSize}`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {HISTORY_PAGE_SIZE_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={String(option)}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+            </CardHeader>
             <CardContent className="space-y-6">
-              {processo.movimentacoes.length === 0 ? (
+              {!hasTimelineEntries ? (
                 <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
-                  Nenhuma movimentação foi registrada até o momento.
+                  No updates have been recorded yet.
                 </div>
               ) : (
-                <div className="relative">
-                  <div
-                    className="pointer-events-none absolute left-3 top-3 bottom-3 w-px bg-border/60 sm:left-4"
-                    aria-hidden
-                  />
-                  <div className="space-y-6">
-                    {processo.movimentacoes.map((movimentacao, index) => {
-                      const fonteDescricao = movimentacao.fonte
-                        ? [
-                            movimentacao.fonte.sigla && movimentacao.fonte.nome
-                              ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
-                              : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
-                            movimentacao.fonte.caderno,
-                            movimentacao.fonte.grauFormatado ?? movimentacao.fonte.grau,
-                            movimentacao.fonte.tipo,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")
-                        : null;
-                      const dataPrincipal =
-                        movimentacao.dataFormatada ??
-                        movimentacao.data ??
-                        "Data não informada";
-                      const isLast = index === processo.movimentacoes.length - 1;
-                      const indicatorDotClasses = isLast
-                        ? "bg-muted-foreground"
-                        : "bg-primary";
-
+                <>
+                  <div className="space-y-8">
+                    {timelineGroups.map((group) => {
                       return (
-                        <div key={movimentacao.id} className="relative pl-10 sm:pl-12">
-                          <span
-                            className="absolute left-1 top-2 flex h-4 w-4 items-center justify-center rounded-full border border-border/60 bg-background"
-                            aria-hidden
-                          >
-                            <span className={`h-2 w-2 rounded-full ${indicatorDotClasses}`} />
-                          </span>
-                          <div className="rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md">
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="space-y-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-base font-semibold text-foreground">
-                                    {movimentacao.tipo}
-                                  </p>
-                                  {movimentacao.tipoPublicacao ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                        <div key={`${group.dateKey}-${group.dateLabel}`} className="space-y-4">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+                            <span className="inline-flex w-fit items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                              {group.dateLabel}
+                            </span>
+                            {group.weekdayLabel ? (
+                              <span className="text-xs text-muted-foreground capitalize">
+                                {group.weekdayLabel}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="relative pl-6 sm:pl-10">
+                            <div
+                              className="pointer-events-none absolute left-[11px] top-2 bottom-4 w-px bg-border/60 sm:left-[17px]"
+                              aria-hidden
+                            />
+                            <div className="space-y-6">
+                              {group.items.map((entry) => {
+                                const isLastInPage = lastPaginatedEntryId === entry.id;
+                                const indicatorDotClasses = isLastInPage
+                                  ? "bg-muted-foreground"
+                                  : "bg-primary";
+
+                                return (
+                                  <div key={entry.id} className="relative pl-6 sm:pl-10">
+                                    <span
+                                      className="absolute left-[-3px] top-2 flex h-4 w-4 items-center justify-center rounded-full border border-border/60 bg-background sm:left-0"
+                                      aria-hidden
                                     >
-                                      {movimentacao.tipoPublicacao}
-                                    </Badge>
-                                  ) : null}
-                                  {movimentacao.classificacao ? (
-                                    <Badge
-                                      variant="secondary"
-                                      className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
-                                    >
-                                      {movimentacao.classificacao.nome}
-                                    </Badge>
-                                  ) : null}
-                                </div>
-                                {fonteDescricao ? (
-                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                    <Newspaper className="h-3.5 w-3.5" />
-                                    <span>{fonteDescricao}</span>
+                                      <span className={`h-2 w-2 rounded-full ${indicatorDotClasses}`} />
+                                    </span>
+                                    <div className="rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md">
+                                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div className="space-y-2">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className="text-sm font-semibold text-foreground">{entry.type}</p>
+                                            {entry.publicationType ? (
+                                              <Badge
+                                                variant="outline"
+                                                className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                              >
+                                                {entry.publicationType}
+                                              </Badge>
+                                            ) : null}
+                                            {entry.classification ? (
+                                              <Badge
+                                                variant="secondary"
+                                                className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                              >
+                                                {entry.classification}
+                                              </Badge>
+                                            ) : null}
+                                          </div>
+                                          {entry.source ? (
+                                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                              <Newspaper className="h-3.5 w-3.5" />
+                                              <span>{entry.source}</span>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground sm:items-end">
+                                          {entry.timeLabel ? (
+                                            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                                              <Clock className="h-4 w-4 text-primary" />
+                                              {entry.timeLabel}
+                                            </span>
+                                          ) : (
+                                            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                                              <Clock className="h-4 w-4 text-primary" />
+                                              Time not available
+                                            </span>
+                                          )}
+                                          {entry.recordedAt ? (
+                                            <span>Recorded: {entry.recordedAt}</span>
+                                          ) : null}
+                                          {entry.updatedAt && entry.updatedAt !== entry.recordedAt ? (
+                                            <span>Updated: {entry.updatedAt}</span>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                      {entry.excerpt ? (
+                                        <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">
+                                          {entry.excerpt}
+                                        </p>
+                                      ) : null}
+                                      {(entry.hasMoreContent || entry.isJudgeDocument) && entry.content ? (
+                                        <Button
+                                          variant="outline"
+                                          size="xs"
+                                          className="mt-3"
+                                          onClick={() => setSelectedMovement(entry)}
+                                        >
+                                          {entry.isJudgeDocument
+                                            ? "View judge decision"
+                                            : "View full content"}
+                                        </Button>
+                                      ) : null}
+                                    </div>
                                   </div>
-                                ) : null}
-                              </div>
-                              <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground sm:items-end">
-                                <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                                  <Calendar className="h-4 w-4 text-primary" />
-                                  {dataPrincipal}
-                                </span>
-                                {movimentacao.criadoEm ? (
-                                  <span>
-                                    Registrado em {formatDateTimeToPtBR(movimentacao.criadoEm)}
-                                  </span>
-                                ) : null}
-                                {movimentacao.atualizadoEm &&
-                                movimentacao.atualizadoEm !== movimentacao.criadoEm ? (
-                                  <span>
-                                    Atualizado em {formatDateTimeToPtBR(movimentacao.atualizadoEm)}
-                                  </span>
-                                ) : null}
-                              </div>
+                                );
+                              })}
                             </div>
-                            {movimentacao.conteudo ? (
-                              <div className="mt-3 rounded-lg border border-border/40 bg-muted/30 p-3 text-sm text-foreground whitespace-pre-line">
-                                {movimentacao.conteudo}
-                              </div>
-                            ) : null}
-                            {movimentacao.textoCategoria ? (
-                              <div className="mt-3 rounded-lg border border-dashed border-border/40 bg-background/50 p-3 text-sm text-foreground whitespace-pre-line">
-                                {movimentacao.textoCategoria}
-                              </div>
-                            ) : null}
-                            {movimentacao.classificacao?.descricao ? (
-                              <p className="mt-3 text-xs text-muted-foreground whitespace-pre-line">
-                                {movimentacao.classificacao.descricao}
-                              </p>
-                            ) : null}
-                            {movimentacao.classificacao?.hierarquia ? (
-                              <p className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                Hierarquia: {movimentacao.classificacao.hierarquia}
-                              </p>
-                            ) : null}
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                </div>
+                  <div className="flex flex-col gap-4 border-t border-border/60 pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                    <span>
+                      Showing {historyDisplayStart}-{historyDisplayEnd} of {totalTimelineEntries} updates
+                    </span>
+                    <Pagination className="sm:justify-end">
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              if (historyPage > 1) {
+                                handleHistoryPageChange(historyPage - 1);
+                              }
+                            }}
+                            className={historyPage === 1 ? "pointer-events-none opacity-50" : undefined}
+                          />
+                        </PaginationItem>
+                        {historyPaginationRange.map((item, itemIndex) => (
+                          <PaginationItem key={`${item}-${itemIndex}`}>
+                            {item === "ellipsis" ? (
+                              <PaginationEllipsis />
+                            ) : (
+                              <PaginationLink
+                                href="#"
+                                size="default"
+                                isActive={item === historyPage}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  handleHistoryPageChange(item);
+                                }}
+                              >
+                                {item}
+                              </PaginationLink>
+                            )}
+                          </PaginationItem>
+                        ))}
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              if (historyPage < historyTotalPages) {
+                                handleHistoryPageChange(historyPage + 1);
+                              }
+                            }}
+                            className={
+                              historyPage === historyTotalPages || historyTotalPages === 0
+                                ? "pointer-events-none opacity-50"
+                                : undefined
+                            }
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+      <Dialog
+        open={selectedMovement !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedMovement(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedMovement?.type ?? "Timeline entry"}</DialogTitle>
+            <DialogDescription>
+              {selectedMovement
+                ? `${selectedMovement.dateLabel}${selectedMovement.timeLabel ? ` • ${selectedMovement.timeLabel}` : ""}`
+                : "Detailed information about the selected update."}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[70vh] pr-2">
+            <div className="space-y-4 pt-1">
+              {selectedMovement?.content ? (
+                <p className="whitespace-pre-line text-sm text-foreground">
+                  {selectedMovement.content}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No additional text is available for this timeline entry.
+                </p>
+              )}
+              {selectedMovement?.source ? (
+                <p className="text-xs text-muted-foreground">Source: {selectedMovement.source}</p>
+              ) : null}
+              {selectedMovement?.recordedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  Recorded: {selectedMovement.recordedAt}
+                </p>
+              ) : null}
+              {selectedMovement?.updatedAt &&
+              selectedMovement.updatedAt !== selectedMovement.recordedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  Updated: {selectedMovement.updatedAt}
+                </p>
+              ) : null}
+            </div>
+          </ScrollArea>
+          <DialogFooter className="sm:justify-end">
+            <Button variant="outline" onClick={() => setSelectedMovement(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
