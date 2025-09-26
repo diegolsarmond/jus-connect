@@ -60,6 +60,59 @@ const resolveRequestSource = (
   return 'system';
 };
 
+const extractJuditErrorMessage = (payload: unknown): string | null => {
+  if (payload == null) {
+    return null;
+  }
+
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const candidateKeys = ['message', 'error', 'detail', 'title', 'description'] as const;
+
+    for (const key of candidateKeys) {
+      const value = record[key];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+
+    const errors = record.errors;
+    if (Array.isArray(errors)) {
+      for (const item of errors) {
+        if (typeof item === 'string') {
+          const trimmed = item.trim();
+          if (trimmed) {
+            return trimmed;
+          }
+        }
+
+        if (item && typeof item === 'object') {
+          const nestedRecord = item as Record<string, unknown>;
+          for (const key of candidateKeys) {
+            const value = nestedRecord[key];
+            if (typeof value === 'string') {
+              const trimmed = value.trim();
+              if (trimmed) {
+                return trimmed;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
 export const triggerManualJuditSync = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { withAttachments } = (req.body ?? {}) as {
@@ -154,7 +207,11 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Processo não encontrado na Judit.' });
       }
 
-      return res.status(502).json({ error: 'Falha ao comunicar com a Judit.' });
+      const message = extractJuditErrorMessage(error.body);
+      const normalizedMessage =
+        message && message.trim() ? message.trim() : 'Falha ao comunicar com a Judit.';
+
+      return res.status(502).json({ error: normalizedMessage });
     }
 
     console.error('[Processos] Falha ao acionar sincronização manual com a Judit.', error);
