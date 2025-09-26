@@ -23,6 +23,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getApiUrl } from "@/lib/api";
@@ -737,13 +753,232 @@ const getTipoBadgeClassName = (tipo: string) => {
   return "border-blue-200 bg-blue-500/10 text-blue-600";
 };
 
+interface ProcessoAttachmentsSectionProps {
+  attachments: Record<string, unknown>[];
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  processoId: number;
+}
+
+const ATTACHMENT_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
+
+const buildPaginationRange = (
+  currentPage: number,
+  totalPages: number,
+): (number | "ellipsis")[] => {
+  if (totalPages <= 5) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const range: (number | "ellipsis")[] = [1];
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+
+  if (start > 2) {
+    range.push("ellipsis");
+  }
+
+  for (let page = start; page <= end; page += 1) {
+    range.push(page);
+  }
+
+  if (end < totalPages - 1) {
+    range.push("ellipsis");
+  }
+
+  range.push(totalPages);
+
+  return range;
+};
+
+export function ProcessoAttachmentsSection({
+  attachments,
+  currentPage,
+  totalPages,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+  processoId,
+}: ProcessoAttachmentsSectionProps) {
+  const hasAttachments = totalItems > 0;
+  const paginationRange = buildPaginationRange(currentPage, totalPages);
+  const displayStart = !hasAttachments ? 0 : (currentPage - 1) * pageSize + 1;
+  const displayEnd = !hasAttachments
+    ? 0
+    : Math.min(displayStart + attachments.length - 1, totalItems);
+
+  const handlePageSizeChange = (value: string) => {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return;
+    }
+
+    onPageSizeChange(parsed);
+  };
+
+  const handlePageChange = (page: number) => {
+    if (page === currentPage) {
+      return;
+    }
+
+    onPageChange(page);
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-1">
+          <CardTitle className="text-xl font-semibold">Anexos recebidos</CardTitle>
+          <CardDescription>
+            {hasAttachments
+              ? "Visualize os documentos compartilhados pela automação da Judit."
+              : "Nenhum anexo foi recebido até o momento."}
+          </CardDescription>
+        </div>
+        {hasAttachments ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium uppercase tracking-wide">Itens por página</span>
+            <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+              <SelectTrigger className="h-8 w-[90px] text-xs" aria-label="Itens por página">
+                <SelectValue placeholder={`${pageSize}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {ATTACHMENT_PAGE_SIZE_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={String(option)}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {!hasAttachments ? (
+          <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+            Nenhum anexo foi recebido até o momento.
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {attachments.map((anexo, index) => {
+                const titulo =
+                  parseOptionalString(anexo.titulo) ??
+                  parseOptionalString(anexo.title) ??
+                  parseOptionalString(anexo.nome) ??
+                  `Anexo ${index + 1 + (currentPage - 1) * pageSize}`;
+                const links = normalizeDocumentoLinks(
+                  buildDocumentoLinksMap(
+                    anexo.links,
+                    anexo.href,
+                    anexo.url,
+                    anexo.link,
+                  ),
+                );
+                const linkEntries = Object.entries(links);
+
+                return (
+                  <div
+                    key={`${processoId}-anexo-${index}-${titulo}`}
+                    className="rounded-md border border-border/40 bg-background/60 p-3"
+                  >
+                    <p className="text-sm font-medium text-foreground">{titulo}</p>
+                    {linkEntries.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-primary underline">
+                        {linkEntries.map(([key, value]) => (
+                          <li key={`${processoId}-anexo-${index}-${key}`}>
+                            <a
+                              href={value}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="hover:text-primary/80"
+                            >
+                              {formatResponseKey(key)}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex flex-col gap-4 border-t border-border/60 pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Mostrando {displayStart}-{displayEnd} de {totalItems} anexos
+              </span>
+              <Pagination className="sm:justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (currentPage > 1) {
+                          onPageChange(currentPage - 1);
+                        }
+                      }}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : undefined}
+                    />
+                  </PaginationItem>
+                  {paginationRange.map((item, itemIndex) => (
+                    <PaginationItem key={`${item}-${itemIndex}`}>
+                      {item === "ellipsis" ? (
+                        <PaginationEllipsis />
+                      ) : (
+                        <PaginationLink
+                          href="#"
+                          size="default"
+                          isActive={item === currentPage}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            handlePageChange(item);
+                          }}
+                        >
+                          {item}
+                        </PaginationLink>
+                      )}
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (currentPage < totalPages) {
+                          onPageChange(currentPage + 1);
+                        }
+                      }}
+                      className={
+                        currentPage === totalPages || totalPages === 0
+                          ? "pointer-events-none opacity-50"
+                          : undefined
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function VisualizarProcesso() {
   const { id: clienteIdParam, processoId } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [processo, setProcesso] = useState<ProcessoDetalhes | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"resumo" | "historico">(
+  const [activeTab, setActiveTab] = useState<"resumo" | "historico" | "anexos">(
     "resumo",
   );
 
@@ -867,7 +1102,86 @@ export default function VisualizarProcesso() {
     return processo.movimentacoes.slice(0, 3);
   }, [processo]);
 
+  const anexos = processo?.responseData?.anexos ?? [];
+  const totalAttachments = anexos.length;
+  const [attachmentsPage, setAttachmentsPage] = useState(1);
+  const [attachmentsPageSize, setAttachmentsPageSize] = useState(10);
 
+  useEffect(() => {
+    setAttachmentsPage(1);
+  }, [processo?.id]);
+
+  useEffect(() => {
+    setAttachmentsPage(1);
+  }, [attachmentsPageSize]);
+
+  const attachmentsTotalPages = useMemo(() => {
+    if (totalAttachments === 0) {
+      return 1;
+    }
+
+    return Math.max(1, Math.ceil(totalAttachments / attachmentsPageSize));
+  }, [attachmentsPageSize, totalAttachments]);
+
+  useEffect(() => {
+    setAttachmentsPage((previous) => {
+      if (previous > attachmentsTotalPages) {
+        return attachmentsTotalPages;
+      }
+
+      if (previous < 1) {
+        return 1;
+      }
+
+      return previous;
+    });
+  }, [attachmentsTotalPages]);
+
+  const paginatedAttachments = useMemo(() => {
+    if (totalAttachments === 0) {
+      return [];
+    }
+
+    const start = (attachmentsPage - 1) * attachmentsPageSize;
+    const end = start + attachmentsPageSize;
+
+    return anexos.slice(start, end);
+  }, [anexos, attachmentsPage, attachmentsPageSize, totalAttachments]);
+
+  const attachmentsSummaryText = useMemo(() => {
+    if (totalAttachments === 0) {
+      return "Nenhum anexo foi recebido nas sincronizações mais recentes.";
+    }
+
+    const suffix = totalAttachments === 1 ? "" : "s";
+    return `Foram identificados ${totalAttachments} anexo${suffix} disponíveis para consulta.`;
+  }, [totalAttachments]);
+
+  const handleAttachmentsPageChange = useCallback(
+    (page: number) => {
+      setAttachmentsPage((current) => {
+        const nextPage = Math.min(
+          Math.max(Number.isFinite(page) ? page : current, 1),
+          attachmentsTotalPages,
+        );
+
+        return nextPage;
+      });
+    },
+    [attachmentsTotalPages],
+  );
+
+  const handleAttachmentsPageSizeChange = useCallback((size: number) => {
+    const nextSize = Number.isFinite(size) && size > 0 ? Math.floor(size) : 10;
+
+    setAttachmentsPageSize((currentSize) => {
+      if (currentSize === nextSize) {
+        return currentSize;
+      }
+
+      return nextSize;
+    });
+  }, []);
 
   const handleGerarContrato = useCallback(() => {
     if (!clienteIdParam || !processoId) {
@@ -935,6 +1249,7 @@ export default function VisualizarProcesso() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="w-full justify-start bg-muted/50">
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
+          <TabsTrigger value="anexos">Anexos</TabsTrigger>
           <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
 
@@ -1156,48 +1471,25 @@ export default function VisualizarProcesso() {
                           </div>
                         </div>
                       ) : null}
-                      {processo.responseData.anexos.length > 0 ? (
-                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Anexos recebidos
-                          </p>
-                          <div className="mt-3 space-y-3">
-                            {processo.responseData.anexos.map((anexo, index) => {
-                              const titulo =
-                                parseOptionalString(anexo.titulo) ??
-                                parseOptionalString(anexo.title) ??
-                                parseOptionalString(anexo.nome) ??
-                                `Anexo ${index + 1}`;
-                              const links = buildDocumentoLinksMap(
-                                anexo.links,
-                                anexo.href,
-                                anexo.url,
-                                anexo.link,
-                              );
-                              const linkEntries = Object.entries(links);
-                              return (
-                                <div
-                                  key={`${processo.id}-anexo-${index}-${titulo}`}
-                                  className="rounded-md border border-border/40 bg-background/60 p-3"
-                                >
-                                  <p className="text-sm font-medium text-foreground">{titulo}</p>
-                                  {linkEntries.length > 0 ? (
-                                    <ul className="mt-2 space-y-1 text-xs text-primary underline">
-                                      {linkEntries.map(([key, value]) => (
-                                        <li key={`${processo.id}-anexo-${index}-${key}`}>
-                                          <a href={value} target="_blank" rel="noreferrer" className="hover:text-primary/80">
-                                            {formatResponseKey(key)}
-                                          </a>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
+                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Anexos recebidos
+                            </p>
+                            <p className="mt-1 text-sm text-foreground">{attachmentsSummaryText}</p>
                           </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full sm:w-auto"
+                            onClick={() => setActiveTab("anexos")}
+                            disabled={totalAttachments === 0}
+                          >
+                            Ver anexos
+                          </Button>
                         </div>
-                      ) : null}
+                      </div>
                       {processo.responseData.metadata ? (
                         <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1483,12 +1775,25 @@ export default function VisualizarProcesso() {
           </div>
         </TabsContent>
 
-          <TabsContent value="historico" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl font-semibold">
-                  Movimentações registradas
-                </CardTitle>
+        <TabsContent value="anexos" className="space-y-6">
+          <ProcessoAttachmentsSection
+            attachments={paginatedAttachments}
+            currentPage={attachmentsPage}
+            totalPages={attachmentsTotalPages}
+            pageSize={attachmentsPageSize}
+            totalItems={totalAttachments}
+            onPageChange={handleAttachmentsPageChange}
+            onPageSizeChange={handleAttachmentsPageSizeChange}
+            processoId={processo.id}
+          />
+        </TabsContent>
+
+        <TabsContent value="historico" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold">
+                Movimentações registradas
+              </CardTitle>
                 <CardDescription>
                   Acompanhe as publicações e andamentos registrados para o processo.
                 </CardDescription>
