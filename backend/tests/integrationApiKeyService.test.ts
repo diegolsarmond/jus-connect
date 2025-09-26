@@ -33,6 +33,8 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
     environment: 'producao',
     active: true,
     last_used: null,
+    idempresa: 123,
+    global: true,
     created_at: '2024-01-01T00:00:00.000Z',
     updated_at: '2024-01-01T00:00:00.000Z',
   };
@@ -48,6 +50,8 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
     apiUrl: ' https://api.openai.com/v1 ',
     key: '  sk_live_abc123  ',
     environment: ' Producao ',
+    empresaId: 123,
+    global: true,
   };
 
   const result = await service.create(payload);
@@ -55,7 +59,16 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   assert.equal(pool.calls.length, 1);
   const call = pool.calls[0];
   assert.match(call.text, /INSERT INTO integration_api_keys/i);
-  assert.deepEqual(call.values, ['openai', 'https://api.openai.com/v1', 'sk_live_abc123', 'producao', true, null]);
+  assert.deepEqual(call.values, [
+    'openai',
+    'https://api.openai.com/v1',
+    'sk_live_abc123',
+    'producao',
+    true,
+    null,
+    123,
+    true,
+  ]);
 
   const expected: IntegrationApiKey = {
     id: 1,
@@ -65,6 +78,8 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
     environment: 'producao',
     active: true,
     lastUsed: null,
+    empresaId: 123,
+    global: true,
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
   };
@@ -81,6 +96,8 @@ test('IntegrationApiKeyService.create normalizes Judit provider and omits defaul
     environment: 'homologacao',
     active: true,
     last_used: null,
+    idempresa: null,
+    global: false,
     created_at: '2024-01-05T00:00:00.000Z',
     updated_at: '2024-01-05T00:00:00.000Z',
   };
@@ -106,11 +123,15 @@ test('IntegrationApiKeyService.create normalizes Judit provider and omits defaul
     'homologacao',
     true,
     null,
+    null,
+    false,
   ]);
 
   assert.equal(result.provider, 'judit');
   assert.equal(result.apiUrl, null);
   assert.equal(result.environment, 'homologacao');
+  assert.equal(result.empresaId, null);
+  assert.equal(result.global, false);
 });
 
 test('IntegrationApiKeyService.create assigns default API URL for Asaas in produção', async () => {
@@ -122,6 +143,8 @@ test('IntegrationApiKeyService.create assigns default API URL for Asaas in produ
     environment: 'producao',
     active: true,
     last_used: null,
+    idempresa: null,
+    global: false,
     created_at: '2024-01-02T00:00:00.000Z',
     updated_at: '2024-01-02T00:00:00.000Z',
   };
@@ -148,11 +171,14 @@ test('IntegrationApiKeyService.create assigns default API URL for Asaas in produ
     'producao',
     true,
     null,
+    null,
+    false,
   ]);
 
   assert.equal(result.provider, 'asaas');
   assert.equal(result.apiUrl, 'https://api.asaas.com/api/v3');
   assert.equal(result.environment, 'producao');
+  assert.equal(result.global, false);
 });
 
 test('IntegrationApiKeyService.create assigns sandbox URL for Asaas in homologação when apiUrl omitted', async () => {
@@ -164,6 +190,8 @@ test('IntegrationApiKeyService.create assigns sandbox URL for Asaas in homologa�
     environment: 'homologacao',
     active: false,
     last_used: null,
+    idempresa: null,
+    global: false,
     created_at: '2024-01-03T00:00:00.000Z',
     updated_at: '2024-01-03T00:00:00.000Z',
   };
@@ -190,11 +218,14 @@ test('IntegrationApiKeyService.create assigns sandbox URL for Asaas in homologa�
     'homologacao',
     false,
     null,
+    null,
+    false,
   ]);
 
   assert.equal(result.provider, 'asaas');
   assert.equal(result.apiUrl, 'https://sandbox.asaas.com/api/v3');
   assert.equal(result.active, false);
+  assert.equal(result.global, false);
 });
 
 test('IntegrationApiKeyService.create validates provider and key', async () => {
@@ -222,6 +253,8 @@ test('IntegrationApiKeyService.list retrieves keys ordered by creation date', as
       environment: 'homologacao',
       active: false,
       last_used: '2024-02-10T12:00:00.000Z',
+      idempresa: 99,
+      global: false,
       created_at: '2024-02-11T12:00:00.000Z',
       updated_at: '2024-02-11T12:30:00.000Z',
     },
@@ -242,6 +275,8 @@ test('IntegrationApiKeyService.list retrieves keys ordered by creation date', as
   assert.equal(result[0].provider, 'openai');
   assert.equal(result[0].apiUrl, 'https://sandbox.openai.com');
   assert.equal(result[0].lastUsed, '2024-02-10T12:00:00.000Z');
+  assert.equal(result[0].empresaId, 99);
+  assert.equal(result[0].global, false);
 });
 
 test('IntegrationApiKeyService.list includes Asaas entries with inactive status', async () => {
@@ -254,6 +289,8 @@ test('IntegrationApiKeyService.list includes Asaas entries with inactive status'
       environment: 'homologacao',
       active: false,
       last_used: null,
+      idempresa: null,
+      global: true,
       created_at: '2024-02-12T10:00:00.000Z',
       updated_at: '2024-02-12T11:00:00.000Z',
     },
@@ -272,6 +309,7 @@ test('IntegrationApiKeyService.list includes Asaas entries with inactive status'
   assert.equal(result[0].apiUrl, 'https://sandbox.asaas.com/api/v3');
   assert.equal(result[0].environment, 'homologacao');
   assert.equal(result[0].active, false);
+  assert.equal(result[0].global, true);
 });
 
 test('IntegrationApiKeyService.list tolerates unexpected provider and environment values', async () => {
@@ -284,6 +322,8 @@ test('IntegrationApiKeyService.list tolerates unexpected provider and environmen
       environment: 'custom-env',
       active: true,
       last_used: null,
+      idempresa: '  ',
+      global: false,
       created_at: '2024-02-15T10:00:00.000Z',
       updated_at: '2024-02-16T11:00:00.000Z',
     },
@@ -300,6 +340,7 @@ test('IntegrationApiKeyService.list tolerates unexpected provider and environmen
   assert.equal(result.length, 1);
   assert.equal(result[0].provider, 'Zoho');
   assert.equal(result[0].environment, 'custom-env');
+  assert.equal(result[0].empresaId, null);
 });
 
 test('IntegrationApiKeyService.update builds dynamic query and handles not found', async () => {
@@ -311,6 +352,8 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
     environment: 'homologacao',
     active: false,
     last_used: '2024-03-01T08:30:00.000Z',
+    idempresa: 55,
+    global: true,
     created_at: '2024-02-01T10:00:00.000Z',
     updated_at: '2024-03-01T08:30:00.000Z',
   };
@@ -329,6 +372,8 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
     environment: ' Homologacao ',
     active: false,
     lastUsed: '2024-03-01T08:30:00Z',
+    empresaId: 55,
+    global: true,
   };
 
   const result = await service.update(7, updates);
@@ -344,13 +389,17 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
   const lastUsedValue = pool.calls[0].values?.[5];
   assert.ok(lastUsedValue instanceof Date);
   assert.equal((lastUsedValue as Date).toISOString(), '2024-03-01T08:30:00.000Z');
-  assert.equal(pool.calls[0].values?.[6], 7);
+  assert.equal(pool.calls[0].values?.[6], 55);
+  assert.equal(pool.calls[0].values?.[7], true);
+  assert.equal(pool.calls[0].values?.[8], 7);
 
   assert.equal(result?.id, 7);
   assert.equal(result?.provider, 'openai');
   assert.equal(result?.active, false);
   assert.equal(result?.environment, 'homologacao');
   assert.equal(result?.apiUrl, 'https://new.api.openai.com');
+  assert.equal(result?.empresaId, 55);
+  assert.equal(result?.global, true);
 
   const notFound = await service.update(99, { active: true });
   assert.equal(pool.calls.length, 2);
