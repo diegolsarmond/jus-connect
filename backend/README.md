@@ -15,21 +15,30 @@ Estrutura inicial do backend usando Express e TypeScript.
 ### Ambiente de desenvolvimento local
 
 1. Certifique-se de ter o **Node.js 20** (ou superior) e um banco de dados
-   **PostgreSQL** acessível. O projeto já inclui um `appsettings.json`
-   configurado para a stack de desenvolvimento utilizada no Docker Compose da
-   Quantum. Ao executar o backend fora de containers, a aplicação substitui
-   automaticamente o host `base-de-dados_postgres` por `localhost`.
-   Caso precise utilizar outro hostname local, defina `LOCAL_DB_HOST` antes de
+   **PostgreSQL** acessível. Antes de iniciar o servidor, informe uma
+   connection string utilizando **uma** das opções abaixo:
+
+   - Defina a variável de ambiente `DATABASE_URL` apontando para a sua base
+     local ou remota.
+   - Crie um arquivo `backend/appsettings.local.json` (ou `backend/appsettings.json`)
+     com o seguinte formato e ajuste os valores conforme a sua infraestrutura:
+
+     ```json
+     {
+       "ConnectionStrings": {
+         "DefaultConnection": "postgres://usuario:senha@localhost:5432/nomedobanco"
+       }
+     }
+     ```
+
+     Utilize o arquivo `backend/appsettings.example.json` como referência. Ele
+     é ignorado pelo Git para evitar que credenciais reais sejam versionadas.
+
+   Ao executar o backend fora de containers, a aplicação substitui
+   automaticamente o host `base-de-dados_postgres` por `localhost`. Caso
+   precise utilizar outro hostname local, defina `LOCAL_DB_HOST` antes de
    iniciar o servidor. Você também pode sobrescrever toda a conexão usando a
-   variável `DATABASE_URL`. Para o ambiente de testes/homologação padrão
-   utilize:
-
-   ```bash
-   export DATABASE_URL="postgres://postgres:C@104rm0nd1994@easypanel02.quantumtecnologia.com.br:5438/quantumtecnologia?sslmode=disable"
-   ```
-
-   Caso prefira outra instância local, substitua a string acima pela conexão
-   desejada.
+   variável `DATABASE_URL`.
 
 2. Instale as dependências do backend:
 
