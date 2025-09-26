@@ -4,6 +4,7 @@ import juditProcessService, {
   JuditApiError,
   JuditConfigurationError,
   type JuditRequestRecord,
+  type JuditRequestSource,
 } from '../services/juditProcessService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
@@ -38,8 +39,32 @@ const parseOptionalBoolean = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
+const VALID_REQUEST_SOURCES: ReadonlyArray<JuditRequestSource> = [
+  'details',
+  'manual',
+  'cron',
+  'webhook',
+  'system',
+];
+
+const resolveRequestSource = (
+  source: JuditRequestRecord['source'] | undefined,
+): JuditRequestSource => {
+  if (typeof source === 'string') {
+    const normalized = source.trim().toLowerCase();
+    if (VALID_REQUEST_SOURCES.includes(normalized as JuditRequestSource)) {
+      return normalized as JuditRequestSource;
+    }
+  }
+
+  return 'system';
+};
+
 export const triggerManualJuditSync = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const { withAttachments } = (req.body ?? {}) as {
+    withAttachments?: unknown;
+  };
   const processoId = Number(id);
 
   if (!Number.isInteger(processoId) || processoId <= 0) {
@@ -105,6 +130,7 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
         source: 'manual',
         actorUserId: req.auth.userId,
         onDemand: onDemandFlag,
+        withAttachments: typeof withAttachments === 'boolean' ? withAttachments : undefined,
       }
     );
 
@@ -194,7 +220,7 @@ export const getJuditRequestStatus = async (req: Request, res: Response) => {
         apiResponse.request_id,
         apiResponse.status ?? 'pending',
         apiResponse.result ?? null,
-        { source: stored?.source ?? 'system' }
+        { source: resolveRequestSource(stored?.source) }
       );
     } catch (error) {
       if (error instanceof JuditConfigurationError) {

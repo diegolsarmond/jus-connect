@@ -496,6 +496,7 @@ export class CronJobsService {
             source: 'cron',
             skipIfPending: true,
             onDemand: false,
+            withAttachments: true,
           });
           processed += 1;
         } catch (error) {

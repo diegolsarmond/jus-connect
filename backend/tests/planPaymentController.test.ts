@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { Pool } from 'pg';
 
 import AsaasClient from '../src/services/asaas/asaasClient';
+import AsaasSubscriptionService from '../src/services/asaas/subscriptionService';
 import AsaasChargeService, { CreateAsaasChargeInput } from '../src/services/asaasChargeService';
 
 process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
@@ -73,9 +74,46 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
     status: 'pendente',
   };
 
+  const empresaStateRow = {
+    id: 45,
+    nome_empresa: 'Empresa Teste',
+    asaas_subscription_id: null,
+    trial_started_at: null,
+    trial_ends_at: null,
+    subscription_trial_ends_at: null,
+    current_period_start: null,
+    current_period_end: null,
+    subscription_current_period_ends_at: null,
+    grace_expires_at: null,
+    subscription_grace_period_ends_at: null,
+    subscription_cadence: 'monthly',
+  };
+
+  const subscriptionMock = test.mock.method(
+    AsaasSubscriptionService.prototype,
+    'createOrUpdateSubscription',
+    async () => ({
+      subscription: {
+        id: 'sub_123',
+        status: 'ACTIVE',
+        cycle: 'MONTHLY',
+        nextDueDate: '2024-05-10',
+      },
+      timeline: {
+        cadence: 'monthly',
+        trialStart: null,
+        trialEnd: null,
+        currentPeriodStart: new Date('2024-05-10T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2024-05-10T00:00:00.000Z'),
+        gracePeriodEnd: new Date('2024-05-13T00:00:00.000Z'),
+      },
+    }),
+  );
+
   const { calls, restore } = setupQueryMock([
     { rows: [{ empresa: 45 }], rowCount: 1 },
     { rows: [{ id: 9, nome: 'Plano Jurídico', valor_mensal: '199.90', valor_anual: '1999.90' }], rowCount: 1 },
+    { rows: [empresaStateRow], rowCount: 1 },
     {
       rows: [
         {
@@ -90,6 +128,7 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
       rowCount: 1,
     },
     { rows: [{ asaas_customer_id: null }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [financialFlowRow], rowCount: 1 },
   ]);
@@ -145,6 +184,7 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
     createCustomerMock.mock.restore();
     updateCustomerMock.mock.restore();
     chargeMock.mock.restore();
+    subscriptionMock.mock.restore();
   }
 
   assert.equal(res.statusCode, 201);
@@ -152,12 +192,15 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
   assert.equal(createCustomerMock.mock.calls.length, 1);
   assert.equal(updateCustomerMock.mock.calls.length, 0);
   assert.equal(chargeMock.mock.calls.length, 1);
+  assert.equal(subscriptionMock.mock.calls.length, 1);
 
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 8);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios/);
-  assert.match(calls[3]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
-  assert.match(calls[4]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
-  assert.deepEqual(calls[4]?.values, ['cus_new_123', 45]);
+  assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
+  assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
+  assert.deepEqual(calls[5]?.values, ['cus_new_123', 45]);
+  assert.match(calls[6]?.text ?? '', /UPDATE public\.empresas/);
+  assert.match(calls[7]?.text ?? '', /INSERT INTO financial_flows/);
 
   const payload = res.body as { plan?: { id?: number }; charge?: { id?: string } };
   assert.equal(payload.plan?.id, 9);
@@ -173,9 +216,46 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
     status: 'pendente',
   };
 
+  const empresaStateRow = {
+    id: 88,
+    nome_empresa: 'Empresa Atualizada',
+    asaas_subscription_id: 'sub_existing',
+    trial_started_at: '2024-04-01',
+    trial_ends_at: '2024-04-30',
+    subscription_trial_ends_at: null,
+    current_period_start: '2024-04-01',
+    current_period_end: '2024-04-30',
+    subscription_current_period_ends_at: null,
+    grace_expires_at: '2024-05-05',
+    subscription_grace_period_ends_at: null,
+    subscription_cadence: 'monthly',
+  };
+
+  const subscriptionMock = test.mock.method(
+    AsaasSubscriptionService.prototype,
+    'createOrUpdateSubscription',
+    async () => ({
+      subscription: {
+        id: 'sub_existing',
+        status: 'ACTIVE',
+        cycle: 'MONTHLY',
+        nextDueDate: '2024-06-15',
+      },
+      timeline: {
+        cadence: 'monthly',
+        trialStart: new Date('2024-04-01T00:00:00.000Z'),
+        trialEnd: new Date('2024-04-30T00:00:00.000Z'),
+        currentPeriodStart: new Date('2024-06-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2024-06-30T00:00:00.000Z'),
+        gracePeriodEnd: new Date('2024-07-05T00:00:00.000Z'),
+      },
+    }),
+  );
+
   const { calls, restore } = setupQueryMock([
     { rows: [{ empresa: 88 }], rowCount: 1 },
     { rows: [{ id: 5, nome: 'Plano Premium', valor_mensal: '299.90', valor_anual: '2999.90' }], rowCount: 1 },
+    { rows: [empresaStateRow], rowCount: 1 },
     {
       rows: [
         {
@@ -190,6 +270,7 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
       rowCount: 1,
     },
     { rows: [{ asaas_customer_id: '  cus_existing_999  ' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [financialFlowRow], rowCount: 1 },
   ]);
@@ -244,6 +325,7 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
     createCustomerMock.mock.restore();
     updateCustomerMock.mock.restore();
     chargeMock.mock.restore();
+    subscriptionMock.mock.restore();
   }
 
   assert.equal(res.statusCode, 201);
@@ -251,11 +333,14 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
   assert.equal(createCustomerMock.mock.calls.length, 0);
   assert.equal(updateCustomerMock.mock.calls.length, 1);
   assert.equal(chargeMock.mock.calls.length, 1);
+  assert.equal(subscriptionMock.mock.calls.length, 1);
 
-  assert.equal(calls.length, 6);
-  assert.match(calls[3]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
-  assert.match(calls[4]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
-  assert.deepEqual(calls[4]?.values, ['cus_existing_999', 88]);
+  assert.equal(calls.length, 8);
+  assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
+  assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
+  assert.deepEqual(calls[5]?.values, ['cus_existing_999', 88]);
+  assert.match(calls[6]?.text ?? '', /UPDATE public\.empresas/);
+  assert.match(calls[7]?.text ?? '', /INSERT INTO financial_flows/);
 
   const payload = res.body as { charge?: { id?: string }; plan?: { id?: number } };
   assert.equal(payload.plan?.id, 5);
@@ -271,9 +356,46 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
     status: 'pendente',
   };
 
+  const empresaStateRow = {
+    id: 55,
+    nome_empresa: 'Empresa Plus',
+    asaas_subscription_id: null,
+    trial_started_at: null,
+    trial_ends_at: null,
+    subscription_trial_ends_at: null,
+    current_period_start: null,
+    current_period_end: null,
+    subscription_current_period_ends_at: null,
+    grace_expires_at: null,
+    subscription_grace_period_ends_at: null,
+    subscription_cadence: 'monthly',
+  };
+
+  const subscriptionMock = test.mock.method(
+    AsaasSubscriptionService.prototype,
+    'createOrUpdateSubscription',
+    async () => ({
+      subscription: {
+        id: 'sub_plus',
+        status: 'ACTIVE',
+        cycle: 'MONTHLY',
+        nextDueDate: '2024-07-05',
+      },
+      timeline: {
+        cadence: 'monthly',
+        trialStart: null,
+        trialEnd: null,
+        currentPeriodStart: new Date('2024-07-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2024-07-31T00:00:00.000Z'),
+        gracePeriodEnd: new Date('2024-08-05T00:00:00.000Z'),
+      },
+    }),
+  );
+
   const { calls, restore } = setupQueryMock([
     { rows: [{ empresa: 55 }], rowCount: 1 },
     { rows: [{ id: 12, nome: 'Plano Plus', valor_mensal: '249.90', valor_anual: '2499.90' }], rowCount: 1 },
+    { rows: [empresaStateRow], rowCount: 1 },
     {
       rows: [
         {
@@ -288,6 +410,7 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
       rowCount: 1,
     },
     { rows: [{ asaas_customer_id: 'cus_linked_123' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [financialFlowRow], rowCount: 1 },
   ]);
@@ -334,16 +457,18 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
     createCustomerMock.mock.restore();
     updateCustomerMock.mock.restore();
     chargeMock.mock.restore();
+    subscriptionMock.mock.restore();
   }
 
   assert.equal(res.statusCode, 201);
   assert.equal(chargeMock.mock.calls.length, 1);
   assert.equal(chargeInputs.length, 1);
   assert.equal(chargeInputs[0]?.billingType, 'DEBIT_CARD');
+  assert.equal(subscriptionMock.mock.calls.length, 1);
 
-  assert.equal(calls.length, 6);
-  assert.match(calls[3]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
-  assert.match(calls[4]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
-  assert.match(calls[5]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.equal(calls.length, 8);
+  assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
+  assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
+  assert.match(calls[7]?.text ?? '', /INSERT INTO financial_flows/);
 });
 

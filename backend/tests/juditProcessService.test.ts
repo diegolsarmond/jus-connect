@@ -511,8 +511,7 @@ test('Judit request lifecycle stores polling response and process_response entry
           search_type: 'lawsuit_cnj',
           search_key: '0000000-00.0000.0.00.0000',
         },
-
-        with_attachments: false,
+        with_attachments: true,
         on_demand: true,
       });
       return new Response(JSON.stringify({
@@ -620,6 +619,130 @@ test('Judit request lifecycle stores polling response and process_response entry
 
   assert.equal(fetchMock.mock.calls.length, 2);
 
+});
+
+test('triggerRequestForProcess forwards attachment preference to Judit', async (t) => {
+  const service = new JuditProcessService('test-key');
+
+  const config = {
+    apiKey: 'test-key',
+    requestsEndpoint: 'https://requests.prod.judit.io/requests',
+    trackingEndpoint: 'https://tracking.prod.judit.io/tracking',
+    integrationId: 15,
+  };
+
+  const resolveMock = t.mock.method(service as any, 'resolveConfiguration', async () => config);
+
+  const requestHandler: QueryHandler = (text, values) => {
+    if (/INSERT INTO public\.process_sync/.test(text)) {
+      const payload = values?.[6] ? JSON.parse(String(values?.[6])) : {};
+      const headers = values?.[7] ? JSON.parse(String(values?.[7])) : null;
+      const metadata = values?.[10] ? JSON.parse(String(values?.[10])) : {};
+
+      return {
+        rows: [
+          {
+            id: 701,
+            processo_id: values?.[0],
+            integration_api_key_id: values?.[1],
+            remote_request_id: values?.[2],
+            request_type: values?.[3] ?? 'manual',
+            requested_by: values?.[4] ?? null,
+            requested_at: new Date('2024-01-01T10:00:00.000Z'),
+            request_payload: payload,
+            request_headers: headers,
+            status: values?.[8] ?? 'pending',
+            status_reason: values?.[9] ?? null,
+            completed_at: null,
+            metadata,
+            created_at: new Date('2024-01-01T10:00:01.000Z'),
+            updated_at: new Date('2024-01-01T10:00:01.000Z'),
+          },
+        ],
+        rowCount: 1,
+      } satisfies QueryResponse;
+    }
+
+    if (/INSERT INTO public\.sync_audit/.test(text)) {
+      const eventDetails = values?.[5] ? JSON.parse(String(values?.[5])) : {};
+      return {
+        rows: [
+          {
+            id: 801,
+            processo_id: values?.[0] ?? null,
+            process_sync_id: values?.[1] ?? null,
+            process_response_id: values?.[2] ?? null,
+            integration_api_key_id: values?.[3] ?? null,
+            event_type: values?.[4] ?? 'request_triggered',
+            event_details: eventDetails,
+            observed_at: new Date('2024-01-01T10:00:02.000Z'),
+            created_at: new Date('2024-01-01T10:00:02.000Z'),
+          },
+        ],
+        rowCount: 1,
+      } satisfies QueryResponse;
+    }
+
+    return null;
+  };
+
+  const requestClient = new RecordingClient(requestHandler);
+
+  let requestCalls = 0;
+
+  const fetchMock = t.mock.method(globalThis as any, 'fetch', async (input: any, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : String(input);
+
+    if (url === config.requestsEndpoint) {
+      requestCalls += 1;
+      const payload = JSON.parse(String(init?.body ?? '{}'));
+
+      if (requestCalls === 1) {
+        assert.equal(payload.with_attachments, true);
+      } else if (requestCalls === 2) {
+        assert.equal(payload.with_attachments, false);
+      } else {
+        assert.fail(`Unexpected number of request calls: ${requestCalls}`);
+      }
+
+      return new Response(
+        JSON.stringify({
+          request_id: `req-${requestCalls}`,
+          status: 'pending',
+          result: null,
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch call to ${url}`);
+  });
+
+  try {
+    const defaultRecord = await service.triggerRequestForProcess(55, '0000000-00.0000.0.00.0000', {
+      source: 'manual',
+      client: requestClient as unknown as any,
+    });
+
+    assert.equal(defaultRecord?.requestId, 'req-1');
+    assert.equal(defaultRecord?.status, 'pending');
+
+    const withoutAttachments = await service.triggerRequestForProcess(56, '1111111-11.1111.1.11.1111', {
+      source: 'manual',
+      client: requestClient as unknown as any,
+      withAttachments: false,
+    });
+
+    assert.equal(withoutAttachments?.requestId, 'req-2');
+    assert.equal(withoutAttachments?.status, 'pending');
+    assert.equal(requestCalls, 2);
+  } finally {
+    fetchMock.mock.restore();
+    resolveMock.mock.restore();
+  }
 });
 
 test('handleJuditWebhook persists data retrievable via list helpers', async (t) => {
