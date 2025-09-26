@@ -72,6 +72,50 @@ test('resolveAsaasIntegration prioritizes custom API URL for production', async 
   assert.equal(integration.environment, 'producao');
 });
 
+test('resolveAsaasIntegration appends API path when missing for known Asaas hosts', async () => {
+  const pool = new FakePool([
+    {
+      rowCount: 1,
+      rows: [
+        {
+          id: 4,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com',
+          key_value: 'sandbox-token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+    },
+  ]);
+
+  const integration = await resolveAsaasIntegration(pool as any);
+
+  assert.equal(integration.baseUrl, 'https://sandbox.asaas.com/api/v3');
+});
+
+test('resolveAsaasIntegration completes API version when only /api is provided', async () => {
+  const pool = new FakePool([
+    {
+      rowCount: 1,
+      rows: [
+        {
+          id: 5,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com/api/',
+          key_value: 'sandbox-token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+    },
+  ]);
+
+  const integration = await resolveAsaasIntegration(pool as any);
+
+  assert.equal(integration.baseUrl, 'https://sandbox.asaas.com/api/v3');
+});
+
 test('resolveAsaasIntegration throws a specific error when no active credential exists', async () => {
   const pool = new FakePool([
     {
