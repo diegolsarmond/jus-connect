@@ -171,6 +171,10 @@ export class CronJobsService {
     void this.initializeJuditIntegration();
   }
 
+  async refreshJuditIntegration(): Promise<void> {
+    await this.initializeJuditIntegration();
+  }
+
   startProjudiSyncJob(): void {
     if (!this.projudiService.hasValidConfiguration()) {
       this.stopProjudiSyncJob();
