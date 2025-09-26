@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import { Pool } from 'pg';
 import { hashPassword } from '../src/utils/passwordUtils';
 
-process.env.AUTH_TOKEN_SECRET ??= 'test-secret';
+process.env.AUTH_TOKEN_SECRET = 'test-secret';
 
 let register: typeof import('../src/controllers/authController')['register'];
 let login: typeof import('../src/controllers/authController')['login'];
