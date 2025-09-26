@@ -1,0 +1,263 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import type { Request, Response } from 'express';
+import { Pool } from 'pg';
+
+import AsaasClient from '../src/services/asaas/asaasClient';
+import AsaasChargeService from '../src/services/asaasChargeService';
+
+process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
+
+let createPlanPayment: typeof import('../src/controllers/planPaymentController')['createPlanPayment'];
+
+const createMockResponse = () => {
+  const response: Partial<Response> & { statusCode: number; body: unknown } = {
+    statusCode: 200,
+    body: undefined,
+    status(code: number) {
+      this.statusCode = code;
+      return this as Response;
+    },
+    json(payload: unknown) {
+      this.body = payload;
+      return this as Response;
+    },
+  };
+
+  return response as Response & { statusCode: number; body: unknown };
+};
+
+const createAuth = (userId: number) => ({
+  userId,
+  payload: {
+    sub: userId,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  },
+});
+
+test.before(async () => {
+  ({ createPlanPayment } = await import('../src/controllers/planPaymentController'));
+});
+
+const setupQueryMock = (responses: Array<{ rows: any[]; rowCount: number }>) => {
+  const calls: Array<{ text: string; values?: unknown[] }> = [];
+
+  const queryMock = test.mock.method(
+    Pool.prototype,
+    'query',
+    async function (this: Pool, text: string, values?: unknown[]) {
+      calls.push({ text, values });
+
+      if (responses.length === 0) {
+        throw new Error('Unexpected query invocation');
+      }
+
+      return responses.shift()!;
+    },
+  );
+
+  const restore = () => {
+    queryMock.mock.restore();
+  };
+
+  return { calls, restore };
+};
+
+test('createPlanPayment creates Asaas customer and stores identifier when missing', async () => {
+  const financialFlowRow = {
+    id: 500,
+    descricao: 'Assinatura Plano Jurídico (mensal)',
+    valor: '199.90',
+    vencimento: '2024-05-10',
+    status: 'pendente',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 45 }], rowCount: 1 },
+    { rows: [{ id: 9, nome: 'Plano Jurídico', valor_mensal: '199.90', valor_anual: '1999.90' }], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 1,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com/api/v3',
+          key_value: 'token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ asaas_customer_id: null }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [financialFlowRow], rowCount: 1 },
+  ]);
+
+  const createCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'createCustomer',
+    async () => ({
+      id: 'cus_new_123',
+      object: 'customer',
+      name: 'Empresa Teste',
+    }),
+  );
+
+  const updateCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'updateCustomer',
+    async () => {
+      throw new Error('updateCustomer should not be called when mapping is missing');
+    },
+  );
+
+  const chargeMock = test.mock.method(
+    AsaasChargeService.prototype,
+    'createCharge',
+    async () => ({
+      charge: { id: 'ch_123', status: 'PENDING' },
+      flow: { ...financialFlowRow, external_provider: 'asaas', external_reference_id: 'ch_123' },
+    }),
+  );
+
+  const req = {
+    body: {
+      planId: 9,
+      pricingMode: 'mensal',
+      paymentMethod: 'PIX',
+      billing: {
+        companyName: 'Empresa Teste',
+        document: '12345678901',
+        email: 'contato@empresa.com',
+        notes: 'Observações',
+      },
+    },
+    auth: createAuth(20),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createPlanPayment(req, res);
+  } finally {
+    restore();
+    createCustomerMock.mock.restore();
+    updateCustomerMock.mock.restore();
+    chargeMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.ok(res.body && typeof res.body === 'object');
+  assert.equal(createCustomerMock.mock.calls.length, 1);
+  assert.equal(updateCustomerMock.mock.calls.length, 0);
+  assert.equal(chargeMock.mock.calls.length, 1);
+
+  assert.equal(calls.length, 6);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios/);
+  assert.match(calls[3]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
+  assert.match(calls[4]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
+  assert.deepEqual(calls[4]?.values, ['cus_new_123', 45]);
+
+  const payload = res.body as { plan?: { id?: number }; charge?: { id?: string } };
+  assert.equal(payload.plan?.id, 9);
+  assert.equal(payload.charge?.id, 'ch_123');
+});
+
+test('createPlanPayment reuses existing Asaas customer and updates information', async () => {
+  const financialFlowRow = {
+    id: 700,
+    descricao: 'Assinatura Plano Premium (mensal)',
+    valor: '299.90',
+    vencimento: '2024-06-15',
+    status: 'pendente',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 88 }], rowCount: 1 },
+    { rows: [{ id: 5, nome: 'Plano Premium', valor_mensal: '299.90', valor_anual: '2999.90' }], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 2,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com/api/v3',
+          key_value: 'token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ asaas_customer_id: '  cus_existing_999  ' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [financialFlowRow], rowCount: 1 },
+  ]);
+
+  const createCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'createCustomer',
+    async () => {
+      throw new Error('createCustomer should not be called when mapping exists');
+    },
+  );
+
+  const updateCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'updateCustomer',
+    async (_id, payload) => ({
+      id: 'cus_existing_999',
+      object: 'customer',
+      ...payload,
+    }),
+  );
+
+  const chargeMock = test.mock.method(
+    AsaasChargeService.prototype,
+    'createCharge',
+    async () => ({
+      charge: { id: 'ch_999', status: 'PENDING' },
+      flow: { ...financialFlowRow, external_provider: 'asaas', external_reference_id: 'ch_999' },
+    }),
+  );
+
+  const req = {
+    body: {
+      planId: 5,
+      pricingMode: 'mensal',
+      paymentMethod: 'BOLETO',
+      billing: {
+        companyName: 'Empresa Atualizada',
+        document: '01234567890',
+        email: 'financeiro@empresa.com',
+      },
+    },
+    auth: createAuth(30),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createPlanPayment(req, res);
+  } finally {
+    restore();
+    createCustomerMock.mock.restore();
+    updateCustomerMock.mock.restore();
+    chargeMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.ok(res.body && typeof res.body === 'object');
+  assert.equal(createCustomerMock.mock.calls.length, 0);
+  assert.equal(updateCustomerMock.mock.calls.length, 1);
+  assert.equal(chargeMock.mock.calls.length, 1);
+
+  assert.equal(calls.length, 6);
+  assert.match(calls[3]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
+  assert.match(calls[4]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
+  assert.deepEqual(calls[4]?.values, ['cus_existing_999', 88]);
+
+  const payload = res.body as { charge?: { id?: string }; plan?: { id?: number } };
+  assert.equal(payload.plan?.id, 5);
+  assert.equal(payload.charge?.id, 'ch_999');
+});
