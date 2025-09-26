@@ -118,7 +118,7 @@ export const getComparableMonthlyPrice = (plan: PlanOption): number | null => {
   return null;
 };
 
-export type PlanPaymentMethod = "pix" | "boleto" | "cartao";
+export type PlanPaymentMethod = "pix" | "boleto" | "cartao" | "debito";
 
 export type PlanPaymentPayload = {
   planId: number;
@@ -136,7 +136,7 @@ export type PlanPaymentCharge = {
   id: number | null;
   financialFlowId: number | null;
   asaasChargeId: string | null;
-  billingType: "PIX" | "BOLETO" | "CREDIT_CARD";
+  billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD";
   status: string | null;
   dueDate: string | null;
   amount: number | null;
@@ -163,7 +163,7 @@ export type PlanPaymentResult = {
     pricingMode: "mensal" | "anual";
     price: number | null;
   };
-  paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD";
+  paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD";
   charge: PlanPaymentCharge;
   flow: PlanPaymentFlow;
 };
@@ -199,12 +199,14 @@ const normalizeCharge = (payload: unknown): PlanPaymentCharge => {
   const amount = toNumber(record.value ?? record.amount ?? record.valor);
 
   const billingTypeRaw = normalizeString(record.billingType);
-  const billingType: "PIX" | "BOLETO" | "CREDIT_CARD" =
+  const billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD" =
     billingTypeRaw === "BOLETO"
       ? "BOLETO"
       : billingTypeRaw === "CREDIT_CARD"
         ? "CREDIT_CARD"
-        : "PIX";
+        : billingTypeRaw === "DEBIT_CARD"
+          ? "DEBIT_CARD"
+          : "PIX";
 
   return {
     id: toNumber(record.id),
@@ -291,12 +293,14 @@ export async function createPlanPayment(payload: PlanPaymentPayload): Promise<Pl
   const payloadRecord = (data ?? {}) as Record<string, unknown>;
 
   const paymentMethodRaw = normalizeString(payloadRecord.paymentMethod);
-  const paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" =
+  const paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD" =
     paymentMethodRaw === "BOLETO"
       ? "BOLETO"
       : paymentMethodRaw === "CREDIT_CARD"
         ? "CREDIT_CARD"
-        : "PIX";
+        : paymentMethodRaw === "DEBIT_CARD"
+          ? "DEBIT_CARD"
+          : "PIX";
 
   return {
     plan: normalizePlanInfo(payloadRecord.plan, payload.planId),

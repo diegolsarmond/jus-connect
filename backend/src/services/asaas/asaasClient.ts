@@ -34,7 +34,7 @@ export interface CustomerResponse extends CustomerPayload {
   dateCreated?: string;
 }
 
-export type BillingType = 'BOLETO' | 'PIX' | 'CREDIT_CARD';
+export type BillingType = 'BOLETO' | 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD';
 
 export interface CreateChargePayload {
   customer: string;

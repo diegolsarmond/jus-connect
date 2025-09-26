@@ -1,7 +1,7 @@
 import { QueryResultRow } from 'pg';
 import pool from './db';
 
-export const ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD'] as const;
+export const ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD', 'DEBIT_CARD'] as const;
 export type AsaasBillingType = (typeof ASAAS_BILLING_TYPES)[number];
 
 export interface AsaasClientChargePayload {
@@ -222,7 +222,7 @@ function normalizeBillingType(value: string): AsaasBillingType {
 
   const normalized = value.trim().toUpperCase();
   if (!ASAAS_BILLING_TYPES.includes(normalized as AsaasBillingType)) {
-    throw new ValidationError('paymentMethod deve ser PIX, BOLETO ou CREDIT_CARD');
+    throw new ValidationError('paymentMethod deve ser PIX, BOLETO, CREDIT_CARD ou DEBIT_CARD');
   }
 
   return normalized as AsaasBillingType;
@@ -489,9 +489,9 @@ export default class AsaasChargeService {
       (payload as Record<string, unknown>).remoteIp = input.remoteIp;
     }
 
-    if (billingType === 'CREDIT_CARD') {
+    if (billingType === 'CREDIT_CARD' || billingType === 'DEBIT_CARD') {
       if (!input.cardToken || !input.cardToken.trim()) {
-        throw new ValidationError('cardToken é obrigatório para cobranças via cartão de crédito');
+        throw new ValidationError('cardToken é obrigatório para cobranças via cartão');
       }
       payload.creditCardToken = input.cardToken.trim();
     }

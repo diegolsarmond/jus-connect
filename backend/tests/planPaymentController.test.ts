@@ -4,7 +4,7 @@ import type { Request, Response } from 'express';
 import { Pool } from 'pg';
 
 import AsaasClient from '../src/services/asaas/asaasClient';
-import AsaasChargeService from '../src/services/asaasChargeService';
+import AsaasChargeService, { CreateAsaasChargeInput } from '../src/services/asaasChargeService';
 
 process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
@@ -260,4 +260,89 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
   const payload = res.body as { charge?: { id?: string }; plan?: { id?: number } };
   assert.equal(payload.plan?.id, 5);
   assert.equal(payload.charge?.id, 'ch_999');
+});
+
+test('createPlanPayment forwards debit card method to AsaasChargeService', async () => {
+  const financialFlowRow = {
+    id: 800,
+    descricao: 'Assinatura Plano Plus (mensal)',
+    valor: '249.90',
+    vencimento: '2024-07-05',
+    status: 'pendente',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 55 }], rowCount: 1 },
+    { rows: [{ id: 12, nome: 'Plano Plus', valor_mensal: '249.90', valor_anual: '2499.90' }], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 3,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com/api/v3',
+          key_value: 'token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ asaas_customer_id: 'cus_linked_123' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [financialFlowRow], rowCount: 1 },
+  ]);
+
+  const createCustomerMock = test.mock.method(AsaasClient.prototype, 'createCustomer', async () => {
+    throw new Error('createCustomer should not be called when customer already linked');
+  });
+
+  const updateCustomerMock = test.mock.method(AsaasClient.prototype, 'updateCustomer', async () => ({
+    id: 'cus_linked_123',
+    object: 'customer',
+    name: 'Empresa Atualizada',
+  }));
+
+  const chargeInputs: Array<CreateAsaasChargeInput> = [];
+  const chargeMock = test.mock.method(AsaasChargeService.prototype, 'createCharge', async (input) => {
+    chargeInputs.push(input as CreateAsaasChargeInput);
+    return {
+      charge: { id: 'ch_debit_001', status: 'PENDING', billingType: 'DEBIT_CARD' },
+      flow: { ...financialFlowRow, external_provider: 'asaas', external_reference_id: 'ch_debit_001' },
+    };
+  });
+
+  const req = {
+    body: {
+      planId: 12,
+      pricingMode: 'mensal',
+      paymentMethod: 'debito',
+      billing: {
+        companyName: 'Empresa Plus',
+        document: '11122233344455',
+        email: 'contato@empresaplus.com',
+      },
+    },
+    auth: createAuth(40),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createPlanPayment(req, res);
+  } finally {
+    restore();
+    createCustomerMock.mock.restore();
+    updateCustomerMock.mock.restore();
+    chargeMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(chargeMock.mock.calls.length, 1);
+  assert.equal(chargeInputs.length, 1);
+  assert.equal(chargeInputs[0]?.billingType, 'DEBIT_CARD');
+
+  assert.equal(calls.length, 6);
+  assert.match(calls[3]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
+  assert.match(calls[4]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
+  assert.match(calls[5]?.text ?? '', /INSERT INTO financial_flows/);
 });

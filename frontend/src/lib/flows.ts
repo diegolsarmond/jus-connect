@@ -1,6 +1,6 @@
 import { getApiUrl, joinUrl } from './api';
 
-export type AsaasPaymentMethod = 'PIX' | 'BOLETO' | 'CREDIT_CARD';
+export type AsaasPaymentMethod = 'PIX' | 'BOLETO' | 'CREDIT_CARD' | 'DEBIT_CARD';
 
 export interface CreateAsaasChargePayload {
   customerId: string;
@@ -342,11 +342,14 @@ function extractData<T>(payload: unknown, key: string): T | null {
 
 function normalizePaymentMethod(method: unknown): AsaasPaymentMethod {
   const normalized = String(method ?? '').toUpperCase();
-  if (normalized === 'PIX' || normalized === 'BOLETO' || normalized === 'CREDIT_CARD') {
+  if (normalized === 'PIX' || normalized === 'BOLETO' || normalized === 'CREDIT_CARD' || normalized === 'DEBIT_CARD') {
     return normalized;
   }
   if (normalized === 'CREDITCARD') {
     return 'CREDIT_CARD';
+  }
+  if (normalized === 'DEBITCARD' || normalized === 'DEBIT' || normalized === 'DEBITO' || normalized === 'DÉBITO') {
+    return 'DEBIT_CARD';
   }
   if (normalized === 'BOLETO_BANCARIO' || normalized === 'BANK_SLIP') {
     return 'BOLETO';

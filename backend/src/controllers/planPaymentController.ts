@@ -40,7 +40,7 @@ function parsePricingMode(value: unknown): 'mensal' | 'anual' {
   return 'mensal';
 }
 
-function parsePaymentMethod(value: unknown): 'PIX' | 'BOLETO' | 'CREDIT_CARD' {
+function parsePaymentMethod(value: unknown): 'PIX' | 'BOLETO' | 'CREDIT_CARD' | 'DEBIT_CARD' {
   if (typeof value !== 'string') {
     return 'PIX';
   }
@@ -50,6 +50,17 @@ function parsePaymentMethod(value: unknown): 'PIX' | 'BOLETO' | 'CREDIT_CARD' {
   }
   if (normalized === 'cartao' || normalized === 'cartão' || normalized === 'credit_card') {
     return 'CREDIT_CARD';
+  }
+  if (
+    normalized === 'debito' ||
+    normalized === 'débito' ||
+    normalized === 'debit_card' ||
+    normalized === 'debitcard' ||
+    normalized === 'cartao_debito' ||
+    normalized === 'cartão_debito' ||
+    normalized === 'cartão_débito'
+  ) {
+    return 'DEBIT_CARD';
   }
   return 'PIX';
 }
@@ -155,7 +166,7 @@ function buildChargeDescription(plan: PlanRow, pricingMode: 'mensal' | 'anual'):
   return `Assinatura ${planName} (${cadenceLabel})`;
 }
 
-function resolveDueDate(billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD'): string {
+function resolveDueDate(billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD' | 'DEBIT_CARD'): string {
   const dueDate = new Date();
   if (billingType === 'BOLETO') {
     dueDate.setDate(dueDate.getDate() + 3);
