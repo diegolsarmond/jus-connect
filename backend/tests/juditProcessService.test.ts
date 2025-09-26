@@ -496,10 +496,12 @@ test('ensureTrackingForProcess creates tracking via Judit API', async (t) => {
   assert.match(pool.calls[3].text, /INSERT INTO public\.sync_audit/i);
 });
 
-test('Judit request lifecycle stores polling response and process_response entry', async (t) => {
+test('Judit request lifecycle polls completed responses and stores them', async (t) => {
   const service = new JuditProcessService('test-key');
 
   let storedSyncRow: Record<string, unknown> | null = null;
+  const polledResponses: unknown[] = [];
+  const auditEvents: Array<{ type: string; details: unknown }> = [];
 
   const requestHandler: QueryHandler = (text, values) => {
     if (/FROM public\.process_sync ps/.test(text) && /status = 'pending'/.test(text)) {
@@ -533,6 +535,10 @@ test('Judit request lifecycle stores polling response and process_response entry
       return { rows: [storedSyncRow], rowCount: 1 } satisfies QueryResponse;
     }
     if (/INSERT INTO public\.sync_audit/.test(text)) {
+      const eventType = typeof values?.[4] === 'string' ? (values?.[4] as string) : '';
+      const eventDetails = values?.[5] ? JSON.parse(String(values?.[5])) : {};
+      auditEvents.push({ type: eventType, details: eventDetails });
+
       return {
         rows: [
           {
@@ -541,8 +547,8 @@ test('Judit request lifecycle stores polling response and process_response entry
             process_sync_id: values?.[1],
             process_response_id: values?.[2],
             integration_api_key_id: values?.[3],
-            event_type: values?.[4],
-            event_details: JSON.parse((values?.[5] ?? '{}') as string),
+            event_type: eventType,
+            event_details: eventDetails,
             observed_at: new Date('2024-01-01T10:00:02.000Z'),
             created_at: new Date('2024-01-01T10:00:02.000Z'),
           },
@@ -551,9 +557,41 @@ test('Judit request lifecycle stores polling response and process_response entry
       } satisfies QueryResponse;
     }
     if (/UPDATE public\.process_sync/.test(text)) {
-      const metadataIndex = values?.length && typeof values?.length === 'number' ? values.length - 2 : 2;
-      const metadataValue = values?.[metadataIndex];
-      const completedAtIndex = metadataIndex - 1;
+      const hasStatus = /status = \$\d+/.test(text);
+      const hasStatusReason = /status_reason = \$\d+/.test(text);
+      const hasCompletedAt = /completed_at = \$\d+::timestamptz/.test(text);
+      const hasMetadata = /metadata = \$\d+::jsonb/.test(text);
+
+      let index = 0;
+      const nextStatus = hasStatus
+        ? (typeof values?.[index] === 'string' ? (values?.[index++] as string) : storedSyncRow?.status ?? 'pending')
+        : storedSyncRow?.status ?? 'pending';
+
+      if (hasStatusReason) {
+        index += 1;
+      }
+
+      let nextCompletedAt = storedSyncRow?.completed_at ?? null;
+      if (hasCompletedAt) {
+        const completedValue = values?.[index++];
+        if (completedValue instanceof Date) {
+          nextCompletedAt = completedValue;
+        } else if (completedValue) {
+          nextCompletedAt = new Date(String(completedValue));
+        } else {
+          nextCompletedAt = null;
+        }
+      }
+
+      let nextMetadata = storedSyncRow?.metadata ?? {};
+      if (hasMetadata) {
+        const metadataValue = values?.[index++];
+        if (typeof metadataValue === 'string') {
+          nextMetadata = JSON.parse(metadataValue);
+        } else if (metadataValue && typeof metadataValue === 'object') {
+          nextMetadata = metadataValue;
+        }
+      }
 
       storedSyncRow = {
         ...(storedSyncRow ?? {}),
@@ -564,25 +602,44 @@ test('Judit request lifecycle stores polling response and process_response entry
         request_type: 'manual',
         requested_by: null,
         requested_at: new Date('2024-01-01T10:00:00.000Z'),
-        request_payload: {},
+        request_payload: storedSyncRow?.request_payload ?? {},
         request_headers: null,
-        status: values?.[0] ?? 'completed',
+        status: nextStatus,
         status_reason: null,
-        completed_at:
-          completedAtIndex >= 0 && values?.[completedAtIndex]
-            ? values?.[completedAtIndex] instanceof Date
-              ? (values?.[completedAtIndex] as Date)
-              : new Date(String(values?.[completedAtIndex]))
-            : new Date('2024-01-01T10:05:00.000Z'),
-        metadata:
-          metadataValue && typeof metadataValue === 'string'
-            ? JSON.parse(metadataValue)
-            : (metadataValue ?? { result: { delivered: true }, status: 'completed' }),
+        completed_at: nextCompletedAt ?? storedSyncRow?.completed_at ?? new Date('2024-01-01T10:05:00.000Z'),
+        metadata: nextMetadata,
         created_at: new Date('2024-01-01T10:00:01.000Z'),
         updated_at: new Date('2024-01-01T10:05:00.000Z'),
       } satisfies Record<string, unknown>;
 
       return { rows: [storedSyncRow], rowCount: 1 } satisfies QueryResponse;
+    }
+    if (/INSERT INTO public\.process_response/.test(text)) {
+      const payloadValue = values?.[7];
+      const payload = typeof payloadValue === 'string' ? JSON.parse(payloadValue) : payloadValue ?? {};
+      const headersValue = values?.[8];
+      const headers = typeof headersValue === 'string' ? JSON.parse(headersValue) : headersValue ?? null;
+      polledResponses.push(payload);
+
+      return {
+        rows: [
+          {
+            id: 301 + polledResponses.length,
+            processo_id: values?.[0],
+            process_sync_id: values?.[1],
+            integration_api_key_id: values?.[2],
+            delivery_id: values?.[3],
+            source: values?.[4] ?? 'polling',
+            status_code: values?.[5] ?? 200,
+            received_at: '2024-01-01T10:10:00.000Z',
+            payload,
+            headers,
+            error_message: values?.[9] ?? null,
+            created_at: '2024-01-01T10:10:00.000Z',
+          },
+        ],
+        rowCount: 1,
+      } satisfies QueryResponse;
     }
     return null;
   };
@@ -625,38 +682,86 @@ test('Judit request lifecycle stores polling response and process_response entry
       });
     }
 
+    if (url.startsWith('https://requests.prod.judit.io/responses')) {
+      const responseUrl = new URL(url);
+      assert.equal(responseUrl.searchParams.get('request_id'), 'req-flow');
+      assert.equal(responseUrl.searchParams.get('page'), '1');
+      assert.equal(responseUrl.searchParams.get('page_size'), '50');
+
+      return new Response(
+        JSON.stringify({
+          request_status: 'completed',
+          page: 1,
+          page_count: 1,
+          all_pages_count: 1,
+          all_count: 1,
+          page_data: [
+            {
+              request_id: 'req-flow',
+              response_id: 'resp-001',
+              origin: 'api',
+              response_type: 'lawsuit',
+              response_data: { delivered: true, fromPolling: true },
+              created_at: '2024-01-01T10:06:00.000Z',
+              updated_at: '2024-01-01T10:06:00.000Z',
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
     throw new Error(`Unexpected fetch call to ${url}`);
   });
 
-  const triggerRecord = await service.triggerRequestForProcess(55, '0000000-00.0000.0.00.0000', {
-    source: 'manual',
-    client: requestClient as unknown as any,
-    withAttachments: true,
-    onDemand: true,
-  });
+  let statusResponse: juditProcessServiceModule.JuditRequestResponse;
 
-  assert.ok(triggerRecord);
-  assert.equal(triggerRecord?.requestId, 'req-flow');
-  assert.equal(triggerRecord?.status, 'pending');
-  assert.equal(triggerRecord?.processSyncId, 777);
-  assert.equal((triggerRecord?.metadata as any).onDemand, true);
-  assert.ok(requestClient.calls.some((call) => /INSERT INTO public\.process_sync/i.test(call.text)));
+  try {
+    const triggerRecord = await service.triggerRequestForProcess(55, '0000000-00.0000.0.00.0000', {
+      source: 'manual',
+      client: requestClient as unknown as any,
+      withAttachments: true,
+      onDemand: true,
+    });
 
-  const statusResponse = await service.getRequestStatusFromApi('req-flow');
-  assert.equal(statusResponse.status, 'completed');
+    assert.ok(triggerRecord);
+    assert.equal(triggerRecord?.requestId, 'req-flow');
+    assert.equal(triggerRecord?.status, 'pending');
+    assert.equal(triggerRecord?.processSyncId, 777);
+    assert.equal((triggerRecord?.metadata as any).onDemand, true);
+    assert.ok(requestClient.calls.some((call) => /INSERT INTO public\.process_sync/i.test(call.text)));
 
-  const updatedRecord = await service.updateRequestStatus(
-    55,
-    'req-flow',
-    statusResponse.status ?? 'pending',
-    statusResponse.result ?? null,
-    { client: requestClient as unknown as any },
+    statusResponse = await service.getRequestStatusFromApi('req-flow');
+    assert.equal(statusResponse.status, 'completed');
+
+    const updatedRecord = await service.updateRequestStatus(
+      55,
+      'req-flow',
+      statusResponse.status ?? 'pending',
+      statusResponse.result ?? null,
+      { client: requestClient as unknown as any },
+    );
+
+    assert.ok(updatedRecord);
+    assert.equal(updatedRecord?.status, 'completed');
+    assert.deepEqual(updatedRecord?.metadata.result, polledResponses[0]);
+    assert.ok(requestClient.calls.some((call) => /UPDATE public\.process_sync/i.test(call.text)));
+  } finally {
+    fetchMock.mock.restore();
+  }
+
+  assert.equal(polledResponses.length, 1);
+  assert.deepEqual(polledResponses[0], { delivered: true, fromPolling: true });
+  assert.ok(storedSyncRow);
+  assert.deepEqual(((storedSyncRow?.metadata ?? {}) as any).responses, polledResponses);
+  assert.ok(
+    auditEvents.some(
+      (event) => event.type === 'responses_polled' && (event.details as any).storedCount === 1,
+    ),
   );
-
-  assert.ok(updatedRecord);
-  assert.equal(updatedRecord?.status, 'completed');
-  assert.deepEqual(updatedRecord?.metadata.result, statusResponse.result);
-  assert.ok(requestClient.calls.some((call) => /UPDATE public\.process_sync/i.test(call.text)));
 
   const responseHandler: QueryHandler = (text, values) => {
     if (/INSERT INTO public\.process_response/.test(text)) {
@@ -665,7 +770,7 @@ test('Judit request lifecycle stores polling response and process_response entry
       return {
         rows: [
           {
-            id: 301,
+            id: 401,
             processo_id: values?.[0],
             process_sync_id: values?.[1],
             integration_api_key_id: values?.[2],
@@ -709,8 +814,231 @@ test('Judit request lifecycle stores polling response and process_response entry
   assert.deepEqual(responseRecord.payload, { delivered: true });
   assert.deepEqual(responseRecord.headers, { 'x-source': 'judit' });
 
-  assert.equal(fetchMock.mock.calls.length, 2);
+  assert.equal(polledResponses.length, 1);
+});
 
+test('triggerRequestForProcess persists immediate responses when request completes', async (t) => {
+  const service = new JuditProcessService('test-key');
+
+  let storedSyncRow: Record<string, unknown> | null = null;
+  const polledResponses: unknown[] = [];
+  const auditEvents: Array<{ type: string; details: unknown }> = [];
+
+  const requestHandler: QueryHandler = (text, values) => {
+    if (/FROM public\.process_sync ps/.test(text) && /status = 'pending'/.test(text)) {
+      return { rows: [], rowCount: 0 } satisfies QueryResponse;
+    }
+    if (/FROM public\.process_sync ps/.test(text) && /remote_request_id/.test(text)) {
+      if (storedSyncRow) {
+        return { rows: [storedSyncRow], rowCount: 1 } satisfies QueryResponse;
+      }
+      return { rows: [], rowCount: 0 } satisfies QueryResponse;
+    }
+    if (/INSERT INTO public\.process_sync/.test(text)) {
+      storedSyncRow = {
+        id: 881,
+        processo_id: values?.[0],
+        integration_api_key_id: values?.[1],
+        remote_request_id: values?.[2],
+        request_type: values?.[3],
+        requested_by: values?.[4],
+        requested_at: new Date('2024-02-01T08:00:00.000Z'),
+        request_payload: JSON.parse((values?.[6] ?? '{}') as string),
+        request_headers: values?.[7] ? JSON.parse(values?.[7] as string) : null,
+        status: values?.[8],
+        status_reason: values?.[9] ?? null,
+        completed_at: null,
+        metadata: JSON.parse((values?.[10] ?? '{}') as string),
+        created_at: new Date('2024-02-01T08:00:01.000Z'),
+        updated_at: new Date('2024-02-01T08:00:01.000Z'),
+      } satisfies Record<string, unknown>;
+
+      return { rows: [storedSyncRow], rowCount: 1 } satisfies QueryResponse;
+    }
+    if (/INSERT INTO public\.sync_audit/.test(text)) {
+      const eventType = typeof values?.[4] === 'string' ? (values?.[4] as string) : '';
+      const eventDetails = values?.[5] ? JSON.parse(String(values?.[5])) : {};
+      auditEvents.push({ type: eventType, details: eventDetails });
+
+      return {
+        rows: [
+          {
+            id: 1001,
+            processo_id: values?.[0],
+            process_sync_id: values?.[1],
+            process_response_id: values?.[2],
+            integration_api_key_id: values?.[3],
+            event_type: eventType,
+            event_details: eventDetails,
+            observed_at: new Date('2024-02-01T08:00:02.000Z'),
+            created_at: new Date('2024-02-01T08:00:02.000Z'),
+          },
+        ],
+        rowCount: 1,
+      } satisfies QueryResponse;
+    }
+    if (/UPDATE public\.process_sync/.test(text)) {
+      const hasStatus = /status = \$\d+/.test(text);
+      const hasStatusReason = /status_reason = \$\d+/.test(text);
+      const hasCompletedAt = /completed_at = \$\d+::timestamptz/.test(text);
+      const hasMetadata = /metadata = \$\d+::jsonb/.test(text);
+
+      let index = 0;
+      const nextStatus = hasStatus
+        ? (typeof values?.[index] === 'string' ? (values?.[index++] as string) : storedSyncRow?.status ?? 'pending')
+        : storedSyncRow?.status ?? 'pending';
+
+      if (hasStatusReason) {
+        index += 1;
+      }
+
+      let nextCompletedAt = storedSyncRow?.completed_at ?? null;
+      if (hasCompletedAt) {
+        const completedValue = values?.[index++];
+        if (completedValue instanceof Date) {
+          nextCompletedAt = completedValue;
+        } else if (completedValue) {
+          nextCompletedAt = new Date(String(completedValue));
+        } else {
+          nextCompletedAt = null;
+        }
+      }
+
+      let nextMetadata = storedSyncRow?.metadata ?? {};
+      if (hasMetadata) {
+        const metadataValue = values?.[index++];
+        if (typeof metadataValue === 'string') {
+          nextMetadata = JSON.parse(metadataValue);
+        } else if (metadataValue && typeof metadataValue === 'object') {
+          nextMetadata = metadataValue;
+        }
+      }
+
+      storedSyncRow = {
+        ...(storedSyncRow ?? {}),
+        id: 881,
+        processo_id: 77,
+        integration_api_key_id: 25,
+        remote_request_id: 'immediate-req',
+        request_type: 'manual',
+        requested_by: null,
+        requested_at: new Date('2024-02-01T08:00:00.000Z'),
+        request_payload: storedSyncRow?.request_payload ?? {},
+        request_headers: null,
+        status: nextStatus,
+        status_reason: null,
+        completed_at: nextCompletedAt ?? storedSyncRow?.completed_at ?? new Date('2024-02-01T08:00:05.000Z'),
+        metadata: nextMetadata,
+        created_at: new Date('2024-02-01T08:00:01.000Z'),
+        updated_at: new Date('2024-02-01T08:00:05.000Z'),
+      } satisfies Record<string, unknown>;
+
+      return { rows: [storedSyncRow], rowCount: 1 } satisfies QueryResponse;
+    }
+    if (/INSERT INTO public\.process_response/.test(text)) {
+      const payloadValue = values?.[7];
+      const payload = typeof payloadValue === 'string' ? JSON.parse(payloadValue) : payloadValue ?? {};
+      const headersValue = values?.[8];
+      const headers = typeof headersValue === 'string' ? JSON.parse(headersValue) : headersValue ?? null;
+      polledResponses.push(payload);
+
+      return {
+        rows: [
+          {
+            id: 511 + polledResponses.length,
+            processo_id: values?.[0],
+            process_sync_id: values?.[1],
+            integration_api_key_id: values?.[2],
+            delivery_id: values?.[3],
+            source: values?.[4] ?? 'polling',
+            status_code: values?.[5] ?? 200,
+            received_at: '2024-02-01T08:00:06.000Z',
+            payload,
+            headers,
+            error_message: values?.[9] ?? null,
+            created_at: '2024-02-01T08:00:06.000Z',
+          },
+        ],
+        rowCount: 1,
+      } satisfies QueryResponse;
+    }
+    return null;
+  };
+
+  const requestClient = new RecordingClient(requestHandler);
+
+  const fetchMock = t.mock.method(globalThis as any, 'fetch', async (input: any, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : String(input);
+
+    if (url === 'https://requests.prod.judit.io/requests') {
+      assert.equal(init?.method, 'POST');
+      return new Response(JSON.stringify({
+        request_id: 'immediate-req',
+        status: 'completed',
+        result: { immediate: true },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.startsWith('https://requests.prod.judit.io/responses')) {
+      const responseUrl = new URL(url);
+      assert.equal(responseUrl.searchParams.get('request_id'), 'immediate-req');
+
+      return new Response(
+        JSON.stringify({
+          request_status: 'completed',
+          page: 1,
+          page_count: 1,
+          all_pages_count: 1,
+          all_count: 1,
+          page_data: [
+            {
+              request_id: 'immediate-req',
+              response_id: 'resp-immediate',
+              origin: 'api',
+              response_type: 'lawsuit',
+              response_data: { immediate: true, fromPolling: true },
+              created_at: '2024-02-01T08:00:04.000Z',
+              updated_at: '2024-02-01T08:00:04.000Z',
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch call to ${url}`);
+  });
+
+  try {
+    const triggerRecord = await service.triggerRequestForProcess(77, '1111111-11.1111.1.11.1111', {
+      source: 'manual',
+      client: requestClient as unknown as any,
+      withAttachments: false,
+      onDemand: false,
+    });
+
+    assert.ok(triggerRecord);
+    assert.equal(triggerRecord?.status, 'completed');
+    assert.equal(triggerRecord?.processSyncId, 881);
+    assert.deepEqual(triggerRecord?.metadata.result, { immediate: true, fromPolling: true });
+    assert.deepEqual((triggerRecord?.metadata as any).responses, [{ immediate: true, fromPolling: true }]);
+  } finally {
+    fetchMock.mock.restore();
+  }
+
+  assert.equal(polledResponses.length, 1);
+  assert.deepEqual(polledResponses[0], { immediate: true, fromPolling: true });
+  assert.ok(
+    auditEvents.some(
+      (event) => event.type === 'responses_polled' && (event.details as any).requestId === 'immediate-req',
+    ),
+  );
 });
 
 test('triggerRequestForProcess forwards attachment preference to Judit', async (t) => {
