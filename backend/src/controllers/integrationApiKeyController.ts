@@ -6,6 +6,7 @@ import IntegrationApiKeyService, {
 } from '../services/integrationApiKeyService';
 import IntegrationApiKeyValidationService from '../services/integrationApiKeyValidationService';
 import juditProcessService from '../services/juditProcessService';
+import cronJobs from '../services/cronJobs';
 
 const service = new IntegrationApiKeyService();
 const validationService = new IntegrationApiKeyValidationService();
@@ -123,6 +124,7 @@ export async function createIntegrationApiKey(req: Request, res: Response) {
 
     const created = await service.create(input);
     juditProcessService.invalidateConfigurationCache();
+    await cronJobs.refreshJuditIntegration();
     return res.status(201).json(created);
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -178,6 +180,7 @@ export async function updateIntegrationApiKey(req: Request, res: Response) {
       return res.status(404).json({ error: 'API key not found' });
     }
     juditProcessService.invalidateConfigurationCache();
+    await cronJobs.refreshJuditIntegration();
     return res.json(updated);
   } catch (error) {
     if (error instanceof ValidationError) {
@@ -201,6 +204,7 @@ export async function deleteIntegrationApiKey(req: Request, res: Response) {
       return res.status(404).json({ error: 'API key not found' });
     }
     juditProcessService.invalidateConfigurationCache();
+    await cronJobs.refreshJuditIntegration();
     return res.status(204).send();
   } catch (error) {
     console.error('Failed to delete integration API key:', error);
