@@ -60,57 +60,87 @@ const resolveRequestSource = (
   return 'system';
 };
 
+const GENERIC_ERROR_MESSAGES = new Set([
+  'bad_request',
+  'bad request',
+  'badrequest',
+  'erro',
+  'error',
+]);
+
 const extractJuditErrorMessage = (payload: unknown): string | null => {
-  if (payload == null) {
+  const fallbacks: string[] = [];
+  const visited = new Set<object>();
+
+  const search = (value: unknown): string | null => {
+    if (value == null) {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+
+      const normalized = trimmed.toLowerCase();
+      if (GENERIC_ERROR_MESSAGES.has(normalized)) {
+        fallbacks.push(trimmed);
+        return null;
+      }
+
+      return trimmed;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const result = search(item);
+        if (result) {
+          return result;
+        }
+      }
+      return null;
+    }
+
+    if (typeof value === 'object') {
+      if (visited.has(value as object)) {
+        return null;
+      }
+      visited.add(value as object);
+
+      const record = value as Record<string, unknown>;
+      const candidateKeys = ['detail', 'description', 'message', 'title', 'error'] as const;
+
+      for (const key of candidateKeys) {
+        if (key in record) {
+          const result = search(record[key]);
+          if (result) {
+            return result;
+          }
+        }
+      }
+
+      const nestedCollectionKeys = ['errors', 'data', 'details'] as const;
+      for (const key of nestedCollectionKeys) {
+        if (key in record) {
+          const result = search(record[key]);
+          if (result) {
+            return result;
+          }
+        }
+      }
+
+    }
+
     return null;
+  };
+
+  const result = search(payload);
+  if (result) {
+    return result;
   }
 
-  if (typeof payload === 'string') {
-    const trimmed = payload.trim();
-    return trimmed ? trimmed : null;
-  }
-
-  if (typeof payload === 'object') {
-    const record = payload as Record<string, unknown>;
-    const candidateKeys = ['message', 'error', 'detail', 'title', 'description'] as const;
-
-    for (const key of candidateKeys) {
-      const value = record[key];
-      if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (trimmed) {
-          return trimmed;
-        }
-      }
-    }
-
-    const errors = record.errors;
-    if (Array.isArray(errors)) {
-      for (const item of errors) {
-        if (typeof item === 'string') {
-          const trimmed = item.trim();
-          if (trimmed) {
-            return trimmed;
-          }
-        }
-
-        if (item && typeof item === 'object') {
-          const nestedRecord = item as Record<string, unknown>;
-          for (const key of candidateKeys) {
-            const value = nestedRecord[key];
-            if (typeof value === 'string') {
-              const trimmed = value.trim();
-              if (trimmed) {
-                return trimmed;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return null;
+  return fallbacks.length > 0 ? fallbacks[0] : null;
 };
 
 const mapJuditStatusToHttp = (status: number): number => {
