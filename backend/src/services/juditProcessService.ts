@@ -849,6 +849,7 @@ interface TriggerRequestOptions {
 
 export class JuditProcessService {
   private readonly envApiKey: string | null;
+  private readonly envBaseUrl: string | null;
   private readonly maxRetries: number;
   private readonly backoffMs: number;
   private readonly configurationCacheTtlMs: number;
@@ -856,9 +857,14 @@ export class JuditProcessService {
   private configurationCacheExpiresAt = 0;
   private loadingConfiguration: Promise<JuditIntegrationConfiguration | null> | null = null;
 
-  constructor(apiKey: string | undefined | null = process.env.JUDIT_API_KEY) {
+  constructor(
+    apiKey: string | undefined | null = process.env.JUDIT_API_KEY,
+    baseUrl: string | undefined | null = process.env.JUDIT_BASE_URL ?? process.env.JUDIT_API_URL,
+  ) {
     const trimmedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
     this.envApiKey = trimmedKey ? trimmedKey : null;
+    const trimmedBaseUrl = typeof baseUrl === 'string' ? baseUrl.trim() : '';
+    this.envBaseUrl = trimmedBaseUrl ? trimmedBaseUrl : null;
     this.maxRetries = this.resolveNumericEnv('JUDIT_MAX_RETRIES', DEFAULT_MAX_RETRIES, 1, 10);
     this.backoffMs = this.resolveNumericEnv('JUDIT_BACKOFF_MS', DEFAULT_BACKOFF_MS, 100, 60000);
     this.configurationCacheTtlMs = DEFAULT_CONFIGURATION_CACHE_TTL_MS;
@@ -936,7 +942,7 @@ export class JuditProcessService {
     client?: PoolClient,
   ): Promise<JuditIntegrationConfiguration | null> {
     if (this.envApiKey) {
-      const endpoints = this.buildEndpoints(null);
+      const endpoints = this.buildEndpoints(this.envBaseUrl);
       return {
         apiKey: this.envApiKey,
         requestsEndpoint: endpoints.requestsEndpoint,
@@ -972,7 +978,9 @@ export class JuditProcessService {
       return null;
     }
 
-    const endpoints = this.buildEndpoints(typeof row.url_api === 'string' ? row.url_api : null);
+    const endpoints = this.buildEndpoints(
+      typeof row.url_api === 'string' && row.url_api.trim() ? row.url_api : this.envBaseUrl,
+    );
 
     return {
       apiKey: keyValue,
