@@ -4,7 +4,7 @@ import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import resolveAsaasIntegration, {
   AsaasIntegrationNotConfiguredError,
 } from '../services/asaas/integrationResolver';
-import AsaasClient, { CustomerPayload } from '../services/asaas/asaasClient';
+import AsaasClient, { AsaasApiError, CustomerPayload } from '../services/asaas/asaasClient';
 import AsaasChargeService, {
   ChargeConflictError,
   ValidationError as AsaasChargeValidationError,
@@ -104,6 +104,42 @@ async function loadPlan(planId: number): Promise<PlanRow | null> {
     return null;
   }
   return result.rows[0];
+}
+
+async function findEmpresaAsaasCustomerId(empresaId: number): Promise<string | null> {
+  const result = await pool.query<{ asaas_customer_id: unknown }>(
+    'SELECT asaas_customer_id FROM public.empresas WHERE id = $1 LIMIT 1',
+    [empresaId],
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  const rawValue = result.rows[0]?.asaas_customer_id;
+
+  if (typeof rawValue === 'string') {
+    const trimmed = rawValue.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  return null;
+}
+
+async function persistEmpresaAsaasCustomerId(empresaId: number, customerId: string): Promise<void> {
+  const normalizedId = customerId.trim();
+  if (!normalizedId) {
+    throw new Error('Cannot persist empty Asaas customer identifier');
+  }
+
+  const result = await pool.query(
+    'UPDATE public.empresas SET asaas_customer_id = $1 WHERE id = $2',
+    [normalizedId, empresaId],
+  );
+
+  if (result.rowCount === 0) {
+    throw new Error('Empresa não encontrada para vincular cliente do Asaas.');
+  }
 }
 
 function resolvePlanPrice(plan: PlanRow, pricingMode: 'mensal' | 'anual'): number | null {
@@ -257,17 +293,55 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     notificationDisabled: false,
   };
 
-  let customerId: string;
+  let existingCustomerId: string | null = null;
   try {
-    const customer = await client.createCustomer(customerPayload);
-    customerId = customer.id;
+    existingCustomerId = await findEmpresaAsaasCustomerId(empresaId);
   } catch (error) {
-    console.error('Falha ao criar cliente no Asaas', error);
+    console.error('Falha ao consultar vínculo de cliente Asaas para empresa', error);
+    res.status(500).json({ error: 'Não foi possível verificar o cadastro da empresa no Asaas.' });
+    return;
+  }
+
+  let customerId: string | null = existingCustomerId;
+
+  try {
+    if (customerId) {
+      try {
+        const customer = await client.updateCustomer(customerId, customerPayload);
+        customerId = customer.id;
+      } catch (error) {
+        console.error('Falha ao atualizar cliente no Asaas', error);
+        if (error instanceof AsaasApiError && error.status === 404) {
+          const customer = await client.createCustomer(customerPayload);
+          customerId = customer.id;
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      const customer = await client.createCustomer(customerPayload);
+      customerId = customer.id;
+    }
+  } catch (error) {
+    console.error('Falha ao preparar cliente no Asaas', error);
     const message =
       error instanceof Error && 'message' in error
         ? (error as Error).message
         : 'Não foi possível preparar o cliente no Asaas.';
     res.status(502).json({ error: message });
+    return;
+  }
+
+  if (!customerId) {
+    res.status(502).json({ error: 'Não foi possível preparar o cliente no Asaas.' });
+    return;
+  }
+
+  try {
+    await persistEmpresaAsaasCustomerId(empresaId, customerId);
+  } catch (error) {
+    console.error('Falha ao persistir vínculo de cliente Asaas para empresa', error);
+    res.status(500).json({ error: 'Não foi possível vincular o cliente do Asaas à empresa.' });
     return;
   }
 
