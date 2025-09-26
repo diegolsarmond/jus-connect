@@ -130,6 +130,7 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
     { rows: [{ asaas_customer_id: null }], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
+    { rows: [{ id: 321 }], rowCount: 1 },
     { rows: [financialFlowRow], rowCount: 1 },
   ]);
 
@@ -194,13 +195,23 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
   assert.equal(chargeMock.mock.calls.length, 1);
   assert.equal(subscriptionMock.mock.calls.length, 1);
 
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 9);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios/);
   assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
   assert.deepEqual(calls[5]?.values, ['cus_new_123', 45]);
   assert.match(calls[6]?.text ?? '', /UPDATE public\.empresas/);
-  assert.match(calls[7]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.match(calls[7]?.text ?? '', /SELECT id FROM public\.accounts/);
+  assert.deepEqual(calls[7]?.values, undefined);
+  assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.ok(Array.isArray(calls[8]?.values));
+  const insertValues = calls[8]?.values as unknown[];
+  assert.equal(insertValues[0], 'Assinatura Plano Jurídico (mensal)');
+  assert.equal(typeof insertValues[1], 'string');
+  assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(insertValues[2], 199.9);
+  assert.equal(insertValues[3], 321);
+  assert.equal(typeof insertValues[4], 'string');
 
   const payload = res.body as { plan?: { id?: number }; charge?: { id?: string } };
   assert.equal(payload.plan?.id, 9);
@@ -272,6 +283,7 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
     { rows: [{ asaas_customer_id: '  cus_existing_999  ' }], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
+    { rows: [{ id: 654 }], rowCount: 1 },
     { rows: [financialFlowRow], rowCount: 1 },
   ]);
 
@@ -335,12 +347,22 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
   assert.equal(chargeMock.mock.calls.length, 1);
   assert.equal(subscriptionMock.mock.calls.length, 1);
 
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 9);
   assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
   assert.deepEqual(calls[5]?.values, ['cus_existing_999', 88]);
   assert.match(calls[6]?.text ?? '', /UPDATE public\.empresas/);
-  assert.match(calls[7]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.match(calls[7]?.text ?? '', /SELECT id FROM public\.accounts/);
+  assert.deepEqual(calls[7]?.values, undefined);
+  assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.ok(Array.isArray(calls[8]?.values));
+  const insertValues = calls[8]?.values as unknown[];
+  assert.equal(insertValues[0], 'Assinatura Plano Premium (mensal)');
+  assert.equal(typeof insertValues[1], 'string');
+  assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(insertValues[2], 299.9);
+  assert.equal(insertValues[3], 654);
+  assert.equal(typeof insertValues[4], 'string');
 
   const payload = res.body as { charge?: { id?: string }; plan?: { id?: number } };
   assert.equal(payload.plan?.id, 5);
@@ -412,6 +434,7 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
     { rows: [{ asaas_customer_id: 'cus_linked_123' }], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
+    { rows: [{ id: 987 }], rowCount: 1 },
     { rows: [financialFlowRow], rowCount: 1 },
   ]);
 
@@ -466,9 +489,19 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
   assert.equal(chargeInputs[0]?.billingType, 'DEBIT_CARD');
   assert.equal(subscriptionMock.mock.calls.length, 1);
 
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 9);
   assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
-  assert.match(calls[7]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.match(calls[7]?.text ?? '', /SELECT id FROM public\.accounts/);
+  assert.deepEqual(calls[7]?.values, undefined);
+  assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
+  assert.ok(Array.isArray(calls[8]?.values));
+  const insertValues = calls[8]?.values as unknown[];
+  assert.equal(insertValues[0], 'Assinatura Plano Plus (mensal)');
+  assert.equal(typeof insertValues[1], 'string');
+  assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(insertValues[2], 249.9);
+  assert.equal(insertValues[3], 987);
+  assert.equal(typeof insertValues[4], 'string');
 });
 

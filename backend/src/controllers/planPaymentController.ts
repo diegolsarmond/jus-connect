@@ -256,16 +256,50 @@ function resolveDueDate(billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD' | 'DEBIT_C
   return dueDate.toISOString().slice(0, 10);
 }
 
+async function resolvePlanPaymentAccountId(): Promise<number | null> {
+  const envValue = sanitizeString(process.env.PLAN_PAYMENT_ACCOUNT_ID);
+  if (envValue) {
+    const parsed = Number.parseInt(envValue, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  const result = await pool.query<{ id: number }>(
+    'SELECT id FROM public.accounts WHERE idempresa = 2 LIMIT 1',
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  const rawId = result.rows[0]?.id;
+  if (typeof rawId === 'number' && Number.isInteger(rawId)) {
+    return rawId;
+  }
+
+  if (typeof rawId === 'string') {
+    const parsed = Number.parseInt(rawId, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 async function createFinancialFlow({
   description,
   value,
   dueDate,
   externalReference,
+  accountId,
 }: {
   description: string;
   value: number;
   dueDate: string;
   externalReference: string;
+  accountId: number | null;
 }): Promise<{ id: number; descricao: string; valor: string; vencimento: string; status: string } | null> {
   const result = await pool.query(
     `INSERT INTO financial_flows (
@@ -274,14 +308,15 @@ async function createFinancialFlow({
         vencimento,
         valor,
         status,
+        conta_id,
         cliente_id,
         fornecedor_id,
         external_provider,
         external_reference_id
       )
-      VALUES ('receita', $1, $2, $3, 'pendente', NULL, NULL, 'asaas', $4)
+      VALUES ('receita', $1, $2, $3, 'pendente', $4, NULL, NULL, 'asaas', $5)
       RETURNING id, descricao, valor::text AS valor, vencimento::text AS vencimento, status`,
-    [description, dueDate, value, externalReference],
+    [description, dueDate, value, accountId, externalReference],
   );
 
   if (result.rowCount === 0) {
@@ -582,11 +617,23 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     return;
   }
 
+  let accountId: number | null = null;
+  try {
+    accountId = await resolvePlanPaymentAccountId();
+  } catch (error) {
+    console.error('Falha ao resolver conta padrão para fluxo financeiro do plano', error);
+    res
+      .status(500)
+      .json({ error: 'Não foi possível determinar a conta para registrar a cobrança.' });
+    return;
+  }
+
   const flow = await createFinancialFlow({
     description,
     value: price,
     dueDate: nextDueDate,
     externalReference,
+    accountId,
   });
 
   if (!flow) {
