@@ -346,3 +346,4 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
   assert.match(calls[4]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
   assert.match(calls[5]?.text ?? '', /INSERT INTO financial_flows/);
 });
+
