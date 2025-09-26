@@ -26,6 +26,18 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getApiUrl } from "@/lib/api";
+import {
+  formatResponseKey,
+  formatResponseValue,
+  mapApiJuditRequest,
+  parseOptionalString,
+  parseResponseDataFromResult,
+  parseTrackingSummaryFromResult,
+  type ApiProcessoJuditRequest,
+  type ProcessoJuditRequest,
+  type ProcessoResponseData,
+  type ProcessoTrackingSummary,
+} from "./utils/judit";
 
 interface ApiProcessoCliente {
   id?: number | null;
@@ -57,7 +69,7 @@ interface ApiProcessoOportunidade {
   solicitante_nome?: string | null;
 }
 
-interface ApiProcessoResponse {
+export interface ApiProcessoResponse {
   id?: number | null;
   cliente_id?: number | null;
   numero?: string | null;
@@ -80,6 +92,9 @@ interface ApiProcessoResponse {
   movimentacoes_count?: number | string | null;
   consultas_api_count?: number | string | null;
   ultima_sincronizacao?: string | null;
+  judit_tracking_id?: string | null;
+  judit_tracking_hour_range?: string | null;
+  judit_last_request?: ApiProcessoJuditRequest | null;
 }
 
 interface ProcessoPropostaDetalhe {
@@ -90,7 +105,7 @@ interface ProcessoPropostaDetalhe {
   sequencial?: number | null;
 }
 
-interface ProcessoDetalhes {
+export interface ProcessoDetalhes {
   id: number;
   numero: string;
   status: string;
@@ -117,6 +132,11 @@ interface ProcessoDetalhes {
   ultimaSincronizacao: string | null;
   movimentacoesCount: number;
   movimentacoes: ProcessoMovimentacaoDetalhe[];
+  juditTrackingId: string | null;
+  juditTrackingHourRange: string | null;
+  juditLastRequest: ProcessoJuditRequest | null;
+  trackingSummary: ProcessoTrackingSummary | null;
+  responseData: ProcessoResponseData | null;
 }
 
 interface ProcessoMovimentacaoDetalhe {
@@ -575,7 +595,7 @@ const normalizeDocumentoLinks = (
 
 
 
-const mapApiProcessoToDetalhes = (
+export const mapApiProcessoToDetalhes = (
   processo: ApiProcessoResponse,
   fallbackId?: string | number,
 ): ProcessoDetalhes => {
@@ -625,6 +645,16 @@ const mapApiProcessoToDetalhes = (
     parseInteger(processo.movimentacoes_count),
     movimentacoes.length,
   );
+  const juditTrackingId = normalizeString(processo.judit_tracking_id) || null;
+  const juditTrackingHourRange =
+    normalizeString(processo.judit_tracking_hour_range) || null;
+  const juditLastRequest = mapApiJuditRequest(processo.judit_last_request);
+  const trackingSummary = juditLastRequest
+    ? parseTrackingSummaryFromResult(juditLastRequest.result)
+    : null;
+  const responseData = juditLastRequest
+    ? parseResponseDataFromResult(juditLastRequest.result)
+    : null;
   const proposta =
     oportunidadeId && oportunidadeId > 0
       ? {
@@ -673,6 +703,11 @@ const mapApiProcessoToDetalhes = (
     ultimaSincronizacao: processo.ultima_sincronizacao ?? null,
     movimentacoesCount,
     movimentacoes,
+    juditTrackingId,
+    juditTrackingHourRange,
+    juditLastRequest,
+    trackingSummary,
+    responseData,
   };
 };
 
@@ -988,6 +1023,202 @@ export default function VisualizarProcesso() {
                       ) : null}
                     </div>
                   </div>
+                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Última solicitação Judit
+                    </p>
+                    <div className="mt-3 space-y-1 text-sm text-foreground">
+                      {processo.juditLastRequest ? (
+                        <>
+                          <p className="font-medium text-foreground">
+                            #{processo.juditLastRequest.requestId} · {processo.juditLastRequest.status}
+                          </p>
+                          {processo.juditLastRequest.updatedAt ? (
+                            <p className="text-xs text-muted-foreground">
+                              Atualizado em {formatDateTimeToPtBR(processo.juditLastRequest.updatedAt)}
+                            </p>
+                          ) : null}
+                          <p className="text-xs text-muted-foreground">
+                            Origem: {processo.juditLastRequest.source}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Nenhuma solicitação registrada até o momento.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {processo.responseData ? (
+                    <div className="space-y-4">
+                      {processo.responseData.cover ? (
+                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Capa do processo
+                          </p>
+                          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {Object.entries(processo.responseData.cover).map(([key, value]) => (
+                              <div key={`${processo.id}-cover-${key}`} className="space-y-1">
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {formatResponseKey(key)}
+                                </dt>
+                                <dd className="break-words text-sm text-foreground">
+                                  {formatResponseValue(value)}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
+                      ) : null}
+                      {processo.responseData.partes.length > 0 ? (
+                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Partes identificadas
+                          </p>
+                          <div className="mt-3 space-y-3">
+                            {processo.responseData.partes.map((parte, index) => {
+                              const parteNome =
+                                parseOptionalString(parte.nome) ??
+                                parseOptionalString(parte.name) ??
+                                parseOptionalString(parte.parte) ??
+                                `Parte ${index + 1}`;
+                              const ignoredKeys = new Set([
+                                "nome",
+                                "name",
+                                "parte",
+                                "id",
+                              ]);
+                              return (
+                                <div
+                                  key={`${processo.id}-parte-${index}-${parteNome}`}
+                                  className="rounded-md border border-border/40 bg-background/60 p-3"
+                                >
+                                  <p className="text-sm font-medium text-foreground">{parteNome}</p>
+                                  <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    {Object.entries(parte)
+                                      .filter(([key]) => !ignoredKeys.has(key))
+                                      .map(([key, value]) => (
+                                        <div key={`${processo.id}-parte-${index}-${key}`} className="space-y-1">
+                                          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                            {formatResponseKey(key)}
+                                          </dt>
+                                          <dd className="break-words text-xs text-foreground">
+                                            {formatResponseValue(value)}
+                                          </dd>
+                                        </div>
+                                      ))}
+                                  </dl>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                      {processo.responseData.movimentacoes.length > 0 ? (
+                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Movimentações recentes (Judit)
+                          </p>
+                          <div className="mt-3 space-y-3">
+                            {processo.responseData.movimentacoes.map((movimentacao, index) => {
+                              const descricao =
+                                parseOptionalString(movimentacao.descricao) ??
+                                parseOptionalString(movimentacao.description) ??
+                                parseOptionalString(movimentacao.titulo) ??
+                                parseOptionalString(movimentacao.title) ??
+                                `Movimentação ${index + 1}`;
+                              const dataPrincipal =
+                                parseOptionalString(movimentacao.data) ??
+                                parseOptionalString(movimentacao.date) ??
+                                parseOptionalString(movimentacao.timestamp);
+                              return (
+                                <div
+                                  key={`${processo.id}-mov-${index}-${descricao}`}
+                                  className="rounded-md border border-border/40 bg-background/60 p-3"
+                                >
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <p className="text-sm font-medium text-foreground">{descricao}</p>
+                                    {dataPrincipal ? (
+                                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        <Calendar className="h-3.5 w-3.5" />
+                                        {dataPrincipal}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {movimentacao.conteudo ? (
+                                    <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">
+                                      {movimentacao.conteudo as string}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                      {processo.responseData.anexos.length > 0 ? (
+                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Anexos recebidos
+                          </p>
+                          <div className="mt-3 space-y-3">
+                            {processo.responseData.anexos.map((anexo, index) => {
+                              const titulo =
+                                parseOptionalString(anexo.titulo) ??
+                                parseOptionalString(anexo.title) ??
+                                parseOptionalString(anexo.nome) ??
+                                `Anexo ${index + 1}`;
+                              const links = buildDocumentoLinksMap(
+                                anexo.links,
+                                anexo.href,
+                                anexo.url,
+                                anexo.link,
+                              );
+                              const linkEntries = Object.entries(links);
+                              return (
+                                <div
+                                  key={`${processo.id}-anexo-${index}-${titulo}`}
+                                  className="rounded-md border border-border/40 bg-background/60 p-3"
+                                >
+                                  <p className="text-sm font-medium text-foreground">{titulo}</p>
+                                  {linkEntries.length > 0 ? (
+                                    <ul className="mt-2 space-y-1 text-xs text-primary underline">
+                                      {linkEntries.map(([key, value]) => (
+                                        <li key={`${processo.id}-anexo-${index}-${key}`}>
+                                          <a href={value} target="_blank" rel="noreferrer" className="hover:text-primary/80">
+                                            {formatResponseKey(key)}
+                                          </a>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                      {processo.responseData.metadata ? (
+                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Metadados do processo
+                          </p>
+                          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {Object.entries(processo.responseData.metadata).map(([key, value]) => (
+                              <div key={`${processo.id}-metadata-${key}`} className="space-y-1">
+                                <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {formatResponseKey(key)}
+                                </dt>
+                                <dd className="break-words text-sm text-foreground">
+                                  {formatResponseValue(value)}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
