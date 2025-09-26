@@ -153,6 +153,43 @@ test('loadConfigurationFromSources preserves custom path segments when deriving 
   assert.equal(config?.trackingEndpoint, 'https://tracking.prod.judit.io/api/v1/tracking');
 });
 
+test('loadConfigurationFromSources honors base url provided via constructor when using env key', async () => {
+  const service = new JuditProcessService('env-key', 'https://judit.test/api');
+
+  const config = await (service as any).loadConfigurationFromSources();
+
+  assert.ok(config);
+  assert.equal(config?.apiKey, 'env-key');
+  assert.equal(config?.requestsEndpoint, 'https://judit.test/api/requests');
+  assert.equal(config?.trackingEndpoint, 'https://judit.test/api/tracking');
+  assert.equal(config?.integrationId, null);
+});
+
+test('loadConfigurationFromSources uses fallback base url when database row omits url_api', async () => {
+  const pool = new FakePool([
+    {
+      rows: [
+        {
+          id: 91,
+          key_value: 'db-key',
+          url_api: null,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const service = new JuditProcessService(null, 'https://judit.test');
+
+  const config = await (service as any).loadConfigurationFromSources(pool as unknown as any);
+
+  assert.ok(config);
+  assert.equal(config?.apiKey, 'db-key');
+  assert.equal(config?.requestsEndpoint, 'https://judit.test/requests');
+  assert.equal(config?.trackingEndpoint, 'https://judit.test/tracking');
+  assert.equal(config?.integrationId, 91);
+});
+
 test('registerProcessRequest inserts payload and maps response', async () => {
   const insertedRow = {
     id: 101,

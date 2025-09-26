@@ -74,6 +74,11 @@ Para consumir os recursos do JUDIT utilizando credenciais gerenciadas em
 3. Se necessário auditar os acessos, utilize a consulta administrativa
    [`backend/sql/queries/judit_credentials_audit.sql`](backend/sql/queries/judit_credentials_audit.sql)
    para listar todas as credenciais cadastradas, com datas de uso e status.
+4. Caso utilize a chave diretamente por variável de ambiente (`JUDIT_API_KEY`),
+   defina também `JUDIT_BASE_URL` (ou `JUDIT_API_URL`) para apontar para o
+   endpoint base desejado. Quando a coluna `url_api` estiver vazia no banco, o
+   backend utilizará esse valor como fallback antes de recorrer aos domínios de
+   produção da JUDIT.
 
 O backend não define URL padrão para o JUDIT; mantenha o campo `apiUrl` em
 branco para usar a configuração padrão do provedor ou preencha manualmente
