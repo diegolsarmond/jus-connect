@@ -883,13 +883,19 @@ export class JuditProcessService {
       if (trimmed) {
         try {
           const base = new URL(trimmed);
-          const baseSegments = base.pathname.split('/').filter(Boolean);
+          const baseSegments = base.pathname
+            .split('/')
+            .map((segment) => segment.trim())
+            .filter(Boolean);
 
           const requestsUrl = new URL(base.href);
           requestsUrl.search = '';
           requestsUrl.hash = '';
-          const requestsSegments = baseSegments.slice();
-          if (requestsSegments[requestsSegments.length - 1] !== 'requests') {
+          requestsUrl.hostname = requestsUrl.hostname.replace(/^tracking\./i, 'requests.');
+          const requestsSegments = baseSegments
+            .filter((segment) => segment.toLowerCase() !== 'tracking');
+          const lastRequestSegment = requestsSegments[requestsSegments.length - 1];
+          if (!lastRequestSegment || lastRequestSegment.toLowerCase() !== 'requests') {
             requestsSegments.push('requests');
           }
           requestsUrl.pathname = `/${requestsSegments.join('/')}`;
@@ -897,12 +903,13 @@ export class JuditProcessService {
           const trackingUrl = new URL(base.href);
           trackingUrl.search = '';
           trackingUrl.hash = '';
-          let trackingSegments = baseSegments.slice();
-          if (/^requests\./i.test(trackingUrl.hostname)) {
-            trackingUrl.hostname = trackingUrl.hostname.replace(/^requests\./i, 'tracking.');
-            trackingSegments = [];
+          trackingUrl.hostname = trackingUrl.hostname.replace(/^requests\./i, 'tracking.');
+          const trackingSegments = baseSegments
+            .filter((segment) => segment.toLowerCase() !== 'requests');
+          const lastTrackingSegment = trackingSegments[trackingSegments.length - 1];
+          if (!lastTrackingSegment || lastTrackingSegment.toLowerCase() !== 'tracking') {
+            trackingSegments.push('tracking');
           }
-          trackingSegments.push('tracking');
           trackingUrl.pathname = `/${trackingSegments.join('/')}`;
 
           return {
