@@ -81,6 +81,30 @@ class MockResponse {
   }
 }
 
+test('loadConfigurationFromSources resolves endpoints for requests host base url', async () => {
+  const pool = new FakePool([
+    {
+      rows: [
+        {
+          id: 55,
+          key_value: 'db-key',
+          url_api: 'https://requests.prod.judit.io',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const service = new JuditProcessService(null);
+
+  const config = await (service as any).loadConfigurationFromSources(pool as unknown as any);
+
+  assert.ok(config);
+  assert.equal(config?.apiKey, 'db-key');
+  assert.equal(config?.requestsEndpoint, 'https://requests.prod.judit.io/requests');
+  assert.equal(config?.trackingEndpoint, 'https://tracking.prod.judit.io/tracking');
+});
+
 test('registerProcessRequest inserts payload and maps response', async () => {
   const insertedRow = {
     id: 101,
