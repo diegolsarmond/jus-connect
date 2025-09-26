@@ -159,7 +159,7 @@ export class CronJobsService {
     }));
 
     this.juditState = {
-      enabled: juditProcessService.isEnabled(),
+      enabled: false,
       running: false,
       lastRunAt: null,
       lastSuccessAt: null,
@@ -168,9 +168,7 @@ export class CronJobsService {
       lastManualTriggerAt: null,
     };
 
-    if (this.juditState.enabled) {
-      this.startJuditSchedules();
-    }
+    void this.initializeJuditIntegration();
   }
 
   startProjudiSyncJob(): void {
@@ -333,9 +331,26 @@ export class CronJobsService {
     };
   }
 
+  private async initializeJuditIntegration(): Promise<void> {
+    try {
+      const enabled = await juditProcessService.isEnabled();
+      this.juditState.enabled = enabled;
+
+      if (enabled) {
+        this.startJuditSchedules();
+      } else {
+        this.clearJuditSchedules();
+      }
+    } catch (error) {
+      console.error('[CronJobs] Falha ao inicializar agendamentos da Judit.', error);
+      this.juditState.enabled = false;
+      this.clearJuditSchedules();
+    }
+  }
+
   private startJuditSchedules(): void {
     for (const schedule of this.juditSchedules) {
-      this.scheduleNextJuditRun(schedule);
+      void this.scheduleNextJuditRun(schedule);
     }
   }
 
@@ -349,26 +364,32 @@ export class CronJobsService {
     }
   }
 
-  private scheduleNextJuditRun(schedule: {
+  private async scheduleNextJuditRun(schedule: {
     hour: number;
     minute: number;
     timer: NodeJS.Timeout | null;
     nextRunAt: Date | null;
-  }): void {
-    if (!juditProcessService.isEnabled()) {
+  }): Promise<void> {
+    try {
+      if (!(await juditProcessService.isEnabled())) {
+        this.juditState.enabled = false;
+        this.clearJuditSchedules();
+        return;
+      }
+
+      this.juditState.enabled = true;
+      const nextRun = this.computeNextJuditExecution(schedule.hour, schedule.minute);
+      schedule.nextRunAt = nextRun;
+      const delay = Math.max(0, nextRun.getTime() - Date.now());
+
+      schedule.timer = setTimeout(() => {
+        void this.executeScheduledJuditRun(schedule);
+      }, delay);
+    } catch (error) {
+      console.error('[CronJobs] Falha ao agendar próxima execução da Judit.', error);
       this.juditState.enabled = false;
       this.clearJuditSchedules();
-      return;
     }
-
-    this.juditState.enabled = true;
-    const nextRun = this.computeNextJuditExecution(schedule.hour, schedule.minute);
-    schedule.nextRunAt = nextRun;
-    const delay = Math.max(0, nextRun.getTime() - Date.now());
-
-    schedule.timer = setTimeout(() => {
-      void this.executeScheduledJuditRun(schedule);
-    }, delay);
   }
 
   private computeNextJuditExecution(hour: number, minute: number): Date {
@@ -401,7 +422,7 @@ export class CronJobsService {
     } catch (error) {
       console.error('[CronJobs] Falha ao executar job agendado da Judit.', error);
     } finally {
-      this.scheduleNextJuditRun(schedule);
+      await this.scheduleNextJuditRun(schedule);
     }
   }
 
@@ -432,7 +453,7 @@ export class CronJobsService {
   }
 
   private async runJuditSync(trigger: 'scheduled' | 'manual'): Promise<void> {
-    if (!juditProcessService.isEnabled()) {
+    if (!(await juditProcessService.isEnabled())) {
       this.juditState.enabled = false;
       this.clearJuditSchedules();
       return;

@@ -27,7 +27,7 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
     return res.status(401).json({ error: 'Token inválido.' });
   }
 
-  if (!juditProcessService.isEnabled()) {
+  if (!(await juditProcessService.isEnabled())) {
     return res.status(503).json({ error: 'Integração com a Judit não está configurada.' });
   }
 

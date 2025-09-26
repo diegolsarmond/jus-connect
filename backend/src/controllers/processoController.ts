@@ -817,7 +817,8 @@ export const getProcessoById = async (req: Request, res: Response) => {
     processo.juditSyncs = juditSyncs;
     processo.juditResponses = juditResponses;
     processo.juditAuditTrail = juditAuditTrail;
-    if (juditProcessService.isEnabled()) {
+
+    if (await juditProcessService.isEnabled()) {
       try {
         const tracking = await juditProcessService.ensureTrackingForProcess(
           processo.id,
