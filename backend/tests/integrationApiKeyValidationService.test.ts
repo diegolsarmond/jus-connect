@@ -3,11 +3,7 @@ import test from 'node:test';
 import IntegrationApiKeyValidationService, {
   ValidateAsaasIntegrationResult,
 } from '../src/services/integrationApiKeyValidationService';
-import {
-  IntegrationApiKey,
-  ValidationError,
-  ASAAS_DEFAULT_API_URLS,
-} from '../src/services/integrationApiKeyService';
+import { IntegrationApiKey, ValidationError, ASAAS_DEFAULT_API_URLS } from '../src/services/integrationApiKeyService';
 
 class FakeIntegrationApiKeyService {
   constructor(private readonly items: Map<number, IntegrationApiKey> = new Map()) {}
@@ -108,6 +104,46 @@ test('validateAsaas falls back to default URL when apiUrl is null', async () => 
   const call = calls[0];
   const url = typeof call.input === 'string' ? call.input : call.input.toString();
   assert.equal(url, `${expectedBase}/customers?limit=1`);
+});
+
+test('validateAsaas normalizes sandbox base URLs without API path', async () => {
+  const apiKey = createApiKey({ apiUrl: 'https://sandbox.asaas.com', environment: 'homologacao' });
+  const fakeService = new FakeIntegrationApiKeyService(new Map([[apiKey.id, apiKey]]));
+  const calls: FetchCall[] = [];
+  const validator = new IntegrationApiKeyValidationService(fakeService, async (input, init) => {
+    calls.push({ input, init });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    };
+  });
+
+  await validator.validateAsaas(apiKey.id);
+  assert.equal(calls.length, 1);
+  const call = calls[0];
+  const url = typeof call.input === 'string' ? call.input : call.input.toString();
+  assert.equal(url, 'https://sandbox.asaas.com/api/v3/customers?limit=1');
+});
+
+test('validateAsaas normalizes sandbox API base without version suffix', async () => {
+  const apiKey = createApiKey({ apiUrl: 'https://sandbox.asaas.com/api', environment: 'homologacao' });
+  const fakeService = new FakeIntegrationApiKeyService(new Map([[apiKey.id, apiKey]]));
+  const calls: FetchCall[] = [];
+  const validator = new IntegrationApiKeyValidationService(fakeService, async (input, init) => {
+    calls.push({ input, init });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    };
+  });
+
+  await validator.validateAsaas(apiKey.id);
+  assert.equal(calls.length, 1);
+  const call = calls[0];
+  const url = typeof call.input === 'string' ? call.input : call.input.toString();
+  assert.equal(url, 'https://sandbox.asaas.com/api/v3/customers?limit=1');
 });
 
 test('validateAsaas returns failure with message from API payload', async () => {
