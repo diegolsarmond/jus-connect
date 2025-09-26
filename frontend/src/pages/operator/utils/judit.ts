@@ -376,11 +376,15 @@ export const parseResponseDataFromResult = (
     return null;
   }
 
+  const fallbackPayloadRecord =
+    toRecord(payload.result) ?? toRecord(payload) ?? null;
+
   const responseData =
     toRecord(payload.response_data) ??
     toRecord(payload.responseData) ??
     toRecord(payload.data) ??
-    toRecord(payload.payload);
+    toRecord(payload.payload) ??
+    fallbackPayloadRecord;
 
   if (!responseData) {
     return null;
@@ -404,9 +408,57 @@ export const parseResponseDataFromResult = (
   )
     .map(toRecord)
     .filter((item): item is Record<string, unknown> => Boolean(item));
+  const metadataSources: Record<string, unknown>[] = [];
+
+  const responseMetadata = toRecord(
+    responseData.metadata ??
+      responseData.metadados ??
+      responseData.meta ??
+      null,
+  );
+
+  if (responseMetadata) {
+    metadataSources.push(responseMetadata);
+  }
+
+  if (fallbackPayloadRecord) {
+    const sanitizedRootEntries = Object.entries(fallbackPayloadRecord).filter(
+      ([key]) =>
+        ![
+          "response_data",
+          "responseData",
+          "data",
+          "payload",
+          "result",
+          "cover",
+          "capa",
+          "metadata",
+          "metadados",
+          "meta",
+          "partes",
+          "parties",
+          "movimentacoes",
+          "movements",
+          "movs",
+          "events",
+          "anexos",
+          "attachments",
+          "documents",
+        ].includes(key),
+    );
+
+    if (sanitizedRootEntries.length > 0) {
+      metadataSources.push(Object.fromEntries(sanitizedRootEntries));
+    }
+  }
+
   const metadata =
-    toRecord(responseData.metadata ?? responseData.metadados ?? responseData.meta ?? null) ??
-    null;
+    metadataSources.length > 0
+      ? metadataSources.reduce<Record<string, unknown>>(
+          (accumulator, current) => ({ ...accumulator, ...current }),
+          {},
+        )
+      : null;
 
   return {
     cover,
