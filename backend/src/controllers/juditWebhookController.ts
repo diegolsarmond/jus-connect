@@ -1,6 +1,13 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
-import juditProcessService from '../services/juditProcessService';
+import juditProcessService, {
+  findProcessSyncByRemoteId,
+  registerProcessRequest,
+  registerProcessResponse,
+  registerSyncAudit,
+  type UpdateProcessSyncStatusInput,
+  updateProcessSyncStatus,
+} from '../services/juditProcessService';
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -83,19 +90,6 @@ export const handleJuditWebhook = async (req: Request, res: Response) => {
       [trackingId, hourRange, processoId]
     );
 
-    await client.query(
-      `INSERT INTO public.processo_sync (processo_id, provider, status, tracking_id, hour_range, last_synced_at)
-          VALUES ($1, 'judit', $2, COALESCE($3, $4), COALESCE($5, $6), NOW())
-          ON CONFLICT (processo_id, provider)
-          DO UPDATE SET
-            status = EXCLUDED.status,
-            tracking_id = COALESCE(EXCLUDED.tracking_id, public.processo_sync.tracking_id),
-            hour_range = COALESCE(EXCLUDED.hour_range, public.processo_sync.hour_range),
-            last_synced_at = EXCLUDED.last_synced_at,
-            atualizado_em = NOW()`,
-      [processoId, status, trackingId, trackingId, hourRange, hourRange]
-    );
-
     const requestPayload = (payload as Record<string, unknown>).request ??
       (payload as Record<string, unknown>).request_info ??
       null;
@@ -120,26 +114,125 @@ export const handleJuditWebhook = async (req: Request, res: Response) => {
       requestResult = (payload as Record<string, unknown>).result ?? null;
     }
 
-    if (requestId && requestStatus) {
-      await juditProcessService.updateRequestStatus(
+    const existingSync = requestId
+      ? await findProcessSyncByRemoteId(requestId, client)
+      : null;
+
+    const integrationApiKeyId = existingSync?.integrationApiKeyId ?? null;
+
+    const processResponse = await registerProcessResponse(
+      {
         processoId,
-        requestId,
-        requestStatus,
-        requestResult,
-        { source: 'webhook', client }
+        processSyncId: existingSync?.id ?? null,
+        integrationApiKeyId,
+        deliveryId: normalizeString((payload as Record<string, unknown>).delivery_id),
+        source: 'webhook',
+        payload,
+        headers: req.headers,
+      },
+      client,
+    );
+
+    await registerSyncAudit(
+      {
+        processoId,
+        processSyncId: existingSync?.id ?? null,
+        processResponseId: processResponse.id,
+        integrationApiKeyId,
+        eventType: 'webhook_received',
+        eventDetails: {
+          trackingId,
+          processNumber,
+          requestId,
+          status: requestStatus,
+          increments: increments.length,
+        },
+      },
+      client,
+    );
+
+    let syncRecord = existingSync;
+
+    if (requestId) {
+      if (!syncRecord) {
+        syncRecord = await registerProcessRequest(
+          {
+            processoId,
+            remoteRequestId: requestId,
+            requestType: 'webhook',
+            status: requestStatus ?? 'completed',
+            metadata: {
+              source: 'webhook',
+              result: requestResult,
+              trackingId,
+              hourRange,
+            },
+          },
+          client,
+        );
+      }
+
+      const currentMetadata =
+        syncRecord.metadata && typeof syncRecord.metadata === 'object' && !Array.isArray(syncRecord.metadata)
+          ? { ...(syncRecord.metadata as Record<string, unknown>) }
+          : ({} as Record<string, unknown>);
+
+      const metadata: Record<string, unknown> = {
+        ...currentMetadata,
+        result: requestResult,
+        trackingId: trackingId ?? (currentMetadata['trackingId'] as string | null | undefined) ?? null,
+        hourRange: hourRange ?? (currentMetadata['hourRange'] as string | null | undefined) ?? null,
+        status: requestStatus ?? syncRecord.status,
+        lastWebhookAt: new Date().toISOString(),
+        increments: increments.length,
+      };
+
+      const statusUpdates: UpdateProcessSyncStatusInput = {
+        status: requestStatus ?? syncRecord.status,
+        metadata,
+      };
+
+      if (requestStatus && requestStatus !== 'pending') {
+        statusUpdates.completedAt = new Date();
+      }
+
+      const updates = await updateProcessSyncStatus(
+        syncRecord.id,
+        statusUpdates,
+        client,
+      );
+
+      if (updates) {
+        syncRecord = updates;
+      }
+
+      await registerSyncAudit(
+        {
+          processoId,
+          processSyncId: syncRecord.id,
+          processResponseId: processResponse.id,
+          integrationApiKeyId: syncRecord.integrationApiKeyId,
+          eventType: 'status_update',
+          eventDetails: {
+            requestId,
+            status: requestStatus,
+          },
+        },
+        client,
       );
     }
 
     for (const increment of increments) {
-      await client.query(
-        `INSERT INTO public.processo_sync_history (processo_id, provider, request_id, event_type, payload)
-            VALUES ($1, 'judit', $2, $3, $4)`,
-        [
+      await registerSyncAudit(
+        {
           processoId,
-          requestId,
-          normalizeString((increment as Record<string, unknown>)?.type) ?? 'increment',
-          increment,
-        ]
+          processSyncId: syncRecord?.id ?? null,
+          processResponseId: processResponse.id,
+          integrationApiKeyId: syncRecord?.integrationApiKeyId ?? integrationApiKeyId,
+          eventType: normalizeString((increment as Record<string, unknown>)?.type) ?? 'increment',
+          eventDetails: increment,
+        },
+        client,
       );
     }
 
