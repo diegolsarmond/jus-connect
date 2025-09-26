@@ -443,6 +443,7 @@ test('Judit request lifecycle stores polling response and process_response entry
           search_type: 'lawsuit_cnj',
           search_key: '0000000-00.0000.0.00.0000',
         },
+
         with_attachments: false,
       });
       return new Response(JSON.stringify({
