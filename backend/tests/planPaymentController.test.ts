@@ -206,12 +206,12 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
   assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
   assert.ok(Array.isArray(calls[8]?.values));
   const insertValues = calls[8]?.values as unknown[];
+  assert.equal(insertValues.length, 4);
   assert.equal(insertValues[0], 'Assinatura Plano Jurídico (mensal)');
   assert.equal(typeof insertValues[1], 'string');
   assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(insertValues[2], 199.9);
   assert.equal(insertValues[3], 321);
-  assert.equal(typeof insertValues[4], 'string');
 
   const payload = res.body as { plan?: { id?: number }; charge?: { id?: string } };
   assert.equal(payload.plan?.id, 9);
@@ -357,12 +357,12 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
   assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
   assert.ok(Array.isArray(calls[8]?.values));
   const insertValues = calls[8]?.values as unknown[];
+  assert.equal(insertValues.length, 4);
   assert.equal(insertValues[0], 'Assinatura Plano Premium (mensal)');
   assert.equal(typeof insertValues[1], 'string');
   assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(insertValues[2], 299.9);
   assert.equal(insertValues[3], 654);
-  assert.equal(typeof insertValues[4], 'string');
 
   const payload = res.body as { charge?: { id?: string }; plan?: { id?: number } };
   assert.equal(payload.plan?.id, 5);
@@ -497,11 +497,11 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
   assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
   assert.ok(Array.isArray(calls[8]?.values));
   const insertValues = calls[8]?.values as unknown[];
+  assert.equal(insertValues.length, 4);
   assert.equal(insertValues[0], 'Assinatura Plano Plus (mensal)');
   assert.equal(typeof insertValues[1], 'string');
   assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(insertValues[2], 249.9);
   assert.equal(insertValues[3], 987);
-  assert.equal(typeof insertValues[4], 'string');
 });
 

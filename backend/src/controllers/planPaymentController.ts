@@ -292,13 +292,11 @@ async function createFinancialFlow({
   description,
   value,
   dueDate,
-  externalReference,
   accountId,
 }: {
   description: string;
   value: number;
   dueDate: string;
-  externalReference: string;
   accountId: number | null;
 }): Promise<{ id: number; descricao: string; valor: string; vencimento: string; status: string } | null> {
   const result = await pool.query(
@@ -314,9 +312,9 @@ async function createFinancialFlow({
         external_provider,
         external_reference_id
       )
-      VALUES ('receita', $1, $2, $3, 'pendente', $4, NULL, NULL, 'asaas', $5)
+      VALUES ('receita', $1, $2, $3, 'pendente', $4, NULL, NULL, 'asaas', NULL)
       RETURNING id, descricao, valor::text AS valor, vencimento::text AS vencimento, status`,
-    [description, dueDate, value, accountId, externalReference],
+    [description, dueDate, value, accountId],
   );
 
   if (result.rowCount === 0) {
@@ -632,7 +630,6 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     description,
     value: price,
     dueDate: nextDueDate,
-    externalReference,
     accountId,
   });
 
