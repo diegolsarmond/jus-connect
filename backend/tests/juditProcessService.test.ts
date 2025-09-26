@@ -104,6 +104,7 @@ test('loadConfigurationFromSources resolves endpoints for requests host base url
   assert.equal(config?.apiKey, 'db-key');
   assert.equal(config?.requestsEndpoint, 'https://requests.prod.judit.io/requests');
   assert.equal(config?.trackingEndpoint, 'https://tracking.prod.judit.io/tracking');
+  assert.match(pool.calls[0]?.text ?? '', /global IS TRUE/);
 });
 
 test('loadConfigurationFromSources swaps host when base url points to tracking domain', async () => {
@@ -189,6 +190,69 @@ test('loadConfigurationFromSources uses fallback base url when database row omit
   assert.equal(config?.requestsEndpoint, 'https://judit.test/requests');
   assert.equal(config?.trackingEndpoint, 'https://judit.test/tracking');
   assert.equal(config?.integrationId, 91);
+});
+
+test('loadConfigurationFromSources falls back to legacy credential when no global exists', async () => {
+  const pool = new FakePool([
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 101,
+          key_value: 'legacy-key',
+          url_api: null,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const warnMock = test.mock.method(console, 'warn');
+
+  const service = new JuditProcessService(null, 'https://judit.test', { allowLegacyFallback: true });
+
+  const config = await (service as any).loadConfigurationFromSources(pool as unknown as any);
+
+  assert.ok(config);
+  assert.equal(config?.apiKey, 'legacy-key');
+  assert.equal(config?.requestsEndpoint, 'https://judit.test/requests');
+  assert.equal(config?.trackingEndpoint, 'https://judit.test/tracking');
+  assert.equal(pool.calls.length, 2);
+  assert.match(pool.calls[0]?.text ?? '', /global IS TRUE/);
+  assert.match(pool.calls[1]?.text ?? '', /FROM public\.integration_api_keys/);
+  assert.ok(
+    warnMock.mock.calls.some((call) =>
+      String(call.arguments[0]).includes('Nenhuma credencial global encontrada'),
+    ),
+  );
+
+  warnMock.mock.restore();
+});
+
+test('loadConfigurationFromSources does not fallback when disabled', async () => {
+  const pool = new FakePool([
+    {
+      rows: [],
+      rowCount: 0,
+    },
+  ]);
+
+  const warnMock = test.mock.method(console, 'warn');
+
+  const service = new JuditProcessService(null, 'https://judit.test', { allowLegacyFallback: false });
+
+  const config = await (service as any).loadConfigurationFromSources(pool as unknown as any);
+
+  assert.equal(config, null);
+  assert.equal(pool.calls.length, 1);
+  assert.match(pool.calls[0]?.text ?? '', /global IS TRUE/);
+  assert.ok(
+    warnMock.mock.calls.some((call) =>
+      String(call.arguments[0]).includes('Nenhuma credencial global encontrada'),
+    ),
+  );
+
+  warnMock.mock.restore();
 });
 
 test('registerProcessRequest inserts payload and maps response', async () => {
