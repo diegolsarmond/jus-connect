@@ -315,3 +315,116 @@ test('getProcessoById triggers Judit when history is missing', async () => {
     poolMock.mock.restore();
   }
 });
+
+test('getProcessoById does not trigger Judit when audit trail is present', async () => {
+  const processoRow: ProcessResponseShape = {
+    id: 303,
+    cliente_id: null,
+    idempresa: 88,
+    numero: '1111111-11.1111.1.11.1111',
+    uf: null,
+    municipio: null,
+    orgao_julgador: null,
+    tipo: null,
+    status: null,
+    classe_judicial: null,
+    assunto: null,
+    jurisdicao: null,
+    oportunidade_id: null,
+    oportunidade_sequencial_empresa: null,
+    oportunidade_data_criacao: null,
+    oportunidade_numero_processo_cnj: null,
+    oportunidade_numero_protocolo: null,
+    oportunidade_solicitante_id: null,
+    oportunidade_solicitante_nome: null,
+    advogado_responsavel: null,
+    data_distribuicao: null,
+    criado_em: '2024-01-01T10:00:00.000Z',
+    atualizado_em: '2024-01-02T10:00:00.000Z',
+    ultima_sincronizacao: null,
+    consultas_api_count: 0,
+    judit_tracking_id: 'tracking-xyz',
+    judit_tracking_hour_range: '10-18',
+    cliente_nome: null,
+    cliente_documento: null,
+    cliente_tipo: null,
+    advogados: '[]',
+    movimentacoes: '[]',
+    movimentacoes_count: 0,
+    judit_last_request: null,
+  };
+
+  const poolResponses: QueryResponse[] = [
+    { rows: [{ empresa: processoRow.idempresa }], rowCount: 1 },
+    { rows: [processoRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 0 },
+    {
+      rows: [
+        {
+          id: 902,
+          processo_id: processoRow.id,
+          process_sync_id: null,
+          process_response_id: null,
+          integration_api_key_id: null,
+          event_type: 'request.created',
+          event_details: { status: 'completed' },
+          observed_at: '2024-01-03T12:00:00.000Z',
+          created_at: '2024-01-03T12:00:01.000Z',
+          provider: null,
+          environment: null,
+          url_api: null,
+          active: true,
+        },
+      ],
+      rowCount: 1,
+    },
+  ];
+
+  const req = {
+    params: { id: String(processoRow.id) },
+    auth: { userId: 66 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  const poolMock = test.mock.method(pool, 'query', async (text: string) => {
+    if (poolResponses.length === 0) {
+      throw new Error(`Unexpected pool query: ${text}`);
+    }
+    return poolResponses.shift()!;
+  });
+
+  const juditService = getJuditServiceInstance();
+  const originalIsEnabled = juditService.isEnabled;
+  const originalEnsure = juditService.ensureTrackingForProcess;
+  const originalTrigger = juditService.triggerRequestForProcess;
+
+  const ensureCalls: unknown[][] = [];
+  const triggerCalls: unknown[][] = [];
+
+  juditService.isEnabled = async () => true;
+  juditService.ensureTrackingForProcess = async (...args: unknown[]) => {
+    ensureCalls.push(args);
+    return null;
+  };
+  juditService.triggerRequestForProcess = async (...args: unknown[]) => {
+    triggerCalls.push(args);
+    return null;
+  };
+
+  try {
+    await getProcessoById(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(ensureCalls.length, 0);
+    assert.equal(triggerCalls.length, 0);
+  } finally {
+    juditService.triggerRequestForProcess = originalTrigger;
+    juditService.ensureTrackingForProcess = originalEnsure;
+    juditService.isEnabled = originalIsEnabled;
+    poolMock.mock.restore();
+  }
+});
+
