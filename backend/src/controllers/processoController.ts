@@ -618,16 +618,16 @@ const baseProcessoSelect = `
     ) AS movimentacoes_count,
     (
       SELECT jsonb_build_object(
-        'request_id', r.request_id,
-        'status', r.status,
-        'source', r.source,
-        'result', r.result,
-        'criado_em', r.criado_em,
-        'atualizado_em', r.atualizado_em
+        'request_id', ps.remote_request_id,
+        'status', ps.status,
+        'source', ps.request_type,
+        'result', ps.metadata -> 'result',
+        'criado_em', ps.created_at,
+        'atualizado_em', ps.updated_at
       )
-      FROM public.processo_judit_requests r
-      WHERE r.processo_id = p.id
-      ORDER BY r.atualizado_em DESC
+      FROM public.process_sync ps
+      WHERE ps.processo_id = p.id
+      ORDER BY ps.requested_at DESC, ps.id DESC
       LIMIT 1
     ) AS judit_last_request
   FROM public.processos p

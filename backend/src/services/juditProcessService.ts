@@ -778,12 +778,36 @@ export interface JuditRequestResponse {
 }
 
 export interface JuditRequestRecord {
+  processSyncId: number;
   requestId: string;
   status: string;
-  source: JuditRequestSource;
+  source: JuditRequestSource | string;
   result: unknown;
+  metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function mapSyncToRequestRecord(sync: ProcessSyncRecord): JuditRequestRecord {
+  const metadata = asRecord(sync.metadata);
+
+  return {
+    processSyncId: sync.id,
+    requestId: sync.remoteRequestId ?? '',
+    status: sync.status,
+    source: sync.requestType,
+    result: metadata.result ?? null,
+    metadata,
+    createdAt: sync.createdAt,
+    updatedAt: sync.updatedAt,
+  };
 }
 
 interface EnsureTrackingOptions {
@@ -1142,17 +1166,48 @@ export class JuditProcessService {
         [trackingResponse.tracking_id, hourRange, processoId]
       );
 
-      await useClient.query(
-        `INSERT INTO public.processo_sync (processo_id, provider, status, tracking_id, hour_range, last_synced_at)
-           VALUES ($1, 'judit', $2, $3, $4, NOW())
-           ON CONFLICT (processo_id, provider)
-           DO UPDATE SET
-             status = EXCLUDED.status,
-             tracking_id = EXCLUDED.tracking_id,
-             hour_range = EXCLUDED.hour_range,
-             last_synced_at = EXCLUDED.last_synced_at,
-             atualizado_em = NOW()`,
-        [processoId, status, trackingResponse.tracking_id, hourRange]
+      const syncRecord = await registerProcessRequest(
+        {
+          processoId,
+          integrationApiKeyId: config.integrationId,
+          remoteRequestId: trackingResponse.tracking_id ?? null,
+          requestType: 'system',
+          requestPayload: {
+            action: options.trackingId ? 'renew-tracking' : 'create-tracking',
+            process_number: processNumber,
+          },
+          requestHeaders: this.buildHeaders(config),
+          status: 'completed',
+          metadata: {
+            source: 'ensure_tracking',
+            remoteStatus: status,
+            hourRange,
+            recurrence: trackingResponse.recurrence ?? null,
+            trackingId: trackingResponse.tracking_id ?? null,
+          },
+        },
+        useClient,
+      );
+
+      await updateProcessSyncStatus(
+        syncRecord.id,
+        { completedAt: new Date() },
+        useClient,
+      );
+
+      await registerSyncAudit(
+        {
+          processoId,
+          processSyncId: syncRecord.id,
+          integrationApiKeyId: syncRecord.integrationApiKeyId,
+          eventType: 'tracking_synced',
+          eventDetails: {
+            trackingId: trackingResponse.tracking_id ?? null,
+            status,
+            hourRange,
+          },
+        },
+        useClient,
       );
 
       if (manageTransaction) {
@@ -1179,6 +1234,7 @@ export class JuditProcessService {
     const client = options.client ?? (await pool.connect());
     const shouldRelease = !options.client;
     const manageTransaction = !options.client;
+    const requestType = normalizeRequestType(options.source ?? 'system') ?? 'system';
 
     try {
       if (manageTransaction) {
@@ -1187,27 +1243,43 @@ export class JuditProcessService {
 
       if (options.skipIfPending) {
         const pendingLookup = await client.query(
-          `SELECT request_id, status, source, result, criado_em, atualizado_em
-             FROM public.processo_judit_requests
-            WHERE processo_id = $1 AND status = 'pending'
-            ORDER BY atualizado_em DESC
-            LIMIT 1`,
-          [processoId]
+          `SELECT
+             ps.id,
+             ps.processo_id,
+             ps.integration_api_key_id,
+             ps.remote_request_id,
+             ps.request_type,
+             ps.requested_by,
+             ps.requested_at,
+             ps.request_payload,
+             ps.request_headers,
+             ps.status,
+             ps.status_reason,
+             ps.completed_at,
+             ps.metadata,
+             ps.created_at,
+             ps.updated_at,
+             iak.provider,
+             iak.environment,
+             iak.url_api,
+             iak.active
+           FROM public.process_sync ps
+           LEFT JOIN public.integration_api_keys iak ON iak.id = ps.integration_api_key_id
+          WHERE ps.processo_id = $1
+            AND ps.status = 'pending'
+            AND ($2::text IS NULL OR ps.request_type = $2)
+          ORDER BY ps.requested_at DESC, ps.id DESC
+          LIMIT 1`,
+          [processoId, requestType]
         );
 
         if ((pendingLookup.rowCount ?? 0) > 0) {
-          const row = pendingLookup.rows[0];
           if (manageTransaction) {
             await client.query('COMMIT');
           }
-          return {
-            requestId: row.request_id,
-            status: row.status,
-            source: row.source,
-            result: row.result,
-            createdAt: row.criado_em.toISOString?.() ?? row.criado_em,
-            updatedAt: row.atualizado_em.toISOString?.() ?? row.atualizado_em,
-          };
+          return mapSyncToRequestRecord(
+            mapProcessSyncRow(pendingLookup.rows[0] as ProcessSyncRow),
+          );
         }
       }
 
@@ -1219,35 +1291,74 @@ export class JuditProcessService {
         return null;
       }
 
-      const response = await this.triggerRequest(processNumber, config);
+      const requestPayload = {
+        search: {
+          search_type: 'lawsuit_cnj',
+          search_key: processNumber,
+        },
+        with_attachments: false,
+      } as const;
+
+      const response = await this.requestWithRetry<JuditRequestResponse>(
+        config,
+        config.requestsEndpoint,
+        {
+          method: 'POST',
+          body: JSON.stringify(requestPayload),
+        },
+      );
 
       const requestId = response.request_id;
       const status = response.status ?? 'pending';
       const result = response.result ?? null;
 
-      const upsert = await client.query(
-        `INSERT INTO public.processo_judit_requests (processo_id, request_id, status, source, result)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (request_id)
-           DO UPDATE SET
-             status = EXCLUDED.status,
-             source = EXCLUDED.source,
-             result = EXCLUDED.result,
-             atualizado_em = NOW()
-           RETURNING request_id, status, source, result, criado_em, atualizado_em`,
-        [processoId, requestId, status, options.source, result]
+      const requestHeaders = this.buildHeaders(config);
+
+      let processSync = await registerProcessRequest(
+        {
+          processoId,
+          integrationApiKeyId: config.integrationId,
+          remoteRequestId: requestId,
+          requestType,
+          requestedBy: options.actorUserId ?? null,
+          requestPayload,
+          requestHeaders,
+          status,
+          metadata: {
+            source: options.source ?? 'system',
+            result,
+            trackingId: response.tracking_id ?? null,
+          },
+        },
+        client,
       );
 
-      const row = upsert.rows[0];
+      if (status !== 'pending') {
+        const updated = await updateProcessSyncStatus(
+          processSync.id,
+          {
+            completedAt: new Date(),
+          },
+          client,
+        );
+        if (updated) {
+          processSync = updated;
+        }
+      }
 
-      await client.query(
-        `UPDATE public.processo_sync
-            SET last_request_id = $1,
-                last_request_status = $2,
-                last_request_payload = $3,
-                atualizado_em = NOW()
-          WHERE processo_id = $4 AND provider = 'judit'`,
-        [requestId, status, result, processoId]
+      await registerSyncAudit(
+        {
+          processoId,
+          processSyncId: processSync.id,
+          integrationApiKeyId: processSync.integrationApiKeyId,
+          eventType: 'request_triggered',
+          eventDetails: {
+            requestId,
+            status,
+            source: options.source ?? 'system',
+          },
+        },
+        client,
       );
 
       if (options.actorUserId) {
@@ -1273,14 +1384,7 @@ export class JuditProcessService {
         await client.query('COMMIT');
       }
 
-      return {
-        requestId: row.request_id,
-        status: row.status,
-        source: row.source,
-        result: row.result,
-        createdAt: row.criado_em.toISOString?.() ?? row.criado_em,
-        updatedAt: row.atualizado_em.toISOString?.() ?? row.atualizado_em,
-      };
+      return mapSyncToRequestRecord(processSync);
     } catch (error) {
       if (manageTransaction) {
         await client.query('ROLLBACK');
@@ -1303,50 +1407,72 @@ export class JuditProcessService {
     const client = options.client ?? (await pool.connect());
     const shouldRelease = !options.client;
     const manageTransaction = !options.client;
+    const requestType = normalizeRequestType(options.source ?? 'system') ?? 'system';
+    const normalizedStatus = normalizeStatus(status, 'pending');
 
     try {
       if (manageTransaction) {
         await client.query('BEGIN');
       }
 
-      const upsert = await client.query(
-        `INSERT INTO public.processo_judit_requests (processo_id, request_id, status, source, result)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (request_id)
-           DO UPDATE SET
-             status = EXCLUDED.status,
-             source = EXCLUDED.source,
-             result = EXCLUDED.result,
-             atualizado_em = NOW()
-           RETURNING request_id, status, source, result, criado_em, atualizado_em`,
-        [processoId, requestId, status, options.source ?? 'system', result]
-      );
+      let processSync = await findProcessSyncByRemoteId(requestId, client);
 
-      const row = upsert.rows[0];
+      if (!processSync) {
+        processSync = await registerProcessRequest(
+          {
+            processoId,
+            remoteRequestId: requestId,
+            requestType,
+            status: normalizedStatus,
+            metadata: {
+              source: options.source ?? 'system',
+              result,
+            },
+          },
+          client,
+        );
+      }
 
-      await client.query(
-        `UPDATE public.processo_sync
-            SET last_request_id = $1,
-                last_request_status = $2,
-                last_request_payload = $3,
-                last_synced_at = NOW(),
-                atualizado_em = NOW()
-          WHERE processo_id = $4 AND provider = 'judit'`,
-        [requestId, status, result, processoId]
+      const existingMetadata = asRecord(processSync.metadata);
+      const updates: UpdateProcessSyncStatusInput = {
+        status: normalizedStatus,
+        metadata: {
+          ...existingMetadata,
+          source: options.source ?? existingMetadata.source ?? 'system',
+          result,
+          status: normalizedStatus,
+        },
+      };
+
+      if (normalizedStatus !== 'pending') {
+        updates.completedAt = new Date();
+      }
+
+      const updated = await updateProcessSyncStatus(processSync.id, updates, client);
+      if (updated) {
+        processSync = updated;
+      }
+
+      await registerSyncAudit(
+        {
+          processoId,
+          processSyncId: processSync.id,
+          integrationApiKeyId: processSync.integrationApiKeyId,
+          eventType: 'status_update',
+          eventDetails: {
+            requestId,
+            status: normalizedStatus,
+            source: options.source ?? 'system',
+          },
+        },
+        client,
       );
 
       if (manageTransaction) {
         await client.query('COMMIT');
       }
 
-      return {
-        requestId: row.request_id,
-        status: row.status,
-        source: row.source,
-        result: row.result,
-        createdAt: row.criado_em.toISOString?.() ?? row.criado_em,
-        updatedAt: row.atualizado_em.toISOString?.() ?? row.atualizado_em,
-      };
+      return mapSyncToRequestRecord(processSync);
     } catch (error) {
       if (manageTransaction) {
         await client.query('ROLLBACK');
@@ -1369,10 +1495,31 @@ export class JuditProcessService {
 
     try {
       const result = await useClient.query(
-        `SELECT request_id, status, source, result, criado_em, atualizado_em
-           FROM public.processo_judit_requests
-          WHERE processo_id = $1 AND request_id = $2
-          LIMIT 1`,
+        `SELECT
+           ps.id,
+           ps.processo_id,
+           ps.integration_api_key_id,
+           ps.remote_request_id,
+           ps.request_type,
+           ps.requested_by,
+           ps.requested_at,
+           ps.request_payload,
+           ps.request_headers,
+           ps.status,
+           ps.status_reason,
+           ps.completed_at,
+           ps.metadata,
+           ps.created_at,
+           ps.updated_at,
+           iak.provider,
+           iak.environment,
+           iak.url_api,
+           iak.active
+         FROM public.process_sync ps
+         LEFT JOIN public.integration_api_keys iak ON iak.id = ps.integration_api_key_id
+        WHERE ps.processo_id = $1 AND ps.remote_request_id = $2
+        ORDER BY ps.requested_at DESC, ps.id DESC
+        LIMIT 1`,
         [processoId, requestId]
       );
 
@@ -1380,15 +1527,8 @@ export class JuditProcessService {
         return null;
       }
 
-      const row = result.rows[0];
-      return {
-        requestId: row.request_id,
-        status: row.status,
-        source: row.source,
-        result: row.result,
-        createdAt: row.criado_em.toISOString?.() ?? row.criado_em,
-        updatedAt: row.atualizado_em.toISOString?.() ?? row.atualizado_em,
-      };
+      const row = mapProcessSyncRow(result.rows[0] as ProcessSyncRow);
+      return mapSyncToRequestRecord(row);
     } finally {
       if (shouldRelease) {
         useClient.release();

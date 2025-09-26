@@ -6,6 +6,7 @@ import resolveAsaasIntegration, {
 } from '../services/asaas/integrationResolver';
 import AsaasClient, { CustomerPayload } from '../services/asaas/asaasClient';
 import AsaasSubscriptionService from '../services/asaas/subscriptionService';
+
 import AsaasChargeService, {
   ChargeConflictError,
   ValidationError as AsaasChargeValidationError,
@@ -148,6 +149,7 @@ async function loadEmpresaSubscriptionState(
        FROM public.empresas
       WHERE id = $1
       LIMIT 1`,
+
     [empresaId],
   );
 
@@ -181,6 +183,7 @@ const parseDateColumn = (value: unknown): Date | null => {
 const formatDateToYMD = (date: Date): string => date.toISOString().slice(0, 10);
 
 const cloneDate = (date: Date | null): Date | null => (date ? new Date(date.getTime()) : null);
+
 
 function resolvePlanPrice(plan: PlanRow, pricingMode: 'mensal' | 'anual'): number | null {
   if (pricingMode === 'anual') {
@@ -373,12 +376,37 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     notificationDisabled: false,
   };
 
-  let customerId: string;
+  let existingCustomerId: string | null = null;
   try {
-    const customer = await client.createCustomer(customerPayload);
-    customerId = customer.id;
+    existingCustomerId = await findEmpresaAsaasCustomerId(empresaId);
   } catch (error) {
-    console.error('Falha ao criar cliente no Asaas', error);
+    console.error('Falha ao consultar vínculo de cliente Asaas para empresa', error);
+    res.status(500).json({ error: 'Não foi possível verificar o cadastro da empresa no Asaas.' });
+    return;
+  }
+
+  let customerId: string | null = existingCustomerId;
+
+  try {
+    if (customerId) {
+      try {
+        const customer = await client.updateCustomer(customerId, customerPayload);
+        customerId = customer.id;
+      } catch (error) {
+        console.error('Falha ao atualizar cliente no Asaas', error);
+        if (error instanceof AsaasApiError && error.status === 404) {
+          const customer = await client.createCustomer(customerPayload);
+          customerId = customer.id;
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      const customer = await client.createCustomer(customerPayload);
+      customerId = customer.id;
+    }
+  } catch (error) {
+    console.error('Falha ao preparar cliente no Asaas', error);
     const message =
       error instanceof Error && 'message' in error
         ? (error as Error).message
@@ -487,6 +515,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
 
   if (updateResult.rowCount === 0) {
     res.status(404).json({ error: 'Empresa não encontrada.' });
+
     return;
   }
 

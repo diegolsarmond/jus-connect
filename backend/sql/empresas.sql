@@ -12,6 +12,9 @@ ALTER TABLE IF EXISTS public.empresas
   ADD COLUMN IF NOT EXISTS subscription_cadence TEXT CHECK (subscription_cadence IN ('monthly','annual')),
   ALTER COLUMN subscription_cadence SET DEFAULT 'monthly';
 
+ALTER TABLE IF EXISTS public.empresas
+  ADD COLUMN IF NOT EXISTS asaas_customer_id TEXT;
+
 UPDATE public.empresas
    SET trial_started_at = COALESCE(trial_started_at, datacadastro),
        trial_ends_at = COALESCE(trial_ends_at, datacadastro + INTERVAL '14 days'),
