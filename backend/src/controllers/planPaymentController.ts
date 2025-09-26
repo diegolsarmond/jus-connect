@@ -256,33 +256,27 @@ function resolveDueDate(billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD' | 'DEBIT_C
   return dueDate.toISOString().slice(0, 10);
 }
 
-async function resolvePlanPaymentAccountId(): Promise<number | null> {
+function isValidUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function resolvePlanPaymentAccountId(): Promise<string | null> {
   const envValue = sanitizeString(process.env.PLAN_PAYMENT_ACCOUNT_ID);
-  if (envValue) {
-    const parsed = Number.parseInt(envValue, 10);
-    if (Number.isInteger(parsed)) {
-      return parsed;
-    }
+  if (envValue && isValidUuid(envValue)) {
+    return envValue;
   }
 
-  const result = await pool.query<{ id: number }>(
-    'SELECT id FROM public.accounts WHERE idempresa = 2 LIMIT 1',
+  const result = await pool.query<{ id: string }>(
+    'SELECT id::text AS id FROM public.accounts WHERE idempresa = 2 LIMIT 1',
   );
 
   if (result.rowCount === 0) {
     return null;
   }
 
-  const rawId = result.rows[0]?.id;
-  if (typeof rawId === 'number' && Number.isInteger(rawId)) {
+  const rawId = sanitizeString(result.rows[0]?.id);
+  if (rawId && isValidUuid(rawId)) {
     return rawId;
-  }
-
-  if (typeof rawId === 'string') {
-    const parsed = Number.parseInt(rawId, 10);
-    if (Number.isInteger(parsed)) {
-      return parsed;
-    }
   }
 
   return null;
@@ -297,7 +291,7 @@ async function createFinancialFlow({
   description: string;
   value: number;
   dueDate: string;
-  accountId: number | null;
+  accountId: string | null;
 }): Promise<{ id: number; descricao: string; valor: string; vencimento: string; status: string } | null> {
   const result = await pool.query(
     `INSERT INTO financial_flows (
@@ -615,7 +609,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     return;
   }
 
-  let accountId: number | null = null;
+  let accountId: string | null = null;
   try {
     accountId = await resolvePlanPaymentAccountId();
   } catch (error) {
