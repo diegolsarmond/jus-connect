@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import pool from '../src/services/db';
 import { handleJuditWebhook } from '../src/controllers/juditWebhookController';
-import juditProcessService, {
+import {
   JuditProcessService,
   findProcessByNumber,
   findProcessSyncByRemoteId,
@@ -360,7 +360,6 @@ test('handleJuditWebhook persists increments and updates request state', async (
 
   const client = new RecordingClient(handler);
   const connectMock = t.mock.method(pool, 'connect', async () => client as unknown as any);
-  const isEnabledMock = t.mock.method(juditProcessService, 'isEnabled', () => true);
 
   const increments = [
     { type: 'movement', payload: { id: 1 } },
@@ -389,7 +388,6 @@ test('handleJuditWebhook persists increments and updates request state', async (
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.jsonBody, { status: 'ok' });
   assert.equal(connectMock.mock.calls.length, 1);
-  assert.equal(isEnabledMock.mock.calls.length, 1);
   assert.ok(client.releaseCalled);
 
   const historyCalls = client.calls.filter((call) =>

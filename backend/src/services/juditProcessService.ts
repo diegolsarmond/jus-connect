@@ -1,7 +1,5 @@
-import { QueryResultRow } from 'pg';
-import pool from './db';
+import { PoolClient, QueryResultRow } from 'pg';
 import { setTimeout as delay } from 'timers/promises';
-import { PoolClient } from 'pg';
 import pool from './db';
 
 type Queryable = {
@@ -731,8 +729,17 @@ export async function findProcessSyncByRemoteId(
 const TRACKING_ENDPOINT = 'https://tracking.prod.judit.io/tracking';
 const REQUESTS_ENDPOINT = 'https://requests.prod.judit.io/requests';
 
+const DEFAULT_CONFIGURATION_CACHE_TTL_MS = 60_000;
+
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BACKOFF_MS = 500;
+
+interface JuditIntegrationConfiguration {
+  apiKey: string;
+  requestsEndpoint: string;
+  trackingEndpoint: string;
+  integrationId: number | null;
+}
 
 export class JuditConfigurationError extends Error {
   constructor(message: string) {
@@ -793,18 +800,168 @@ interface TriggerRequestOptions {
 }
 
 export class JuditProcessService {
-  private readonly apiKey: string | null;
+  private readonly envApiKey: string | null;
   private readonly maxRetries: number;
   private readonly backoffMs: number;
+  private readonly configurationCacheTtlMs: number;
+  private configurationCache: JuditIntegrationConfiguration | null = null;
+  private configurationCacheExpiresAt = 0;
+  private loadingConfiguration: Promise<JuditIntegrationConfiguration | null> | null = null;
 
   constructor(apiKey: string | undefined | null = process.env.JUDIT_API_KEY) {
-    this.apiKey = apiKey ?? null;
+    const trimmedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+    this.envApiKey = trimmedKey ? trimmedKey : null;
     this.maxRetries = this.resolveNumericEnv('JUDIT_MAX_RETRIES', DEFAULT_MAX_RETRIES, 1, 10);
     this.backoffMs = this.resolveNumericEnv('JUDIT_BACKOFF_MS', DEFAULT_BACKOFF_MS, 100, 60000);
+    this.configurationCacheTtlMs = DEFAULT_CONFIGURATION_CACHE_TTL_MS;
   }
 
-  isEnabled(): boolean {
-    return Boolean(this.apiKey);
+  async isEnabled(): Promise<boolean> {
+    try {
+      const config = await this.resolveConfiguration({ markUsage: false });
+      return config !== null;
+    } catch (error) {
+      console.error('[Judit] Falha ao verificar configuração da integração.', error);
+      return false;
+    }
+  }
+
+  private buildEndpoints(baseUrl: string | null | undefined): {
+    requestsEndpoint: string;
+    trackingEndpoint: string;
+  } {
+    if (typeof baseUrl === 'string') {
+      const trimmed = baseUrl.trim();
+      if (trimmed) {
+        const normalized = trimmed.replace(/\/+$/, '');
+        return {
+          requestsEndpoint: `${normalized}/requests`,
+          trackingEndpoint: `${normalized}/tracking`,
+        };
+      }
+    }
+
+    return {
+      requestsEndpoint: REQUESTS_ENDPOINT,
+      trackingEndpoint: TRACKING_ENDPOINT,
+    };
+  }
+
+  private async loadConfigurationFromSources(
+    client?: PoolClient,
+  ): Promise<JuditIntegrationConfiguration | null> {
+    if (this.envApiKey) {
+      const endpoints = this.buildEndpoints(null);
+      return {
+        apiKey: this.envApiKey,
+        requestsEndpoint: endpoints.requestsEndpoint,
+        trackingEndpoint: endpoints.trackingEndpoint,
+        integrationId: null,
+      };
+    }
+
+    const executor = client ?? pool;
+    const result = await executor.query(
+      `SELECT id, key_value, url_api
+         FROM public.integration_api_keys
+        WHERE provider = 'judit' AND active IS TRUE
+        ORDER BY (environment = 'producao') DESC,
+                 last_used DESC NULLS LAST,
+                 updated_at DESC,
+                 id DESC
+        LIMIT 1`,
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    const row = result.rows[0] as {
+      id: number | null;
+      key_value: unknown;
+      url_api: unknown;
+    };
+
+    const keyValue = typeof row.key_value === 'string' ? row.key_value.trim() : '';
+    if (!keyValue) {
+      return null;
+    }
+
+    const endpoints = this.buildEndpoints(typeof row.url_api === 'string' ? row.url_api : null);
+
+    return {
+      apiKey: keyValue,
+      requestsEndpoint: endpoints.requestsEndpoint,
+      trackingEndpoint: endpoints.trackingEndpoint,
+      integrationId: typeof row.id === 'number' ? row.id : null,
+    };
+  }
+
+  private async resolveConfiguration(options: {
+    client?: PoolClient;
+    forceRefresh?: boolean;
+    markUsage?: boolean;
+  } = {}): Promise<JuditIntegrationConfiguration | null> {
+    const now = Date.now();
+    if (!options.forceRefresh && this.configurationCache && now < this.configurationCacheExpiresAt) {
+      if (options.markUsage && this.configurationCache.integrationId) {
+        void this.markIntegrationAsUsed(this.configurationCache.integrationId, options.client);
+      }
+      return this.configurationCache;
+    }
+
+    if (this.loadingConfiguration) {
+      try {
+        const cached = await this.loadingConfiguration;
+        if (!options.forceRefresh && cached && this.configurationCache && now < this.configurationCacheExpiresAt) {
+          if (options.markUsage && this.configurationCache.integrationId) {
+            void this.markIntegrationAsUsed(this.configurationCache.integrationId, options.client);
+          }
+          return this.configurationCache;
+        }
+      } catch {
+        // ignore and fetch a new configuration
+      }
+    }
+
+    const loader = this.loadConfigurationFromSources(options.client);
+    this.loadingConfiguration = loader;
+
+    try {
+      const configuration = await loader;
+      this.configurationCache = configuration;
+      this.configurationCacheExpiresAt = Date.now() + this.configurationCacheTtlMs;
+
+      if (configuration && options.markUsage && configuration.integrationId) {
+        void this.markIntegrationAsUsed(configuration.integrationId, options.client);
+      }
+
+      return configuration;
+    } finally {
+      this.loadingConfiguration = null;
+    }
+  }
+
+  private async requireConfiguration(options: { client?: PoolClient } = {}): Promise<JuditIntegrationConfiguration> {
+    const configuration = await this.resolveConfiguration({ ...options, markUsage: true });
+    if (!configuration) {
+      throw new JuditConfigurationError('Integração com a Judit está desabilitada.');
+    }
+    return configuration;
+  }
+
+  private async markIntegrationAsUsed(integrationId: number, client?: PoolClient): Promise<void> {
+    try {
+      const executor = client ?? pool;
+      await executor.query('UPDATE public.integration_api_keys SET last_used = NOW() WHERE id = $1', [integrationId]);
+    } catch (error) {
+      console.warn('[Judit] Falha ao atualizar last_used da credencial Judit.', error);
+    }
+  }
+
+  invalidateConfigurationCache(): void {
+    this.configurationCache = null;
+    this.configurationCacheExpiresAt = 0;
   }
 
   private resolveNumericEnv(name: string, fallback: number, min: number, max: number): number {
@@ -821,21 +978,25 @@ export class JuditProcessService {
     return Math.min(Math.max(parsed, min), max);
   }
 
-  private buildHeaders(): HeadersInit {
-    if (!this.apiKey) {
-      throw new JuditConfigurationError('Variável de ambiente JUDIT_API_KEY não configurada.');
-    }
-
+  private buildHeaders(config: JuditIntegrationConfiguration): HeadersInit {
     return {
       'Content-Type': 'application/json',
       Accept: 'application/json',
-      'api-key': this.apiKey,
+      'api-key': config.apiKey,
     } satisfies HeadersInit;
   }
 
-  private async requestWithRetry<T>(url: string, init: RequestInit, attempt = 0): Promise<T> {
+  private async requestWithRetry<T>(
+    config: JuditIntegrationConfiguration,
+    url: string,
+    init: RequestInit,
+    attempt = 0,
+  ): Promise<T> {
     try {
-      const response = await fetch(url, { ...init, headers: { ...init.headers, ...this.buildHeaders() } });
+      const response = await fetch(url, {
+        ...init,
+        headers: { ...init.headers, ...this.buildHeaders(config) },
+      });
 
       if (response.ok) {
         const contentType = response.headers.get('content-type');
@@ -852,7 +1013,7 @@ export class JuditProcessService {
 
       if (retryable && attempt + 1 < this.maxRetries) {
         await delay(this.backoffMs * 2 ** attempt);
-        return this.requestWithRetry<T>(url, init, attempt + 1);
+        return this.requestWithRetry<T>(config, url, init, attempt + 1);
       }
 
       throw new JuditApiError(`Requisição para Judit falhou com status ${response.status}`, response.status, body);
@@ -863,7 +1024,7 @@ export class JuditProcessService {
 
       if (attempt + 1 < this.maxRetries) {
         await delay(this.backoffMs * 2 ** attempt);
-        return this.requestWithRetry<T>(url, init, attempt + 1);
+        return this.requestWithRetry<T>(config, url, init, attempt + 1);
       }
 
       throw error;
@@ -886,47 +1047,49 @@ export class JuditProcessService {
     }
   }
 
-  async createTracking(processNumber: string): Promise<JuditTrackingResponse> {
-    if (!this.isEnabled()) {
-      throw new JuditConfigurationError('Integração com a Judit está desabilitada.');
-    }
+  async createTracking(
+    processNumber: string,
+    config?: JuditIntegrationConfiguration,
+  ): Promise<JuditTrackingResponse> {
+    const resolvedConfig = config ?? (await this.requireConfiguration());
 
-    return this.requestWithRetry<JuditTrackingResponse>(TRACKING_ENDPOINT, {
+    return this.requestWithRetry<JuditTrackingResponse>(resolvedConfig, resolvedConfig.trackingEndpoint, {
       method: 'POST',
       body: JSON.stringify({ process_number: processNumber, recurrence: 1 }),
     });
   }
 
-  async renewTracking(trackingId: string, processNumber: string): Promise<JuditTrackingResponse> {
-    if (!this.isEnabled()) {
-      throw new JuditConfigurationError('Integração com a Judit está desabilitada.');
-    }
-
-    const url = `${TRACKING_ENDPOINT}/${encodeURIComponent(trackingId)}`;
-    return this.requestWithRetry<JuditTrackingResponse>(url, {
+  async renewTracking(
+    trackingId: string,
+    processNumber: string,
+    config?: JuditIntegrationConfiguration,
+  ): Promise<JuditTrackingResponse> {
+    const resolvedConfig = config ?? (await this.requireConfiguration());
+    const url = `${resolvedConfig.trackingEndpoint}/${encodeURIComponent(trackingId)}`;
+    return this.requestWithRetry<JuditTrackingResponse>(resolvedConfig, url, {
       method: 'PUT',
       body: JSON.stringify({ process_number: processNumber, recurrence: 1 }),
     });
   }
 
-  async triggerRequest(processNumber: string): Promise<JuditRequestResponse> {
-    if (!this.isEnabled()) {
-      throw new JuditConfigurationError('Integração com a Judit está desabilitada.');
-    }
-
-    return this.requestWithRetry<JuditRequestResponse>(REQUESTS_ENDPOINT, {
+  async triggerRequest(
+    processNumber: string,
+    config?: JuditIntegrationConfiguration,
+  ): Promise<JuditRequestResponse> {
+    const resolvedConfig = config ?? (await this.requireConfiguration());
+    return this.requestWithRetry<JuditRequestResponse>(resolvedConfig, resolvedConfig.requestsEndpoint, {
       method: 'POST',
       body: JSON.stringify({ process_number: processNumber }),
     });
   }
 
-  async getRequestStatusFromApi(requestId: string): Promise<JuditRequestResponse> {
-    if (!this.isEnabled()) {
-      throw new JuditConfigurationError('Integração com a Judit está desabilitada.');
-    }
-
-    const url = `${REQUESTS_ENDPOINT}/${encodeURIComponent(requestId)}`;
-    return this.requestWithRetry<JuditRequestResponse>(url, { method: 'GET' });
+  async getRequestStatusFromApi(
+    requestId: string,
+    config?: JuditIntegrationConfiguration,
+  ): Promise<JuditRequestResponse> {
+    const resolvedConfig = config ?? (await this.requireConfiguration());
+    const url = `${resolvedConfig.requestsEndpoint}/${encodeURIComponent(requestId)}`;
+    return this.requestWithRetry<JuditRequestResponse>(resolvedConfig, url, { method: 'GET' });
   }
 
   async ensureTrackingForProcess(
@@ -934,15 +1097,16 @@ export class JuditProcessService {
     processNumber: string,
     options: EnsureTrackingOptions = {}
   ): Promise<JuditTrackingResponse | null> {
-    if (!this.isEnabled()) {
-      return null;
-    }
-
     const useClient = options.client ?? (await pool.connect());
     const shouldRelease = !options.client;
     const manageTransaction = !options.client;
 
     try {
+      const config = await this.resolveConfiguration({ client: useClient, markUsage: true });
+      if (!config) {
+        return null;
+      }
+
       if (manageTransaction) {
         await useClient.query('BEGIN');
       }
@@ -951,13 +1115,13 @@ export class JuditProcessService {
 
       if (options.trackingId) {
         try {
-          trackingResponse = await this.renewTracking(options.trackingId, processNumber);
+          trackingResponse = await this.renewTracking(options.trackingId, processNumber, config);
         } catch (error) {
           console.warn('[Judit] Falha ao renovar tracking, criando um novo.', error);
-          trackingResponse = await this.createTracking(processNumber);
+          trackingResponse = await this.createTracking(processNumber, config);
         }
       } else {
-        trackingResponse = await this.createTracking(processNumber);
+        trackingResponse = await this.createTracking(processNumber, config);
       }
 
       const hourRange = typeof trackingResponse.hour_range === 'string' ? trackingResponse.hour_range : null;
@@ -1006,10 +1170,6 @@ export class JuditProcessService {
     processNumber: string,
     options: TriggerRequestOptions
   ): Promise<JuditRequestRecord | null> {
-    if (!this.isEnabled()) {
-      return null;
-    }
-
     const client = options.client ?? (await pool.connect());
     const shouldRelease = !options.client;
     const manageTransaction = !options.client;
@@ -1045,7 +1205,15 @@ export class JuditProcessService {
         }
       }
 
-      const response = await this.triggerRequest(processNumber);
+      const config = await this.resolveConfiguration({ client, markUsage: true });
+      if (!config) {
+        if (manageTransaction) {
+          await client.query('ROLLBACK');
+        }
+        return null;
+      }
+
+      const response = await this.triggerRequest(processNumber, config);
 
       const requestId = response.request_id;
       const status = response.status ?? 'pending';
@@ -1126,10 +1294,6 @@ export class JuditProcessService {
     result: unknown,
     options: { source?: JuditRequestSource; client?: PoolClient } = {}
   ): Promise<JuditRequestRecord | null> {
-    if (!this.isEnabled()) {
-      return null;
-    }
-
     const client = options.client ?? (await pool.connect());
     const shouldRelease = !options.client;
     const manageTransaction = !options.client;
