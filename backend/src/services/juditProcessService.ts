@@ -857,11 +857,41 @@ export class JuditProcessService {
     if (typeof baseUrl === 'string') {
       const trimmed = baseUrl.trim();
       if (trimmed) {
-        const normalized = trimmed.replace(/\/+$/, '');
-        return {
-          requestsEndpoint: `${normalized}/requests`,
-          trackingEndpoint: `${normalized}/tracking`,
-        };
+        try {
+          const base = new URL(trimmed);
+          const baseSegments = base.pathname.split('/').filter(Boolean);
+
+          const requestsUrl = new URL(base.href);
+          requestsUrl.search = '';
+          requestsUrl.hash = '';
+          const requestsSegments = baseSegments.slice();
+          if (requestsSegments[requestsSegments.length - 1] !== 'requests') {
+            requestsSegments.push('requests');
+          }
+          requestsUrl.pathname = `/${requestsSegments.join('/')}`;
+
+          const trackingUrl = new URL(base.href);
+          trackingUrl.search = '';
+          trackingUrl.hash = '';
+          let trackingSegments = baseSegments.slice();
+          if (/^requests\./i.test(trackingUrl.hostname)) {
+            trackingUrl.hostname = trackingUrl.hostname.replace(/^requests\./i, 'tracking.');
+            trackingSegments = [];
+          }
+          trackingSegments.push('tracking');
+          trackingUrl.pathname = `/${trackingSegments.join('/')}`;
+
+          return {
+            requestsEndpoint: requestsUrl.href.replace(/\/+$/, ''),
+            trackingEndpoint: trackingUrl.href.replace(/\/+$/, ''),
+          };
+        } catch {
+          const normalized = trimmed.replace(/\/+$/, '');
+          return {
+            requestsEndpoint: `${normalized}/requests`,
+            trackingEndpoint: `${normalized}/tracking`,
+          };
+        }
       }
     }
 

@@ -824,6 +824,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
       juditAuditTrail.length > 0 ||
       (typeof processo.consultas_api_count === 'number' && processo.consultas_api_count > 0) ||
       (typeof processo.judit_tracking_id === 'string' && processo.judit_tracking_id.trim() !== '') ||
+
       processo.judit_last_request != null;
 
     if ((await juditProcessService.isEnabled()) && !hasJuditHistory) {

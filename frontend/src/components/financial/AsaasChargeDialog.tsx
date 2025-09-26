@@ -67,6 +67,10 @@ function sanitizeDigits(value: string): string {
   return value.replace(DIGIT_ONLY_REGEX, '');
 }
 
+function isCardPayment(method: AsaasPaymentMethod): boolean {
+  return method === 'CREDIT_CARD' || method === 'DEBIT_CARD';
+}
+
 function validateCardForm(form: CardFormState): CardFormErrors {
   const errors: CardFormErrors = {};
 
@@ -206,7 +210,7 @@ export const AsaasChargeDialog = ({
   }, [open]);
 
   useEffect(() => {
-    if (paymentMethod === 'PIX') {
+    if (paymentMethod === 'PIX' || paymentMethod === 'DEBIT_CARD') {
       setInstallments(1);
     }
   }, [paymentMethod]);
@@ -218,7 +222,7 @@ export const AsaasChargeDialog = ({
   }, [paymentMethod]);
 
   useEffect(() => {
-    if (paymentMethod !== 'CREDIT_CARD') {
+    if (!isCardPayment(paymentMethod)) {
       setLastCardDetails(null);
     }
   }, [paymentMethod]);
@@ -385,18 +389,19 @@ export const AsaasChargeDialog = ({
     const basePayload: CreateAsaasChargePayload = {
       customerId,
       paymentMethod,
-      installmentCount: paymentMethod === 'PIX' ? undefined : installments,
+      installmentCount:
+        paymentMethod === 'PIX' || paymentMethod === 'DEBIT_CARD' ? undefined : installments,
       dueDate: paymentMethod === 'BOLETO' && dueDate ? dueDate : undefined,
     };
 
-  if (paymentMethod === 'CREDIT_CARD') {
-    setCardModalState({ flow, payload: basePayload });
-    return;
-  }
+    if (isCardPayment(paymentMethod)) {
+      setCardModalState({ flow, payload: basePayload });
+      return;
+    }
 
-  setLastCardDetails(null);
-  await chargeMutation.mutateAsync(basePayload);
-};
+    setLastCardDetails(null);
+    await chargeMutation.mutateAsync(basePayload);
+  };
 
 const handleCardTokenized = async (details: CardTokenDetails) => {
   if (!cardModalState) {
@@ -620,6 +625,7 @@ const handleCardTokenized = async (details: CardTokenDetails) => {
     PIX: 'PIX',
     BOLETO: 'Boleto',
     CREDIT_CARD: 'Cartão de crédito',
+    DEBIT_CARD: 'Cartão de débito',
   };
 
   return (
@@ -686,6 +692,7 @@ const handleCardTokenized = async (details: CardTokenDetails) => {
                     <option value="PIX">PIX</option>
                     <option value="BOLETO">Boleto</option>
                     <option value="CREDIT_CARD">Cartão de crédito</option>
+                    <option value="DEBIT_CARD">Cartão de débito</option>
                   </select>
                 </div>
 
@@ -698,7 +705,7 @@ const handleCardTokenized = async (details: CardTokenDetails) => {
                     value={installments}
                     onChange={(event) => setInstallments(Number(event.target.value))}
                     className="w-full rounded-md border px-3 py-2 text-sm"
-                    disabled={paymentMethod === 'PIX'}
+                    disabled={paymentMethod === 'PIX' || paymentMethod === 'DEBIT_CARD'}
                   >
                     {DEFAULT_INSTALLMENT_OPTIONS.map((option) => (
                       <option key={option} value={option}>

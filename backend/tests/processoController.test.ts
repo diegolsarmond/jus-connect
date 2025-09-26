@@ -427,3 +427,4 @@ test('getProcessoById does not trigger Judit when audit trail is present', async
     poolMock.mock.restore();
   }
 });
+
