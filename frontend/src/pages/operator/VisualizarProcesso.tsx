@@ -57,6 +57,7 @@ import {
   type ProcessoResponseData,
   type ProcessoTrackingSummary,
 } from "./utils/judit";
+import { filtrarPartesInteressadas } from "./utils/partes";
 import { renderMetadataEntries } from "./components/metadata-renderer";
 
 interface ApiProcessoCliente {
@@ -1175,6 +1176,14 @@ export default function VisualizarProcesso() {
     return anexos.slice(start, end);
   }, [anexos, attachmentsPage, attachmentsPageSize, totalAttachments]);
 
+  const partesInteressadas = useMemo(() => {
+    if (!processo?.responseData?.partes) {
+      return [];
+    }
+
+    return filtrarPartesInteressadas(processo.responseData.partes);
+  }, [processo?.responseData?.partes]);
+
   const handleAttachmentsPageChange = useCallback(
     (page: number) => {
       setAttachmentsPage((current) => {
@@ -1426,70 +1435,76 @@ export default function VisualizarProcesso() {
                           </dl>
                         </div>
                       ) : null}
-                      {processo.responseData.partes.length > 0 ? (
+                      {processo.responseData.partes ? (
                         <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             Partes identificadas
                           </p>
                           <div className="mt-3 space-y-3">
-                            {processo.responseData.partes.map((parte, index) => {
-                              const parteNome =
-                                parseOptionalString(parte.nome) ??
-                                parseOptionalString(parte.name) ??
-                                parseOptionalString(parte.parte) ??
-                                `Parte ${index + 1}`;
-                              const ignoredKeys = new Set([
-                                "nome",
-                                "name",
-                                "parte",
-                                "id",
-                              ]);
-                              return (
-                                <div
-                                  key={`${processo.id}-parte-${index}-${parteNome}`}
-                                  className="rounded-md border border-border/40 bg-background/60 p-3"
-                                >
-                                  <p className="text-sm font-medium text-foreground">{parteNome}</p>
-                                  <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                                    {Object.entries(parte)
-                                      .filter(([key]) => !ignoredKeys.has(key))
-                                      .map(([key, value]) => {
-                                        const formattedValue = formatResponseValue(value);
-                                        const isStructured = isMetadataEntryList(formattedValue);
-                                        const entryKey = `${processo.id}-parte-${index}-${key}`;
+                            {partesInteressadas.length > 0 ? (
+                              partesInteressadas.map((parte, index) => {
+                                const parteNome =
+                                  parseOptionalString(parte.nome) ??
+                                  parseOptionalString(parte.name) ??
+                                  parseOptionalString(parte.parte) ??
+                                  `Parte ${index + 1}`;
+                                const ignoredKeys = new Set([
+                                  "nome",
+                                  "name",
+                                  "parte",
+                                  "id",
+                                ]);
+                                return (
+                                  <div
+                                    key={`${processo.id}-parte-${index}-${parteNome}`}
+                                    className="rounded-md border border-border/40 bg-background/60 p-3"
+                                  >
+                                    <p className="text-sm font-medium text-foreground">{parteNome}</p>
+                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                                      {Object.entries(parte)
+                                        .filter(([key]) => !ignoredKeys.has(key))
+                                        .map(([key, value]) => {
+                                          const formattedValue = formatResponseValue(value);
+                                          const isStructured = isMetadataEntryList(formattedValue);
+                                          const entryKey = `${processo.id}-parte-${index}-${key}`;
 
-                                        return (
-                                          <div key={entryKey} className="space-y-1">
-                                            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                              {formatResponseKey(key)}
-                                            </dt>
-                                            <dd
-                                              className={cn(
-                                                "break-words",
-                                                isStructured
-                                                  ? "text-foreground"
-                                                  : "text-xs text-foreground",
-                                              )}
-                                            >
-                                              {isStructured
-                                                ? renderMetadataEntries(formattedValue, {
-                                                    keyPrefix: entryKey,
-                                                    containerClassName: "space-y-2",
-                                                    nestedContainerClassName: "space-y-2",
-                                                    valueClassName:
-                                                      "text-xs text-foreground break-words",
-                                                    nestedValueClassName:
-                                                      "text-[11px] text-foreground/90 break-words",
-                                                  })
-                                                : formattedValue}
-                                            </dd>
-                                          </div>
-                                        );
-                                      })}
-                                  </dl>
-                                </div>
-                              );
-                            })}
+                                          return (
+                                            <div key={entryKey} className="space-y-1">
+                                              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                {formatResponseKey(key)}
+                                              </dt>
+                                              <dd
+                                                className={cn(
+                                                  "break-words",
+                                                  isStructured
+                                                    ? "text-foreground"
+                                                    : "text-xs text-foreground",
+                                                )}
+                                              >
+                                                {isStructured
+                                                  ? renderMetadataEntries(formattedValue, {
+                                                      keyPrefix: entryKey,
+                                                      containerClassName: "space-y-2",
+                                                      nestedContainerClassName: "space-y-2",
+                                                      valueClassName:
+                                                        "text-xs text-foreground break-words",
+                                                      nestedValueClassName:
+                                                        "text-[11px] text-foreground/90 break-words",
+                                                    })
+                                                  : formattedValue}
+                                              </dd>
+                                            </div>
+                                          );
+                                        })}
+                                    </dl>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                Nenhuma parte interessada foi identificada.
+                              </p>
+                            )}
                           </div>
                         </div>
                       ) : null}
