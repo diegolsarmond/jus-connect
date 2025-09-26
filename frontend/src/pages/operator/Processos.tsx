@@ -2158,12 +2158,35 @@ export default function Processos() {
                 : `${processo.movimentacoesCount} movimentações registradas`;
             const trackingPhase = processo.trackingSummary?.phase?.trim() || null;
             const trackingTags = processo.trackingSummary?.tags ?? [];
-            const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
-            const trackingLastStepLabel =
-              trackingLastStep?.label ?? trackingLastStep?.name ?? null;
-            const trackingLastStepDescription = trackingLastStep?.description ?? null;
-            const trackingLastStepUpdatedAt = trackingLastStep?.updatedAt ?? null;
-            const trackingIncrements = processo.trackingSummary?.increments ?? [];
+              const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
+              const trackingLastStepLabel =
+                trackingLastStep?.label ?? trackingLastStep?.name ?? null;
+              const trackingLastStepDescription = trackingLastStep?.description ?? null;
+              const trackingLastStepUpdatedAt = trackingLastStep?.updatedAt ?? null;
+              const trackingLastStepContent = trackingLastStepLabel ? (
+                trackingLastStepDescription || trackingLastStepUpdatedAt ? (
+                  <Tooltip>
+                    <TooltipTrigger className="text-left">
+                      Etapa atual: {trackingLastStepLabel}
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs space-y-1">
+                      {trackingLastStepDescription ? (
+                        <p className="text-xs text-muted-foreground">{trackingLastStepDescription}</p>
+                      ) : null}
+                      {trackingLastStepUpdatedAt ? (
+                        <p className="text-xs text-muted-foreground">
+                          Atualizado em {formatDateTimeToPtBR(trackingLastStepUpdatedAt)}
+                        </p>
+                      ) : null}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <>Etapa atual: {trackingLastStepLabel}</>
+                )
+              ) : (
+                <>Etapa atual: Não informada</>
+              );
+              const trackingIncrements = processo.trackingSummary?.increments ?? [];
             const isSyncing = syncingProcessIds.includes(processo.id);
             const syncError = syncErrors[processo.id] ?? null;
 
@@ -2231,27 +2254,7 @@ export default function Processos() {
                         </span>
                         <span className="flex items-center gap-1.5">
                           <ChevronsUpDown className="h-3.5 w-3.5 text-primary" />
-                          {trackingLastStepLabel ? (
-                            trackingLastStepDescription || trackingLastStepUpdatedAt ? (
-                              <Tooltip>
-                                <TooltipTrigger className="text-left">Etapa atual: {trackingLastStepLabel}</TooltipTrigger>
-                                <TooltipContent className="max-w-xs space-y-1">
-                                  {trackingLastStepDescription ? (
-                                    <p className="text-xs text-muted-foreground">{trackingLastStepDescription}</p>
-                                  ) : null}
-                                  {trackingLastStepUpdatedAt ? (
-                                    <p className="text-xs text-muted-foreground">
-                                      Atualizado em {formatDateTimeToPtBR(trackingLastStepUpdatedAt)}
-                                    </p>
-                                  ) : null}
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              <>Etapa atual: {trackingLastStepLabel}</>
-                            )
-                          ) : (
-                            <>Etapa atual: Não informada</>
-                          )}
+                          {trackingLastStepContent}
                         </span>
                       </div>
                     </div>
