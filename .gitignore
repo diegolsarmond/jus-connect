@@ -3,8 +3,10 @@
 /index.html
 
 /.env
+/.env
 /backend/appsettings.json
 *.json
 /frontend/.env.development
-
-!backend/appsettings.example.json
+/backend/appsettings.json
+/frontend/.env.development
+/.env

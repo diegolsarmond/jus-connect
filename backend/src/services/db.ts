@@ -6,8 +6,6 @@ let connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
   const configPaths = [
-    path.resolve(__dirname, '../../appsettings.local.json'),
-    path.resolve(process.cwd(), 'appsettings.local.json'),
     path.resolve(__dirname, '../../appsettings.json'),
     path.resolve(process.cwd(), 'appsettings.json'),
   ];
@@ -47,7 +45,7 @@ if (
 
 if (!connectionString) {
   throw new Error(
-    'Database connection string not provided. Set DATABASE_URL or create appsettings.json (see appsettings.example.json).'
+    'Database connection string not provided. Set DATABASE_URL or add appsettings.json.'
   );
 }
 
