@@ -436,6 +436,15 @@ test('Judit request lifecycle stores polling response and process_response entry
 
     if (url === 'https://requests.prod.judit.io/requests') {
       assert.equal(init?.method, 'POST');
+      assert.equal(typeof init?.body, 'string');
+      const payload = JSON.parse(init?.body as string);
+      assert.deepEqual(payload, {
+        search: {
+          search_type: 'lawsuit_cnj',
+          search_key: '0000000-00.0000.0.00.0000',
+        },
+        with_attachments: false,
+      });
       return new Response(JSON.stringify({
         request_id: 'req-flow',
         status: 'pending',
