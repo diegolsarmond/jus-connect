@@ -181,7 +181,11 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
           ? (body as Record<string, unknown>).with_attachments
           : undefined;
     const withAttachmentsFlag = parseOptionalBoolean(withAttachmentsValue);
+
     const onDemandFlag = parseOptionalBoolean(body.onDemand ?? body.on_demand);
+    const withAttachmentsFlag = parseOptionalBoolean(
+      body.withAttachments ?? body.with_attachments,
+    );
 
     const requestRecord = await juditProcessService.triggerRequestForProcess(
       processo.id,
