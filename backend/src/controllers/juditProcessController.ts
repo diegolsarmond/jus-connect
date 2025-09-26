@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import juditProcessService, {
+  JuditApiError,
   JuditConfigurationError,
   type JuditRequestRecord,
 } from '../services/juditProcessService';
@@ -94,6 +95,14 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
   } catch (error) {
     if (error instanceof JuditConfigurationError) {
       return res.status(503).json({ error: error.message });
+    }
+
+    if (error instanceof JuditApiError) {
+      if (error.status === 404) {
+        return res.status(404).json({ error: 'Processo não encontrado na Judit.' });
+      }
+
+      return res.status(502).json({ error: 'Falha ao comunicar com a Judit.' });
     }
 
     console.error('[Processos] Falha ao acionar sincronização manual com a Judit.', error);
