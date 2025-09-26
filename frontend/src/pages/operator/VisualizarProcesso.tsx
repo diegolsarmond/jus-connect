@@ -877,6 +877,17 @@ export function ProcessoAttachmentsSection({
                   parseOptionalString(anexo.title) ??
                   parseOptionalString(anexo.nome) ??
                   `Anexo ${index + 1 + (currentPage - 1) * pageSize}`;
+                const dataBruta =
+                  parseOptionalString(anexo.attachment_date) ??
+                  parseOptionalString(anexo.data) ??
+                  parseOptionalString(anexo.created_at) ??
+                  parseOptionalString(anexo.updated_at) ??
+                  parseOptionalString(anexo.criado_em) ??
+                  parseOptionalString(anexo.atualizado_em) ??
+                  parseOptionalString(anexo.timestamp) ??
+                  parseOptionalString(anexo.date) ??
+                  null;
+                const dataFormatada = formatDateTimeToPtBR(dataBruta);
                 const links = normalizeDocumentoLinks(
                   buildDocumentoLinksMap(
                     anexo.links,
@@ -893,6 +904,7 @@ export function ProcessoAttachmentsSection({
                     className="rounded-md border border-border/40 bg-background/60 p-3"
                   >
                     <p className="text-sm font-medium text-foreground">{titulo}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{dataFormatada}</p>
                     {linkEntries.length > 0 ? (
                       <ul className="mt-2 space-y-1 text-xs text-primary underline">
                         {linkEntries.map(([key, value]) => (
