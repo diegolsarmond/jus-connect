@@ -1079,7 +1079,13 @@ export class JuditProcessService {
     const resolvedConfig = config ?? (await this.requireConfiguration());
     return this.requestWithRetry<JuditRequestResponse>(resolvedConfig, resolvedConfig.requestsEndpoint, {
       method: 'POST',
-      body: JSON.stringify({ process_number: processNumber }),
+      body: JSON.stringify({
+        search: {
+          search_type: 'lawsuit_cnj',
+          search_key: processNumber,
+        },
+        with_attachments: false,
+      }),
     });
   }
 
