@@ -6,6 +6,7 @@ import * as juditProcessServiceModule from '../src/services/juditProcessService'
 
 const {
   JuditProcessService,
+  JuditApiError,
   findProcessByNumber,
   findProcessSyncByRemoteId,
   listProcessSyncs,
@@ -983,4 +984,57 @@ test('handleJuditWebhook persists data retrievable via list helpers', async (t) 
   assert.equal(responses[0].processSyncId, syncs[0].id);
   assert.equal(audits.length >= 2, true);
   assert.equal(audits[0].processoId, 77);
+});
+
+test('requestWithRetry logs status and body before throwing a JuditApiError', async () => {
+  const service = new JuditProcessService('api-key', 'https://judit.test');
+  const config = {
+    apiKey: 'api-key',
+    requestsEndpoint: 'https://judit.test/requests',
+    trackingEndpoint: 'https://judit.test/tracking',
+    integrationId: null,
+  };
+
+  const responseBody = { error: 'Falha na requisição' };
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const capturedCalls: unknown[][] = [];
+
+  globalThis.fetch = (async () => ({
+    ok: false,
+    status: 400,
+    headers: {
+      get(name: string) {
+        return name.toLowerCase() === 'content-type' ? 'application/json' : null;
+      },
+    },
+    async json() {
+      return responseBody;
+    },
+    async text() {
+      return JSON.stringify(responseBody);
+    },
+  })) as typeof fetch;
+
+  console.error = (...args: unknown[]) => {
+    capturedCalls.push(args);
+  };
+
+  try {
+    await assert.rejects(
+      () => (service as any).requestWithRetry(config, 'https://judit.test/requests', { method: 'POST' }),
+      JuditApiError,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(capturedCalls.length, 1);
+  const payload = capturedCalls[0]?.[1] as Record<string, unknown> | undefined;
+  assert.ok(payload);
+  assert.equal(payload?.status, 400);
+  assert.equal(payload?.url, 'https://judit.test/requests');
+  assert.equal(payload?.attempt, 0);
+  assert.deepEqual(payload?.body, responseBody);
 });
