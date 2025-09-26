@@ -67,7 +67,6 @@ import {
   ChevronsUpDown,
   RefreshCw,
 } from "lucide-react";
-import AttachmentsSummaryCard from "@/components/process/AttachmentsSummaryCard";
 import {
   formatResponseKey,
   formatResponseValue,
@@ -83,7 +82,6 @@ import {
   type ProcessoTrackingSummary,
 } from "./utils/judit";
 import { renderMetadataEntries } from "./components/metadata-renderer";
-import { filtrarPartesInteressadas } from "./utils/partes";
 
 interface ProcessoCliente {
   id: number;
@@ -1656,13 +1654,6 @@ export default function Processos() {
     [navigateToProcess],
   );
 
-  const handleViewProcessAttachments = useCallback(
-    (processoToView: Processo) => {
-      navigateToProcess(processoToView, { initialTab: "anexos" });
-    },
-    [navigateToProcess],
-  );
-
   const isInstanciaOutroSelected = processForm.instancia === INSTANCIA_OUTRO_VALUE;
 
   const isCreateDisabled =
@@ -1912,9 +1903,6 @@ export default function Processos() {
                 : `${processo.movimentacoesCount} movimentações registradas`;
             const trackingPhase = processo.trackingSummary?.phase?.trim() || null;
             const trackingTags = processo.trackingSummary?.tags ?? [];
-            const partesBrutas = processo.responseData?.partes;
-            const partesInteressadas = filtrarPartesInteressadas(partesBrutas);
-            const hasPartesData = partesBrutas !== undefined && partesBrutas !== null;
             const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
             const trackingLastStepLabel =
               trackingLastStep?.label ?? trackingLastStep?.name ?? null;
@@ -2202,79 +2190,6 @@ export default function Processos() {
                             </dl>
                           </div>
                         ) : null}
-                        {hasPartesData || partesInteressadas.length > 0 ? (
-                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Partes identificadas
-                            </p>
-                            <div className="mt-3 space-y-3">
-                              {partesInteressadas.length > 0 ? (
-                                partesInteressadas.map((parte, index) => {
-                                  const parteNome =
-                                    parseOptionalString(parte.nome) ??
-                                    parseOptionalString(parte.name) ??
-                                    parseOptionalString(parte.parte) ??
-                                    `Parte ${index + 1}`;
-                                const ignoredKeys = new Set([
-                                  "nome",
-                                  "name",
-                                  "parte",
-                                  "id",
-                                ]);
-                                return (
-                                  <div
-                                    key={`${processo.id}-parte-${index}-${parteNome}`}
-                                    className="rounded-md border border-border/40 bg-background/60 p-3"
-                                  >
-                                    <p className="text-sm font-medium text-foreground">{parteNome}</p>
-                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                                      {Object.entries(parte)
-                                        .filter(([key]) => !ignoredKeys.has(key))
-                                        .map(([key, value]) => {
-                                          const formattedValue = formatResponseValue(value);
-                                          const isStructured = isMetadataEntryList(formattedValue);
-                                          const entryKey = `${processo.id}-parte-${index}-${key}`;
-
-                                          return (
-                                            <div key={entryKey} className="space-y-1">
-                                              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                {formatResponseKey(key)}
-                                              </dt>
-                                              <dd
-                                                className={cn(
-                                                  "break-words",
-                                                  isStructured
-                                                    ? "text-foreground"
-                                                    : "text-xs text-foreground",
-                                                )}
-                                              >
-                                                {isStructured
-                                                  ? renderMetadataEntries(formattedValue, {
-                                                      keyPrefix: entryKey,
-                                                      containerClassName: "space-y-2",
-                                                      nestedContainerClassName: "space-y-2",
-                                                      valueClassName:
-                                                        "text-xs text-foreground break-words",
-                                                      nestedValueClassName:
-                                                        "text-[11px] text-foreground/90 break-words",
-                                                    })
-                                                  : formattedValue}
-                                              </dd>
-                                            </div>
-                                          );
-                                        })}
-                                    </dl>
-                                  </div>
-                                  );
-                                })
-                              ) : (
-                                <p className="text-sm text-muted-foreground">
-                                  Nenhuma parte interessada foi identificada.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
                         {processo.responseData.movimentacoes.length > 0 ? (
                           <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -2346,32 +2261,6 @@ export default function Processos() {
                                 );
                               })}
                             </div>
-                          </div>
-                        ) : null}
-                        {processo.responseData.anexos.length > 0 ? (
-                          <AttachmentsSummaryCard
-                            attachments={processo.responseData.anexos}
-                            onViewAttachments={() => handleViewProcessAttachments(processo)}
-                          />
-                        ) : null}
-                        {processo.responseData.metadata ? (
-                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Metadados adicionais
-                            </p>
-                            {renderMetadataEntries(
-                              Object.entries(processo.responseData.metadata).map(([key, value]) => ({
-                                key,
-                                label: formatResponseKey(key),
-                                value: formatResponseValue(value),
-                              })),
-                              {
-                                keyPrefix: `${processo.id}-metadata`,
-                                containerClassName: "mt-3 grid gap-2 sm:grid-cols-2",
-                                valueClassName: "text-xs text-foreground break-words",
-                                nestedValueClassName: "text-[11px] text-foreground/90 break-words",
-                              },
-                            )}
                           </div>
                         ) : null}
                       </div>
