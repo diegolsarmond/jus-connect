@@ -314,12 +314,32 @@ async function createFinancialFlow({
   if (result.rowCount === 0) {
     return null;
   }
-  return result.rows[0] as {
-    id: number;
+
+  const row = result.rows[0] as {
+    id: unknown;
     descricao: string;
     valor: string;
     vencimento: string;
     status: string;
+  };
+
+  const id =
+    typeof row.id === 'number'
+      ? row.id
+      : typeof row.id === 'string'
+        ? Number.parseInt(row.id, 10)
+        : Number.NaN;
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return null;
+  }
+
+  return {
+    id,
+    descricao: row.descricao,
+    valor: row.valor,
+    vencimento: row.vencimento,
+    status: row.status,
   };
 }
 
