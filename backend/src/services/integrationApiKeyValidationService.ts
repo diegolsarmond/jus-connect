@@ -1,9 +1,12 @@
 import IntegrationApiKeyService, {
-  ApiKeyEnvironment,
   IntegrationApiKey,
   ValidationError,
-  ASAAS_DEFAULT_API_URLS,
 } from './integrationApiKeyService';
+import {
+  ASAAS_DEFAULT_BASE_URLS,
+  AsaasEnvironment,
+  normalizeAsaasBaseUrl,
+} from './asaas/urlNormalization';
 
 export interface ValidateAsaasIntegrationResult {
   success: boolean;
@@ -17,21 +20,28 @@ type FetchFn = (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fet
 }>;
 
 function resolveAsaasApiUrl(environment: string, apiUrl: string | null): string {
-  if (typeof apiUrl === 'string') {
-    const trimmed = apiUrl.trim();
-    if (trimmed) {
-      return trimmed;
+  const normalizedEnvironment = typeof environment === 'string' ? environment.trim().toLowerCase() : '';
+  if (!normalizedEnvironment) {
+    throw new ValidationError('Unable to determine Asaas API URL for this integration');
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(ASAAS_DEFAULT_BASE_URLS, normalizedEnvironment)) {
+    throw new ValidationError('Unable to determine Asaas API URL for this integration');
+  }
+
+  const trimmedApiUrl = typeof apiUrl === 'string' ? apiUrl.trim() : '';
+  if (trimmedApiUrl) {
+    try {
+      new URL(trimmedApiUrl);
+    } catch (error) {
+      throw new ValidationError('Invalid Asaas API URL configured');
     }
   }
 
-  if (typeof environment === 'string') {
-    const normalized = environment.trim().toLowerCase();
-    if (normalized && normalized in ASAAS_DEFAULT_API_URLS) {
-      return ASAAS_DEFAULT_API_URLS[normalized as ApiKeyEnvironment];
-    }
-  }
-
-  throw new ValidationError('Unable to determine Asaas API URL for this integration');
+  return normalizeAsaasBaseUrl(
+    normalizedEnvironment as AsaasEnvironment,
+    trimmedApiUrl ? trimmedApiUrl : null,
+  );
 }
 
 function buildValidationUrl(baseUrl: string): string {

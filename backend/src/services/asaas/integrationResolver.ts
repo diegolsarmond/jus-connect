@@ -1,16 +1,15 @@
 import pool from '../db';
 import AsaasClient, { AsaasClientConfig } from './asaasClient';
+import {
+  ASAAS_DEFAULT_BASE_URLS,
+  AsaasEnvironment,
+  normalizeAsaasBaseUrl,
+  normalizeAsaasEnvironment,
+} from './urlNormalization';
 
 export type Queryable = {
   query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount: number }>;
 };
-
-export const ASAAS_DEFAULT_BASE_URLS = {
-  producao: 'https://www.asaas.com/api/v3',
-  homologacao: 'https://sandbox.asaas.com/api/v3',
-} as const;
-
-export type AsaasEnvironment = keyof typeof ASAAS_DEFAULT_BASE_URLS;
 
 export interface AsaasIntegration {
   baseUrl: string;
@@ -32,57 +31,6 @@ interface IntegrationRow {
   key_value: string | null;
   environment: string | null;
   active: boolean;
-}
-
-function normalizeEnvironment(value: string | null): AsaasEnvironment {
-  if (value && value.trim().toLowerCase() === 'producao') {
-    return 'producao';
-  }
-  return 'homologacao';
-}
-
-function normalizeBaseUrl(environment: AsaasEnvironment, apiUrl: string | null): string {
-  const fallback = ASAAS_DEFAULT_BASE_URLS[environment];
-
-  if (!apiUrl) {
-    return fallback;
-  }
-
-  const trimmed = apiUrl.trim();
-  if (!trimmed) {
-    return fallback;
-  }
-
-  const withoutTrailingSlash = trimmed.replace(/\/+$/, '');
-
-  try {
-    const parsed = new URL(withoutTrailingSlash);
-    if (parsed.hostname.endsWith('asaas.com')) {
-      const pathname = parsed.pathname ?? '';
-
-      if (/\/api\/v\d+$/i.test(pathname)) {
-        return withoutTrailingSlash;
-      }
-
-      if (/\/api$/i.test(pathname)) {
-        return `${withoutTrailingSlash}/v3`;
-      }
-
-      if (!pathname || pathname === '/') {
-        return `${withoutTrailingSlash}/api/v3`;
-      }
-
-      if (!/\/api\//i.test(pathname)) {
-        return `${withoutTrailingSlash}/api/v3`;
-      }
-
-      return withoutTrailingSlash;
-    }
-  } catch (error) {
-    return fallback;
-  }
-
-  return withoutTrailingSlash;
 }
 
 function normalizeToken(token: string | null): string {
@@ -112,8 +60,8 @@ export async function resolveAsaasIntegration(db: Queryable = pool): Promise<Asa
 
   const row = result.rows[0] as IntegrationRow;
 
-  const environment = normalizeEnvironment(row.environment);
-  const baseUrl = normalizeBaseUrl(environment, row.url_api);
+  const environment = normalizeAsaasEnvironment(row.environment);
+  const baseUrl = normalizeAsaasBaseUrl(environment, row.url_api);
   const accessToken = normalizeToken(row.key_value);
 
   return { baseUrl, accessToken, environment };
@@ -132,4 +80,6 @@ export async function createAsaasClient(
 }
 
 export default resolveAsaasIntegration;
+
+export { ASAAS_DEFAULT_BASE_URLS, AsaasEnvironment, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
 
