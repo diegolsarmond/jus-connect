@@ -464,7 +464,11 @@ test('ensureTrackingForProcess creates tracking via Judit API', async (t) => {
     assert.equal(url, 'https://tracking.prod.judit.io/tracking');
     assert.equal(init?.method, 'POST');
     const body = JSON.parse((init?.body ?? '{}') as string);
-    assert.equal(body.process_number, '0000000-00.0000.0.00.0000');
+    assert.deepStrictEqual(body.search, {
+      search_type: 'lawsuit_cnj',
+      search_key: '0000000-00.0000.0.00.0000',
+    });
+    assert.equal(body.recurrence, 1);
 
     return new Response(JSON.stringify({
       tracking_id: 'trk-123',
