@@ -1154,7 +1154,13 @@ export class JuditProcessService {
 
     return this.requestWithRetry<JuditTrackingResponse>(resolvedConfig, resolvedConfig.trackingEndpoint, {
       method: 'POST',
-      body: JSON.stringify({ process_number: processNumber, recurrence: 1 }),
+      body: JSON.stringify({
+        search: {
+          search_type: 'lawsuit_cnj',
+          search_key: processNumber,
+        },
+        recurrence: 1,
+      }),
     });
   }
 
@@ -1167,7 +1173,13 @@ export class JuditProcessService {
     const url = `${resolvedConfig.trackingEndpoint}/${encodeURIComponent(trackingId)}`;
     return this.requestWithRetry<JuditTrackingResponse>(resolvedConfig, url, {
       method: 'PUT',
-      body: JSON.stringify({ process_number: processNumber, recurrence: 1 }),
+      body: JSON.stringify({
+        search: {
+          search_type: 'lawsuit_cnj',
+          search_key: processNumber,
+        },
+        recurrence: 1,
+      }),
     });
   }
 
