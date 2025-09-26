@@ -1084,7 +1084,7 @@ export class JuditProcessService {
           search_type: 'lawsuit_cnj',
           search_key: processNumber,
         },
-        with_attachments: true,
+        with_attachments: false,
       }),
     });
   }
