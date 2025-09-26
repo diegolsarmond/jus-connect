@@ -846,6 +846,70 @@ test('triggerRequestForProcess forwards attachment preference to Judit', async (
   }
 });
 
+test('triggerRequestForProcess returns existing pending manual request when skipIfPending is true', async (t) => {
+  const service = new JuditProcessService('test-key');
+
+  const resolveMock = t.mock.method(
+    service as any,
+    'resolveConfiguration',
+    async () => {
+      throw new Error('resolveConfiguration should not be called when pending request exists');
+    }
+  );
+
+  const pendingRow = {
+    id: 901,
+    processo_id: 101,
+    integration_api_key_id: 33,
+    remote_request_id: 'existing-req',
+    request_type: 'manual',
+    requested_by: 88,
+    requested_at: '2024-01-01T10:00:00.000Z',
+    request_payload: { foo: 'bar' },
+    request_headers: { Authorization: 'Bearer token' },
+    status: 'pending',
+    status_reason: null,
+    completed_at: null,
+    metadata: { result: { alreadyPending: true }, source: 'manual' },
+    created_at: '2024-01-01T10:00:01.000Z',
+    updated_at: '2024-01-01T10:00:02.000Z',
+    provider: 'judit',
+    environment: 'sandbox',
+    url_api: 'https://example.test',
+    active: true,
+  } satisfies Record<string, unknown>;
+
+  const client = new RecordingClient((text, values) => {
+    if (/FROM public\.process_sync/.test(text)) {
+      return {
+        rows: [pendingRow],
+        rowCount: 1,
+      } satisfies QueryResponse;
+    }
+
+    throw new Error(`Unexpected query: ${text}`);
+  });
+
+  const record = await service.triggerRequestForProcess(101, '0000000-00.0000.0.00.0000', {
+    source: 'manual',
+    actorUserId: 88,
+    skipIfPending: true,
+    client: client as unknown as any,
+  });
+
+  assert.ok(record);
+  assert.equal(record?.processSyncId, pendingRow.id);
+  assert.equal(record?.requestId, 'existing-req');
+  assert.equal(record?.status, 'pending');
+  assert.equal(record?.source, 'manual');
+  assert.deepEqual(record?.result, { alreadyPending: true });
+  assert.equal(client.calls.length, 1);
+  assert.match(client.calls[0].text, /FROM public\.process_sync/i);
+  assert.equal(client.calls[0].values?.[0], 101);
+  assert.equal(client.calls[0].values?.[1], 'manual');
+  assert.equal(resolveMock.mock.calls.length, 0);
+});
+
 test('handleJuditWebhook persists data retrievable via list helpers', async (t) => {
   const processSyncRow = {
     id: 501,
