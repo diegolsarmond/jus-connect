@@ -46,6 +46,7 @@ test('resolveAsaasIntegration returns sandbox base URL when environment is homol
   assert.equal(integration.environment, 'homologacao');
   assert.match(pool.calls[0].text, /FROM integration_api_keys/);
   assert.deepEqual(pool.calls[0].params, ['asaas']);
+  assert.match(pool.calls[0].text, /global IS TRUE/);
 });
 
 test('resolveAsaasIntegration prioritizes custom API URL for production', async () => {
@@ -122,9 +123,88 @@ test('resolveAsaasIntegration throws a specific error when no active credential 
       rowCount: 0,
       rows: [],
     },
+    {
+      rowCount: 0,
+      rows: [],
+    },
   ]);
 
   await assert.rejects(() => resolveAsaasIntegration(pool as any), AsaasIntegrationNotConfiguredError);
+  assert.equal(pool.calls.length, 2);
+  assert.match(pool.calls[0].text, /global IS TRUE/);
+});
+
+test('resolveAsaasIntegration falls back to legacy credential when no global exists', async () => {
+  const originalEnv = process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK;
+  process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK = 'true';
+
+  const pool = new FakePool([
+    { rowCount: 0, rows: [] },
+    {
+      rowCount: 1,
+      rows: [
+        {
+          id: 9,
+          provider: 'asaas',
+          url_api: 'https://fallback.asaas.com/api/v3',
+          key_value: 'legacy-token',
+          environment: 'producao',
+          active: true,
+        },
+      ],
+    },
+  ]);
+
+  const warnMock = test.mock.method(console, 'warn');
+
+  const integration = await resolveAsaasIntegration(pool as any);
+
+  assert.equal(integration.accessToken, 'legacy-token');
+  assert.equal(integration.baseUrl, 'https://fallback.asaas.com/api/v3');
+  assert.equal(pool.calls.length, 2);
+  assert.match(pool.calls[0].text, /global IS TRUE/);
+  assert.ok(
+    warnMock.mock.calls.some((call) =>
+      String(call.arguments[0]).includes('Nenhuma credencial global encontrada'),
+    ),
+  );
+
+  warnMock.mock.restore();
+  if (originalEnv === undefined) {
+    delete process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK;
+  } else {
+    process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK = originalEnv;
+  }
+});
+
+test('resolveAsaasIntegration does not fallback when disabled', async () => {
+  const originalEnv = process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK;
+  process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK = 'false';
+
+  const pool = new FakePool([
+    {
+      rowCount: 0,
+      rows: [],
+    },
+  ]);
+
+  const warnMock = test.mock.method(console, 'warn');
+
+  await assert.rejects(() => resolveAsaasIntegration(pool as any), AsaasIntegrationNotConfiguredError);
+  assert.equal(pool.calls.length, 1);
+  assert.match(pool.calls[0].text, /global IS TRUE/);
+  assert.ok(
+    warnMock.mock.calls.some((call) =>
+      String(call.arguments[0]).includes('Nenhuma credencial global encontrada'),
+    ),
+  );
+
+  warnMock.mock.restore();
+  if (originalEnv === undefined) {
+    delete process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK;
+  } else {
+    process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK = originalEnv;
+  }
 });
 
 test('createAsaasClient builds client instance with resolved credentials', async () => {
