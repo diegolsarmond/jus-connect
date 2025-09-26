@@ -8,6 +8,7 @@ ALTER TABLE IF EXISTS public.empresas
   ADD COLUMN IF NOT EXISTS subscription_trial_ends_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS subscription_current_period_ends_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS subscription_grace_period_ends_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS asaas_subscription_id TEXT,
   ADD COLUMN IF NOT EXISTS subscription_cadence TEXT CHECK (subscription_cadence IN ('monthly','annual')),
   ALTER COLUMN subscription_cadence SET DEFAULT 'monthly';
 

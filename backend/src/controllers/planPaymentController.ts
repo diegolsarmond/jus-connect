@@ -5,12 +5,15 @@ import resolveAsaasIntegration, {
   AsaasIntegrationNotConfiguredError,
 } from '../services/asaas/integrationResolver';
 import AsaasClient, { CustomerPayload } from '../services/asaas/asaasClient';
+import AsaasSubscriptionService from '../services/asaas/subscriptionService';
 import AsaasChargeService, {
   ChargeConflictError,
   ValidationError as AsaasChargeValidationError,
 } from '../services/asaasChargeService';
+import { calculateGraceDeadline, parseCadence as parseSubscriptionCadence } from '../services/subscriptionService';
 
 const asaasChargeService = new AsaasChargeService();
+const asaasSubscriptionService = new AsaasSubscriptionService();
 
 function parseNumericId(value: unknown): number | null {
   if (typeof value === 'number' && Number.isInteger(value)) {
@@ -105,6 +108,79 @@ async function loadPlan(planId: number): Promise<PlanRow | null> {
   }
   return result.rows[0];
 }
+
+const CADENCE_DURATION_DAYS: Record<'monthly' | 'annual', number> = {
+  monthly: 30,
+  annual: 365,
+};
+
+type EmpresaSubscriptionRow = {
+  id: number;
+  nome_empresa: string | null;
+  asaas_subscription_id: string | null;
+  trial_started_at: Date | string | null;
+  trial_ends_at: Date | string | null;
+  subscription_trial_ends_at: Date | string | null;
+  current_period_start: Date | string | null;
+  current_period_end: Date | string | null;
+  subscription_current_period_ends_at: Date | string | null;
+  grace_expires_at: Date | string | null;
+  subscription_grace_period_ends_at: Date | string | null;
+  subscription_cadence: string | null;
+};
+
+async function loadEmpresaSubscriptionState(
+  empresaId: number,
+): Promise<EmpresaSubscriptionRow | null> {
+  const result = await pool.query<EmpresaSubscriptionRow>(
+    `SELECT id,
+            nome_empresa,
+            asaas_subscription_id,
+            trial_started_at,
+            trial_ends_at,
+            subscription_trial_ends_at,
+            current_period_start,
+            current_period_end,
+            subscription_current_period_ends_at,
+            grace_expires_at,
+            subscription_grace_period_ends_at,
+            subscription_cadence
+       FROM public.empresas
+      WHERE id = $1
+      LIMIT 1`,
+    [empresaId],
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+const parseDateColumn = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getTime());
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const formatDateToYMD = (date: Date): string => date.toISOString().slice(0, 10);
+
+const cloneDate = (date: Date | null): Date | null => (date ? new Date(date.getTime()) : null);
 
 function resolvePlanPrice(plan: PlanRow, pricingMode: 'mensal' | 'anual'): number | null {
   if (pricingMode === 'anual') {
@@ -227,8 +303,48 @@ export const createPlanPayment = async (req: Request, res: Response) => {
   }
 
   const description = buildChargeDescription(plan, pricingMode);
-  const dueDate = resolveDueDate(billingType);
   const externalReference = `plan-${planId}-empresa-${empresaId}-${Date.now()}`;
+
+  const empresaState = await loadEmpresaSubscriptionState(empresaId);
+  if (!empresaState) {
+    res.status(404).json({ error: 'Empresa não encontrada.' });
+    return;
+  }
+
+  const existingSubscriptionId = sanitizeString(empresaState.asaas_subscription_id);
+  const existingTrialStartedAt = parseDateColumn(empresaState.trial_started_at);
+  const existingTrialEndsAt =
+    parseDateColumn(empresaState.subscription_trial_ends_at) ??
+    parseDateColumn(empresaState.trial_ends_at);
+  const existingCurrentPeriodStart = parseDateColumn(empresaState.current_period_start);
+  const existingCurrentPeriodEnd =
+    parseDateColumn(empresaState.subscription_current_period_ends_at) ??
+    parseDateColumn(empresaState.current_period_end);
+  const existingGraceExpiresAt =
+    parseDateColumn(empresaState.subscription_grace_period_ends_at) ??
+    parseDateColumn(empresaState.grace_expires_at);
+  const existingCadence = parseSubscriptionCadence(empresaState.subscription_cadence) ?? 'monthly';
+
+  const defaultDueDateStr = resolveDueDate(billingType);
+  const defaultDueDate = parseDateColumn(defaultDueDateStr) ?? new Date();
+
+  let nextDueDateDate = existingTrialEndsAt ?? existingCurrentPeriodEnd ?? defaultDueDate;
+  if (nextDueDateDate.getTime() < defaultDueDate.getTime()) {
+    nextDueDateDate = defaultDueDate;
+  }
+  const nextDueDate = formatDateToYMD(nextDueDateDate);
+
+  const trialPayload = (() => {
+    const start = existingTrialStartedAt ? formatDateToYMD(existingTrialStartedAt) : null;
+    const end = existingTrialEndsAt ? formatDateToYMD(existingTrialEndsAt) : null;
+    if (!start && !end) {
+      return null;
+    }
+    return {
+      ...(start ? { startDate: start } : {}),
+      ...(end ? { endDate: end } : {}),
+    } as { startDate?: string; endDate?: string };
+  })();
 
   let integration;
   try {
@@ -271,10 +387,113 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     return;
   }
 
+  const subscriptionCycle = pricingMode === 'anual' ? 'ANNUAL' : 'MONTHLY';
+
+  let subscriptionResult;
+  try {
+    subscriptionResult = await asaasSubscriptionService.createOrUpdateSubscription({
+      integration,
+      payload: {
+        subscriptionId: existingSubscriptionId ?? undefined,
+        customer: customerId,
+        billingType,
+        cycle: subscriptionCycle,
+        value: price,
+        nextDueDate,
+        description,
+        externalReference,
+        metadata: {
+          planId,
+          empresaId,
+          pricingMode,
+        },
+        ...(trialPayload ? { trial: trialPayload } : {}),
+      },
+    });
+  } catch (error) {
+    console.error('Falha ao sincronizar assinatura no Asaas', error);
+    const message =
+      error instanceof Error && 'message' in error
+        ? (error as Error).message
+        : 'Não foi possível criar ou atualizar a assinatura no Asaas.';
+    res.status(502).json({ error: message });
+    return;
+  }
+
+  const { subscription, timeline } = subscriptionResult;
+
+  let resolvedCadence = timeline.cadence ?? existingCadence;
+  if (resolvedCadence !== 'monthly' && resolvedCadence !== 'annual') {
+    resolvedCadence = existingCadence;
+  }
+
+  let resolvedTrialStartedAt = timeline.trialStart ?? existingTrialStartedAt ?? null;
+  let resolvedTrialEndsAt = timeline.trialEnd ?? existingTrialEndsAt ?? null;
+
+  let resolvedCurrentPeriodStart =
+    timeline.currentPeriodStart ??
+    existingCurrentPeriodStart ??
+    (resolvedTrialEndsAt ? new Date(resolvedTrialEndsAt.getTime()) : null);
+  let resolvedCurrentPeriodEnd =
+    timeline.currentPeriodEnd ??
+    existingCurrentPeriodEnd ??
+    (nextDueDateDate ? new Date(nextDueDateDate.getTime()) : null);
+
+  if (resolvedCurrentPeriodEnd && !resolvedCurrentPeriodStart) {
+    const start = new Date(resolvedCurrentPeriodEnd.getTime());
+    start.setUTCDate(start.getUTCDate() - CADENCE_DURATION_DAYS[resolvedCadence]);
+    resolvedCurrentPeriodStart = start;
+  } else if (resolvedCurrentPeriodStart && !resolvedCurrentPeriodEnd) {
+    const end = new Date(resolvedCurrentPeriodStart.getTime());
+    end.setUTCDate(end.getUTCDate() + CADENCE_DURATION_DAYS[resolvedCadence]);
+    resolvedCurrentPeriodEnd = end;
+  }
+
+  const resolvedGraceExpiresAt =
+    timeline.gracePeriodEnd ??
+    existingGraceExpiresAt ??
+    (resolvedCurrentPeriodEnd
+      ? calculateGraceDeadline(resolvedCurrentPeriodEnd, resolvedCadence)
+      : null);
+
+  const updateResult = await pool.query(
+    `UPDATE public.empresas
+        SET plano = $1,
+            ativo = TRUE,
+            asaas_subscription_id = $2,
+            trial_started_at = COALESCE($3, trial_started_at),
+            trial_ends_at = COALESCE($4, trial_ends_at),
+            current_period_start = COALESCE($5, current_period_start),
+            current_period_end = COALESCE($6, current_period_end),
+            grace_expires_at = COALESCE($7, grace_expires_at),
+            subscription_trial_ends_at = COALESCE($4, subscription_trial_ends_at),
+            subscription_current_period_ends_at = COALESCE($6, subscription_current_period_ends_at),
+            subscription_grace_period_ends_at = COALESCE($7, subscription_grace_period_ends_at),
+            subscription_cadence = $8
+       WHERE id = $9
+       RETURNING id, nome_empresa, plano, ativo, trial_started_at, trial_ends_at, current_period_start, current_period_end, grace_expires_at, subscription_cadence, asaas_subscription_id`,
+    [
+      planId,
+      subscription.id,
+      cloneDate(resolvedTrialStartedAt),
+      cloneDate(resolvedTrialEndsAt),
+      cloneDate(resolvedCurrentPeriodStart),
+      cloneDate(resolvedCurrentPeriodEnd),
+      cloneDate(resolvedGraceExpiresAt),
+      resolvedCadence,
+      empresaId,
+    ],
+  );
+
+  if (updateResult.rowCount === 0) {
+    res.status(404).json({ error: 'Empresa não encontrada.' });
+    return;
+  }
+
   const flow = await createFinancialFlow({
     description,
     value: price,
-    dueDate,
+    dueDate: nextDueDate,
     externalReference,
   });
 
@@ -288,7 +507,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
       financialFlowId: flow.id,
       billingType,
       value: price,
-      dueDate,
+      dueDate: nextDueDate,
       description,
       customer: customerId,
       payerEmail: billingEmail,
@@ -299,8 +518,26 @@ export const createPlanPayment = async (req: Request, res: Response) => {
         pricingMode,
         empresaId,
         origin: 'plan-payment',
+        subscriptionId: subscription.id,
       },
     });
+
+    const subscriptionInfo = {
+      id: subscription.id,
+      status: sanitizeString((subscription as Record<string, unknown>).status) ?? null,
+      cycle:
+        sanitizeString((subscription as Record<string, unknown>).cycle) ??
+        (subscriptionCycle as string),
+      nextDueDate: sanitizeString(subscription.nextDueDate) ?? nextDueDate,
+      cadence: resolvedCadence,
+      trialStart: resolvedTrialStartedAt ? resolvedTrialStartedAt.toISOString() : null,
+      trialEnd: resolvedTrialEndsAt ? resolvedTrialEndsAt.toISOString() : null,
+      currentPeriodStart: resolvedCurrentPeriodStart
+        ? resolvedCurrentPeriodStart.toISOString()
+        : null,
+      currentPeriodEnd: resolvedCurrentPeriodEnd ? resolvedCurrentPeriodEnd.toISOString() : null,
+      gracePeriodEnd: resolvedGraceExpiresAt ? resolvedGraceExpiresAt.toISOString() : null,
+    };
 
     res.status(201).json({
       plan: {
@@ -312,6 +549,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
       paymentMethod: billingType,
       charge: chargeResult.charge,
       flow: chargeResult.flow,
+      subscription: subscriptionInfo,
     });
   } catch (error) {
     if (error instanceof AsaasChargeValidationError) {
