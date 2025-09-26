@@ -267,6 +267,7 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
       {
         source: 'manual',
         actorUserId: req.auth.userId,
+        skipIfPending: true,
         onDemand: onDemandFlag,
         withAttachments: withAttachmentsFlag,
       }

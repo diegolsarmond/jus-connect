@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
-import { respondToJuditApiError } from '../src/controllers/juditProcessController';
-import { JuditApiError } from '../src/services/juditProcessService';
+import { respondToJuditApiError, triggerManualJuditSync } from '../src/controllers/juditProcessController';
+import pool from '../src/services/db';
+import juditProcessService, {
+  JuditApiError,
+  type JuditRequestRecord,
+} from '../src/services/juditProcessService';
 
 type MockResponse = Response & {
   statusCode?: number;
@@ -80,4 +84,103 @@ test('respondToJuditApiError falls back to top-level message when no details are
     assert.equal(res.statusCode, 400);
     assert.deepEqual(res.jsonPayload, { error: 'BAD_REQUEST' });
   });
+});
+
+test('triggerManualJuditSync reuses pending manual requests instead of creating duplicates', async () => {
+  const req = {
+    params: { id: '101' },
+    auth: { userId: 55 },
+    body: {},
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  const isEnabledMock = test.mock.method(
+    juditProcessService,
+    'isEnabled',
+    async () => true
+  );
+
+  const poolMock = test.mock.method(pool, 'query', async (text: string) => {
+    if (/FROM public\.usuarios/.test(text)) {
+      return { rows: [{ empresa: 77 }], rowCount: 1 } satisfies {
+        rows: unknown[];
+        rowCount: number;
+      };
+    }
+
+    if (/FROM public\.processos/.test(text)) {
+      return {
+        rows: [
+          {
+            id: 101,
+            numero: '0000000-00.0000.0.00.0000',
+            judit_tracking_id: null,
+            judit_tracking_hour_range: null,
+          },
+        ],
+        rowCount: 1,
+      } satisfies { rows: unknown[]; rowCount: number };
+    }
+
+    throw new Error(`Unexpected query: ${text}`);
+  });
+
+  const ensureTrackingMock = test.mock.method(
+    juditProcessService,
+    'ensureTrackingForProcess',
+    async () => null
+  );
+
+  const existingRequest: JuditRequestRecord = {
+    processSyncId: 501,
+    requestId: 'existing-req',
+    status: 'pending',
+    source: 'manual',
+    result: { alreadyPending: true },
+    metadata: { result: { alreadyPending: true } },
+    createdAt: '2024-01-01T10:00:00.000Z',
+    updatedAt: '2024-01-01T10:05:00.000Z',
+  };
+
+  let receivedOptions: Record<string, unknown> | null = null;
+  const triggerMock = test.mock.method(
+    juditProcessService,
+    'triggerRequestForProcess',
+    async (_processoId: number, _processNumber: string, options) => {
+      receivedOptions = options as Record<string, unknown>;
+      return existingRequest;
+    }
+  );
+
+  try {
+    await triggerManualJuditSync(req, res);
+  } finally {
+    triggerMock.mock.restore();
+    ensureTrackingMock.mock.restore();
+    poolMock.mock.restore();
+    isEnabledMock.mock.restore();
+  }
+
+  assert.equal(triggerMock.mock.calls.length, 1);
+  assert.equal(receivedOptions?.skipIfPending, true);
+  assert.equal(receivedOptions?.source, 'manual');
+  assert.equal(receivedOptions?.actorUserId, 55);
+
+  const payload = res.jsonPayload as
+    | { tracking: unknown; request: Record<string, unknown> }
+    | undefined;
+  assert.ok(payload);
+  assert.equal(payload?.tracking, null);
+  assert.deepEqual(payload?.request, {
+    request_id: 'existing-req',
+    status: 'pending',
+    source: 'manual',
+    result: { alreadyPending: true },
+    criado_em: '2024-01-01T10:00:00.000Z',
+    atualizado_em: '2024-01-01T10:05:00.000Z',
+  });
+
+  assert.equal(poolMock.mock.calls.length, 2);
+  assert.match(String(poolMock.mock.calls[1]?.arguments?.[0] ?? ''), /FROM public\.processos/i);
 });
