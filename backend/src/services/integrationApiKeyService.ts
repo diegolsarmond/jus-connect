@@ -27,6 +27,8 @@ export interface IntegrationApiKey {
   environment: string;
   active: boolean;
   lastUsed: string | null;
+  empresaId: number | null;
+  global: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +40,8 @@ export interface CreateIntegrationApiKeyInput {
   environment: string;
   active?: boolean;
   lastUsed?: string | Date | null;
+  empresaId?: number | null;
+  global?: boolean;
 }
 
 export interface UpdateIntegrationApiKeyInput {
@@ -47,6 +51,8 @@ export interface UpdateIntegrationApiKeyInput {
   environment?: string;
   active?: boolean;
   lastUsed?: string | Date | null;
+  empresaId?: number | null;
+  global?: boolean;
 }
 
 interface IntegrationApiKeyRow extends QueryResultRow {
@@ -57,6 +63,8 @@ interface IntegrationApiKeyRow extends QueryResultRow {
   environment: string;
   active: boolean;
   last_used: string | Date | null;
+  idempresa: number | string | null;
+  global: boolean;
   created_at: string | Date;
   updated_at: string | Date;
 }
@@ -189,6 +197,59 @@ function formatNullableDate(value: string | Date | null): string | null {
   return formatDate(value);
 }
 
+function normalizeOptionalEmpresaId(value: unknown): number | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+      throw new ValidationError('empresaId must be a positive integer');
+    }
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+      throw new ValidationError('empresaId must be a positive integer');
+    }
+    return parsed;
+  }
+
+  throw new ValidationError('empresaId must be a positive integer');
+}
+
+function mapEmpresaIdFromRow(value: number | string | null): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isFinite(value) && Number.isInteger(value)) {
+      return value;
+    }
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 let hasLoggedUnexpectedProvider = false;
 let hasLoggedUnexpectedEnvironment = false;
 
@@ -245,6 +306,8 @@ function mapRow(row: IntegrationApiKeyRow): IntegrationApiKey {
     environment: mapEnvironmentFromRow(row.environment),
     active: row.active,
     lastUsed: formatNullableDate(row.last_used),
+    empresaId: mapEmpresaIdFromRow(row.idempresa ?? null),
+    global: Boolean(row.global),
     createdAt: formatDate(row.created_at),
     updatedAt: formatDate(row.updated_at),
   };
@@ -255,7 +318,7 @@ export default class IntegrationApiKeyService {
 
   async list(): Promise<IntegrationApiKey[]> {
     const result = await this.db.query(
-      `SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
+      `SELECT id, provider, url_api, key_value, environment, active, last_used, idempresa, global, created_at, updated_at
        FROM integration_api_keys
        ORDER BY created_at DESC`
     );
@@ -270,12 +333,14 @@ export default class IntegrationApiKeyService {
     const key = normalizeKey(input.key);
     const active = input.active ?? true;
     const lastUsed = normalizeLastUsed(input.lastUsed);
+    const empresaId = normalizeOptionalEmpresaId(input.empresaId);
+    const global = Boolean(input.global);
 
     const result = await this.db.query(
-      `INSERT INTO integration_api_keys (provider, url_api, key_value, environment, active, last_used)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at`,
-      [provider, apiUrl, key, environment, active, lastUsed]
+      `INSERT INTO integration_api_keys (provider, url_api, key_value, environment, active, last_used, idempresa, global)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, provider, url_api, key_value, environment, active, last_used, idempresa, global, created_at, updated_at`,
+      [provider, apiUrl, key, environment, active, lastUsed, empresaId, global]
     );
 
     return mapRow(result.rows[0] as IntegrationApiKeyRow);
@@ -360,6 +425,19 @@ export default class IntegrationApiKeyService {
       index += 1;
     }
 
+    if (updates.empresaId !== undefined) {
+      const empresaId = normalizeOptionalEmpresaId(updates.empresaId);
+      fields.push(`idempresa = $${index}`);
+      values.push(empresaId);
+      index += 1;
+    }
+
+    if (updates.global !== undefined) {
+      fields.push(`global = $${index}`);
+      values.push(Boolean(updates.global));
+      index += 1;
+    }
+
     if (fields.length === 0) {
       throw new ValidationError('No fields provided to update');
     }
@@ -367,7 +445,7 @@ export default class IntegrationApiKeyService {
     const query = `UPDATE integration_api_keys
       SET ${fields.join(', ')}, updated_at = NOW()
       WHERE id = $${index}
-      RETURNING id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at`;
+      RETURNING id, provider, url_api, key_value, environment, active, last_used, idempresa, global, created_at, updated_at`;
 
     values.push(id);
 
@@ -391,7 +469,7 @@ export default class IntegrationApiKeyService {
     }
 
     const result = await this.db.query(
-      `SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
+      `SELECT id, provider, url_api, key_value, environment, active, last_used, idempresa, global, created_at, updated_at
        FROM integration_api_keys
        WHERE id = $1`,
       [id]
