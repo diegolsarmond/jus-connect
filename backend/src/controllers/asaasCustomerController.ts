@@ -49,7 +49,7 @@ export const getAsaasCustomerStatus = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
 
-    const status = await asaasCustomerService.ensureCustomer(clienteId);
+    const status = await asaasCustomerService.ensureCustomer(clienteId, empresaId);
     return res.json(status);
   } catch (error) {
     console.error('Falha ao recuperar status do cliente Asaas:', error);

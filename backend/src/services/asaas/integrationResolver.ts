@@ -44,14 +44,27 @@ function normalizeToken(token: string | null): string {
   return trimmed;
 }
 
-export async function resolveAsaasIntegration(db: Queryable = pool): Promise<AsaasIntegration> {
+function assertValidEmpresaId(empresaId: number): asserts empresaId is number {
+  if (!Number.isInteger(empresaId) || empresaId <= 0) {
+    throw new AsaasIntegrationNotConfiguredError('Identificador de empresa inválido para integração do Asaas');
+  }
+}
+
+export async function resolveAsaasIntegration(
+  empresaId: number,
+  db: Queryable = pool,
+): Promise<AsaasIntegration> {
+  assertValidEmpresaId(empresaId);
+
   const result = await db.query(
     `SELECT id, provider, url_api, key_value, environment, active
      FROM integration_api_keys
-     WHERE provider = $1 AND active = TRUE
+     WHERE provider = $1
+       AND active = TRUE
+       AND (global IS TRUE OR idempresa = $2)
      ORDER BY updated_at DESC
      LIMIT 1`,
-    ['asaas'],
+    ['asaas', empresaId],
   );
 
   if (!result.rowCount) {
@@ -68,10 +81,11 @@ export async function resolveAsaasIntegration(db: Queryable = pool): Promise<Asa
 }
 
 export async function createAsaasClient(
+  empresaId: number,
   db: Queryable = pool,
   overrides: Partial<Omit<AsaasClientConfig, 'accessToken' | 'baseUrl'>> = {},
 ): Promise<AsaasClient> {
-  const integration = await resolveAsaasIntegration(db);
+  const integration = await resolveAsaasIntegration(empresaId, db);
   return new AsaasClient({
     baseUrl: integration.baseUrl,
     accessToken: integration.accessToken,

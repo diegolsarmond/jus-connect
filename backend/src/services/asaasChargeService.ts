@@ -121,6 +121,7 @@ export interface AsaasClient {
 
 type AsaasClientFactory = (options: {
   integrationApiKeyId?: number | null;
+  financialFlowId: number;
   db: Queryable;
 }) => Promise<AsaasClient>;
 
@@ -167,16 +168,78 @@ class HttpAsaasClient implements AsaasClient {
   }
 }
 
+function normalizeEmpresaId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function extractEmpresaId(row: QueryResultRow): number | null {
+  const candidates = ['idempresa', 'empresa_id', 'empresa'];
+  for (const candidate of candidates) {
+    if (Object.prototype.hasOwnProperty.call(row, candidate)) {
+      const value = normalizeEmpresaId((row as Record<string, unknown>)[candidate]);
+      if (value !== null) {
+        return value;
+      }
+    }
+  }
+  return null;
+}
+
+function isTruthy(value: unknown): boolean {
+  if (value === true) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return ['true', 't', '1', 'yes', 'y'].includes(normalized);
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  return false;
+}
+
 async function defaultClientFactory({
   integrationApiKeyId,
+  financialFlowId,
   db,
 }: {
   integrationApiKeyId?: number | null;
+  financialFlowId: number;
   db: Queryable;
 }): Promise<AsaasClient> {
+  if (!Number.isInteger(financialFlowId) || financialFlowId <= 0) {
+    throw new ValidationError('Identificador do fluxo financeiro inválido');
+  }
+
+  const flowResult = await db.query(
+    'SELECT id, idempresa, empresa_id, empresa FROM financial_flows WHERE id = $1',
+    [financialFlowId],
+  );
+
+  if (flowResult.rowCount === 0) {
+    throw new ValidationError('Fluxo financeiro não encontrado');
+  }
+
+  const flowRow = flowResult.rows[0] as QueryResultRow;
+  const flowEmpresaId = extractEmpresaId(flowRow);
+
   if (integrationApiKeyId) {
     const result = await db.query(
-      'SELECT id, provider, key_value, url_api FROM integration_api_keys WHERE id = $1',
+      'SELECT id, provider, key_value, url_api, idempresa, global FROM integration_api_keys WHERE id = $1',
       [integrationApiKeyId],
     );
 
@@ -188,6 +251,8 @@ async function defaultClientFactory({
       provider?: string;
       key_value?: string;
       url_api?: string | null;
+      idempresa?: unknown;
+      global?: unknown;
     };
 
     const keyValue = typeof row.key_value === 'string' ? row.key_value : null;
@@ -201,6 +266,17 @@ async function defaultClientFactory({
         'integration_api_keys apontada para o Asaas contém provider diferente de "asaas":',
         row.provider,
       );
+    }
+
+    const integrationEmpresaId = extractEmpresaId(row);
+    const isGlobalKey = isTruthy(row.global);
+
+    if (!isGlobalKey) {
+      if (integrationEmpresaId === null || flowEmpresaId === null || integrationEmpresaId !== flowEmpresaId) {
+        throw new ValidationError(
+          'Chave de integração do Asaas não pertence à empresa do fluxo financeiro',
+        );
+      }
     }
 
     const baseUrl = typeof row.url_api === 'string' && row.url_api.trim() ? row.url_api : null;
@@ -496,7 +572,13 @@ export default class AsaasChargeService {
       payload.creditCardToken = input.cardToken.trim();
     }
 
-    const asaasClient = options?.asaasClient ?? (await this.clientFactory({ integrationApiKeyId: input.integrationApiKeyId, db: dbClient }));
+    const asaasClient =
+      options?.asaasClient ??
+      (await this.clientFactory({
+        integrationApiKeyId: input.integrationApiKeyId,
+        financialFlowId: input.financialFlowId,
+        db: dbClient,
+      }));
     const chargeResponse = await asaasClient.createCharge(payload);
 
     const { payload: pixPayload, qrCode: pixQrCode } = extractPixPayload(chargeResponse);

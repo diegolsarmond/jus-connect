@@ -20,11 +20,12 @@ const DEFAULT_ASAAS_STATE: AsaasCustomerState = {
 
 const triggerAsaasSync = (
   clienteId: number,
+  empresaId: number,
   payload: ClienteLocalData
 ) => {
   const runSync = async () => {
     try {
-      await asaasCustomerService.updateFromLocal(clienteId, payload);
+      await asaasCustomerService.updateFromLocal(clienteId, empresaId, payload);
     } catch (error) {
       console.error('Falha ao sincronizar cliente no Asaas:', error);
     }
@@ -204,11 +205,12 @@ export const createCliente = async (req: Request, res: Response) => {
 
     try {
       asaasIntegration = await asaasCustomerService.ensureCustomer(
-        createdCliente.id
+        createdCliente.id,
+        empresaId,
       );
 
       if (asaasIntegration.integrationActive) {
-        triggerAsaasSync(createdCliente.id, syncPayload);
+        triggerAsaasSync(createdCliente.id, empresaId, syncPayload);
       }
     } catch (syncError) {
       console.error('Falha ao preparar sincronização com Asaas:', syncError);
@@ -306,10 +308,10 @@ export const updateCliente = async (req: Request, res: Response) => {
     let asaasIntegration: AsaasCustomerState = { ...DEFAULT_ASAAS_STATE };
 
     try {
-      asaasIntegration = await asaasCustomerService.ensureCustomer(updatedCliente.id);
+      asaasIntegration = await asaasCustomerService.ensureCustomer(updatedCliente.id, empresaId);
 
       if (asaasIntegration.integrationActive) {
-        triggerAsaasSync(updatedCliente.id, syncPayload);
+        triggerAsaasSync(updatedCliente.id, empresaId, syncPayload);
       }
     } catch (syncError) {
       console.error('Falha ao preparar sincronização com Asaas:', syncError);

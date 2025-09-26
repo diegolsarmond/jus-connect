@@ -347,14 +347,14 @@ export default class AsaasCustomerService {
     private readonly httpClientFactory: (config: AsaasHttpClientConfig) => AsaasHttpClient = createAsaasHttpClient
   ) {}
 
-  private async findActiveIntegration(): Promise<IntegrationApiKeyRow | null> {
+  private async findActiveIntegration(empresaId: number): Promise<IntegrationApiKeyRow | null> {
     const result = await this.db.query(
       `SELECT id, provider, url_api, key_value, environment, active
          FROM public.integration_api_keys
-        WHERE provider = $1 AND active IS TRUE
+        WHERE provider = $1 AND active IS TRUE AND (global IS TRUE OR idempresa = $2)
         ORDER BY created_at DESC
         LIMIT 1`,
-      [ASAAS_PROVIDER_NAME]
+      [ASAAS_PROVIDER_NAME, empresaId]
     );
 
     if (result.rowCount === 0) {
@@ -405,12 +405,15 @@ export default class AsaasCustomerService {
     });
   }
 
-  async ensureCustomer(clienteId: number): Promise<AsaasCustomerState> {
+  async ensureCustomer(clienteId: number, empresaId: number): Promise<AsaasCustomerState> {
     if (!Number.isInteger(clienteId) || clienteId <= 0) {
       throw new Error('clienteId must be a positive integer');
     }
+    if (!Number.isInteger(empresaId) || empresaId <= 0) {
+      throw new Error('empresaId must be a positive integer');
+    }
 
-    const integration = await this.findActiveIntegration();
+    const integration = await this.findActiveIntegration(empresaId);
     if (!integration) {
       return { ...INACTIVE_STATE };
     }
@@ -425,13 +428,17 @@ export default class AsaasCustomerService {
 
   async updateFromLocal(
     clienteId: number,
+    empresaId: number,
     dadosCliente: ClienteLocalData
   ): Promise<AsaasCustomerState> {
     if (!Number.isInteger(clienteId) || clienteId <= 0) {
       throw new Error('clienteId must be a positive integer');
     }
+    if (!Number.isInteger(empresaId) || empresaId <= 0) {
+      throw new Error('empresaId must be a positive integer');
+    }
 
-    const integration = await this.findActiveIntegration();
+    const integration = await this.findActiveIntegration(empresaId);
     if (!integration) {
       return { ...INACTIVE_STATE };
     }
