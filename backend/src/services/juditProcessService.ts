@@ -1109,6 +1109,12 @@ export class JuditProcessService {
         return this.requestWithRetry<T>(config, url, init, attempt + 1);
       }
 
+      console.error('[Judit] Request failed.', {
+        url,
+        status: response.status,
+        attempt,
+        body,
+      });
       throw new JuditApiError(`Requisição para Judit falhou com status ${response.status}`, response.status, body);
     } catch (error) {
       if (error instanceof JuditApiError) {

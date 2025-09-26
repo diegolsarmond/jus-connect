@@ -113,6 +113,53 @@ const extractJuditErrorMessage = (payload: unknown): string | null => {
   return null;
 };
 
+const mapJuditStatusToHttp = (status: number): number => {
+  if (status === 404) {
+    return 404;
+  }
+
+  if (status === 401 || status === 403) {
+    return 401;
+  }
+
+  if (status === 429) {
+    return 429;
+  }
+
+  if (status >= 500) {
+    return 502;
+  }
+
+  if (status >= 400) {
+    return 400;
+  }
+
+  return 502;
+};
+
+export const respondToJuditApiError = (error: JuditApiError, res: Response) => {
+  if (error.status === 404) {
+    const message = 'Processo não encontrado na Judit.';
+    console.error('[Processos] Falha ao acionar sincronização manual com a Judit.', {
+      status: error.status,
+      message,
+    });
+    return res.status(404).json({ error: message });
+  }
+
+  const message = extractJuditErrorMessage(error.body);
+  const normalizedMessage =
+    message && message.trim() ? message.trim() : 'Falha ao comunicar com a Judit.';
+  const httpStatus = mapJuditStatusToHttp(error.status);
+
+  console.error('[Processos] Falha ao acionar sincronização manual com a Judit.', {
+    status: error.status,
+    message: normalizedMessage,
+  });
+
+  return res.status(httpStatus).json({ error: normalizedMessage });
+};
+
 export const triggerManualJuditSync = async (req: Request, res: Response) => {
   const { id } = req.params;
   const processoId = Number(id);
@@ -214,15 +261,7 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
     }
 
     if (error instanceof JuditApiError) {
-      if (error.status === 404) {
-        return res.status(404).json({ error: 'Processo não encontrado na Judit.' });
-      }
-
-      const message = extractJuditErrorMessage(error.body);
-      const normalizedMessage =
-        message && message.trim() ? message.trim() : 'Falha ao comunicar com a Judit.';
-
-      return res.status(502).json({ error: normalizedMessage });
+      return respondToJuditApiError(error, res);
     }
 
     console.error('[Processos] Falha ao acionar sincronização manual com a Judit.', error);
