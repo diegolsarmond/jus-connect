@@ -83,6 +83,7 @@ import {
   type ProcessoTrackingSummary,
 } from "./utils/judit";
 import { renderMetadataEntries } from "./components/metadata-renderer";
+import { filtrarPartesInteressadas } from "./utils/partes";
 
 interface ProcessoCliente {
   id: number;
@@ -1911,9 +1912,12 @@ export default function Processos() {
                 : `${processo.movimentacoesCount} movimentações registradas`;
             const trackingPhase = processo.trackingSummary?.phase?.trim() || null;
             const trackingTags = processo.trackingSummary?.tags ?? [];
-              const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
-              const trackingLastStepLabel =
-                trackingLastStep?.label ?? trackingLastStep?.name ?? null;
+            const partesBrutas = processo.responseData?.partes;
+            const partesInteressadas = filtrarPartesInteressadas(partesBrutas);
+            const hasPartesData = partesBrutas !== undefined && partesBrutas !== null;
+            const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
+            const trackingLastStepLabel =
+              trackingLastStep?.label ?? trackingLastStep?.name ?? null;
               const trackingLastStepDescription = trackingLastStep?.description ?? null;
               const trackingLastStepUpdatedAt = trackingLastStep?.updatedAt ?? null;
               const trackingLastStepContent = trackingLastStepLabel ? (
@@ -2198,18 +2202,19 @@ export default function Processos() {
                             </dl>
                           </div>
                         ) : null}
-                        {processo.responseData.partes.length > 0 ? (
+                        {hasPartesData || partesInteressadas.length > 0 ? (
                           <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               Partes identificadas
                             </p>
                             <div className="mt-3 space-y-3">
-                              {processo.responseData.partes.map((parte, index) => {
-                                const parteNome =
-                                  parseOptionalString(parte.nome) ??
-                                  parseOptionalString(parte.name) ??
-                                  parseOptionalString(parte.parte) ??
-                                  `Parte ${index + 1}`;
+                              {partesInteressadas.length > 0 ? (
+                                partesInteressadas.map((parte, index) => {
+                                  const parteNome =
+                                    parseOptionalString(parte.nome) ??
+                                    parseOptionalString(parte.name) ??
+                                    parseOptionalString(parte.parte) ??
+                                    `Parte ${index + 1}`;
                                 const ignoredKeys = new Set([
                                   "nome",
                                   "name",
@@ -2260,8 +2265,13 @@ export default function Processos() {
                                         })}
                                     </dl>
                                   </div>
-                                );
-                              })}
+                                  );
+                                })
+                              ) : (
+                                <p className="text-sm text-muted-foreground">
+                                  Nenhuma parte interessada foi identificada.
+                                </p>
+                              )}
                             </div>
                           </div>
                         ) : null}

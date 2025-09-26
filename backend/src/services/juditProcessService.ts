@@ -894,12 +894,17 @@ interface TriggerRequestOptions {
   client?: PoolClient;
 }
 
+interface JuditProcessServiceOptions {
+  allowLegacyFallback?: boolean;
+}
+
 export class JuditProcessService {
   private readonly envApiKey: string | null;
   private readonly envBaseUrl: string | null;
   private readonly maxRetries: number;
   private readonly backoffMs: number;
   private readonly configurationCacheTtlMs: number;
+  private readonly allowLegacyCredentialFallback: boolean;
   private configurationCache: JuditIntegrationConfiguration | null = null;
   private configurationCacheExpiresAt = 0;
   private loadingConfiguration: Promise<JuditIntegrationConfiguration | null> | null = null;
@@ -907,6 +912,7 @@ export class JuditProcessService {
   constructor(
     apiKey: string | undefined | null = process.env.JUDIT_API_KEY,
     baseUrl: string | undefined | null = process.env.JUDIT_BASE_URL ?? process.env.JUDIT_API_URL,
+    options: JuditProcessServiceOptions = {},
   ) {
     const trimmedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
     this.envApiKey = trimmedKey ? trimmedKey : null;
@@ -915,6 +921,8 @@ export class JuditProcessService {
     this.maxRetries = this.resolveNumericEnv('JUDIT_MAX_RETRIES', DEFAULT_MAX_RETRIES, 1, 10);
     this.backoffMs = this.resolveNumericEnv('JUDIT_BACKOFF_MS', DEFAULT_BACKOFF_MS, 100, 60000);
     this.configurationCacheTtlMs = DEFAULT_CONFIGURATION_CACHE_TTL_MS;
+    this.allowLegacyCredentialFallback =
+      options.allowLegacyFallback ?? this.resolveBooleanEnv('JUDIT_ALLOW_LEGACY_CREDENTIAL_FALLBACK', true);
   }
 
   async isEnabled(): Promise<boolean> {
@@ -985,24 +993,23 @@ export class JuditProcessService {
     };
   }
 
-  private async loadConfigurationFromSources(
-    client?: PoolClient,
-  ): Promise<JuditIntegrationConfiguration | null> {
-    if (this.envApiKey) {
-      const endpoints = this.buildEndpoints(this.envBaseUrl);
-      return {
-        apiKey: this.envApiKey,
-        requestsEndpoint: endpoints.requestsEndpoint,
-        trackingEndpoint: endpoints.trackingEndpoint,
-        integrationId: null,
-      };
+  private resolveBooleanEnv(name: string, fallback: boolean): boolean {
+    const raw = process.env[name];
+    if (typeof raw !== 'string') {
+      return fallback;
     }
 
-    const executor = client ?? pool;
+    return normalizeBoolean(raw, fallback);
+  }
+
+  private async loadConfigurationFromDatabase(
+    executor: Queryable,
+    { globalOnly }: { globalOnly: boolean },
+  ): Promise<JuditIntegrationConfiguration | null> {
     const result = await executor.query(
       `SELECT id, key_value, url_api
          FROM public.integration_api_keys
-        WHERE provider = 'judit' AND active IS TRUE
+        WHERE provider = 'judit' AND active IS TRUE${globalOnly ? ' AND global IS TRUE' : ''}
         ORDER BY (environment = 'producao') DESC,
                  last_used DESC NULLS LAST,
                  updated_at DESC,
@@ -1035,6 +1042,40 @@ export class JuditProcessService {
       trackingEndpoint: endpoints.trackingEndpoint,
       integrationId: typeof row.id === 'number' ? row.id : null,
     };
+  }
+
+  private async loadConfigurationFromSources(
+    client?: PoolClient,
+  ): Promise<JuditIntegrationConfiguration | null> {
+    if (this.envApiKey) {
+      const endpoints = this.buildEndpoints(this.envBaseUrl);
+      return {
+        apiKey: this.envApiKey,
+        requestsEndpoint: endpoints.requestsEndpoint,
+        trackingEndpoint: endpoints.trackingEndpoint,
+        integrationId: null,
+      };
+    }
+
+    const executor = client ?? pool;
+    const configuration = await this.loadConfigurationFromDatabase(executor, { globalOnly: true });
+    if (configuration) {
+      return configuration;
+    }
+
+    if (!this.allowLegacyCredentialFallback) {
+      console.warn('[Judit] Nenhuma credencial global encontrada e fallback legado está desabilitado.');
+      return null;
+    }
+
+    console.warn('[Judit] Nenhuma credencial global encontrada. Aplicando fallback legado.');
+
+    const legacyConfiguration = await this.loadConfigurationFromDatabase(executor, { globalOnly: false });
+    if (!legacyConfiguration) {
+      console.warn('[Judit] Fallback legado não encontrou credenciais ativas para a Judit.');
+    }
+
+    return legacyConfiguration;
   }
 
   private async resolveConfiguration(options: {

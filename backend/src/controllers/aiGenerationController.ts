@@ -6,6 +6,7 @@ import IntegrationApiKeyService, {
 import { AiProviderError } from '../services/aiProviders/errors';
 import { generateDocumentWithGemini } from '../services/aiProviders/geminiProvider';
 import { escapeHtml } from '../utils/html';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const providerLabels: Record<string, string> = {
   gemini: 'Gemini',
@@ -14,6 +15,33 @@ const providerLabels: Record<string, string> = {
 
 const integrationService = new IntegrationApiKeyService();
 let hasLoggedUnknownEnvironment = false;
+
+async function resolveEmpresaId(req: Request, res: Response): Promise<number | null> {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  try {
+    const lookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!lookup.success) {
+      res.status(lookup.status).json({ error: lookup.message });
+      return null;
+    }
+
+    if (lookup.empresaId === null) {
+      res.status(400).json({ error: 'Usuário não está vinculado a uma empresa.' });
+      return null;
+    }
+
+    return lookup.empresaId;
+  } catch (error) {
+    console.error('Failed to resolve authenticated user empresa:', error);
+    res.status(500).json({ error: 'Internal server error' });
+    return null;
+  }
+}
 
 function isApiKeyEnvironment(value: string): value is ApiKeyEnvironment {
   return API_KEY_ENVIRONMENTS.includes(value as ApiKeyEnvironment);
@@ -99,8 +127,13 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
     return res.status(400).json({ error: 'prompt is required' });
   }
 
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
+  }
+
   try {
-    const integration = await integrationService.findById(parsedIntegrationId);
+    const integration = await integrationService.findById(parsedIntegrationId, { empresaId });
     if (!integration || !integration.active) {
       return res.status(404).json({ error: 'Active integration not found' });
     }
@@ -134,7 +167,7 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
     }
 
     try {
-      await integrationService.update(parsedIntegrationId, { lastUsed: new Date() });
+      await integrationService.update(parsedIntegrationId, { lastUsed: new Date() }, { empresaId });
     } catch (updateError) {
       console.error('Failed to update integration lastUsed timestamp:', updateError);
     }

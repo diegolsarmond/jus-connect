@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/features/auth/AuthProvider';
 import {
   fetchIntegrationApiKeys,
   generateAiText,
@@ -202,6 +203,9 @@ export default function EditorPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const companyId = typeof user?.empresa_id === 'number' ? user.empresa_id : null;
 
   const editorRef = useRef<HTMLDivElement | null>(null);
   const [title, setTitle] = useState('');
@@ -238,9 +242,23 @@ export default function EditorPage() {
     queryFn: fetchClientCustomAttributeTypes,
   });
 
-  const activeAiIntegrations = useMemo(() => {
+  const accessibleIntegrationKeys = useMemo(() => {
     if (!integrationQuery.data) return [] as IntegrationApiKey[];
-    return [...integrationQuery.data]
+    return integrationQuery.data.filter((integration) => {
+      if (integration.global) {
+        return true;
+      }
+
+      if (companyId === null) {
+        return false;
+      }
+
+      return integration.empresaId === companyId;
+    });
+  }, [integrationQuery.data, companyId]);
+
+  const activeAiIntegrations = useMemo(() => {
+    return [...accessibleIntegrationKeys]
       .filter(integration => integration.active)
       .sort((a, b) => {
         if (a.environment === b.environment) {
@@ -252,7 +270,7 @@ export default function EditorPage() {
         if (b.environment === 'producao') return 1;
         return a.environment.localeCompare(b.environment);
       });
-  }, [integrationQuery.data]);
+  }, [accessibleIntegrationKeys]);
 
   const hasActiveAiIntegrations = activeAiIntegrations.length > 0;
   const isLoadingAiIntegrations = integrationQuery.isLoading;

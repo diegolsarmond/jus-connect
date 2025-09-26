@@ -313,14 +313,30 @@ function mapRow(row: IntegrationApiKeyRow): IntegrationApiKey {
   };
 }
 
+interface EmpresaScope {
+  empresaId: number;
+}
+
+function assertValidEmpresaId(value: number): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new ValidationError('empresaId must be a positive integer');
+  }
+
+  return value;
+}
+
 export default class IntegrationApiKeyService {
   constructor(private readonly db: Queryable = pool) {}
 
-  async list(): Promise<IntegrationApiKey[]> {
+  async list(scope: EmpresaScope): Promise<IntegrationApiKey[]> {
+    const empresaId = assertValidEmpresaId(scope.empresaId);
+
     const result = await this.db.query(
       `SELECT id, provider, url_api, key_value, environment, active, last_used, idempresa, global, created_at, updated_at
        FROM integration_api_keys
-       ORDER BY created_at DESC`
+       WHERE global IS TRUE OR idempresa = $1
+       ORDER BY created_at DESC`,
+      [empresaId],
     );
 
     return (result.rows as IntegrationApiKeyRow[]).map(mapRow);
@@ -346,7 +362,13 @@ export default class IntegrationApiKeyService {
     return mapRow(result.rows[0] as IntegrationApiKeyRow);
   }
 
-  async update(id: number, updates: UpdateIntegrationApiKeyInput): Promise<IntegrationApiKey | null> {
+  async update(
+    id: number,
+    updates: UpdateIntegrationApiKeyInput,
+    scope: EmpresaScope,
+  ): Promise<IntegrationApiKey | null> {
+    const empresaId = assertValidEmpresaId(scope.empresaId);
+
     const fields: string[] = [];
     const values: unknown[] = [];
     let index = 1;
@@ -373,8 +395,9 @@ export default class IntegrationApiKeyService {
 
       if (!resolvedProvider || !resolvedEnvironment) {
         const currentResult = await this.db.query(
-          'SELECT provider, environment FROM integration_api_keys WHERE id = $1',
-          [id],
+          `SELECT provider, environment FROM integration_api_keys
+           WHERE id = $1 AND (global IS TRUE OR idempresa = $2)`,
+          [id, empresaId],
         );
 
         if (currentResult.rowCount === 0) {
@@ -444,10 +467,10 @@ export default class IntegrationApiKeyService {
 
     const query = `UPDATE integration_api_keys
       SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE id = $${index}
+      WHERE id = $${index} AND (global IS TRUE OR idempresa = $${index + 1})
       RETURNING id, provider, url_api, key_value, environment, active, last_used, idempresa, global, created_at, updated_at`;
 
-    values.push(id);
+    values.push(id, empresaId);
 
     const result = await this.db.query(query, values);
 
@@ -458,21 +481,28 @@ export default class IntegrationApiKeyService {
     return mapRow(result.rows[0] as IntegrationApiKeyRow);
   }
 
-  async delete(id: number): Promise<boolean> {
-    const result = await this.db.query('DELETE FROM integration_api_keys WHERE id = $1', [id]);
+  async delete(id: number, scope: EmpresaScope): Promise<boolean> {
+    const empresaId = assertValidEmpresaId(scope.empresaId);
+
+    const result = await this.db.query(
+      'DELETE FROM integration_api_keys WHERE id = $1 AND (global IS TRUE OR idempresa = $2)',
+      [id, empresaId],
+    );
     return result.rowCount > 0;
   }
 
-  async findById(id: number): Promise<IntegrationApiKey | null> {
+  async findById(id: number, scope: EmpresaScope): Promise<IntegrationApiKey | null> {
     if (!Number.isInteger(id) || id <= 0) {
       return null;
     }
 
+    const empresaId = assertValidEmpresaId(scope.empresaId);
+
     const result = await this.db.query(
       `SELECT id, provider, url_api, key_value, environment, active, last_used, idempresa, global, created_at, updated_at
        FROM integration_api_keys
-       WHERE id = $1`,
-      [id]
+       WHERE id = $1 AND (global IS TRUE OR idempresa = $2)`,
+      [id, empresaId],
     );
 
     if (result.rowCount === 0) {

@@ -266,10 +266,12 @@ test('IntegrationApiKeyService.list retrieves keys ordered by creation date', as
 
   const service = new IntegrationApiKeyService(pool as any);
 
-  const result = await service.list();
+  const result = await service.list({ empresaId: 42 });
 
   assert.equal(pool.calls.length, 1);
   assert.match(pool.calls[0].text, /ORDER BY created_at DESC/);
+  assert.match(pool.calls[0].text, /global IS TRUE OR idempresa = \$1/);
+  assert.deepEqual(pool.calls[0].values, [42]);
   assert.equal(result.length, 1);
   assert.equal(result[0].id, 10);
   assert.equal(result[0].provider, 'openai');
@@ -302,7 +304,7 @@ test('IntegrationApiKeyService.list includes Asaas entries with inactive status'
 
   const service = new IntegrationApiKeyService(pool as any);
 
-  const result = await service.list();
+  const result = await service.list({ empresaId: 55 });
 
   assert.equal(result.length, 1);
   assert.equal(result[0].provider, 'asaas');
@@ -310,6 +312,7 @@ test('IntegrationApiKeyService.list includes Asaas entries with inactive status'
   assert.equal(result[0].environment, 'homologacao');
   assert.equal(result[0].active, false);
   assert.equal(result[0].global, true);
+  assert.deepEqual(pool.calls[0].values, [55]);
 });
 
 test('IntegrationApiKeyService.list tolerates unexpected provider and environment values', async () => {
@@ -335,12 +338,13 @@ test('IntegrationApiKeyService.list tolerates unexpected provider and environmen
 
   const service = new IntegrationApiKeyService(pool as any);
 
-  const result = await service.list();
+  const result = await service.list({ empresaId: 77 });
 
   assert.equal(result.length, 1);
   assert.equal(result[0].provider, 'Zoho');
   assert.equal(result[0].environment, 'custom-env');
   assert.equal(result[0].empresaId, null);
+  assert.deepEqual(pool.calls[0].values, [77]);
 });
 
 test('IntegrationApiKeyService.update builds dynamic query and handles not found', async () => {
@@ -376,7 +380,7 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
     global: true,
   };
 
-  const result = await service.update(7, updates);
+  const result = await service.update(7, updates, { empresaId: 55 });
 
   assert.ok(pool.calls[0].text.startsWith('UPDATE integration_api_keys'));
   assert.deepEqual(pool.calls[0].values?.slice(0, 5), [
@@ -392,6 +396,7 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
   assert.equal(pool.calls[0].values?.[6], 55);
   assert.equal(pool.calls[0].values?.[7], true);
   assert.equal(pool.calls[0].values?.[8], 7);
+  assert.equal(pool.calls[0].values?.[9], 55);
 
   assert.equal(result?.id, 7);
   assert.equal(result?.provider, 'openai');
@@ -401,9 +406,9 @@ test('IntegrationApiKeyService.update builds dynamic query and handles not found
   assert.equal(result?.empresaId, 55);
   assert.equal(result?.global, true);
 
-  const notFound = await service.update(99, { active: true });
+  const notFound = await service.update(99, { active: true }, { empresaId: 55 });
   assert.equal(pool.calls.length, 2);
-  assert.equal(pool.calls[1].values?.[1], 99);
+  assert.deepEqual(pool.calls[1].values, [true, 99, 55]);
   assert.equal(notFound, null);
 });
 
@@ -411,7 +416,7 @@ test('IntegrationApiKeyService.update requires at least one field', async () => 
   const pool = new FakePool([]);
   const service = new IntegrationApiKeyService(pool as any);
 
-  await assert.rejects(() => service.update(1, {}), ValidationError);
+  await assert.rejects(() => service.update(1, {}, { empresaId: 1 }), ValidationError);
 });
 
 test('IntegrationApiKeyService.delete returns operation status', async () => {
@@ -422,11 +427,50 @@ test('IntegrationApiKeyService.delete returns operation status', async () => {
 
   const service = new IntegrationApiKeyService(pool as any);
 
-  const deleted = await service.delete(3);
+  const deleted = await service.delete(3, { empresaId: 12 });
   assert.equal(deleted, true);
-  assert.deepEqual(pool.calls[0].values, [3]);
+  assert.deepEqual(pool.calls[0].values, [3, 12]);
 
-  const notDeleted = await service.delete(4);
+  const notDeleted = await service.delete(4, { empresaId: 12 });
   assert.equal(notDeleted, false);
-  assert.deepEqual(pool.calls[1].values, [4]);
+  assert.deepEqual(pool.calls[1].values, [4, 12]);
+});
+
+test('IntegrationApiKeyService.findById applies empresa scope filters', async () => {
+  const row = {
+    id: 25,
+    provider: 'asaas',
+    url_api: 'https://sandbox.asaas.com/api/v3',
+    key_value: 'asaas_key',
+    environment: 'homologacao',
+    active: true,
+    last_used: null,
+    idempresa: 12,
+    global: false,
+    created_at: '2024-01-01T00:00:00.000Z',
+    updated_at: '2024-01-02T00:00:00.000Z',
+  };
+
+  const poolSuccess = new FakePool([
+    { rows: [row], rowCount: 1 },
+  ]);
+
+  const serviceSuccess = new IntegrationApiKeyService(poolSuccess as any);
+
+  const integration = await serviceSuccess.findById(25, { empresaId: 12 });
+  assert.equal(poolSuccess.calls[0].values?.[0], 25);
+  assert.equal(poolSuccess.calls[0].values?.[1], 12);
+  assert.ok(integration);
+  assert.equal(integration?.id, 25);
+
+  const poolNotFound = new FakePool([
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const serviceNotFound = new IntegrationApiKeyService(poolNotFound as any);
+
+  const notFound = await serviceNotFound.findById(25, { empresaId: 99 });
+  assert.equal(poolNotFound.calls[0].values?.[0], 25);
+  assert.equal(poolNotFound.calls[0].values?.[1], 99);
+  assert.equal(notFound, null);
 });

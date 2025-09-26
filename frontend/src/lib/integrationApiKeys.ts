@@ -21,6 +21,8 @@ export interface IntegrationApiKey {
   environment: string;
   active: boolean;
   lastUsed: string | null;
+  empresaId: number | null;
+  global: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -63,6 +65,8 @@ export interface CreateIntegrationApiKeyPayload {
   environment: ApiKeyEnvironment;
   active?: boolean;
   lastUsed?: string | null;
+  empresaId?: number | null;
+  global?: boolean;
 }
 
 export interface UpdateIntegrationApiKeyPayload {
@@ -72,6 +76,8 @@ export interface UpdateIntegrationApiKeyPayload {
   environment?: ApiKeyEnvironment;
   active?: boolean;
   lastUsed?: string | null;
+  empresaId?: number | null;
+  global?: boolean;
 }
 
 export interface GenerateAiTextPayload {
