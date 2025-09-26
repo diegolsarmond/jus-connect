@@ -626,6 +626,8 @@ test('Judit request lifecycle stores polling response and process_response entry
   const triggerRecord = await service.triggerRequestForProcess(55, '0000000-00.0000.0.00.0000', {
     source: 'manual',
     client: requestClient as unknown as any,
+    withAttachments: true,
+    onDemand: true,
   });
 
   assert.ok(triggerRecord);
@@ -783,9 +785,15 @@ test('triggerRequestForProcess forwards attachment preference to Judit', async (
       const payload = JSON.parse(String(init?.body ?? '{}'));
 
       if (requestCalls === 1) {
-        assert.equal(payload.with_attachments, true);
+        assert.deepEqual(payload, {
+          search: {
+            search_type: 'lawsuit_cnj',
+            search_key: '0000000-00.0000.0.00.0000',
+          },
+        });
       } else if (requestCalls === 2) {
         assert.equal(payload.with_attachments, false);
+        assert.equal(payload.on_demand, false);
       } else {
         assert.fail(`Unexpected number of request calls: ${requestCalls}`);
       }
@@ -814,15 +822,18 @@ test('triggerRequestForProcess forwards attachment preference to Judit', async (
 
     assert.equal(defaultRecord?.requestId, 'req-1');
     assert.equal(defaultRecord?.status, 'pending');
+    assert.equal((defaultRecord?.metadata as any).onDemand, false);
 
     const withoutAttachments = await service.triggerRequestForProcess(56, '1111111-11.1111.1.11.1111', {
       source: 'manual',
       client: requestClient as unknown as any,
       withAttachments: false,
+      onDemand: false,
     });
 
     assert.equal(withoutAttachments?.requestId, 'req-2');
     assert.equal(withoutAttachments?.status, 'pending');
+    assert.equal((withoutAttachments?.metadata as any).onDemand, false);
     assert.equal(requestCalls, 2);
   } finally {
     fetchMock.mock.restore();

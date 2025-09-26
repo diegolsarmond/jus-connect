@@ -1168,18 +1168,27 @@ export class JuditProcessService {
   async triggerRequest(
     processNumber: string,
     config?: JuditIntegrationConfiguration,
+    options: { withAttachments?: boolean; onDemand?: boolean } = {},
   ): Promise<JuditRequestResponse> {
     const resolvedConfig = config ?? (await this.requireConfiguration());
+    const payload: Record<string, unknown> = {
+      search: {
+        search_type: 'lawsuit_cnj',
+        search_key: processNumber,
+      },
+    };
+
+    if (typeof options.withAttachments === 'boolean') {
+      payload.with_attachments = options.withAttachments;
+    }
+
+    if (typeof options.onDemand === 'boolean') {
+      payload.on_demand = options.onDemand;
+    }
+
     return this.requestWithRetry<JuditRequestResponse>(resolvedConfig, resolvedConfig.requestsEndpoint, {
       method: 'POST',
-      body: JSON.stringify({
-        search: {
-          search_type: 'lawsuit_cnj',
-          search_key: processNumber,
-        },
-        with_attachments: false,
-        on_demand: false,
-      }),
+      body: JSON.stringify(payload),
     });
   }
 
@@ -1305,8 +1314,6 @@ export class JuditProcessService {
     const shouldRelease = !options.client;
     const manageTransaction = !options.client;
     const requestType = normalizeRequestType(options.source ?? 'system') ?? 'system';
-    const onDemand = normalizeBoolean(options.onDemand, requestType === 'manual');
-
     try {
       if (manageTransaction) {
         await client.query('BEGIN');
@@ -1365,16 +1372,27 @@ export class JuditProcessService {
       const includeAttachments =
         typeof options.withAttachments === 'boolean'
           ? options.withAttachments
-          : true;
+          : undefined;
 
-      const requestPayload = {
+      const onDemandFlag =
+        typeof options.onDemand === 'boolean'
+          ? options.onDemand
+          : undefined;
+
+      const requestPayload: Record<string, unknown> = {
         search: {
           search_type: 'lawsuit_cnj',
           search_key: processNumber,
         },
-        with_attachments: includeAttachments,
-        on_demand: onDemand,
-      } as const;
+      };
+
+      if (includeAttachments !== undefined) {
+        requestPayload.with_attachments = includeAttachments;
+      }
+
+      if (onDemandFlag !== undefined) {
+        requestPayload.on_demand = onDemandFlag;
+      }
 
       const response = await this.requestWithRetry<JuditRequestResponse>(
         config,
@@ -1405,7 +1423,7 @@ export class JuditProcessService {
             source: options.source ?? 'system',
             result,
             trackingId: response.tracking_id ?? null,
-            onDemand,
+            onDemand: onDemandFlag ?? false,
           },
         },
         client,
@@ -1434,7 +1452,7 @@ export class JuditProcessService {
             requestId,
             status,
             source: options.source ?? 'system',
-            onDemand,
+            onDemand: onDemandFlag ?? false,
           },
         },
         client,
