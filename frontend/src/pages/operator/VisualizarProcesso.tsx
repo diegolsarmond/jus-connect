@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   AlertCircle,
   Archive,
@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AttachmentsSummaryCard from "@/components/process/AttachmentsSummaryCard";
 import { getApiUrl } from "@/lib/api";
 import {
   formatResponseKey,
@@ -975,12 +976,22 @@ export function ProcessoAttachmentsSection({
 export default function VisualizarProcesso() {
   const { id: clienteIdParam, processoId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation<{ initialTab?: "resumo" | "historico" | "anexos" }>();
   const [loading, setLoading] = useState(true);
   const [processo, setProcesso] = useState<ProcessoDetalhes | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const initialTabFromLocation = location.state?.initialTab;
   const [activeTab, setActiveTab] = useState<"resumo" | "historico" | "anexos">(
-    "resumo",
+    initialTabFromLocation ?? "resumo",
   );
+
+  useEffect(() => {
+    if (!initialTabFromLocation || initialTabFromLocation === activeTab) {
+      return;
+    }
+
+    setActiveTab(initialTabFromLocation);
+  }, [activeTab, initialTabFromLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1147,15 +1158,6 @@ export default function VisualizarProcesso() {
 
     return anexos.slice(start, end);
   }, [anexos, attachmentsPage, attachmentsPageSize, totalAttachments]);
-
-  const attachmentsSummaryText = useMemo(() => {
-    if (totalAttachments === 0) {
-      return "Nenhum anexo foi recebido nas sincronizações mais recentes.";
-    }
-
-    const suffix = totalAttachments === 1 ? "" : "s";
-    return `Foram identificados ${totalAttachments} anexo${suffix} disponíveis para consulta.`;
-  }, [totalAttachments]);
 
   const handleAttachmentsPageChange = useCallback(
     (page: number) => {
@@ -1471,25 +1473,11 @@ export default function VisualizarProcesso() {
                           </div>
                         </div>
                       ) : null}
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Anexos recebidos
-                            </p>
-                            <p className="mt-1 text-sm text-foreground">{attachmentsSummaryText}</p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full sm:w-auto"
-                            onClick={() => setActiveTab("anexos")}
-                            disabled={totalAttachments === 0}
-                          >
-                            Ver anexos
-                          </Button>
-                        </div>
-                      </div>
+                      <AttachmentsSummaryCard
+                        attachments={anexos}
+                        onViewAttachments={() => setActiveTab("anexos")}
+                        disabled={loading}
+                      />
                       {processo.responseData.metadata ? (
                         <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

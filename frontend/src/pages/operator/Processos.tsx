@@ -66,6 +66,7 @@ import {
   ChevronsUpDown,
   RefreshCw,
 } from "lucide-react";
+import AttachmentsSummaryCard from "@/components/process/AttachmentsSummaryCard";
 import {
   formatResponseKey,
   formatResponseValue,
@@ -1620,8 +1621,11 @@ export default function Processos() {
     manualSyncWithAttachments,
   ]);
 
-  const handleViewProcessDetails = useCallback(
-    (processoToView: Processo) => {
+  const navigateToProcess = useCallback(
+    (
+      processoToView: Processo,
+      options?: { initialTab?: "resumo" | "historico" | "anexos" },
+    ) => {
       const clienteId = processoToView.cliente?.id ?? null;
 
       if (!clienteId || clienteId <= 0) {
@@ -1633,9 +1637,26 @@ export default function Processos() {
         return;
       }
 
-      navigate(`/clientes/${clienteId}/processos/${processoToView.id}`);
+      const state = options?.initialTab ? { initialTab: options.initialTab } : undefined;
+      const navigateOptions = state ? { state } : undefined;
+
+      navigate(`/clientes/${clienteId}/processos/${processoToView.id}`, navigateOptions);
     },
     [navigate, toast],
+  );
+
+  const handleViewProcessDetails = useCallback(
+    (processoToView: Processo) => {
+      navigateToProcess(processoToView);
+    },
+    [navigateToProcess],
+  );
+
+  const handleViewProcessAttachments = useCallback(
+    (processoToView: Processo) => {
+      navigateToProcess(processoToView, { initialTab: "anexos" });
+    },
+    [navigateToProcess],
   );
 
   const isInstanciaOutroSelected = processForm.instancia === INSTANCIA_OUTRO_VALUE;
@@ -2246,58 +2267,10 @@ export default function Processos() {
                           </div>
                         ) : null}
                         {processo.responseData.anexos.length > 0 ? (
-                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Anexos recebidos
-                            </p>
-                            <div className="mt-3 space-y-3">
-                              {processo.responseData.anexos.map((anexo, index) => {
-                                const titulo =
-                                  parseOptionalString(anexo.titulo) ??
-                                  parseOptionalString(anexo.title) ??
-                                  parseOptionalString(anexo.nome) ??
-                                  `Anexo ${index + 1}`;
-                                const href =
-                                  parseOptionalString(anexo.url) ??
-                                  parseOptionalString(anexo.href) ??
-                                  parseOptionalString(anexo.link);
-                                return (
-                                  <div
-                                    key={`${processo.id}-anexo-${index}-${titulo}`}
-                                    className="rounded-md border border-border/40 bg-background/60 p-3"
-                                  >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <p className="text-sm font-medium text-foreground">{titulo}</p>
-                                      {href ? (
-                                        <a
-                                          href={href}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="text-xs font-medium text-primary hover:underline"
-                                        >
-                                          Abrir documento
-                                        </a>
-                                      ) : null}
-                                    </div>
-                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                                      {Object.entries(anexo)
-                                        .filter(([key]) => !["titulo", "title", "nome", "url", "href", "link"].includes(key))
-                                        .map(([key, value]) => (
-                                          <div key={`${processo.id}-anexo-${index}-${key}`} className="space-y-1">
-                                            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                              {formatResponseKey(key)}
-                                            </dt>
-                                            <dd className="text-xs text-foreground break-words">
-                                              {formatResponseValue(value)}
-                                            </dd>
-                                          </div>
-                                        ))}
-                                    </dl>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
+                          <AttachmentsSummaryCard
+                            attachments={processo.responseData.anexos}
+                            onViewAttachments={() => handleViewProcessAttachments(processo)}
+                          />
                         ) : null}
                         {processo.responseData.metadata ? (
                           <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
