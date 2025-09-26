@@ -143,6 +143,21 @@ function normalizeNullableNumber(value: unknown): number | null {
   return null;
 }
 
+function normalizeNumeric(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
 function normalizeStatus(value: unknown, fallback: string): string {
   const normalized = normalizeOptionalString(value);
   return normalized ?? fallback;
@@ -756,6 +771,15 @@ const DEFAULT_CONFIGURATION_CACHE_TTL_MS = 60_000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BACKOFF_MS = 500;
 
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const pgError = error as { code?: unknown };
+  return pgError.code === '23505';
+}
+
 interface JuditIntegrationConfiguration {
   apiKey: string;
   requestsEndpoint: string;
@@ -797,6 +821,29 @@ export interface JuditRequestResponse {
   status: string;
   result?: unknown;
   tracking_id?: string;
+}
+
+interface JuditResponsesPage {
+  request_status?: string | null;
+  page?: number | string | null;
+  page_count?: number | string | null;
+  all_pages_count?: number | string | null;
+  all_count?: number | string | null;
+  page_data?: JuditResponseEntry[];
+}
+
+interface JuditResponseEntry {
+  request_id?: string | null;
+  response_id?: string | null;
+  origin?: string | null;
+  origin_id?: string | null;
+  response_type?: string | null;
+  response_data?: unknown;
+  tags?: unknown;
+  user_id?: string | null;
+  created_at?: string | Date | null;
+  updated_at?: string | Date | null;
+  request_created_at?: string | Date | null;
 }
 
 export interface JuditRequestRecord {
@@ -1219,6 +1266,169 @@ export class JuditProcessService {
     return this.requestWithRetry<JuditRequestResponse>(resolvedConfig, url, { method: 'GET' });
   }
 
+  private buildResponsesEndpoint(config: JuditIntegrationConfiguration): string {
+    const normalized = typeof config.requestsEndpoint === 'string'
+      ? config.requestsEndpoint.replace(/\/+$/, '')
+      : '';
+
+    try {
+      if (normalized) {
+        const url = new URL(normalized);
+        const segments = url.pathname
+          .split('/')
+          .map((segment) => segment.trim())
+          .filter(Boolean);
+
+        if (segments.length === 0) {
+          url.pathname = '/responses';
+        } else {
+          segments[segments.length - 1] = 'responses';
+          url.pathname = `/${segments.join('/')}`;
+        }
+
+        url.search = '';
+        url.hash = '';
+        return url.href.replace(/\/+$/, '');
+      }
+    } catch (error) {
+      console.warn('[Judit] Falha ao derivar endpoint de respostas, usando fallback.', error);
+    }
+
+    if (!normalized) {
+      return 'responses';
+    }
+
+    return `${normalized}/responses`;
+  }
+
+  private async pollResponsesForRequest(
+    config: JuditIntegrationConfiguration,
+    requestId: string,
+    processoId: number,
+    processSync: ProcessSyncRecord,
+    client: PoolClient,
+    source: JuditRequestSource | string,
+  ): Promise<ProcessSyncRecord> {
+    const responsesEndpoint = this.buildResponsesEndpoint(config);
+    let responsesUrl: URL;
+    try {
+      responsesUrl = new URL(responsesEndpoint);
+    } catch {
+      responsesUrl = new URL(`${config.requestsEndpoint.replace(/\/+$/, '')}/responses`);
+    }
+    let page = 1;
+    let totalPages = 1;
+    const insertedPayloads: unknown[] = [];
+    let lastRequestStatus: string | null = null;
+
+    while (page <= totalPages) {
+      const pageUrl = new URL(responsesUrl.href);
+      pageUrl.searchParams.set('page_size', '50');
+      pageUrl.searchParams.set('page', String(page));
+      pageUrl.searchParams.set('request_id', requestId);
+
+      const pageResponse = await this.requestWithRetry<JuditResponsesPage>(config, pageUrl.href, {
+        method: 'GET',
+      });
+
+      lastRequestStatus = typeof pageResponse.request_status === 'string'
+        ? pageResponse.request_status
+        : lastRequestStatus;
+
+      const pageCount = normalizeNumeric(pageResponse.page_count, page);
+      totalPages = pageCount > 0 ? pageCount : page;
+
+      const entries = Array.isArray(pageResponse.page_data) ? pageResponse.page_data : [];
+
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object') {
+          continue;
+        }
+
+        const deliveryId = normalizeOptionalString((entry as JuditResponseEntry).response_id);
+
+        try {
+          const saved = await registerProcessResponse(
+            {
+              processoId,
+              processSyncId: processSync.id,
+              integrationApiKeyId: processSync.integrationApiKeyId,
+              deliveryId,
+              source: 'polling',
+              statusCode: 200,
+              receivedAt:
+                (entry as JuditResponseEntry).created_at ??
+                (entry as JuditResponseEntry).updated_at ??
+                null,
+              payload: (entry as JuditResponseEntry).response_data ?? entry,
+              headers: {
+                origin: (entry as JuditResponseEntry).origin ?? null,
+                originId: (entry as JuditResponseEntry).origin_id ?? null,
+                responseType: (entry as JuditResponseEntry).response_type ?? null,
+                tags: (entry as JuditResponseEntry).tags ?? null,
+                requestCreatedAt: (entry as JuditResponseEntry).request_created_at ?? null,
+                userId: (entry as JuditResponseEntry).user_id ?? null,
+              },
+            },
+            client,
+          );
+          insertedPayloads.push(saved.payload);
+        } catch (error) {
+          if (isUniqueViolation(error)) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      page += 1;
+    }
+
+    if (insertedPayloads.length > 0) {
+      const existingMetadata = asRecord(processSync.metadata);
+      const previousResponses = Array.isArray((existingMetadata as any).responses)
+        ? ((existingMetadata as any).responses as unknown[])
+        : [];
+
+      const metadata = {
+        ...existingMetadata,
+        status: existingMetadata.status ?? processSync.status,
+        result: insertedPayloads[0],
+        responses: [...previousResponses, ...insertedPayloads],
+      } satisfies Record<string, unknown>;
+
+      const updated = await updateProcessSyncStatus(
+        processSync.id,
+        {
+          metadata,
+        },
+        client,
+      );
+
+      if (updated) {
+        processSync = updated;
+      }
+    }
+
+    await registerSyncAudit(
+      {
+        processoId,
+        processSyncId: processSync.id,
+        integrationApiKeyId: processSync.integrationApiKeyId,
+        eventType: 'responses_polled',
+        eventDetails: {
+          requestId,
+          storedCount: insertedPayloads.length,
+          requestStatus: lastRequestStatus,
+          source,
+        },
+      },
+      client,
+    );
+
+    return processSync;
+  }
+
   async ensureTrackingForProcess(
     processoId: number,
     processNumber: string,
@@ -1476,6 +1686,17 @@ export class JuditProcessService {
         client,
       );
 
+      if (status === 'completed' && requestId) {
+        processSync = await this.pollResponsesForRequest(
+          config,
+          requestId,
+          processoId,
+          processSync,
+          client,
+          options.source ?? 'system',
+        );
+      }
+
       if (options.actorUserId) {
         await client.query(
           `INSERT INTO public.processo_consultas_api (processo_id, sucesso, detalhes)
@@ -1524,6 +1745,7 @@ export class JuditProcessService {
     const manageTransaction = !options.client;
     const requestType = normalizeRequestType(options.source ?? 'system') ?? 'system';
     const normalizedStatus = normalizeStatus(status, 'pending');
+    let resolvedConfig: JuditIntegrationConfiguration | null = null;
 
     try {
       if (manageTransaction) {
@@ -1582,6 +1804,23 @@ export class JuditProcessService {
         },
         client,
       );
+
+      if (normalizedStatus === 'completed' && requestId) {
+        if (!resolvedConfig) {
+          resolvedConfig = await this.resolveConfiguration({ client, markUsage: false });
+        }
+
+        if (resolvedConfig) {
+          processSync = await this.pollResponsesForRequest(
+            resolvedConfig,
+            requestId,
+            processoId,
+            processSync,
+            client,
+            options.source ?? 'system',
+          );
+        }
+      }
 
       if (manageTransaction) {
         await client.query('COMMIT');
