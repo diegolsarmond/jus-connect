@@ -105,6 +105,54 @@ test('loadConfigurationFromSources resolves endpoints for requests host base url
   assert.equal(config?.trackingEndpoint, 'https://tracking.prod.judit.io/tracking');
 });
 
+test('loadConfigurationFromSources swaps host when base url points to tracking domain', async () => {
+  const pool = new FakePool([
+    {
+      rows: [
+        {
+          id: 77,
+          key_value: 'db-key',
+          url_api: 'https://tracking.prod.judit.io/tracking',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const service = new JuditProcessService(null);
+
+  const config = await (service as any).loadConfigurationFromSources(pool as unknown as any);
+
+  assert.ok(config);
+  assert.equal(config?.apiKey, 'db-key');
+  assert.equal(config?.requestsEndpoint, 'https://requests.prod.judit.io/requests');
+  assert.equal(config?.trackingEndpoint, 'https://tracking.prod.judit.io/tracking');
+});
+
+test('loadConfigurationFromSources preserves custom path segments when deriving endpoints', async () => {
+  const pool = new FakePool([
+    {
+      rows: [
+        {
+          id: 88,
+          key_value: 'db-key',
+          url_api: 'https://tracking.prod.judit.io/api/v1/tracking',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const service = new JuditProcessService(null);
+
+  const config = await (service as any).loadConfigurationFromSources(pool as unknown as any);
+
+  assert.ok(config);
+  assert.equal(config?.apiKey, 'db-key');
+  assert.equal(config?.requestsEndpoint, 'https://requests.prod.judit.io/api/v1/requests');
+  assert.equal(config?.trackingEndpoint, 'https://tracking.prod.judit.io/api/v1/tracking');
+});
+
 test('registerProcessRequest inserts payload and maps response', async () => {
   const insertedRow = {
     id: 101,
