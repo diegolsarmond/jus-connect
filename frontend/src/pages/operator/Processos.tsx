@@ -274,6 +274,73 @@ interface ProcessFormState {
   instanciaOutro: string;
 }
 
+export interface ManualSyncFlags {
+  withAttachments?: boolean;
+  onDemand?: boolean;
+}
+
+export interface ManualSyncRequestPlan {
+  path: string;
+  method: "GET" | "POST";
+  body: Record<string, unknown> | null;
+  isStatusCheck: boolean;
+  requestId: string | null;
+}
+
+export const planManualSyncRequest = (
+  processo: Processo,
+  flags?: ManualSyncFlags,
+): ManualSyncRequestPlan => {
+  const requestId = processo.juditLastRequest?.requestId?.trim();
+
+  if (requestId) {
+    return {
+      path: `processos/${processo.id}/judit/requests/${requestId}`,
+      method: "GET",
+      body: null,
+      isStatusCheck: true,
+      requestId,
+    };
+  }
+
+  const payload: Record<string, unknown> = {};
+
+  if (typeof flags?.withAttachments === "boolean") {
+    payload.withAttachments = flags.withAttachments;
+  }
+
+  if (typeof flags?.onDemand === "boolean") {
+    payload.onDemand = flags.onDemand;
+  }
+
+  return {
+    path: `processos/${processo.id}/judit/sync`,
+    method: "POST",
+    body: payload,
+    isStatusCheck: false,
+    requestId: null,
+  };
+};
+
+const extractErrorMessageFromResult = (result: unknown): string | null => {
+  if (typeof result === "string") {
+    const trimmed = result.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  const record = toRecord(result);
+  if (!record) {
+    return null;
+  }
+
+  return (
+    parseOptionalString(record.error) ??
+    parseOptionalString(record.message) ??
+    parseOptionalString(record.reason) ??
+    null
+  );
+};
+
 const formatProcessNumber = (value: string) => {
   const digits = value.replace(/\D/g, "").slice(0, 20);
   const match = digits.match(/^(\d{0,7})(\d{0,2})(\d{0,4})(\d{0,1})(\d{0,2})(\d{0,4})$/);
@@ -1778,33 +1845,27 @@ export default function Processos() {
   };
 
   const handleManualSync = useCallback(
-    async (
-      processoToSync: Processo,
-      flags?: { withAttachments?: boolean; onDemand?: boolean },
-    ) => {
+    async (processoToSync: Processo, flags?: ManualSyncFlags) => {
       setSyncingProcessIds((prev) =>
         prev.includes(processoToSync.id) ? prev : [...prev, processoToSync.id],
       );
       setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: null }));
 
+      const requestPlan = planManualSyncRequest(processoToSync, flags);
+
       try {
-        const requestPayload: Record<string, unknown> = {};
+        const headers: Record<string, string> = { Accept: "application/json" };
 
-        if (typeof flags?.withAttachments === "boolean") {
-          requestPayload.withAttachments = flags.withAttachments;
+        if (requestPlan.method === "POST") {
+          headers["Content-Type"] = "application/json";
         }
 
-        if (typeof flags?.onDemand === "boolean") {
-          requestPayload.onDemand = flags.onDemand;
-        }
-
-        const res = await fetch(getApiUrl(`processos/${processoToSync.id}/judit/sync`), {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestPayload),
+        const res = await fetch(getApiUrl(requestPlan.path), {
+          method: requestPlan.method,
+          headers,
+          ...(requestPlan.method === "POST"
+            ? { body: JSON.stringify(requestPlan.body ?? {}) }
+            : {}),
         });
 
         const text = await res.text();
@@ -1829,23 +1890,20 @@ export default function Processos() {
           throw new Error(message);
         }
 
-        const responsePayload = (json ?? {}) as {
-          tracking?: Record<string, unknown> | null;
-          request?: ApiProcessoJuditRequest | null;
-        };
+        const responseRecord = toRecord(json) ?? {};
+        const trackingRecord =
+          toRecord(responseRecord["tracking"] ?? null) ??
+          toRecord(responseRecord["tracking_status"] ?? null) ??
+          toRecord(responseRecord["sync"] ?? null);
+        const requestRecord =
+          toRecord(responseRecord["request"] ?? null) ??
+          (requestPlan.isStatusCheck ? responseRecord : null);
+        const requestMapped = mapApiJuditRequest(
+          (requestRecord ?? null) as ApiProcessoJuditRequest | null,
+        );
 
-        const trackingRecord = toRecord(responsePayload.tracking ?? null);
-        const requestMapped = mapApiJuditRequest(responsePayload.request ?? null);
-
-        let trackingSummary = processoToSync.trackingSummary;
-        let responseData = processoToSync.responseData;
-
-        if (requestMapped) {
-          trackingSummary =
-            parseTrackingSummaryFromResult(requestMapped.result) ?? trackingSummary;
-          responseData =
-            parseResponseDataFromResult(requestMapped.result) ?? responseData;
-        }
+        const requestStatus = requestMapped?.status ?? null;
+        const shouldApplyResult = requestStatus === "completed";
 
         setProcessos((prev) =>
           prev.map((item) => {
@@ -1853,46 +1911,112 @@ export default function Processos() {
               return item;
             }
 
-            const trackingStatus =
-              parseOptionalString(trackingRecord?.status) ??
-              trackingSummary?.status ??
-              item.status;
-            const updatedAt =
-              trackingSummary?.updatedAt ?? item.trackingSummary?.updatedAt ?? null;
+            const trackingSummary = shouldApplyResult
+              ? parseTrackingSummaryFromResult(requestMapped?.result) ??
+                item.trackingSummary
+              : item.trackingSummary;
+            const responseData = shouldApplyResult
+              ? parseResponseDataFromResult(requestMapped?.result) ??
+                item.responseData
+              : item.responseData;
+
+            const trackingId = shouldApplyResult
+              ? parseOptionalString(
+                  trackingRecord?.tracking_id ?? trackingRecord?.id ?? null,
+                ) ?? item.juditTrackingId
+              : item.juditTrackingId;
+            const trackingHourRange = shouldApplyResult
+              ? parseOptionalString(trackingRecord?.hour_range) ??
+                item.juditTrackingHourRange
+              : item.juditTrackingHourRange;
+
+            const trackingStatus = shouldApplyResult
+              ? parseOptionalString(trackingRecord?.status) ??
+                trackingSummary?.status ??
+                item.status
+              : item.status;
+
+            const updatedAt = shouldApplyResult
+              ? trackingSummary?.updatedAt ??
+                item.trackingSummary?.updatedAt ??
+                null
+              : item.trackingSummary?.updatedAt ?? null;
 
             return {
               ...item,
-              juditTrackingId:
-                parseOptionalString(
-                  trackingRecord?.tracking_id ?? trackingRecord?.id ?? null,
-                ) ?? item.juditTrackingId,
-              juditTrackingHourRange:
-                parseOptionalString(trackingRecord?.hour_range) ??
-                item.juditTrackingHourRange,
+              juditTrackingId: trackingId,
+              juditTrackingHourRange: trackingHourRange,
               juditLastRequest: requestMapped ?? item.juditLastRequest,
-              trackingSummary: trackingSummary ?? item.trackingSummary,
-              responseData: responseData ?? item.responseData,
+              trackingSummary,
+              responseData,
               status: trackingStatus || item.status,
-              ultimaSincronizacao: updatedAt ?? item.ultimaSincronizacao,
+              ultimaSincronizacao: shouldApplyResult
+                ? updatedAt ?? item.ultimaSincronizacao
+                : item.ultimaSincronizacao,
             };
           }),
         );
 
-        try {
-          const refreshed = await loadProcessos();
-          setProcessos(refreshed);
-        } catch (refreshError) {
-          console.error(
-            "Falha ao atualizar lista após sincronização manual",
-            refreshError,
-          );
+        if (requestStatus === "error") {
+          const errorMessage =
+            extractErrorMessageFromResult(requestMapped?.result) ??
+            "A Judit retornou um erro ao processar a solicitação.";
+          setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: errorMessage }));
+          toast({
+            title: "Erro ao sincronizar processo",
+            description: errorMessage,
+            variant: "destructive",
+          });
+          return;
         }
 
-        toast({
-          title: "Sincronização solicitada",
-          description:
-            "Estamos consultando a Judit para atualizar os dados deste processo.",
-        });
+        const shouldRefreshProcessList =
+          !requestPlan.isStatusCheck || shouldApplyResult;
+
+        if (shouldRefreshProcessList) {
+          try {
+            const refreshed = await loadProcessos();
+            setProcessos(refreshed);
+          } catch (refreshError) {
+            console.error(
+              "Falha ao atualizar lista após sincronização manual",
+              refreshError,
+            );
+          }
+        }
+
+        if (requestPlan.isStatusCheck) {
+          if (shouldApplyResult) {
+            toast({
+              title: "Dados do processo atualizados",
+              description:
+                "A consulta manual anterior foi concluída e os dados foram atualizados.",
+            });
+          } else {
+            const pendingStatuses = new Set(["pending", "processing", "queued"]);
+            const isPending =
+              !requestStatus || pendingStatuses.has(requestStatus.toLowerCase());
+
+            if (isPending) {
+              toast({
+                title: "Ainda buscando os dados do processo",
+                description:
+                  "A Judit ainda está processando esta solicitação. Verifique novamente em alguns minutos.",
+              });
+            } else {
+              toast({
+                title: "Status da solicitação verificado",
+                description: `Status atual: ${requestStatus}.`,
+              });
+            }
+          }
+        } else {
+          toast({
+            title: "Solicitação enviada para a Judit",
+            description:
+              "Primeira solicitação manual registrada. Avisaremos quando os dados forem atualizados.",
+          });
+        }
       } catch (error) {
         console.error(error);
         const message =

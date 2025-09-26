@@ -20,6 +20,11 @@ const baseProcesso: Processo = {
   ultimaSincronizacao: null,
   consultasApiCount: 0,
   movimentacoesCount: 0,
+  juditTrackingId: null,
+  juditTrackingHourRange: null,
+  juditLastRequest: null,
+  trackingSummary: null,
+  responseData: null,
 };
 
 type RenderResult = {
