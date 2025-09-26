@@ -2258,7 +2258,6 @@ export default function Processos() {
                         </span>
                       </div>
                     </div>
-                  </div>
                 </AccordionTrigger>
                 <AccordionContent className="border-t border-border/40 px-6 pb-6 pt-6 sm:px-8">
                   <div className="space-y-6">
