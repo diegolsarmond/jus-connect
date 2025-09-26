@@ -495,6 +495,7 @@ export class CronJobsService {
           await juditProcessService.triggerRequestForProcess(row.id, row.numero, {
             source: 'cron',
             skipIfPending: true,
+            withAttachments: true,
           });
           processed += 1;
         } catch (error) {

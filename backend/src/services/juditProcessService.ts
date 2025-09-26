@@ -820,6 +820,7 @@ interface TriggerRequestOptions {
   source: JuditRequestSource;
   actorUserId?: number | null;
   skipIfPending?: boolean;
+  withAttachments?: boolean;
   client?: PoolClient;
 }
 
@@ -1321,13 +1322,18 @@ export class JuditProcessService {
         return null;
       }
 
+      const includeAttachments =
+        typeof options.withAttachments === 'boolean'
+          ? options.withAttachments
+          : true;
+
       const requestPayload = {
         search: {
           search_type: 'lawsuit_cnj',
           search_key: processNumber,
         },
-        with_attachments: false,
-      } as const;
+        with_attachments: includeAttachments,
+      };
 
       const response = await this.requestWithRetry<JuditRequestResponse>(
         config,
