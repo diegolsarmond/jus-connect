@@ -1788,14 +1788,14 @@ export default function Processos() {
       setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: null }));
 
       try {
-        const payload: Record<string, unknown> = {};
+        const requestPayload: Record<string, unknown> = {};
 
         if (typeof flags?.withAttachments === "boolean") {
-          payload.withAttachments = flags.withAttachments;
+          requestPayload.withAttachments = flags.withAttachments;
         }
 
         if (typeof flags?.onDemand === "boolean") {
-          payload.onDemand = flags.onDemand;
+          requestPayload.onDemand = flags.onDemand;
         }
 
         const res = await fetch(getApiUrl(`processos/${processoToSync.id}/judit/sync`), {
@@ -1804,7 +1804,7 @@ export default function Processos() {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(requestPayload),
         });
 
         const text = await res.text();
@@ -1829,13 +1829,13 @@ export default function Processos() {
           throw new Error(message);
         }
 
-        const payload = (json ?? {}) as {
+        const responsePayload = (json ?? {}) as {
           tracking?: Record<string, unknown> | null;
           request?: ApiProcessoJuditRequest | null;
         };
 
-        const trackingRecord = toRecord(payload.tracking ?? null);
-        const requestMapped = mapApiJuditRequest(payload.request ?? null);
+        const trackingRecord = toRecord(responsePayload.tracking ?? null);
+        const requestMapped = mapApiJuditRequest(responsePayload.request ?? null);
 
         let trackingSummary = processoToSync.trackingSummary;
         let responseData = processoToSync.responseData;
