@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -31,6 +31,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
 import { createPlanPayment, PlanPaymentMethod, PlanPaymentResult } from "@/features/plans/api";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { getApiUrl } from "@/lib/api";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -71,6 +73,66 @@ const getFormattedPrice = (display: string | null, numeric: number | null) => {
 
 const sanitizeDigits = (value: string): string => value.replace(/\D+/g, "");
 
+const extractCompanyRecord = (input: unknown): Record<string, unknown> | null => {
+  if (Array.isArray(input)) {
+    const candidate = input.find((item) => item && typeof item === "object");
+    return (candidate as Record<string, unknown> | undefined) ?? null;
+  }
+
+  if (input && typeof input === "object") {
+    const record = input as Record<string, unknown>;
+    const rows = (record as { rows?: unknown }).rows;
+    if (Array.isArray(rows)) {
+      const candidate = rows.find((item) => item && typeof item === "object");
+      if (candidate) {
+        return candidate as Record<string, unknown>;
+      }
+    }
+
+    const data = (record as { data?: unknown }).data;
+    if (Array.isArray(data)) {
+      const candidate = data.find((item) => item && typeof item === "object");
+      if (candidate) {
+        return candidate as Record<string, unknown>;
+      }
+    }
+
+    if (data && typeof data === "object") {
+      const nestedRows = (data as { rows?: unknown }).rows;
+      if (Array.isArray(nestedRows)) {
+        const candidate = nestedRows.find((item) => item && typeof item === "object");
+        if (candidate) {
+          return candidate as Record<string, unknown>;
+        }
+      }
+    }
+
+    return record;
+  }
+
+  return null;
+};
+
+const normalizeString = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const getFirstString = (record: Record<string, unknown>, keys: string[]): string | null => {
+  for (const key of keys) {
+    const value = normalizeString(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
 const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD", string> = {
   PIX: "PIX empresarial",
   BOLETO: "Boleto bancário",
@@ -85,6 +147,7 @@ const ManagePlanPayment = () => {
   const selectedPlan = state.plan ?? null;
   const pricingMode: PricingMode = state.pricingMode ?? "mensal";
   const { toast } = useToast();
+  const { user } = useAuth();
   const [paymentMethod, setPaymentMethod] = useState<PlanPaymentMethod>("pix");
   const [companyName, setCompanyName] = useState("");
   const [companyDocument, setCompanyDocument] = useState("");
@@ -93,6 +156,91 @@ const ManagePlanPayment = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentResult, setPaymentResult] = useState<PlanPaymentResult | null>(null);
+
+  useEffect(() => {
+    if (!user?.empresa_id) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const loadBillingData = async () => {
+      try {
+        const response = await fetch(getApiUrl(`empresas/${user.empresa_id}`), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Falha ao carregar empresa (HTTP ${response.status})`);
+        }
+
+        const payload = await response.json();
+        if (!isMounted) {
+          return;
+        }
+
+        const record = extractCompanyRecord(payload);
+        if (!record) {
+          return;
+        }
+
+        const resolvedName = getFirstString(record, [
+          "razao_social",
+          "razaoSocial",
+          "nome_empresa",
+          "nomeEmpresa",
+          "nome",
+        ]);
+        if (resolvedName) {
+          setCompanyName((previous) => (previous.trim().length > 0 ? previous : resolvedName));
+        }
+
+        const resolvedDocument = getFirstString(record, [
+          "cnpj",
+          "documento",
+          "document",
+          "cnpj_cpf",
+          "cpf_cnpj",
+        ]);
+        if (resolvedDocument) {
+          setCompanyDocument((previous) => (previous.trim().length > 0 ? previous : resolvedDocument));
+        }
+
+        const resolvedEmail = getFirstString(record, [
+          "email_cobranca",
+          "emailCobranca",
+          "billingEmail",
+          "email_billing",
+          "email_financeiro",
+          "emailFinanceiro",
+          "email",
+        ]);
+        if (resolvedEmail) {
+          setBillingEmail((previous) => (previous.trim().length > 0 ? previous : resolvedEmail));
+        }
+      } catch (loadError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        console.error("Erro ao carregar dados de faturamento da empresa", loadError);
+        toast({
+          title: "Não foi possível carregar os dados da empresa",
+          description: "Preencha manualmente os campos de faturamento para continuar.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    void loadBillingData();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [toast, user?.empresa_id]);
 
   const formattedPrice = useMemo(() => {
     if (!selectedPlan) {
