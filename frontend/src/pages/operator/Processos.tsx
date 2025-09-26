@@ -1912,9 +1912,9 @@ export default function Processos() {
                 : `${processo.movimentacoesCount} movimentações registradas`;
             const trackingPhase = processo.trackingSummary?.phase?.trim() || null;
             const trackingTags = processo.trackingSummary?.tags ?? [];
-            const partesInteressadas = processo.responseData?.partes
-              ? filtrarPartesInteressadas(processo.responseData.partes)
-              : [];
+            const partesBrutas = processo.responseData?.partes;
+            const partesInteressadas = filtrarPartesInteressadas(partesBrutas);
+            const hasPartesData = partesBrutas !== undefined && partesBrutas !== null;
             const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
             const trackingLastStepLabel =
               trackingLastStep?.label ?? trackingLastStep?.name ?? null;
@@ -2202,7 +2202,7 @@ export default function Processos() {
                             </dl>
                           </div>
                         ) : null}
-                        {processo.responseData.partes ? (
+                        {hasPartesData || partesInteressadas.length > 0 ? (
                           <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               Partes identificadas

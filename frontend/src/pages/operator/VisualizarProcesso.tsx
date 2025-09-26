@@ -1176,13 +1176,12 @@ export default function VisualizarProcesso() {
     return anexos.slice(start, end);
   }, [anexos, attachmentsPage, attachmentsPageSize, totalAttachments]);
 
-  const partesInteressadas = useMemo(() => {
-    if (!processo?.responseData?.partes) {
-      return [];
-    }
-
-    return filtrarPartesInteressadas(processo.responseData.partes);
-  }, [processo?.responseData?.partes]);
+  const partesBrutas = processo?.responseData?.partes;
+  const partesInteressadas = useMemo(
+    () => filtrarPartesInteressadas(partesBrutas),
+    [partesBrutas],
+  );
+  const hasPartesData = partesBrutas !== undefined && partesBrutas !== null;
 
   const handleAttachmentsPageChange = useCallback(
     (page: number) => {
@@ -1435,7 +1434,7 @@ export default function VisualizarProcesso() {
                           </dl>
                         </div>
                       ) : null}
-                      {processo.responseData.partes ? (
+                      {hasPartesData || partesInteressadas.length > 0 ? (
                         <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             Partes identificadas
