@@ -36,6 +36,77 @@ export interface CustomerResponse extends CustomerPayload {
 
 export type BillingType = 'BOLETO' | 'PIX' | 'CREDIT_CARD';
 
+export type SubscriptionCycle =
+  | 'DAILY'
+  | 'WEEKLY'
+  | 'BIWEEKLY'
+  | 'MONTHLY'
+  | 'BIMONTHLY'
+  | 'QUARTERLY'
+  | 'SEMIANNUAL'
+  | 'ANNUAL';
+
+export interface SubscriptionTrialPayload {
+  startDate?: string;
+  endDate?: string;
+  value?: number;
+  cycle?: SubscriptionCycle;
+  nextDueDate?: string;
+  [key: string]: unknown;
+}
+
+export interface CreateSubscriptionPayload {
+  customer: string;
+  billingType: BillingType;
+  value: number;
+  nextDueDate: string;
+  cycle?: SubscriptionCycle;
+  description?: string;
+  externalReference?: string;
+  creditCardToken?: string;
+  creditCard?: CreditCardDetails;
+  creditCardHolderInfo?: CreditCardHolderInfo;
+  split?: SplitConfiguration[];
+  discount?: unknown;
+  fine?: unknown;
+  interest?: unknown;
+  maxPayments?: number;
+  endDate?: string;
+  updatePendingPayments?: boolean;
+  metadata?: Record<string, unknown>;
+  trial?: SubscriptionTrialPayload | null;
+  [key: string]: unknown;
+}
+
+export type UpdateSubscriptionPayload = Partial<CreateSubscriptionPayload>;
+
+export interface SubscriptionResponse {
+  id: string;
+  customer?: string;
+  billingType?: BillingType;
+  cycle?: SubscriptionCycle;
+  value?: number;
+  status?: string;
+  nextDueDate?: string;
+  dateCreated?: string;
+  description?: string | null;
+  externalReference?: string | null;
+  deleted?: boolean;
+  trial?:
+    | ({
+        startDate?: string | null;
+        endDate?: string | null;
+        value?: number | null;
+        status?: string | null;
+        cycle?: SubscriptionCycle | null;
+        nextDueDate?: string | null;
+      } & Record<string, unknown>)
+    | null;
+  currentCycle?: { start?: string | null; end?: string | null } | null;
+  currentPeriod?: { start?: string | null; end?: string | null } | null;
+  [key: string]: unknown;
+}
+
 export interface CreateChargePayload {
   customer: string;
   value: number;
@@ -280,6 +351,27 @@ export class AsaasClient {
   async createPix(payload: PixChargePayload): Promise<PixChargeResponse> {
     return this.request<PixChargeResponse>('/pix/payments', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async createSubscription(payload: CreateSubscriptionPayload): Promise<SubscriptionResponse> {
+    return this.request<SubscriptionResponse>('/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateSubscription(
+    subscriptionId: string,
+    payload: UpdateSubscriptionPayload,
+  ): Promise<SubscriptionResponse> {
+    if (!subscriptionId) {
+      throw new Error('subscriptionId is required to update an Asaas subscription');
+    }
+
+    return this.request<SubscriptionResponse>(`/subscriptions/${subscriptionId}`, {
+      method: 'PUT',
       body: JSON.stringify(payload),
     });
   }
