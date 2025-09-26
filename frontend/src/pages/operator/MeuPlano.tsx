@@ -317,6 +317,18 @@ function hasAnualPricing(plan: PlanoDetalhe | null): boolean {
   );
 }
 
+function resolvePricingModeForPlan(current: PricingMode, plan: PlanoDetalhe): PricingMode {
+  if (current === "anual" && !hasAnualPricing(plan)) {
+    return hasMensalPricing(plan) ? "mensal" : "anual";
+  }
+
+  if (current === "mensal" && !hasMensalPricing(plan)) {
+    return hasAnualPricing(plan) ? "anual" : "mensal";
+  }
+
+  return current;
+}
+
 function getDefaultPricingMode(plan: PlanoDetalhe | null): PricingMode {
   if (hasMensalPricing(plan)) {
     return "mensal";
@@ -880,15 +892,8 @@ function MeuPlanoContent() {
     (plan: PlanoDetalhe) => {
       setPreviewPlano(plan);
       setDialogOpen(false);
-      setPricingMode((current) => {
-        if (current === "anual" && !hasAnualPricing(plan)) {
-          return hasMensalPricing(plan) ? "mensal" : "anual";
-        }
-        if (current === "mensal" && !hasMensalPricing(plan)) {
-          return hasAnualPricing(plan) ? "anual" : "mensal";
-        }
-        return current;
-      });
+      const nextPricingMode = resolvePricingModeForPlan(pricingMode, plan);
+      setPricingMode(nextPricingMode);
       toast({
         title: `Plano ${plan.nome} selecionado`,
         description: "Revise as opções de pagamento para confirmar a alteração do seu plano.",
@@ -908,7 +913,7 @@ function MeuPlanoContent() {
             economiaAnual: plan.economiaAnual,
             economiaAnualFormatada: plan.economiaAnualFormatada,
           },
-          pricingMode,
+          pricingMode: nextPricingMode,
         },
       });
     },
