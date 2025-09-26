@@ -33,6 +33,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { getApiUrl } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -70,6 +71,7 @@ import AttachmentsSummaryCard from "@/components/process/AttachmentsSummaryCard"
 import {
   formatResponseKey,
   formatResponseValue,
+  isMetadataEntryList,
   mapApiJuditRequest,
   parseOptionalString,
   parseResponseDataFromResult,
@@ -80,6 +82,7 @@ import {
   type ProcessoResponseData,
   type ProcessoTrackingSummary,
 } from "./utils/judit";
+import { renderMetadataEntries } from "./components/metadata-renderer";
 
 interface ProcessoCliente {
   id: number;
@@ -2159,16 +2162,39 @@ export default function Processos() {
                               Capa do processo
                             </p>
                             <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                              {Object.entries(processo.responseData.cover).map(([key, value]) => (
-                                <div key={`${processo.id}-cover-${key}`} className="space-y-1">
-                                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    {formatResponseKey(key)}
-                                  </dt>
-                                  <dd className="text-sm text-foreground break-words">
-                                    {formatResponseValue(value)}
-                                  </dd>
-                                </div>
-                              ))}
+                              {Object.entries(processo.responseData.cover).map(([key, value]) => {
+                                const formattedValue = formatResponseValue(value);
+                                const isStructured = isMetadataEntryList(formattedValue);
+                                const entryKey = `${processo.id}-cover-${key}`;
+
+                                return (
+                                  <div key={entryKey} className="space-y-1">
+                                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                      {formatResponseKey(key)}
+                                    </dt>
+                                    <dd
+                                      className={cn(
+                                        "break-words",
+                                        isStructured
+                                          ? "text-foreground"
+                                          : "text-sm text-foreground",
+                                      )}
+                                    >
+                                      {isStructured
+                                        ? renderMetadataEntries(formattedValue, {
+                                            keyPrefix: entryKey,
+                                            containerClassName: "space-y-2",
+                                            nestedContainerClassName: "space-y-2",
+                                            valueClassName:
+                                              "text-sm text-foreground break-words",
+                                            nestedValueClassName:
+                                              "text-xs text-foreground/90 break-words",
+                                          })
+                                        : formattedValue}
+                                    </dd>
+                                  </div>
+                                );
+                              })}
                             </dl>
                           </div>
                         ) : null}
@@ -2199,16 +2225,39 @@ export default function Processos() {
                                     <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                                       {Object.entries(parte)
                                         .filter(([key]) => !ignoredKeys.has(key))
-                                        .map(([key, value]) => (
-                                          <div key={`${processo.id}-parte-${index}-${key}`} className="space-y-1">
-                                            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                              {formatResponseKey(key)}
-                                            </dt>
-                                            <dd className="text-xs text-foreground break-words">
-                                              {formatResponseValue(value)}
-                                            </dd>
-                                          </div>
-                                        ))}
+                                        .map(([key, value]) => {
+                                          const formattedValue = formatResponseValue(value);
+                                          const isStructured = isMetadataEntryList(formattedValue);
+                                          const entryKey = `${processo.id}-parte-${index}-${key}`;
+
+                                          return (
+                                            <div key={entryKey} className="space-y-1">
+                                              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                {formatResponseKey(key)}
+                                              </dt>
+                                              <dd
+                                                className={cn(
+                                                  "break-words",
+                                                  isStructured
+                                                    ? "text-foreground"
+                                                    : "text-xs text-foreground",
+                                                )}
+                                              >
+                                                {isStructured
+                                                  ? renderMetadataEntries(formattedValue, {
+                                                      keyPrefix: entryKey,
+                                                      containerClassName: "space-y-2",
+                                                      nestedContainerClassName: "space-y-2",
+                                                      valueClassName:
+                                                        "text-xs text-foreground break-words",
+                                                      nestedValueClassName:
+                                                        "text-[11px] text-foreground/90 break-words",
+                                                    })
+                                                  : formattedValue}
+                                              </dd>
+                                            </div>
+                                          );
+                                        })}
                                     </dl>
                                   </div>
                                 );
@@ -2249,16 +2298,39 @@ export default function Processos() {
                                     <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                                       {Object.entries(movimentacao)
                                         .filter(([key]) => !["descricao", "description", "titulo", "title", "data", "date", "timestamp"].includes(key))
-                                        .map(([key, value]) => (
-                                          <div key={`${processo.id}-mov-${index}-${key}`} className="space-y-1">
-                                            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                              {formatResponseKey(key)}
-                                            </dt>
-                                            <dd className="text-xs text-foreground break-words">
-                                              {formatResponseValue(value)}
-                                            </dd>
-                                          </div>
-                                        ))}
+                                        .map(([key, value]) => {
+                                          const formattedValue = formatResponseValue(value);
+                                          const isStructured = isMetadataEntryList(formattedValue);
+                                          const entryKey = `${processo.id}-mov-${index}-${key}`;
+
+                                          return (
+                                            <div key={entryKey} className="space-y-1">
+                                              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                {formatResponseKey(key)}
+                                              </dt>
+                                              <dd
+                                                className={cn(
+                                                  "break-words",
+                                                  isStructured
+                                                    ? "text-foreground"
+                                                    : "text-xs text-foreground",
+                                                )}
+                                              >
+                                                {isStructured
+                                                  ? renderMetadataEntries(formattedValue, {
+                                                      keyPrefix: entryKey,
+                                                      containerClassName: "space-y-2",
+                                                      nestedContainerClassName: "space-y-2",
+                                                      valueClassName:
+                                                        "text-xs text-foreground break-words",
+                                                      nestedValueClassName:
+                                                        "text-[11px] text-foreground/90 break-words",
+                                                    })
+                                                  : formattedValue}
+                                              </dd>
+                                            </div>
+                                          );
+                                        })}
                                     </dl>
                                   </div>
                                 );
@@ -2277,18 +2349,19 @@ export default function Processos() {
                             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               Metadados adicionais
                             </p>
-                            <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                              {Object.entries(processo.responseData.metadata).map(([key, value]) => (
-                                <div key={`${processo.id}-metadata-${key}`} className="space-y-1">
-                                  <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                    {formatResponseKey(key)}
-                                  </dt>
-                                  <dd className="text-xs text-foreground break-words">
-                                    {formatResponseValue(value)}
-                                  </dd>
-                                </div>
-                              ))}
-                            </dl>
+                            {renderMetadataEntries(
+                              Object.entries(processo.responseData.metadata).map(([key, value]) => ({
+                                key,
+                                label: formatResponseKey(key),
+                                value: formatResponseValue(value),
+                              })),
+                              {
+                                keyPrefix: `${processo.id}-metadata`,
+                                containerClassName: "mt-3 grid gap-2 sm:grid-cols-2",
+                                valueClassName: "text-xs text-foreground break-words",
+                                nestedValueClassName: "text-[11px] text-foreground/90 break-words",
+                              },
+                            )}
                           </div>
                         ) : null}
                       </div>
