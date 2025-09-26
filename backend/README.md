@@ -46,24 +46,11 @@ Estrutura inicial do backend usando Express e TypeScript.
    npm install
    ```
 
-3. Defina uma chave secreta para assinar os tokens JWT antes de iniciar o
-   servidor. Durante o desenvolvimento você pode exportar uma string qualquer
-   (com pelo menos 32 caracteres aleatórios) diretamente no terminal ou criar
-   um arquivo `.env` consumido pelo `npm run dev`:
-
-   ```bash
-   export AUTH_TOKEN_SECRET="troque-por-uma-chave-segura"
-   ```
-
-   O backend também aceita as variáveis `JWT_SECRET` ou `TOKEN_SECRET`, mas em
-   qualquer ambiente diferente de `NODE_ENV=test` a aplicação será encerrada se
-   nenhuma delas estiver configurada.
-
-4. (Opcional) Execute os scripts SQL necessários para criar as tabelas usadas
+3. (Opcional) Execute os scripts SQL necessários para criar as tabelas usadas
    pelos módulos que deseja testar. Os arquivos estão em `sql/*.sql`. O
    projeto pode ser iniciado mesmo sem todas as tabelas, mas os endpoints que
    dependem delas retornarão erros específicos.
-5. Inicie o servidor em modo desenvolvimento. A API ficará disponível em
+4. Inicie o servidor em modo desenvolvimento. A API ficará disponível em
    `http://localhost:3001` e a documentação Swagger em
    `http://localhost:3001/api-docs`:
 
