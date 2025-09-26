@@ -174,6 +174,14 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
       req.body && typeof req.body === 'object'
         ? (req.body as Record<string, unknown>)
         : {};
+    const withAttachmentsValue =
+      'withAttachments' in body
+        ? body.withAttachments
+        : 'with_attachments' in body
+          ? (body as Record<string, unknown>).with_attachments
+          : undefined;
+    const withAttachmentsFlag = parseOptionalBoolean(withAttachmentsValue);
+
     const onDemandFlag = parseOptionalBoolean(body.onDemand ?? body.on_demand);
     const withAttachmentsFlag = parseOptionalBoolean(
       body.withAttachments ?? body.with_attachments,

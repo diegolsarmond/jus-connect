@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
@@ -1079,6 +1080,9 @@ export default function Processos() {
   const [creatingProcess, setCreatingProcess] = useState(false);
   const [syncingProcessIds, setSyncingProcessIds] = useState<number[]>([]);
   const [syncErrors, setSyncErrors] = useState<Record<number, string | null>>({});
+  const [manualSyncProcess, setManualSyncProcess] = useState<Processo | null>(null);
+  const [manualSyncWithAttachments, setManualSyncWithAttachments] = useState(false);
+  const [manualSyncOnDemand, setManualSyncOnDemand] = useState(false);
   useEffect(() => {
     let cancelled = false;
 
@@ -1774,16 +1778,33 @@ export default function Processos() {
   };
 
   const handleManualSync = useCallback(
-    async (processoToSync: Processo) => {
+    async (
+      processoToSync: Processo,
+      flags?: { withAttachments?: boolean; onDemand?: boolean },
+    ) => {
       setSyncingProcessIds((prev) =>
         prev.includes(processoToSync.id) ? prev : [...prev, processoToSync.id],
       );
       setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: null }));
 
       try {
+        const payload: Record<string, unknown> = {};
+
+        if (typeof flags?.withAttachments === "boolean") {
+          payload.withAttachments = flags.withAttachments;
+        }
+
+        if (typeof flags?.onDemand === "boolean") {
+          payload.onDemand = flags.onDemand;
+        }
+
         const res = await fetch(getApiUrl(`processos/${processoToSync.id}/judit/sync`), {
           method: "POST",
-          headers: { Accept: "application/json" },
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         });
 
         const text = await res.text();
@@ -1890,6 +1911,40 @@ export default function Processos() {
     },
     [loadProcessos, toast],
   );
+
+  const handleManualSyncDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setManualSyncProcess(null);
+      setManualSyncWithAttachments(false);
+      setManualSyncOnDemand(false);
+    }
+  }, []);
+
+  const handleRequestManualSync = useCallback((processo: Processo) => {
+    setManualSyncProcess(processo);
+    setManualSyncWithAttachments(false);
+    setManualSyncOnDemand(false);
+  }, []);
+
+  const handleConfirmManualSync = useCallback(() => {
+    if (!manualSyncProcess) {
+      return;
+    }
+
+    const processo = manualSyncProcess;
+    void handleManualSync(processo, {
+      withAttachments: manualSyncWithAttachments,
+      onDemand: manualSyncOnDemand,
+    });
+    setManualSyncProcess(null);
+    setManualSyncWithAttachments(false);
+    setManualSyncOnDemand(false);
+  }, [
+    handleManualSync,
+    manualSyncOnDemand,
+    manualSyncProcess,
+    manualSyncWithAttachments,
+  ]);
 
   const handleViewProcessDetails = useCallback(
     (processoToView: Processo) => {
@@ -2656,7 +2711,7 @@ export default function Processos() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleManualSync(processo)}
+                          onClick={() => handleRequestManualSync(processo)}
                           disabled={isSyncing}
                         >
                           {isSyncing ? (
@@ -2691,6 +2746,70 @@ export default function Processos() {
           })}
         </Accordion>
       )}
+
+      <Dialog open={manualSyncProcess !== null} onOpenChange={handleManualSyncDialogOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sincronizar processo com a Judit</DialogTitle>
+            <DialogDescription>
+              Configure os parâmetros da consulta manual antes de enviá-la para a Judit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">
+                Processo selecionado
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {manualSyncProcess?.numero ?? "Nenhum processo selecionado"}
+              </p>
+            </div>
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id="manual-sync-attachments"
+                checked={manualSyncWithAttachments}
+                onCheckedChange={(checked) =>
+                  setManualSyncWithAttachments(checked === true)
+                }
+              />
+              <div className="space-y-1">
+                <Label htmlFor="manual-sync-attachments">Incluir anexos</Label>
+                <p className="text-xs text-muted-foreground">
+                  Solicitar que a Judit busque e entregue anexos disponíveis junto com o processo.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id="manual-sync-on-demand"
+                checked={manualSyncOnDemand}
+                onCheckedChange={(checked) => setManualSyncOnDemand(checked === true)}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="manual-sync-on-demand">Busca sob demanda</Label>
+                <p className="text-xs text-muted-foreground">
+                  Forçar uma consulta imediata ao processo na Judit, sem aguardar o rastreamento automático.
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleManualSyncDialogOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmManualSync}
+              disabled={
+                manualSyncProcess === null ||
+                (manualSyncProcess !== null &&
+                  syncingProcessIds.includes(manualSyncProcess.id))
+              }
+            >
+              Solicitar sincronização
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="sm:max-w-lg">
