@@ -162,9 +162,6 @@ export const respondToJuditApiError = (error: JuditApiError, res: Response) => {
 
 export const triggerManualJuditSync = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { withAttachments } = (req.body ?? {}) as {
-    withAttachments?: unknown;
-  };
   const processoId = Number(id);
 
   if (!Number.isInteger(processoId) || processoId <= 0) {
@@ -220,8 +217,22 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
       }
     );
 
-    const body = (req.body && typeof req.body === 'object') ? (req.body as Record<string, unknown>) : {};
+    const body =
+      req.body && typeof req.body === 'object'
+        ? (req.body as Record<string, unknown>)
+        : {};
+    const withAttachmentsValue =
+      'withAttachments' in body
+        ? body.withAttachments
+        : 'with_attachments' in body
+          ? (body as Record<string, unknown>).with_attachments
+          : undefined;
+    const withAttachmentsFlag = parseOptionalBoolean(withAttachmentsValue);
+
     const onDemandFlag = parseOptionalBoolean(body.onDemand ?? body.on_demand);
+    const withAttachmentsFlag = parseOptionalBoolean(
+      body.withAttachments ?? body.with_attachments,
+    );
 
     const requestRecord = await juditProcessService.triggerRequestForProcess(
       processo.id,
@@ -230,7 +241,7 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
         source: 'manual',
         actorUserId: req.auth.userId,
         onDemand: onDemandFlag,
-        withAttachments: typeof withAttachments === 'boolean' ? withAttachments : undefined,
+        withAttachments: withAttachmentsFlag,
       }
     );
 
