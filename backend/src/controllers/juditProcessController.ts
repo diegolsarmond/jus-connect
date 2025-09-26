@@ -4,6 +4,7 @@ import juditProcessService, {
   JuditApiError,
   JuditConfigurationError,
   type JuditRequestRecord,
+  type JuditRequestSource,
 } from '../services/juditProcessService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
@@ -15,6 +16,27 @@ const mapRecordToResponse = (record: JuditRequestRecord) => ({
   criado_em: record.createdAt,
   atualizado_em: record.updatedAt,
 });
+
+const VALID_REQUEST_SOURCES: ReadonlyArray<JuditRequestSource> = [
+  'details',
+  'manual',
+  'cron',
+  'webhook',
+  'system',
+];
+
+const resolveRequestSource = (
+  source: JuditRequestRecord['source'] | undefined,
+): JuditRequestSource => {
+  if (typeof source === 'string') {
+    const normalized = source.trim().toLowerCase();
+    if (VALID_REQUEST_SOURCES.includes(normalized as JuditRequestSource)) {
+      return normalized as JuditRequestSource;
+    }
+  }
+
+  return 'system';
+};
 
 export const triggerManualJuditSync = async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -172,7 +194,7 @@ export const getJuditRequestStatus = async (req: Request, res: Response) => {
         apiResponse.request_id,
         apiResponse.status ?? 'pending',
         apiResponse.result ?? null,
-        { source: stored?.source ?? 'system' }
+        { source: resolveRequestSource(stored?.source) }
       );
     } catch (error) {
       if (error instanceof JuditConfigurationError) {
