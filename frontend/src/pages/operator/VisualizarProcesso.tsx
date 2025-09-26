@@ -876,6 +876,7 @@ export function ProcessoAttachmentsSection({
                   parseOptionalString(anexo.titulo) ??
                   parseOptionalString(anexo.title) ??
                   parseOptionalString(anexo.nome) ??
+                  parseOptionalString(anexo.attachment_name ?? anexo.attachmentName) ??
                   `Anexo ${index + 1 + (currentPage - 1) * pageSize}`;
                 const dataBruta =
                   parseOptionalString(anexo.attachment_date) ??
