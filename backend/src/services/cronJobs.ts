@@ -171,7 +171,7 @@ export class CronJobsService {
     void this.initializeJuditIntegration();
   }
 
-  async refreshJuditIntegration(): Promise<void> {
+  public async refreshJuditIntegration(): Promise<void> {
     await this.initializeJuditIntegration();
   }
 
