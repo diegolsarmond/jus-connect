@@ -1,11 +1,46 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChargeConflictError = exports.ValidationError = exports.ASAAS_BILLING_TYPES = void 0;
+const financialFlowIdentifier_1 = require("../utils/financialFlowIdentifier");
 const db_1 = __importDefault(require("./db"));
-exports.ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD'];
+const integrationResolver_1 = __importStar(require("./asaas/integrationResolver"));
+exports.ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD', 'DEBIT_CARD'];
 class ValidationError extends Error {
     constructor(message) {
         super(message);
@@ -58,9 +93,60 @@ class HttpAsaasClient {
         return data;
     }
 }
-async function defaultClientFactory({ integrationApiKeyId, db, }) {
+function normalizeEmpresaId(value) {
+    if (typeof value === 'number' && Number.isInteger(value)) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return null;
+        }
+        const parsed = Number.parseInt(trimmed, 10);
+        if (Number.isInteger(parsed)) {
+            return parsed;
+        }
+    }
+    return null;
+}
+function extractEmpresaId(row) {
+    const candidates = ['idempresa', 'empresa_id', 'empresa'];
+    for (const candidate of candidates) {
+        if (Object.prototype.hasOwnProperty.call(row, candidate)) {
+            const value = normalizeEmpresaId(row[candidate]);
+            if (value !== null) {
+                return value;
+            }
+        }
+    }
+    return null;
+}
+function isTruthy(value) {
+    if (value === true) {
+        return true;
+    }
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        return ['true', 't', '1', 'yes', 'y'].includes(normalized);
+    }
+    if (typeof value === 'number') {
+        return value === 1;
+    }
+    return false;
+}
+async function defaultClientFactory({ integrationApiKeyId, financialFlowId, db, }) {
+    const normalizedFinancialFlowId = (0, financialFlowIdentifier_1.normalizeFinancialFlowIdentifier)(financialFlowId);
+    if (normalizedFinancialFlowId === null) {
+        throw new ValidationError('Identificador do fluxo financeiro inválido');
+    }
+    const flowResult = await db.query('SELECT id, idempresa, empresa_id, empresa FROM financial_flows WHERE id = $1', [normalizedFinancialFlowId]);
+    if (flowResult.rowCount === 0) {
+        throw new ValidationError('Fluxo financeiro não encontrado');
+    }
+    const flowRow = flowResult.rows[0];
+    const flowEmpresaId = extractEmpresaId(flowRow);
     if (integrationApiKeyId) {
-        const result = await db.query('SELECT id, provider, key_value, url_api FROM integration_api_keys WHERE id = $1', [integrationApiKeyId]);
+        const result = await db.query('SELECT id, provider, key_value, url_api, idempresa, global FROM integration_api_keys WHERE id = $1', [integrationApiKeyId]);
         if (result.rowCount === 0) {
             throw new ValidationError('Chave de integração do Asaas não encontrada');
         }
@@ -73,8 +159,26 @@ async function defaultClientFactory({ integrationApiKeyId, db, }) {
         if (provider && provider !== 'asaas') {
             console.warn('integration_api_keys apontada para o Asaas contém provider diferente de "asaas":', row.provider);
         }
+        const integrationEmpresaId = extractEmpresaId(row);
+        const isGlobalKey = isTruthy(row.global);
+        if (!isGlobalKey) {
+            if (integrationEmpresaId === null || flowEmpresaId === null || integrationEmpresaId !== flowEmpresaId) {
+                throw new ValidationError('Chave de integração do Asaas não pertence à empresa do fluxo financeiro');
+            }
+        }
         const baseUrl = typeof row.url_api === 'string' && row.url_api.trim() ? row.url_api : null;
         return new HttpAsaasClient({ apiKey: keyValue, baseUrl });
+    }
+    if (flowEmpresaId !== null) {
+        try {
+            const integration = await (0, integrationResolver_1.default)(flowEmpresaId, db);
+            return new HttpAsaasClient({ apiKey: integration.accessToken, baseUrl: integration.baseUrl });
+        }
+        catch (error) {
+            if (!(error instanceof integrationResolver_1.AsaasIntegrationNotConfiguredError)) {
+                console.error('Falha ao resolver integração do Asaas para empresa', flowEmpresaId, error);
+            }
+        }
     }
     const apiKey = process.env.ASAAS_API_KEY;
     if (!apiKey) {
@@ -88,7 +192,7 @@ function normalizeBillingType(value) {
     }
     const normalized = value.trim().toUpperCase();
     if (!exports.ASAAS_BILLING_TYPES.includes(normalized)) {
-        throw new ValidationError('paymentMethod deve ser PIX, BOLETO ou CREDIT_CARD');
+        throw new ValidationError('paymentMethod deve ser PIX, BOLETO, CREDIT_CARD ou DEBIT_CARD');
     }
     return normalized;
 }
@@ -222,9 +326,10 @@ function mapFlowStatus(chargeStatus) {
     return 'pendente';
 }
 function normalizeInsertRow(row) {
+    const financialFlowId = (0, financialFlowIdentifier_1.normalizeFinancialFlowIdentifierFromRow)(row.financial_flow_id);
     return {
         id: Number(row.id),
-        financialFlowId: Number(row.financial_flow_id),
+        financialFlowId,
         clienteId: row.cliente_id === null || row.cliente_id === undefined ? null : Number(row.cliente_id),
         integrationApiKeyId: row.integration_api_key_id === null || row.integration_api_key_id === undefined
             ? null
@@ -255,7 +360,11 @@ class AsaasChargeService {
         const value = normalizeValue(input.value);
         const dueDate = formatDueDate(input.dueDate);
         const customer = ensureCustomerIdentifier(input.clienteId, input.asaasCustomerId, input.customer);
-        const existingCharge = await dbClient.query('SELECT id FROM asaas_charges WHERE financial_flow_id = $1', [input.financialFlowId]);
+        const normalizedFinancialFlowId = (0, financialFlowIdentifier_1.normalizeFinancialFlowIdentifier)(input.financialFlowId);
+        if (normalizedFinancialFlowId === null) {
+            throw new ValidationError('Identificador do fluxo financeiro inválido');
+        }
+        const existingCharge = await dbClient.query('SELECT id FROM asaas_charges WHERE financial_flow_id = $1', [normalizedFinancialFlowId]);
         if (existingCharge.rowCount > 0) {
             throw new ChargeConflictError('O fluxo financeiro já possui uma cobrança vinculada ao Asaas');
         }
@@ -265,7 +374,7 @@ class AsaasChargeService {
             value,
             dueDate,
             description: input.description ?? undefined,
-            externalReference: input.externalReferenceId ?? String(input.financialFlowId),
+            externalReference: input.externalReferenceId ?? String(normalizedFinancialFlowId),
         };
         if (input.additionalFields) {
             for (const [key, val] of Object.entries(input.additionalFields)) {
@@ -289,13 +398,18 @@ class AsaasChargeService {
         if (input.remoteIp) {
             payload.remoteIp = input.remoteIp;
         }
-        if (billingType === 'CREDIT_CARD') {
+        if (billingType === 'CREDIT_CARD' || billingType === 'DEBIT_CARD') {
             if (!input.cardToken || !input.cardToken.trim()) {
-                throw new ValidationError('cardToken é obrigatório para cobranças via cartão de crédito');
+                throw new ValidationError('cardToken é obrigatório para cobranças via cartão');
             }
             payload.creditCardToken = input.cardToken.trim();
         }
-        const asaasClient = options?.asaasClient ?? (await this.clientFactory({ integrationApiKeyId: input.integrationApiKeyId, db: dbClient }));
+        const asaasClient = options?.asaasClient ??
+            (await this.clientFactory({
+                integrationApiKeyId: input.integrationApiKeyId,
+                financialFlowId: normalizedFinancialFlowId,
+                db: dbClient,
+            }));
         const chargeResponse = await asaasClient.createCharge(payload);
         const { payload: pixPayload, qrCode: pixQrCode } = extractPixPayload(chargeResponse);
         const boletoUrl = extractBoletoUrl(chargeResponse);
@@ -339,7 +453,7 @@ class AsaasChargeService {
         created_at,
         updated_at
       `, [
-            input.financialFlowId,
+            normalizedFinancialFlowId,
             input.clienteId ?? null,
             input.integrationApiKeyId ?? null,
             chargeResponse.id,
@@ -364,7 +478,7 @@ class AsaasChargeService {
              external_reference_id = $2,
              status = $3
        WHERE id = $4
-       RETURNING *`, ['asaas', chargeResponse.id, flowStatus, input.financialFlowId]);
+       RETURNING *`, ['asaas', chargeResponse.id, flowStatus, normalizedFinancialFlowId]);
         if (updateResult.rowCount === 0) {
             throw new Error('Fluxo financeiro não encontrado para atualização');
         }

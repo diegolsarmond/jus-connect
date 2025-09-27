@@ -1,6 +1,9 @@
 import { QueryResultRow } from 'pg';
 import { normalizeFinancialFlowIdentifier, normalizeFinancialFlowIdentifierFromRow } from '../utils/financialFlowIdentifier';
 import pool from './db';
+import resolveAsaasIntegration, {
+  AsaasIntegrationNotConfiguredError,
+} from './asaas/integrationResolver';
 
 export const ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD', 'DEBIT_CARD'] as const;
 export type AsaasBillingType = (typeof ASAAS_BILLING_TYPES)[number];
@@ -284,6 +287,17 @@ async function defaultClientFactory({
 
     const baseUrl = typeof row.url_api === 'string' && row.url_api.trim() ? row.url_api : null;
     return new HttpAsaasClient({ apiKey: keyValue, baseUrl });
+  }
+
+  if (flowEmpresaId !== null) {
+    try {
+      const integration = await resolveAsaasIntegration(flowEmpresaId, db);
+      return new HttpAsaasClient({ apiKey: integration.accessToken, baseUrl: integration.baseUrl });
+    } catch (error) {
+      if (!(error instanceof AsaasIntegrationNotConfiguredError)) {
+        console.error('Falha ao resolver integração do Asaas para empresa', flowEmpresaId, error);
+      }
+    }
   }
 
   const apiKey = process.env.ASAAS_API_KEY;
