@@ -23,14 +23,14 @@ ALTER TABLE financial_flows ADD COLUMN IF NOT EXISTS idempresa INTEGER REFERENCE
 
 DO $$
 DECLARE
-  column_name TEXT;
+  legacy_column TEXT;
 BEGIN
-  FOR column_name IN
-    SELECT column_name
-      FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = 'financial_flows'
-       AND column_name IN ('empresa_id', 'empresa')
+  FOR legacy_column IN
+    SELECT cols.column_name AS legacy_column
+      FROM information_schema.columns AS cols
+     WHERE cols.table_schema = 'public'
+       AND cols.table_name = 'financial_flows'
+       AND cols.column_name IN ('empresa_id', 'empresa')
   LOOP
     EXECUTE format(
       'UPDATE public.financial_flows
@@ -38,7 +38,7 @@ BEGIN
         WHERE idempresa IS NULL
           AND %1$I IS NOT NULL
           AND TRIM(%1$I::text) ~ ''^[0-9]+$''',
-      column_name
+      legacy_column
     );
   END LOOP;
 END $$;
