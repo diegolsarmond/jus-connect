@@ -1510,9 +1510,9 @@ export default function VisualizarOportunidade() {
   ];
 
   const sectionContainerClass =
-    "rounded-lg border border-border bg-muted/40 p-5 shadow-sm";
+    "rounded-lg border border-border bg-muted/40 p-4 shadow-sm sm:p-5";
   const sectionTitleClass =
-    "mb-4 text-lg font-semibold tracking-wide text-primary";
+    "mb-3 text-base font-semibold tracking-wide text-primary sm:mb-4 sm:text-lg";
 
   // cria um mapa das entradas por chave para fácil consulta
   const entriesMap = useMemo(() => {
@@ -2697,15 +2697,17 @@ export default function VisualizarOportunidade() {
                   <dt className="text-sm font-medium text-muted-foreground">
                     {label}
                   </dt>
-                  <dd className="mt-1 flex items-start gap-2">
-                    <div className="flex-1 min-w-0">{formatted}</div>
+                  <dd className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-2">
+                    <div className="flex-1 min-w-0 break-words text-sm [&_*]:break-words">
+                      {formatted}
+                    </div>
 
                     {shouldShowCopy(key) && copyText && (
                       <button
                         onClick={() => copyToClipboard(copyText)}
                         title={`Copiar ${label}`}
                         aria-label={`Copiar ${label}`}
-                        className="ml-2 inline-flex items-center justify-center rounded px-2 py-1 border text-sm hover:bg-surface"
+                        className="inline-flex w-full items-center justify-center rounded border px-2 py-1 text-sm hover:bg-surface sm:ml-2 sm:w-auto"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -2773,10 +2775,14 @@ export default function VisualizarOportunidade() {
 
   if (!opportunity) {
     return (
-      <div className="p-4 sm:p-6 space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 p-4 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-3xl font-bold">Oportunidade</h1>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button
+            className="w-full sm:w-auto"
+            variant="outline"
+            onClick={() => navigate(-1)}
+          >
             Voltar
           </Button>
         </div>
@@ -2915,7 +2921,7 @@ export default function VisualizarOportunidade() {
         </div>
       </div>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
             <div className="flex flex-col gap-2">
@@ -2974,7 +2980,7 @@ export default function VisualizarOportunidade() {
         </CardHeader>
 
         <CardContent>
-          <ScrollArea className="max-h-[1300vh]">
+          <ScrollArea className="max-h-none md:max-h-[75vh] lg:max-h-[80vh]">
             <div className="space-y-6">
               {/* percorre as seções definidas e exibe apenas campos que existam */}
               {renderDataSection("fluxo")}
@@ -3002,7 +3008,7 @@ export default function VisualizarOportunidade() {
                           className="rounded-lg border border-border/60 bg-background p-4 shadow-sm"
                           aria-labelledby={participantTitleId}
                         >
-                          <div className="mb-3 flex items-center justify-between">
+                          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <h3
                               id={participantTitleId}
                               className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
@@ -3105,7 +3111,7 @@ export default function VisualizarOportunidade() {
                             key={doc.id}
                             className="flex flex-col gap-4 rounded-lg border border-border/60 bg-background/60 p-4"
                           >
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div className="flex items-start gap-3">
                                 <div className="rounded-md bg-muted p-2 text-muted-foreground">
                                   <FileText className="h-4 w-4" />
@@ -3318,7 +3324,7 @@ export default function VisualizarOportunidade() {
                           {pendingAttachments.map((file, index) => (
                             <li
                               key={`${file.name}-${index}`}
-                              className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-sm"
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-sm"
                             >
                               <div className="min-w-0 flex-1">
                                 <p className="truncate font-medium">{file.name}</p>
@@ -3452,13 +3458,19 @@ export default function VisualizarOportunidade() {
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Button
+            className="w-full sm:w-auto"
             variant="outline"
             onClick={() => navigate(-1)}
             aria-label="Voltar para a listagem de oportunidades"
           >
             Voltar
           </Button>
-          <Button variant="ghost" onClick={onPrint} aria-label="Imprimir proposta">
+          <Button
+            className="w-full sm:w-auto"
+            variant="ghost"
+            onClick={onPrint}
+            aria-label="Imprimir proposta"
+          >
             Imprimir
           </Button>
         </div>
@@ -3526,6 +3538,7 @@ export default function VisualizarOportunidade() {
               {documentPreview && (
                 <>
                   <Button
+                    className="w-full sm:w-auto"
                     type="button"
                     variant="outline"
                     onClick={() => handleDownloadDocument(documentPreview)}
@@ -3543,6 +3556,7 @@ export default function VisualizarOportunidade() {
                     Baixar PDF
                   </Button>
                   <Button
+                    className="w-full sm:w-auto"
                     type="button"
                     variant="outline"
                     onClick={() => handleDownloadDocumentDocx(documentPreview)}
@@ -3560,6 +3574,7 @@ export default function VisualizarOportunidade() {
                     Baixar DOCX
                   </Button>
                   <Button
+                    className="w-full sm:w-auto"
                     type="button"
                     variant="outline"
                     onClick={() => handleOpenDocumentInNewTab(documentPreview)}
@@ -3578,7 +3593,11 @@ export default function VisualizarOportunidade() {
                   </Button>
                 </>
               )}
-              <Button type="button" onClick={closeDocumentPreview}>
+              <Button
+                className="w-full sm:w-auto"
+                type="button"
+                onClick={closeDocumentPreview}
+              >
                 Fechar
               </Button>
             </div>
@@ -3601,11 +3620,15 @@ export default function VisualizarOportunidade() {
               Tem certeza de que deseja excluir "{documentToDelete?.title ?? "Documento"}"? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={documentDeleting}>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogCancel
+              className="w-full sm:w-auto"
+              disabled={documentDeleting}
+            >
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
+              className="w-full sm:w-auto"
               onClick={handleConfirmDeleteDocument}
               disabled={documentDeleting}
             >
@@ -3970,6 +3993,7 @@ export default function VisualizarOportunidade() {
 
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
+              className="w-full sm:w-auto"
               type="button"
               variant="outline"
               onClick={() => setBillingDialogOpen(false)}
@@ -3978,6 +4002,7 @@ export default function VisualizarOportunidade() {
               Cancelar
             </Button>
             <Button
+              className="w-full sm:w-auto"
               type="button"
               onClick={handleBillingConfirm}
               disabled={billingSubmitting}
@@ -4189,8 +4214,9 @@ export default function VisualizarOportunidade() {
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
+              className="w-full sm:w-auto"
               type="button"
               variant="outline"
               onClick={() => setDocumentDialogOpen(false)}
@@ -4199,6 +4225,7 @@ export default function VisualizarOportunidade() {
               Cancelar
             </Button>
             <Button
+              className="w-full sm:w-auto"
               type="button"
               onClick={() => void handleDocumentConfirm()}
               disabled={isDocumentContinueDisabled}
