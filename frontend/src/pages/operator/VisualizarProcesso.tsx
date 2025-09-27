@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  AlertCircle,
-  Archive,
-  ArrowLeft,
-  Calendar,
-  Clock,
-  FileText,
-  Landmark,
-  MapPin,
-  Newspaper,
-  Users,
-} from "lucide-react";
+import { AlertCircle, ArrowLeft, Clock, Newspaper } from "lucide-react";
 
 import {
   Card,
@@ -50,13 +39,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import AttachmentsSummaryCard from "@/components/process/AttachmentsSummaryCard";
 import { getApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   formatResponseKey,
-  formatResponseValue,
-  isMetadataEntryList,
   mapApiJuditRequest,
   parseOptionalString,
   parseResponseDataFromResult,
@@ -66,8 +52,6 @@ import {
   type ProcessoResponseData,
   type ProcessoTrackingSummary,
 } from "./utils/judit";
-import { filtrarPartesInteressadas } from "./utils/partes";
-import { renderMetadataEntries } from "./components/metadata-renderer";
 
 interface ApiProcessoCliente {
   id?: number | null;
@@ -209,12 +193,12 @@ const formatDateToPtBR = (value: string | null | undefined): string | null => {
 
 const formatDateTimeToPtBR = (value: string | null | undefined): string => {
   if (!value) {
-    return "Data não informada";
+    return "Date not available";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "Data não informada";
+    return "Date not available";
   }
 
   return date.toLocaleString("pt-BR", {
@@ -232,7 +216,7 @@ const formatDateTimeOrNull = (value: string | null | undefined): string | null =
   }
 
   const formatted = formatDateTimeToPtBR(value);
-  return formatted === "Data não informada" ? null : formatted;
+  return formatted === "Date not available" ? null : formatted;
 };
 
 const normalizeString = (value: unknown): string => {
@@ -263,17 +247,17 @@ const resolveClientePapel = (tipo: string | null | undefined): string => {
     normalized.includes("JURIDICA") ||
     ["2", "J", "PJ"].includes(normalized)
   ) {
-    return "Pessoa Jurídica";
+    return "Corporate entity";
   }
 
   if (
     normalized.includes("FISICA") ||
     ["1", "F", "PF"].includes(normalized)
   ) {
-    return "Pessoa Física";
+    return "Individual";
   }
 
-  return "Parte";
+  return "Party";
 };
 
 const parseOptionalInteger = (value: unknown): number | null => {
@@ -317,7 +301,7 @@ const formatPropostaLabel = (
       ? solicitante.trim()
       : "";
 
-  return `Proposta #${numero}/${ano}${solicitanteNome ? ` - ${solicitanteNome}` : ""}`;
+  return `Proposal #${numero}/${ano}${solicitanteNome ? ` - ${solicitanteNome}` : ""}`;
 };
 
 const parseInteger = (value: unknown): number => {
@@ -395,7 +379,7 @@ const mapApiMovimentacoes = (
 
     const dataValue = normalizeString(raw.data) || null;
     const dataFormatada = dataValue ? formatDateToPtBR(dataValue) : null;
-    const tipo = normalizeString(raw.tipo) || "Movimentação";
+    const tipo = normalizeString(raw.tipo) || "Update";
     const tipoPublicacao = normalizeString(raw.tipo_publicacao) || null;
     const conteudo = normalizeMovimentacaoText(raw.conteudo);
     const textoCategoria = normalizeMovimentacaoText(raw.texto_categoria);
@@ -415,7 +399,7 @@ const mapApiMovimentacoes = (
 
       if (nome || descricao || hierarquia) {
         classificacao = {
-          nome: nome || "Classificação predita",
+          nome: nome || "Predicted classification",
           descricao,
           hierarquia: hierarquia || null,
         };
@@ -630,19 +614,19 @@ export const mapApiProcessoToDetalhes = (
   fallbackId?: string | number,
 ): ProcessoDetalhes => {
   const rawNumero = normalizeString(processo.numero);
-  const rawStatus = normalizeString(processo.status) || "Não informado";
-  const rawTipo = normalizeString(processo.tipo) || "Não informado";
-  const rawClasse = normalizeString(processo.classe_judicial) || "Não informada";
-  const rawAssunto = normalizeString(processo.assunto) || "Não informado";
-  const rawOrgao = normalizeString(processo.orgao_julgador) || "Não informado";
+  const rawStatus = normalizeString(processo.status) || NOT_INFORMED_LABEL;
+  const rawTipo = normalizeString(processo.tipo) || NOT_INFORMED_LABEL;
+  const rawClasse = normalizeString(processo.classe_judicial) || NOT_INFORMED_LABEL;
+  const rawAssunto = normalizeString(processo.assunto) || NOT_INFORMED_LABEL;
+  const rawOrgao = normalizeString(processo.orgao_julgador) || NOT_INFORMED_LABEL;
   const rawAdvogado =
-    normalizeString(processo.advogado_responsavel) || "Não informado";
+    normalizeString(processo.advogado_responsavel) || NOT_INFORMED_LABEL;
   const rawMunicipio = normalizeString(processo.municipio);
   const rawUf = normalizeString(processo.uf);
   const jurisdicao =
     normalizeString(processo.jurisdicao) ||
     [rawMunicipio, rawUf].filter(Boolean).join(" - ") ||
-    "Não informado";
+    NOT_INFORMED_LABEL;
   const dataDistribuicao = normalizeString(processo.data_distribuicao) || null;
   const oportunidadeResumo = processo.oportunidade ?? null;
   const oportunidadeId = parseOptionalInteger(
@@ -666,7 +650,7 @@ export const mapApiProcessoToDetalhes = (
         ? processo.cliente_id
         : null;
   const clienteNome =
-    normalizeString(clienteResumo?.nome) || "Cliente não informado";
+    normalizeString(clienteResumo?.nome) || "Client not provided";
   const clienteDocumento = normalizeString(clienteResumo?.documento) || null;
   const clientePapel = resolveClientePapel(clienteResumo?.tipo);
   const movimentacoes = mapApiMovimentacoes(processo.movimentacoes);
@@ -706,7 +690,7 @@ export const mapApiProcessoToDetalhes = (
       typeof processo.id === "number"
         ? processo.id
         : Number.parseInt(String(processo.id ?? fallbackId ?? 0), 10) || 0,
-    numero: rawNumero || "Não informado",
+    numero: rawNumero || NOT_INFORMED_LABEL,
     status: rawStatus,
     tipo: rawTipo,
     classeJudicial: rawClasse,
@@ -744,15 +728,20 @@ export const mapApiProcessoToDetalhes = (
 const getStatusBadgeClassName = (status: string) => {
   const normalized = status.toLowerCase();
 
-  if (normalized.includes("andamento") || normalized.includes("ativo")) {
+  if (
+    normalized.includes("andamento") ||
+    normalized.includes("ativo") ||
+    normalized.includes("progress") ||
+    normalized.includes("active")
+  ) {
     return "border-emerald-200 bg-emerald-500/10 text-emerald-600";
   }
 
-  if (normalized.includes("arquiv")) {
+  if (normalized.includes("arquiv") || normalized.includes("archive")) {
     return "border-slate-200 bg-slate-500/10 text-slate-600";
   }
 
-  if (normalized.includes("urg")) {
+  if (normalized.includes("urg") || normalized.includes("urgent")) {
     return "border-amber-200 bg-amber-500/10 text-amber-600";
   }
 
@@ -760,7 +749,13 @@ const getStatusBadgeClassName = (status: string) => {
 };
 
 const getTipoBadgeClassName = (tipo: string) => {
-  if (!tipo || tipo.toLowerCase() === "não informado") {
+  if (!tipo) {
+    return "border-muted-foreground/20 bg-muted text-muted-foreground";
+  }
+
+  const normalized = tipo.toLowerCase();
+
+  if (normalized === "não informado" || normalized === "not informed") {
     return "border-muted-foreground/20 bg-muted text-muted-foreground";
   }
 
@@ -781,6 +776,25 @@ interface ProcessoAttachmentsSectionProps {
 const ATTACHMENT_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const HISTORY_PAGE_SIZE_OPTIONS = [5, 10, 20, 30];
 
+type ProcessoTab = "overview" | "attachments" | "timeline";
+
+const resolveTabValue = (value: string | null | undefined): ProcessoTab | null => {
+  switch (value) {
+    case "overview":
+    case "attachments":
+    case "timeline":
+      return value;
+    case "resumo":
+      return "overview";
+    case "anexos":
+      return "attachments";
+    case "historico":
+      return "timeline";
+    default:
+      return null;
+  }
+};
+
 const EN_US_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "long",
   day: "2-digit",
@@ -796,7 +810,44 @@ const EN_US_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
+const EN_US_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 const EXCERPT_CHARACTER_LIMIT = 320;
+const NOT_INFORMED_LABEL = "Not informed";
+
+const formatDateToEnUS = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return EN_US_DATE_FORMATTER.format(parsed);
+};
+
+const formatDateTimeToEnUS = (value: string | null | undefined): string => {
+  if (!value) {
+    return "Date not available";
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "Date not available";
+  }
+
+  return EN_US_DATE_TIME_FORMATTER.format(parsed);
+};
 
 const MOVEMENT_TRANSLATION_RULES: {
   pattern: RegExp;
@@ -1233,18 +1284,18 @@ export function ProcessoAttachmentsSection({
     <Card>
       <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-1">
-          <CardTitle className="text-xl font-semibold">Anexos recebidos</CardTitle>
+          <CardTitle className="text-xl font-semibold">Attachments</CardTitle>
           <CardDescription>
             {hasAttachments
-              ? "Visualize os documentos compartilhados pela automação da Judit."
-              : "Nenhum anexo foi recebido até o momento."}
+              ? "Review the documents provided by the tracking service."
+              : "No attachments have been received yet."}
           </CardDescription>
         </div>
         {hasAttachments ? (
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="font-medium uppercase tracking-wide">Itens por página</span>
+            <span className="font-medium uppercase tracking-wide">Items per page</span>
             <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
-              <SelectTrigger className="h-8 w-[90px] text-xs" aria-label="Itens por página">
+              <SelectTrigger className="h-8 w-[90px] text-xs" aria-label="Items per page">
                 <SelectValue placeholder={`${pageSize}`} />
               </SelectTrigger>
               <SelectContent>
@@ -1261,7 +1312,7 @@ export function ProcessoAttachmentsSection({
       <CardContent className="space-y-6">
         {!hasAttachments ? (
           <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
-            Nenhum anexo foi recebido até o momento.
+            No attachments have been received yet.
           </div>
         ) : (
           <>
@@ -1272,7 +1323,7 @@ export function ProcessoAttachmentsSection({
                   parseOptionalString(anexo.title) ??
                   parseOptionalString(anexo.nome) ??
                   parseOptionalString(anexo.attachment_name ?? anexo.attachmentName) ??
-                  `Anexo ${index + 1 + (currentPage - 1) * pageSize}`;
+                  `Attachment ${index + 1 + (currentPage - 1) * pageSize}`;
                 const dataBruta =
                   parseOptionalString(anexo.attachment_date) ??
                   parseOptionalString(anexo.data) ??
@@ -1283,7 +1334,7 @@ export function ProcessoAttachmentsSection({
                   parseOptionalString(anexo.timestamp) ??
                   parseOptionalString(anexo.date) ??
                   null;
-                const dataFormatada = formatDateTimeToPtBR(dataBruta);
+                const dataFormatada = formatDateTimeToEnUS(dataBruta);
                 const links = normalizeDocumentoLinks(
                   buildDocumentoLinksMap(
                     anexo.links,
@@ -1323,7 +1374,7 @@ export function ProcessoAttachmentsSection({
             </div>
             <div className="flex flex-col gap-4 border-t border-border/60 pt-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>
-                Mostrando {displayStart}-{displayEnd} de {totalItems} anexos
+                Showing {displayStart}-{displayEnd} of {totalItems} attachments
               </span>
               <Pagination className="sm:justify-end">
                 <PaginationContent>
@@ -1385,15 +1436,15 @@ export function ProcessoAttachmentsSection({
 }
 
 export default function VisualizarProcesso() {
-  const { id: clienteIdParam, processoId } = useParams();
+  const { processoId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation<{ initialTab?: "resumo" | "historico" | "anexos" }>();
+  const location = useLocation<{ initialTab?: string }>();
   const [loading, setLoading] = useState(true);
   const [processo, setProcesso] = useState<ProcessoDetalhes | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const initialTabFromLocation = location.state?.initialTab;
-  const [activeTab, setActiveTab] = useState<"resumo" | "historico" | "anexos">(
-    initialTabFromLocation ?? "resumo",
+  const initialTabFromLocation = resolveTabValue(location.state?.initialTab);
+  const [activeTab, setActiveTab] = useState<ProcessoTab>(
+    initialTabFromLocation ?? "overview",
   );
 
   useEffect(() => {
@@ -1410,7 +1461,7 @@ export default function VisualizarProcesso() {
     const fetchProcesso = async () => {
       if (!processoId) {
         setProcesso(null);
-        setError("Processo inválido");
+        setError("Invalid case identifier");
         setLoading(false);
         return;
       }
@@ -1430,7 +1481,7 @@ export default function VisualizarProcesso() {
           try {
             json = JSON.parse(text);
           } catch (parseError) {
-            console.error("Não foi possível interpretar os dados do processo", parseError);
+            console.error("Failed to parse case payload", parseError);
           }
         }
 
@@ -1440,12 +1491,12 @@ export default function VisualizarProcesso() {
             "error" in json &&
             typeof (json as { error: unknown }).error === "string"
               ? (json as { error: string }).error
-              : `Não foi possível carregar o processo (HTTP ${res.status})`;
+              : `Failed to load the case (HTTP ${res.status})`;
           throw new Error(message);
         }
 
         if (!json || typeof json !== "object") {
-          throw new Error("Resposta inválida do servidor ao carregar o processo");
+          throw new Error("Invalid response received while loading the case");
         }
 
         const processoResponse = json as ApiProcessoResponse;
@@ -1458,7 +1509,7 @@ export default function VisualizarProcesso() {
         const message =
           fetchError instanceof Error
             ? fetchError.message
-            : "Erro ao carregar o processo";
+            : "Failed to load the case details";
         if (!cancelled) {
           setProcesso(null);
           setError(message);
@@ -1478,50 +1529,94 @@ export default function VisualizarProcesso() {
   }, [processoId]);
 
 
+  const overviewFields = useMemo(() => {
+    if (!processo) {
+      return [] as { label: string; value: string }[];
+    }
 
-  const dataDistribuicaoLabel = useMemo(() => {
+    const distributionDate =
+      formatDateToEnUS(processo.dataDistribuicao) ??
+      processo.dataDistribuicaoFormatada ??
+      NOT_INFORMED_LABEL;
+
+    return [
+      { label: "Case number", value: processo.numero || NOT_INFORMED_LABEL },
+      {
+        label: "Status",
+        value: translateLabelToEnglish(processo.status) || NOT_INFORMED_LABEL,
+      },
+      {
+        label: "Type",
+        value: translateLabelToEnglish(processo.tipo) || NOT_INFORMED_LABEL,
+      },
+      {
+        label: "Judicial class",
+        value:
+          translateLabelToEnglish(processo.classeJudicial) || NOT_INFORMED_LABEL,
+      },
+      {
+        label: "Subject",
+        value: translateLabelToEnglish(processo.assunto) || NOT_INFORMED_LABEL,
+      },
+      {
+        label: "Jurisdiction",
+        value:
+          translateLabelToEnglish(processo.jurisdicao) || NOT_INFORMED_LABEL,
+      },
+      {
+        label: "Judging body",
+        value:
+          translateLabelToEnglish(processo.orgaoJulgador) || NOT_INFORMED_LABEL,
+      },
+      {
+        label: "Responsible attorney",
+        value:
+          translateLabelToEnglish(processo.advogadoResponsavel) ||
+          NOT_INFORMED_LABEL,
+      },
+      {
+        label: "Distribution date",
+        value: distributionDate,
+      },
+      {
+        label: "Created at",
+        value: processo.criadoEm
+          ? formatDateTimeToEnUS(processo.criadoEm)
+          : "Date not available",
+      },
+      {
+        label: "Updated at",
+        value: processo.atualizadoEm
+          ? formatDateTimeToEnUS(processo.atualizadoEm)
+          : "Date not available",
+      },
+      {
+        label: "Last synchronization",
+        value: processo.ultimaSincronizacao
+          ? formatDateTimeToEnUS(processo.ultimaSincronizacao)
+          : "Date not available",
+      },
+      {
+        label: "Unique timeline updates",
+        value: String(totalTimelineEntries),
+      },
+    ];
+  }, [processo, totalTimelineEntries]);
+
+  const statusBadgeLabel = useMemo(() => {
     if (!processo) {
       return null;
     }
 
-    return (
-      processo.dataDistribuicaoFormatada ||
-      (processo.dataDistribuicao
-        ? formatDateToPtBR(processo.dataDistribuicao)
-        : null)
-    );
+    return translateLabelToEnglish(processo.status);
   }, [processo]);
 
-  const criadoEmLabel = useMemo(() => {
-    if (!processo?.criadoEm) {
-      return null;
-    }
-
-    return formatDateTimeToPtBR(processo.criadoEm);
-  }, [processo?.criadoEm]);
-
-  const atualizadoEmLabel = useMemo(() => {
-    if (!processo?.atualizadoEm) {
-      return null;
-    }
-
-    return formatDateTimeToPtBR(processo.atualizadoEm);
-  }, [processo?.atualizadoEm]);
-
-  const ultimaSincronizacaoLabel = useMemo(() => {
-    if (!processo?.ultimaSincronizacao) {
-      return null;
-    }
-
-    return formatDateTimeToPtBR(processo.ultimaSincronizacao);
-  }, [processo?.ultimaSincronizacao]);
-
-  const ultimasMovimentacoes = useMemo(() => {
+  const typeBadgeLabel = useMemo(() => {
     if (!processo) {
-      return [];
+      return null;
     }
 
-    return processo.movimentacoes.slice(0, 3);
+    return translateLabelToEnglish(processo.tipo);
   }, [processo]);
 
   const anexos = processo?.responseData?.anexos ?? [];
@@ -1646,13 +1741,6 @@ export default function VisualizarProcesso() {
       ? paginatedTimelineEntries[paginatedTimelineEntries.length - 1].id
       : null;
 
-  const partesBrutas = processo?.responseData?.partes;
-  const partesInteressadas = useMemo(
-    () => filtrarPartesInteressadas(partesBrutas),
-    [partesBrutas],
-  );
-  const hasPartesData = partesBrutas !== undefined && partesBrutas !== null;
-
   const handleAttachmentsPageChange = useCallback(
     (page: number) => {
       setAttachmentsPage((current) => {
@@ -1705,14 +1793,6 @@ export default function VisualizarProcesso() {
     });
   }, []);
 
-  const handleGerarContrato = useCallback(() => {
-    if (!clienteIdParam || !processoId) {
-      return;
-    }
-
-    navigate(`/clientes/${clienteIdParam}/processos/${processoId}/contrato`);
-  }, [clienteIdParam, navigate, processoId]);
-
   if (loading && !processo) {
     return (
       <div className="space-y-6 p-4 sm:p-6">
@@ -1737,13 +1817,13 @@ export default function VisualizarProcesso() {
       <div className="space-y-6 p-4 sm:p-6">
         <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
+          Back
         </Button>
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erro ao carregar processo</AlertTitle>
+          <AlertTitle>Unable to load case</AlertTitle>
           <AlertDescription>
-            {error ?? "Não foi possível encontrar os dados deste processo."}
+            {error ?? "The requested case information could not be found."}
 
           </AlertDescription>
         </Alert>
@@ -1756,587 +1836,78 @@ export default function VisualizarProcesso() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <Button variant="outline" onClick={() => navigate(-1)} className="w-fit">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
+          Back
         </Button>
         <div className="space-y-2">
           <h1 className="text-3xl font-bold text-foreground">
-            Processo {processo.numero}
+            Case {processo.numero}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Consulte os dados cadastrados do processo e mantenha o acompanhamento organizado em um só lugar.
+            Review the registered case data and keep every update organized in a single workspace.
           </p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="w-full justify-start bg-muted/50">
-          <TabsTrigger value="resumo">Resumo</TabsTrigger>
-          <TabsTrigger value="anexos">Anexos</TabsTrigger>
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="attachments">Attachments</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="resumo" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-            <div className="space-y-6">
-              <Card>
-                <CardHeader className="space-y-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-2xl font-semibold text-foreground">
-                        Dados do processo
-                      </CardTitle>
-                      <CardDescription>
-                        {atualizadoEmLabel
-                          ? `Última atualização em ${atualizadoEmLabel}.`
-                          : "Dados conforme o cadastro do processo."}
-                      </CardDescription>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
+        <TabsContent value="overview" className="space-y-6">
+          <Card>
+            <CardHeader className="space-y-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-2xl font-semibold text-foreground">
+                    Case overview
+                  </CardTitle>
+                  <CardDescription>
+                    Review the essential data captured for this case.
+                  </CardDescription>
+                </div>
+                {processo ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {statusBadgeLabel ? (
                       <Badge className={`text-xs ${getStatusBadgeClassName(processo.status)}`}>
-                        {processo.status}
+                        {statusBadgeLabel}
                       </Badge>
+                    ) : null}
+                    {typeBadgeLabel ? (
                       <Badge
                         variant="outline"
                         className={`text-xs ${getTipoBadgeClassName(processo.tipo)}`}
                       >
-                        {processo.tipo}
+                        {typeBadgeLabel}
                       </Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {[
-                      { label: "Número do processo", value: processo.numero },
-                      { label: "Classe judicial", value: processo.classeJudicial },
-                      { label: "Assunto principal", value: processo.assunto },
-                      { label: "Jurisdição", value: processo.jurisdicao },
-                      { label: "Órgão julgador", value: processo.orgaoJulgador },
-                      { label: "Advogado responsável", value: processo.advogadoResponsavel },
-                      {
-                        label: "Distribuído em",
-                        value: dataDistribuicaoLabel ?? "Data não informada",
-                      },
-                      {
-                        label: "Última atualização",
-                        value: atualizadoEmLabel ?? "Não informada",
-                      },
-                      {
-                        label: "Movimentações registradas",
-                        value: `${processo.movimentacoesCount}`,
-                      },
-                    ].map((item) => (
-                      <div
-                        key={item.label}
-                        className="rounded-lg border border-border/60 bg-muted/30 p-4"
-                      >
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {item.label}
-                        </p>
-                        <div className="mt-1 text-sm font-medium text-foreground">{item.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Cliente
-                    </p>
-                    <div className="mt-2 flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {processo.cliente?.nome ?? "Cliente não informado"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {processo.cliente?.documento ?? "Documento não informado"}
-                        </p>
-                      </div>
-                      {processo.cliente?.papel ? (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] uppercase tracking-wide text-muted-foreground"
-                        >
-                          {processo.cliente.papel}
-                        </Badge>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Última solicitação Judit
-                    </p>
-                    <div className="mt-3 space-y-1 text-sm text-foreground">
-                      {processo.juditLastRequest ? (
-                        <>
-                          <p className="font-medium text-foreground">
-                            #{processo.juditLastRequest.requestId} · {processo.juditLastRequest.status}
-                          </p>
-                          {processo.juditLastRequest.updatedAt ? (
-                            <p className="text-xs text-muted-foreground">
-                              Atualizado em {formatDateTimeToPtBR(processo.juditLastRequest.updatedAt)}
-                            </p>
-                          ) : null}
-                          <p className="text-xs text-muted-foreground">
-                            Origem: {processo.juditLastRequest.source}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Nenhuma solicitação registrada até o momento.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {processo.responseData ? (
-                    <div className="space-y-4">
-                      {processo.responseData.cover ? (
-                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Capa do processo
-                          </p>
-                          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                            {Object.entries(processo.responseData.cover).map(([key, value]) => {
-                              const formattedValue = formatResponseValue(value);
-                              const isStructured = isMetadataEntryList(formattedValue);
-                              const entryKey = `${processo.id}-cover-${key}`;
-
-                              return (
-                                <div key={entryKey} className="space-y-1">
-                                  <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    {formatResponseKey(key)}
-                                  </dt>
-                                  <dd
-                                    className={cn(
-                                      "break-words",
-                                      isStructured
-                                        ? "text-foreground"
-                                        : "text-sm text-foreground",
-                                    )}
-                                  >
-                                    {isStructured
-                                      ? renderMetadataEntries(formattedValue, {
-                                          keyPrefix: entryKey,
-                                          containerClassName: "space-y-2",
-                                          nestedContainerClassName: "space-y-2",
-                                          valueClassName:
-                                            "text-sm text-foreground break-words",
-                                          nestedValueClassName:
-                                            "text-xs text-foreground/90 break-words",
-                                        })
-                                      : formattedValue}
-                                  </dd>
-                                </div>
-                              );
-                            })}
-                          </dl>
-                        </div>
-                      ) : null}
-                      {hasPartesData || partesInteressadas.length > 0 ? (
-                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Partes identificadas
-                          </p>
-                          <div className="mt-3 space-y-3">
-                            {partesInteressadas.length > 0 ? (
-                              partesInteressadas.map((parte, index) => {
-                                const parteNome =
-                                  parseOptionalString(parte.nome) ??
-                                  parseOptionalString(parte.name) ??
-                                  parseOptionalString(parte.parte) ??
-                                  `Parte ${index + 1}`;
-                                const ignoredKeys = new Set([
-                                  "nome",
-                                  "name",
-                                  "parte",
-                                  "id",
-                                ]);
-                                return (
-                                  <div
-                                    key={`${processo.id}-parte-${index}-${parteNome}`}
-                                    className="rounded-md border border-border/40 bg-background/60 p-3"
-                                  >
-                                    <p className="text-sm font-medium text-foreground">{parteNome}</p>
-                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                                      {Object.entries(parte)
-                                        .filter(([key]) => !ignoredKeys.has(key))
-                                        .map(([key, value]) => {
-                                          const formattedValue = formatResponseValue(value);
-                                          const isStructured = isMetadataEntryList(formattedValue);
-                                          const entryKey = `${processo.id}-parte-${index}-${key}`;
-
-                                          return (
-                                            <div key={entryKey} className="space-y-1">
-                                              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                {formatResponseKey(key)}
-                                              </dt>
-                                              <dd
-                                                className={cn(
-                                                  "break-words",
-                                                  isStructured
-                                                    ? "text-foreground"
-                                                    : "text-xs text-foreground",
-                                                )}
-                                              >
-                                                {isStructured
-                                                  ? renderMetadataEntries(formattedValue, {
-                                                      keyPrefix: entryKey,
-                                                      containerClassName: "space-y-2",
-                                                      nestedContainerClassName: "space-y-2",
-                                                      valueClassName:
-                                                        "text-xs text-foreground break-words",
-                                                      nestedValueClassName:
-                                                        "text-[11px] text-foreground/90 break-words",
-                                                    })
-                                                  : formattedValue}
-                                              </dd>
-                                            </div>
-                                          );
-                                        })}
-                                    </dl>
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <p className="text-sm text-muted-foreground">
-                                Nenhuma parte interessada foi identificada.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
-                      {processo.responseData.movimentacoes.length > 0 ? (
-                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Movimentações recentes (Judit)
-                          </p>
-                          <div className="mt-3 space-y-3">
-                            {processo.responseData.movimentacoes.map((movimentacao, index) => {
-                              const descricao =
-                                parseOptionalString(movimentacao.descricao) ??
-                                parseOptionalString(movimentacao.description) ??
-                                parseOptionalString(movimentacao.titulo) ??
-                                parseOptionalString(movimentacao.title) ??
-                                `Movimentação ${index + 1}`;
-                              const dataPrincipal =
-                                parseOptionalString(movimentacao.data) ??
-                                parseOptionalString(movimentacao.date) ??
-                                parseOptionalString(movimentacao.timestamp);
-                              return (
-                                <div
-                                  key={`${processo.id}-mov-${index}-${descricao}`}
-                                  className="rounded-md border border-border/40 bg-background/60 p-3"
-                                >
-                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                    <p className="text-sm font-medium text-foreground">{descricao}</p>
-                                    {dataPrincipal ? (
-                                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                        <Calendar className="h-3.5 w-3.5" />
-                                        {dataPrincipal}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  {movimentacao.conteudo ? (
-                                    <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">
-                                      {movimentacao.conteudo as string}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-                      <AttachmentsSummaryCard
-                        attachments={anexos}
-                        onViewAttachments={() => setActiveTab("anexos")}
-                        disabled={loading}
-                      />
-                      {processo.responseData.metadata ? (
-                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Metadados do processo
-                          </p>
-                          {renderMetadataEntries(
-                            Object.entries(processo.responseData.metadata).map(([key, value]) => ({
-                              key,
-                              label: formatResponseKey(key),
-                              value: formatResponseValue(value),
-                            })),
-                            {
-                              keyPrefix: `${processo.id}-metadata`,
-                              containerClassName: "mt-3 grid gap-2 sm:grid-cols-2",
-                              valueClassName: "text-sm text-foreground break-words",
-                              nestedValueClassName: "text-xs text-foreground/90 break-words",
-                            },
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-
-
-              <Card>
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg font-semibold">Últimos históricos</CardTitle>
-                    <CardDescription>
-                      Principais andamentos registrados recentemente para o processo.
-                    </CardDescription>
-                  </div>
-                  {processo.movimentacoes.length > 0 ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 w-full sm:mt-0 sm:w-auto"
-                      onClick={() => setActiveTab("historico")}
-                    >
-                      Ver histórico completo
-                    </Button>
-                  ) : null}
-                </CardHeader>
-                <CardContent>
-                  {ultimasMovimentacoes.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
-                      Nenhuma movimentação foi registrada até o momento.
-                    </div>
-                  ) : (
-                    <div className="space-y-5">
-                      {ultimasMovimentacoes.map((movimentacao, index) => {
-                        const fonteDescricao = movimentacao.fonte
-                          ? [
-                              movimentacao.fonte.sigla && movimentacao.fonte.nome
-                                ? `${movimentacao.fonte.sigla} • ${movimentacao.fonte.nome}`
-                                : movimentacao.fonte.nome ?? movimentacao.fonte.sigla,
-                              movimentacao.fonte.caderno,
-                              movimentacao.fonte.grauFormatado ?? movimentacao.fonte.grau,
-                              movimentacao.fonte.tipo,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")
-                          : null;
-                        const dataPrincipal =
-                          movimentacao.dataFormatada ??
-                          movimentacao.data ??
-                          "Data não informada";
-                        const indicatorColor =
-                          index === 0 ? "bg-primary" : "bg-muted-foreground/50";
-
-                        return (
-                          <div key={movimentacao.id} className="relative pl-6">
-                            <span
-                              className={`absolute left-0 top-2 h-2 w-2 rounded-full ${indicatorColor}`}
-                              aria-hidden
-                            />
-                            <div className="rounded-lg border border-border/60 bg-background/80 p-4 shadow-sm">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="space-y-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <p className="text-sm font-semibold text-foreground">
-                                      {movimentacao.tipo}
-                                    </p>
-                                    {movimentacao.tipoPublicacao ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
-                                      >
-                                        {movimentacao.tipoPublicacao}
-                                      </Badge>
-                                    ) : null}
-                                    {movimentacao.classificacao ? (
-                                      <Badge
-                                        variant="secondary"
-                                        className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
-                                      >
-                                        {movimentacao.classificacao.nome}
-                                      </Badge>
-                                    ) : null}
-                                  </div>
-                                  {fonteDescricao ? (
-                                    <p className="text-xs text-muted-foreground">{fonteDescricao}</p>
-                                  ) : null}
-                                </div>
-                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <Calendar className="h-3.5 w-3.5" />
-                                  {dataPrincipal}
-                                </span>
-                              </div>
-                              {movimentacao.conteudo ? (
-                                <p className="mt-2 text-sm text-muted-foreground line-clamp-3">
-                                  {movimentacao.conteudo}
-                                </p>
-                              ) : null}
-                              {movimentacao.textoCategoria ? (
-                                <p className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                                  {movimentacao.textoCategoria}
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Informações complementares</CardTitle>
-                  <CardDescription>
-                    Dados adicionais registrados no sistema para fins de acompanhamento.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex flex-wrap items-center gap-3 text-foreground">
-                    <span className="flex items-center gap-1.5 text-sm font-medium">
-                      <Calendar className="h-4 w-4 text-primary" />
-                      {dataDistribuicaoLabel
-                        ? `Distribuído em ${dataDistribuicaoLabel}`
-                        : "Data de distribuição não informada"}
-                    </span>
-                    {criadoEmLabel ? (
-                      <>
-                        <span aria-hidden className="h-4 w-px bg-border/60" />
-                        <span>Criado em {criadoEmLabel}</span>
-                      </>
-                    ) : null}
-                    {atualizadoEmLabel ? (
-                      <>
-                        <span aria-hidden className="h-4 w-px bg-border/60" />
-                        <span>Atualizado em {atualizadoEmLabel}</span>
-                      </>
                     ) : null}
                   </div>
-                  <p>
-                    {processo.uf && processo.municipio
-                      ? `Localização cadastrada: ${processo.municipio} - ${processo.uf}`
-                      : "Localização não informada."}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Recursos e desdobramentos</CardTitle>
-                  <CardDescription>
-                    Acompanhe recursos vinculados e outras ramificações do processo.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
-                    Nenhum recurso ou desdobramento cadastrado para este processo.
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Apensos</CardTitle>
-                  <CardDescription>
-                    Visualize processos apensados relacionados.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 sm:p-6 text-sm text-muted-foreground">
-                    Nenhum processo apensado foi registrado.
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Próximas atividades</CardTitle>
-                  <CardDescription>
-                    Organize as tarefas planejadas para manter o processo em dia.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
-                    Nenhuma atividade agendada para este processo.
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-center"
-                    disabled
-                  >
-                    Agendar atividade
-                  </Button>
-                </CardContent>
-              </Card>
-
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Atendimentos</CardTitle>
-                  <CardDescription>
-                    Centralize os contatos realizados com as partes envolvidas.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
-                    Nenhum atendimento registrado.
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-center"
-                    disabled
-                  >
-                    Registrar atendimento
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">Honorários</CardTitle>
-                  <CardDescription>
-                    Acompanhe propostas e contratos relacionados ao processo.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {processo.proposta ? (
-                    <>
-                      <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
-                        <p className="text-sm font-medium text-foreground">
-                          {processo.proposta.label}
-                        </p>
-                        {processo.proposta.solicitante ? (
-                          <p className="text-xs text-muted-foreground">
-                            Solicitante: {processo.proposta.solicitante}
-                          </p>
-                        ) : null}
-                        {processo.proposta.dataCriacao ? (
-                          <p className="text-xs text-muted-foreground">
-                            Criada em {formatDateToPtBR(processo.proposta.dataCriacao) ?? processo.proposta.dataCriacao}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Button
-                        size="sm"
-                        className="w-full justify-center"
-                        onClick={handleGerarContrato}
-                        disabled={!clienteIdParam || !processoId}
-                      >
-                        Gerar contrato
-                      </Button>
-                    </>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
-                      Nenhuma proposta de honorários vinculada ao processo.
+                ) : null}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {overviewFields.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+                  No case information is available.
+                </div>
+              ) : (
+                <dl className="grid gap-4 sm:grid-cols-2">
+                  {overviewFields.map((field) => (
+                    <div key={field.label} className="space-y-1">
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {field.label}
+                      </dt>
+                      <dd className="text-sm text-foreground">{field.value}</dd>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                  ))}
+                </dl>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="anexos" className="space-y-6">
+        <TabsContent value="attachments" className="space-y-6">
           <ProcessoAttachmentsSection
             attachments={paginatedAttachments}
             currentPage={attachmentsPage}
@@ -2349,7 +1920,7 @@ export default function VisualizarProcesso() {
           />
         </TabsContent>
 
-        <TabsContent value="historico" className="space-y-6">
+        <TabsContent value="timeline" className="space-y-6">
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="space-y-1">
@@ -2426,7 +1997,13 @@ export default function VisualizarProcesso() {
                                     >
                                       <span className={`h-2 w-2 rounded-full ${indicatorDotClasses}`} />
                                     </span>
-                                    <div className="rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md">
+                                    <div
+                                      className={cn(
+                                        "rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm transition hover:border-primary/40 hover:shadow-md",
+                                        entry.isJudgeDocument &&
+                                          "border-amber-400/70 bg-amber-50/40 dark:bg-amber-500/10",
+                                      )}
+                                    >
                                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="space-y-2">
                                           <div className="flex flex-wrap items-center gap-2">
@@ -2445,6 +2022,14 @@ export default function VisualizarProcesso() {
                                                 className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
                                               >
                                                 {entry.classification}
+                                              </Badge>
+                                            ) : null}
+                                            {entry.isJudgeDocument ? (
+                                              <Badge
+                                                variant="destructive"
+                                                className="rounded-full px-2.5 text-[10px] uppercase tracking-wide"
+                                              >
+                                                Judge decision
                                               </Badge>
                                             ) : null}
                                           </div>
