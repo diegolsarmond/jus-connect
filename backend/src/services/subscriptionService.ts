@@ -1,4 +1,5 @@
 import pool from './db';
+import { normalizeFinancialFlowIdentifier } from '../utils/financialFlowIdentifier';
 
 export const TRIAL_DURATION_DAYS = 14;
 const CADENCE_MONTHLY = 'monthly' as const;
@@ -226,8 +227,12 @@ const ensureClienteEmpresaColumn = async (): Promise<string | null> => {
   return cachedClienteEmpresaColumn;
 };
 
-export const findCompanyIdForFinancialFlow = async (financialFlowId: number): Promise<number | null> => {
-  if (!Number.isInteger(financialFlowId) || financialFlowId <= 0) {
+export const findCompanyIdForFinancialFlow = async (
+  financialFlowId: number | string,
+): Promise<number | null> => {
+  const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(financialFlowId);
+
+  if (normalizedFinancialFlowId === null) {
     return null;
   }
 
@@ -241,7 +246,7 @@ export const findCompanyIdForFinancialFlow = async (financialFlowId: number): Pr
        FROM financial_flows
       WHERE id = $1
       LIMIT 1`,
-    [financialFlowId],
+    [normalizedFinancialFlowId],
   );
 
   if (result.rowCount === 0) {

@@ -7,6 +7,7 @@ import {
   findCompanyIdForCliente,
   findCompanyIdForFinancialFlow,
 } from '../services/subscriptionService';
+import { normalizeFinancialFlowIdentifier } from '../utils/financialFlowIdentifier';
 
 interface RawBodyRequest extends Request {
   rawBody?: string;
@@ -36,7 +37,7 @@ interface AsaasWebhookBody {
 type ChargeRecord = {
   id: number;
   credential_id: number | null;
-  financial_flow_id: number | null;
+  financial_flow_id: number | string | null;
   cliente_id: number | string | null;
 };
 
@@ -189,7 +190,17 @@ async function findChargeByAsaasId(asaasChargeId: string): Promise<ChargeRecord 
     return null;
   }
 
-  return result.rows[0] ?? null;
+  const row = result.rows[0] ?? null;
+  if (!row) {
+    return null;
+  }
+
+  const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(row.financial_flow_id);
+
+  return {
+    ...row,
+    financial_flow_id: normalizedFinancialFlowId,
+  };
 }
 
 function extractDueDate(payment: AsaasPaymentPayload | null | undefined): Date | null {
@@ -247,11 +258,20 @@ async function updateCharge(
   );
 }
 
-async function updateFinancialFlowAsPaid(financialFlowId: number, paymentDate: string | null): Promise<void> {
+async function updateFinancialFlowAsPaid(
+  financialFlowId: number | string,
+  paymentDate: string | null,
+): Promise<void> {
+  const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(financialFlowId);
+
+  if (normalizedFinancialFlowId === null) {
+    return;
+  }
+
   const paidAt = paymentDate ?? new Date().toISOString();
   await pool.query(
     "UPDATE financial_flows SET status = 'pago', pagamento = $1 WHERE id = $2",
-    [paidAt, financialFlowId]
+    [paidAt, normalizedFinancialFlowId]
   );
 }
 

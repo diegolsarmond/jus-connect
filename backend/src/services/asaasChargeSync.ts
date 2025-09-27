@@ -7,6 +7,7 @@ import {
   applySubscriptionPayment,
   findCompanyIdForFinancialFlow,
 } from './subscriptionService';
+import { normalizeFinancialFlowIdentifier } from '../utils/financialFlowIdentifier';
 
 export const OPEN_PAYMENT_STATUSES = [
   'PENDING',
@@ -67,7 +68,7 @@ export interface AsaasClient {
 interface AsaasChargeRow extends QueryResultRow {
   id: number;
   asaas_id: string;
-  financial_flow_id: number | null;
+  financial_flow_id: number | string | null;
   status: string;
 }
 
@@ -262,7 +263,18 @@ export class AsaasChargeSyncService {
       [OPEN_PAYMENT_STATUSES],
     );
 
-    return rows as AsaasChargeRow[];
+    return rows.map((row) => {
+      const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(
+        (row as Record<string, unknown>).financial_flow_id,
+      );
+
+      return {
+        id: Number(row.id),
+        asaas_id: String(row.asaas_id),
+        financial_flow_id: normalizedFinancialFlowId,
+        status: String(row.status),
+      } as AsaasChargeRow;
+    });
   }
 
   private async fetchPayments(): Promise<AsaasPayment[]> {
@@ -359,7 +371,7 @@ export class AsaasChargeSyncService {
   }
 
   private async updateSubscriptionForCharge(
-    financialFlowId: number,
+    financialFlowId: number | string,
     paymentStatus: string,
     paymentDate: Date | null,
     dueDate: string | null | undefined,

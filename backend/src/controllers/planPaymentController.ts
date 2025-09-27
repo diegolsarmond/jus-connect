@@ -12,6 +12,7 @@ import AsaasChargeService, {
   ValidationError as AsaasChargeValidationError,
 } from '../services/asaasChargeService';
 import { calculateGraceDeadline, parseCadence as parseSubscriptionCadence } from '../services/subscriptionService';
+import { normalizeFinancialFlowIdentifierFromRow } from '../utils/financialFlowIdentifier';
 
 const asaasChargeService = new AsaasChargeService();
 const asaasSubscriptionService = new AsaasSubscriptionService();
@@ -292,7 +293,7 @@ async function createFinancialFlow({
   value: number;
   dueDate: string;
   accountId: string | null;
-}): Promise<{ id: number; descricao: string; valor: string; vencimento: string; status: string } | null> {
+}): Promise<{ id: number | string; descricao: string; valor: string; vencimento: string; status: string } | null> {
   const result = await pool.query(
     `INSERT INTO financial_flows (
         tipo,
@@ -323,14 +324,10 @@ async function createFinancialFlow({
     status: string;
   };
 
-  const id =
-    typeof row.id === 'number'
-      ? row.id
-      : typeof row.id === 'string'
-        ? Number.parseInt(row.id, 10)
-        : Number.NaN;
-
-  if (!Number.isInteger(id) || id <= 0) {
+  let id: number | string;
+  try {
+    id = normalizeFinancialFlowIdentifierFromRow(row.id);
+  } catch (error) {
     return null;
   }
 
