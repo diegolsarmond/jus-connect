@@ -1516,13 +1516,47 @@ export const deleteProcesso = async (req: Request, res: Response) => {
   }
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    const existingProcess = await pool.query(
+      'SELECT 1 FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      [parsedId, empresaId]
+    );
+
+    if (existingProcess.rowCount === 0) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
     const result = await pool.query(
-      'DELETE FROM public.processos WHERE id = $1',
-      [parsedId]
+      'DELETE FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      [parsedId, empresaId]
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Processo não encontrado' });
+      const processStillExists = await pool.query(
+        'SELECT 1 FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+        [parsedId, empresaId]
+      );
+
+      if (processStillExists.rowCount === 0) {
+        return res.status(404).json({ error: 'Processo não encontrado' });
+      }
     }
 
     res.status(204).send();
