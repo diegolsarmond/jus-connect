@@ -109,6 +109,29 @@ test('triggerManualJuditSync reuses pending manual requests instead of creating 
       };
     }
 
+    if (/FROM public\.empresas/.test(text)) {
+      return {
+        rows: [
+          {
+            limite_usuarios: null,
+            limite_processos: null,
+            limite_propostas: null,
+            sincronizacao_processos_habilitada: true,
+            sincronizacao_processos_cota: null,
+          },
+        ],
+        rowCount: 1,
+      } satisfies { rows: unknown[]; rowCount: number };
+    }
+
+    if (/FROM public\.process_sync/.test(text)) {
+      return { rows: [{ total: '0' }], rowCount: 1 };
+    }
+
+    if (/FROM public\.processo_consultas_api/.test(text)) {
+      return { rows: [{ total: '0' }], rowCount: 1 };
+    }
+
     if (/FROM public\.processos/.test(text)) {
       return {
         rows: [
@@ -181,6 +204,125 @@ test('triggerManualJuditSync reuses pending manual requests instead of creating 
     atualizado_em: '2024-01-01T10:05:00.000Z',
   });
 
-  assert.equal(poolMock.mock.calls.length, 2);
-  assert.match(String(poolMock.mock.calls[1]?.arguments?.[0] ?? ''), /FROM public\.processos/i);
+  const queryTexts = poolMock.mock.calls.map((call) => String(call.arguments?.[0] ?? ''));
+  assert.ok(
+    queryTexts.some((text) => /FROM public\.processos/i.test(text)),
+    'expected processos query to be executed',
+  );
+});
+
+test('triggerManualJuditSync returns 403 when plan disables synchronization', async () => {
+  const req = {
+    params: { id: '101' },
+    auth: { userId: 55 },
+    body: {},
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  const isEnabledMock = test.mock.method(
+    juditProcessService,
+    'isEnabled',
+    async () => true
+  );
+
+  const poolMock = test.mock.method(pool, 'query', async (text: string) => {
+    if (/FROM public\.usuarios/.test(text)) {
+      return { rows: [{ empresa: 77 }], rowCount: 1 } satisfies {
+        rows: unknown[];
+        rowCount: number;
+      };
+    }
+
+    if (/FROM public\.empresas/.test(text)) {
+      return {
+        rows: [
+          {
+            limite_usuarios: null,
+            limite_processos: null,
+            limite_propostas: null,
+            sincronizacao_processos_habilitada: false,
+            sincronizacao_processos_cota: null,
+          },
+        ],
+        rowCount: 1,
+      } satisfies { rows: unknown[]; rowCount: number };
+    }
+
+    throw new Error(`Unexpected query: ${text}`);
+  });
+
+  try {
+    await triggerManualJuditSync(req, res);
+
+    assert.equal(res.statusCode, 403);
+    assert.deepEqual(res.jsonPayload, {
+      error: 'Sincronização de processos não disponível para o plano atual.',
+    });
+  } finally {
+    poolMock.mock.restore();
+    isEnabledMock.mock.restore();
+  }
+});
+
+test('triggerManualJuditSync returns 403 when quota is exhausted', async () => {
+  const req = {
+    params: { id: '101' },
+    auth: { userId: 55 },
+    body: {},
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  const isEnabledMock = test.mock.method(
+    juditProcessService,
+    'isEnabled',
+    async () => true
+  );
+
+  const poolMock = test.mock.method(pool, 'query', async (text: string) => {
+    if (/FROM public\.usuarios/.test(text)) {
+      return { rows: [{ empresa: 77 }], rowCount: 1 } satisfies {
+        rows: unknown[];
+        rowCount: number;
+      };
+    }
+
+    if (/FROM public\.empresas/.test(text)) {
+      return {
+        rows: [
+          {
+            limite_usuarios: null,
+            limite_processos: null,
+            limite_propostas: null,
+            sincronizacao_processos_habilitada: true,
+            sincronizacao_processos_cota: 10,
+          },
+        ],
+        rowCount: 1,
+      } satisfies { rows: unknown[]; rowCount: number };
+    }
+
+    if (/FROM public\.process_sync/.test(text)) {
+      return { rows: [{ total: '7' }], rowCount: 1 };
+    }
+
+    if (/FROM public\.processo_consultas_api/.test(text)) {
+      return { rows: [{ total: '3' }], rowCount: 1 };
+    }
+
+    throw new Error(`Unexpected query: ${text}`);
+  });
+
+  try {
+    await triggerManualJuditSync(req, res);
+
+    assert.equal(res.statusCode, 403);
+    assert.deepEqual(res.jsonPayload, {
+      error: 'Cota de sincronização de processos esgotada para o plano atual.',
+    });
+  } finally {
+    poolMock.mock.restore();
+    isEnabledMock.mock.restore();
+  }
 });

@@ -1,7 +1,15 @@
 import { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { ArrowLeftRight, LogOut, User } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  ArrowUpRight,
+  Crown,
+  Loader2,
+  LogOut,
+  User,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,11 +21,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ModeToggle } from "@/components/ui/mode-toggle";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { IntimacaoMenu } from "@/components/notifications/IntimacaoMenu";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { usePlan } from "@/features/plans/PlanProvider";
+import { getPlanDisplayName, getPlanVisualMeta } from "@/features/plans/planVisuals";
 import { routes } from "@/config/routes";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMeuPerfil } from "@/services/meuPerfil";
+import { cn } from "@/lib/utils";
 
 const getInitials = (name: string | undefined) => {
   if (!name) {
@@ -38,11 +56,75 @@ const getInitials = (name: string | undefined) => {
     .join("");
 };
 
+interface PlanBadgeProps {
+  plan: ReturnType<typeof usePlan>["plan"];
+  isLoading: boolean;
+  error: string | null;
+}
+
+const PlanBadge = ({ plan, isLoading, error }: PlanBadgeProps) => {
+  const statusLabel = isLoading
+    ? "Carregando plano..."
+    : error
+      ? "Não foi possível carregar o plano"
+      : getPlanDisplayName(plan);
+
+  const meta = getPlanVisualMeta(plan);
+
+  const toneClassName = isLoading
+    ? "border-muted-foreground/20 bg-muted text-muted-foreground"
+    : error
+      ? "border-destructive/30 bg-destructive/10 text-destructive"
+      : "border-primary/30 bg-gradient-to-r from-primary/90 via-primary to-primary/90 text-primary-foreground shadow-sm";
+
+  const tierLabel = isLoading || error ? "Plano atual" : meta.tier;
+
+  return (
+    <Badge
+      data-testid="plan-badge"
+      className={cn(
+        "flex h-auto min-h-[2.5rem] min-w-0 max-w-[220px] items-stretch gap-1.5 rounded-full px-3 py-1.5 text-left shadow-sm sm:max-w-[260px]",
+        toneClassName,
+      )}
+      title={statusLabel}
+      aria-live={isLoading ? "polite" : undefined}
+    >
+      <span className="flex min-w-0 items-center gap-1.5">
+        {isLoading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        ) : error ? (
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : meta.crowns > 0 ? (
+          <span className="flex items-center gap-0.5 text-amber-200">
+            {Array.from({ length: meta.crowns }).map((_, index) => (
+              <Crown
+                key={index}
+                className="h-3.5 w-3.5 drop-shadow-sm"
+                aria-hidden="true"
+                data-testid="plan-crown"
+              />
+            ))}
+          </span>
+        ) : null}
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
+            {tierLabel}
+          </span>
+          <span className="truncate text-xs font-semibold" data-testid="plan-badge-label">
+            {statusLabel}
+          </span>
+        </span>
+      </span>
+    </Badge>
+  );
+};
+
 export function HeaderActions() {
   const navigate = useNavigate();
   const location = useLocation();
 
   const { user, logout } = useAuth();
+  const { plan, isLoading, error } = usePlan();
   const { data: profile } = useQuery({
     queryKey: ["meu-perfil", "header"],
     queryFn: () => fetchMeuPerfil(),
@@ -76,9 +158,39 @@ export function HeaderActions() {
   const avatarAlt = profile?.name ?? user?.nome_completo ?? "Usuário";
   const avatarSrc = profile?.avatarUrl?.trim() ? profile.avatarUrl : undefined;
 
+  const planMeta = useMemo(() => getPlanVisualMeta(plan), [plan]);
+  const showUpgradeButton = useMemo(
+    () => Boolean(plan) && !isLoading && !error && planMeta.canUpgrade,
+    [plan, isLoading, error, planMeta.canUpgrade],
+  );
+
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
       <ModeToggle />
+      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+        <PlanBadge plan={plan} isLoading={isLoading} error={error} />
+        {showUpgradeButton && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full border border-primary/30 bg-primary/10 text-primary transition-colors hover:bg-primary/20"
+                  onClick={() => navigate(routes.meuPlano)}
+                  aria-label="Upgrade do plano"
+                  data-testid="plan-upgrade-button"
+                  disabled={isLoading}
+                >
+                  <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Upgrade</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
       <IntimacaoMenu />
 
       <DropdownMenu>
