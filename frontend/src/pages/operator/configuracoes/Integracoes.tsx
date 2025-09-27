@@ -151,7 +151,6 @@ type EditApiKeyForm = {
   apiUrl: string;
   key: string;
   active: boolean;
-  global: boolean;
 };
 
 type NewApiKeyForm = {
@@ -159,7 +158,6 @@ type NewApiKeyForm = {
   environment: ApiEnvironment;
   apiUrl: string;
   key: string;
-  global: boolean;
 };
 
 const resolveProviderLabel = (provider: string) => getApiKeyProviderLabel(provider) || "—";
@@ -299,28 +297,17 @@ export default function Integracoes() {
     apiUrl: "",
     key: "",
     active: true,
-    global: false,
   });
   const [newApiKey, setNewApiKey] = useState<NewApiKeyForm>({
     provider: fallbackProvider,
     apiUrl: "",
     key: "",
     environment: fallbackEnvironment,
-    global: false,
   });
 
   const companyId = typeof user?.empresa_id === "number" ? user.empresa_id : null;
-  const isCompanyMaintainer =
-    typeof user?.empresa_responsavel_id === "number" &&
-    typeof user?.id === "number" &&
-    user.empresa_responsavel_id === user.id;
-
   const isApiKeyAccessible = useCallback(
     (item: ApiKey) => {
-      if (item.global) {
-        return true;
-      }
-
       if (companyId === null) {
         return false;
       }
@@ -378,7 +365,6 @@ export default function Integracoes() {
       apiUrl: "",
       key: "",
       active: true,
-      global: false,
     });
     setEditingApiKeyId(null);
     setIsLoadingEditApiKey(false);
@@ -394,15 +380,6 @@ export default function Integracoes() {
 
   const startEditApiKey = async (id: number) => {
     const current = apiKeys.find((item) => item.id === id);
-    if (current?.global && !isCompanyMaintainer) {
-      toast({
-        title: "Edição não permitida",
-        description: "Somente o responsável pela conta pode editar chaves globais.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setEditingApiKeyId(id);
     setIsEditDialogOpen(true);
     setIsLoadingEditApiKey(true);
@@ -413,17 +390,12 @@ export default function Integracoes() {
         throw new Error("A chave selecionada não está disponível para o seu usuário.");
       }
 
-      if (apiKey.global && !isCompanyMaintainer) {
-        throw new Error("Somente o responsável pela conta pode editar chaves globais.");
-      }
-
       setEditApiKeyForm({
         provider: normalizeProviderValue(apiKey.provider, fallbackProvider),
         environment: normalizeEnvironmentValue(apiKey.environment, fallbackEnvironment),
         apiUrl: apiKey.apiUrl ?? "",
         key: apiKey.key,
         active: apiKey.active,
-        global: apiKey.global,
       });
     } catch (error) {
       console.error("Failed to load integration API key:", error);
@@ -471,12 +443,8 @@ export default function Integracoes() {
         apiUrl: trimmedApiUrl ? trimmedApiUrl : null,
       };
 
-      if (isCompanyMaintainer) {
-        payload.global = editApiKeyForm.global;
-        payload.empresaId = editApiKeyForm.global ? null : companyId;
-      } else if (companyId !== null) {
+      if (companyId !== null) {
         payload.empresaId = companyId;
-        payload.global = false;
       }
 
       const updated = await updateIntegrationApiKey(editingApiKeyId, payload);
@@ -588,6 +556,15 @@ export default function Integracoes() {
       return;
     }
 
+    if (companyId === null) {
+      toast({
+        title: "Não foi possível salvar a chave",
+        description: "Seu usuário não está vinculado a uma empresa.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSavingApiKey(true);
     try {
       const payload: CreateIntegrationApiKeyPayload = {
@@ -595,19 +572,9 @@ export default function Integracoes() {
         apiUrl: trimmedApiUrl ? trimmedApiUrl : null,
         key: trimmedKey,
         environment: newApiKey.environment,
+        global: false,
+        empresaId: companyId,
       };
-
-      const shouldUseGlobal = isCompanyMaintainer && newApiKey.global;
-
-      if (shouldUseGlobal) {
-        payload.global = true;
-        payload.empresaId = null;
-      } else {
-        payload.global = false;
-        if (companyId !== null) {
-          payload.empresaId = companyId;
-        }
-      }
 
       const created = await createIntegrationApiKey(payload);
 
@@ -643,15 +610,6 @@ export default function Integracoes() {
   const toggleApiKey = async (id: number, value: boolean) => {
     const current = apiKeys.find((item) => item.id === id);
     if (!current) {
-      return;
-    }
-
-    if (current.global && !isCompanyMaintainer) {
-      toast({
-        title: "Ação não permitida",
-        description: "Somente o responsável pela conta pode alterar chaves globais.",
-        variant: "destructive",
-      });
       return;
     }
 
@@ -730,15 +688,6 @@ export default function Integracoes() {
   const removeApiKey = async (id: number) => {
     const current = apiKeys.find((item) => item.id === id);
     if (!current) {
-      return;
-    }
-
-    if (current.global && !isCompanyMaintainer) {
-      toast({
-        title: "Ação não permitida",
-        description: "Somente o responsável pela conta pode remover chaves globais.",
-        variant: "destructive",
-      });
       return;
     }
 
@@ -976,28 +925,6 @@ export default function Integracoes() {
                 </div>
               </div>
 
-              {isCompanyMaintainer ? (
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">Disponibilizar como chave global</p>
-                    <p className="text-xs text-muted-foreground">
-                      Torna a credencial disponível para todos os usuários da sua empresa.
-                    </p>
-                  </div>
-                  <Switch
-                    id="api-key-global"
-                    checked={newApiKey.global}
-                    onCheckedChange={(checked) =>
-                      setNewApiKey((prev) => ({
-                        ...prev,
-                        global: checked,
-                      }))
-                    }
-                    aria-label="Ativar chave global"
-                  />
-                </div>
-              ) : null}
-
               <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto]">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -1072,14 +999,7 @@ export default function Integracoes() {
                       return (
                         <TableRow key={item.id}>
                           <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <span className="font-medium">{providerLabel}</span>
-                              {item.global ? (
-                                <Badge variant="outline" className="w-fit text-[0.65rem] uppercase tracking-wide">
-                                  Chave global
-                                </Badge>
-                              ) : null}
-                            </div>
+                            <span className="font-medium">{providerLabel}</span>
                           </TableCell>
                           <TableCell>
                             <Badge variant="secondary">{environmentLabel}</Badge>
@@ -1112,9 +1032,7 @@ export default function Integracoes() {
                               </Badge>
                               <Switch
                                 checked={item.active}
-                                disabled={
-                                  pendingApiKeyId === item.id || (item.global && !isCompanyMaintainer)
-                                }
+                                disabled={pendingApiKeyId === item.id}
                                 onCheckedChange={(checked) => void toggleApiKey(item.id, checked)}
                                 aria-label={`Alterar status da chave ${providerLabel}`}
                               />
@@ -1144,7 +1062,6 @@ export default function Integracoes() {
                               variant="ghost"
                               onClick={() => void startEditApiKey(item.id)}
                               aria-label="Editar chave"
-                              disabled={!isCompanyMaintainer && item.global}
                             >
                               <PencilLine className="h-4 w-4" />
                             </Button>
@@ -1174,9 +1091,7 @@ export default function Integracoes() {
                               variant="ghost"
                               onClick={() => void removeApiKey(item.id)}
                               aria-label="Remover chave"
-                              disabled={
-                                deletingKeyId === item.id || (item.global && !isCompanyMaintainer)
-                              }
+                              disabled={deletingKeyId === item.id}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -1717,24 +1632,6 @@ export default function Integracoes() {
                   Armazene este valor com segurança e compartilhe apenas com sistemas confiáveis.
                 </p>
               </div>
-              {isCompanyMaintainer ? (
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">Disponibilizar como chave global</p>
-                    <p className="text-xs text-muted-foreground">
-                      Torna a credencial disponível para todos os usuários da empresa.
-                    </p>
-                  </div>
-                  <Switch
-                    id="edit-api-key-global"
-                    checked={editApiKeyForm.global}
-                    onCheckedChange={(checked) =>
-                      setEditApiKeyForm((prev) => ({ ...prev, global: checked }))
-                    }
-                    aria-label="Alterar chave global"
-                  />
-                </div>
-              ) : null}
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div className="space-y-1">
                   <p className="text-sm font-medium leading-none">Status da chave</p>
