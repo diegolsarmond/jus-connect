@@ -175,6 +175,8 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
       },
     },
     auth: createAuth(20),
+    headers: {},
+    ip: '127.0.0.1',
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -328,6 +330,8 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
       },
     },
     auth: createAuth(30),
+    headers: {},
+    ip: '127.0.0.1',
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -472,6 +476,8 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
       },
     },
     auth: createAuth(40),
+    headers: {},
+    ip: '127.0.0.1',
   } as unknown as Request;
 
   const res = createMockResponse();
@@ -506,5 +512,178 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
   assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(insertValues[2], 249.9);
   assert.equal(insertValues[3], defaultAccountId);
+});
+
+test('createPlanPayment rejects credit card without card token', async () => {
+  const { restore } = setupQueryMock([
+    { rows: [{ empresa: 70 }], rowCount: 1 },
+    { rows: [{ id: 21, nome: 'Plano Jurídico', valor_mensal: '199.90', valor_anual: '1999.90' }], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: {
+      planId: 21,
+      pricingMode: 'mensal',
+      paymentMethod: 'cartao',
+      billing: {
+        companyName: 'Empresa Sem Token',
+        document: '12345678000199',
+        email: 'financeiro@semcartao.com',
+      },
+    },
+    auth: createAuth(60),
+    headers: {},
+    ip: '127.0.0.1',
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createPlanPayment(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.ok(res.body && typeof res.body === 'object');
+  assert.match(String((res.body as { error?: string }).error ?? ''), /token do cartão/i);
+});
+
+test('createPlanPayment forwards credit card token and metadata to AsaasChargeService', async () => {
+  const financialFlowRow = {
+    id: 910,
+    descricao: 'Assinatura Plano Enterprise (mensal)',
+    valor: '499.90',
+    vencimento: '2024-08-15',
+    status: 'pendente',
+  };
+  const defaultAccountId = '123e4567-e89b-12d3-a456-426614174000';
+
+  const empresaStateRow = {
+    id: 95,
+    nome_empresa: 'Empresa Enterprise',
+    asaas_subscription_id: null,
+    trial_started_at: null,
+    trial_ends_at: null,
+    subscription_trial_ends_at: null,
+    current_period_start: null,
+    current_period_end: null,
+    subscription_current_period_ends_at: null,
+    grace_expires_at: null,
+    subscription_grace_period_ends_at: null,
+    subscription_cadence: 'monthly',
+  };
+
+  const subscriptionMock = test.mock.method(
+    AsaasSubscriptionService.prototype,
+    'createOrUpdateSubscription',
+    async () => ({
+      subscription: {
+        id: 'sub_enterprise',
+        status: 'ACTIVE',
+        cycle: 'MONTHLY',
+        nextDueDate: '2024-08-15',
+      },
+      timeline: {
+        cadence: 'monthly',
+        trialStart: null,
+        trialEnd: null,
+        currentPeriodStart: new Date('2024-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2024-08-31T00:00:00.000Z'),
+        gracePeriodEnd: new Date('2024-09-05T00:00:00.000Z'),
+      },
+    }),
+  );
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 95 }], rowCount: 1 },
+    { rows: [{ id: 33, nome: 'Plano Enterprise', valor_mensal: '499.90', valor_anual: '4999.90' }], rowCount: 1 },
+    { rows: [empresaStateRow], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 6,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com/api/v3',
+          key_value: 'token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ asaas_customer_id: null }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: defaultAccountId }], rowCount: 1 },
+    { rows: [financialFlowRow], rowCount: 1 },
+  ]);
+
+  const createCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'createCustomer',
+    async () => ({
+      id: 'cus_enterprise_001',
+      object: 'customer',
+      name: 'Empresa Enterprise',
+    }),
+  );
+
+  const chargeInputs: Array<CreateAsaasChargeInput> = [];
+  const chargeMock = test.mock.method(AsaasChargeService.prototype, 'createCharge', async (input) => {
+    chargeInputs.push(input as CreateAsaasChargeInput);
+    return {
+      charge: { id: 'ch_card_123', status: 'PENDING', billingType: 'CREDIT_CARD' },
+      flow: { ...financialFlowRow, external_provider: 'asaas', external_reference_id: 'ch_card_123' },
+    };
+  });
+
+  const req = {
+    body: {
+      planId: 33,
+      pricingMode: 'mensal',
+      paymentMethod: 'cartao',
+      billing: {
+        companyName: 'Empresa Enterprise',
+        document: '55443322110088',
+        email: 'financeiro@enterprise.com',
+      },
+      cardToken: 'tok_card_123',
+      cardMetadata: {
+        brand: 'VISA',
+        remoteIp: '198.51.100.10 ',
+        last4Digits: '4242',
+      },
+    },
+    auth: createAuth(75),
+    headers: {},
+    ip: '127.0.0.1',
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createPlanPayment(req, res);
+  } finally {
+    restore();
+    createCustomerMock.mock.restore();
+    chargeMock.mock.restore();
+    subscriptionMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(chargeInputs.length, 1);
+  assert.equal(chargeInputs[0]?.cardToken, 'tok_card_123');
+  assert.equal(chargeInputs[0]?.remoteIp, '198.51.100.10');
+  assert.ok(chargeInputs[0]?.metadata);
+  const metadata = chargeInputs[0]?.metadata as Record<string, unknown>;
+  assert.ok(metadata.cardMetadata && typeof metadata.cardMetadata === 'object');
+  assert.equal((metadata.cardMetadata as { brand?: string }).brand, 'VISA');
+  assert.equal((metadata.cardMetadata as { remoteIp?: string }).remoteIp, '198.51.100.10');
+  assert.equal((metadata.cardMetadata as { last4Digits?: string }).last4Digits, '4242');
+
+  assert.equal(calls.length, 9);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /FROM public\.planos/);
 });
 

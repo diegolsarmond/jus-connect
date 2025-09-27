@@ -130,6 +130,8 @@ export type PlanPaymentPayload = {
     email: string;
     notes?: string;
   };
+  cardToken?: string;
+  cardMetadata?: Record<string, unknown>;
 };
 
 export type PlanPaymentCharge = {
