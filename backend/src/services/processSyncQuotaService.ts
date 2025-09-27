@@ -57,9 +57,12 @@ export const countCompanyProcessSyncUsage = async (
     ),
   ]);
 
-  const syncCount = syncResult.rowCount > 0 ? toNonNegativeInteger(syncResult.rows[0]?.total) : 0;
+  const syncCount =
+    (syncResult.rowCount ?? 0) > 0 ? toNonNegativeInteger(syncResult.rows[0]?.total) : 0;
   const consultaCount =
-    consultaResult.rowCount > 0 ? toNonNegativeInteger(consultaResult.rows[0]?.total) : 0;
+    (consultaResult.rowCount ?? 0) > 0
+      ? toNonNegativeInteger(consultaResult.rows[0]?.total)
+      : 0;
 
   return syncCount + consultaCount;
 };
