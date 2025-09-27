@@ -1282,6 +1282,11 @@ export default function Processos() {
     [processos],
   );
 
+  const totalSincronizacoes = useMemo(
+    () => processos.reduce((acc, processo) => acc + processo.consultasApiCount, 0),
+    [processos],
+  );
+
   const handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
@@ -1735,7 +1740,7 @@ export default function Processos() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card className="border-border/60 bg-card/60 shadow-sm">
           <CardContent className="flex items-center justify-between gap-4 pt-6">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -1785,6 +1790,20 @@ export default function Processos() {
                 Clientes vinculados
               </p>
               <p className="text-2xl font-semibold">{clientesAtivos}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/60 bg-card/60 shadow-sm">
+          <CardContent className="flex items-center justify-between gap-4 pt-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+              <RefreshCw className="h-5 w-5" />
+            </div>
+            <div className="space-y-1 text-right">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Sincronizações Judit
+              </p>
+              <p className="text-2xl font-semibold">{totalSincronizacoes}</p>
+              <p className="text-xs text-muted-foreground">Consultas manuais acumuladas</p>
             </div>
           </CardContent>
         </Card>
@@ -1988,7 +2007,7 @@ export default function Processos() {
                           ))}
                         </div>
                       </div>
-                      <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+                      <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-5">
                         <span className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-primary" />
                           Distribuído em {processo.dataDistribuicao}
@@ -2004,6 +2023,12 @@ export default function Processos() {
                         <span className="flex items-center gap-1.5">
                           <ChevronsUpDown className="h-3.5 w-3.5 text-primary" />
                           {trackingLastStepContent}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <RefreshCw className="h-3.5 w-3.5 text-primary" />
+                          {processo.consultasApiCount === 1
+                            ? "1 sincronização"
+                            : `${processo.consultasApiCount} sincronizações`}
                         </span>
                       </div>
                     </div>
