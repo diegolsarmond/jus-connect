@@ -6,6 +6,7 @@ import resolveAsaasIntegration, {
 } from '../services/asaas/integrationResolver';
 import AsaasClient, { AsaasApiError, CustomerPayload } from '../services/asaas/asaasClient';
 import AsaasSubscriptionService from '../services/asaas/subscriptionService';
+import { normalizeAsaasEnvironment } from '../services/asaas/urlNormalization';
 
 import AsaasChargeService, {
   ChargeConflictError,
@@ -16,6 +17,14 @@ import { normalizeFinancialFlowIdentifierFromRow } from '../utils/financialFlowI
 
 const asaasChargeService = new AsaasChargeService();
 const asaasSubscriptionService = new AsaasSubscriptionService();
+
+function resolveConfiguredAsaasEnvironment() {
+  const rawEnvironment = process.env.ASAAS_ENVIRONMENT;
+  if (typeof rawEnvironment === 'string' && rawEnvironment.trim()) {
+    return normalizeAsaasEnvironment(rawEnvironment);
+  }
+  return undefined;
+}
 
 function parseNumericId(value: unknown): number | null {
   if (typeof value === 'number' && Number.isInteger(value)) {
@@ -445,7 +454,8 @@ export const createPlanPayment = async (req: Request, res: Response) => {
 
   let integration;
   try {
-    integration = await resolveAsaasIntegration(empresaId);
+    const environment = resolveConfiguredAsaasEnvironment();
+    integration = await resolveAsaasIntegration(empresaId, undefined, environment);
   } catch (error) {
     if (error instanceof AsaasIntegrationNotConfiguredError) {
       res.status(503).json({ error: 'Integração com o Asaas não está configurada.' });
