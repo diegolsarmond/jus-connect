@@ -1,4 +1,5 @@
 import { QueryResultRow } from 'pg';
+import { normalizeFinancialFlowIdentifier, normalizeFinancialFlowIdentifierFromRow } from '../utils/financialFlowIdentifier';
 import pool from './db';
 
 export const ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD', 'DEBIT_CARD'] as const;
@@ -49,7 +50,7 @@ type CreditCardResponse = NonNullable<
 
 export interface AsaasChargeRecord {
   id: number;
-  financialFlowId: number;
+  financialFlowId: number | string;
   clienteId: number | null;
   integrationApiKeyId: number | null;
   asaasChargeId: string;
@@ -91,7 +92,7 @@ export class ChargeConflictError extends Error {
 }
 
 export interface CreateAsaasChargeInput {
-  financialFlowId: number;
+  financialFlowId: number | string;
   billingType: string;
   clienteId?: number | null;
   integrationApiKeyId?: number | null;
@@ -121,7 +122,7 @@ export interface AsaasClient {
 
 type AsaasClientFactory = (options: {
   integrationApiKeyId?: number | null;
-  financialFlowId: number;
+  financialFlowId: number | string;
   db: Queryable;
 }) => Promise<AsaasClient>;
 
@@ -218,16 +219,18 @@ async function defaultClientFactory({
   db,
 }: {
   integrationApiKeyId?: number | null;
-  financialFlowId: number;
+  financialFlowId: number | string;
   db: Queryable;
 }): Promise<AsaasClient> {
-  if (!Number.isInteger(financialFlowId) || financialFlowId <= 0) {
+  const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(financialFlowId);
+
+  if (normalizedFinancialFlowId === null) {
     throw new ValidationError('Identificador do fluxo financeiro inválido');
   }
 
   const flowResult = await db.query(
     'SELECT id, idempresa, empresa_id, empresa FROM financial_flows WHERE id = $1',
-    [financialFlowId],
+    [normalizedFinancialFlowId],
   );
 
   if (flowResult.rowCount === 0) {
@@ -478,9 +481,13 @@ function mapFlowStatus(chargeStatus: string | undefined): 'pendente' | 'pago' {
 }
 
 function normalizeInsertRow(row: QueryResultRow): AsaasChargeRecord {
+  const financialFlowId = normalizeFinancialFlowIdentifierFromRow(
+    (row as Record<string, unknown>).financial_flow_id,
+  );
+
   return {
     id: Number(row.id),
-    financialFlowId: Number(row.financial_flow_id),
+    financialFlowId,
     clienteId: row.cliente_id === null || row.cliente_id === undefined ? null : Number(row.cliente_id),
     integrationApiKeyId:
       row.integration_api_key_id === null || row.integration_api_key_id === undefined
@@ -519,9 +526,15 @@ export default class AsaasChargeService {
     const dueDate = formatDueDate(input.dueDate);
     const customer = ensureCustomerIdentifier(input.clienteId, input.asaasCustomerId, input.customer);
 
+    const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(input.financialFlowId);
+
+    if (normalizedFinancialFlowId === null) {
+      throw new ValidationError('Identificador do fluxo financeiro inválido');
+    }
+
     const existingCharge = await dbClient.query(
       'SELECT id FROM asaas_charges WHERE financial_flow_id = $1',
-      [input.financialFlowId],
+      [normalizedFinancialFlowId],
     );
 
     if (existingCharge.rowCount > 0) {
@@ -534,7 +547,7 @@ export default class AsaasChargeService {
       value,
       dueDate,
       description: input.description ?? undefined,
-      externalReference: input.externalReferenceId ?? String(input.financialFlowId),
+      externalReference: input.externalReferenceId ?? String(normalizedFinancialFlowId),
     };
 
     if (input.additionalFields) {
@@ -576,7 +589,7 @@ export default class AsaasChargeService {
       options?.asaasClient ??
       (await this.clientFactory({
         integrationApiKeyId: input.integrationApiKeyId,
-        financialFlowId: input.financialFlowId,
+        financialFlowId: normalizedFinancialFlowId,
         db: dbClient,
       }));
     const chargeResponse = await asaasClient.createCharge(payload);
@@ -626,7 +639,7 @@ export default class AsaasChargeService {
         updated_at
       `,
       [
-        input.financialFlowId,
+        normalizedFinancialFlowId,
         input.clienteId ?? null,
         input.integrationApiKeyId ?? null,
         chargeResponse.id,
@@ -657,7 +670,7 @@ export default class AsaasChargeService {
              status = $3
        WHERE id = $4
        RETURNING *`,
-      ['asaas', chargeResponse.id, flowStatus, input.financialFlowId],
+      ['asaas', chargeResponse.id, flowStatus, normalizedFinancialFlowId],
     );
 
     if (updateResult.rowCount === 0) {
