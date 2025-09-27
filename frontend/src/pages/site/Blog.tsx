@@ -103,11 +103,11 @@ const BlogPage = () => {
                 Blog Jus Connect
               </Badge>
               <h1 className="text-4xl md:text-5xl font-bold leading-tight">
-                Insights que conectam tecnologia, estratégia e resultados jurídicos
+                Insights que conectam tecnologia, estratégia e resultados de negócio
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground">
                 Explore análises profundas, guias práticos e tendências sobre inteligência artificial, automação e transformação
-                digital para escritórios e departamentos jurídicos que querem liderar o futuro.
+                digital para organizações que querem liderar o futuro.
               </p>
             </div>
 

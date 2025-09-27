@@ -35,13 +35,13 @@ const SERVICES: ServiceCard[] = [
     href: "/servicos/automacoes",
   },
   {
-    title: "CRM para advocacia",
+    title: "CRM inteligente omnichannel",
     description:
-      "Plataforma única para gerir processos, tarefas, agendas, documentos padrão, finanças e relacionamento com clientes.",
+      "Plataforma única para gerenciar relacionamento com clientes, pipelines, tarefas, documentos padronizados e finanças.",
     highlights: [
-      "Gestão completa de processos e fluxos de trabalho",
-      "Central de conversas com WhatsApp integrado",
-      "Integração com PJe, PROJUDI e gateways de pagamento",
+      "Gestão completa de oportunidades e projetos",
+      "Central de conversas com integrações nativas",
+      "Conexões com ERPs, gateways e ferramentas colaborativas",
     ],
     icon: ShieldCheck,
     href: "/servicos/crm",
@@ -89,7 +89,7 @@ const Services = () => {
             Soluções Jus Connect
           </span>
           <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
-            Tudo o que sua operação jurídica precisa para escalar
+            Tudo o que sua operação digital precisa para escalar
           </h2>
           <p className="mx-auto max-w-2xl text-base text-muted-foreground">
             Do primeiro contato à fidelização, conectamos pessoas, processos e tecnologia para garantir uma experiência
