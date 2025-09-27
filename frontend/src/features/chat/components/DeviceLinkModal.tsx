@@ -89,7 +89,7 @@ export const DeviceLinkContent = ({
       },
       {
         title: "Sincronização automática",
-        description: "Aguarde alguns instantes até que o WhatsApp sincronize as conversas com o QuantumJus.",
+        description: "Aguarde alguns instantes até que o WhatsApp sincronize as conversas com o Quantum Jud.",
         icon: <ShieldCheck size={18} aria-hidden="true" />,
       },
       {

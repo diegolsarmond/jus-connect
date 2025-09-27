@@ -39,7 +39,7 @@ const Hero = () => {
             Plataforma jurídica inteligente
           </span>
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl">
-            Jus Connect organiza o contencioso e o relacionamento com clientes em um só lugar
+            Quantum Jud organiza o contencioso e o relacionamento com clientes em um só lugar
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground">
             Elimine planilhas paralelas, acompanhe indicadores em tempo real e ofereça experiências digitais modernas para o

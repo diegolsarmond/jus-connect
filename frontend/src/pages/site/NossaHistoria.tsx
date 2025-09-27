@@ -9,7 +9,7 @@ import { Lightbulb, Rocket, ShieldCheck, Target, Users } from "lucide-react";
 const milestones = [
   {
     period: "2016",
-    title: "Origens do Jus Connect",
+    title: "Origens do Quantum Jud",
     description:
       "A Quantum Tecnologia inicia pesquisas com escritórios e departamentos jurídicos para mapear dores e oportunidades.",
   },
@@ -23,7 +23,7 @@ const milestones = [
     period: "2020",
     title: "Lançamento oficial",
     description:
-      "O Jus Connect chega ao mercado com squads consultivos, fluxos prontos e integrações nativas com ecossistemas jurídicos.",
+      "O Quantum Jud chega ao mercado com squads consultivos, fluxos prontos e integrações nativas com ecossistemas jurídicos.",
   },
   {
     period: "2022",
@@ -35,7 +35,7 @@ const milestones = [
     period: "2024+",
     title: "Evolução contínua",
     description:
-      "Seguimos co-criando com clientes, parceiros e comunidade legaltech para ampliar os resultados do Jus Connect.",
+      "Seguimos co-criando com clientes, parceiros e comunidade legaltech para ampliar os resultados do Quantum Jud.",
   },
 ];
 
@@ -69,7 +69,7 @@ const pillars = [
 const recognitions = [
   {
     title: "+120 operações jurídicas",
-    description: "Escritórios e departamentos que confiam no Jus Connect para conduzir sua estratégia.",
+    description: "Escritórios e departamentos que confiam no Quantum Jud para conduzir sua estratégia.",
   },
   {
     title: "+8 anos de evolução",
@@ -100,7 +100,7 @@ const NossaHistoria = () => {
                 Uma trajetória construída com escritórios e departamentos jurídicos em todo o Brasil
               </h1>
               <p className="mt-6 text-lg md:text-xl text-white/85">
-                O Jus Connect nasceu para organizar dados jurídicos, relacionamentos e finanças em um único ecossistema. Evoluímos em conjunto com clientes que buscam previsibilidade e escala.
+                O Quantum Jud nasceu para organizar dados jurídicos, relacionamentos e finanças em um único ecossistema. Evoluímos em conjunto com clientes que buscam previsibilidade e escala.
               </p>
               <div className="mt-10 grid gap-6 sm:grid-cols-3">
                 <Card className="border-white/20 bg-white/10 backdrop-blur">
@@ -193,7 +193,7 @@ const NossaHistoria = () => {
             <div className="mb-12 max-w-2xl">
               <h2 className="text-3xl md:text-5xl font-bold mb-4 text-foreground">Reconhecimentos dos nossos clientes</h2>
               <p className="text-lg text-muted-foreground">
-                Cada projeto concluído fortalece nossa parceria com organizações que confiam no Jus Connect para liderar seus movimentos digitais.
+                Cada projeto concluído fortalece nossa parceria com organizações que confiam no Quantum Jud para liderar seus movimentos digitais.
               </p>
             </div>
             <div className="grid gap-6 md:grid-cols-3">
@@ -210,7 +210,7 @@ const NossaHistoria = () => {
               <div>
                 <h3 className="text-3xl font-bold">Pronto para escrever os próximos capítulos com a gente?</h3>
                 <p className="mt-2 text-white/80 text-lg">
-                  Vamos explorar como o Jus Connect pode impulsionar seus resultados com tecnologia e estratégia.
+                  Vamos explorar como o Quantum Jud pode impulsionar seus resultados com tecnologia e estratégia.
                 </p>
               </div>
               <Button
