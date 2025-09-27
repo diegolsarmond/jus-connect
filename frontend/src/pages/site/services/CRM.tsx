@@ -22,11 +22,10 @@ import {
   Layers,
   MessageSquare,
   Shield,
+  Sparkle,
   Users,
   Workflow,
   Zap,
-  Scale,
-  Sparkle,
   CheckCircle2
 } from "lucide-react";
 import { useServiceBySlug } from "@/hooks/useServices";
@@ -276,45 +275,45 @@ const CRM = () => {
 
   const industries = [
     {
-      icon: Scale,
-      title: "Advocacia",
-      description: "Gestão completa de processos, prazos e relacionamento com clientes e correspondentes.",
-      highlights: ["Integração com tribunais", "Automação de prazos", "Geração de peças e contratos"],
+      icon: Building2,
+      title: "Serviços profissionais",
+      description: "Gestão completa de projetos, contratos e relacionamento com clientes corporativos.",
+      highlights: ["Workflows configuráveis por equipe", "Integração com ferramentas de produtividade", "Follow-up automático"],
     },
     {
-      icon: Building2,
-      title: "Mercado Imobiliário",
-      description: "Gestão de funil de vendas, propostas e pós-venda para construtoras e imobiliárias.",
-      highlights: ["Integração com portais", "Controle de documentos", "Follow-up automático"],
+      icon: Sparkle,
+      title: "SaaS e tecnologia",
+      description: "Unifique dados do produto, suporte e sucesso do cliente em um painel único.",
+      highlights: ["Pipelines de expansão e retenção", "Métricas em tempo real", "Conectores com plataformas cloud"],
     },
   ];
 
-  const lawDifferentials = [
+  const operationDifferentials = [
     {
       icon: Users,
-      title: "Gestão de Clientes e Casos",
-      description: "Dossiês completos com histórico de atendimento, honorários e documentos vinculados."
+      title: "Visão 360º do cliente",
+      description: "Dossiês completos com histórico de interações, contratos e entregas."
     },
     {
       icon: FileText,
-      title: "Automação de Peças",
-      description: "Modelos inteligentes que preenchem dados de processos e geram peças em poucos cliques."
+      title: "Modelos inteligentes",
+      description: "Templates dinâmicos que preenchem dados automaticamente e padronizam comunicações."
     },
     {
       icon: Workflow,
-      title: "Fluxos de Prazos",
-      description: "Alertas automáticos e redistribuição de tarefas conforme SLA e especialidade jurídica."
+      title: "Fluxos guiados por SLA",
+      description: "Alertas automáticos e redistribuição de tarefas conforme prioridade e capacidade da equipe."
     },
     {
       icon: Layers,
-      title: "Controle Financeiro",
-      description: "Painéis de receitas recorrentes, adiantamentos e divisão de honorários por sócio."
+      title: "Governança financeira",
+      description: "Painéis de receitas recorrentes, previsões e divisão de metas por squad."
     }
   ];
 
   const successMetrics = [
-    "Redução média de 45% no tempo de atualização de processos",
-    "Aumento de 60% na taxa de conversão de leads jurídicos",
+    "Redução média de 45% no tempo de atualização de pipelines",
+    "Aumento de 60% na taxa de conversão de leads qualificados",
     "Visão 360º da carteira com relatórios executivos semanais",
     "Suporte especializado com onboarding em até 14 dias"
   ];
@@ -602,11 +601,10 @@ const CRM = () => {
         <div className="container px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
-              Especializado em Segmentos Estratégicos
+              Especializado em segmentos estratégicos
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Operações jurídicas e imobiliárias contam com fluxos prontos, integrações profundas e relatórios sob medida para
-              acelerar resultados desde o primeiro mês.
+              Operações de serviços, tecnologia, finanças e mercado imobiliário contam com fluxos prontos, integrações profundas e relatórios sob medida para acelerar resultados desde o primeiro mês.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -640,25 +638,25 @@ const CRM = () => {
         </div>
       </section>
 
-      {/* Highlight Section for Legal CRM */}
+      {/* Highlight Section for CRM */}
       <section className="py-20 bg-background relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div className="container px-4 relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
               <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium rounded-full bg-gradient-quantum text-white animate-pulse-glow">
-                <Scale className="h-4 w-4 mr-2" />
-                CRM para Escritórios de Advocacia
+                <Sparkle className="h-4 w-4 mr-2" />
+                CRM para operações complexas
               </div>
               <h2 className="text-4xl md:text-5xl font-bold mb-6">
-                Especialistas em Gestão Jurídica Digital
+                Especialistas em jornadas de relacionamento B2B e B2C
               </h2>
               <p className="text-lg text-muted-foreground mb-8">
-                Com mais de uma década acompanhando escritórios de diferentes portes, desenvolvemos um CRM que une gestão de processos, atendimento consultivo e inteligência financeira em uma única plataforma.
+                Com mais de uma década acompanhando operações de alta complexidade, desenvolvemos um CRM que une gestão de pipelines, atendimento consultivo e inteligência financeira em uma única plataforma.
               </p>
               <div className="space-y-10 mb-10">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {lawDifferentials.map((item) => (
+                  {operationDifferentials.map((item) => (
                     <Card key={item.title} className="border-quantum-light/20 hover:border-quantum-bright/40 transition-all duration-300 hover:-translate-y-1">
                       <CardHeader className="pb-3">
                         <div className="p-3 rounded-full bg-gradient-quantum w-fit mb-3">
@@ -675,9 +673,9 @@ const CRM = () => {
 
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <h3 className="text-2xl font-semibold">Planos disponíveis para escritórios</h3>
+                    <h3 className="text-2xl font-semibold">Planos disponíveis para sua equipe</h3>
                     <p className="text-sm text-muted-foreground">
-                      Compare modalidades, benefícios e encontre o pacote ideal para o seu time jurídico.
+                      Compare modalidades, benefícios e encontre o pacote ideal para o seu time.
                     </p>
                   </div>
 
@@ -830,7 +828,7 @@ const CRM = () => {
                 </div>
               </div>
               <div className="flex flex-wrap gap-4">
-                <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("legal_section")}>
+                <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("crm_section")}>
                   Solicitar Demonstração
                   <ArrowRight className="h-5 w-5 ml-2" />
                 </Button>
@@ -838,18 +836,15 @@ const CRM = () => {
                   variant="outline_quantum"
                   size="lg"
                   className="track-link"
-                  onClick={() => handleWhatsappClick("legal_section")}
+                  onClick={() => handleWhatsappClick("crm_section")}
                 >
                   Falar no WhatsApp
-                </Button>
-                <Button variant="outline_quantum" size="lg" className="track-link" asChild>
-                  <a href="/servicos/crm/advocacia">Conheça o CRM para Advocacia</a>
                 </Button>
               </div>
             </div>
             <Card className="bg-gradient-quantum text-white border-0 shadow-quantum">
               <CardContent className="p-8 space-y-6">
-                <h3 className="text-2xl font-bold">Principais ganhos para seu escritório</h3>
+                <h3 className="text-2xl font-bold">Principais ganhos para sua operação</h3>
                 <div className="space-y-4">
                   {successMetrics.map((metric) => (
                     <div key={metric} className="flex items-start space-x-3">

@@ -39,11 +39,15 @@ const services = [
     link: "/servicos/automacoes",
   },
   {
-    title: "CRM para Advogados",
+    title: "CRM inteligente omnichannel",
     description:
-      "Uma plataforma completa para escritórios jurídicos com gestão de clientes, prazos, documentos e indicadores estratégicos.",
+      "Uma plataforma completa para equipes de relacionamento com gestão de clientes, pipelines, documentos e indicadores estratégicos.",
     icon: ShieldCheck,
-    highlights: ["Gestão de processos com SLA", "Organização de documentos sensíveis", "Visão 360º do relacionamento"],
+    highlights: [
+      "Gestão de oportunidades com SLA",
+      "Organização de documentos e contratos sensíveis",
+      "Visão 360º do relacionamento",
+    ],
     link: "/servicos/crm",
   },
   {
@@ -252,9 +256,9 @@ const ServicesPage = () => {
                 <div className="flex items-center gap-3">
                   <Workflow className="h-5 w-5 text-quantum-bright" />
                   <span>
-                    +120 projetos entregues com NPS médio de 92 em segmentos como jurídico, varejo, saúde e financeiro.
+                    +120 projetos entregues com NPS médio de 92 em segmentos como serviços, varejo, saúde e financeiro.
                   </span>
-                </div>
+              </div>
               </div>
             </div>
 

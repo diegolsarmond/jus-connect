@@ -11,31 +11,31 @@ const milestones = [
     period: "2016",
     title: "Origens do Jus Connect",
     description:
-      "A Quantum Tecnologia inicia pesquisas com escritórios e departamentos jurídicos para mapear dores e oportunidades.",
+      "A Quantum Tecnologia inicia pesquisas com equipes de negócio intensivas em dados para mapear dores e oportunidades.",
   },
   {
     period: "2018",
     title: "Primeiros pilotos",
     description:
-      "Protótipos da plataforma integram publicações de tribunais, CRM e automações de atendimento em um único ambiente.",
+      "Protótipos da plataforma integram CRM, automações de atendimento e analytics em um único ambiente colaborativo.",
   },
   {
     period: "2020",
     title: "Lançamento oficial",
     description:
-      "O Jus Connect chega ao mercado com squads consultivos, fluxos prontos e integrações nativas com ecossistemas jurídicos.",
+      "O Jus Connect chega ao mercado com squads consultivos, fluxos prontos e integrações nativas com os principais sistemas corporativos.",
   },
   {
     period: "2022",
     title: "Expansão de módulos",
     description:
-      "Incluímos analytics jurídicos, financial ops e conectores low-code para acelerar projetos personalizados.",
+      "Incluímos analytics avançado, financial ops e conectores low-code para acelerar projetos personalizados.",
   },
   {
     period: "2024+",
     title: "Evolução contínua",
     description:
-      "Seguimos co-criando com clientes, parceiros e comunidade legaltech para ampliar os resultados do Jus Connect.",
+      "Seguimos co-criando com clientes, parceiros e comunidade tech para ampliar os resultados do Jus Connect.",
   },
 ];
 
@@ -50,13 +50,13 @@ const pillars = [
     icon: Users,
     title: "Parceria de longo prazo",
     description:
-      "Trabalhamos lado a lado com o time jurídico, capacitando pessoas e garantindo adoção contínua.",
+      "Trabalhamos lado a lado com cada time, capacitando pessoas e garantindo adoção contínua.",
   },
   {
     icon: Lightbulb,
     title: "Inovação aplicada",
     description:
-      "IA generativa, automações e UX centrado no usuário para resolver desafios reais do dia a dia jurídico.",
+      "IA generativa, automações e UX centrado no usuário para resolver desafios reais do dia a dia.",
   },
   {
     icon: ShieldCheck,
@@ -68,8 +68,8 @@ const pillars = [
 
 const recognitions = [
   {
-    title: "+120 operações jurídicas",
-    description: "Escritórios e departamentos que confiam no Jus Connect para conduzir sua estratégia.",
+    title: "+120 operações digitais",
+    description: "Empresas que confiam no Jus Connect para conduzir sua estratégia.",
   },
   {
     title: "+8 anos de evolução",
@@ -97,10 +97,10 @@ const NossaHistoria = () => {
                 Nossa trajetória
               </div>
               <h1 className="mt-6 text-4xl md:text-6xl font-bold leading-tight">
-                Uma trajetória construída com escritórios e departamentos jurídicos em todo o Brasil
+                Uma trajetória construída com empresas e equipes de alta performance em todo o Brasil
               </h1>
               <p className="mt-6 text-lg md:text-xl text-white/85">
-                O Jus Connect nasceu para organizar dados jurídicos, relacionamentos e finanças em um único ecossistema. Evoluímos em conjunto com clientes que buscam previsibilidade e escala.
+                O Jus Connect nasceu para organizar dados, relacionamento e finanças em um único ecossistema. Evoluímos em conjunto com clientes que buscam previsibilidade e escala.
               </p>
               <div className="mt-10 grid gap-6 sm:grid-cols-3">
                 <Card className="border-white/20 bg-white/10 backdrop-blur">
@@ -142,7 +142,7 @@ const NossaHistoria = () => {
                 Marcos da nossa jornada
               </h2>
               <p className="text-lg text-muted-foreground">
-                Crescemos com clientes que buscavam previsibilidade, segurança e produtividade no contencioso e no relacionamento com clientes.
+                Crescemos com clientes que buscavam previsibilidade, segurança e produtividade em operações complexas e no relacionamento com clientes.
               </p>
             </div>
 

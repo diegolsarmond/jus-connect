@@ -27,11 +27,10 @@ import {
   CheckCircle2,
   FileText,
   FolderCog,
-  Gavel,
   Layers,
   Link as LinkIcon,
   MessageSquare,
-  Scale,
+  Sparkles,
   Workflow
 } from "lucide-react";
 import { useServiceBySlug } from "@/hooks/useServices";
@@ -94,23 +93,23 @@ const CRMAdvocacia = () => {
     () => [
       {
         icon: FolderCog,
-        title: "Gestão de processos e tarefas",
-        description: "Centralize fluxos, prazos, agendas e relatórios para ter domínio total da operação jurídica.",
+        title: "Gestão de projetos e tarefas",
+        description: "Centralize fluxos, prazos, agendas e relatórios para ter domínio total da operação.",
       },
       {
         icon: FileText,
         title: "Documentos padrão com IA",
-        description: "Monte modelos inteligentes e utilize a inteligência artificial para elaborar peças e resumos em segundos.",
+        description: "Monte modelos inteligentes e utilize a inteligência artificial para elaborar propostas, contratos e resumos em segundos.",
       },
       {
         icon: MessageSquare,
-        title: "Conversas com WhatsApp integrado",
-        description: "Atenda clientes sem sair da tela, mantendo histórico unificado e automações de atendimento.",
+        title: "Conversas integradas",
+        description: "Atenda clientes em qualquer canal, mantendo histórico unificado e automações de atendimento.",
       },
       {
         icon: LinkIcon,
-        title: "Integrações judiciais e financeiras",
-        description: "Receba intimações do PJe, PROJUDI e mais, além de conectar gateways de pagamento ao seu CRM.",
+        title: "Integrações com sistemas críticos",
+        description: "Conecte ERPs, gateways de pagamento e plataformas colaborativas ao seu CRM.",
       },
     ],
     [],
@@ -132,17 +131,17 @@ const CRMAdvocacia = () => {
     });
   }, [heroHighlights, service]);
 
-  const heroLabel = service?.title ?? "CRM Especializado para Escritórios de Advocacia";
-  const heroHeadline = service?.summary ?? "Controle absoluto dos seus processos, clientes e resultados";
+  const heroLabel = service?.title ?? "CRM especializado para operações consultivas";
+  const heroHeadline = service?.summary ?? "Controle absoluto dos seus clientes, projetos e resultados";
   const heroDescription =
     service?.description ??
-    "Um CRM completo para escritórios: gestão de processos, tarefas, agendas, relatórios, documentos padrão e fluxos de trabalho com inteligência artificial. Experimente grátis por 14 dias.";
+    "Um CRM completo para organizações consultivas: gestão de pipelines, tarefas, agendas, relatórios, documentos padrão e fluxos de trabalho com inteligência artificial. Experimente grátis por 14 dias.";
 
   const productivityMetrics = [
     {
       value: "-45%",
-      label: "tempo na atualização de andamentos",
-      description: "Robôs jurídicos capturam movimentações automaticamente e notificam o time responsável."
+      label: "tempo na atualização de pipelines",
+      description: "Automações capturam movimentações automaticamente e notificam o time responsável."
     },
     {
       value: "+60%",
@@ -152,16 +151,16 @@ const CRMAdvocacia = () => {
     {
       value: "14 dias",
       label: "para go-live completo",
-      description: "Metodologia de implementação guiada por especialistas em operações jurídicas."
+      description: "Metodologia de implementação guiada por especialistas em operações digitais."
     }
   ];
 
   const modules = [
     {
       icon: FolderCog,
-      title: "Gestão de processos e fluxos",
+      title: "Gestão de projetos e fluxos",
       description:
-        "Controle processos, tarefas e workflows personalizados com checklists, responsáveis e fases totalmente configuráveis.",
+        "Controle projetos, tarefas e workflows personalizados com checklists, responsáveis e fases totalmente configuráveis.",
       features: [
         "Agenda de prazos integrada ao calendário do time",
         "Relatórios completos por área, cliente e responsável",
@@ -181,18 +180,18 @@ const CRMAdvocacia = () => {
     },
     {
       icon: FileText,
-      title: "Documentos padrão com IA jurídica",
+      title: "Documentos padrão com IA",
       description:
-        "Construa modelos inteligentes e utilize a IA para elaborar peças, contratos e resumos de processos automaticamente.",
+        "Construa modelos inteligentes e utilize a IA para elaborar propostas, contratos e relatórios automaticamente.",
       features: [
         "Biblioteca de modelos personalizada",
-        "Preenchimento automático com dados do processo",
+        "Preenchimento automático com dados do CRM",
         "Resumos e insights gerados por inteligência artificial",
       ],
     },
     {
       icon: MessageSquare,
-      title: "Conversas com WhatsApp no CRM",
+      title: "Conversas integradas no CRM",
       description:
         "Gerencie atendimentos sem sair da plataforma com o WhatsApp integrado e histórico completo dos clientes.",
       features: [
@@ -203,12 +202,12 @@ const CRMAdvocacia = () => {
     },
     {
       icon: LinkIcon,
-      title: "Integrações judiciais e financeiras",
+      title: "Integrações com sistemas críticos",
       description:
-        "Sincronize o CRM com PJe, PROJUDI e principais sistemas judiciais, além de gateways de pagamento para receber online.",
+        "Sincronize o CRM com ERPs, plataformas financeiras e ferramentas colaborativas, além de gateways de pagamento para receber online.",
       features: [
-        "Receba intimações e atualizações dentro do CRM",
-        "Consulta automática aos principais tribunais",
+        "Atualizações automáticas dentro do CRM",
+        "Conectores com APIs REST e webhooks",
         "Integração com os principais gateways de pagamento",
       ],
     },
@@ -217,15 +216,15 @@ const CRMAdvocacia = () => {
   const automationFlows = [
     {
       icon: Workflow,
-      title: "Fluxos Processuais Automatizados",
+      title: "Workflows automatizados",
       description:
-        "Dispare tarefas e notificações com base em eventos processuais, prazos e metas estratégicas do escritório."
+        "Dispare tarefas e notificações com base em eventos do funil, contratos e metas estratégicas da empresa."
     },
     {
       icon: CalendarClock,
       title: "Agenda e Prazos Integrados",
       description:
-        "Visualize audiências, compromissos e prazos críticos em uma agenda compartilhada com alertas multicanal."
+        "Visualize compromissos, entregas e prazos críticos em uma agenda compartilhada com alertas multicanal."
     },
     {
       icon: Layers,
@@ -277,32 +276,32 @@ const CRMAdvocacia = () => {
 
   const implementationSteps = [
     {
-      title: "Diagnóstico Jurídico",
+      title: "Diagnóstico colaborativo",
       description:
-        "Mapeamos áreas de atuação, sistemas existentes e indicadores estratégicos para configurar o CRM sob medida."
+        "Mapeamos jornadas de cliente, sistemas existentes e indicadores estratégicos para configurar o CRM sob medida."
     },
     {
-      title: "Configuração Guiada",
+      title: "Configuração guiada",
       description:
-        "Parametrização de pipelines, prazos, templates e automações com treinamento por núcleo jurídico."
+        "Parametrização de pipelines, prazos, templates e automações com treinamento por unidade de negócio."
     },
     {
-      title: "Adoção e Performance",
+      title: "Adoção e performance",
       description:
         "Acompanhamento pós-go-live com revisão de indicadores, comitês de melhoria contínua e suporte especializado."
     }
   ];
 
   const supportHighlights = [
-    "Especialistas em operações jurídicas disponíveis em horário estendido",
-    "Central de conhecimento com playbooks por área de atuação",
+    "Especialistas em operações digitais disponíveis em horário estendido",
+    "Central de conhecimento com playbooks por jornada do cliente",
     "Comunidade de clientes com benchmark exclusivo de indicadores"
   ];
 
   const handleDemoClick = (source: string) => {
     const gtag = getGtag();
-    gtag?.("event", "crm_advocacia_demo_click", {
-      service: "crm_advocacia",
+    gtag?.("event", "crm_advanced_demo_click", {
+      service: "crm_advanced",
       source
     });
     document.getElementById("contato")?.scrollIntoView({ behavior: "smooth" });
@@ -310,12 +309,12 @@ const CRMAdvocacia = () => {
 
   const handleWhatsappClick = (source: string) => {
     const gtag = getGtag();
-    gtag?.("event", "crm_advocacia_whatsapp_click", {
-      service: "crm_advocacia",
+    gtag?.("event", "crm_advanced_whatsapp_click", {
+      service: "crm_advanced",
       source
     });
     window.open(
-      "https://wa.me/553193054200?text=Olá! Gostaria de conhecer o CRM do Jus Connect para escritórios de advocacia.",
+      "https://wa.me/553193054200?text=Olá! Gostaria de conhecer o CRM avançado do Jus Connect.",
       "_blank"
     );
   };
@@ -332,7 +331,7 @@ const CRMAdvocacia = () => {
         <div className="container px-4 relative z-10">
           <div className="max-w-5xl mx-auto text-center">
             <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium rounded-full bg-white/15 backdrop-blur animate-pulse-glow">
-              <Gavel className="h-4 w-4 mr-2" />
+              <Sparkles className="h-4 w-4 mr-2" />
               {heroLabel}
             </div>
             <h1 className="text-5xl md:text-7xl font-bold mb-6">{heroHeadline}</h1>
@@ -340,8 +339,7 @@ const CRMAdvocacia = () => {
             <div className="flex flex-wrap justify-center gap-4">
               <Button variant="quantum" size="xl" className="track-link shadow-quantum" onClick={() => handleDemoClick("hero")}
               >
-                              Experimente gratuitamente por 14 dias.
-
+                Experimente gratuitamente por 14 dias
                 <ArrowRight className="h-5 w-5 ml-2" />
               </Button>
               <Button
@@ -397,10 +395,10 @@ const CRMAdvocacia = () => {
         <div className="container px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
-              Resultados reais para bancas jurídicas
+              Resultados reais para operações consultivas
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              O CRM do Jus Connect combina automação, dados e atendimento consultivo para acelerar o crescimento do seu escritório.
+              O CRM do Jus Connect combina automação, dados e atendimento consultivo para acelerar o crescimento da sua operação.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -425,10 +423,10 @@ const CRMAdvocacia = () => {
         <div className="container px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-quantum bg-clip-text text-transparent">
-              Módulos especializados para a advocacia
+              Módulos especializados para operações consultivas
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Configure fluxos para contencioso, consultivo, societário, tributário e todas as áreas que compõem sua operação.
+              Configure fluxos para prospecção, projetos, pós-venda, financeiro e todas as áreas que compõem sua operação.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -465,13 +463,13 @@ const CRMAdvocacia = () => {
             <div>
               <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium rounded-full bg-gradient-quantum text-white">
                 <Workflow className="h-4 w-4 mr-2" />
-                Automação centrada no cliente jurídico
+                Automação centrada no cliente
               </div>
               <h2 className="text-4xl md:text-5xl font-bold mb-6">
-                Orquestração completa dos fluxos do escritório
+                Orquestração completa dos fluxos da sua operação
               </h2>
               <p className="text-lg text-muted-foreground mb-8">
-                Do primeiro contato ao encerramento do caso, a plataforma garante visibilidade e colaboração em todas as etapas.
+                Do primeiro contato ao pós-venda, a plataforma garante visibilidade e colaboração em todas as etapas.
               </p>
               <div className="space-y-6">
                 {automationFlows.map((flow) => (
@@ -491,9 +489,9 @@ const CRMAdvocacia = () => {
             </div>
             <Card className="bg-gradient-quantum text-white border-0 shadow-quantum">
               <CardContent className="p-8 space-y-6">
-                <h3 className="text-2xl font-semibold">Painel executivo jurídico</h3>
+                <h3 className="text-2xl font-semibold">Painel executivo de performance</h3>
                 <p className="text-white/80">
-                  Consolide indicadores de produção, receita, satisfação dos clientes e riscos em um cockpit desenhado para sócios e diretoria.
+                  Consolide indicadores de produção, receita, satisfação dos clientes e riscos em um cockpit desenhado para lideranças.
                 </p>
                 <ul className="space-y-3 text-white/80 text-sm">
                   <li className="flex items-start space-x-3">
@@ -502,11 +500,11 @@ const CRMAdvocacia = () => {
                   </li>
                   <li className="flex items-start space-x-3">
                     <CheckCircle2 className="h-5 w-5 text-white flex-shrink-0 mt-0.5" />
-                    <span>Comparativos de metas x realizado com projeção de honorários</span>
+                    <span>Comparativos de metas x realizado com projeção de receita</span>
                   </li>
                   <li className="flex items-start space-x-3">
                     <CheckCircle2 className="h-5 w-5 text-white flex-shrink-0 mt-0.5" />
-                    <span>Alertas proativos de riscos, prescrições e alçadas</span>
+                    <span>Alertas proativos de riscos, dependências e prazos críticos</span>
                   </li>
                 </ul>
                 <Button
@@ -539,10 +537,10 @@ const CRMAdvocacia = () => {
               Escolha o plano ideal
             </div>
             <h2 className="text-4xl md:text-5xl font-bold bg-gradient-quantum bg-clip-text text-transparent">
-              Planos que evoluem com o seu escritório
+              Planos que evoluem com a sua operação
             </h2>
             <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Comece em minutos com acesso completo à plataforma, suporte consultivo e infraestrutura preparada para escalar de acordo com o ritmo do seu escritório.
+              Comece em minutos com acesso completo à plataforma, suporte consultivo e infraestrutura preparada para escalar de acordo com o ritmo da sua organização.
             </p>
           </div>
           {isPlansLoading ? (
@@ -625,7 +623,7 @@ const CRMAdvocacia = () => {
                         </CardHeader>
                         <CardContent className="flex-1 space-y-4">
                           <div className="rounded-lg border border-quantum-light/20 bg-background/60 p-4 text-sm leading-relaxed text-muted-foreground">
-                            Inicie agora com 14 dias de acesso completo, templates prontos e especialistas auxiliando a configuração do CRM para o seu escritório.
+                            Inicie agora com 14 dias de acesso completo, templates prontos e especialistas auxiliando a configuração do CRM para a sua operação.
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <CheckCircle2 className="h-4 w-4 text-quantum-bright" />
@@ -674,7 +672,7 @@ const CRMAdvocacia = () => {
                   <CardTitle className="text-xl">Planos sob medida</CardTitle>
                   <CardDescription className="text-sm text-muted-foreground">
                     Nenhum plano pôde ser carregado no momento. Converse com nossos especialistas para receber uma proposta
-                    personalizada para o seu escritório.
+                    personalizada para a sua operação.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -707,7 +705,7 @@ const CRMAdvocacia = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
               <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium rounded-full bg-gradient-quantum text-white">
-                <Scale className="h-4 w-4 mr-2" />
+                <Layers className="h-4 w-4 mr-2" />
                 Implementação apoiada por especialistas
               </div>
               <h2 className="text-4xl md:text-5xl font-bold mb-6">
@@ -756,10 +754,10 @@ const CRMAdvocacia = () => {
           <Card className="bg-gradient-quantum text-white border-0 shadow-quantum max-w-5xl mx-auto">
             <CardContent className="p-12 text-center space-y-8">
               <h3 className="text-3xl md:text-4xl font-bold">
-                Pronto para elevar a gestão do seu escritório?
+                Pronto para elevar a gestão da sua operação?
               </h3>
               <p className="text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
-                Agende uma demonstração personalizada e descubra como nossos especialistas podem acelerar a transformação digital da sua operação jurídica.
+                Agende uma demonstração personalizada e descubra como nossos especialistas podem acelerar a transformação digital do seu relacionamento com clientes.
               </p>
               <div className="flex flex-wrap justify-center gap-4">
                 <Button
@@ -768,8 +766,7 @@ const CRMAdvocacia = () => {
                   className="bg-white/20 border-white/30 text-white hover:bg-white hover:text-quantum-deep track-link"
                   onClick={() => handleDemoClick("final_cta")}
                 >
-                                  Experimente gratuitamente por 14 dias.
-
+                  Solicitar demonstração
                   <ArrowRight className="h-5 w-5 ml-2" />
                 </Button>
                 <Button

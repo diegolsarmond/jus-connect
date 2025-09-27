@@ -13,17 +13,17 @@ const HIGHLIGHTS: Highlight[] = [
   {
     icon: Sparkles,
     title: "Dados confiáveis",
-    description: "Centralize processos, publicações e documentos em um painel único.",
+    description: "Centralize operações, interações e documentos críticos em um painel único.",
   },
   {
     icon: Workflow,
     title: "Fluxos automatizados",
-    description: "Padronize tarefas críticas com automações e playbooks jurídicos.",
+    description: "Padronize tarefas recorrentes com automações e playbooks inteligentes.",
   },
   {
     icon: ShieldCheck,
     title: "Conformidade total",
-    description: "Governança, rastreabilidade e controles alinhados à LGPD.",
+    description: "Governança, rastreabilidade e controles alinhados às exigências regulatórias.",
   },
 ];
 
@@ -36,14 +36,14 @@ const Hero = () => {
       <div className="container relative z-10 grid gap-12 px-4 pb-24 pt-28">
         <div className="space-y-8">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-            Plataforma jurídica inteligente
+            Plataforma tecnológica completa
           </span>
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl">
-            Jus Connect organiza o contencioso e o relacionamento com clientes em um só lugar
+            Jus Connect conecta equipes, clientes e dados em um só lugar
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground">
-            Elimine planilhas paralelas, acompanhe indicadores em tempo real e ofereça experiências digitais modernas para o
-            seu escritório ou departamento jurídico.
+            Elimine silos operacionais, acompanhe indicadores em tempo real e entregue experiências digitais modernas para
+            qualquer unidade de negócio.
           </p>
           <dl className="grid gap-4 sm:grid-cols-3">
             {HIGHLIGHTS.map((highlight) => (

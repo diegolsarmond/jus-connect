@@ -13,7 +13,7 @@ interface Pillar {
 const PILLARS: Pillar[] = [
   {
     title: "Onboarding consultivo",
-    description: "Especialistas acompanham cada etapa para adaptar o Jus Connect à sua realidade jurídica.",
+    description: "Especialistas acompanham cada etapa para adaptar o Jus Connect aos processos da sua organização.",
     icon: HandshakeIcon,
   },
   {
@@ -23,7 +23,7 @@ const PILLARS: Pillar[] = [
   },
   {
     title: "Inovação pragmática",
-    description: "IA generativa, automações e analytics aplicados a fluxos que aceleram decisões.",
+    description: "IA generativa, automações e analytics aplicados a fluxos que aceleram decisões em toda a empresa.",
     icon: Lightbulb,
   },
   {
@@ -70,17 +70,17 @@ const About = () => {
               Sobre o Jus Connect
             </span>
             <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
-              Plataforma completa para escritórios e departamentos jurídicos
+              Plataforma completa para operações de alto impacto
             </h2>
             <p className="text-base text-muted-foreground">
-              Nasceu dentro da Quantum Tecnologia para organizar equipes jurídicas de alto volume. Hoje o Jus Connect integra
-              relacionamento com clientes, contencioso, finanças e colaboração em uma única experiência digital.
+              Nasceu dentro da Quantum Tecnologia para conectar operações intensivas em dados. Hoje o Jus Connect integra
+              relacionamento com clientes, processos de negócio, finanças e colaboração em uma única experiência digital.
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               <Card className="border-border/40 bg-background/80">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-3xl font-semibold text-foreground">120+</CardTitle>
-                  <CardDescription>equipes jurídicas conectadas</CardDescription>
+                  <CardDescription>equipes conectadas em diferentes segmentos</CardDescription>
                 </CardHeader>
               </Card>
               <Card className="border-border/40 bg-background/80">
@@ -92,7 +92,7 @@ const About = () => {
               <Card className="border-border/40 bg-background/80">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-3xl font-semibold text-foreground">8</CardTitle>
-                  <CardDescription>anos evoluindo com o setor jurídico</CardDescription>
+                  <CardDescription>anos impulsionando organizações digitais</CardDescription>
                 </CardHeader>
               </Card>
             </div>
@@ -127,7 +127,7 @@ const About = () => {
           <div className="space-y-2">
             <h3 className="text-lg font-semibold text-foreground">Time multidisciplinar</h3>
             <p className="text-sm text-muted-foreground">
-              Estratégia, dados, UX e operações atuam juntos para suportar missões críticas do jurídico.
+              Estratégia, dados, UX e operações atuam juntos para suportar missões críticas do seu negócio.
             </p>
           </div>
           <div className="space-y-2">
