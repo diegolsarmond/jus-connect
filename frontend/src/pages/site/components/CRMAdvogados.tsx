@@ -33,7 +33,7 @@ const CRMAdvogados = () => {
         <div className="space-y-6">
           <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase text-primary">
             <Scale className="h-4 w-4" aria-hidden />
-            CRM Jus Connect
+            CRM Quantum Jud
           </span>
           <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
             CRM criado para acelerar escritórios jurídicos e departamentos legais

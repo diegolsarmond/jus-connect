@@ -268,7 +268,7 @@ const CRM = () => {
     });
   }, [generalFeatures, service]);
 
-  const heroLabel = service?.title ?? "Suíte Completa de CRM Jus Connect";
+  const heroLabel = service?.title ?? "Suíte Completa de CRM Quantum Jud";
   const heroHeadline = service?.summary ?? "Relacionamentos Inteligentes em Todos os Canais";
   const heroDescription =
     service?.description ??
@@ -498,7 +498,7 @@ const CRM = () => {
       service: "crm",
       source
     });
-    window.open("https://wa.me/553193054200?text=Olá! Gostaria de saber mais sobre a suíte de CRMs do Jus Connect.", "_blank");
+    window.open("https://wa.me/553193054200?text=Olá! Gostaria de saber mais sobre a suíte de CRMs do Quantum Jud.", "_blank");
   };
 
   return (
@@ -879,7 +879,7 @@ const CRM = () => {
                 Pronto para transformar a gestão de relacionamento da sua empresa?
               </h3>
               <p className="text-xl text-white/90 max-w-3xl mx-auto">
-                Solicite uma demonstração personalizada e conheça na prática como o Jus Connect pode conectar equipes, clientes e resultados.
+                Solicite uma demonstração personalizada e conheça na prática como o Quantum Jud pode conectar equipes, clientes e resultados.
               </p>
               <div className="flex flex-wrap justify-center gap-4">
                 <Button

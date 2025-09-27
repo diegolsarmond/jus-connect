@@ -357,7 +357,7 @@ const Automacoes = () => {
                     gtag?.('event', 'case_study_request', {
                       service: 'automacoes',
                     });
-                    window.open('https://wa.me/553193054200?text=Olá! Gostaria de ver cases de automação do Jus Connect.', '_blank');
+                    window.open('https://wa.me/553193054200?text=Olá! Gostaria de ver cases de automação do Quantum Jud.', '_blank');
                   }}
                 >
                   Ver Cases de Sucesso

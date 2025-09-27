@@ -1,4 +1,4 @@
-# Jus Connect Document Templates
+# Quantum Jud Document Templates
 
 Este repositório contém um módulo simples de CRUD de Templates de Documentos com editor rich text, painel de tags e geração de documentos via API.
 

@@ -17,10 +17,10 @@ const Contact = () => {
     () => [
       {
         title: "Fale pelo WhatsApp",
-        description: "Conecte-se com nosso time para tirar dúvidas ou agendar uma demonstração guiada do Jus Connect.",
+        description: "Conecte-se com nosso time para tirar dúvidas ou agendar uma demonstração guiada do Quantum Jud.",
         icon: MessageCircle,
         actionLabel: "Conversar agora",
-        href: "https://wa.me/553193054200?text=Ol%C3%A1!%20Quero%20conhecer%20o%20Jus%20Connect.",
+        href: "https://wa.me/553193054200?text=Ol%C3%A1!%20Quero%20conhecer%20o%20Quantum%20Jud.",
       },
       {
         title: "Envie um e-mail",
@@ -31,7 +31,7 @@ const Contact = () => {
       },
       {
         title: "Converse com especialistas",
-        description: "Marque uma reunião para entender como o Jus Connect pode acelerar seus resultados.",
+        description: "Marque uma reunião para entender como o Quantum Jud pode acelerar seus resultados.",
         icon: Phone,
         actionLabel: "Agendar reunião",
         href: "https://cal.com/quantum/agendamento",

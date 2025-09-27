@@ -13,7 +13,7 @@ interface Pillar {
 const PILLARS: Pillar[] = [
   {
     title: "Onboarding consultivo",
-    description: "Especialistas acompanham cada etapa para adaptar o Jus Connect à sua realidade jurídica.",
+    description: "Especialistas acompanham cada etapa para adaptar o Quantum Jud à sua realidade jurídica.",
     icon: HandshakeIcon,
   },
   {
@@ -67,13 +67,13 @@ const About = () => {
         <div className="grid gap-8 md:grid-cols-[1.1fr_1fr] md:items-start">
           <div className="space-y-4">
             <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
-              Sobre o Jus Connect
+              Sobre o Quantum Jud
             </span>
             <h2 className="text-3xl font-semibold text-foreground md:text-4xl">
               Plataforma completa para escritórios e departamentos jurídicos
             </h2>
             <p className="text-base text-muted-foreground">
-              Nasceu dentro da Quantum Tecnologia para organizar equipes jurídicas de alto volume. Hoje o Jus Connect integra
+              Nasceu dentro da Quantum Tecnologia para organizar equipes jurídicas de alto volume. Hoje o Quantum Jud integra
               relacionamento com clientes, contencioso, finanças e colaboração em uma única experiência digital.
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
