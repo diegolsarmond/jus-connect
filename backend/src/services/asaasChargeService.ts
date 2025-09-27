@@ -4,6 +4,7 @@ import pool from './db';
 import resolveAsaasIntegration, {
   AsaasIntegrationNotConfiguredError,
 } from './asaas/integrationResolver';
+import { normalizeAsaasEnvironment } from './asaas/urlNormalization';
 
 export const ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD', 'DEBIT_CARD'] as const;
 export type AsaasBillingType = (typeof ASAAS_BILLING_TYPES)[number];
@@ -290,8 +291,17 @@ async function defaultClientFactory({
   }
 
   if (flowEmpresaId !== null) {
+    const rawEnvironment = process.env.ASAAS_ENVIRONMENT;
+    const configuredEnvironment =
+      typeof rawEnvironment === 'string' && rawEnvironment.trim()
+        ? normalizeAsaasEnvironment(rawEnvironment)
+        : undefined;
     try {
-      const integration = await resolveAsaasIntegration(flowEmpresaId, db);
+      const integration = await resolveAsaasIntegration(
+        flowEmpresaId,
+        db,
+        configuredEnvironment,
+      );
       return new HttpAsaasClient({ apiKey: integration.accessToken, baseUrl: integration.baseUrl });
     } catch (error) {
       if (!(error instanceof AsaasIntegrationNotConfiguredError)) {

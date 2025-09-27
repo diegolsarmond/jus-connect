@@ -118,6 +118,59 @@ test('resolveAsaasIntegration completes API version when only /api is provided',
   assert.equal(integration.baseUrl, 'https://sandbox.asaas.com/api/v3');
 });
 
+test('resolveAsaasIntegration selects credential matching requested environment when available', async () => {
+  const pool = new FakePool([
+    {
+      rowCount: 1,
+      rows: [
+        {
+          id: 6,
+          provider: 'asaas',
+          url_api: null,
+          key_value: 'live-token',
+          environment: 'producao',
+          active: true,
+        },
+      ],
+    },
+  ]);
+
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any, 'producao');
+
+  assert.equal(integration.environment, 'producao');
+  assert.equal(integration.accessToken, 'live-token');
+  assert.equal(pool.calls.length, 1);
+  assert.deepEqual(pool.calls[0].params, ['asaas', EMPRESA_ID, 'producao']);
+  assert.match(pool.calls[0].text, /environment = \$3/);
+});
+
+test('resolveAsaasIntegration falls back to other environments when requested one is unavailable', async () => {
+  const pool = new FakePool([
+    { rowCount: 0, rows: [] },
+    {
+      rowCount: 1,
+      rows: [
+        {
+          id: 7,
+          provider: 'asaas',
+          url_api: null,
+          key_value: 'sandbox-token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+    },
+  ]);
+
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any, 'producao');
+
+  assert.equal(integration.environment, 'homologacao');
+  assert.equal(integration.accessToken, 'sandbox-token');
+  assert.equal(pool.calls.length, 2);
+  assert.deepEqual(pool.calls[0].params, ['asaas', EMPRESA_ID, 'producao']);
+  assert.deepEqual(pool.calls[1].params, ['asaas', EMPRESA_ID]);
+});
+
 test('resolveAsaasIntegration throws a specific error when no active credential exists', async () => {
   const pool = new FakePool([
     {
@@ -174,6 +227,45 @@ test('resolveAsaasIntegration falls back to legacy credential when no global exi
   );
 
   warnMock.mock.restore();
+  if (originalEnv === undefined) {
+    delete process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK;
+  } else {
+    process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK = originalEnv;
+  }
+});
+
+test('resolveAsaasIntegration prioritizes matching environment during legacy fallback when available', async () => {
+  const originalEnv = process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK;
+  process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK = 'true';
+
+  const pool = new FakePool([
+    { rowCount: 0, rows: [] },
+    { rowCount: 0, rows: [] },
+    {
+      rowCount: 1,
+      rows: [
+        {
+          id: 11,
+          provider: 'asaas',
+          url_api: 'https://legacy.asaas.com/api/v3',
+          key_value: 'legacy-production-token',
+          environment: 'producao',
+          active: true,
+        },
+      ],
+    },
+  ]);
+
+  const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any, 'producao');
+
+  assert.equal(integration.environment, 'producao');
+  assert.equal(integration.accessToken, 'legacy-production-token');
+  assert.equal(pool.calls.length, 3);
+  assert.deepEqual(pool.calls[0].params, ['asaas', EMPRESA_ID, 'producao']);
+  assert.deepEqual(pool.calls[1].params, ['asaas', EMPRESA_ID]);
+  assert.deepEqual(pool.calls[2].params, ['asaas', 'producao']);
+  assert.match(pool.calls[2].text, /environment = \$2/);
+
   if (originalEnv === undefined) {
     delete process.env.ASAAS_ALLOW_LEGACY_CREDENTIAL_FALLBACK;
   } else {
