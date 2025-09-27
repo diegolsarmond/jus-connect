@@ -522,6 +522,10 @@ const createEmptyProcessForm = (): ProcessFormState => ({
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
   const clienteResumo = processo.cliente ?? null;
+  const clienteId =
+    parseOptionalInteger(clienteResumo?.id) ??
+    parseOptionalInteger(processo.cliente_id) ??
+    0;
   const documento = clienteResumo?.documento ?? "";
   const jurisdicao =
     processo.jurisdicao ||
@@ -622,7 +626,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     status: statusLabel,
     tipo: processo.tipo?.trim() || "Não informado",
     cliente: {
-      id: clienteResumo?.id ?? processo.cliente_id,
+      id: clienteId,
       nome: clienteResumo?.nome ?? "Cliente não informado",
       documento: documento,
       papel: resolveClientePapel(clienteResumo?.tipo),
