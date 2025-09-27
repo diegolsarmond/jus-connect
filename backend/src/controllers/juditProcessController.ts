@@ -6,6 +6,8 @@ import juditProcessService, {
   type JuditRequestRecord,
   type JuditRequestSource,
 } from '../services/juditProcessService';
+import { fetchPlanLimitsForCompany } from '../services/planLimitsService';
+import { evaluateProcessSyncAvailability } from '../services/processSyncQuotaService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const mapRecordToResponse = (record: JuditRequestRecord) => ({
@@ -217,6 +219,18 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    const planLimits = await fetchPlanLimitsForCompany(empresaId);
+    const availability = await evaluateProcessSyncAvailability(empresaId, planLimits);
+
+    if (!availability.allowed) {
+      const message =
+        availability.reason === 'quota_exceeded'
+          ? 'Cota de sincronização de processos esgotada para o plano atual.'
+          : 'Sincronização de processos não disponível para o plano atual.';
+
+      return res.status(403).json({ error: message });
     }
 
     const processoResult = await pool.query(
