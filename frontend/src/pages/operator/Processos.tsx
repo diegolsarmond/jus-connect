@@ -1632,21 +1632,21 @@ export default function Processos() {
       processoToView: Processo,
       options?: { initialTab?: "resumo" | "historico" | "anexos" },
     ) => {
-      const clienteId = processoToView.cliente?.id ?? null;
-
-      if (!clienteId || clienteId <= 0) {
-        toast({
-          title: "Não foi possível abrir o processo",
-          description: "Cliente relacionado ao processo não identificado.",
-          variant: "destructive",
-        });
-        return;
-      }
-
       const state = options?.initialTab ? { initialTab: options.initialTab } : undefined;
       const navigateOptions = state ? { state } : undefined;
 
-      navigate(`/clientes/${clienteId}/processos/${processoToView.id}`, navigateOptions);
+      const clienteId = processoToView.cliente?.id ?? null;
+
+      if (clienteId && clienteId > 0) {
+        navigate(`/clientes/${clienteId}/processos/${processoToView.id}`, navigateOptions);
+        return;
+      }
+
+      toast({
+        title: "Cliente do processo não identificado",
+        description: "Abrindo detalhes do processo diretamente.",
+      });
+      navigate(`/processos/${processoToView.id}`, navigateOptions);
     },
     [navigate, toast],
   );

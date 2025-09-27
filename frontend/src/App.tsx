@@ -160,7 +160,11 @@ const App = () => (
                 <Route path="/clientes/:id/novo-processo" element={withModule("clientes", <NovoProcesso />)} />
                 <Route
                   path="/clientes/:id/processos/:processoId"
-                  element={withModule("clientes", <VisualizarProcesso />)}
+                  element={withModule(["clientes", "processos"], <VisualizarProcesso />)}
+                />
+                <Route
+                  path="/processos/:processoId"
+                  element={withModule(["clientes", "processos"], <VisualizarProcesso />)}
                 />
                 <Route
                   path="/clientes/:id/processos/:processoId/contrato"
