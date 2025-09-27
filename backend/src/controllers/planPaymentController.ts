@@ -96,6 +96,41 @@ function sanitizeDocument(value: unknown): string | null {
   return digits.length > 0 ? digits : null;
 }
 
+function sanitizeIp(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const candidate = value.split(',')[0]?.trim() ?? '';
+  if (!candidate) {
+    return null;
+  }
+
+  if (/^[0-9a-fA-F:.]+$/.test(candidate)) {
+    return candidate;
+  }
+
+  return null;
+}
+
+function sanitizeMetadataRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  const metadata: Record<string, unknown> = {};
+
+  for (const [key, entryValue] of entries) {
+    if (typeof key !== 'string') {
+      continue;
+    }
+    metadata[key] = entryValue;
+  }
+
+  return metadata;
+}
+
 function parseCurrency(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -368,6 +403,28 @@ export const createPlanPayment = async (req: Request, res: Response) => {
   const companyDocument = sanitizeDocument(req.body?.billing?.document ?? req.body?.companyDocument);
   const billingEmail = sanitizeString(req.body?.billing?.email ?? req.body?.billingEmail);
   const notes = sanitizeString(req.body?.billing?.notes ?? req.body?.notes);
+  const cardToken = sanitizeString(req.body?.cardToken ?? req.body?.card?.token);
+  let cardMetadata = sanitizeMetadataRecord(req.body?.cardMetadata ?? req.body?.card?.metadata);
+
+  if (cardMetadata) {
+    const candidate = cardMetadata.remoteIp;
+    if (typeof candidate === 'string') {
+      const sanitized = sanitizeIp(candidate);
+      if (sanitized) {
+        cardMetadata.remoteIp = sanitized;
+      } else {
+        delete cardMetadata.remoteIp;
+      }
+    }
+  }
+
+  const forwardedForHeader = req.headers['x-forwarded-for'];
+  const forwardedFor = Array.isArray(forwardedForHeader) ? forwardedForHeader[0] : forwardedForHeader;
+  const remoteIp =
+    (cardMetadata?.remoteIp as string | undefined) ??
+    sanitizeIp(req.body?.remoteIp) ??
+    sanitizeIp(forwardedFor) ??
+    sanitizeIp(req.ip);
 
   if (!companyName) {
     res.status(400).json({ error: 'Informe a razão social ou nome do responsável pela cobrança.' });
@@ -405,6 +462,11 @@ export const createPlanPayment = async (req: Request, res: Response) => {
   const price = resolvePlanPrice(plan, pricingMode);
   if (price == null || price <= 0) {
     res.status(400).json({ error: 'O plano selecionado não possui valor configurado para esta recorrência.' });
+    return;
+  }
+
+  if (billingType === 'CREDIT_CARD' && !cardToken) {
+    res.status(400).json({ error: 'Informe o token do cartão para concluir a cobrança via cartão.' });
     return;
   }
 
@@ -670,13 +732,16 @@ export const createPlanPayment = async (req: Request, res: Response) => {
       payerEmail: billingEmail,
       payerName: companyName,
       customerDocument: companyDocument,
+      cardToken: cardToken ?? undefined,
       metadata: {
         planId,
         pricingMode,
         empresaId,
         origin: 'plan-payment',
         subscriptionId: subscription.id,
+        ...(cardMetadata ? { cardMetadata } : {}),
       },
+      remoteIp: remoteIp ?? undefined,
     });
 
     const subscriptionInfo = {

@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, type ChangeEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -33,6 +33,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPlanPayment, PlanPaymentMethod, PlanPaymentResult } from "@/features/plans/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { getApiUrl } from "@/lib/api";
+import { tokenizeCard, type CardTokenPayload } from "@/lib/flows";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -72,6 +73,70 @@ const getFormattedPrice = (display: string | null, numeric: number | null) => {
 };
 
 const sanitizeDigits = (value: string): string => value.replace(/\D+/g, "");
+
+type CardFormState = {
+  holderName: string;
+  holderEmail: string;
+  document: string;
+  number: string;
+  expiryMonth: string;
+  expiryYear: string;
+  cvv: string;
+  phone: string;
+  postalCode: string;
+  addressNumber: string;
+  addressComplement: string;
+};
+
+type CardFormErrors = Partial<Record<keyof CardFormState, string>>;
+
+const validateCardForm = (form: CardFormState): CardFormErrors => {
+  const errors: CardFormErrors = {};
+
+  if (!form.holderName.trim()) {
+    errors.holderName = "Informe o nome impresso no cartão.";
+  }
+
+  if (!form.holderEmail.trim() || !form.holderEmail.includes("@")) {
+    errors.holderEmail = "Informe um e-mail válido.";
+  }
+
+  if (sanitizeDigits(form.document).length < 11) {
+    errors.document = "Informe um CPF ou CNPJ válido.";
+  }
+
+  if (sanitizeDigits(form.number).length < 13) {
+    errors.number = "Informe um número de cartão válido.";
+  }
+
+  const month = Number.parseInt(form.expiryMonth, 10);
+  if (!Number.isFinite(month) || month < 1 || month > 12) {
+    errors.expiryMonth = "Mês inválido.";
+  }
+
+  if (!form.expiryYear || form.expiryYear.trim().length < 2) {
+    errors.expiryYear = "Ano inválido.";
+  }
+
+  const cvvLength = sanitizeDigits(form.cvv).length;
+  if (cvvLength < 3 || cvvLength > 4) {
+    errors.cvv = "Código de segurança inválido.";
+  }
+
+  if (sanitizeDigits(form.phone).length < 8) {
+    errors.phone = "Informe um telefone válido.";
+  }
+
+  if (sanitizeDigits(form.postalCode).length < 8) {
+    errors.postalCode = "Informe um CEP válido.";
+  }
+
+  if (!form.addressNumber.trim()) {
+    errors.addressNumber = "Informe o número do endereço.";
+  }
+
+  return errors;
+};
 
 const extractCompanyRecord = (input: unknown): Record<string, unknown> | null => {
   if (Array.isArray(input)) {
@@ -154,8 +219,23 @@ const ManagePlanPayment = () => {
   const [billingEmail, setBillingEmail] = useState("");
   const [billingNotes, setBillingNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTokenizingCard, setIsTokenizingCard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentResult, setPaymentResult] = useState<PlanPaymentResult | null>(null);
+  const [cardForm, setCardForm] = useState<CardFormState>({
+    holderName: "",
+    holderEmail: "",
+    document: "",
+    number: "",
+    expiryMonth: "",
+    expiryYear: "",
+    cvv: "",
+    phone: "",
+    postalCode: "",
+    addressNumber: "",
+    addressComplement: "",
+  });
+  const [cardErrors, setCardErrors] = useState<CardFormErrors>({});
 
   useEffect(() => {
     if (!user?.empresa_id) {
@@ -270,7 +350,23 @@ const ManagePlanPayment = () => {
     if (value === "pix" || value === "boleto" || value === "cartao" || value === "debito") {
       setPaymentMethod(value as PlanPaymentMethod);
       setError(null);
+      setCardErrors({});
     }
+  }, []);
+
+  const handleCardFormChange = useCallback((field: keyof CardFormState, transform?: (value: string) => string) => {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      const rawValue = event.target.value;
+      const nextValue = transform ? transform(rawValue) : rawValue;
+      setCardForm((previous) => ({ ...previous, [field]: nextValue }));
+      setCardErrors((previous) => {
+        if (!previous[field]) {
+          return previous;
+        }
+        const { [field]: _removed, ...rest } = previous;
+        return rest;
+      });
+    };
   }, []);
 
   const pixPayload = paymentResult?.charge.pixPayload ?? null;
@@ -360,14 +456,6 @@ const ManagePlanPayment = () => {
       return;
     }
 
-    if (paymentMethod === "cartao") {
-      toast({
-        title: "Cartão corporativo em breve",
-        description: "Por enquanto, utilize PIX ou boleto para concluir a alteração de plano.",
-      });
-      return;
-    }
-
     if (!companyName.trim() || !companyDocument.trim() || !billingEmail.trim()) {
       const message = "Preencha razão social, documento e e-mail para gerar a cobrança.";
       setError(message);
@@ -379,11 +467,74 @@ const ManagePlanPayment = () => {
       return;
     }
 
+    let cardTokenDetails: { token: string; metadata: Record<string, unknown> } | null = null;
+
+    if (paymentMethod === "cartao") {
+      const validation = validateCardForm(cardForm);
+      setCardErrors(validation);
+      if (Object.values(validation).some(Boolean)) {
+        const message = "Verifique os dados do cartão para continuar.";
+        toast({
+          title: "Dados do cartão incompletos",
+          description: message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const payload: CardTokenPayload = {
+        holderName: cardForm.holderName.trim(),
+        number: sanitizeDigits(cardForm.number),
+        expiryMonth: cardForm.expiryMonth.trim(),
+        expiryYear: cardForm.expiryYear.trim(),
+        cvv: sanitizeDigits(cardForm.cvv),
+        document: sanitizeDigits(cardForm.document),
+        email: cardForm.holderEmail.trim(),
+        phone: sanitizeDigits(cardForm.phone),
+        postalCode: sanitizeDigits(cardForm.postalCode),
+        addressNumber: cardForm.addressNumber.trim(),
+        addressComplement: cardForm.addressComplement.trim() || undefined,
+      };
+
+      try {
+        setIsTokenizingCard(true);
+        const tokenized = await tokenizeCard(payload);
+        cardTokenDetails = {
+          token: tokenized.token,
+          metadata: {
+            brand: tokenized.brand ?? undefined,
+            last4Digits: tokenized.last4Digits ?? undefined,
+            holderName: payload.holderName,
+            holderEmail: payload.email,
+            document: payload.document,
+            phone: payload.phone,
+            postalCode: payload.postalCode,
+            addressNumber: payload.addressNumber,
+            addressComplement: payload.addressComplement,
+          },
+        };
+      } catch (tokenError) {
+        const message =
+          tokenError instanceof Error
+            ? tokenError.message
+            : "Não foi possível validar o cartão informado.";
+        setError(message);
+        toast({
+          title: "Falha ao processar cartão",
+          description: message,
+          variant: "destructive",
+        });
+        return;
+      } finally {
+        setIsTokenizingCard(false);
+      }
+    }
+
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const result = await createPlanPayment({
+      const payload = {
         planId: selectedPlan.id,
         pricingMode,
         paymentMethod,
@@ -393,7 +544,11 @@ const ManagePlanPayment = () => {
           email: billingEmail.trim(),
           notes: billingNotes.trim() ? billingNotes.trim() : undefined,
         },
-      });
+        cardToken: cardTokenDetails?.token,
+        cardMetadata: cardTokenDetails?.metadata,
+      } as const;
+
+      const result = await createPlanPayment(payload);
 
       setPaymentResult(result);
       toast({
@@ -415,6 +570,7 @@ const ManagePlanPayment = () => {
   }, [
     billingEmail,
     billingNotes,
+    cardForm,
     companyDocument,
     companyName,
     paymentMethod,
@@ -423,12 +579,29 @@ const ManagePlanPayment = () => {
     toast,
   ]);
 
+  const isCardMethod = paymentMethod === "cartao";
+  const isCardFormComplete = !isCardMethod
+    ? true
+    : Boolean(
+        cardForm.holderName.trim() &&
+          cardForm.holderEmail.trim() &&
+          sanitizeDigits(cardForm.document).length >= 11 &&
+          sanitizeDigits(cardForm.number).length >= 13 &&
+          cardForm.expiryMonth.trim() &&
+          cardForm.expiryYear.trim() &&
+          sanitizeDigits(cardForm.cvv).length >= 3 &&
+          sanitizeDigits(cardForm.phone).length >= 8 &&
+          sanitizeDigits(cardForm.postalCode).length >= 8 &&
+          cardForm.addressNumber.trim(),
+      );
+
   const isConfirmDisabled =
-    paymentMethod === "cartao" ||
     isSubmitting ||
+    isTokenizingCard ||
     !companyName.trim() ||
     !companyDocument.trim() ||
-    !billingEmail.trim();
+    !billingEmail.trim() ||
+    !isCardFormComplete;
 
   if (!selectedPlan) {
     return (
@@ -550,21 +723,21 @@ const ManagePlanPayment = () => {
                 onValueChange={handlePaymentMethodChange}
                 className="space-y-3"
               >
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-background/60 p-4 opacity-60">
+                <div
+                  className={`flex items-center justify-between gap-3 rounded-2xl border p-4 transition ${
+                    paymentMethod === "cartao"
+                      ? "border-primary/60 bg-primary/5"
+                      : "border-border/60 bg-background/80"
+                  }`}
+                >
                   <div className="flex items-center gap-3">
-                    <RadioGroupItem id="payment-cartao" value="cartao" disabled />
+                    <RadioGroupItem id="payment-cartao" value="cartao" />
                     <div>
-                      <Label
-                        htmlFor="payment-cartao"
-                        className="font-medium flex items-center gap-2 text-muted-foreground"
-                      >
+                      <Label htmlFor="payment-cartao" className="font-medium">
                         Cartão corporativo
-                        <Badge variant="outline" className="text-xs uppercase tracking-wide">
-                          Em breve
-                        </Badge>
                       </Label>
                       <p className="text-sm text-muted-foreground">
-                        Pagamento imediato e renovação automática.
+                        Pagamento imediato e renovação automática com cobrança recorrente.
                       </p>
                     </div>
                   </div>
@@ -615,6 +788,165 @@ const ManagePlanPayment = () => {
               </RadioGroup>
             </CardContent>
           </Card>
+
+          {isCardMethod && (
+            <Card className="rounded-3xl border border-border/60">
+              <CardHeader>
+                <CardTitle>Dados do cartão</CardTitle>
+                <CardDescription>
+                  Informe os dados do cartão corporativo para gerar o token de autorização de cobrança.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="card-holder-name">Nome impresso no cartão</Label>
+                    <Input
+                      id="card-holder-name"
+                      placeholder="Nome completo"
+                      value={cardForm.holderName}
+                      onChange={handleCardFormChange("holderName")}
+                    />
+                    {cardErrors.holderName && (
+                      <p className="text-xs text-destructive">{cardErrors.holderName}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card-holder-email">E-mail do portador</Label>
+                    <Input
+                      id="card-holder-email"
+                      type="email"
+                      placeholder="nome@empresa.com"
+                      value={cardForm.holderEmail}
+                      onChange={handleCardFormChange("holderEmail")}
+                    />
+                    {cardErrors.holderEmail && (
+                      <p className="text-xs text-destructive">{cardErrors.holderEmail}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="card-document">CPF ou CNPJ do portador</Label>
+                    <Input
+                      id="card-document"
+                      placeholder="000.000.000-00"
+                      value={cardForm.document}
+                      onChange={handleCardFormChange("document")}
+                    />
+                    {cardErrors.document && (
+                      <p className="text-xs text-destructive">{cardErrors.document}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card-phone">Telefone de contato</Label>
+                    <Input
+                      id="card-phone"
+                      placeholder="(11) 99999-9999"
+                      value={cardForm.phone}
+                      onChange={handleCardFormChange("phone")}
+                    />
+                    {cardErrors.phone && <p className="text-xs text-destructive">{cardErrors.phone}</p>}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="card-number">Número do cartão</Label>
+                    <Input
+                      id="card-number"
+                      placeholder="0000 0000 0000 0000"
+                      value={cardForm.number}
+                      onChange={handleCardFormChange("number")}
+                    />
+                    {cardErrors.number && <p className="text-xs text-destructive">{cardErrors.number}</p>}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="card-expiry-month">Mês</Label>
+                      <Input
+                        id="card-expiry-month"
+                        placeholder="MM"
+                        maxLength={2}
+                        value={cardForm.expiryMonth}
+                        onChange={handleCardFormChange("expiryMonth")}
+                      />
+                      {cardErrors.expiryMonth && (
+                        <p className="text-xs text-destructive">{cardErrors.expiryMonth}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="card-expiry-year">Ano</Label>
+                      <Input
+                        id="card-expiry-year"
+                        placeholder="AA"
+                        maxLength={4}
+                        value={cardForm.expiryYear}
+                        onChange={handleCardFormChange("expiryYear")}
+                      />
+                      {cardErrors.expiryYear && (
+                        <p className="text-xs text-destructive">{cardErrors.expiryYear}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="card-cvv">CVV</Label>
+                      <Input
+                        id="card-cvv"
+                        placeholder="123"
+                        maxLength={4}
+                        value={cardForm.cvv}
+                        onChange={handleCardFormChange("cvv")}
+                      />
+                      {cardErrors.cvv && <p className="text-xs text-destructive">{cardErrors.cvv}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="card-postal-code">CEP de cobrança</Label>
+                    <Input
+                      id="card-postal-code"
+                      placeholder="00000-000"
+                      value={cardForm.postalCode}
+                      onChange={handleCardFormChange("postalCode")}
+                    />
+                    {cardErrors.postalCode && (
+                      <p className="text-xs text-destructive">{cardErrors.postalCode}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="card-address-number">Número do endereço</Label>
+                    <Input
+                      id="card-address-number"
+                      placeholder="123"
+                      value={cardForm.addressNumber}
+                      onChange={handleCardFormChange("addressNumber")}
+                    />
+                    {cardErrors.addressNumber && (
+                      <p className="text-xs text-destructive">{cardErrors.addressNumber}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="card-address-complement">Complemento</Label>
+                  <Input
+                    id="card-address-complement"
+                    placeholder="Sala, bloco, referência"
+                    value={cardForm.addressComplement}
+                    onChange={handleCardFormChange("addressComplement")}
+                  />
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Os dados informados são utilizados apenas para gerar um token seguro junto ao Asaas. O número do cartão não é
+                  armazenado pela Jus Connect.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="rounded-3xl border border-border/60">
             <CardHeader>
@@ -718,10 +1050,10 @@ const ManagePlanPayment = () => {
                 onClick={handleSubmit}
                 disabled={isConfirmDisabled}
               >
-                {isSubmitting ? (
+                {isSubmitting || isTokenizingCard ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Processando…
+                    {isTokenizingCard ? "Validando cartão…" : "Processando…"}
                   </span>
                 ) : (
                   "Confirmar alteração de plano"
