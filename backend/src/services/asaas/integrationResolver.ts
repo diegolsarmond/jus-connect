@@ -92,11 +92,13 @@ export async function resolveAsaasIntegration(
     row = result.rows[0] as IntegrationRow;
   } else {
     if (!allowLegacyFallback) {
-      console.warn('[Asaas] Nenhuma credencial encontrada e fallback legado está desabilitado.');
+      console.warn(
+        '[Asaas] Nenhuma credencial global encontrada e fallback legado está desabilitado.',
+      );
       throw new AsaasIntegrationNotConfiguredError();
     }
 
-    console.warn('[Asaas] Nenhuma credencial encontrada. Aplicando fallback legado.');
+    console.warn('[Asaas] Nenhuma credencial global encontrada. Aplicando fallback legado.');
 
     const legacyResult = await db.query(
       `SELECT id, provider, url_api, key_value, environment, active
