@@ -10,6 +10,10 @@ import asaasChargeSyncService, {
 } from './asaasChargeSync';
 import juditProcessService from './juditProcessService';
 import pool from './db';
+import {
+  evaluateProcessSyncAvailability,
+  type ProcessSyncAvailabilityResult,
+} from './processSyncQuotaService';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -479,17 +483,48 @@ export class CronJobsService {
 
     try {
       const processos = await pool.query(
-        `SELECT id, numero, judit_tracking_id, judit_tracking_hour_range
-           FROM public.processos
-          WHERE numero IS NOT NULL`
+        `SELECT p.id,
+                p.numero,
+                p.judit_tracking_id,
+                p.judit_tracking_hour_range,
+                p.idempresa
+           FROM public.processos p
+           JOIN public.empresas emp ON emp.id = p.idempresa
+           JOIN public.planos pl ON pl.id::text = emp.plano::text
+          WHERE p.numero IS NOT NULL
+            AND COALESCE(pl.sincronizacao_processos_habilitada, FALSE) = TRUE`
       );
+
+      const availabilityCache = new Map<number, ProcessSyncAvailabilityResult>();
 
       for (const row of processos.rows as Array<{
         id: number;
         numero: string;
         judit_tracking_id: string | null;
         judit_tracking_hour_range: string | null;
+        idempresa: number | null;
       }>) {
+        const empresaId = row.idempresa ?? null;
+
+        if (!Number.isInteger(empresaId) || empresaId === null || empresaId <= 0) {
+          continue;
+        }
+
+        let availability = availabilityCache.get(empresaId);
+
+        if (!availability) {
+          availability = await evaluateProcessSyncAvailability(empresaId);
+          availabilityCache.set(empresaId, availability);
+        }
+
+        if (!availability.allowed) {
+          continue;
+        }
+
+        if (availability.remainingQuota != null && availability.remainingQuota <= 0) {
+          continue;
+        }
+
         try {
           await juditProcessService.ensureTrackingForProcess(row.id, row.numero, {
             trackingId: row.judit_tracking_id,
@@ -502,6 +537,9 @@ export class CronJobsService {
             onDemand: false,
             withAttachments: true,
           });
+          if (availability.remainingQuota != null) {
+            availability.remainingQuota = Math.max(0, availability.remainingQuota - 1);
+          }
           processed += 1;
         } catch (error) {
           errors += 1;

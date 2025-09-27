@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CronJobsService } from '../src/services/cronJobs';
 import juditProcessService from '../src/services/juditProcessService';
+import pool from '../src/services/db';
 
 const waitForAsyncTasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -117,5 +118,136 @@ test('refreshJuditIntegration clears timers when integration is disabled', async
   for (const schedule of schedules) {
     assert.equal(schedule.timer, null, 'Expected Judit timer to be cleared when disabled');
     assert.equal(schedule.nextRunAt, null, 'Expected Judit schedule to lose next run when disabled');
+  }
+});
+
+test('runJuditSync skips companies without available quota', async () => {
+  const cron = createCronJobs([true], true);
+
+  const processosRows = [
+    {
+      id: 1,
+      numero: '0000000-00.0000.0.00.0000',
+      judit_tracking_id: null,
+      judit_tracking_hour_range: null,
+      idempresa: 10,
+    },
+    {
+      id: 2,
+      numero: '1111111-11.1111.1.11.1111',
+      judit_tracking_id: null,
+      judit_tracking_hour_range: null,
+      idempresa: 10,
+    },
+    {
+      id: 3,
+      numero: '2222222-22.2222.2.22.2222',
+      judit_tracking_id: null,
+      judit_tracking_hour_range: null,
+      idempresa: 20,
+    },
+  ];
+
+  const poolMock = test.mock.method(pool, 'query', async (text: string, params: unknown[]) => {
+    if (/FROM public\.processos/.test(text) && /JOIN public\.empresas/.test(text)) {
+      return { rows: processosRows, rowCount: processosRows.length };
+    }
+
+    if (/FROM public\.empresas/.test(text)) {
+      const companyId = Array.isArray(params) ? Number(params[0]) : null;
+      if (companyId === 10) {
+        return {
+          rows: [
+            {
+              limite_usuarios: null,
+              limite_processos: null,
+              limite_propostas: null,
+              sincronizacao_processos_habilitada: true,
+              sincronizacao_processos_cota: 1,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+
+      if (companyId === 20) {
+        return {
+          rows: [
+            {
+              limite_usuarios: null,
+              limite_processos: null,
+              limite_propostas: null,
+              sincronizacao_processos_habilitada: true,
+              sincronizacao_processos_cota: 0,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (/FROM public\.process_sync/.test(text)) {
+      const companyId = Array.isArray(params) ? Number(params[0]) : null;
+      if (companyId === 10) {
+        return { rows: [{ total: '0' }], rowCount: 1 };
+      }
+      if (companyId === 20) {
+        return { rows: [{ total: '0' }], rowCount: 1 };
+      }
+      return { rows: [{ total: '0' }], rowCount: 1 };
+    }
+
+    if (/FROM public\.processo_consultas_api/.test(text)) {
+      const companyId = Array.isArray(params) ? Number(params[0]) : null;
+      if (companyId === 10) {
+        return { rows: [{ total: '0' }], rowCount: 1 };
+      }
+      if (companyId === 20) {
+        return { rows: [{ total: '0' }], rowCount: 1 };
+      }
+      return { rows: [{ total: '0' }], rowCount: 1 };
+    }
+
+    throw new Error(`Unexpected query: ${text}`);
+  });
+
+  const juditService = (juditProcessService as unknown as {
+    ensureTrackingForProcess: typeof juditProcessService.ensureTrackingForProcess;
+    triggerRequestForProcess: typeof juditProcessService.triggerRequestForProcess;
+  });
+
+  const ensureCalls: unknown[][] = [];
+  const triggerCalls: unknown[][] = [];
+
+  const ensureMock = test.mock.method(juditService, 'ensureTrackingForProcess', async (...args: unknown[]) => {
+    ensureCalls.push(args);
+    return { tracking_id: 'tracking', hour_range: '00-06' };
+  });
+
+  const triggerMock = test.mock.method(juditService, 'triggerRequestForProcess', async (...args: unknown[]) => {
+    triggerCalls.push(args);
+    return {
+      requestId: 'req-1',
+      status: 'pending',
+      source: 'cron',
+      result: null,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    } as any;
+  });
+
+  try {
+    await (cron as any).runJuditSync('manual');
+
+    assert.equal(ensureCalls.length, 1);
+    assert.equal(triggerCalls.length, 1);
+    assert.equal(ensureCalls[0]?.[0], 1);
+    assert.equal(triggerCalls[0]?.[0], 1);
+  } finally {
+    triggerMock.mock.restore();
+    ensureMock.mock.restore();
+    poolMock.mock.restore();
   }
 });

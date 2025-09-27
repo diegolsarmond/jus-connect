@@ -14,6 +14,7 @@ import juditProcessService, {
   JuditConfigurationError,
   type JuditRequestRecord,
 } from '../services/juditProcessService';
+import { evaluateProcessSyncAvailability } from '../services/processSyncQuotaService';
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -829,35 +830,43 @@ export const getProcessoById = async (req: Request, res: Response) => {
 
     if ((await juditProcessService.isEnabled()) && !hasJuditHistory) {
       try {
-        const tracking = await juditProcessService.ensureTrackingForProcess(
-          processo.id,
-          processo.numero,
-          {
-            trackingId: processo.judit_tracking_id ?? null,
-            hourRange: processo.judit_tracking_hour_range ?? null,
-          }
+        const planLimits = await fetchPlanLimitsForCompany(empresaId);
+        const availability = await evaluateProcessSyncAvailability(
+          empresaId,
+          planLimits,
         );
 
-        if (tracking) {
-          processo.judit_tracking_id = tracking.tracking_id;
-          processo.judit_tracking_hour_range =
-            typeof tracking.hour_range === 'string'
-              ? tracking.hour_range
-              : processo.judit_tracking_hour_range ?? null;
-        }
+        if (availability.allowed) {
+          const tracking = await juditProcessService.ensureTrackingForProcess(
+            processo.id,
+            processo.numero,
+            {
+              trackingId: processo.judit_tracking_id ?? null,
+              hourRange: processo.judit_tracking_hour_range ?? null,
+            }
+          );
 
-        const requestRecord = await juditProcessService.triggerRequestForProcess(
-          processo.id,
-          processo.numero,
-          {
-            source: 'details',
-            skipIfPending: true,
-            withAttachments: true,
+          if (tracking) {
+            processo.judit_tracking_id = tracking.tracking_id;
+            processo.judit_tracking_hour_range =
+              typeof tracking.hour_range === 'string'
+                ? tracking.hour_range
+                : processo.judit_tracking_hour_range ?? null;
           }
-        );
 
-        if (requestRecord) {
-          processo.judit_last_request = mapRequestRecordToProcesso(requestRecord);
+          const requestRecord = await juditProcessService.triggerRequestForProcess(
+            processo.id,
+            processo.numero,
+            {
+              source: 'details',
+              skipIfPending: true,
+              withAttachments: true,
+            }
+          );
+
+          if (requestRecord) {
+            processo.judit_last_request = mapRequestRecordToProcesso(requestRecord);
+          }
         }
       } catch (error) {
         if (!(error instanceof JuditConfigurationError)) {
