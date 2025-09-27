@@ -1529,6 +1529,64 @@ export default function VisualizarProcesso() {
   }, [processoId]);
 
 
+  const statusBadgeLabel = useMemo(() => {
+    if (!processo) {
+      return null;
+    }
+
+    return translateLabelToEnglish(processo.status);
+  }, [processo]);
+
+  const typeBadgeLabel = useMemo(() => {
+    if (!processo) {
+      return null;
+    }
+
+    return translateLabelToEnglish(processo.tipo);
+  }, [processo]);
+
+  const anexos = processo?.responseData?.anexos ?? [];
+  const totalAttachments = anexos.length;
+  const [attachmentsPage, setAttachmentsPage] = useState(1);
+  const [attachmentsPageSize, setAttachmentsPageSize] = useState(10);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(10);
+  const [selectedMovement, setSelectedMovement] = useState<TimelineEntry | null>(null);
+
+  useEffect(() => {
+    setAttachmentsPage(1);
+  }, [processo?.id]);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [processo?.id]);
+
+  useEffect(() => {
+    setAttachmentsPage(1);
+  }, [attachmentsPageSize]);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyPageSize]);
+
+  const attachmentsTotalPages = useMemo(() => {
+    if (totalAttachments === 0) {
+      return 1;
+    }
+
+    return Math.max(1, Math.ceil(totalAttachments / attachmentsPageSize));
+  }, [attachmentsPageSize, totalAttachments]);
+
+  const timelineEntries = useMemo(() => {
+    if (!processo) {
+      return [];
+    }
+
+    return createTimelineEntries(processo.movimentacoes);
+  }, [processo]);
+
+  const totalTimelineEntries = timelineEntries.length;
+
   const overviewFields = useMemo(() => {
     if (!processo) {
       return [] as { label: string; value: string }[];
@@ -1602,64 +1660,6 @@ export default function VisualizarProcesso() {
       },
     ];
   }, [processo, totalTimelineEntries]);
-
-  const statusBadgeLabel = useMemo(() => {
-    if (!processo) {
-      return null;
-    }
-
-    return translateLabelToEnglish(processo.status);
-  }, [processo]);
-
-  const typeBadgeLabel = useMemo(() => {
-    if (!processo) {
-      return null;
-    }
-
-    return translateLabelToEnglish(processo.tipo);
-  }, [processo]);
-
-  const anexos = processo?.responseData?.anexos ?? [];
-  const totalAttachments = anexos.length;
-  const [attachmentsPage, setAttachmentsPage] = useState(1);
-  const [attachmentsPageSize, setAttachmentsPageSize] = useState(10);
-  const [historyPage, setHistoryPage] = useState(1);
-  const [historyPageSize, setHistoryPageSize] = useState(10);
-  const [selectedMovement, setSelectedMovement] = useState<TimelineEntry | null>(null);
-
-  useEffect(() => {
-    setAttachmentsPage(1);
-  }, [processo?.id]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [processo?.id]);
-
-  useEffect(() => {
-    setAttachmentsPage(1);
-  }, [attachmentsPageSize]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [historyPageSize]);
-
-  const attachmentsTotalPages = useMemo(() => {
-    if (totalAttachments === 0) {
-      return 1;
-    }
-
-    return Math.max(1, Math.ceil(totalAttachments / attachmentsPageSize));
-  }, [attachmentsPageSize, totalAttachments]);
-
-  const timelineEntries = useMemo(() => {
-    if (!processo) {
-      return [];
-    }
-
-    return createTimelineEntries(processo.movimentacoes);
-  }, [processo]);
-
-  const totalTimelineEntries = timelineEntries.length;
 
   const historyTotalPages = useMemo(() => {
     if (totalTimelineEntries === 0) {
