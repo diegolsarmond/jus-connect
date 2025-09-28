@@ -19,6 +19,25 @@ class AsaasIntegrationNotConfiguredError extends Error {
     }
 }
 exports.AsaasIntegrationNotConfiguredError = AsaasIntegrationNotConfiguredError;
+async function findCredentialId(db, integrationId) {
+    const result = await db.query('SELECT id FROM asaas_credentials WHERE integration_api_key_id = $1', [
+        integrationId,
+    ]);
+    if (result.rowCount === 0) {
+        return null;
+    }
+    const rawId = result.rows[0]?.id;
+    if (typeof rawId === 'number' && Number.isFinite(rawId)) {
+        return Math.trunc(rawId);
+    }
+    if (typeof rawId === 'string' && rawId.trim()) {
+        const parsed = Number.parseInt(rawId.trim(), 10);
+        if (Number.isFinite(parsed)) {
+            return parsed;
+        }
+    }
+    return null;
+}
 function resolveBooleanEnv(name, fallback) {
     const raw = process.env[name];
     if (typeof raw !== 'string') {
@@ -85,7 +104,8 @@ async function resolveAsaasIntegration(empresaId, db = db_1.default) {
     const environment = (0, urlNormalization_1.normalizeAsaasEnvironment)(row.environment);
     const baseUrl = (0, urlNormalization_1.normalizeAsaasBaseUrl)(environment, row.url_api);
     const accessToken = normalizeToken(row.key_value);
-    return { baseUrl, accessToken, environment };
+    const credentialId = await findCredentialId(db, row.id);
+    return { baseUrl, accessToken, environment, integrationId: row.id, credentialId };
 }
 async function createAsaasClient(empresaId, db = db_1.default, overrides = {}) {
     const integration = await resolveAsaasIntegration(empresaId, db);

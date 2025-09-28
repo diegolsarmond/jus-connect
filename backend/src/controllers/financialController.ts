@@ -558,12 +558,19 @@ const normalizeAsaasChargeFromRow = (row: QueryResultRow): AsaasChargeRecord => 
     financialFlowId: normalizeFinancialFlowIdValue(record.financial_flow_id),
     clienteId: parseNullableInteger(record.cliente_id),
     integrationApiKeyId: parseNullableInteger(record.integration_api_key_id),
+    credentialId: parseNullableInteger(record.credential_id),
     asaasChargeId: String(record.asaas_charge_id ?? ''),
     billingType: normalizeBillingTypeFromRow(record.billing_type),
     status: String(record.status ?? ''),
     dueDate: formatDateOnly(record.due_date),
     value: String(record.value ?? ''),
     invoiceUrl: record.invoice_url ? String(record.invoice_url) : null,
+    lastEvent: record.last_event ? String(record.last_event) : null,
+    payload:
+      record.payload && typeof record.payload === 'object'
+        ? (record.payload as Record<string, unknown>)
+        : null,
+    paidAt: record.paid_at ? formatDateTime(record.paid_at) : null,
     pixPayload: record.pix_payload ? String(record.pix_payload) : null,
     pixQrCode: record.pix_qr_code ? String(record.pix_qr_code) : null,
     boletoUrl: record.boleto_url ? String(record.boleto_url) : null,
@@ -578,17 +585,21 @@ const findAsaasChargeByFlowId = async (
   flowId: string | number,
 ): Promise<AsaasChargeRecord | null> => {
   const result = await pool.query(
-    `SELECT
+      `SELECT
         id,
         financial_flow_id,
         cliente_id,
         integration_api_key_id,
+        credential_id,
         asaas_charge_id,
         billing_type,
         status,
         due_date,
         value,
         invoice_url,
+        last_event,
+        payload,
+        paid_at,
         pix_payload,
         pix_qr_code,
         boleto_url,

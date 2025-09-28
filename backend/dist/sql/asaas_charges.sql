@@ -3,12 +3,16 @@ CREATE TABLE IF NOT EXISTS asaas_charges (
   financial_flow_id INTEGER NOT NULL REFERENCES financial_flows(id) ON DELETE CASCADE,
   cliente_id INTEGER REFERENCES public.clientes(id),
   integration_api_key_id BIGINT REFERENCES integration_api_keys(id),
+  credential_id BIGINT REFERENCES asaas_credentials(id),
   asaas_charge_id TEXT NOT NULL,
   billing_type TEXT NOT NULL CHECK (billing_type IN ('PIX','BOLETO','CREDIT_CARD')),
   status TEXT NOT NULL,
   due_date DATE NOT NULL,
   value NUMERIC NOT NULL,
   invoice_url TEXT,
+  last_event TEXT,
+  payload JSONB,
+  paid_at TIMESTAMPTZ,
   pix_payload TEXT,
   pix_qr_code TEXT,
   boleto_url TEXT,
@@ -39,3 +43,15 @@ CREATE TRIGGER trg_asaas_charges_updated_at
   BEFORE UPDATE ON asaas_charges
   FOR EACH ROW
   EXECUTE FUNCTION set_asaas_charges_updated_at();
+
+ALTER TABLE asaas_charges
+  ADD COLUMN IF NOT EXISTS credential_id BIGINT REFERENCES asaas_credentials(id);
+
+ALTER TABLE asaas_charges
+  ADD COLUMN IF NOT EXISTS last_event TEXT;
+
+ALTER TABLE asaas_charges
+  ADD COLUMN IF NOT EXISTS payload JSONB;
+
+ALTER TABLE asaas_charges
+  ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
