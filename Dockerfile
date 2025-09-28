@@ -10,18 +10,34 @@ ENV NODE_ENV=development
 COPY backend/package*.json backend/
 COPY frontend/package*.json frontend/
 
-# instalar dependências do backend (inclui dev para build TS)
+# forçar registry oficial, aumentar retries e limpar cache (ajuda contra tarballs corrompidos/mirror)
+RUN npm config set registry https://registry.npmjs.org/ \
+ && npm config set fetch-retries 5 \
+ && npm config set fetch-retry-mintimeout 20000 \
+ && npm config set fetch-retry-maxtimeout 120000 \
+ && npm cache clean --force || true \
+ && npm cache verify || true
+
+# instalar dependências do backend (inclui dev para build TS) com retry
 RUN if [ -f backend/package-lock.json ]; then \
-      npm --prefix backend ci; \
+      for i in 1 2 3; do \
+        npm --prefix backend ci --no-audit --no-fund && break || (npm cache clean --force; sleep 2); \
+      done; \
     else \
-      npm --prefix backend install; \
+      for i in 1 2 3; do \
+        npm --prefix backend install --no-audit --no-fund && break || (npm cache clean --force; sleep 2); \
+      done; \
     fi
 
-# instalar dependências do frontend
+# instalar dependências do frontend com fallback para install e retry
 RUN if [ -f frontend/package-lock.json ]; then \
-      npm --prefix frontend ci || npm --prefix frontend install; \
+      for i in 1 2 3; do \
+        npm --prefix frontend ci --no-audit --no-fund && break || (npm --prefix frontend install --no-audit --no-fund || true; npm cache clean --force; sleep 2); \
+      done; \
     else \
-      npm --prefix frontend install; \
+      for i in 1 2 3; do \
+        npm --prefix frontend install --no-audit --no-fund && break || (npm cache clean --force; sleep 2); \
+      done; \
     fi
 
 # copiar código e buildar
@@ -54,11 +70,23 @@ COPY --from=builder --chown=appuser:appuser /app/backend/appsettings.json /app/b
 COPY --from=builder --chown=appuser:appuser /app/backend/package*.json /app/backend/
 COPY --from=builder --chown=appuser:appuser /app/frontend/dist /app/frontend/dist
 
-# instalar apenas dependências de produção no final
+# garantir config npm no estágio final também
+RUN npm config set registry https://registry.npmjs.org/ \
+ && npm config set fetch-retries 5 \
+ && npm config set fetch-retry-mintimeout 20000 \
+ && npm config set fetch-retry-maxtimeout 120000 \
+ && npm cache clean --force || true \
+ && npm cache verify || true
+
+# instalar apenas dependências de produção no final (com retry)
 RUN if [ -f /app/backend/package-lock.json ]; then \
-      npm --prefix /app/backend ci --omit=dev --prefer-offline --no-audit; \
+      for i in 1 2 3; do \
+        npm --prefix /app/backend ci --omit=dev --prefer-offline --no-audit && break || (npm cache clean --force; sleep 2); \
+      done; \
     else \
-      npm --prefix /app/backend install --omit=dev --prefer-offline --no-audit; \
+      for i in 1 2 3; do \
+        npm --prefix /app/backend install --omit=dev --prefer-offline --no-audit && break || (npm cache clean --force; sleep 2); \
+      done; \
     fi
 
 # metadata

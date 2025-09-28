@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
-import type { PoolClient, QueryResult } from 'pg';
+import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import pool from '../services/db';
 import type { Flow } from '../models/flow';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasChargeService, {
   ChargeConflictError,
+  type AsaasChargeRecord,
+  type AsaasChargeResult,
   ValidationError as AsaasValidationError,
 } from '../services/asaasChargeService';
 import { createAsaasClient } from '../services/asaas/integrationResolver';
@@ -399,6 +401,214 @@ export const __internal = {
 };
 
 const asaasChargeService = new AsaasChargeService();
+
+type QueryExecutor = Pick<PoolClient, 'query'>;
+
+interface AsaasChargeCreationParams {
+  dbClient: QueryExecutor;
+  flow: QueryResultRow;
+  paymentMethod: unknown;
+  clienteId: number | null;
+  integrationApiKeyId?: number | null;
+  value: unknown;
+  dueDate: unknown;
+  description: unknown;
+  cardToken?: string | null;
+  asaasCustomerId?: string | null;
+  additionalFields?: Record<string, unknown> | null;
+  payerEmail?: string | null;
+  payerName?: string | null;
+  customerDocument?: string | null;
+  externalReferenceId?: unknown;
+  metadata?: Record<string, unknown> | null;
+  remoteIp?: string | null;
+}
+
+const ensureReceitaFlow = (flow: QueryResultRow): void => {
+  const tipo = (flow as { tipo?: unknown }).tipo;
+  const normalizedTipo = typeof tipo === 'string' ? tipo.trim().toLowerCase() : '';
+
+  if (normalizedTipo !== 'receita') {
+    throw new AsaasValidationError('Apenas receitas podem gerar cobrança no Asaas');
+  }
+};
+
+const extractFlowId = (flow: QueryResultRow): number | string => {
+  const flowId = (flow as { id?: unknown }).id;
+
+  if (typeof flowId === 'number' || typeof flowId === 'string') {
+    return flowId;
+  }
+
+  throw new AsaasValidationError('Fluxo financeiro inválido para geração de cobrança');
+};
+
+const createChargeForFlowIfRequested = async (
+  params: AsaasChargeCreationParams,
+): Promise<AsaasChargeResult | null> => {
+  if (typeof params.paymentMethod !== 'string' || !params.paymentMethod.trim()) {
+    return null;
+  }
+
+  ensureReceitaFlow(params.flow);
+
+  const flowId = extractFlowId(params.flow);
+
+  return asaasChargeService.createCharge(
+    {
+      financialFlowId: flowId,
+      billingType: params.paymentMethod,
+      clienteId: params.clienteId ?? null,
+      integrationApiKeyId: params.integrationApiKeyId ?? null,
+      value: params.value,
+      dueDate: params.dueDate,
+      description: params.description ?? null,
+      cardToken: params.cardToken ?? null,
+      asaasCustomerId: params.asaasCustomerId ?? null,
+      additionalFields: params.additionalFields ?? null,
+      payerEmail: params.payerEmail ?? null,
+      payerName: params.payerName ?? null,
+      customerDocument: params.customerDocument ?? null,
+      externalReferenceId: params.externalReferenceId ?? null,
+      metadata: params.metadata ?? null,
+      remoteIp: params.remoteIp ?? null,
+    },
+    { dbClient: params.dbClient },
+  );
+};
+
+const parseNullableInteger = (value: unknown): number | null => {
+  if (value === null || typeof value === 'undefined') {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.trunc(value) : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const normalizeBillingTypeFromRow = (
+  value: unknown,
+): AsaasChargeRecord['billingType'] => {
+  const normalized = String(value ?? '').trim().toUpperCase();
+
+  if (normalized === 'PIX' || normalized === 'BOLETO' || normalized === 'CREDIT_CARD' || normalized === 'DEBIT_CARD') {
+    return normalized;
+  }
+
+  if (normalized === 'CREDITCARD') {
+    return 'CREDIT_CARD';
+  }
+
+  if (normalized === 'DEBITCARD' || normalized === 'DEBIT' || normalized === 'DEBITO' || normalized === 'DÉBITO') {
+    return 'DEBIT_CARD';
+  }
+
+  if (normalized === 'BOLETO_BANCARIO' || normalized === 'BANK_SLIP') {
+    return 'BOLETO';
+  }
+
+  return 'PIX';
+};
+
+const normalizeFinancialFlowIdValue = (value: unknown): number | string => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return String(value ?? '');
+};
+
+const formatDateOnly = (value: unknown): string => {
+  const date = value instanceof Date ? value : new Date(value as string);
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDateTime = (value: unknown): string => {
+  const date = value instanceof Date ? value : new Date(value as string);
+  return date.toISOString();
+};
+
+const normalizeAsaasChargeFromRow = (row: QueryResultRow): AsaasChargeRecord => {
+  const record = row as Record<string, unknown>;
+  const id = parseNullableInteger(record.id);
+
+  if (id === null) {
+    throw new Error('Invalid identifier for Asaas charge row');
+  }
+
+  return {
+    id,
+    financialFlowId: normalizeFinancialFlowIdValue(record.financial_flow_id),
+    clienteId: parseNullableInteger(record.cliente_id),
+    integrationApiKeyId: parseNullableInteger(record.integration_api_key_id),
+    asaasChargeId: String(record.asaas_charge_id ?? ''),
+    billingType: normalizeBillingTypeFromRow(record.billing_type),
+    status: String(record.status ?? ''),
+    dueDate: formatDateOnly(record.due_date),
+    value: String(record.value ?? ''),
+    invoiceUrl: record.invoice_url ? String(record.invoice_url) : null,
+    pixPayload: record.pix_payload ? String(record.pix_payload) : null,
+    pixQrCode: record.pix_qr_code ? String(record.pix_qr_code) : null,
+    boletoUrl: record.boleto_url ? String(record.boleto_url) : null,
+    cardLast4: record.card_last4 ? String(record.card_last4) : null,
+    cardBrand: record.card_brand ? String(record.card_brand) : null,
+    createdAt: formatDateTime(record.created_at),
+    updatedAt: formatDateTime(record.updated_at),
+  };
+};
+
+const findAsaasChargeByFlowId = async (
+  flowId: string | number,
+): Promise<AsaasChargeRecord | null> => {
+  const result = await pool.query(
+    `SELECT
+        id,
+        financial_flow_id,
+        cliente_id,
+        integration_api_key_id,
+        asaas_charge_id,
+        billing_type,
+        status,
+        due_date,
+        value,
+        invoice_url,
+        pix_payload,
+        pix_qr_code,
+        boleto_url,
+        card_last4,
+        card_brand,
+        created_at,
+        updated_at
+      FROM asaas_charges
+      WHERE financial_flow_id = $1
+      ORDER BY updated_at DESC
+      LIMIT 1`,
+    [flowId],
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return normalizeAsaasChargeFromRow(result.rows[0]);
+};
 
 const determineFinancialFlowEmpresaColumn = async (): Promise<FinancialFlowEmpresaColumn | null> => {
   if (
@@ -1056,33 +1266,27 @@ export const createFlow = async (req: Request, res: Response) => {
     let flow = inserted.rows[0];
     let charge = null;
 
-    if (typeof paymentMethod === 'string' && paymentMethod.trim()) {
-      if (flow.tipo !== 'receita') {
-        throw new AsaasValidationError('Apenas receitas podem gerar cobrança no Asaas');
-      }
+    const chargeResult = await createChargeForFlowIfRequested({
+      dbClient: client,
+      flow,
+      paymentMethod,
+      clienteId: clienteIdForInsert,
+      integrationApiKeyId: integrationApiKeyId ?? null,
+      value: valor ?? flow.valor,
+      dueDate: vencimento ?? flow.vencimento,
+      description: descricao ?? flow.descricao,
+      cardToken: cardToken ?? null,
+      asaasCustomerId: asaasCustomerId ?? null,
+      additionalFields: asaasPayload ?? null,
+      payerEmail: payerEmail ?? null,
+      payerName: payerName ?? null,
+      customerDocument: customerDocument ?? null,
+      externalReferenceId: externalReferenceId ?? null,
+      metadata: metadata ?? null,
+      remoteIp: remoteIp ?? null,
+    });
 
-      const chargeResult = await asaasChargeService.createCharge(
-        {
-          financialFlowId: flow.id,
-          billingType: paymentMethod,
-          clienteId: clienteIdForInsert,
-          integrationApiKeyId: integrationApiKeyId ?? null,
-          value: valor,
-          dueDate: vencimento,
-          description: descricao,
-          cardToken: cardToken ?? null,
-          asaasCustomerId: asaasCustomerId ?? null,
-          additionalFields: asaasPayload ?? null,
-          payerEmail: payerEmail ?? null,
-          payerName: payerName ?? null,
-          customerDocument: customerDocument ?? null,
-          externalReferenceId: externalReferenceId ?? null,
-          metadata: metadata ?? null,
-          remoteIp: remoteIp ?? null,
-        },
-        { dbClient: client },
-      );
-
+    if (chargeResult) {
       flow = chargeResult.flow;
       charge = chargeResult.charge;
     }
@@ -1166,33 +1370,27 @@ export const updateFlow = async (req: Request, res: Response) => {
     let flow = result.rows[0];
     let charge = null;
 
-    if (typeof paymentMethod === 'string' && paymentMethod.trim()) {
-      if (flow.tipo !== 'receita') {
-        throw new AsaasValidationError('Apenas receitas podem gerar cobrança no Asaas');
-      }
+    const chargeResult = await createChargeForFlowIfRequested({
+      dbClient: client,
+      flow,
+      paymentMethod,
+      clienteId: clienteIdForUpdate,
+      integrationApiKeyId: integrationApiKeyId ?? null,
+      value: valor ?? flow.valor,
+      dueDate: vencimento ?? flow.vencimento,
+      description: descricao ?? flow.descricao,
+      cardToken: cardToken ?? null,
+      asaasCustomerId: asaasCustomerId ?? null,
+      additionalFields: asaasPayload ?? null,
+      payerEmail: payerEmail ?? null,
+      payerName: payerName ?? null,
+      customerDocument: customerDocument ?? null,
+      externalReferenceId: externalReferenceId ?? flow.external_reference_id ?? null,
+      metadata: metadata ?? null,
+      remoteIp: remoteIp ?? null,
+    });
 
-      const chargeResult = await asaasChargeService.createCharge(
-        {
-          financialFlowId: flow.id,
-          billingType: paymentMethod,
-          clienteId: clienteIdForUpdate,
-          integrationApiKeyId: integrationApiKeyId ?? null,
-          value: valor ?? flow.valor,
-          dueDate: vencimento ?? flow.vencimento,
-          description: descricao ?? flow.descricao,
-          cardToken: cardToken ?? null,
-          asaasCustomerId: asaasCustomerId ?? null,
-          additionalFields: asaasPayload ?? null,
-          payerEmail: payerEmail ?? null,
-          payerName: payerName ?? null,
-          customerDocument: customerDocument ?? null,
-          externalReferenceId: externalReferenceId ?? flow.external_reference_id ?? null,
-          metadata: metadata ?? null,
-          remoteIp: remoteIp ?? null,
-        },
-        { dbClient: client },
-      );
-
+    if (chargeResult) {
       flow = chargeResult.flow;
       charge = chargeResult.charge;
     }
@@ -1486,31 +1684,32 @@ export const createAsaasChargeForFlow = async (req: Request, res: Response) => {
     }
 
     const flow = flowResult.rows[0];
-    if (flow.tipo !== 'receita') {
-      throw new AsaasValidationError('Apenas receitas podem gerar cobrança no Asaas');
-    }
+    const normalizedClienteId = normalizeOptionalInteger(clienteId);
+    const normalizedIntegrationApiKeyId = normalizeOptionalInteger(integrationApiKeyId);
 
-    const chargeResult = await asaasChargeService.createCharge(
-      {
-        financialFlowId: flow.id,
-        billingType: paymentMethod,
-        clienteId: clienteId ?? null,
-        integrationApiKeyId: integrationApiKeyId ?? null,
-        value: flow.valor,
-        dueDate: flow.vencimento,
-        description: flow.descricao,
-        cardToken: cardToken ?? null,
-        asaasCustomerId: asaasCustomerId ?? null,
-        additionalFields: asaasPayload ?? null,
-        payerEmail: payerEmail ?? null,
-        payerName: payerName ?? null,
-        customerDocument: customerDocument ?? null,
-        externalReferenceId: externalReferenceId ?? flow.external_reference_id ?? null,
-        metadata: metadata ?? null,
-        remoteIp: remoteIp ?? null,
-      },
-      { dbClient: client },
-    );
+    const chargeResult = await createChargeForFlowIfRequested({
+      dbClient: client,
+      flow,
+      paymentMethod,
+      clienteId: normalizedClienteId,
+      integrationApiKeyId: normalizedIntegrationApiKeyId,
+      value: flow.valor,
+      dueDate: flow.vencimento,
+      description: flow.descricao,
+      cardToken: cardToken ?? null,
+      asaasCustomerId: asaasCustomerId ?? null,
+      additionalFields: asaasPayload ?? null,
+      payerEmail: payerEmail ?? null,
+      payerName: payerName ?? null,
+      customerDocument: customerDocument ?? null,
+      externalReferenceId: externalReferenceId ?? flow.external_reference_id ?? null,
+      metadata: metadata ?? null,
+      remoteIp: remoteIp ?? null,
+    });
+
+    if (!chargeResult) {
+      throw new Error('Falha ao criar cobrança no Asaas');
+    }
 
     await client.query('COMMIT');
     res.status(201).json({ flow: chargeResult.flow, charge: chargeResult.charge });
@@ -1682,5 +1881,68 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
+export const getAsaasChargeForFlow = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const flowId = normalizeFlowId(id);
+
+  if (flowId === null) {
+    return res.status(400).json({ error: 'Invalid flow id' });
+  }
+
+  try {
+    const charge = await findAsaasChargeByFlowId(flowId);
+
+    if (!charge) {
+      return res.status(404).json({ error: 'Charge not found' });
+    }
+
+    const chargePayload: Record<string, unknown> = { ...charge };
+
+    if (typeof charge.financialFlowId === 'number') {
+      chargePayload.flowId = charge.financialFlowId;
+    }
+
+    res.json({ charge: chargePayload });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const listAsaasChargeStatus = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const flowId = normalizeFlowId(id);
+
+  if (flowId === null) {
+    return res.status(400).json({ error: 'Invalid flow id' });
+  }
+
+  try {
+    const charge = await findAsaasChargeByFlowId(flowId);
+
+    if (!charge) {
+      return res.status(404).json({ error: 'Charge not found' });
+    }
+
+    const statuses = [
+      {
+        status: charge.status,
+        description: 'Status atual sincronizado localmente.',
+        updatedAt: charge.updatedAt,
+        metadata: {
+          source: 'asaas_charges',
+          chargeId: charge.asaasChargeId,
+          financialFlowId: charge.financialFlowId,
+          billingType: charge.billingType,
+          value: charge.value,
+          createdAt: charge.createdAt,
+        },
+      },
+    ];
+
+    res.json({ statuses });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
