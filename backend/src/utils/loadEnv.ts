@@ -77,6 +77,37 @@ const findEnvFileInAncestors = (startDir: string): string | null => {
   return null;
 };
 
+const loadEnvFilesInOrder = (paths: Array<string | null | undefined>) => {
+  const seen = new Set<string>();
+
+  for (const candidate of paths) {
+    if (!candidate) {
+      continue;
+    }
+
+    const resolved = path.resolve(candidate);
+    if (seen.has(resolved)) {
+      continue;
+    }
+
+    if (!fs.existsSync(resolved)) {
+      continue;
+    }
+
+    try {
+      const stats = fs.statSync(resolved);
+      if (!stats.isFile()) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    loadEnvFile(resolved);
+    seen.add(resolved);
+  }
+};
+
 const loadDefaultEnvFile = () => {
   const customPath = process.env.DOTENV_CONFIG_PATH;
   if (customPath) {
@@ -90,25 +121,16 @@ const loadDefaultEnvFile = () => {
     }
   }
 
-  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
-  if (ancestorEnvFile) {
-    loadEnvFile(ancestorEnvFile);
-    return;
-  }
-
   const backendRoot = path.resolve(__dirname, '..', '..');
   const repoRoot = path.resolve(backendRoot, '..');
+  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
   const fallbackCandidates = [
+    ancestorEnvFile,
     path.join(backendRoot, '.env'),
     path.join(repoRoot, '.env'),
   ];
 
-  for (const candidate of fallbackCandidates) {
-    if (fs.existsSync(candidate)) {
-      loadEnvFile(candidate);
-      return;
-    }
-  }
+  loadEnvFilesInOrder(fallbackCandidates);
 };
 
 loadDefaultEnvFile();
