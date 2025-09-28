@@ -641,18 +641,6 @@ export const WhatsAppLayout = ({
   const hasMoreMessages = Boolean(activePagination?.hasMore);
   const isLoadingMoreMessages = Boolean(activePagination?.isLoading && activePagination?.isLoaded);
 
-  const handleShowSidebar = useCallback(() => {
-    if (!isDesktopLayout) {
-      setIsSidebarVisible(true);
-    }
-  }, [isDesktopLayout]);
-
-  const handleHideSidebar = useCallback(() => {
-    if (!isDesktopLayout) {
-      setIsSidebarVisible(false);
-    }
-  }, [isDesktopLayout]);
-
   const handleSelectConversation = useCallback(
     async (conversationId: string, options?: { skipNavigation?: boolean }) => {
       if (conversationId === activeConversationId && messageMap[conversationId]) {
