@@ -256,7 +256,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
     setor: null,
     oab: null,
     status: true,
-    senha: 'sha256:placeholder',
+    senha: 'argon2:placeholder',
     telefone: '(11) 90000-0000',
     ultimo_login: null,
     observacoes: null,
@@ -319,7 +319,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
   assert.ok(insertCall);
   assert.equal(typeof insertCall.values?.[8], 'string');
-  assert.ok(String(insertCall.values?.[8]).startsWith('sha256:'));
+  assert.ok(String(insertCall.values?.[8]).startsWith('argon2:'));
 
   assert.equal(capturedCalls.length, 1);
   const [welcomeArgs] = capturedCalls;
@@ -349,7 +349,7 @@ test('createUsuario cleans up created user when welcome email fails', async () =
     setor: null,
     oab: null,
     status: true,
-    senha: 'sha256:placeholder',
+    senha: 'argon2:placeholder',
     telefone: '(11) 95555-0000',
     ultimo_login: null,
     observacoes: null,

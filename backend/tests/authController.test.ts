@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import test from 'node:test';
 import type { Request, Response } from 'express';
 import { Pool } from 'pg';
@@ -254,7 +255,7 @@ const duplicateCheckResponses: QueryResponse[] = [
   );
   assert.ok(userInsertCall, 'expected user insert to be executed');
   assert.equal(typeof userInsertCall?.values?.[8], 'string');
-  assert.ok((userInsertCall?.values?.[8] as string).startsWith('sha256:'));
+  assert.ok((userInsertCall?.values?.[8] as string).startsWith('argon2:'));
   assert.notEqual(userInsertCall?.values?.[8], 'SenhaSegura123');
 
   const companyInsertCall = clientCalls.find((call) =>
@@ -490,7 +491,7 @@ test('register returns 409 when email already exists', async () => {
 
 test('login succeeds when subscription is active', async () => {
   const password = 'SenhaSegura123';
-  const hashedPassword = hashPassword(password);
+  const hashedPassword = await hashPassword(password);
   const now = Date.now();
   const trialEndsAt = new Date(now + 3 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
@@ -581,7 +582,7 @@ test('login succeeds when subscription is active', async () => {
 
 test('login rejects when user is inactive', async () => {
   const password = 'SenhaSegura123';
-  const hashedPassword = hashPassword(password);
+  const hashedPassword = await hashPassword(password);
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -625,7 +626,7 @@ test('login rejects when user is inactive', async () => {
 
 test('login rejects when trial period has expired without payment', async () => {
   const password = 'SenhaSegura123';
-  const hashedPassword = hashPassword(password);
+  const hashedPassword = await hashPassword(password);
   const now = Date.now();
   const trialEndsAt = new Date(now - 2 * 24 * 60 * 60 * 1000);
 
@@ -680,7 +681,7 @@ test('login rejects when trial period has expired without payment', async () => 
 
 test('login rejects with payment required once grace period expires', async () => {
   const password = 'SenhaSegura123';
-  const hashedPassword = hashPassword(password);
+  const hashedPassword = await hashPassword(password);
   const now = Date.now();
   const currentPeriodEndsAt = new Date(now - 12 * 24 * 60 * 60 * 1000);
   const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
@@ -735,9 +736,154 @@ test('login rejects with payment required once grace period expires', async () =
   assert.equal('token' in (res.body as Record<string, unknown>), false);
 });
 
+test('login migrates legacy sha256 hashes to argon2 format', async () => {
+  const password = 'SenhaSegura123';
+  const salt = 'f00dbabe1234abcd';
+  const legacyDigest = crypto.createHash('sha256').update(`${salt}:${password}`).digest('hex');
+  const legacyHash = `sha256:${salt}:${legacyDigest}`;
+  const now = Date.now();
+  const trialEndsAt = new Date(now + 3 * 24 * 60 * 60 * 1000);
+  const currentPeriodEndsAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+
+  const { calls, restore: restorePoolQuery } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 171,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          senha: legacyHash,
+          must_change_password: false,
+          status: true,
+          perfil: 15,
+          empresa_id: 20,
+          empresa_nome: 'Acme Corp',
+          setor_id: 9,
+          setor_nome: 'Jurídico',
+          empresa_plano: 5,
+          empresa_ativo: true,
+          empresa_datacadastro: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          empresa_trial_ends_at: trialEndsAt.toISOString(),
+          empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
+          empresa_grace_period_ends_at: gracePeriodEndsAt.toISOString(),
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: planModules.map((modulo) => ({ modulo })), rowCount: planModules.length },
+  ]);
+
+  const req = {
+    body: {
+      email: 'alice@example.com',
+      senha: password,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await login(req, res);
+  } finally {
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 200);
+
+  const passwordUpdateIndex = calls.findIndex((call) =>
+    /UPDATE public\.usuarios/.test(call.text ?? '') && /SET senha = \$1/.test(call.text ?? '')
+  );
+  assert.ok(passwordUpdateIndex >= 1, 'expected legacy hash update before finishing login');
+
+  const passwordUpdateCall = calls[passwordUpdateIndex];
+  const updatedHash = passwordUpdateCall?.values?.[0];
+  assert.equal(typeof updatedHash, 'string');
+  assert.ok(String(updatedHash).startsWith('argon2:'));
+  assert.notEqual(updatedHash, legacyHash);
+
+  const lastLoginIndex = calls.findIndex((call) =>
+    /UPDATE public\.usuarios/.test(call.text ?? '') && /SET ultimo_login/.test(call.text ?? '')
+  );
+  assert.ok(lastLoginIndex > passwordUpdateIndex, 'expected last login update after password migration');
+
+  const modulesCall = calls.find((call) => /perfil_modulos/.test(call.text ?? ''));
+  assert.ok(modulesCall, 'expected module fetch to occur');
+});
+
+test('login migrates plain text passwords to argon2 format', async () => {
+  const password = 'SenhaSegura123';
+  const now = Date.now();
+  const trialEndsAt = new Date(now + 5 * 24 * 60 * 60 * 1000);
+  const currentPeriodEndsAt = new Date(now + 35 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+
+  const { calls, restore: restorePoolQuery } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 172,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          senha: password,
+          must_change_password: false,
+          status: true,
+          perfil: 15,
+          empresa_id: 20,
+          empresa_nome: 'Acme Corp',
+          setor_id: 9,
+          setor_nome: 'Jurídico',
+          empresa_plano: 5,
+          empresa_ativo: true,
+          empresa_datacadastro: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          empresa_trial_ends_at: trialEndsAt.toISOString(),
+          empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
+          empresa_grace_period_ends_at: gracePeriodEndsAt.toISOString(),
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: planModules.map((modulo) => ({ modulo })), rowCount: planModules.length },
+  ]);
+
+  const req = {
+    body: {
+      email: 'alice@example.com',
+      senha: password,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await login(req, res);
+  } finally {
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 200);
+
+  const passwordUpdateCall = calls.find((call) =>
+    /UPDATE public\.usuarios/.test(call.text ?? '') && /SET senha = \$1/.test(call.text ?? '')
+  );
+  assert.ok(passwordUpdateCall, 'expected plain text password migration');
+
+  const updatedHash = passwordUpdateCall?.values?.[0];
+  assert.equal(typeof updatedHash, 'string');
+  assert.ok(String(updatedHash).startsWith('argon2:'));
+  assert.notEqual(updatedHash, password);
+
+  const modulesCall = calls.find((call) => /perfil_modulos/.test(call.text ?? ''));
+  assert.ok(modulesCall, 'expected module fetch to occur');
+});
+
 test('changePassword updates the stored hash and clears the must-change flag', async () => {
   const temporaryPassword = 'Temp#Senha123';
-  const hashedTemporaryPassword = hashPassword(temporaryPassword);
+  const hashedTemporaryPassword = await hashPassword(temporaryPassword);
   const newPassword = 'NovaSenhaSegura!45';
 
   const { calls, restore, wasReleased } = setupPoolConnectMock([
@@ -775,7 +921,7 @@ test('changePassword updates the stored hash and clears the must-change flag', a
   assert.equal(updateCall?.values?.[1], 321);
   const storedHash = updateCall?.values?.[0];
   assert.equal(typeof storedHash, 'string');
-  assert.ok(typeof storedHash === 'string' && storedHash.startsWith('sha256:'));
+  assert.ok(typeof storedHash === 'string' && storedHash.startsWith('argon2:'));
 
   const tokenUpdateCall = calls.find((call) =>
     call.text.includes('UPDATE public.password_reset_tokens')
@@ -786,7 +932,7 @@ test('changePassword updates the stored hash and clears the must-change flag', a
 
 test('changePassword rejects invalid provisional passwords', async () => {
   const correctTemporaryPassword = 'Temp#Senha123';
-  const hashedTemporaryPassword = hashPassword(correctTemporaryPassword);
+  const hashedTemporaryPassword = await hashPassword(correctTemporaryPassword);
 
   const { calls, restore } = setupPoolConnectMock([
     {
