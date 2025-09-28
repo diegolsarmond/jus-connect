@@ -34,6 +34,7 @@ type ApiPlanLimits = {
   usuarios?: number | string | null;
   processos?: number | string | null;
   propostas?: number | string | null;
+  clientes?: number | string | null;
 };
 
 interface ApiPlan {
@@ -62,6 +63,7 @@ type PlanLimits = {
   users: number | null;
   processes: number | null;
   proposals: number | null;
+  clients: number | null;
 };
 
 interface Subscription {
@@ -331,10 +333,17 @@ const extractPlanLimits = (plan: ApiPlan | undefined): PlanLimits => {
     parseInteger(plan?.limite_propostas) ??
     parseInteger(plan?.max_propostas);
 
+  const clients =
+    parseInteger(limitsRecord?.clientes) ??
+    parseInteger(limitsRecord?.clients) ??
+    parseInteger(plan?.limite_clientes) ??
+    parseInteger((plan as { max_clientes?: unknown })?.max_clientes);
+
   return {
     users: users ?? null,
     processes: processes ?? null,
     proposals: proposals ?? null,
+    clients: clients ?? null,
   };
 };
 
@@ -726,6 +735,9 @@ export default function Subscriptions() {
                           <div className="space-y-1 text-xs text-muted-foreground">
                             <div>
                               <span className="font-medium text-foreground">Usuários:</span> {formatLimitValue(subscription.planLimits.users)}
+                            </div>
+                            <div>
+                              <span className="font-medium text-foreground">Clientes:</span> {formatLimitValue(subscription.planLimits.clients)}
                             </div>
                             <div>
                               <span className="font-medium text-foreground">Processos:</span> {formatLimitValue(subscription.planLimits.processes)}
