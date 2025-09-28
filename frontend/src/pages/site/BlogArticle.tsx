@@ -45,6 +45,38 @@ const allowedAttributes = new Map<string, Set<string>>([
   ],
 ]);
 
+const htmlEntityMap: Record<string, string> = {
+  "&lt;": "<",
+  "&gt;": ">",
+  "&amp;": "&",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+
+const decodeHtmlEntities = (value: string): string => {
+  if (!value) {
+    return value;
+  }
+
+  if (typeof DOMParser !== "undefined") {
+    try {
+      const parser = new DOMParser();
+      const documentFragment = parser.parseFromString(`<!doctype html><body>${value}`, "text/html");
+      return documentFragment.body.innerHTML || value;
+    } catch (error) {
+      // Fallback to other strategies when DOMParser is unavailable or fails.
+    }
+  }
+
+  if (typeof document !== "undefined") {
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = value;
+    return textarea.value;
+  }
+
+  return value.replace(/&(lt|gt|amp|quot|#39);/g, (match) => htmlEntityMap[match] ?? match);
+};
+
 const escapeHtml = (value: string): string =>
   value
     .replace(/&/g, "&amp;")
@@ -164,7 +196,8 @@ const BlogArticle = () => {
   const sanitizedContent = useMemo(() => {
     const rawContent = post?.content?.trim();
     if (rawContent) {
-      const sanitized = sanitizeBlogContent(rawContent);
+      const decodedContent = decodeHtmlEntities(rawContent);
+      const sanitized = sanitizeBlogContent(decodedContent);
       if (sanitized && sanitized.trim()) {
         return sanitized;
       }
