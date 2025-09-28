@@ -31,34 +31,9 @@
   justify-content: space-between;
 }
 
-.titleActions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .titleRow h1 {
   font-size: 1.6rem;
   font-weight: 700;
-}
-
-.closeButton {
-  border: 1px solid hsl(var(--sidebar-border));
-  background: hsl(var(--background));
-  color: inherit;
-  border-radius: 999px;
-  width: 2.25rem;
-  height: 2.25rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: var(--transition-fast);
-}
-
-.closeButton:hover,
-.closeButton:focus-visible {
-  background: hsl(var(--sidebar-accent));
 }
 
 .newButton {
@@ -316,23 +291,5 @@
 
   .footer {
     display: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .titleRow {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-
-  .titleActions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .newButton {
-    flex: 1;
-    justify-content: center;
   }
 }
