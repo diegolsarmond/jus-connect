@@ -8,6 +8,7 @@ import {
   type FormEventHandler,
 } from "react";
 import {
+  ArrowLeft,
   CalendarPlus,
   CheckSquare,
   Info,
@@ -186,6 +187,8 @@ interface ChatWindowProps {
   onCreateAppointment?: () => void;
   responsibleOptions?: ChatResponsibleOption[];
   isLoadingResponsibles?: boolean;
+  onShowConversationList?: () => void;
+  isMobileView?: boolean;
 }
 
 export const ChatWindow = ({
@@ -205,6 +208,8 @@ export const ChatWindow = ({
   onCreateAppointment,
   responsibleOptions: providedResponsibleOptions = [],
   isLoadingResponsibles = false,
+  onShowConversationList,
+  isMobileView = false,
 }: ChatWindowProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -790,17 +795,33 @@ export const ChatWindow = ({
     });
   };
 
+  const showMobileListButton = isMobileView && typeof onShowConversationList === "function";
+
   if (!conversation) {
     return (
       <div className={styles.wrapper}>
         <div className={styles.mainColumn}>
           <div className={styles.viewportWrapper}>
             <div className={styles.deviceLinkPlaceholder}>
-              <DeviceLinkContent
-                isActive
-                layout="inline"
-                className={styles.deviceLinkContent}
-              />
+              <div className={styles.placeholderContent}>
+                <DeviceLinkContent
+                  isActive
+                  layout="inline"
+                  className={styles.deviceLinkContent}
+                />
+                {showMobileListButton ? (
+                  <div className={styles.placeholderActions}>
+                    <p>Selecione uma conversa para começar.</p>
+                    <button
+                      type="button"
+                      className={styles.placeholderButton}
+                      onClick={onShowConversationList}
+                    >
+                      Abrir lista de conversas
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -818,6 +839,17 @@ export const ChatWindow = ({
       <div className={styles.mainColumn}>
         <header className={styles.header}>
           <div className={styles.headerInfo}>
+            {showMobileListButton ? (
+              <button
+                type="button"
+                className={styles.mobileBackButton}
+                onClick={onShowConversationList}
+                aria-label="Voltar para a lista de conversas"
+              >
+                <ArrowLeft size={18} aria-hidden="true" />
+                <span>Conversas</span>
+              </button>
+            ) : null}
             <img src={conversation.avatar} alt="" aria-hidden="true" />
             <div className={styles.headerText}>
               <div className={styles.headerTitleRow}>
