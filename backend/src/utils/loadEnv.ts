@@ -57,16 +57,58 @@ const loadEnvFile = (filePath: string): void => {
   }
 };
 
-const resolveEnvPath = (filename: string): string => path.resolve(process.cwd(), filename);
+const findEnvFileInAncestors = (startDir: string): string | null => {
+  let currentDir = path.resolve(startDir);
+
+  while (true) {
+    const candidate = path.join(currentDir, '.env');
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+
+    currentDir = parentDir;
+  }
+
+  return null;
+};
 
 const loadDefaultEnvFile = () => {
   const customPath = process.env.DOTENV_CONFIG_PATH;
   if (customPath) {
-    loadEnvFile(path.resolve(process.cwd(), customPath));
+    const resolvedCustomPath = path.isAbsolute(customPath)
+      ? customPath
+      : path.resolve(process.cwd(), customPath);
+
+    if (fs.existsSync(resolvedCustomPath)) {
+      loadEnvFile(resolvedCustomPath);
+      return;
+    }
+  }
+
+  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
+  if (ancestorEnvFile) {
+    loadEnvFile(ancestorEnvFile);
     return;
   }
 
-  loadEnvFile(resolveEnvPath('.env'));
+  const backendRoot = path.resolve(__dirname, '..', '..');
+  const repoRoot = path.resolve(backendRoot, '..');
+  const fallbackCandidates = [
+    path.join(backendRoot, '.env'),
+    path.join(repoRoot, '.env'),
+  ];
+
+  for (const candidate of fallbackCandidates) {
+    if (fs.existsSync(candidate)) {
+      loadEnvFile(candidate);
+      return;
+    }
+  }
 };
 
 loadDefaultEnvFile();
