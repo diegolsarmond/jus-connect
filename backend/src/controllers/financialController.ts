@@ -1881,6 +1881,9 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
+  }
+};
+
 export const getAsaasChargeForFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
   const flowId = normalizeFlowId(id);
