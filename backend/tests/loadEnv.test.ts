@@ -173,3 +173,81 @@ test('loads backend and repo .env files without overriding backend values', asyn
     restoreEnvFile(repoEnvPath, repoPreviousContent);
   }
 });
+
+test('prefers backend values over repo defaults when running from repo root', async () => {
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const backendRoot = path.resolve(__dirname, '..');
+  const backendEnvPath = path.join(backendRoot, '.env');
+  const repoEnvPath = path.join(repoRoot, '.env');
+
+  const originalCwd = process.cwd();
+  const originalBackendValue = process.env[BACKEND_KEY];
+  const originalSharedValue = process.env[SHARED_KEY];
+  const originalDotenvConfigPath = process.env.DOTENV_CONFIG_PATH;
+  const backendPreviousContent = readEnvFileIfExists(backendEnvPath);
+  const repoPreviousContent = readEnvFileIfExists(repoEnvPath);
+
+  try {
+    fs.writeFileSync(
+      backendEnvPath,
+      `${BACKEND_KEY}=backend-value\n${SHARED_KEY}=backend-only\n`,
+      'utf8'
+    );
+    fs.writeFileSync(
+      repoEnvPath,
+      `${SHARED_KEY}=root-value\n`,
+      'utf8'
+    );
+
+    process.chdir(repoRoot);
+    delete process.env[BACKEND_KEY];
+    delete process.env[SHARED_KEY];
+    delete process.env.DOTENV_CONFIG_PATH;
+
+    const modulePath = path.resolve(backendRoot, 'src/utils/loadEnv.ts');
+    try {
+      delete require.cache[require.resolve(modulePath)];
+    } catch {
+      // ignore if the module is not in the cache yet or cannot be resolved via require
+    }
+
+    const moduleUrl = pathToFileURL(modulePath);
+    moduleUrl.searchParams.set('test', Date.now().toString());
+    await import(moduleUrl.href);
+
+    assert.strictEqual(
+      process.env[BACKEND_KEY],
+      'backend-value',
+      'backend/.env should load even when cwd is repo root'
+    );
+    assert.strictEqual(
+      process.env[SHARED_KEY],
+      'backend-only',
+      'backend/.env should maintain priority over repo/.env when cwd is repo root'
+    );
+  } finally {
+    process.chdir(originalCwd);
+
+    if (originalBackendValue === undefined) {
+      delete process.env[BACKEND_KEY];
+    } else {
+      process.env[BACKEND_KEY] = originalBackendValue;
+    }
+
+    if (originalSharedValue === undefined) {
+      delete process.env[SHARED_KEY];
+    } else {
+      process.env[SHARED_KEY] = originalSharedValue;
+    }
+
+    if (originalDotenvConfigPath === undefined) {
+      delete process.env.DOTENV_CONFIG_PATH;
+    } else {
+      process.env.DOTENV_CONFIG_PATH = originalDotenvConfigPath;
+    }
+
+    restoreEnvFile(backendEnvPath, backendPreviousContent);
+    restoreEnvFile(repoEnvPath, repoPreviousContent);
+  }
+});
+

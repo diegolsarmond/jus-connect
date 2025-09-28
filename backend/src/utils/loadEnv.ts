@@ -77,6 +77,15 @@ const findEnvFileInAncestors = (startDir: string): string | null => {
   return null;
 };
 
+const pathsEqual = (first: string | null | undefined, second: string | null | undefined) => {
+  if (!first || !second) {
+    return false;
+  }
+
+  return path.resolve(first) === path.resolve(second);
+};
+
+
 const loadEnvFilesInOrder = (paths: Array<string | null | undefined>) => {
   const seen = new Set<string>();
 
@@ -123,6 +132,23 @@ const loadDefaultEnvFile = () => {
 
   const backendRoot = path.resolve(__dirname, '..', '..');
   const repoRoot = path.resolve(backendRoot, '..');
+  const backendEnvPath = path.join(backendRoot, '.env');
+  const repoEnvPath = path.join(repoRoot, '.env');
+  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
+
+  const fallbackCandidates: Array<string | null> = [];
+
+  if (
+    ancestorEnvFile &&
+    !pathsEqual(ancestorEnvFile, backendEnvPath) &&
+    !pathsEqual(ancestorEnvFile, repoEnvPath)
+  ) {
+    fallbackCandidates.push(ancestorEnvFile);
+  }
+
+  fallbackCandidates.push(backendEnvPath, repoEnvPath);
+
+
   const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
   const fallbackCandidates = [
     ancestorEnvFile,
