@@ -15,7 +15,6 @@ RUN npm config set registry https://registry.npmjs.org/ \
  && npm config set fetch-retries 5 \
  && npm config set fetch-retry-mintimeout 20000 \
  && npm config set fetch-retry-maxtimeout 120000 \
- && npm config set cache-min 0 \
  && npm cache clean --force || true \
  && rm -rf ~/.npm/_cacache || true \
  && npm cache verify || true
@@ -165,7 +164,6 @@ RUN npm config set registry https://registry.npmjs.org/ \
  && npm config set fetch-retries 5 \
  && npm config set fetch-retry-mintimeout 20000 \
  && npm config set fetch-retry-maxtimeout 120000 \
- && npm config set cache-min 0 \
  && npm cache clean --force || true \
  && rm -rf ~/.npm/_cacache || true \
  && npm cache verify || true
