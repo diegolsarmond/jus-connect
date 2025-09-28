@@ -6,20 +6,18 @@ const ARGON2_PREFIX = 'argon2:';
 
 let forceFallbackOverride: boolean | null = null;
 
-const TRUE_ENV_VALUES = new Set(['true', '1', 'yes', 'on']);
-const FALSE_ENV_VALUES = new Set(['false', '0', 'no', 'off']);
-
 const parseBooleanEnv = (value: string | undefined): boolean => {
+
   if (!value) {
     return false;
   }
 
   const normalized = value.trim().toLowerCase();
-  if (TRUE_ENV_VALUES.has(normalized)) {
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
     return true;
   }
 
-  if (FALSE_ENV_VALUES.has(normalized)) {
+  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') {
     return false;
   }
 
@@ -32,6 +30,7 @@ const shouldForceFallback = (): boolean => {
   }
 
   return parseBooleanEnv(process.env.PASSWORD_HASH_FORCE_FALLBACK);
+
 };
 
 const parseIntegerEnv = (
@@ -205,32 +204,15 @@ export const verifyPassword = async (
 
 export type { PasswordVerificationResult };
 
-const resetArgon2ModuleCache = (): void => {
-  argon2ModulePromise = null;
-  argon2ModuleSource = null;
-};
-
-const setForceFallbackOverride = (value: boolean | null): void => {
-  forceFallbackOverride = value;
-  resetArgon2ModuleCache();
-};
-
-const withForceFallbackOverride = async <T>(
-  value: boolean,
-  callback: () => Promise<T> | T
-): Promise<T> => {
-  const previous = forceFallbackOverride;
-  setForceFallbackOverride(value);
-
-  try {
-    return await Promise.resolve(callback());
-  } finally {
-    setForceFallbackOverride(previous);
-  }
-};
-
 export const __testing = {
-  resetArgon2ModuleCache,
-  setForceFallbackOverride,
-  withForceFallbackOverride,
+  resetArgon2ModuleCache(): void {
+    argon2ModulePromise = null;
+    argon2ModuleSource = null;
+  },
+  setForceFallbackOverride(value: boolean | null): void {
+    forceFallbackOverride = value;
+    argon2ModulePromise = null;
+    argon2ModuleSource = null;
+  },
+
 };
