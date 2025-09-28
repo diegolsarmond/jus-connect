@@ -758,7 +758,7 @@ export const register = async (req: Request, res: Response) => {
         );
       }
 
-      const hashedPassword = hashPassword(passwordValue);
+      const hashedPassword = await hashPassword(passwordValue);
 
       const userInsert = await client.query(
         `INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao)
@@ -930,11 +930,24 @@ export const login = async (req: Request, res: Response) => {
       return;
     }
 
-    const passwordMatches = await verifyPassword(senha, user.senha);
+    const passwordCheck = await verifyPassword(senha, user.senha);
 
-    if (!passwordMatches) {
+    if (!passwordCheck.isValid) {
       res.status(401).json({ error: 'E-mail ou senha incorretos.' });
       return;
+    }
+
+    if (passwordCheck.migratedHash) {
+      try {
+        await pool.query(
+          `UPDATE public.usuarios
+              SET senha = $1
+            WHERE id = $2`,
+          [passwordCheck.migratedHash, user.id]
+        );
+      } catch (migrationError) {
+        console.error('Falha ao atualizar hash de senha legado durante login', migrationError);
+      }
     }
 
     const mustChangePassword =
@@ -1147,15 +1160,15 @@ export const changePassword = async (req: Request, res: Response) => {
       return;
     }
 
-    const passwordMatches = await verifyPassword(temporaryPasswordValue, userRow.senha);
-    if (!passwordMatches) {
+    const passwordCheck = await verifyPassword(temporaryPasswordValue, userRow.senha);
+    if (!passwordCheck.isValid) {
       await client.query('ROLLBACK');
       transactionActive = false;
       res.status(400).json({ error: 'Senha provisória inválida.' });
       return;
     }
 
-    const hashedPassword = hashPassword(newPasswordValue);
+    const hashedPassword = await hashPassword(newPasswordValue);
 
     await client.query(
       `UPDATE public.usuarios

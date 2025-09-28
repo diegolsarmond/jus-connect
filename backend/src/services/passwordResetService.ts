@@ -45,7 +45,7 @@ function buildResetLink(rawToken: string): string {
 
 export async function createPasswordResetRequest(user: TargetUser): Promise<void> {
   const temporaryPassword = generateTemporaryPassword();
-  const hashedPassword = hashPassword(temporaryPassword);
+  const hashedPassword = await hashPassword(temporaryPassword);
   const { rawToken, tokenHash } = generateResetToken();
   const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
   const resetLink = buildResetLink(rawToken);
