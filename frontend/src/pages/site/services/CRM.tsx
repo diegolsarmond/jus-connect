@@ -423,7 +423,7 @@ const CRM = () => {
                             <p className="text-lg text-muted-foreground mb-8">
                                 Com mais de uma década acompanhando escritórios de diferentes portes, desenvolvemos um CRM que une gestão de processos, atendimento consultivo e inteligência financeira em uma única plataforma.
                             </p>
-                            <div className="space-y-10 mb-10">
+                            <div className="space-y-12 mb-10">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {lawDifferentials.map((item) => (
                                         <Card key={item.title} className="border-quantum-light/20 hover:border-quantum-bright/40 transition-all duration-300 hover:-translate-y-1">
@@ -432,15 +432,14 @@ const CRM = () => {
                                                     <item.icon className="h-5 w-5 text-white" />
                                                 </div>
                                                 <CardTitle className="text-lg">{item.title}</CardTitle>
-                                                <CardDescription className="text-muted-foreground text-sm">
-                                                    {item.description}
-                                                </CardDescription>
+                                                <CardDescription className="text-muted-foreground text-sm">{item.description}</CardDescription>
                                             </CardHeader>
                                         </Card>
                                     ))}
                                 </div>
 
-                                <div className="space-y-10">
+                                <div className="space-y-8">
+
                                     <div className="space-y-4">
                                         <span className="inline-flex items-center gap-2 rounded-full border border-quantum-light/40 bg-background/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-quantum-bright">
                                             Planos Quantum
@@ -455,185 +454,182 @@ const CRM = () => {
                                         </p>
                                     </div>
 
-                                    {planosLoading ? (
-                                        <Card className="border-quantum-light/40 bg-background/70 backdrop-blur">
-                                            <CardContent className="flex items-center justify-center p-8">
-                                                <p className="text-sm text-muted-foreground animate-pulse">Carregando opções de planos...</p>
-                                            </CardContent>
-                                        </Card>
-                                    ) : planosError ? (
-                                        <Card className="border-destructive/40 bg-destructive/5">
-                                            <CardContent className="space-y-4 p-6">
-                                                <p className="text-sm text-destructive">
-                                                    {planosError}
-                                                </p>
-                                                <div className="flex flex-wrap gap-3">
-                                                    <Button
-                                                        variant="quantum"
-                                                        className="track-link"
-                                                        onClick={() => handleDemoClick("planos_erro")}
-                                                    >
-                                                        Solicitar atendimento
-                                                        <ArrowRight className="h-5 w-5 ml-2" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline_quantum"
-                                                        className="track-link"
-                                                        onClick={() => handleWhatsappClick("planos_erro")}
-                                                    >
-                                                        Falar no WhatsApp
-                                                    </Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ) : planosOrdenados.length > 0 ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                                            {planosOrdenados.map((plan) => (
-                                                <Card
-                                                    key={plan.id}
-                                                    className={`relative flex h-full flex-col overflow-hidden border bg-background/70 backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:shadow-quantum ${
-                                                        destaquePlanoId === plan.id
-                                                            ? "border-transparent shadow-quantum ring-2 ring-quantum-bright/60"
-                                                            : "border-quantum-light/20"
-                                                    }`}
-                                                >
-                                                    {destaquePlanoId === plan.id && (
-                                                        <span className="absolute top-4 right-4 rounded-full bg-gradient-quantum px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
-                                                            Mais completo
-                                                        </span>
-                                                    )}
-                                                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-quantum-bright/60 to-transparent"></div>
-                                                    <CardHeader className="space-y-4">
-                                                        <div className="space-y-2">
-                                                            <CardTitle className="text-2xl">{plan.nome}</CardTitle>
-                                                            {plan.descricao && (
-                                                                <CardDescription className="text-muted-foreground leading-relaxed">
-                                                                    {plan.descricao}
-                                                                </CardDescription>
-                                                            )}
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            {plan.precoMensal && (
-                                                                <div className="flex items-baseline gap-2">
-                                                                    <span className="text-3xl font-bold text-quantum-bright">
-                                                                        {plan.precoMensal}
-                                                                    </span>
-                                                                    <span className="text-sm text-muted-foreground">/mês</span>
-                                                                </div>
-                                                            )}
-                                                            {plan.precoAnual && (
-                                                                <p className="text-sm text-muted-foreground">
-                                                                    Plano anual: {plan.precoAnual}
-                                                                    {plan.descontoAnualPercentual !== null
-                                                                        ? ` • até ${plan.descontoAnualPercentual}% de economia`
-                                                                        : plan.economiaAnualFormatada
-                                                                            ? ` • Economize ${plan.economiaAnualFormatada}`
-                                                                            : ""}
-                                                                </p>
-                                                            )}
-                                                            {!plan.precoMensal && !plan.precoAnual && (
-                                                                <p className="text-sm text-muted-foreground">Investimento sob consulta.</p>
-                                                            )}
-                                                        </div>
-                                                    </CardHeader>
-                                                    <CardContent className="flex flex-1 flex-col gap-4">
-                                                        <div className="space-y-3">
-                                                            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-quantum-light">
-                                                                Principais benefícios
-                                                            </p>
-                                                            <ul className="space-y-2">
-                                                                {plan.recursos.length > 0 ? (
-                                                                    plan.recursos.slice(0, 6).map((feature) => (
-                                                                        <li key={feature} className="flex items-start gap-3 text-sm text-muted-foreground">
-                                                                            <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-quantum-bright" />
-                                                                            <span>{feature}</span>
-                                                                        </li>
-                                                                    ))
-                                                                ) : (
-                                                                    <li className="text-sm text-muted-foreground">
-                                                                        Personalize o pacote com nossos especialistas para incluir os recursos desejados.
-                                                                    </li>
-                                                                )}
-                                                            </ul>
-                                                        </div>
-                                                    </CardContent>
-                                                    <CardFooter className="mt-auto flex flex-col gap-3">
+                                    <div className="space-y-6">
+                                        {planosLoading ? (
+                                            <Card className="border-quantum-light/40 bg-background/70 backdrop-blur">
+                                                <CardContent className="flex items-center justify-center p-8">
+                                                    <p className="text-sm text-muted-foreground animate-pulse">Carregando opções de planos...</p>
+                                                </CardContent>
+                                            </Card>
+                                        ) : planosError ? (
+                                            <Card className="border-destructive/40 bg-destructive/5">
+                                                <CardContent className="space-y-4 p-6">
+                                                    <p className="text-sm text-destructive">{planosError}</p>
+                                                    <div className="flex flex-wrap gap-3">
                                                         <Button
                                                             variant="quantum"
-                                                            className="w-full track-link"
-                                                            onClick={() => handleDemoClick(`plan_${plan.id}`)}
+                                                            className="track-link"
+                                                            onClick={() => handleDemoClick("planos_erro")}
                                                         >
-                                                            Solicitar proposta
+                                                            Solicitar atendimento
                                                             <ArrowRight className="h-5 w-5 ml-2" />
                                                         </Button>
                                                         <Button
                                                             variant="outline_quantum"
-                                                            className="w-full track-link"
-                                                            onClick={() => handleWhatsappClick(`plan_${plan.id}`)}
+                                                            className="track-link"
+                                                            onClick={() => handleWhatsappClick("planos_erro")}
                                                         >
                                                             Falar no WhatsApp
                                                         </Button>
-                                                    </CardFooter>
-                                                </Card>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <Card className="border-dashed border-quantum-light/40 bg-background/60 backdrop-blur">
-                                            <CardContent className="p-6 space-y-4">
-                                                <p className="text-sm text-muted-foreground">
-                                                    Nenhum plano disponível no momento. Entre em contato para receber uma proposta personalizada.
-                                                </p>
-                                                <div className="flex flex-wrap gap-3">
-                                                    <Button
-                                                        variant="quantum"
-                                                        className="track-link"
-                                                        onClick={() => handleDemoClick("planos_vazios")}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ) : planosOrdenados.length > 0 ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                                {planosOrdenados.map((plan) => (
+                                                    <Card
+                                                        key={plan.id}
+                                                        className={`relative flex h-full flex-col overflow-hidden border bg-background/70 backdrop-blur transition-all duration-300 hover:-translate-y-2 hover:shadow-quantum ${
+                                                            destaquePlanoId === plan.id
+                                                                ? "border-transparent shadow-quantum ring-2 ring-quantum-bright/60"
+                                                                : "border-quantum-light/20"
+                                                        }`}
                                                     >
-                                                        Solicitar atendimento
-                                                        <ArrowRight className="h-5 w-5 ml-2" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline_quantum"
-                                                        className="track-link"
-                                                        onClick={() => handleWhatsappClick("planos_vazios")}
-                                                    >
-                                                        Falar no WhatsApp
-                                                    </Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    )}
+                                                        {destaquePlanoId === plan.id && (
+                                                            <span className="absolute top-4 right-4 rounded-full bg-gradient-quantum px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                                                                Mais completo
+                                                            </span>
+                                                        )}
+                                                        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-quantum-bright/60 to-transparent"></div>
+                                                        <CardHeader className="space-y-4">
+                                                            <div className="space-y-2">
+                                                                <CardTitle className="text-2xl">{plan.nome}</CardTitle>
+                                                                {plan.descricao && (
+                                                                    <CardDescription className="text-muted-foreground leading-relaxed">
+                                                                        {plan.descricao}
+                                                                    </CardDescription>
+                                                                )}
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                {plan.precoMensal && (
+                                                                    <div className="flex items-baseline gap-2">
+                                                                        <span className="text-3xl font-bold text-quantum-bright">{plan.precoMensal}</span>
+                                                                        <span className="text-sm text-muted-foreground">/mês</span>
+                                                                    </div>
+                                                                )}
+                                                                {plan.precoAnual && (
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        Plano anual: {plan.precoAnual}
+                                                                        {plan.descontoAnualPercentual !== null
+                                                                            ? ` • até ${plan.descontoAnualPercentual}% de economia`
+                                                                            : plan.economiaAnualFormatada
+                                                                                ? ` • Economize ${plan.economiaAnualFormatada}`
+                                                                                : ""}
+                                                                    </p>
+                                                                )}
+                                                                {!plan.precoMensal && !plan.precoAnual && (
+                                                                    <p className="text-sm text-muted-foreground">Investimento sob consulta.</p>
+                                                                )}
+                                                            </div>
+                                                        </CardHeader>
+                                                        <CardContent className="flex flex-1 flex-col gap-4">
+                                                            <div className="space-y-3">
+                                                                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-quantum-light">Principais benefícios</p>
+                                                                <ul className="space-y-2">
+                                                                    {plan.recursos.length > 0 ? (
+                                                                        plan.recursos.slice(0, 6).map((feature) => (
+                                                                            <li key={feature} className="flex items-start gap-3 text-sm text-muted-foreground">
+                                                                                <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-quantum-bright" />
+                                                                                <span>{feature}</span>
+                                                                            </li>
+                                                                        ))
+                                                                    ) : (
+                                                                        <li className="text-sm text-muted-foreground">
+                                                                            Personalize o pacote com nossos especialistas para incluir os recursos desejados.
+                                                                        </li>
+                                                                    )}
+                                                                </ul>
+                                                            </div>
+                                                        </CardContent>
+                                                        <CardFooter className="mt-auto flex flex-col gap-3">
+                                                            <Button
+                                                                variant="quantum"
+                                                                className="w-full track-link"
+                                                                onClick={() => handleDemoClick(`plan_${plan.id}`)}
+                                                            >
+                                                                Solicitar proposta
+                                                                <ArrowRight className="h-5 w-5 ml-2" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline_quantum"
+                                                                className="w-full track-link"
+                                                                onClick={() => handleWhatsappClick(`plan_${plan.id}`)}
+                                                            >
+                                                                Falar no WhatsApp
+                                                            </Button>
+                                                        </CardFooter>
+                                                    </Card>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <Card className="border-dashed border-quantum-light/40 bg-background/60 backdrop-blur">
+                                                <CardContent className="p-6 space-y-4">
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Nenhum plano disponível no momento. Entre em contato para receber uma proposta personalizada.
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-3">
+                                                        <Button
+                                                            variant="quantum"
+                                                            className="track-link"
+                                                            onClick={() => handleDemoClick("planos_vazios")}
+                                                        >
+                                                            Solicitar atendimento
+                                                            <ArrowRight className="h-5 w-5 ml-2" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline_quantum"
+                                                            className="track-link"
+                                                            onClick={() => handleWhatsappClick("planos_vazios")}
+                                                        >
+                                                            Falar no WhatsApp
+                                                        </Button>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        )}
 
-                                    <div className="rounded-3xl border border-quantum-light/30 bg-background/70 p-6 shadow-sm backdrop-blur">
-                                        <div className="mb-6 flex items-center gap-3">
-                                            <div className="rounded-full bg-gradient-quantum p-3 text-white">
-                                                <Layers className="h-5 w-5" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-quantum-light">
-                                                    Tudo incluso
-                                                </p>
-                                                <h4 className="text-lg font-semibold">Recursos presentes em todos os planos</h4>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            {includedInAllPlans.map((item) => (
-                                                <div
-                                                    key={item.title}
-                                                    className="group flex items-start gap-3 rounded-2xl border border-transparent bg-white/5 p-4 transition-all duration-300 hover:border-quantum-bright/40 hover:bg-quantum-bright/5"
-                                                >
-                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-quantum text-white shadow-inner transition-transform duration-300 group-hover:scale-105">
-                                                        <item.icon className="h-5 w-5" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-semibold text-foreground">{item.title}</p>
-                                                        <p className="text-sm text-muted-foreground">{item.description}</p>
-                                                    </div>
+                                        <div className="rounded-3xl border border-quantum-light/30 bg-background/70 p-6 shadow-sm backdrop-blur">
+                                            <div className="mb-6 flex items-center gap-3">
+                                                <div className="rounded-full bg-gradient-quantum p-3 text-white">
+                                                    <Layers className="h-5 w-5" />
                                                 </div>
-                                            ))}
+                                                <div>
+                                                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-quantum-light">Tudo incluso</p>
+                                                    <h4 className="text-lg font-semibold">Recursos presentes em todos os planos</h4>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {includedInAllPlans.map((item) => (
+                                                    <div
+                                                        key={item.title}
+                                                        className="group flex items-start gap-3 rounded-2xl border border-transparent bg-white/5 p-4 transition-all duration-300 hover:border-quantum-bright/40 hover:bg-quantum-bright/5"
+                                                    >
+                                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-quantum text-white shadow-inner transition-transform duration-300 group-hover:scale-105">
+                                                            <item.icon className="h-5 w-5" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-semibold text-foreground">{item.title}</p>
+                                                            <p className="text-sm text-muted-foreground">{item.description}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
+
+                            </div>
+
                             <div className="flex flex-wrap gap-4">
                                 <Button variant="quantum" size="lg" className="track-link" onClick={() => handleDemoClick("legal_section")}>
                                     Solicitar Demonstração
