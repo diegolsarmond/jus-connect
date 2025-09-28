@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { MessageCircle, Plus, Search, Pin, X } from "lucide-react";
+import { MessageCircle, Plus, Search, Pin } from "lucide-react";
 import type { ConversationSummary } from "../types";
 import { formatConversationTimestamp, normalizeText } from "../utils/format";
 import styles from "./ChatSidebar.module.css";
@@ -21,8 +21,6 @@ interface ChatSidebarProps {
   isLoadingMore?: boolean;
   allowUnassignedFilter?: boolean;
   isResponsibleFilterLocked?: boolean;
-  onClose?: () => void;
-  isMobileView?: boolean;
 }
 
 export const ChatSidebar = ({
@@ -42,8 +40,6 @@ export const ChatSidebar = ({
   isLoadingMore = false,
   allowUnassignedFilter = true,
   isResponsibleFilterLocked = false,
-  onClose,
-  isMobileView = false,
 }: ChatSidebarProps) => {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const filtered = useMemo(() => {
@@ -125,26 +121,9 @@ export const ChatSidebar = ({
       <div className={styles.header}>
         <div className={styles.titleRow}>
           <h1>Conversas</h1>
-          <div className={styles.titleActions}>
-            {isMobileView && onClose ? (
-              <button
-                type="button"
-                className={styles.closeButton}
-                onClick={onClose}
-                aria-label="Fechar lista de conversas"
-              >
-                <X size={18} aria-hidden="true" />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className={styles.newButton}
-              onClick={onNewConversation}
-              aria-label="Iniciar nova conversa"
-            >
-              <Plus size={18} aria-hidden="true" /> Nova conversa
-            </button>
-          </div>
+          <button type="button" className={styles.newButton} onClick={onNewConversation} aria-label="Iniciar nova conversa">
+            <Plus size={18} aria-hidden="true" /> Nova conversa
+          </button>
         </div>
         <div className={styles.searchBox}>
           <Search size={18} aria-hidden="true" />
