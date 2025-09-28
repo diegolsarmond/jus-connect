@@ -12,6 +12,11 @@ import {
   resolveSubscriptionPayloadFromRow,
   type SubscriptionCadence,
 } from '../services/subscriptionService';
+import {
+  sendEmailConfirmationToken,
+  EmailConfirmationTokenError,
+  confirmEmailWithToken,
+} from '../services/emailConfirmationService';
 
 const TRIAL_DURATION_DAYS = 14;
 const GRACE_PERIOD_DAYS = 10;
@@ -159,6 +164,7 @@ type UserRowBase = SubscriptionRow & {
   setor_nome: string | null;
   must_change_password?: unknown;
   perfil_ver_todas_conversas?: unknown;
+  email_confirmed_at?: unknown;
 };
 
 type LoginUserRow = UserRowBase & {
@@ -536,6 +542,14 @@ export const register = async (req: Request, res: Response) => {
   }
 
   const normalizedEmail = normalizeEmail(emailValue);
+  let confirmationTarget: { id: number; nome_completo: string; email: string } | null = null;
+  let registrationResponse:
+    | {
+        user: Record<string, unknown>;
+        empresa: Record<string, unknown>;
+        perfil: Record<string, unknown>;
+      }
+    | null = null;
 
   try {
     const duplicateCheck = await pool.query(
@@ -799,10 +813,23 @@ export const register = async (req: Request, res: Response) => {
         ]);
       }
 
+      if (createdUserId == null) {
+        throw new Error('Falha ao determinar o usuário criado durante o cadastro.');
+      }
+
       await client.query('COMMIT');
       transactionActive = false;
 
-      res.status(201).json({
+      confirmationTarget = {
+        id: createdUserId,
+        nome_completo:
+          typeof createdUser?.nome_completo === 'string' && createdUser?.nome_completo.trim().length > 0
+            ? createdUser.nome_completo
+            : nameValue,
+        email: normalizedEmail,
+      };
+
+      registrationResponse = {
         user: {
           id: createdUser?.id,
           nome_completo: createdUser?.nome_completo,
@@ -823,7 +850,7 @@ export const register = async (req: Request, res: Response) => {
           nome: perfilNome,
           modulos: modules,
         },
-      });
+      };
     } catch (error) {
       if (transactionActive) {
         try {
@@ -842,6 +869,68 @@ export const register = async (req: Request, res: Response) => {
     if (!res.headersSent) {
       res.status(500).json({ error: 'Não foi possível concluir o cadastro.' });
     }
+    return;
+  }
+
+  if (!confirmationTarget || !registrationResponse) {
+    return;
+  }
+
+  try {
+    await sendEmailConfirmationToken(confirmationTarget);
+  } catch (error) {
+    console.error('Falha ao enviar e-mail de confirmação de cadastro', error);
+
+    if (!res.headersSent) {
+      res
+        .status(500)
+        .json({ error: 'Não foi possível enviar o e-mail de confirmação. Tente novamente.' });
+    }
+    return;
+  }
+
+  res.status(201).json({
+    ...registrationResponse,
+    message: 'Cadastro realizado. Verifique seu e-mail para confirmar o acesso.',
+    requiresEmailConfirmation: true,
+  });
+};
+
+export const confirmEmail = async (req: Request, res: Response) => {
+  const tokenValue = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+
+  if (!tokenValue) {
+    res.status(400).json({ error: 'Token de confirmação inválido.' });
+    return;
+  }
+
+  try {
+    const result = await confirmEmailWithToken(tokenValue);
+
+    res.json({
+      message: 'E-mail confirmado com sucesso.',
+      confirmedAt: result.confirmedAt.toISOString(),
+    });
+  } catch (error) {
+    if (error instanceof EmailConfirmationTokenError) {
+      if (error.code === 'TOKEN_INVALID') {
+        res.status(400).json({ error: 'Token de confirmação inválido.' });
+        return;
+      }
+
+      if (error.code === 'TOKEN_EXPIRED') {
+        res.status(400).json({ error: 'Token de confirmação expirado. Solicite um novo link.' });
+        return;
+      }
+
+      if (error.code === 'TOKEN_ALREADY_USED') {
+        res.status(409).json({ error: 'Token de confirmação já utilizado.' });
+        return;
+      }
+    }
+
+    console.error('Erro ao confirmar e-mail', error);
+    res.status(500).json({ error: 'Não foi possível confirmar o e-mail.' });
   }
 };
 
@@ -862,6 +951,7 @@ export const login = async (req: Request, res: Response) => {
               u.email,
               u.senha,
               u.must_change_password,
+              u.email_confirmed_at,
               u.status,
               u.perfil,
               per.ver_todas_conversas AS perfil_ver_todas_conversas,
@@ -901,6 +991,7 @@ export const login = async (req: Request, res: Response) => {
       nome_completo: string;
       email: string;
       senha: string | null;
+      email_confirmed_at?: unknown;
       status: unknown;
       perfil: number | string | null;
       empresa_id: number | null;
@@ -927,6 +1018,12 @@ export const login = async (req: Request, res: Response) => {
     const isUserActive = parseBooleanFlag(user.status);
     if (isUserActive === false) {
       res.status(403).json({ error: 'Usuário inativo.' });
+      return;
+    }
+
+    const emailConfirmedAt = parseDateValue(user.email_confirmed_at);
+    if (!emailConfirmedAt) {
+      res.status(403).json({ error: 'Confirme seu e-mail antes de acessar.' });
       return;
     }
 

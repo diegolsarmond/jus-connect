@@ -10,11 +10,14 @@ process.env.AUTH_TOKEN_SECRET ??= 'test-secret';
 let register: typeof import('../src/controllers/authController')['register'];
 let login: typeof import('../src/controllers/authController')['login'];
 let changePassword: typeof import('../src/controllers/authController')['changePassword'];
+let confirmEmail: typeof import('../src/controllers/authController')['confirmEmail'];
+let emailConfirmationService: typeof import('../src/services/emailConfirmationService');
 
 const planModules = ['configuracoes', 'clientes', 'dashboard'];
 
 test.before(async () => {
-  ({ register, login, changePassword } = await import('../src/controllers/authController'));
+  ({ register, login, changePassword, confirmEmail } = await import('../src/controllers/authController'));
+  emailConfirmationService = await import('../src/services/emailConfirmationService');
 });
 
 const normalizeSql = (query: string): string => query.replace(/\s+/g, ' ').trim();
@@ -206,6 +209,12 @@ const duplicateCheckResponses: QueryResponse[] = [
     clientResponses
   );
 
+  const sendEmailMock = test.mock.method(
+    emailConfirmationService,
+    'sendEmailConfirmationToken',
+    async () => {}
+  );
+
   const req = {
     body: {
       name: 'Alice Doe',
@@ -224,16 +233,21 @@ const duplicateCheckResponses: QueryResponse[] = [
   } finally {
     restoreConnect();
     restorePoolQuery();
+    sendEmailMock.mock.restore();
   }
 
   assert.equal(res.statusCode, 201);
 
   const responseBody = res.body as {
+    message: string;
+    requiresEmailConfirmation: boolean;
     user: { id: number; perfil: number; empresa: number };
     empresa: { id: number; nome: string; plano: number | null };
     perfil: { id: number; nome: string; modulos: string[] };
   };
 
+  assert.equal(responseBody.requiresEmailConfirmation, true);
+  assert.match(responseBody.message, /Verifique seu e-mail/i);
   assert.equal(responseBody.user.id, 123);
   assert.equal(responseBody.user.perfil, 99);
   assert.equal(responseBody.user.empresa, 42);
@@ -280,6 +294,13 @@ const duplicateCheckResponses: QueryResponse[] = [
   assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
   assert.deepEqual(poolCalls[1]?.values, [7]);
   assert.equal(wasReleased(), true);
+  assert.equal(sendEmailMock.mock.callCount(), 1);
+  const [confirmationArg] = sendEmailMock.mock.calls[0]?.arguments ?? [];
+  assert.deepEqual(confirmationArg, {
+    id: 123,
+    nome_completo: 'Alice Doe',
+    email: 'alice@example.com',
+  });
 });
 
 test('register utiliza módulos padrão quando tabela de planos está ausente', async () => {
@@ -331,6 +352,12 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
   ];
 
   const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
+
+  const sendEmailMock = test.mock.method(
+    emailConfirmationService,
+    'sendEmailConfirmationToken',
+    async () => {}
+  );
 
   const req = {
     body: {
@@ -429,15 +456,20 @@ test('register tolerates trailing spaces when matching existing company and prof
   } finally {
     restoreConnect();
     restorePoolQuery();
+    sendEmailMock.mock.restore();
   }
 
   assert.equal(res.statusCode, 201);
 
   const responseBody = res.body as {
+    message: string;
+    requiresEmailConfirmation: boolean;
     empresa: { nome: string };
     perfil: { nome: string };
   };
 
+  assert.equal(responseBody.requiresEmailConfirmation, true);
+  assert.match(responseBody.message, /Verifique seu e-mail/i);
   assert.equal(responseBody.empresa.nome, 'Acme Corp');
   assert.equal(responseBody.perfil.nome, 'Administrador');
 
@@ -454,6 +486,7 @@ test('register tolerates trailing spaces when matching existing company and prof
 
   const perfilInsertCall = clientCalls.find((call) => call.text.includes('INSERT INTO public.perfis'));
   assert.equal(perfilInsertCall, undefined);
+  assert.equal(sendEmailMock.mock.callCount(), 1);
 });
 
 test('register returns 409 when email already exists', async () => {
@@ -506,6 +539,7 @@ test('login succeeds when subscription is active', async () => {
           email: 'alice@example.com',
           senha: hashedPassword,
           must_change_password: false,
+          email_confirmed_at: new Date(now - 60 * 60 * 1000).toISOString(),
           status: true,
           perfil: 15,
           empresa_id: 20,
@@ -593,6 +627,7 @@ test('login rejects when user is inactive', async () => {
           email: 'alice@example.com',
           senha: hashedPassword,
           must_change_password: false,
+          email_confirmed_at: new Date().toISOString(),
           status: 'inactive',
           perfil: 15,
           empresa_id: 20,
@@ -624,6 +659,51 @@ test('login rejects when user is inactive', async () => {
   assert.deepEqual(res.body, { error: 'Usuário inativo.' });
 });
 
+test('login rejects when e-mail confirmation is pending', async () => {
+  const password = 'SenhaSegura123';
+  const hashedPassword = await hashPassword(password);
+
+  const { restore: restorePoolQuery } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 78,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          senha: hashedPassword,
+          must_change_password: false,
+          email_confirmed_at: null,
+          status: true,
+          perfil: 15,
+          empresa_id: 20,
+          empresa_nome: 'Acme Corp',
+          setor_id: 9,
+          setor_nome: 'Jurídico',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    body: {
+      email: 'alice@example.com',
+      senha: password,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await login(req, res);
+  } finally {
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: 'Confirme seu e-mail antes de acessar.' });
+});
+
 test('login rejects when trial period has expired without payment', async () => {
   const password = 'SenhaSegura123';
   const hashedPassword = await hashPassword(password);
@@ -639,6 +719,7 @@ test('login rejects when trial period has expired without payment', async () => 
           email: 'alice@example.com',
           senha: hashedPassword,
           must_change_password: false,
+          email_confirmed_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
           status: true,
           perfil: 22,
           empresa_id: 30,
@@ -695,6 +776,7 @@ test('login rejects with payment required once grace period expires', async () =
           email: 'alice@example.com',
           senha: hashedPassword,
           must_change_password: false,
+          email_confirmed_at: new Date(now - 15 * 24 * 60 * 60 * 1000).toISOString(),
           status: true,
           perfil: 33,
           empresa_id: 40,
@@ -755,6 +837,7 @@ test('login migrates legacy sha256 hashes to argon2 format', async () => {
           email: 'alice@example.com',
           senha: legacyHash,
           must_change_password: false,
+          email_confirmed_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
           status: true,
           perfil: 15,
           empresa_id: 20,
@@ -829,6 +912,7 @@ test('login migrates plain text passwords to argon2 format', async () => {
           email: 'alice@example.com',
           senha: password,
           must_change_password: false,
+          email_confirmed_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
           status: true,
           perfil: 15,
           empresa_id: 20,
@@ -879,6 +963,59 @@ test('login migrates plain text passwords to argon2 format', async () => {
 
   const modulesCall = calls.find((call) => /perfil_modulos/.test(call.text ?? ''));
   assert.ok(modulesCall, 'expected module fetch to occur');
+});
+
+test('confirmEmail returns success when token is valid', async () => {
+  const confirmMock = test.mock.method(
+    emailConfirmationService,
+    'confirmEmailWithToken',
+    async () => ({
+      userId: 99,
+      confirmedAt: new Date('2024-01-02T10:00:00.000Z'),
+    })
+  );
+
+  const req = { body: { token: 'abc123' } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await confirmEmail(req, res);
+  } finally {
+    confirmMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    message: 'E-mail confirmado com sucesso.',
+    confirmedAt: new Date('2024-01-02T10:00:00.000Z').toISOString(),
+  });
+});
+
+test('confirmEmail handles expired tokens', async () => {
+  const confirmMock = test.mock.method(
+    emailConfirmationService,
+    'confirmEmailWithToken',
+    async () => {
+      throw new emailConfirmationService.EmailConfirmationTokenError(
+        'Token expirado',
+        'TOKEN_EXPIRED'
+      );
+    }
+  );
+
+  const req = { body: { token: 'expired-token' } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await confirmEmail(req, res);
+  } finally {
+    confirmMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, {
+    error: 'Token de confirmação expirado. Solicite um novo link.',
+  });
 });
 
 test('changePassword updates the stored hash and clears the must-change flag', async () => {
