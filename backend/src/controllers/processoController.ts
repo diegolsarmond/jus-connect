@@ -628,7 +628,7 @@ const baseProcessoSelect = `
       )
       FROM public.process_sync ps
       WHERE ps.processo_id = p.id
-      ORDER BY ps.requested_at DESC, ps.id DESC
+      ORDER BY (ps.metadata -> 'result') IS NULL, ps.requested_at DESC, ps.id DESC
       LIMIT 1
     ) AS judit_last_request
   FROM public.processos p

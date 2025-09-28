@@ -30,9 +30,189 @@ const createMockResponse = () => {
 };
 
 let getProcessoById: typeof import('../src/controllers/processoController')['getProcessoById'];
+let listProcessos: typeof import('../src/controllers/processoController')['listProcessos'];
 
 test.before(async () => {
-  ({ getProcessoById } = await import('../src/controllers/processoController'));
+  ({ getProcessoById, listProcessos } = await import('../src/controllers/processoController'));
+});
+
+test('listProcessos prioritizes Judit syncs with results', async () => {
+  const processoRow: ProcessResponseShape = {
+    id: 1,
+    cliente_id: null,
+    idempresa: 10,
+    numero: '1234567-89.1234.5.67.8901',
+    uf: null,
+    municipio: null,
+    orgao_julgador: null,
+    tipo: null,
+    status: null,
+    classe_judicial: null,
+    assunto: null,
+    jurisdicao: null,
+    oportunidade_id: null,
+    oportunidade_sequencial_empresa: null,
+    oportunidade_data_criacao: null,
+    oportunidade_numero_processo_cnj: null,
+    oportunidade_numero_protocolo: null,
+    oportunidade_solicitante_id: null,
+    oportunidade_solicitante_nome: null,
+    advogado_responsavel: null,
+    data_distribuicao: null,
+    criado_em: '2024-01-01T12:00:00.000Z',
+    atualizado_em: '2024-01-02T12:00:00.000Z',
+    ultima_sincronizacao: null,
+    consultas_api_count: 1,
+    judit_tracking_id: null,
+    judit_tracking_hour_range: null,
+    cliente_nome: null,
+    cliente_documento: null,
+    cliente_tipo: null,
+    advogados: '[]',
+    movimentacoes: '[]',
+    movimentacoes_count: 0,
+    judit_last_request: {
+      request_id: 'req-abc',
+      status: 'completed',
+      source: 'manual',
+      result: { ok: true },
+      criado_em: '2024-01-05T10:00:00.000Z',
+      atualizado_em: '2024-01-05T11:00:00.000Z',
+    },
+  };
+
+  const req = { auth: { userId: 77 } } as unknown as Request;
+  const res = createMockResponse();
+
+  const poolMock = test.mock.method(pool, 'query', async (text: string) => {
+    if (/FROM public\.usuarios/.test(text)) {
+      return { rows: [{ empresa: processoRow.idempresa }], rowCount: 1 };
+    }
+
+    if (/FROM public\.processos\b/.test(text)) {
+      assert.match(
+        text,
+        /ORDER BY\s+\(ps\.metadata -> 'result'\) IS NULL,\s+ps\.requested_at DESC,\s+ps\.id DESC/
+      );
+      return { rows: [processoRow], rowCount: 1 };
+    }
+
+    throw new Error(`Unexpected pool query: ${text}`);
+  });
+
+  try {
+    await listProcessos(req, res);
+
+    assert.equal(res.statusCode, 200);
+    const body = res.body as ProcessResponseShape[];
+    assert.ok(Array.isArray(body));
+    assert.equal(body.length, 1);
+    assert.deepEqual(body[0]?.judit_last_request, processoRow.judit_last_request);
+  } finally {
+    poolMock.mock.restore();
+  }
+});
+
+test('getProcessoById prioritizes Judit syncs with results', async () => {
+  const processoRow: ProcessResponseShape = {
+    id: 222,
+    cliente_id: null,
+    idempresa: 44,
+    numero: '7654321-98.7654.3.21.0987',
+    uf: null,
+    municipio: null,
+    orgao_julgador: null,
+    tipo: null,
+    status: null,
+    classe_judicial: null,
+    assunto: null,
+    jurisdicao: null,
+    oportunidade_id: null,
+    oportunidade_sequencial_empresa: null,
+    oportunidade_data_criacao: null,
+    oportunidade_numero_processo_cnj: null,
+    oportunidade_numero_protocolo: null,
+    oportunidade_solicitante_id: null,
+    oportunidade_solicitante_nome: null,
+    advogado_responsavel: null,
+    data_distribuicao: null,
+    criado_em: '2024-04-01T09:00:00.000Z',
+    atualizado_em: '2024-04-01T10:00:00.000Z',
+    ultima_sincronizacao: null,
+    consultas_api_count: 0,
+    judit_tracking_id: null,
+    judit_tracking_hour_range: null,
+    cliente_nome: null,
+    cliente_documento: null,
+    cliente_tipo: null,
+    advogados: '[]',
+    movimentacoes: '[]',
+    movimentacoes_count: 0,
+    judit_last_request: {
+      request_id: 'req-with-result',
+      status: 'completed',
+      source: 'details',
+      result: { synced: true },
+      criado_em: '2024-04-02T12:00:00.000Z',
+      atualizado_em: '2024-04-02T13:00:00.000Z',
+    },
+  };
+
+  const req = {
+    params: { id: String(processoRow.id) },
+    auth: { userId: 33 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  const poolMock = test.mock.method(pool, 'query', async (text: string) => {
+    if (/FROM public\.usuarios/.test(text)) {
+      return { rows: [{ empresa: processoRow.idempresa }], rowCount: 1 };
+    }
+
+    if (/FROM public\.processos\b/.test(text) && /WHERE p\.id = \$1/.test(text)) {
+      assert.match(
+        text,
+        /ORDER BY\s+\(ps\.metadata -> 'result'\) IS NULL,\s+ps\.requested_at DESC,\s+ps\.id DESC/
+      );
+      return { rows: [processoRow], rowCount: 1 };
+    }
+
+    if (/FROM public\.processo_movimentacoes/.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (/FROM public\.process_sync\b/.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (/FROM public\.process_response\b/.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+
+    if (/FROM public\.sync_audit\b/.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+
+    throw new Error(`Unexpected pool query: ${text}`);
+  });
+
+  const juditService = getJuditServiceInstance();
+  const originalIsEnabled = juditService.isEnabled;
+
+  juditService.isEnabled = async () => false;
+
+  try {
+    await getProcessoById(req, res);
+
+    assert.equal(res.statusCode, 200);
+    const body = res.body as ProcessResponseShape;
+    assert.ok(body);
+    assert.deepEqual(body.judit_last_request, processoRow.judit_last_request);
+  } finally {
+    juditService.isEnabled = originalIsEnabled;
+    poolMock.mock.restore();
+  }
 });
 
 test('getProcessoById does not trigger Judit when local history exists', async () => {
