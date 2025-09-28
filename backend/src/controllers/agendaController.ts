@@ -461,12 +461,12 @@ export const updateAgenda = async (req: Request, res: Response) => {
                 dataatualizacao = NOW()
           WHERE id = $12
             AND idempresa IS NOT DISTINCT FROM $13
-            AND idusuario = $14
+            AND (idusuario = $14 OR idusuario IS NULL)
           RETURNING id, titulo, tipo, descricao, data, hora_inicio, hora_fim, cliente, tipo_local, local, lembrete, status, datacadastro, idempresa, idusuario, dataatualizacao
        )
        ${buildAgendaSelect('updated')}
        WHERE updated.idempresa IS NOT DISTINCT FROM $13
-         AND updated.idusuario = $14`,
+         AND (updated.idusuario = $14 OR updated.idusuario IS NULL)`,
       [
         titulo,
         tipo,
@@ -542,7 +542,10 @@ export const deleteAgenda = async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      'DELETE FROM public.agenda WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2 AND idusuario = $3',
+      `DELETE FROM public.agenda
+        WHERE id = $1
+          AND idempresa IS NOT DISTINCT FROM $2
+          AND (idusuario = $3 OR idusuario IS NULL)`,
       [id, empresaId, req.auth.userId]
     );
     if (result.rowCount === 0) {
