@@ -15,13 +15,14 @@ import {
   tokenizeCard,
   fetchCustomerSyncStatus,
   syncCustomerNow,
+  refundAsaasCharge,
 } from '@/lib/flows';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, RefreshCcw, Clipboard, Send, CreditCard, QrCode } from 'lucide-react';
+import { Loader2, RefreshCcw, Clipboard, Send, CreditCard, QrCode, Undo2 } from 'lucide-react';
 
 export type CustomerOption = {
   id: string;
@@ -62,6 +63,12 @@ type CardFormErrors = Partial<Record<keyof CardFormState, string>>;
 
 const DEFAULT_INSTALLMENT_OPTIONS = [1, 2, 3, 6, 12];
 const DIGIT_ONLY_REGEX = /\D+/g;
+const REFUNDABLE_CHARGE_STATUSES = new Set([
+  'RECEIVED',
+  'RECEIVED_IN_CASH',
+  'RECEIVED_PARTIALLY',
+  'CONFIRMED',
+]);
 
 function sanitizeDigits(value: string): string {
   return value.replace(DIGIT_ONLY_REGEX, '');
@@ -182,6 +189,21 @@ export const AsaasChargeDialog = ({
       currencyFormatter.format(Number.parseFloat(value ? value.toString() : '0') || 0),
     [currencyFormatter],
   );
+  const refundDisabledReason = useMemo(() => {
+    if (!flow) {
+      return 'Selecione um lançamento para solicitar estorno.';
+    }
+    if (!lastCharge) {
+      return 'Gere uma cobrança antes de solicitar estorno.';
+    }
+    if (isChargeRefunded) {
+      return 'A cobrança já foi estornada no Asaas.';
+    }
+    if (!canRefundCharge) {
+      return 'O Asaas precisa confirmar o pagamento antes de liberar o estorno.';
+    }
+    return null;
+  }, [flow, lastCharge, isChargeRefunded, canRefundCharge]);
   const [customerId, setCustomerId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<AsaasPaymentMethod>('PIX');
   const [installments, setInstallments] = useState<number>(1);
@@ -190,6 +212,14 @@ export const AsaasChargeDialog = ({
   const [statuses, setStatuses] = useState<AsaasChargeStatus[]>(persistedStatuses ?? []);
   const [cardModalState, setCardModalState] = useState<CardModalState | null>(null);
   const [lastCardDetails, setLastCardDetails] = useState<CardTokenDetails | null>(null);
+  const normalizedChargeStatus = useMemo(() => {
+    if (!lastCharge?.status) {
+      return '';
+    }
+    return lastCharge.status.toString().trim().toUpperCase();
+  }, [lastCharge?.status]);
+  const isChargeRefunded = normalizedChargeStatus === 'REFUNDED';
+  const canRefundCharge = Boolean(normalizedChargeStatus && REFUNDABLE_CHARGE_STATUSES.has(normalizedChargeStatus));
 
   useEffect(() => {
     if (open) {
@@ -367,6 +397,47 @@ export const AsaasChargeDialog = ({
       toast({
         title: 'Erro ao criar cobrança',
         description: error instanceof Error ? error.message : 'Não foi possível criar a cobrança.',
+        variant: 'destructive',
+      });
+    },
+  });
+  const refundMutation = useMutation({
+    mutationFn: async () => {
+      if (!flow) {
+        throw new Error('Fluxo não selecionado.');
+      }
+      const numericFlowId =
+        typeof flow.id === 'number' && Number.isFinite(flow.id)
+          ? flow.id
+          : Number.parseInt(String(flow.id), 10);
+      if (!Number.isFinite(numericFlowId)) {
+        throw new Error('Identificador do fluxo inválido para estorno.');
+      }
+      return refundAsaasCharge(numericFlowId);
+    },
+    onSuccess: (result) => {
+      if (!flow) {
+        return;
+      }
+      setLastCharge(result.charge);
+      const resultFlowId =
+        typeof result.flow?.id === 'number' && Number.isFinite(result.flow.id)
+          ? result.flow.id
+          : Number.parseInt(String(result.flow?.id ?? flow.id), 10);
+      if (Number.isFinite(resultFlowId)) {
+        onChargeCreated(Number(resultFlowId), result.charge);
+      }
+      toast({
+        title: 'Estorno solicitado',
+        description: 'O estorno foi registrado no Asaas.',
+      });
+      statusQuery.refetch();
+      chargeDetailsQuery.refetch();
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: 'Erro ao solicitar estorno',
+        description: error instanceof Error ? error.message : 'Não foi possível solicitar o estorno.',
         variant: 'destructive',
       });
     },
@@ -800,6 +871,43 @@ const handleCardTokenized = async (details: CardTokenDetails) => {
               ) : (
                 renderChargeDetails()
               )}
+
+              {lastCharge ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 p-3">
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium">
+                      {isChargeRefunded ? 'Cobrança estornada no Asaas' : 'Solicitar estorno no Asaas'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {isChargeRefunded
+                        ? 'O Asaas confirmou o estorno desta cobrança e o lançamento será marcado como estornado.'
+                        : 'O estorno reverterá o pagamento no Asaas e atualizará o lançamento como estornado no CRM.'}
+                    </p>
+                  </div>
+                  {isChargeRefunded ? (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Undo2 className="h-3.5 w-3.5" /> Estornado
+                    </Badge>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => refundMutation.mutate()}
+                      disabled={!canRefundCharge || refundMutation.isPending}
+                      title={refundDisabledReason ?? undefined}
+                    >
+                      {refundMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Undo2 className="h-3.5 w-3.5" />
+                      )}
+                      {refundMutation.isPending ? 'Solicitando...' : 'Solicitar estorno'}
+                    </Button>
+                  )}
+                </div>
+              ) : null}
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">

@@ -5,6 +5,7 @@ import {
   AsaasConfigurationError,
   OPEN_PAYMENT_STATUSES,
   PAID_PAYMENT_STATUSES,
+  REFUND_PAYMENT_STATUSES,
   type AsaasPaymentsResponse,
   type AsaasPayment,
 } from '../src/services/asaasChargeSync';
@@ -70,7 +71,10 @@ test('syncPendingCharges consults only pending charges when querying storage', a
   assert.equal(result.totalCharges, 0);
   assert.equal(db.calls.length, 1);
   assert.ok(/FROM\s+asaas_charges/i.test(db.calls[0].text));
-  assert.deepEqual(db.calls[0].values?.[0], OPEN_PAYMENT_STATUSES);
+  assert.deepEqual(
+    db.calls[0].values?.[0],
+    [...new Set([...OPEN_PAYMENT_STATUSES, ...PAID_PAYMENT_STATUSES, ...REFUND_PAYMENT_STATUSES])],
+  );
   assert.equal(client.calls.length, 0);
 });
 
@@ -78,6 +82,7 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   const storedCharges = [
     { id: 1, asaas_id: 'pay_1', financial_flow_id: 10, status: 'PENDING' },
     { id: 2, asaas_id: 'pay_2', financial_flow_id: 20, status: 'PENDING' },
+    { id: 3, asaas_id: 'pay_3', financial_flow_id: 30, status: 'RECEIVED' },
   ];
 
   const db = new FakeDb([
@@ -87,6 +92,7 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   const remotePayments: AsaasPayment[] = [
     { id: 'pay_1', status: 'OVERDUE', dueDate: '2024-04-15' },
     { id: 'pay_2', status: 'RECEIVED', paymentDate: '2024-04-01' },
+    { id: 'pay_3', status: 'REFUNDED' },
     { id: 'other', status: 'PENDING' },
   ];
 
@@ -113,22 +119,28 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
 
   const result = await service.syncPendingCharges();
 
-  assert.equal(result.totalCharges, 2);
+  assert.equal(result.totalCharges, 3);
   assert.equal(result.paymentsRetrieved, remotePayments.length);
-  assert.equal(result.chargesUpdated, 2);
-  assert.equal(result.flowsUpdated, 2);
-  assert.deepEqual(result.fetchedStatuses, [...OPEN_PAYMENT_STATUSES, ...PAID_PAYMENT_STATUSES]);
+  assert.equal(result.chargesUpdated, 3);
+  assert.equal(result.flowsUpdated, 3);
+  assert.deepEqual(
+    result.fetchedStatuses,
+    [...new Set([...OPEN_PAYMENT_STATUSES, ...PAID_PAYMENT_STATUSES, ...REFUND_PAYMENT_STATUSES])],
+  );
 
   assert.equal(client.calls.length, 1);
-  assert.deepEqual(client.calls[0].status, [...OPEN_PAYMENT_STATUSES, ...PAID_PAYMENT_STATUSES]);
+  assert.deepEqual(
+    client.calls[0].status,
+    [...new Set([...OPEN_PAYMENT_STATUSES, ...PAID_PAYMENT_STATUSES, ...REFUND_PAYMENT_STATUSES])],
+  );
   assert.equal(client.calls[0].limit, 50);
   assert.equal(client.calls[0].offset, 0);
 
 
   const updateCalls = db.calls.slice(1);
-  assert.equal(updateCalls.length, 4);
+  assert.equal(updateCalls.length, 6);
 
-  const [updateCharge1, updateFlow1, updateCharge2, updateFlow2] = updateCalls;
+  const [updateCharge1, updateFlow1, updateCharge2, updateFlow2, updateCharge3, updateFlow3] = updateCalls;
 
   assert.match(updateCharge1.text, /UPDATE\s+asaas_charges/i);
   assert.deepEqual(updateCharge1.values, ['OVERDUE', 1]);
@@ -142,16 +154,22 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   assert.ok(updateFlow2.values?.[1] instanceof Date);
   assert.equal(updateFlow2.values?.[2], 20);
 
-  assert.equal(subscriptionUpdates.length, 2);
+  assert.deepEqual(updateCharge3.values, ['REFUNDED', 3]);
+  assert.deepEqual(updateFlow3.values, ['estornado', null, 30]);
+
+  assert.equal(subscriptionUpdates.length, 3);
   assert.deepEqual(
     subscriptionUpdates.map((entry) => entry.flowId).sort(),
-    [10, 20],
+    [10, 20, 30],
   );
   const paymentEntry = subscriptionUpdates.find((entry) => entry.flowId === 20);
   assert.ok(paymentEntry?.paymentDate instanceof Date);
   const overdueEntry = subscriptionUpdates.find((entry) => entry.flowId === 10);
   assert.equal(overdueEntry?.status, 'OVERDUE');
   assert.equal(overdueEntry?.dueDate, '2024-04-15');
+  const refundedEntry = subscriptionUpdates.find((entry) => entry.flowId === 30);
+  assert.equal(refundedEntry?.status, 'REFUNDED');
+  assert.equal(refundedEntry?.paymentDate, null);
 });
 
 test('syncPendingCharges fails fast when credentials are not configured', async () => {

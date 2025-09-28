@@ -9,6 +9,7 @@ import {
   getAsaasChargeForFlow,
   listAsaasChargeStatus,
   createAsaasChargeForFlow,
+  refundAsaasCharge,
 } from '../controllers/financialController';
 
 const router = Router();
@@ -29,5 +30,6 @@ router.get('/financial/flows/:id/asaas/charges/status', listAsaasChargeStatus);
 router.get('/financial/flows/:id/asaas-charge', getAsaasChargeForFlow);
 router.get('/financial/flows/:id/asaas-charge/status', listAsaasChargeStatus);
 router.post('/financial/flows/:id/asaas-charge', createAsaasChargeForFlow);
+router.post('/financial/flows/:id/asaas/charges/refund', refundAsaasCharge);
 
 export default router;

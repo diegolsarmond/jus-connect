@@ -9,5 +9,5 @@ export interface Flow {
   vencimento: string;
   pagamento: string | null;
   valor: number;
-  status: 'pendente' | 'pago';
+  status: 'pendente' | 'pago' | 'estornado';
 }

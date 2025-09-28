@@ -49,6 +49,7 @@ const HANDLED_EVENTS = new Set([
   'PAYMENT_RECEIVED',
   'PAYMENT_CONFIRMED',
   'PAYMENT_OVERDUE',
+  'PAYMENT_REFUNDED',
 ]);
 
 function extractSignature(req: Request): string | null {
@@ -129,6 +130,19 @@ function normalizeEventName(event: string | null | undefined): string | null {
 
 function shouldMarkAsPaid(event: string): boolean {
   return event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED';
+}
+
+function shouldMarkAsRefunded(event: string, status: string | null | undefined): boolean {
+  if (event === 'PAYMENT_REFUNDED') {
+    return true;
+  }
+
+  if (!status) {
+    return false;
+  }
+
+  const normalized = status.trim().toUpperCase();
+  return normalized === 'REFUNDED' || normalized === 'REFUND_PENDING' || normalized === 'REFUND_REQUESTED';
 }
 
 function extractPaymentDate(payment: AsaasPaymentPayload | null | undefined): string | null {
@@ -275,6 +289,19 @@ async function updateFinancialFlowAsPaid(
   );
 }
 
+async function updateFinancialFlowAsRefunded(financialFlowId: number | string): Promise<void> {
+  const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(financialFlowId);
+
+  if (normalizedFinancialFlowId === null) {
+    return;
+  }
+
+  await pool.query(
+    "UPDATE financial_flows SET status = 'estornado', pagamento = NULL WHERE id = $1",
+    [normalizedFinancialFlowId],
+  );
+}
+
 function buildWebhookResponse() {
   return { received: true };
 }
@@ -387,12 +414,17 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
   const status = extractChargeStatus(normalizedEvent, payment);
   const paymentDate = shouldMarkAsPaid(normalizedEvent) ? extractPaymentDate(payment) : null;
   const dueDate = normalizedEvent === 'PAYMENT_OVERDUE' ? extractDueDate(payment) : null;
+  const isRefunded = shouldMarkAsRefunded(normalizedEvent, status);
 
   try {
     await updateCharge(asaasChargeId, normalizedEvent, status, paymentDate, payload ?? {});
 
-    if (charge.financial_flow_id && shouldMarkAsPaid(normalizedEvent)) {
-      await updateFinancialFlowAsPaid(charge.financial_flow_id, paymentDate);
+    if (charge.financial_flow_id) {
+      if (shouldMarkAsPaid(normalizedEvent)) {
+        await updateFinancialFlowAsPaid(charge.financial_flow_id, paymentDate);
+      } else if (isRefunded) {
+        await updateFinancialFlowAsRefunded(charge.financial_flow_id);
+      }
     }
 
     let companyId: number | null = null;

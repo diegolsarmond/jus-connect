@@ -55,6 +55,19 @@ export interface CardTokenResponse {
   raw?: unknown;
 }
 
+export interface RefundAsaasChargePayload {
+  value?: number;
+  description?: string;
+  externalReference?: string;
+  keepCustomerFee?: boolean;
+}
+
+export interface RefundAsaasChargeResult {
+  flow: Flow;
+  charge: AsaasCharge;
+  refund: unknown;
+}
+
 export interface Flow {
   id: number | string;
   tipo: 'receita' | 'despesa';
@@ -62,7 +75,7 @@ export interface Flow {
   vencimento: string;
   pagamento?: string | null;
   valor: number;
-  status: 'pendente' | 'pago';
+  status: 'pendente' | 'pago' | 'estornado';
   cliente_id?: string | null;
   fornecedor_id?: string | null;
 }
@@ -474,6 +487,30 @@ export async function listChargeStatus(flowId: number): Promise<AsaasChargeStatu
   }
   const payload = await ensureOkResponse(response).json();
   return normalizeChargeStatuses(payload);
+}
+
+export async function refundAsaasCharge(
+  flowId: number,
+  payload?: RefundAsaasChargePayload,
+): Promise<RefundAsaasChargeResult> {
+  const endpoint = joinUrl(getChargeEndpoint(flowId), 'refund');
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload ?? {}),
+  });
+
+  const data = await ensureOkResponse(response).json();
+  const normalizedCharge = normalizeCharge((data as { [key: string]: unknown }).charge);
+  if (!normalizedCharge) {
+    throw new Error('Resposta inesperada ao estornar cobrança');
+  }
+
+  return {
+    flow: (data as { [key: string]: unknown }).flow as Flow,
+    charge: normalizedCharge,
+    refund: (data as { [key: string]: unknown }).refund,
+  } satisfies RefundAsaasChargeResult;
 }
 
 export async function tokenizeCard(payload: CardTokenPayload): Promise<CardTokenResponse> {

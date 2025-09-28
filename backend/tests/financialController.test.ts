@@ -12,6 +12,7 @@ let listFlows: typeof import('../src/controllers/financialController')['listFlow
 let createFlow: typeof import('../src/controllers/financialController')['createFlow'];
 let updateFlow: typeof import('../src/controllers/financialController')['updateFlow'];
 let settleFlow: typeof import('../src/controllers/financialController')['settleFlow'];
+let refundAsaasCharge: typeof import('../src/controllers/financialController')['refundAsaasCharge'];
 let getAsaasChargeForFlow: typeof import('../src/controllers/financialController')['getAsaasChargeForFlow'];
 let listAsaasChargeStatus: typeof import('../src/controllers/financialController')['listAsaasChargeStatus'];
 let __internal: typeof import('../src/controllers/financialController')['__internal'];
@@ -78,6 +79,7 @@ const financialAccountColumnsResponse: QueryResponse = {
 
 
 test.before(async () => {
+
   ({
     listFlows,
     createFlow,
@@ -1267,6 +1269,147 @@ test('settleFlow enforces company ownership for opportunity installments', async
   assert.match(calls[1]?.text ?? '', /FROM public\.oportunidade_parcelas/);
 });
 
+test('refundAsaasCharge refunds Asaas payment and updates records', async () => {
+  const flowRow = {
+    id: 55,
+    tipo: 'receita',
+    descricao: 'Mensalidade',
+    valor: 150,
+    vencimento: '2024-08-01',
+    pagamento: '2024-08-02',
+    status: 'pago',
+    idempresa: DEFAULT_EMPRESA_ID,
+  };
+
+  const chargeRow = {
+    id: 77,
+    financial_flow_id: flowRow.id,
+    asaas_charge_id: 'ch_123',
+    status: 'RECEIVED',
+    raw_response: null,
+  };
+
+  const updatedChargeRow = { ...chargeRow, status: 'REFUNDED' };
+  const updatedFlowRow = { ...flowRow, status: 'estornado', pagamento: null };
+
+  const { calls, restore } = setupQueryMock([empresaLookupResponse]);
+
+  const clientSetup = setupClientMock([
+    { rows: [], rowCount: 0 },
+    { rows: [flowRow], rowCount: 1 },
+    { rows: [chargeRow], rowCount: 1 },
+    { rows: [updatedChargeRow], rowCount: 1 },
+    { rows: [updatedFlowRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => clientSetup.client as unknown as any);
+
+  const integrationModule = await import('../src/services/asaas/integrationResolver');
+  const refundResponse = { id: 'refund_1', status: 'REFUNDED' };
+  const createClientMock = test.mock.method(integrationModule, 'createAsaasClient', async () => ({
+    refundCharge: test.mock.fn(async (chargeId: string) => {
+      assert.equal(chargeId, chargeRow.asaas_charge_id);
+      return refundResponse;
+    }),
+  }));
+
+  const req = {
+    params: { id: String(flowRow.id) },
+    auth: { userId: 42 },
+    body: { value: 100 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await refundAsaasCharge(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+    createClientMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { flow: updatedFlowRow, charge: updatedChargeRow, refund: refundResponse });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+
+  assert.equal(clientSetup.calls.length, 6);
+  assert.equal(clientSetup.calls[0]?.text, 'BEGIN');
+  assert.match(clientSetup.calls[1]?.text ?? '', /FROM financial_flows/i);
+  assert.match(clientSetup.calls[2]?.text ?? '', /FROM asaas_charges/i);
+  assert.match(clientSetup.calls[3]?.text ?? '', /UPDATE asaas_charges/i);
+  assert.match(clientSetup.calls[4]?.text ?? '', /UPDATE financial_flows/i);
+  assert.equal(clientSetup.calls[5]?.text, 'COMMIT');
+  assert.equal(clientSetup.release.mock.callCount(), 1);
+  assert.equal(createClientMock.mock.callCount(), 1);
+});
+
+test('refundAsaasCharge rejects charges not eligible for refund', async () => {
+  const flowRow = {
+    id: 66,
+    tipo: 'receita',
+    descricao: 'Mensalidade',
+    valor: 200,
+    vencimento: '2024-09-10',
+    pagamento: '2024-09-11',
+    status: 'pago',
+    idempresa: DEFAULT_EMPRESA_ID,
+  };
+
+  const chargeRow = {
+    id: 88,
+    financial_flow_id: flowRow.id,
+    asaas_charge_id: 'ch_999',
+    status: 'PENDING',
+  };
+
+  const { calls, restore } = setupQueryMock([empresaLookupResponse]);
+
+  const clientSetup = setupClientMock([
+    { rows: [], rowCount: 0 },
+    { rows: [flowRow], rowCount: 1 },
+    { rows: [chargeRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => clientSetup.client as unknown as any);
+
+  const integrationModule = await import('../src/services/asaas/integrationResolver');
+  const createClientMock = test.mock.method(integrationModule, 'createAsaasClient', async () => ({
+    refundCharge: test.mock.fn(),
+  }));
+
+  const req = {
+    params: { id: String(flowRow.id) },
+    auth: { userId: 42 },
+    body: {},
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await refundAsaasCharge(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+    createClientMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, { error: 'A cobrança não está elegível para estorno no Asaas.' });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.equal(clientSetup.calls.length, 4);
+  assert.equal(clientSetup.calls[0]?.text, 'BEGIN');
+  assert.match(clientSetup.calls[1]?.text ?? '', /FROM financial_flows/);
+  assert.match(clientSetup.calls[2]?.text ?? '', /FROM asaas_charges/);
+  assert.equal(clientSetup.calls[3]?.text, 'ROLLBACK');
+  assert.equal(clientSetup.release.mock.callCount(), 1);
+  assert.equal(createClientMock.mock.callCount(), 0);
 test('getAsaasChargeForFlow returns 404 when there is no charge', async () => {
   const flowId = 88;
   const { restore } = setupQueryMock([{ rows: [], rowCount: 0 }]);

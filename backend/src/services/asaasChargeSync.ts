@@ -19,9 +19,23 @@ export const OPEN_PAYMENT_STATUSES = [
 ] as const;
 
 export const PAID_PAYMENT_STATUSES = ['RECEIVED', 'RECEIVED_IN_CASH', 'CONFIRMED'] as const;
+export const REFUND_PAYMENT_STATUSES = [
+  'REFUNDED',
+  'REFUND_REQUESTED',
+  'REFUND_PENDING',
+  'REFUND_IN_PROGRESS',
+  'REFUND_COMPLETED',
+  'CHARGEBACK',
+  'CHARGEBACK_REQUESTED',
+  'CHARGEBACK_DISPUTE',
+] as const;
 
 const OPEN_PAYMENT_STATUS_SET = new Set<string>(OPEN_PAYMENT_STATUSES);
 const PAID_PAYMENT_STATUS_SET = new Set<string>(PAID_PAYMENT_STATUSES);
+const REFUND_PAYMENT_STATUS_SET = new Set<string>(REFUND_PAYMENT_STATUSES);
+const TRACKED_PAYMENT_STATUSES = Array.from(
+  new Set<string>([...OPEN_PAYMENT_STATUSES, ...PAID_PAYMENT_STATUSES, ...REFUND_PAYMENT_STATUSES]),
+);
 
 const DEFAULT_PAGE_SIZE = 100;
 
@@ -254,13 +268,13 @@ export class AsaasChargeSyncService {
   }
 
   private get statusesToFetch(): string[] {
-    return [...OPEN_PAYMENT_STATUSES, ...PAID_PAYMENT_STATUSES];
+    return TRACKED_PAYMENT_STATUSES;
   }
 
   private async loadPendingCharges(): Promise<AsaasChargeRow[]> {
     const { rows } = await this.db.query(
       'SELECT id, asaas_id, financial_flow_id, status FROM asaas_charges WHERE status = ANY($1)',
-      [OPEN_PAYMENT_STATUSES],
+      [TRACKED_PAYMENT_STATUSES],
     );
 
     return rows.map((row) => {
@@ -318,9 +332,11 @@ export class AsaasChargeSyncService {
     const normalizedStatus = normalizeStatus(status);
     const type: NotificationType = PAID_PAYMENT_STATUS_SET.has(normalizedStatus)
       ? 'success'
-      : normalizedStatus === 'OVERDUE'
+      : REFUND_PAYMENT_STATUS_SET.has(normalizedStatus)
         ? 'warning'
-        : 'info';
+        : normalizedStatus === 'OVERDUE'
+          ? 'warning'
+          : 'info';
 
     const dueDate = payment.dueDate ?? null;
     const paymentDate = payment.paymentDate ?? null;
@@ -361,6 +377,10 @@ export class AsaasChargeSyncService {
 
     if (PAID_PAYMENT_STATUS_SET.has(normalizedStatus)) {
       return ['pago', parseDate(paymentDate)];
+    }
+
+    if (REFUND_PAYMENT_STATUS_SET.has(normalizedStatus)) {
+      return ['estornado', null];
     }
 
     if (OPEN_PAYMENT_STATUS_SET.has(normalizedStatus)) {

@@ -9,6 +9,8 @@ import AsaasChargeService, {
   type AsaasChargeResult,
   ValidationError as AsaasValidationError,
 } from '../services/asaasChargeService';
+import { createAsaasClient } from '../services/asaas/integrationResolver';
+import { AsaasApiError, RefundChargePayload } from '../services/asaas/asaasClient';
 
 const getAuthenticatedUser = (
   req: Request,
@@ -26,6 +28,12 @@ const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const INTEGER_ID_REGEX = /^-?\d+$/;
 const OPPORTUNITY_INSTALLMENT_PAID_STATUSES = new Set(['quitado', 'quitada', 'pago', 'paga']);
+const ASAAS_REFUNDABLE_CHARGE_STATUSES = new Set([
+  'RECEIVED',
+  'RECEIVED_IN_CASH',
+  'RECEIVED_PARTIALLY',
+  'CONFIRMED',
+]);
 
 const normalizeFlowId = (value: unknown): string | number | null => {
   if (typeof value === 'number') {
@@ -1010,9 +1018,17 @@ ${baseFinancialFlowsSelect}
       return stringValue.length > 0 ? stringValue : 'Fluxo financeiro';
     };
 
-    const normalizeStatus = (value: unknown): 'pendente' | 'pago' => {
-      if (typeof value === 'string' && value.trim().toLowerCase() === 'pago') {
+    const normalizeStatus = (value: unknown): 'pendente' | 'pago' | 'estornado' => {
+      if (typeof value !== 'string') {
+        return 'pendente';
+      }
+
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'pago') {
         return 'pago';
+      }
+      if (normalized === 'estornado') {
+        return 'estornado';
       }
       return 'pendente';
     };
@@ -1717,6 +1733,154 @@ export const createAsaasChargeForFlow = async (req: Request, res: Response) => {
   }
 };
 
+export const refundAsaasCharge = async (req: Request, res: Response) => {
+  const auth = getAuthenticatedUser(req, res);
+  if (!auth) {
+    return;
+  }
+
+  const { id } = req.params;
+  const flowId = normalizeFlowId(id);
+  if (flowId === null) {
+    res.status(400).json({ error: 'Invalid flow id' });
+    return;
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return;
+  }
+
+  const { empresaId } = empresaLookup;
+
+  if (empresaId === null) {
+    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    return;
+  }
+
+  const refundPayloadCandidate = req.body ?? {};
+  const refundPayload =
+    refundPayloadCandidate && typeof refundPayloadCandidate === 'object'
+      ? (refundPayloadCandidate as RefundChargePayload)
+      : undefined;
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const flowResult = await client.query('SELECT * FROM financial_flows WHERE id = $1 FOR UPDATE', [flowId]);
+    if (flowResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: 'Flow not found' });
+      return;
+    }
+
+    const flow = flowResult.rows[0] as Record<string, unknown>;
+
+    const rawEmpresaId =
+      (flow.idempresa as unknown) ??
+      (flow.empresa_id as unknown) ??
+      (flow.empresa as unknown) ??
+      (flow.id_empresa as unknown);
+    const flowEmpresaId = normalizeEmpresaIdValue(rawEmpresaId);
+
+    if (flowEmpresaId === null || flowEmpresaId !== empresaId) {
+      await client.query('ROLLBACK');
+      res.status(403).json({ error: 'Lançamento indisponível para este usuário.' });
+      return;
+    }
+
+    if (String(flow.tipo).trim().toLowerCase() !== 'receita') {
+      await client.query('ROLLBACK');
+      res.status(400).json({ error: 'Somente receitas podem ser estornadas no Asaas.' });
+      return;
+    }
+
+    const currentStatus = typeof flow.status === 'string' ? flow.status.trim().toLowerCase() : '';
+    if (currentStatus !== 'pago') {
+      await client.query('ROLLBACK');
+      res.status(409).json({ error: 'Somente lançamentos pagos podem ser estornados.' });
+      return;
+    }
+
+    const chargeResult = await client.query(
+      'SELECT id, asaas_charge_id, status, raw_response FROM asaas_charges WHERE financial_flow_id = $1 FOR UPDATE',
+      [flowId],
+    );
+
+    if (chargeResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: 'Cobrança do Asaas não encontrada para este fluxo.' });
+      return;
+    }
+
+    const chargeRow = chargeResult.rows[0] as {
+      id: number;
+      asaas_charge_id: string;
+      status?: string | null;
+      raw_response?: unknown;
+    };
+
+    const normalizedChargeStatus =
+      typeof chargeRow.status === 'string' ? chargeRow.status.trim().toUpperCase() : '';
+
+    if (normalizedChargeStatus === 'REFUNDED') {
+      await client.query('ROLLBACK');
+      res.status(409).json({ error: 'A cobrança já foi estornada no Asaas.' });
+      return;
+    }
+
+    if (!ASAAS_REFUNDABLE_CHARGE_STATUSES.has(normalizedChargeStatus)) {
+      await client.query('ROLLBACK');
+      res.status(409).json({ error: 'A cobrança não está elegível para estorno no Asaas.' });
+      return;
+    }
+
+    const asaasClient = await createAsaasClient(flowEmpresaId, client);
+    const refundResponse = await asaasClient.refundCharge(chargeRow.asaas_charge_id, refundPayload);
+
+    const updatedChargeResult = await client.query(
+      `UPDATE asaas_charges
+          SET status = 'REFUNDED',
+              raw_response = COALESCE(raw_response, '{}'::jsonb) || $2::jsonb,
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING *`,
+      [chargeRow.id, JSON.stringify({ refund: refundResponse })],
+    );
+
+    const updatedFlowResult = await client.query(
+      `UPDATE financial_flows
+          SET status = 'estornado',
+              pagamento = NULL
+        WHERE id = $1
+        RETURNING *`,
+      [flowId],
+    );
+
+    await client.query('COMMIT');
+
+    res.json({
+      flow: updatedFlowResult.rows[0],
+      charge: updatedChargeResult.rows[0],
+      refund: refundResponse,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+
+    if (error instanceof AsaasApiError) {
+      const statusCode = error.status >= 400 && error.status < 600 ? error.status : 502;
+      res.status(statusCode).json({ error: error.message, code: error.errorCode, details: error.responseBody });
+      return;
+    }
+
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
 export const getAsaasChargeForFlow = async (req: Request, res: Response) => {
   const { id } = req.params;
   const flowId = normalizeFlowId(id);

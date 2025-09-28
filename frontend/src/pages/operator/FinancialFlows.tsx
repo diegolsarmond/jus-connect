@@ -337,16 +337,23 @@ const FinancialFlows = () => {
     }
   }, [suppliersError, toast]);
 
-  const handleChargeSaved = useCallback((flowId: number, charge: AsaasCharge) => {
-    setChargeSummaries((prev) => ({ ...prev, [flowId]: charge }));
-  }, []);
+  const handleChargeSaved = useCallback(
+    (flowId: number, charge: AsaasCharge) => {
+      setChargeSummaries((prev) => ({ ...prev, [flowId]: charge }));
+      const normalizedStatus = typeof charge.status === 'string' ? charge.status.trim().toUpperCase() : '';
+      if (normalizedStatus === 'REFUNDED' || normalizedStatus === 'REFUND_PENDING' || normalizedStatus === 'REFUND_REQUESTED') {
+        queryClient.invalidateQueries({ queryKey: ['flows'] });
+      }
+    },
+    [queryClient],
+  );
 
   const handleStatusUpdated = useCallback((flowId: number, statuses: AsaasChargeStatus[]) => {
     setChargeStatusHistory((prev) => ({ ...prev, [flowId]: statuses }));
   }, []);
 
 
-  type DerivedStatus = 'pendente' | 'pago' | 'vencido';
+  type DerivedStatus = 'pendente' | 'pago' | 'vencido' | 'estornado';
 
   type FlowWithDetails = Flow & {
     computedStatus: DerivedStatus;
@@ -389,18 +396,21 @@ const FinancialFlows = () => {
     pendente: 'Pendentes',
     pago: 'Pagos',
     vencido: 'Vencidos',
+    estornado: 'Estornados',
   };
 
   const statusSingleLabels: Record<DerivedStatus, string> = {
     pendente: 'Pendente',
     pago: 'Pago',
     vencido: 'Vencido',
+    estornado: 'Estornado',
   };
 
   const statusBadgeVariants: Record<DerivedStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     pendente: 'outline',
     pago: 'secondary',
     vencido: 'destructive',
+    estornado: 'default',
   };
 
   const deriveMonthLabel = useCallback((date: Date) => {
@@ -423,11 +433,13 @@ const FinancialFlows = () => {
       const normalizedId = normalizeFlowId(flow.id);
 
       const computedStatus: DerivedStatus =
-        flow.status === 'pago' || pagamentoDate
-          ? 'pago'
-          : dueDate && isBefore(dueDate, today)
-            ? 'vencido'
-            : 'pendente';
+        flow.status === 'estornado'
+          ? 'estornado'
+          : flow.status === 'pago' || pagamentoDate
+            ? 'pago'
+            : dueDate && isBefore(dueDate, today)
+              ? 'vencido'
+              : 'pendente';
       return {
         ...flow,
         computedStatus,
@@ -493,6 +505,7 @@ const FinancialFlows = () => {
               pendente: { count: 0, value: 0 },
               pago: { count: 0, value: 0 },
               vencido: { count: 0, value: 0 },
+              estornado: { count: 0, value: 0 },
             },
           },
         );
@@ -518,17 +531,18 @@ const FinancialFlows = () => {
         acc.status[flow.computedStatus].value += flow.valor;
         return acc;
       },
-      {
-        receitas: 0,
-        despesas: 0,
-        saldo: 0,
-        status: {
-          pendente: { count: 0, value: 0 },
-          pago: { count: 0, value: 0 },
-          vencido: { count: 0, value: 0 },
-        },
+    {
+      receitas: 0,
+      despesas: 0,
+      saldo: 0,
+      status: {
+        pendente: { count: 0, value: 0 },
+        pago: { count: 0, value: 0 },
+        vencido: { count: 0, value: 0 },
+        estornado: { count: 0, value: 0 },
       },
-    );
+    },
+  );
     totals.saldo = totals.receitas - totals.despesas;
     return totals;
   }, [filteredFlows]);
@@ -764,7 +778,7 @@ const FinancialFlows = () => {
 
   };
 
-  const statusOrder: DerivedStatus[] = ['pendente', 'vencido', 'pago'];
+  const statusOrder: DerivedStatus[] = ['pendente', 'vencido', 'pago', 'estornado'];
   const settleDialogDueDate = settleDialogFlow ? parseDateValue(settleDialogFlow.vencimento) : null;
 
   if (isLoading) {
@@ -1183,6 +1197,7 @@ const FinancialFlows = () => {
                 <SelectItem value="pendente">Pendentes</SelectItem>
                 <SelectItem value="vencido">Vencidos</SelectItem>
                 <SelectItem value="pago">Pagos</SelectItem>
+                <SelectItem value="estornado">Estornados</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1343,7 +1358,11 @@ const FinancialFlows = () => {
                         <td className="p-3">
                           <div className="flex flex-col items-end gap-2">
                             <div className="flex flex-wrap justify-end gap-2">
-                              {flow.computedStatus !== 'pago' ? (
+                              {flow.computedStatus === 'pago' ? (
+                                <span className="self-center text-xs text-muted-foreground">Pago</span>
+                              ) : flow.computedStatus === 'estornado' ? (
+                                <span className="self-center text-xs text-muted-foreground">Estornado</span>
+                              ) : (
                                 <Button
                                   size="sm"
                                   variant="outline_quantum"
@@ -1358,8 +1377,6 @@ const FinancialFlows = () => {
                                 >
                                   Marcar como pago
                                 </Button>
-                              ) : (
-                                <span className="self-center text-xs text-muted-foreground">Pago</span>
                               )}
                               <Button
                                 size="sm"

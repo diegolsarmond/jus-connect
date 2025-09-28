@@ -196,6 +196,23 @@ export interface PixChargeResponse {
   expirationDate?: string;
 }
 
+export interface RefundChargePayload {
+  value?: number;
+  description?: string;
+  externalReference?: string;
+  keepCustomerFee?: boolean;
+  [key: string]: unknown;
+}
+
+export interface RefundChargeResponse {
+  id: string;
+  status?: string;
+  value?: number;
+  dateCreated?: string;
+  payment?: ChargeResponse | null;
+  [key: string]: unknown;
+}
+
 export interface AccountInformation {
   object: 'account';
   id: string;
@@ -353,6 +370,37 @@ export class AsaasClient {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  }
+
+  async refundCharge(
+    chargeId: string,
+    payload?: RefundChargePayload | null,
+  ): Promise<RefundChargeResponse> {
+    if (!chargeId || typeof chargeId !== 'string' || !chargeId.trim()) {
+      throw new Error('chargeId is required to refund an Asaas charge');
+    }
+
+    const path = `/payments/${chargeId}/refund`;
+    const body = payload && Object.keys(payload).length > 0 ? JSON.stringify(payload) : undefined;
+
+    try {
+      return await this.request<RefundChargeResponse>(path, {
+        method: 'POST',
+        body,
+      });
+    } catch (error) {
+      if (error instanceof AsaasApiError) {
+        throw error;
+      }
+
+      const err = error as Error;
+      throw new AsaasApiError(
+        err.message || 'Falha ao solicitar estorno no Asaas',
+        err instanceof AsaasApiError ? err.status : 500,
+        err instanceof AsaasApiError ? err.responseBody : null,
+        err instanceof AsaasApiError ? err.errorCode : undefined,
+      );
+    }
   }
 
   async createSubscription(payload: CreateSubscriptionPayload): Promise<SubscriptionResponse> {

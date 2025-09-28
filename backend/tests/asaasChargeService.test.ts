@@ -221,6 +221,62 @@ test('AsaasChargeService.createCharge maps credit card responses to paid status'
   assert.equal(payload.creditCardToken, 'tok_abc');
 });
 
+test('AsaasChargeService.createCharge maps refunded responses to estornado status', async () => {
+  const chargeResponse = {
+    id: 'refund_42',
+    status: 'REFUNDED',
+  };
+
+  const insertedRow = {
+    id: 93,
+    financial_flow_id: 13,
+    cliente_id: null,
+    integration_api_key_id: null,
+    asaas_charge_id: 'refund_42',
+    billing_type: 'PIX',
+    status: 'REFUNDED',
+    due_date: '2024-03-25',
+    value: '275.00',
+    invoice_url: null,
+    pix_payload: null,
+    pix_qr_code: null,
+    boleto_url: null,
+    card_last4: null,
+    card_brand: null,
+    created_at: '2024-03-15T12:00:00.000Z',
+    updated_at: '2024-03-15T12:00:00.000Z',
+  };
+
+  const updatedFlow = {
+    id: 13,
+    tipo: 'receita',
+    descricao: 'Serviço cancelado',
+    valor: '275.00',
+    vencimento: '2024-03-25',
+    status: 'estornado',
+    external_provider: 'asaas',
+    external_reference_id: 'refund_42',
+  };
+
+  const db = new FakeDb([
+    { rows: [], rowCount: 0 },
+    { rows: [insertedRow], rowCount: 1 },
+    { rows: [updatedFlow], rowCount: 1 },
+  ]);
+
+  const fakeClient = new FakeAsaasClient(chargeResponse);
+  const service = new AsaasChargeService(db as any, async () => fakeClient as any);
+
+  const result = await service.createCharge(createChargeInput({ financialFlowId: 13 }));
+
+  assert.equal(db.calls.length, 3);
+  const updateCall = db.calls[2];
+  assert.match(updateCall.text, /UPDATE\s+financial_flows/i);
+  assert.equal(updateCall.values?.[2], 'estornado');
+  assert.equal(result.flow.status, 'estornado');
+  assert.equal(result.charge.status, 'REFUNDED');
+});
+
 test('AsaasChargeService.createCharge sends debit card payloads with token metadata', async () => {
   const chargeResponse = {
     id: 'debit_321',
