@@ -20,24 +20,80 @@ RUN npm config set registry https://registry.npmjs.org/ \
 
 # instalar dependências do backend (inclui dev para build TS) com retry
 RUN if [ -f backend/package-lock.json ]; then \
+      install_ok=0; \
       for i in 1 2 3; do \
-        npm --prefix backend ci --no-audit --no-fund && break || (npm cache clean --force; sleep 2); \
+        if npm --prefix backend ci --no-audit --no-fund; then \
+          install_ok=1; \
+          break; \
+        else \
+          npm cache clean --force; \
+          sleep 2; \
+        fi; \
       done; \
+      if [ "$install_ok" != "1" ]; then \
+        echo "npm ci failed for backend, trying npm install --include=dev"; \
+        if npm --prefix backend install --include=dev --no-audit --no-fund; then \
+          install_ok=1; \
+        fi; \
+      fi; \
+      if [ "$install_ok" != "1" ]; then \
+        echo "Failed to install backend dependencies"; \
+        exit 1; \
+      fi; \
     else \
+      install_ok=0; \
       for i in 1 2 3; do \
-        npm --prefix backend install --no-audit --no-fund && break || (npm cache clean --force; sleep 2); \
+        if npm --prefix backend install --no-audit --no-fund; then \
+          install_ok=1; \
+          break; \
+        else \
+          npm cache clean --force; \
+          sleep 2; \
+        fi; \
       done; \
+      if [ "$install_ok" != "1" ]; then \
+        echo "Failed to install backend dependencies"; \
+        exit 1; \
+      fi; \
     fi
 
 # instalar dependências do frontend com fallback para install e retry
 RUN if [ -f frontend/package-lock.json ]; then \
+      install_ok=0; \
       for i in 1 2 3; do \
-        npm --prefix frontend ci --no-audit --no-fund && break || (npm --prefix frontend install --no-audit --no-fund || true; npm cache clean --force; sleep 2); \
+        if npm --prefix frontend ci --no-audit --no-fund; then \
+          install_ok=1; \
+          break; \
+        else \
+          npm cache clean --force; \
+          sleep 2; \
+        fi; \
       done; \
+      if [ "$install_ok" != "1" ]; then \
+        echo "npm ci failed for frontend, trying npm install"; \
+        if npm --prefix frontend install --no-audit --no-fund; then \
+          install_ok=1; \
+        fi; \
+      fi; \
+      if [ "$install_ok" != "1" ]; then \
+        echo "Failed to install frontend dependencies"; \
+        exit 1; \
+      fi; \
     else \
+      install_ok=0; \
       for i in 1 2 3; do \
-        npm --prefix frontend install --no-audit --no-fund && break || (npm cache clean --force; sleep 2); \
+        if npm --prefix frontend install --no-audit --no-fund; then \
+          install_ok=1; \
+          break; \
+        else \
+          npm cache clean --force; \
+          sleep 2; \
+        fi; \
       done; \
+      if [ "$install_ok" != "1" ]; then \
+        echo "Failed to install frontend dependencies"; \
+        exit 1; \
+      fi; \
     fi
 
 # copiar código e buildar
