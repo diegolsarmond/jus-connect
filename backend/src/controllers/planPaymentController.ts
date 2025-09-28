@@ -594,7 +594,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     return;
   }
 
-  const subscriptionCycle = pricingMode === 'anual' ? 'ANNUAL' : 'MONTHLY';
+  const subscriptionCycle = pricingMode === 'anual' ? 'YEARLY' : 'MONTHLY';
 
   let subscriptionResult;
   try {

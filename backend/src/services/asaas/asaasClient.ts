@@ -44,7 +44,8 @@ export type SubscriptionCycle =
   | 'BIMONTHLY'
   | 'QUARTERLY'
   | 'SEMIANNUAL'
-  | 'ANNUAL';
+  | 'ANNUAL'
+  | 'YEARLY';
 
 export interface SubscriptionTrialPayload {
   startDate?: string;
