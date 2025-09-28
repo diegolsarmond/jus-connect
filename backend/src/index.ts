@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Router } from 'express';
 import { AddressInfo } from 'net';
 import path from 'path';

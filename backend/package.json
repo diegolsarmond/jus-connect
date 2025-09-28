@@ -15,6 +15,7 @@
   "dependencies": {
     "argon2": "^0.39.0",
     "esbuild": "~0.25.0",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "pg": "^8.11.3",
     "swagger-jsdoc": "^6.2.8",
