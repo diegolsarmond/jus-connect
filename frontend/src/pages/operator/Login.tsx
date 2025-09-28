@@ -10,6 +10,7 @@ import quantumLogo from "@/assets/quantum-logo.png";
 import { routes } from "@/config/routes";
 import { appConfig } from "@/config/app-config";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { ApiError } from "@/features/auth/api";
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -50,7 +51,13 @@ const Login = () => {
         navigate(resolveRedirectPath(), { replace: true });
       }
     } catch (error) {
-      if (error instanceof Error) {
+      if (error instanceof ApiError) {
+        if (error.status === 403) {
+          setErrorMessage("Confirme seu e-mail antes de acessar. Verifique sua caixa de entrada.");
+        } else {
+          setErrorMessage(error.message);
+        }
+      } else if (error instanceof Error) {
         setErrorMessage(error.message);
       } else {
         setErrorMessage("Não foi possível realizar o login. Tente novamente.");
