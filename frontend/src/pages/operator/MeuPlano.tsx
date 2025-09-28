@@ -34,6 +34,11 @@ import { cn } from "@/lib/utils";
 import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { PlanSelection } from "@/features/plans/PlanSelection";
+import {
+  persistManagePlanSelection,
+  type ManagePlanSelection,
+  type PricingMode,
+} from "@/features/plans/managePlanPaymentStorage";
 import { evaluateSubscriptionAccess } from "@/features/auth/subscriptionStatus";
 import {
   AlertTriangle,
@@ -45,8 +50,6 @@ import {
 } from "lucide-react";
 
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
-
-type PricingMode = "mensal" | "anual";
 
 type PlanoDetalhe = {
   id: number;
@@ -905,26 +908,27 @@ function MeuPlanoContent() {
           ? "Revise as opções de pagamento para concluir a contratação do plano escolhido."
           : "Revise as opções de pagamento para confirmar a alteração do seu plano.",
       });
-      navigate(routes.meuPlanoPayment, {
-        state: {
-          plan: {
-            id: plan.id,
-            nome: plan.nome,
-            descricao: plan.descricao,
-            recursos: plan.recursos,
-            valorMensal: plan.valorMensal,
-            valorAnual: plan.valorAnual,
-            precoMensal: plan.precoMensal,
-            precoAnual: plan.precoAnual,
-            descontoAnualPercentual: plan.descontoAnualPercentual,
-            economiaAnual: plan.economiaAnual,
-            economiaAnualFormatada: plan.economiaAnualFormatada,
-          },
-          pricingMode: nextPricingMode,
+      const selection: ManagePlanSelection = {
+        plan: {
+          id: plan.id,
+          nome: plan.nome,
+          descricao: plan.descricao,
+          recursos: plan.recursos,
+          valorMensal: plan.valorMensal,
+          valorAnual: plan.valorAnual,
+          precoMensal: plan.precoMensal,
+          precoAnual: plan.precoAnual,
+          descontoAnualPercentual: plan.descontoAnualPercentual,
+          economiaAnual: plan.economiaAnual,
+          economiaAnualFormatada: plan.economiaAnualFormatada,
         },
-      });
+        pricingMode: nextPricingMode,
+      };
+
+      persistManagePlanSelection(selection);
+      navigate(routes.meuPlanoPayment, { state: selection });
     },
-    [isTrialing, navigate, pricingMode, toast],
+    [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
   );
 
   const resetPreview = useCallback(() => {
