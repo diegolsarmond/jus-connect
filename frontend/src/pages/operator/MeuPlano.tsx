@@ -58,6 +58,7 @@ type PlanoDetalhe = {
   valorMensal: number | null;
   valorAnual: number | null;
   limiteUsuarios: number | null;
+  limiteClientes: number | null;
   limiteProcessos: number | null;
   limitePropostas: number | null;
   precoMensal: string | null;
@@ -665,6 +666,7 @@ function MeuPlanoContent() {
               (typeof rawValorAnual === "string" && rawValorAnual.trim() ? rawValorAnual.trim() : null);
 
             const limiteUsuarios = toNumber(raw.limite_usuarios ?? raw.limiteUsuarios);
+            const limiteClientes = toNumber(raw.limite_clientes ?? raw.limiteClientes);
             const limiteProcessos = toNumber(raw.limite_processos ?? raw.limiteProcessos);
             const limitePropostas = toNumber(raw.limite_propostas ?? raw.limitePropostas);
 
@@ -678,6 +680,7 @@ function MeuPlanoContent() {
               valorMensal,
               valorAnual,
               limiteUsuarios: limiteUsuarios ?? null,
+              limiteClientes: limiteClientes ?? null,
               limiteProcessos: limiteProcessos ?? null,
               limitePropostas: limitePropostas ?? null,
               precoMensal,
@@ -783,6 +786,13 @@ function MeuPlanoContent() {
         limit: planoExibido.limiteUsuarios,
       });
     }
+    if (planoExibido.limiteClientes !== null || metrics.clientesAtivos !== null) {
+      items.push({
+        label: "Clientes ativos",
+        current: metrics.clientesAtivos,
+        limit: planoExibido.limiteClientes,
+      });
+    }
     if (planoExibido.limiteProcessos !== null || metrics.processosAtivos !== null) {
       items.push({
         label: "Processos cadastrados",
@@ -797,19 +807,13 @@ function MeuPlanoContent() {
         limit: planoExibido.limitePropostas,
       });
     }
-    if (metrics.clientesAtivos !== null) {
-      items.push({
-        label: "Clientes ativos",
-        current: metrics.clientesAtivos,
-      });
-    }
 
     return items;
   }, [
-    metrics.clientesAtivos,
     metrics.processosAtivos,
     metrics.propostasEmitidas,
     metrics.usuariosAtivos,
+    metrics.clientesAtivos,
     planoExibido,
   ]);
 
@@ -1049,7 +1053,7 @@ function MeuPlanoContent() {
 
               <Separator className="border-primary/20" />
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">Plano contratado</p>
                   <p className="text-sm font-semibold text-foreground">{planoAtual.nome}</p>
@@ -1073,6 +1077,15 @@ function MeuPlanoContent() {
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {previewPlano ? "Limite estimado para o plano em pré-visualização" : "Limite do plano atual"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Clientes incluídos</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatLimitValue(planoExibido?.limiteClientes ?? null, "cliente", "clientes")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {previewPlano ? "Estimativa para o plano selecionado" : "Limite do plano atual"}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/60 bg-background/60 p-4">
