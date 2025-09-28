@@ -44,7 +44,7 @@ const SERVICES: ServiceCard[] = [
       "Integração com PJe, PROJUDI e gateways de pagamento",
     ],
     icon: ShieldCheck,
-    href: "/servicos/crm",
+    href: "/produtos/crm",
   },
   {
     title: "Desenvolvimento sob medida",

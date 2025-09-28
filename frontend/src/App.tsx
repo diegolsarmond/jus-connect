@@ -134,8 +134,8 @@ const App = () => (
               <Route path="/servicos" element={<SiteServices />} />
               <Route path="/servicos/assistente-ia" element={<SiteServiceAssistenteIA />} />
               <Route path="/servicos/automacoes" element={<SiteServiceAutomacoes />} />
-              <Route path="/servicos/crm" element={<SiteServiceCRM />} />
-              <Route path="/servicos/crm-advocacia" element={<SiteServiceCRMAdvocacia />} />
+              <Route path="/produtos/crm" element={<SiteServiceCRM />} />
+              <Route path="/produtos/crm-advocacia" element={<SiteServiceCRMAdvocacia />} />
               <Route path="/servicos/desenvolvimento" element={<SiteServiceDesenvolvimento />} />
               <Route path="/politica-de-privacidade" element={<SitePrivacyPolicy />} />
               <Route path="/termos-de-uso" element={<SiteTermsOfUse />} />
