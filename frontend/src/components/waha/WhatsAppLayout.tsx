@@ -464,6 +464,8 @@ export const WhatsAppLayout = ({
     messagePaginationState,
   } = wahaState;
 
+  const activeConversationId = activeChatId ?? undefined;
+
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
@@ -610,8 +612,6 @@ export const WhatsAppLayout = ({
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [responsibleOptions, conversations, restrictToAssigned, currentUserId, user?.nome_completo]);
-
-  const activeConversationId = activeChatId ?? undefined;
 
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeConversationId),
