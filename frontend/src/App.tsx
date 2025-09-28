@@ -329,9 +329,11 @@ const App = () => (
                 element={(
                   <ProtectedRoute>
                     <RequireAdminUser>
-                      <Suspense fallback={<AdminAreaFallback />}>
-                        <AdminLayout />
-                      </Suspense>
+                      <PlanProvider>
+                        <Suspense fallback={<AdminAreaFallback />}>
+                          <AdminLayout />
+                        </Suspense>
+                      </PlanProvider>
                     </RequireAdminUser>
                   </ProtectedRoute>
 
