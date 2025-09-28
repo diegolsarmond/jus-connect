@@ -13,6 +13,7 @@ test.beforeEach(() => {
 
 test.afterEach(() => {
   passwordUtilsTesting.setForceFallbackOverride(null);
+
 });
 
 test('hashPassword utiliza o fallback quando configurado', async () => {

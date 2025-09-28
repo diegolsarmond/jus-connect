@@ -7,6 +7,7 @@ const ARGON2_PREFIX = 'argon2:';
 let forceFallbackOverride: boolean | null = null;
 
 const parseBooleanEnv = (value: string | undefined): boolean => {
+
   if (!value) {
     return false;
   }
@@ -29,6 +30,7 @@ const shouldForceFallback = (): boolean => {
   }
 
   return parseBooleanEnv(process.env.PASSWORD_HASH_FORCE_FALLBACK);
+
 };
 
 const parseIntegerEnv = (
@@ -212,4 +214,5 @@ export const __testing = {
     argon2ModulePromise = null;
     argon2ModuleSource = null;
   },
+
 };

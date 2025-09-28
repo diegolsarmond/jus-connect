@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   changePassword,
+  confirmEmail,
   getCurrentUser,
   login,
   refreshToken,
@@ -71,6 +72,35 @@ const router = Router();
  *         description: E-mail já cadastrado
  */
 router.post('/auth/register', register);
+
+/**
+ * @swagger
+ * /api/auth/confirm-email:
+ *   post:
+ *     summary: Confirma o endereço de e-mail do usuário
+ *     tags: [Autenticação]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Token de confirmação recebido por e-mail
+ *     responses:
+ *       200:
+ *         description: E-mail confirmado com sucesso
+ *       400:
+ *         description: Token inválido ou expirado
+ *       409:
+ *         description: Token já utilizado
+ */
+router.post('/auth/confirm-email', confirmEmail);
 
 /**
  * @swagger
