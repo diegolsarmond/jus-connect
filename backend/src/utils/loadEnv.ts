@@ -148,14 +148,6 @@ const loadDefaultEnvFile = () => {
 
   fallbackCandidates.push(backendEnvPath, repoEnvPath);
 
-
-  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
-  const fallbackCandidates = [
-    ancestorEnvFile,
-    path.join(backendRoot, '.env'),
-    path.join(repoRoot, '.env'),
-  ];
-
   loadEnvFilesInOrder(fallbackCandidates);
 };
 
