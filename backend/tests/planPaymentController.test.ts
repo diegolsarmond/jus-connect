@@ -221,6 +221,146 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
   assert.equal(payload.charge?.id, 'ch_123');
 });
 
+test('createPlanPayment requests yearly cycle when pricing mode is annual', async () => {
+  const financialFlowRow = {
+    id: 915,
+    descricao: 'Assinatura Plano Premium (anual)',
+    valor: '1999.90',
+    vencimento: '2024-11-20',
+    status: 'pendente',
+  };
+  const defaultAccountId = '123e4567-e89b-12d3-a456-426614174111';
+
+  const empresaStateRow = {
+    id: 78,
+    nome_empresa: 'Empresa Premium',
+    asaas_subscription_id: null,
+    trial_started_at: null,
+    trial_ends_at: null,
+    subscription_trial_ends_at: null,
+    current_period_start: null,
+    current_period_end: null,
+    subscription_current_period_ends_at: null,
+    grace_expires_at: null,
+    subscription_grace_period_ends_at: null,
+    subscription_cadence: 'monthly',
+  };
+
+  const subscriptionCalls: Array<{
+    payload: { cycle?: string };
+  }> = [];
+
+  const subscriptionMock = test.mock.method(
+    AsaasSubscriptionService.prototype,
+    'createOrUpdateSubscription',
+    async (input) => {
+      subscriptionCalls.push({ payload: input.payload });
+      return {
+        subscription: {
+          id: 'sub_yearly',
+          status: 'ACTIVE',
+          cycle: 'YEARLY',
+          nextDueDate: '2024-11-20',
+        },
+        timeline: {
+          cadence: 'annual',
+          trialStart: null,
+          trialEnd: null,
+          currentPeriodStart: new Date('2024-11-20T00:00:00.000Z'),
+          currentPeriodEnd: new Date('2025-11-20T00:00:00.000Z'),
+          gracePeriodEnd: new Date('2025-11-25T00:00:00.000Z'),
+        },
+      };
+    },
+  );
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 78 }], rowCount: 1 },
+    { rows: [{ id: 55, nome: 'Plano Premium', valor_mensal: '219.90', valor_anual: '1999.90' }], rowCount: 1 },
+    { rows: [empresaStateRow], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 2,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com/api/v3',
+          key_value: 'token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ asaas_customer_id: null }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: defaultAccountId }], rowCount: 1 },
+    { rows: [financialFlowRow], rowCount: 1 },
+  ]);
+
+  const createCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'createCustomer',
+    async () => ({
+      id: 'cus_premium',
+      object: 'customer',
+      name: 'Empresa Premium',
+    }),
+  );
+
+  const updateCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'updateCustomer',
+    async () => {
+      throw new Error('updateCustomer should not be called when mapping is missing');
+    },
+  );
+
+  const chargeMock = test.mock.method(
+    AsaasChargeService.prototype,
+    'createCharge',
+    async () => ({
+      charge: { id: 'ch_yearly', status: 'PENDING' },
+      flow: { id: financialFlowRow.id, status: 'pendente' },
+    }),
+  );
+
+  const req = {
+    body: {
+      planId: 55,
+      pricingMode: 'anual',
+      paymentMethod: 'boleto',
+      billing: {
+        companyName: 'Empresa Premium',
+        document: '12345678000199',
+        email: 'financeiro@premium.com',
+      },
+    },
+    auth: createAuth(72),
+    headers: {},
+    ip: '127.0.0.1',
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createPlanPayment(req, res);
+  } finally {
+    restore();
+    subscriptionMock.mock.restore();
+    createCustomerMock.mock.restore();
+    updateCustomerMock.mock.restore();
+    chargeMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(subscriptionMock.mock.calls.length, 1);
+  assert.equal(chargeMock.mock.calls.length, 1);
+  assert.equal(calls.length, 9);
+  const cycle = subscriptionCalls[0]?.payload?.cycle;
+  assert.equal(cycle, 'YEARLY');
+});
+
 test('createPlanPayment reuses existing Asaas customer and updates information', async () => {
   const financialFlowRow = {
     id: 700,
