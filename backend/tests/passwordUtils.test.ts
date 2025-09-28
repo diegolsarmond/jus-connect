@@ -7,20 +7,13 @@ import {
   __testing as passwordUtilsTesting,
 } from '../src/utils/passwordUtils';
 
-const ORIGINAL_ENV = process.env.PASSWORD_HASH_FORCE_FALLBACK;
-
 test.beforeEach(() => {
-  process.env.PASSWORD_HASH_FORCE_FALLBACK = 'true';
-  passwordUtilsTesting.resetArgon2ModuleCache();
+  passwordUtilsTesting.setForceFallbackOverride(true);
 });
 
 test.afterEach(() => {
-  if (ORIGINAL_ENV === undefined) {
-    delete process.env.PASSWORD_HASH_FORCE_FALLBACK;
-  } else {
-    process.env.PASSWORD_HASH_FORCE_FALLBACK = ORIGINAL_ENV;
-  }
-  passwordUtilsTesting.resetArgon2ModuleCache();
+  passwordUtilsTesting.setForceFallbackOverride(null);
+
 });
 
 test('hashPassword utiliza o fallback quando configurado', async () => {

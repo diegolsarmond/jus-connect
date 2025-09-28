@@ -4,14 +4,33 @@ import type { Argon2Module, Argon2Options } from './argon2Types';
 const SHA256_PREFIX = 'sha256:';
 const ARGON2_PREFIX = 'argon2:';
 
-const shouldForceFallback = (): boolean => {
-  const value = process.env.PASSWORD_HASH_FORCE_FALLBACK;
+let forceFallbackOverride: boolean | null = null;
+
+const parseBooleanEnv = (value: string | undefined): boolean => {
+
   if (!value) {
     return false;
   }
 
   const normalized = value.trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
+    return true;
+  }
+
+  if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off') {
+    return false;
+  }
+
+  return false;
+};
+
+const shouldForceFallback = (): boolean => {
+  if (forceFallbackOverride !== null) {
+    return forceFallbackOverride;
+  }
+
+  return parseBooleanEnv(process.env.PASSWORD_HASH_FORCE_FALLBACK);
+
 };
 
 const parseIntegerEnv = (
@@ -190,4 +209,10 @@ export const __testing = {
     argon2ModulePromise = null;
     argon2ModuleSource = null;
   },
+  setForceFallbackOverride(value: boolean | null): void {
+    forceFallbackOverride = value;
+    argon2ModulePromise = null;
+    argon2ModuleSource = null;
+  },
+
 };
