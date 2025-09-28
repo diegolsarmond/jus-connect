@@ -37,6 +37,7 @@ export interface Plan {
   modules: string[];
   customAvailableFeatures: string[];
   customUnavailableFeatures: string[];
+  clientLimit: number | null;
   userLimit: number | null;
   processLimit: number | null;
   proposalLimit: number | null;
@@ -51,6 +52,7 @@ export type PlanFormState = {
   modules: string[];
   customAvailableFeatures: string;
   customUnavailableFeatures: string;
+  clientLimit: string;
   userLimit: string;
   processLimit: string;
   proposalLimit: string;
@@ -65,6 +67,7 @@ export const initialPlanFormState: PlanFormState = {
   modules: [],
   customAvailableFeatures: "",
   customUnavailableFeatures: "",
+  clientLimit: "",
   userLimit: "",
   processLimit: "",
   proposalLimit: "",
@@ -386,6 +389,19 @@ export const parsePlan = (raw: unknown): Plan | null => {
         data.maxPropostas ??
         data.propostasLimit
     ) ?? null;
+  const clientLimit =
+    parseInteger(
+      data.limite_clientes ??
+        data.clientLimit ??
+        data.clienteLimit ??
+        data.client_limit ??
+        data.clientes_limit ??
+        data.limiteClientes ??
+        data.max_clientes ??
+        data.maxClientes ??
+        data.clientesMax ??
+        data.clientsLimit
+    ) ?? null;
 
   const processSyncEnabled = parseBoolean(
     data.sincronizacao_processos_habilitada ??
@@ -425,6 +441,7 @@ export const parsePlan = (raw: unknown): Plan | null => {
     modules,
     customAvailableFeatures: customResources.available,
     customUnavailableFeatures: customResources.unavailable,
+    clientLimit,
     userLimit,
     processLimit,
     proposalLimit,
