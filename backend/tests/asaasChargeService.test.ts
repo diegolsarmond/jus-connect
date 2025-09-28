@@ -71,12 +71,16 @@ test('AsaasChargeService.createCharge persists PIX charge and updates flow', asy
     financial_flow_id: 10,
     cliente_id: 55,
     integration_api_key_id: 7,
+    credential_id: 99,
     asaas_charge_id: 'ch_123',
     billing_type: 'PIX',
     status: 'PENDING',
     due_date: '2024-02-10',
     value: '150.50',
     invoice_url: 'https://asaas.example/invoice',
+    last_event: null,
+    payload: null,
+    paid_at: null,
     pix_payload: '000201...',
     pix_qr_code: 'iVBORw0KGgoAAA',
     boleto_url: null,
@@ -107,7 +111,7 @@ test('AsaasChargeService.createCharge persists PIX charge and updates flow', asy
     assert.equal(options.integrationApiKeyId, 7);
     assert.equal(options.financialFlowId, 10);
     assert.strictEqual(options.db, db);
-    return fakeClient;
+    return { client: fakeClient, credentialId: 99, integrationApiKeyId: 7 };
   });
 
   const result = await service.createCharge(createChargeInput());
@@ -122,13 +126,14 @@ test('AsaasChargeService.createCharge persists PIX charge and updates flow', asy
   assert.equal(insertQuery.values?.[0], 10);
   assert.equal(insertQuery.values?.[1], 55);
   assert.equal(insertQuery.values?.[2], 7);
-  assert.equal(insertQuery.values?.[3], 'ch_123');
-  assert.equal(insertQuery.values?.[4], 'PIX');
-  assert.equal(insertQuery.values?.[5], 'PENDING');
-  assert.equal(insertQuery.values?.[6], '2024-02-10');
-  assert.equal(insertQuery.values?.[7], 150.5);
-  assert.equal(insertQuery.values?.[9], '000201...');
-  assert.equal(insertQuery.values?.[10], 'iVBORw0KGgoAAA');
+  assert.equal(insertQuery.values?.[3], 99);
+  assert.equal(insertQuery.values?.[4], 'ch_123');
+  assert.equal(insertQuery.values?.[5], 'PIX');
+  assert.equal(insertQuery.values?.[6], 'PENDING');
+  assert.equal(insertQuery.values?.[7], '2024-02-10');
+  assert.equal(insertQuery.values?.[8], 150.5);
+  assert.equal(insertQuery.values?.[13], '000201...');
+  assert.equal(insertQuery.values?.[14], 'iVBORw0KGgoAAA');
 
   assert.match(updateQuery.text, /UPDATE financial_flows/);
   assert.deepEqual(updateQuery.values, ['asaas', 'ch_123', 'pendente', 10]);
@@ -160,12 +165,16 @@ test('AsaasChargeService.createCharge maps credit card responses to paid status'
     financial_flow_id: 11,
     cliente_id: null,
     integration_api_key_id: null,
+    credential_id: null,
     asaas_charge_id: 'card_999',
     billing_type: 'CREDIT_CARD',
     status: 'CONFIRMED',
     due_date: '2024-03-15',
     value: '320.00',
     invoice_url: null,
+    last_event: null,
+    payload: null,
+    paid_at: null,
     pix_payload: null,
     pix_qr_code: null,
     boleto_url: null,
@@ -197,7 +206,7 @@ test('AsaasChargeService.createCharge maps credit card responses to paid status'
     assert.equal(options.integrationApiKeyId, null);
     assert.equal(options.financialFlowId, 11);
     assert.strictEqual(options.db, db);
-    return fakeClient;
+    return { client: fakeClient, credentialId: null, integrationApiKeyId: null };
   });
 
   const input = createChargeInput({
@@ -232,12 +241,16 @@ test('AsaasChargeService.createCharge maps refunded responses to estornado statu
     financial_flow_id: 13,
     cliente_id: null,
     integration_api_key_id: null,
+    credential_id: null,
     asaas_charge_id: 'refund_42',
     billing_type: 'PIX',
     status: 'REFUNDED',
     due_date: '2024-03-25',
     value: '275.00',
     invoice_url: null,
+    last_event: null,
+    payload: null,
+    paid_at: null,
     pix_payload: null,
     pix_qr_code: null,
     boleto_url: null,
@@ -292,12 +305,16 @@ test('AsaasChargeService.createCharge sends debit card payloads with token metad
     financial_flow_id: 12,
     cliente_id: 77,
     integration_api_key_id: 3,
+    credential_id: 88,
     asaas_charge_id: 'debit_321',
     billing_type: 'DEBIT_CARD',
     status: 'PENDING',
     due_date: '2024-04-01',
     value: '510.00',
     invoice_url: null,
+    last_event: null,
+    payload: null,
+    paid_at: null,
     pix_payload: null,
     pix_qr_code: null,
     boleto_url: null,
@@ -329,7 +346,7 @@ test('AsaasChargeService.createCharge sends debit card payloads with token metad
     assert.equal(options.integrationApiKeyId, 3);
     assert.equal(options.financialFlowId, 12);
     assert.strictEqual(options.db, db);
-    return fakeClient;
+    return { client: fakeClient, credentialId: 88, integrationApiKeyId: 3 };
   });
 
   const input = createChargeInput({

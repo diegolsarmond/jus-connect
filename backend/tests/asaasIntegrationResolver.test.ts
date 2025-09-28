@@ -15,10 +15,13 @@ class FakePool {
   async query(text: string, params?: unknown[]) {
     this.calls.push({ text, params });
     const response = this.responses.shift();
-    if (!response) {
-      throw new Error('No response configured');
+    if (response) {
+      return response;
     }
-    return response;
+    if (/asaas_credentials/i.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+    throw new Error('No response configured');
   }
 }
 

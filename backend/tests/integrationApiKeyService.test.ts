@@ -41,6 +41,8 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
 
   const pool = new FakePool([
     { rows: [insertedRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
   ]);
 
   const service = new IntegrationApiKeyService(pool as any);
@@ -104,6 +106,8 @@ test('IntegrationApiKeyService.create normalizes Judit provider and omits defaul
 
   const pool = new FakePool([
     { rows: [insertedRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
   ]);
 
   const service = new IntegrationApiKeyService(pool as any);
@@ -164,7 +168,11 @@ test('IntegrationApiKeyService.create assigns default API URL for Asaas in produ
 
   const result = await service.create(payload);
 
-  assert.deepEqual(pool.calls[0].values, [
+  assert.equal(pool.calls.length, 3);
+
+  const [insertCall, selectCredentialCall, insertCredentialCall] = pool.calls;
+
+  assert.deepEqual(insertCall.values, [
     'asaas',
     'https://api.asaas.com/api/v3',
     'asaas_prod_token',
@@ -174,6 +182,12 @@ test('IntegrationApiKeyService.create assigns default API URL for Asaas in produ
     null,
     false,
   ]);
+
+  assert.match(selectCredentialCall.text, /FROM asaas_credentials/i);
+  assert.deepEqual(selectCredentialCall.values, [insertedRow.id]);
+
+  assert.match(insertCredentialCall.text, /INTO asaas_credentials/i);
+  assert.equal(insertCredentialCall.values?.[0], insertedRow.id);
 
   assert.equal(result.provider, 'asaas');
   assert.equal(result.apiUrl, 'https://api.asaas.com/api/v3');
@@ -211,7 +225,10 @@ test('IntegrationApiKeyService.create assigns sandbox URL for Asaas in homologa√
 
   const result = await service.create(payload);
 
-  assert.deepEqual(pool.calls[0].values, [
+  assert.equal(pool.calls.length, 3);
+  const [insertCall, selectCredentialCall, insertCredentialCall] = pool.calls;
+
+  assert.deepEqual(insertCall.values, [
     'asaas',
     'https://sandbox.asaas.com/api/v3',
     'asaas_sbx_token',
@@ -221,6 +238,12 @@ test('IntegrationApiKeyService.create assigns sandbox URL for Asaas in homologa√
     null,
     false,
   ]);
+
+  assert.match(selectCredentialCall.text, /FROM asaas_credentials/i);
+  assert.deepEqual(selectCredentialCall.values, [insertedRow.id]);
+
+  assert.match(insertCredentialCall.text, /INTO asaas_credentials/i);
+  assert.equal(insertCredentialCall.values?.[0], insertedRow.id);
 
   assert.equal(result.provider, 'asaas');
   assert.equal(result.apiUrl, 'https://sandbox.asaas.com/api/v3');

@@ -57,12 +57,16 @@ export interface AsaasChargeRecord {
   financialFlowId: number | string;
   clienteId: number | null;
   integrationApiKeyId: number | null;
+  credentialId: number | null;
   asaasChargeId: string;
   billingType: AsaasBillingType;
   status: string;
   dueDate: string;
   value: string;
   invoiceUrl: string | null;
+  lastEvent: string | null;
+  payload: Record<string, unknown> | null;
+  paidAt: string | null;
   pixPayload: string | null;
   pixQrCode: string | null;
   boletoUrl: string | null;
@@ -124,11 +128,17 @@ export interface AsaasClient {
   createCharge(payload: AsaasClientChargePayload): Promise<AsaasClientChargeResponse>;
 }
 
+interface AsaasClientFactoryResult {
+  client: AsaasClient;
+  credentialId: number | null;
+  integrationApiKeyId: number | null;
+}
+
 type AsaasClientFactory = (options: {
   integrationApiKeyId?: number | null;
   financialFlowId: number | string;
   db: Queryable;
-}) => Promise<AsaasClient>;
+}) => Promise<AsaasClientFactoryResult>;
 
 const DEFAULT_BASE_URL = 'https://api.asaas.com/v3/';
 
@@ -225,7 +235,7 @@ async function defaultClientFactory({
   integrationApiKeyId?: number | null;
   financialFlowId: number | string;
   db: Queryable;
-}): Promise<AsaasClient> {
+}): Promise<AsaasClientFactoryResult> {
   const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(financialFlowId);
 
   if (normalizedFinancialFlowId === null) {
@@ -287,7 +297,30 @@ async function defaultClientFactory({
     }
 
     const baseUrl = typeof row.url_api === 'string' && row.url_api.trim() ? row.url_api : null;
-    return new HttpAsaasClient({ apiKey: keyValue, baseUrl });
+
+    const credentialLookup = await db.query(
+      'SELECT id FROM asaas_credentials WHERE integration_api_key_id = $1',
+      [integrationApiKeyId],
+    );
+
+    let credentialId: number | null = null;
+    if (credentialLookup.rowCount > 0) {
+      const rawId = (credentialLookup.rows[0] as { id?: unknown })?.id;
+      if (typeof rawId === 'number' && Number.isFinite(rawId)) {
+        credentialId = Math.trunc(rawId);
+      } else if (typeof rawId === 'string' && rawId.trim()) {
+        const parsed = Number.parseInt(rawId.trim(), 10);
+        if (Number.isFinite(parsed)) {
+          credentialId = parsed;
+        }
+      }
+    }
+
+    return {
+      client: new HttpAsaasClient({ apiKey: keyValue, baseUrl }),
+      credentialId,
+      integrationApiKeyId,
+    };
   }
 
   if (flowEmpresaId !== null) {
@@ -302,7 +335,11 @@ async function defaultClientFactory({
         db,
         configuredEnvironment,
       );
-      return new HttpAsaasClient({ apiKey: integration.accessToken, baseUrl: integration.baseUrl });
+      return {
+        client: new HttpAsaasClient({ apiKey: integration.accessToken, baseUrl: integration.baseUrl }),
+        credentialId: integration.credentialId ?? null,
+        integrationApiKeyId: integration.integrationId ?? null,
+      };
     } catch (error) {
       if (!(error instanceof AsaasIntegrationNotConfiguredError)) {
         console.error('Falha ao resolver integração do Asaas para empresa', flowEmpresaId, error);
@@ -315,7 +352,11 @@ async function defaultClientFactory({
     throw new ValidationError('Nenhuma credencial do Asaas configurada');
   }
 
-  return new HttpAsaasClient({ apiKey, baseUrl: process.env.ASAAS_BASE_URL });
+  return {
+    client: new HttpAsaasClient({ apiKey, baseUrl: process.env.ASAAS_BASE_URL }),
+    credentialId: null,
+    integrationApiKeyId: null,
+  };
 }
 
 function normalizeBillingType(value: string): AsaasBillingType {
@@ -524,6 +565,27 @@ function normalizeInsertRow(row: QueryResultRow): AsaasChargeRecord {
     (row as Record<string, unknown>).financial_flow_id,
   );
 
+  const credentialValue = (row as Record<string, unknown>).credential_id;
+  let credentialId: number | null = null;
+  if (typeof credentialValue === 'number' && Number.isFinite(credentialValue)) {
+    credentialId = Math.trunc(credentialValue);
+  } else if (typeof credentialValue === 'string' && credentialValue.trim()) {
+    const parsed = Number.parseInt(credentialValue.trim(), 10);
+    if (Number.isFinite(parsed)) {
+      credentialId = parsed;
+    }
+  }
+
+  const payloadValue = (row as Record<string, unknown>).payload;
+  const parsedPayload =
+    payloadValue && typeof payloadValue === 'object' ? (payloadValue as Record<string, unknown>) : null;
+
+  const paidAtValue = (row as Record<string, unknown>).paid_at;
+  const paidAt =
+    paidAtValue === null || paidAtValue === undefined
+      ? null
+      : new Date(paidAtValue as string | number | Date).toISOString();
+
   return {
     id: Number(row.id),
     financialFlowId,
@@ -532,12 +594,17 @@ function normalizeInsertRow(row: QueryResultRow): AsaasChargeRecord {
       row.integration_api_key_id === null || row.integration_api_key_id === undefined
         ? null
         : Number(row.integration_api_key_id),
+    credentialId,
     asaasChargeId: String(row.asaas_charge_id),
     billingType: String(row.billing_type) as AsaasBillingType,
     status: String(row.status),
     dueDate: new Date(row.due_date).toISOString().slice(0, 10),
     value: String(row.value),
     invoiceUrl: row.invoice_url ? String(row.invoice_url) : null,
+    lastEvent:
+      row.last_event === null || row.last_event === undefined ? null : String(row.last_event),
+    payload: parsedPayload,
+    paidAt,
     pixPayload: row.pix_payload ? String(row.pix_payload) : null,
     pixQrCode: row.pix_qr_code ? String(row.pix_qr_code) : null,
     boletoUrl: row.boleto_url ? String(row.boleto_url) : null,
@@ -556,7 +623,12 @@ export default class AsaasChargeService {
 
   async createCharge(
     input: CreateAsaasChargeInput,
-    options?: { dbClient?: Queryable; asaasClient?: AsaasClient },
+    options?: {
+      dbClient?: Queryable;
+      asaasClient?: AsaasClient;
+      credentialId?: number | null;
+      integrationApiKeyId?: number | null;
+    },
   ): Promise<AsaasChargeResult> {
     const dbClient = options?.dbClient ?? this.db;
 
@@ -624,13 +696,29 @@ export default class AsaasChargeService {
       payload.creditCardToken = input.cardToken.trim();
     }
 
-    const asaasClient =
-      options?.asaasClient ??
-      (await this.clientFactory({
+    let resolvedCredentialId = options?.credentialId ?? null;
+    let resolvedIntegrationApiKeyId = options?.integrationApiKeyId ?? input.integrationApiKeyId ?? null;
+    let asaasClient: AsaasClient;
+
+    if (options?.asaasClient) {
+      asaasClient = options.asaasClient;
+    } else {
+      const clientResolution = await this.clientFactory({
         integrationApiKeyId: input.integrationApiKeyId,
         financialFlowId: normalizedFinancialFlowId,
         db: dbClient,
-      }));
+      });
+      asaasClient = clientResolution.client;
+      if (clientResolution.credentialId !== null && clientResolution.credentialId !== undefined) {
+        resolvedCredentialId = clientResolution.credentialId;
+      }
+      if (
+        clientResolution.integrationApiKeyId !== null &&
+        clientResolution.integrationApiKeyId !== undefined
+      ) {
+        resolvedIntegrationApiKeyId = clientResolution.integrationApiKeyId;
+      }
+    }
     const chargeResponse = await asaasClient.createCharge(payload);
 
     const { payload: pixPayload, qrCode: pixQrCode } = extractPixPayload(chargeResponse);
@@ -643,12 +731,16 @@ export default class AsaasChargeService {
         financial_flow_id,
         cliente_id,
         integration_api_key_id,
+        credential_id,
         asaas_charge_id,
         billing_type,
         status,
         due_date,
         value,
         invoice_url,
+        last_event,
+        payload,
+        paid_at,
         pix_payload,
         pix_qr_code,
         boleto_url,
@@ -656,37 +748,46 @@ export default class AsaasChargeService {
         card_brand,
         raw_response
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
       )
       RETURNING
         id,
         financial_flow_id,
         cliente_id,
         integration_api_key_id,
+        credential_id,
         asaas_charge_id,
         billing_type,
         status,
         due_date,
         value,
         invoice_url,
+        last_event,
+        payload,
+        paid_at,
         pix_payload,
         pix_qr_code,
         boleto_url,
         card_last4,
         card_brand,
+        raw_response,
         created_at,
         updated_at
       `,
       [
         normalizedFinancialFlowId,
         input.clienteId ?? null,
-        input.integrationApiKeyId ?? null,
+        resolvedIntegrationApiKeyId,
+        resolvedCredentialId,
         chargeResponse.id,
         billingType,
         chargeResponse.status,
         dueDate,
         value,
         chargeResponse.invoiceUrl ?? null,
+        null,
+        null,
+        null,
         pixPayload,
         pixQrCode,
         boletoUrl,

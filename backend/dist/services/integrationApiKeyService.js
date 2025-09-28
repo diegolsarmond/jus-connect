@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ASAAS_DEFAULT_API_URLS = exports.ValidationError = exports.API_KEY_ENVIRONMENTS = exports.API_KEY_PROVIDERS = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const url_1 = require("url");
 const db_1 = __importDefault(require("./db"));
 exports.API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas', 'judit'];
@@ -176,9 +177,46 @@ function mapRow(row) {
         updatedAt: formatDate(row.updated_at),
     };
 }
+function sanitizeWebhookSecret(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const trimmed = value.trim();
+    return trimmed || null;
+}
+function generateWebhookSecret() {
+    return crypto_1.default.randomBytes(32).toString('hex');
+}
 class IntegrationApiKeyService {
     constructor(db = db_1.default) {
         this.db = db;
+    }
+    async ensureAsaasCredential(integrationId) {
+        if (!Number.isInteger(integrationId) || integrationId <= 0) {
+            return;
+        }
+        const existing = await this.db.query('SELECT id, webhook_secret FROM asaas_credentials WHERE integration_api_key_id = $1', [integrationId]);
+        if (existing.rowCount > 0) {
+            const row = existing.rows[0];
+            const currentId = typeof row.id === 'number' && Number.isFinite(row.id)
+                ? Math.trunc(row.id)
+                : typeof row.id === 'string' && row.id.trim()
+                    ? Number.parseInt(row.id.trim(), 10)
+                    : null;
+            const currentSecret = sanitizeWebhookSecret(row.webhook_secret);
+            if (currentId && currentSecret) {
+                return;
+            }
+            const secret = generateWebhookSecret();
+            if (currentId) {
+                await this.db.query('UPDATE asaas_credentials SET webhook_secret = $1, updated_at = NOW() WHERE id = $2', [secret, currentId]);
+                return;
+            }
+        }
+        const secret = generateWebhookSecret();
+        await this.db.query(`INSERT INTO asaas_credentials (integration_api_key_id, webhook_secret)
+       VALUES ($1, $2)
+       ON CONFLICT (integration_api_key_id) DO NOTHING`, [integrationId, secret]);
     }
     async list() {
         const result = await this.db.query(`SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
@@ -196,7 +234,11 @@ class IntegrationApiKeyService {
         const result = await this.db.query(`INSERT INTO integration_api_keys (provider, url_api, key_value, environment, active, last_used)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at`, [provider, apiUrl, key, environment, active, lastUsed]);
-        return mapRow(result.rows[0]);
+        const mapped = mapRow(result.rows[0]);
+        if (mapped.provider === 'asaas') {
+            await this.ensureAsaasCredential(mapped.id);
+        }
+        return mapped;
     }
     async update(id, updates) {
         const fields = [];
@@ -285,7 +327,11 @@ class IntegrationApiKeyService {
         if (result.rowCount === 0) {
             return null;
         }
-        return mapRow(result.rows[0]);
+        const mapped = mapRow(result.rows[0]);
+        if (mapped.provider === 'asaas') {
+            await this.ensureAsaasCredential(mapped.id);
+        }
+        return mapped;
     }
 }
 exports.default = IntegrationApiKeyService;

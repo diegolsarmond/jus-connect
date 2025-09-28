@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { QueryResultRow } from 'pg';
 import { URL } from 'url';
 import pool from './db';
@@ -313,6 +314,19 @@ function mapRow(row: IntegrationApiKeyRow): IntegrationApiKey {
   };
 }
 
+function sanitizeWebhookSecret(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function generateWebhookSecret(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
 interface EmpresaScope {
   empresaId: number;
 }
@@ -327,6 +341,48 @@ function assertValidEmpresaId(value: number): number {
 
 export default class IntegrationApiKeyService {
   constructor(private readonly db: Queryable = pool) {}
+
+  private async ensureAsaasCredential(integrationId: number): Promise<void> {
+    if (!Number.isInteger(integrationId) || integrationId <= 0) {
+      return;
+    }
+
+    const existing = await this.db.query(
+      'SELECT id, webhook_secret FROM asaas_credentials WHERE integration_api_key_id = $1',
+      [integrationId],
+    );
+
+    if (existing.rowCount > 0) {
+      const row = existing.rows[0] as { id?: unknown; webhook_secret?: unknown };
+      const currentId = typeof row.id === 'number' && Number.isFinite(row.id)
+        ? Math.trunc(row.id)
+        : typeof row.id === 'string' && row.id.trim()
+        ? Number.parseInt(row.id.trim(), 10)
+        : null;
+
+      const currentSecret = sanitizeWebhookSecret(row.webhook_secret);
+      if (currentId && currentSecret) {
+        return;
+      }
+
+      const secret = generateWebhookSecret();
+      if (currentId) {
+        await this.db.query(
+          'UPDATE asaas_credentials SET webhook_secret = $1, updated_at = NOW() WHERE id = $2',
+          [secret, currentId],
+        );
+        return;
+      }
+    }
+
+    const secret = generateWebhookSecret();
+    await this.db.query(
+      `INSERT INTO asaas_credentials (integration_api_key_id, webhook_secret)
+       VALUES ($1, $2)
+       ON CONFLICT (integration_api_key_id) DO NOTHING`,
+      [integrationId, secret],
+    );
+  }
 
   async list(scope: EmpresaScope): Promise<IntegrationApiKey[]> {
     const empresaId = assertValidEmpresaId(scope.empresaId);
@@ -359,7 +415,13 @@ export default class IntegrationApiKeyService {
       [provider, apiUrl, key, environment, active, lastUsed, empresaId, global]
     );
 
-    return mapRow(result.rows[0] as IntegrationApiKeyRow);
+    const mapped = mapRow(result.rows[0] as IntegrationApiKeyRow);
+
+    if (mapped.provider === 'asaas') {
+      await this.ensureAsaasCredential(mapped.id);
+    }
+
+    return mapped;
   }
 
   async update(
@@ -478,7 +540,13 @@ export default class IntegrationApiKeyService {
       return null;
     }
 
-    return mapRow(result.rows[0] as IntegrationApiKeyRow);
+    const mapped = mapRow(result.rows[0] as IntegrationApiKeyRow);
+
+    if (mapped.provider === 'asaas') {
+      await this.ensureAsaasCredential(mapped.id);
+    }
+
+    return mapped;
   }
 
   async delete(id: number, scope: EmpresaScope): Promise<boolean> {

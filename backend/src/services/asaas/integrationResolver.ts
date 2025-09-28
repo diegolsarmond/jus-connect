@@ -15,6 +15,8 @@ export interface AsaasIntegration {
   baseUrl: string;
   accessToken: string;
   environment: AsaasEnvironment;
+  integrationId: number;
+  credentialId: number | null;
 }
 
 export class AsaasIntegrationNotConfiguredError extends Error {
@@ -31,6 +33,34 @@ interface IntegrationRow {
   key_value: string | null;
   environment: string | null;
   active: boolean;
+}
+
+async function findCredentialId(
+  db: Queryable,
+  integrationId: number,
+): Promise<number | null> {
+  const result = await db.query('SELECT id FROM asaas_credentials WHERE integration_api_key_id = $1', [
+    integrationId,
+  ]);
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  const rawId = (result.rows[0] as { id?: unknown })?.id;
+
+  if (typeof rawId === 'number' && Number.isFinite(rawId)) {
+    return Math.trunc(rawId);
+  }
+
+  if (typeof rawId === 'string' && rawId.trim()) {
+    const parsed = Number.parseInt(rawId.trim(), 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 function resolveBooleanEnv(name: string, fallback: boolean): boolean {
@@ -167,7 +197,9 @@ export async function resolveAsaasIntegration(
   const baseUrl = normalizeAsaasBaseUrl(resolvedEnvironment, row.url_api);
   const accessToken = normalizeToken(row.key_value);
 
-  return { baseUrl, accessToken, environment: resolvedEnvironment };
+  const credentialId = await findCredentialId(db, row.id);
+
+  return { baseUrl, accessToken, environment: resolvedEnvironment, integrationId: row.id, credentialId };
 }
 
 export async function createAsaasClient(
