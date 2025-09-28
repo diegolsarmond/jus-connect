@@ -1,0 +1,10 @@
+{
+  "name": "argon2",
+  "version": "0.31.2",
+  "description": "Local fallback implementation used for offline environments.",
+  "main": "index.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
