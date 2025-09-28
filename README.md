@@ -13,6 +13,14 @@ psql -f sql/intimacoes.sql
 npm run dev
 ```
 
+### Segredo do token de autenticação
+
+O backend **não inicia** sem um segredo explícito para assinar os tokens JWT. Defina a variável
+`AUTH_TOKEN_SECRET` (ou uma das alternativas `JWT_SECRET`/`TOKEN_SECRET`) com um valor forte e único
+antes de executar `npm run dev` ou publicar o serviço. Em ambientes de contêiner/Docker, exporte a
+variável na orquestração (Compose, Kubernetes, etc.) para evitar subir instâncias com segredos
+padrão.
+
 ### Integração com notificações do PJE
 
 Para habilitar o agendamento automático de webhooks com o PJE, defina as

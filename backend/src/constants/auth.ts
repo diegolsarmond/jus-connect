@@ -1,19 +1,33 @@
 import { parseExpiration } from '../utils/tokenUtils';
 
-const FALLBACK_SECRET = 'change-me-in-production';
 const FALLBACK_EXPIRATION_SECONDS = 60 * 60; // 1 hora
 
-const secretFromEnv =
-  process.env.AUTH_TOKEN_SECRET || process.env.JWT_SECRET || process.env.TOKEN_SECRET;
+let cachedSecret: string | undefined;
 
-if (!secretFromEnv) {
-  console.warn(
-    'AUTH_TOKEN_SECRET não definido. Um valor padrão inseguro está sendo utilizado apenas para desenvolvimento.'
-  );
-}
+const resolveAuthSecret = (): string => {
+  if (cachedSecret) {
+    return cachedSecret;
+  }
+
+  const secretFromEnv =
+    process.env.AUTH_TOKEN_SECRET || process.env.JWT_SECRET || process.env.TOKEN_SECRET;
+
+  if (!secretFromEnv) {
+    throw new Error(
+      'AUTH_TOKEN_SECRET (ou JWT_SECRET/TOKEN_SECRET) não foi definido. Defina um segredo forte antes de iniciar o servidor.'
+    );
+  }
+
+  cachedSecret = secretFromEnv;
+  return cachedSecret;
+};
+
+export const getAuthSecret = (): string => resolveAuthSecret();
 
 export const authConfig = {
-  secret: secretFromEnv ?? FALLBACK_SECRET,
+  get secret(): string {
+    return resolveAuthSecret();
+  },
   expirationSeconds: parseExpiration(
     process.env.AUTH_TOKEN_EXPIRATION || process.env.JWT_EXPIRATION,
     FALLBACK_EXPIRATION_SECONDS

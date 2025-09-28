@@ -53,9 +53,26 @@ import { ensureProcessSyncSchema } from './services/processSyncSchema';
 import { ensureSupportSchema } from './services/supportSchema';
 import { authenticateRequest } from './middlewares/authMiddleware';
 import { authorizeModules } from './middlewares/moduleAuthorization';
+import { getAuthSecret } from './constants/auth';
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+
+const ensureCriticalConfig = () => {
+  try {
+    getAuthSecret();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'AUTH_TOKEN_SECRET (ou JWT_SECRET/TOKEN_SECRET) não foi definido.';
+
+    console.error(`Falha ao iniciar o servidor: ${message}`);
+    process.exit(1);
+  }
+};
+
+ensureCriticalConfig();
 
 app.use(
   express.json({
