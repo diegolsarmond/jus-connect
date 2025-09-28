@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect, type ChangeEvent } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef, type ChangeEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -34,31 +34,19 @@ import { createPlanPayment, PlanPaymentMethod, PlanPaymentResult } from "@/featu
 import { useAuth } from "@/features/auth/AuthProvider";
 import { getApiUrl } from "@/lib/api";
 import { tokenizeCard, type CardTokenPayload } from "@/lib/flows";
+import {
+  clearPersistedManagePlanSelection,
+  getPersistedManagePlanSelection,
+  persistManagePlanSelection,
+  type ManagePlanSelection,
+  type PricingMode,
+} from "@/features/plans/managePlanPaymentStorage";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
   minimumFractionDigits: 2,
 });
-
-type PricingMode = "mensal" | "anual";
-
-type SelectedPlanState = {
-  plan?: {
-    id: number;
-    nome: string;
-    descricao: string | null;
-    recursos: string[];
-    valorMensal: number | null;
-    valorAnual: number | null;
-    precoMensal: string | null;
-    precoAnual: string | null;
-    descontoAnualPercentual: number | null;
-    economiaAnual: number | null;
-    economiaAnualFormatada: string | null;
-  };
-  pricingMode?: PricingMode;
-};
 
 const getFormattedPrice = (display: string | null, numeric: number | null) => {
   if (typeof display === "string" && display.trim().length > 0) {
@@ -208,9 +196,47 @@ const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CA
 const ManagePlanPayment = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = (location.state ?? {}) as SelectedPlanState;
-  const selectedPlan = state.plan ?? null;
-  const pricingMode: PricingMode = state.pricingMode ?? "mensal";
+  const selectionFromLocation = (location.state ?? {}) as ManagePlanSelection;
+  const [cachedSelection, setCachedSelection] = useState<ManagePlanSelection>(() =>
+    getPersistedManagePlanSelection(),
+  );
+  const lastPersistedRef = useRef<{ planId: number | null; pricingMode?: PricingMode }>({
+    planId: null,
+    pricingMode: undefined,
+  });
+  const locationPlanId = selectionFromLocation.plan?.id ?? null;
+  const locationPricingMode = selectionFromLocation.pricingMode;
+
+  useEffect(() => {
+    if (!selectionFromLocation.plan) {
+      return;
+    }
+
+    const hasChanged =
+      lastPersistedRef.current.planId !== locationPlanId ||
+      lastPersistedRef.current.pricingMode !== locationPricingMode;
+
+    if (!hasChanged) {
+      return;
+    }
+
+    const nextSelection: ManagePlanSelection = {
+      plan: selectionFromLocation.plan,
+      pricingMode: selectionFromLocation.pricingMode,
+    };
+
+    lastPersistedRef.current = {
+      planId: locationPlanId,
+      pricingMode: locationPricingMode,
+    };
+
+    setCachedSelection(nextSelection);
+    persistManagePlanSelection(nextSelection);
+  }, [locationPlanId, locationPricingMode, selectionFromLocation.plan]);
+
+  const selection = selectionFromLocation.plan ? selectionFromLocation : cachedSelection;
+  const selectedPlan = selection.plan ?? null;
+  const pricingMode: PricingMode = selection.pricingMode ?? "mensal";
   const { toast } = useToast();
   const { user } = useAuth();
   const [paymentMethod, setPaymentMethod] = useState<PlanPaymentMethod>("pix");
@@ -603,11 +629,16 @@ const ManagePlanPayment = () => {
     !billingEmail.trim() ||
     !isCardFormComplete;
 
+  const handleReturnToPlanSelection = useCallback(() => {
+    clearPersistedManagePlanSelection();
+    navigate(routes.meuPlano);
+  }, [navigate]);
+
   if (!selectedPlan) {
     return (
       <div className="p-4 sm:p-6 space-y-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={() => navigate(routes.meuPlano)}>
+          <Button variant="ghost" onClick={handleReturnToPlanSelection}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Voltar para planos
           </Button>
           <div>
@@ -625,7 +656,7 @@ const ManagePlanPayment = () => {
           </AlertDescription>
         </Alert>
 
-        <Button className="rounded-full" onClick={() => navigate(routes.meuPlano)}>
+        <Button className="rounded-full" onClick={handleReturnToPlanSelection}>
           Escolher um plano
         </Button>
       </div>
@@ -1062,7 +1093,7 @@ const ManagePlanPayment = () => {
               <Button
                 variant="outline"
                 className="w-full rounded-full"
-                onClick={() => navigate(routes.meuPlano)}
+                onClick={handleReturnToPlanSelection}
                 disabled={isSubmitting}
               >
                 Cancelar e voltar
