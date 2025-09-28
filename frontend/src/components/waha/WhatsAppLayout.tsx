@@ -457,6 +457,7 @@ export const WhatsAppLayout = ({
     loadChats,
     loadMoreChats,
     activeChatId,
+    sessionStatus,
     checkSessionStatus,
     loading,
     hasMoreChats,
@@ -465,6 +466,22 @@ export const WhatsAppLayout = ({
   } = wahaState;
 
   const activeConversationId = activeChatId ?? undefined;
+
+  const normalizedSessionName = useCallback((value?: string | null) => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }, []);
+
+  const displayedSessionName = useMemo(() => {
+    const fromStatus = normalizedSessionName(sessionStatus?.name);
+    if (fromStatus) {
+      return fromStatus;
+    }
+    return normalizedSessionName(sessionNameOverride);
+  }, [normalizedSessionName, sessionNameOverride, sessionStatus?.name]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -834,13 +851,13 @@ export const WhatsAppLayout = ({
   }, [activeConversationId, checkSessionStatus, loadChats, loadMessages]);
 
   useEffect(() => {
-    const currentStatus = wahaState.sessionStatus?.status ?? null;
+    const currentStatus = sessionStatus?.status ?? null;
     const previousStatus = lastSessionStatusRef.current;
     if (currentStatus === "WORKING" && previousStatus !== "WORKING") {
       handleReload();
     }
     lastSessionStatusRef.current = currentStatus;
-  }, [wahaState.sessionStatus?.status, handleReload]);
+  }, [sessionStatus?.status, handleReload]);
 
   const handleDisconnect = useCallback(async () => {
     if (isDisconnecting) {
@@ -914,11 +931,12 @@ export const WhatsAppLayout = ({
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
         <SessionStatus
-          status={wahaState.sessionStatus}
+          status={sessionStatus}
           onRefresh={handleReload}
           onDisconnect={handleDisconnect}
           isDisconnecting={isDisconnecting}
           onManageDevice={() => setIsDeviceModalOpen(true)}
+          sessionName={displayedSessionName}
         />
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
           <ConversationLoadingScreen />
@@ -935,11 +953,12 @@ export const WhatsAppLayout = ({
     <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 
       <SessionStatus
-        status={wahaState.sessionStatus}
+        status={sessionStatus}
         onRefresh={handleReload}
         onDisconnect={handleDisconnect}
         isDisconnecting={isDisconnecting}
         onManageDevice={() => setIsDeviceModalOpen(true)}
+        sessionName={displayedSessionName}
       />
 
       {!isDesktopLayout && isSidebarVisible ? (

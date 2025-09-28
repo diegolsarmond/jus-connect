@@ -18,7 +18,16 @@ interface SessionStatusProps {
   onDisconnect?: () => void;
   isDisconnecting?: boolean;
   onManageDevice?: () => void;
+  sessionName?: string | null;
 }
+
+const normalizeSessionName = (value?: string | null): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
 
 export const SessionStatus = ({
   status,
@@ -26,6 +35,7 @@ export const SessionStatus = ({
   onDisconnect,
   isDisconnecting = false,
   onManageDevice,
+  sessionName,
 }: SessionStatusProps) => {
   const getStatusIcon = () => {
     if (!status) return <WifiOff className="w-4 h-4" />;
@@ -80,11 +90,22 @@ export const SessionStatus = ({
     }
   };
 
+  const resolvedSessionName =
+    normalizeSessionName(status?.name) ?? normalizeSessionName(sessionName);
+
   return (
-    <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 bg-whatsapp px-4 py-2 text-foreground shadow-soft dark:text-white">
-      <div className="flex items-center gap-2 text-sm">
-        {getStatusIcon()}
-        <span className={`font-semibold tracking-wide ${getStatusColor()}`}>{getStatusText()}</span>
+    <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-4 bg-whatsapp px-4 py-2 text-foreground shadow-soft dark:text-white">
+      <div className="flex min-w-0 flex-col gap-1 text-xs sm:text-sm">
+        <div className="flex items-center gap-2 text-sm">
+          {getStatusIcon()}
+          <span className={`font-semibold tracking-wide ${getStatusColor()}`}>{getStatusText()}</span>
+        </div>
+        {resolvedSessionName ? (
+          <p className="text-xs text-foreground/80 sm:text-sm">
+            Sessão vinculada:{' '}
+            <span className="font-semibold text-foreground">{resolvedSessionName}</span>
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
