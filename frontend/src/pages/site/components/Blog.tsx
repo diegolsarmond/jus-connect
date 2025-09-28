@@ -52,9 +52,9 @@ const Blog = () => {
         <div className="flex flex-col gap-4 text-center">
           <span className="mx-auto inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-primary">
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            Conteúdo especializado
+            BLOG
           </span>
-          <h2 className="text-3xl font-semibold text-foreground md:text-4xl">Insights para acelerar sua transformação</h2>
+                  <h2 className="text-3xl font-semibold text-foreground md:text-4xl">Acompanhe as novidades e conteúdos exclusivos da Quantum</h2>
           <p className="mx-auto max-w-3xl text-base text-muted-foreground">
             Artigos, cases e melhores práticas sobre automações, CRM, experiência do cliente e operação orientada a dados.
           </p>

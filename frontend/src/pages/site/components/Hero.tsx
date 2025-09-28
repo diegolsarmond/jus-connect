@@ -36,10 +36,10 @@ const Hero = () => {
       <div className="container relative z-10 grid gap-12 px-4 pb-24 pt-28">
         <div className="space-y-8">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-            Plataforma jurídica inteligente
+                      Automação de processos, impulsionada por IA
           </span>
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-foreground md:text-5xl">
-            Quantum Jud organiza o contencioso e o relacionamento com clientes em um só lugar
+                      Tecnologias que modernizam processos e ampliam resultados. Da ideia à nuvem. Sempre um passo adiante.
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground">
             Elimine planilhas paralelas, acompanhe indicadores em tempo real e ofereça experiências digitais modernas para o
