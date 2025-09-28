@@ -18,6 +18,26 @@ import { normalizeFinancialFlowIdentifierFromRow } from '../utils/financialFlowI
 const asaasChargeService = new AsaasChargeService();
 const asaasSubscriptionService = new AsaasSubscriptionService();
 
+function handleAsaasError(
+  res: Response,
+  error: unknown,
+  fallbackMessage: string,
+  fallbackStatus = 502,
+): error is AsaasApiError {
+  if (error instanceof AsaasApiError) {
+    const normalizedStatus =
+      Number.isInteger(error.status) && error.status >= 400 && error.status < 600
+        ? error.status
+        : fallbackStatus;
+    const rawMessage = typeof error.message === 'string' ? error.message.trim() : '';
+    const message = rawMessage.length > 0 ? rawMessage : fallbackMessage;
+    res.status(normalizedStatus).json({ error: message });
+    return true;
+  }
+
+  return false;
+}
+
 function resolveConfiguredAsaasEnvironment() {
   const rawEnvironment = process.env.ASAAS_ENVIRONMENT;
   if (typeof rawEnvironment === 'string' && rawEnvironment.trim()) {
@@ -564,6 +584,9 @@ export const createPlanPayment = async (req: Request, res: Response) => {
           const customer = await client.createCustomer(customerPayload);
           customerId = customer.id;
         } else {
+          if (handleAsaasError(res, error, 'Não foi possível preparar o cliente no Asaas.')) {
+            return;
+          }
           throw error;
         }
       }
@@ -573,6 +596,10 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error('Falha ao preparar cliente no Asaas', error);
+    if (handleAsaasError(res, error, 'Não foi possível preparar o cliente no Asaas.')) {
+      return;
+    }
+
     const message =
       error instanceof Error && 'message' in error
         ? (error as Error).message
@@ -619,6 +646,10 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Falha ao sincronizar assinatura no Asaas', error);
+    if (handleAsaasError(res, error, 'Não foi possível criar ou atualizar a assinatura no Asaas.')) {
+      return;
+    }
+
     const message =
       error instanceof Error && 'message' in error
         ? (error as Error).message
@@ -780,6 +811,9 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     }
     if (error instanceof ChargeConflictError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    if (handleAsaasError(res, error, 'Não foi possível criar a cobrança do plano no Asaas.')) {
       return;
     }
     console.error('Falha ao criar cobrança do plano no Asaas', error);
