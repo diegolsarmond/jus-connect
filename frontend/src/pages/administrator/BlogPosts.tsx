@@ -622,9 +622,12 @@ const BlogPosts = () => {
                 id="content"
                 value={formState.content}
                 onChange={(event) => setFormState((prev) => ({ ...prev, content: event.target.value }))}
-                placeholder="Insira os parágrafos do artigo separados por linhas em branco."
+                placeholder="Use HTML básico para formatar o texto (ex.: <p>, <strong>, <em>, <ul>)."
                 rows={8}
               />
+              <p className="text-xs text-muted-foreground">
+                Aceita negrito, itálico, listas e links com marcação HTML simples.
+              </p>
             </div>
 
             <DialogFooter className="gap-2 sm:space-x-2">

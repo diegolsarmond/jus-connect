@@ -14,6 +14,135 @@ import { routes } from "@/config/routes";
 import { useToast } from "@/hooks/use-toast";
 import { useBlogPostBySlug, useBlogPosts } from "@/hooks/useBlogPosts";
 
+const allowedTags = new Set([
+  "p",
+  "br",
+  "strong",
+  "em",
+  "b",
+  "i",
+  "u",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "code",
+  "pre",
+  "hr",
+  "a",
+]);
+
+const allowedAttributes = new Map<string, Set<string>>([
+  [
+    "a",
+    new Set(["href", "title", "target", "rel"]),
+  ],
+]);
+
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const normalizeParagraphs = (text: string): string =>
+  text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+    .join("");
+
+const sanitizeBlogContent = (html: string): string | null => {
+  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
+    return html;
+  }
+
+  const parser = new DOMParser();
+  const parsedDocument = parser.parseFromString(html, "text/html");
+
+  if (parsedDocument.querySelector("parsererror")) {
+    return null;
+  }
+
+  const elements = Array.from(parsedDocument.body.querySelectorAll("*"));
+
+  const unwrapElement = (element: Element) => {
+    const parent = element.parentNode;
+    if (!parent) {
+      element.remove();
+      return;
+    }
+
+    while (element.firstChild) {
+      parent.insertBefore(element.firstChild, element);
+    }
+    parent.removeChild(element);
+  };
+
+  elements.forEach((element) => {
+    const tagName = element.tagName.toLowerCase();
+
+    if (!allowedTags.has(tagName)) {
+      unwrapElement(element);
+      return;
+    }
+
+    const allowedForTag = allowedAttributes.get(tagName);
+
+    Array.from(element.attributes).forEach((attribute) => {
+      const attributeName = attribute.name.toLowerCase();
+
+      if (!allowedForTag || !allowedForTag.has(attributeName)) {
+        element.removeAttribute(attribute.name);
+        return;
+      }
+
+      if (tagName === "a" && attributeName === "href") {
+        const value = attribute.value.trim();
+
+        if (!value || /^(javascript:|data:)/i.test(value)) {
+          element.removeAttribute(attribute.name);
+          return;
+        }
+
+        if (/^https?:/i.test(value)) {
+          element.setAttribute("target", "_blank");
+          element.setAttribute("rel", "noopener noreferrer");
+        }
+      }
+
+      if (tagName === "a" && attributeName === "target") {
+        const value = attribute.value.trim();
+        if (value !== "_blank" && value !== "_self") {
+          element.setAttribute("target", "_blank");
+        }
+      }
+
+      if (tagName === "a" && attributeName === "rel") {
+        const tokens = attribute.value
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter(Boolean);
+        const normalized = new Set(tokens);
+        normalized.add("noopener");
+        normalized.add("noreferrer");
+        element.setAttribute("rel", Array.from(normalized).join(" "));
+      }
+    });
+  });
+
+  return parsedDocument.body.innerHTML;
+};
+
 const BlogArticle = () => {
   const { slug } = useParams<{ slug: string }>();
   const {
@@ -32,17 +161,24 @@ const BlogArticle = () => {
     return allPosts.filter((item) => item.slug !== post.slug).slice(0, 3);
   }, [allPosts, post]);
 
-  const contentParagraphs = useMemo(() => {
-    const rawContent = post?.content?.trim() ?? post?.description ?? "";
-    if (!rawContent) {
-      return [];
+  const sanitizedContent = useMemo(() => {
+    const rawContent = post?.content?.trim();
+    if (rawContent) {
+      const sanitized = sanitizeBlogContent(rawContent);
+      if (sanitized && sanitized.trim()) {
+        return sanitized;
+      }
     }
 
-    return rawContent
-      .split(/\n{2,}/)
-      .map((paragraph) => paragraph.trim())
-      .filter(Boolean);
-  }, [post]);
+    const fallback = post?.description?.trim();
+    if (fallback) {
+      return normalizeParagraphs(fallback);
+    }
+
+    return "";
+  }, [post?.content, post?.description]);
+
+  const hasArticleContent = sanitizedContent.trim().length > 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -144,12 +280,11 @@ const BlogArticle = () => {
                   <Skeleton key={index} className="h-4 w-full" />
                 ))}
               </div>
-            ) : post && contentParagraphs.length ? (
-              contentParagraphs.map((paragraph, index) => (
-                <p key={index} className="text-foreground/90">
-                  {paragraph}
-                </p>
-              ))
+            ) : post && hasArticleContent ? (
+              <div
+                className="prose prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-em:text-foreground/90 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-primary/60 prose-blockquote:text-foreground/80 max-w-none"
+                dangerouslySetInnerHTML={{ __html: sanitizedContent }}
+              />
             ) : (
               <p className="text-base text-muted-foreground">
                 Conteúdo em breve. Atualize a página para verificar novas informações.
