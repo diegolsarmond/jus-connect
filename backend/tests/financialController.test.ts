@@ -12,6 +12,8 @@ let listFlows: typeof import('../src/controllers/financialController')['listFlow
 let createFlow: typeof import('../src/controllers/financialController')['createFlow'];
 let updateFlow: typeof import('../src/controllers/financialController')['updateFlow'];
 let settleFlow: typeof import('../src/controllers/financialController')['settleFlow'];
+let getAsaasChargeForFlow: typeof import('../src/controllers/financialController')['getAsaasChargeForFlow'];
+let listAsaasChargeStatus: typeof import('../src/controllers/financialController')['listAsaasChargeStatus'];
 let __internal: typeof import('../src/controllers/financialController')['__internal'];
 
 const financialFlowColumnsResponse: QueryResponse = {
@@ -76,7 +78,15 @@ const financialAccountColumnsResponse: QueryResponse = {
 
 
 test.before(async () => {
-  ({ listFlows, createFlow, updateFlow, settleFlow, __internal } = await import('../src/controllers/financialController'));
+  ({
+    listFlows,
+    createFlow,
+    updateFlow,
+    settleFlow,
+    getAsaasChargeForFlow,
+    listAsaasChargeStatus,
+    __internal,
+  } = await import('../src/controllers/financialController'));
 });
 
 test.afterEach(() => {
@@ -1255,4 +1265,157 @@ test('settleFlow enforces company ownership for opportunity installments', async
   assert.equal(calls.length, 2);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
   assert.match(calls[1]?.text ?? '', /FROM public\.oportunidade_parcelas/);
+});
+
+test('getAsaasChargeForFlow returns 404 when there is no charge', async () => {
+  const flowId = 88;
+  const { restore } = setupQueryMock([{ rows: [], rowCount: 0 }]);
+
+  const req = { params: { id: `${flowId}` } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await getAsaasChargeForFlow(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Charge not found' });
+});
+
+test('getAsaasChargeForFlow returns the persisted charge details', async () => {
+  const flowId = 101;
+  const chargeRow = {
+    id: 7,
+    financial_flow_id: flowId,
+    cliente_id: 55,
+    integration_api_key_id: 12,
+    asaas_charge_id: 'ch_123',
+    billing_type: 'PIX',
+    status: 'PENDING',
+    due_date: '2024-01-15',
+    value: '250.90',
+    invoice_url: 'https://asaas.test/invoice',
+    pix_payload: 'payload-code',
+    pix_qr_code: 'qr-code',
+    boleto_url: null,
+    card_last4: null,
+    card_brand: null,
+    created_at: '2024-01-01T00:00:00.000Z',
+    updated_at: '2024-01-02T12:34:56.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([{ rows: [chargeRow], rowCount: 1 }]);
+
+  const req = { params: { id: `${flowId}` } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await getAsaasChargeForFlow(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.text ?? '', /FROM asaas_charges/i);
+  assert.deepEqual(calls[0]?.values, [flowId]);
+
+  const expectedCharge = {
+    id: 7,
+    financialFlowId: flowId,
+    clienteId: 55,
+    integrationApiKeyId: 12,
+    asaasChargeId: 'ch_123',
+    billingType: 'PIX',
+    status: 'PENDING',
+    dueDate: '2024-01-15',
+    value: '250.90',
+    invoiceUrl: 'https://asaas.test/invoice',
+    pixPayload: 'payload-code',
+    pixQrCode: 'qr-code',
+    boletoUrl: null,
+    cardLast4: null,
+    cardBrand: null,
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-02T12:34:56.000Z',
+    flowId,
+  };
+
+  assert.deepEqual(res.body, { charge: expectedCharge });
+});
+
+test('listAsaasChargeStatus returns 404 when the charge is missing', async () => {
+  const flowId = 202;
+  const { restore } = setupQueryMock([{ rows: [], rowCount: 0 }]);
+
+  const req = { params: { id: `${flowId}` } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await listAsaasChargeStatus(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Charge not found' });
+});
+
+test('listAsaasChargeStatus exposes the latest local status information', async () => {
+  const flowId = 303;
+  const chargeRow = {
+    id: 11,
+    financial_flow_id: flowId,
+    cliente_id: null,
+    integration_api_key_id: null,
+    asaas_charge_id: 'ch_status',
+    billing_type: 'CREDIT_CARD',
+    status: 'RECEIVED',
+    due_date: '2024-02-10',
+    value: '500.00',
+    invoice_url: null,
+    pix_payload: null,
+    pix_qr_code: null,
+    boleto_url: null,
+    card_last4: '4242',
+    card_brand: 'VISA',
+    created_at: '2024-02-01T10:00:00.000Z',
+    updated_at: '2024-02-05T15:30:00.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([{ rows: [chargeRow], rowCount: 1 }]);
+
+  const req = { params: { id: `${flowId}` } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await listAsaasChargeStatus(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.text ?? '', /FROM asaas_charges/i);
+  assert.deepEqual(calls[0]?.values, [flowId]);
+
+  assert.deepEqual(res.body, {
+    statuses: [
+      {
+        status: 'RECEIVED',
+        description: 'Status atual sincronizado localmente.',
+        updatedAt: '2024-02-05T15:30:00.000Z',
+        metadata: {
+          source: 'asaas_charges',
+          chargeId: 'ch_status',
+          financialFlowId: flowId,
+          billingType: 'CREDIT_CARD',
+          value: '500.00',
+          createdAt: '2024-02-01T10:00:00.000Z',
+        },
+      },
+    ],
+  });
 });
