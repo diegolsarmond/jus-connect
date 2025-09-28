@@ -30,6 +30,7 @@ import TaskCreationDialog, { TaskCreationPrefill } from "@/components/tasks/Task
 import AppointmentCreationDialog, {
   AppointmentCreationPrefill,
 } from "@/components/agenda/AppointmentCreationDialog";
+import { cn } from "@/lib/utils";
 
 const ensureIsoTimestamp = (value?: number): string => {
   if (!value) {
@@ -422,6 +423,13 @@ export const WhatsAppLayout = ({
   const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSessionStatusRef = useRef<string | null>(null);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return true;
+    }
+    return window.matchMedia("(min-width: 1024px)").matches;
+  });
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
   const currentUserId = user ? String(user.id) : null;
@@ -455,6 +463,43 @@ export const WhatsAppLayout = ({
     isLoadingMoreChats,
     messagePaginationState,
   } = wahaState;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsDesktopLayout(event.matches);
+    };
+    setIsDesktopLayout(mediaQuery.matches);
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => {
+        mediaQuery.removeEventListener("change", handleChange);
+      };
+    }
+    mediaQuery.addListener(handleChange);
+    return () => {
+      mediaQuery.removeListener(handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    setIsSidebarVisible(true);
+  }, [isDesktopLayout]);
+
+  useEffect(() => {
+    if (!isDesktopLayout && !activeConversationId) {
+      setIsSidebarVisible(true);
+    }
+  }, [activeConversationId, isDesktopLayout]);
+
+  useEffect(() => {
+    if (!isDesktopLayout && isSidebarVisible) {
+      searchInputRef.current?.focus();
+    }
+  }, [isDesktopLayout, isSidebarVisible]);
 
   useEffect(() => {
     let canceled = false;
@@ -636,6 +681,9 @@ export const WhatsAppLayout = ({
       setMessagesLoading(true);
       try {
         await selectChat(conversationId);
+        if (!isDesktopLayout) {
+          handleHideSidebar();
+        }
         if (!options?.skipNavigation) {
           onConversationRouteChange?.(conversationId);
         }
@@ -643,7 +691,14 @@ export const WhatsAppLayout = ({
         setMessagesLoading(false);
       }
     },
-    [activeConversationId, messageMap, onConversationRouteChange, selectChat],
+    [
+      activeConversationId,
+      handleHideSidebar,
+      isDesktopLayout,
+      messageMap,
+      onConversationRouteChange,
+      selectChat,
+    ],
   );
 
   useEffect(() => {
@@ -743,6 +798,18 @@ export const WhatsAppLayout = ({
     [conversations],
   );
 
+  const handleShowSidebar = useCallback(() => {
+    if (!isDesktopLayout) {
+      setIsSidebarVisible(true);
+    }
+  }, [isDesktopLayout]);
+
+  const handleHideSidebar = useCallback(() => {
+    if (!isDesktopLayout) {
+      setIsSidebarVisible(false);
+    }
+  }, [isDesktopLayout]);
+
   const handleModalSelect = useCallback(
     async (conversationId: string) => {
       setIsNewConversationOpen(false);
@@ -832,6 +899,16 @@ export const WhatsAppLayout = ({
   const isInitialLoading = loading && !hasLoadedOnce;
   const shouldShowOverlayLoading = loading && hasLoadedOnce;
 
+  const sidebarClassName = cn(
+    "flex h-full min-h-0 w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-b border-border/40 bg-sidebar/90 shadow-[0_12px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-transform duration-300 ease-in-out pointer-events-auto lg:relative lg:w-[34%] lg:min-w-[300px] lg:max-w-md lg:border-b-0 lg:border-r",
+    !isDesktopLayout ? "fixed inset-y-0 left-0 z-40 w-full max-w-[360px] border-r sm:max-w-[420px]" : undefined,
+    !isDesktopLayout && !isSidebarVisible ? "-translate-x-full pointer-events-none" : "translate-x-0",
+  );
+
+  const chatWindowClassName = cn(
+    "relative min-w-0 flex-1 overflow-hidden bg-transparent transition-opacity duration-200 ease-in-out lg:flex lg:h-full lg:flex-col",
+    isDesktopLayout ? "flex h-full flex-col" : isSidebarVisible ? "hidden" : "flex h-full flex-col",
+  );
 
   if (isInitialLoading) {
     return (
@@ -865,8 +942,20 @@ export const WhatsAppLayout = ({
         onManageDevice={() => setIsDeviceModalOpen(true)}
       />
 
+      {!isDesktopLayout && isSidebarVisible ? (
+        <button
+          type="button"
+          aria-label="Ocultar lista de conversas"
+          className="fixed inset-0 z-30 bg-background/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden"
+          onClick={handleHideSidebar}
+        />
+      ) : null}
+
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden lg:flex-row">
-        <div className="flex h-full min-h-0 w-full min-w-0 flex-shrink-0 flex-col overflow-hidden border-b border-border/40 bg-sidebar/90 shadow-[0_12px_24px_rgba(15,23,42,0.06)] backdrop-blur-sm lg:w-[34%] lg:min-w-[300px] lg:max-w-md lg:border-b-0 lg:border-r">
+        <div
+          className={sidebarClassName}
+          aria-hidden={!isDesktopLayout && !isSidebarVisible ? "true" : undefined}
+        >
           <CRMChatSidebar
             conversations={conversations}
             activeConversationId={activeConversationId}
@@ -889,10 +978,15 @@ export const WhatsAppLayout = ({
             }}
             allowUnassignedFilter={!restrictToAssigned}
             isResponsibleFilterLocked={restrictToAssigned}
+            onClose={!isDesktopLayout ? handleHideSidebar : undefined}
+            isMobileView={!isDesktopLayout}
           />
         </div>
 
-        <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-transparent">
+        <div
+          className={chatWindowClassName}
+          aria-hidden={!isDesktopLayout && isSidebarVisible ? "true" : undefined}
+        >
           <CRMChatWindow
             conversation={activeConversation}
             messages={messages}
@@ -914,6 +1008,8 @@ export const WhatsAppLayout = ({
             onCreateAppointment={handleOpenAppointmentDialog}
             responsibleOptions={responsibleOptions}
             isLoadingResponsibles={isLoadingResponsibles}
+            onShowConversationList={!isDesktopLayout ? handleShowSidebar : undefined}
+            isMobileView={!isDesktopLayout}
           />
         </div>
       </div>
