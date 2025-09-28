@@ -62,6 +62,38 @@ const findEnvFileInAncestors = (startDir) => {
     }
     return null;
 };
+const pathsEqual = (first, second) => {
+    if (!first || !second) {
+        return false;
+    }
+    return path_1.default.resolve(first) === path_1.default.resolve(second);
+};
+const loadEnvFilesInOrder = (paths) => {
+    const seen = new Set();
+    for (const candidate of paths) {
+        if (!candidate) {
+            continue;
+        }
+        const resolved = path_1.default.resolve(candidate);
+        if (seen.has(resolved)) {
+            continue;
+        }
+        if (!fs_1.default.existsSync(resolved)) {
+            continue;
+        }
+        try {
+            const stats = fs_1.default.statSync(resolved);
+            if (!stats.isFile()) {
+                continue;
+            }
+        }
+        catch (_a) {
+            continue;
+        }
+        loadEnvFile(resolved);
+        seen.add(resolved);
+    }
+};
 const loadDefaultEnvFile = () => {
     const customPath = process.env.DOTENV_CONFIG_PATH;
     if (customPath) {
@@ -73,22 +105,18 @@ const loadDefaultEnvFile = () => {
             return;
         }
     }
-    const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
-    if (ancestorEnvFile) {
-        loadEnvFile(ancestorEnvFile);
-        return;
-    }
     const backendRoot = path_1.default.resolve(__dirname, '..', '..');
     const repoRoot = path_1.default.resolve(backendRoot, '..');
-    const fallbackCandidates = [
-        path_1.default.join(backendRoot, '.env'),
-        path_1.default.join(repoRoot, '.env'),
-    ];
-    for (const candidate of fallbackCandidates) {
-        if (fs_1.default.existsSync(candidate)) {
-            loadEnvFile(candidate);
-            return;
-        }
+    const backendEnvPath = path_1.default.join(backendRoot, '.env');
+    const repoEnvPath = path_1.default.join(repoRoot, '.env');
+    const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
+    const fallbackCandidates = [];
+    if (ancestorEnvFile &&
+        !pathsEqual(ancestorEnvFile, backendEnvPath) &&
+        !pathsEqual(ancestorEnvFile, repoEnvPath)) {
+        fallbackCandidates.push(ancestorEnvFile);
     }
+    fallbackCandidates.push(backendEnvPath, repoEnvPath);
+    loadEnvFilesInOrder(fallbackCandidates);
 };
 loadDefaultEnvFile();

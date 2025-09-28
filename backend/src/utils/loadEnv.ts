@@ -77,6 +77,45 @@ const findEnvFileInAncestors = (startDir: string): string | null => {
   return null;
 };
 
+const pathsEqual = (first: string | null | undefined, second: string | null | undefined) => {
+  if (!first || !second) {
+    return false;
+  }
+
+  return path.resolve(first) === path.resolve(second);
+};
+
+const loadEnvFilesInOrder = (paths: Array<string | null | undefined>) => {
+  const seen = new Set<string>();
+
+  for (const candidate of paths) {
+    if (!candidate) {
+      continue;
+    }
+
+    const resolved = path.resolve(candidate);
+    if (seen.has(resolved)) {
+      continue;
+    }
+
+    if (!fs.existsSync(resolved)) {
+      continue;
+    }
+
+    try {
+      const stats = fs.statSync(resolved);
+      if (!stats.isFile()) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    loadEnvFile(resolved);
+    seen.add(resolved);
+  }
+};
+
 const loadDefaultEnvFile = () => {
   const customPath = process.env.DOTENV_CONFIG_PATH;
   if (customPath) {
@@ -90,25 +129,25 @@ const loadDefaultEnvFile = () => {
     }
   }
 
-  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
-  if (ancestorEnvFile) {
-    loadEnvFile(ancestorEnvFile);
-    return;
-  }
-
   const backendRoot = path.resolve(__dirname, '..', '..');
   const repoRoot = path.resolve(backendRoot, '..');
-  const fallbackCandidates = [
-    path.join(backendRoot, '.env'),
-    path.join(repoRoot, '.env'),
-  ];
+  const backendEnvPath = path.join(backendRoot, '.env');
+  const repoEnvPath = path.join(repoRoot, '.env');
+  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
 
-  for (const candidate of fallbackCandidates) {
-    if (fs.existsSync(candidate)) {
-      loadEnvFile(candidate);
-      return;
-    }
+  const fallbackCandidates: Array<string | null> = [];
+
+  if (
+    ancestorEnvFile &&
+    !pathsEqual(ancestorEnvFile, backendEnvPath) &&
+    !pathsEqual(ancestorEnvFile, repoEnvPath)
+  ) {
+    fallbackCandidates.push(ancestorEnvFile);
   }
+
+  fallbackCandidates.push(backendEnvPath, repoEnvPath);
+
+  loadEnvFilesInOrder(fallbackCandidates);
 };
 
 loadDefaultEnvFile();
