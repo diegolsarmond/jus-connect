@@ -443,33 +443,126 @@ const extractFlowId = (flow: QueryResultRow): number | string => {
   throw new AsaasValidationError('Fluxo financeiro inválido para geração de cobrança');
 };
 
+const normalizeChargeValue = (value: unknown): number | string => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new AsaasValidationError('Valor inválido para geração de cobrança no Asaas');
+    }
+    return value;
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new AsaasValidationError('Valor inválido para geração de cobrança no Asaas');
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+
+    return trimmed;
+  }
+
+  if (value instanceof Number) {
+    const numericValue = value.valueOf();
+    if (!Number.isFinite(numericValue)) {
+      throw new AsaasValidationError('Valor inválido para geração de cobrança no Asaas');
+    }
+    return numericValue;
+  }
+
+  throw new AsaasValidationError('Valor inválido para geração de cobrança no Asaas');
+};
+
+const normalizeChargeDueDate = (value: unknown): string | Date => {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new AsaasValidationError('Data de vencimento inválida para geração de cobrança no Asaas');
+    }
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new AsaasValidationError('Data de vencimento inválida para geração de cobrança no Asaas');
+    }
+    return trimmed;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new AsaasValidationError('Data de vencimento inválida para geração de cobrança no Asaas');
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new AsaasValidationError('Data de vencimento inválida para geração de cobrança no Asaas');
+    }
+    return date.toISOString();
+  }
+
+  throw new AsaasValidationError('Data de vencimento inválida para geração de cobrança no Asaas');
+};
+
+const normalizeNullableString = (value: unknown): string | null => {
+  if (value === null || typeof value === 'undefined') {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return null;
+};
+
 const createChargeForFlowIfRequested = async (
   params: AsaasChargeCreationParams,
 ): Promise<AsaasChargeResult | null> => {
-  if (typeof params.paymentMethod !== 'string' || !params.paymentMethod.trim()) {
+  const paymentMethod = params.paymentMethod;
+  if (typeof paymentMethod !== 'string' || !paymentMethod.trim()) {
     return null;
   }
 
   ensureReceitaFlow(params.flow);
 
   const flowId = extractFlowId(params.flow);
+  const value = normalizeChargeValue(params.value);
+  const dueDate = normalizeChargeDueDate(params.dueDate);
+  const description = normalizeNullableString(params.description);
+  const externalReferenceId = normalizeNullableString(params.externalReferenceId);
 
   return asaasChargeService.createCharge(
     {
       financialFlowId: flowId,
-      billingType: params.paymentMethod,
+      billingType: paymentMethod,
       clienteId: params.clienteId ?? null,
       integrationApiKeyId: params.integrationApiKeyId ?? null,
-      value: params.value,
-      dueDate: params.dueDate,
-      description: params.description ?? null,
+      value,
+      dueDate,
+      description,
       cardToken: params.cardToken ?? null,
       asaasCustomerId: params.asaasCustomerId ?? null,
       additionalFields: params.additionalFields ?? null,
       payerEmail: params.payerEmail ?? null,
       payerName: params.payerName ?? null,
       customerDocument: params.customerDocument ?? null,
-      externalReferenceId: params.externalReferenceId ?? null,
+      externalReferenceId,
       metadata: params.metadata ?? null,
       remoteIp: params.remoteIp ?? null,
     },
