@@ -4,6 +4,36 @@ import type { Argon2Module, Argon2Options } from './argon2Types';
 const SHA256_PREFIX = 'sha256:';
 const ARGON2_PREFIX = 'argon2:';
 
+let forceFallbackOverride: boolean | null = null;
+
+const TRUE_ENV_VALUES = new Set(['true', '1', 'yes', 'on']);
+const FALSE_ENV_VALUES = new Set(['false', '0', 'no', 'off']);
+
+const parseBooleanEnv = (value: string | undefined): boolean => {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (TRUE_ENV_VALUES.has(normalized)) {
+    return true;
+  }
+
+  if (FALSE_ENV_VALUES.has(normalized)) {
+    return false;
+  }
+
+  return false;
+};
+
+const shouldForceFallback = (): boolean => {
+  if (forceFallbackOverride !== null) {
+    return forceFallbackOverride;
+  }
+
+  return parseBooleanEnv(process.env.PASSWORD_HASH_FORCE_FALLBACK);
+};
+
 const parseIntegerEnv = (
   value: string | undefined,
   fallback: number,
@@ -77,14 +107,32 @@ type PasswordVerificationResult = {
 };
 
 let argon2ModulePromise: Promise<Argon2Module> | null = null;
+let argon2ModuleSource: 'native' | 'fallback' | null = null;
+
+const loadFallbackModule = async (): Promise<Argon2Module> => {
+  const fallback = await import('./argon2Fallback');
+  return fallback.default;
+};
 
 const loadArgon2 = async (): Promise<Argon2Module> => {
-  if (!argon2ModulePromise) {
+  if (shouldForceFallback()) {
+    if (argon2ModuleSource !== 'fallback') {
+      argon2ModulePromise = loadFallbackModule();
+      argon2ModuleSource = 'fallback';
+    }
+
+    return argon2ModulePromise!;
+  }
+
+  if (!argon2ModulePromise || argon2ModuleSource !== 'native') {
     argon2ModulePromise = import('argon2')
-      .then((module) => (module.default ? module.default : (module as unknown as Argon2Module)))
+      .then((module) => {
+        argon2ModuleSource = 'native';
+        return module.default ? module.default : (module as unknown as Argon2Module);
+      })
       .catch(async () => {
-        const fallback = await import('./argon2Fallback');
-        return fallback.default;
+        argon2ModuleSource = 'fallback';
+        return loadFallbackModule();
       });
   }
 
@@ -156,3 +204,33 @@ export const verifyPassword = async (
 };
 
 export type { PasswordVerificationResult };
+
+const resetArgon2ModuleCache = (): void => {
+  argon2ModulePromise = null;
+  argon2ModuleSource = null;
+};
+
+const setForceFallbackOverride = (value: boolean | null): void => {
+  forceFallbackOverride = value;
+  resetArgon2ModuleCache();
+};
+
+const withForceFallbackOverride = async <T>(
+  value: boolean,
+  callback: () => Promise<T> | T
+): Promise<T> => {
+  const previous = forceFallbackOverride;
+  setForceFallbackOverride(value);
+
+  try {
+    return await Promise.resolve(callback());
+  } finally {
+    setForceFallbackOverride(previous);
+  }
+};
+
+export const __testing = {
+  resetArgon2ModuleCache,
+  setForceFallbackOverride,
+  withForceFallbackOverride,
+};
