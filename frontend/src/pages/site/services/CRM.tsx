@@ -439,6 +439,7 @@ const CRM = () => {
                                 </div>
 
                                 <div className="space-y-8">
+
                                     <div className="space-y-4">
                                         <span className="inline-flex items-center gap-2 rounded-full border border-quantum-light/40 bg-background/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-quantum-bright">
                                             Planos Quantum
@@ -596,36 +597,37 @@ const CRM = () => {
                                                 </CardContent>
                                             </Card>
                                         )}
-                                    </div>
 
-                                    <div className="rounded-3xl border border-quantum-light/30 bg-background/70 p-6 shadow-sm backdrop-blur">
-                                        <div className="mb-6 flex items-center gap-3">
-                                            <div className="rounded-full bg-gradient-quantum p-3 text-white">
-                                                <Layers className="h-5 w-5" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-quantum-light">Tudo incluso</p>
-                                                <h4 className="text-lg font-semibold">Recursos presentes em todos os planos</h4>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            {includedInAllPlans.map((item) => (
-                                                <div
-                                                    key={item.title}
-                                                    className="group flex items-start gap-3 rounded-2xl border border-transparent bg-white/5 p-4 transition-all duration-300 hover:border-quantum-bright/40 hover:bg-quantum-bright/5"
-                                                >
-                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-quantum text-white shadow-inner transition-transform duration-300 group-hover:scale-105">
-                                                        <item.icon className="h-5 w-5" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-semibold text-foreground">{item.title}</p>
-                                                        <p className="text-sm text-muted-foreground">{item.description}</p>
-                                                    </div>
+                                        <div className="rounded-3xl border border-quantum-light/30 bg-background/70 p-6 shadow-sm backdrop-blur">
+                                            <div className="mb-6 flex items-center gap-3">
+                                                <div className="rounded-full bg-gradient-quantum p-3 text-white">
+                                                    <Layers className="h-5 w-5" />
                                                 </div>
-                                            ))}
+                                                <div>
+                                                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-quantum-light">Tudo incluso</p>
+                                                    <h4 className="text-lg font-semibold">Recursos presentes em todos os planos</h4>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {includedInAllPlans.map((item) => (
+                                                    <div
+                                                        key={item.title}
+                                                        className="group flex items-start gap-3 rounded-2xl border border-transparent bg-white/5 p-4 transition-all duration-300 hover:border-quantum-bright/40 hover:bg-quantum-bright/5"
+                                                    >
+                                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-quantum text-white shadow-inner transition-transform duration-300 group-hover:scale-105">
+                                                            <item.icon className="h-5 w-5" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-semibold text-foreground">{item.title}</p>
+                                                            <p className="text-sm text-muted-foreground">{item.description}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
+
                             </div>
 
                             <div className="flex flex-wrap gap-4">
