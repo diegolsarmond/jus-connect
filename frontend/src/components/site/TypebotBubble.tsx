@@ -17,7 +17,7 @@ Typebot.initBubble({
   typebot: "quantumbot",
   apiHost: "https://form.quantumtecnologia.com.br",
   previewMessage: {
-    message: "Olá, sou o assistente do Quantum Jud. Em que posso ajudar?",
+    message: "Olá, sou o assistente do Quantum Tecnologia. Em que posso ajudar?",
     autoShowDelay: 10000,
     avatarUrl: "https://i.postimg.cc/CLKVTcfx/graident-ai-robot-vectorart-em-ingles-78370-4114.avif",
   },

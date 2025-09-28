@@ -106,7 +106,7 @@ const Footer = () => {
       <div className="border-t border-border/40 bg-background/60">
         <div className="container flex flex-col items-center justify-between gap-3 px-4 py-4 text-center text-xs text-muted-foreground md:flex-row">
           <span>
-            &copy; {currentYear} Quantum Jud. Uma solução Quantum Tecnologia. Todos os direitos reservados.
+            &copy; {currentYear} Quantum Tecnologia. Todos os direitos reservados.
           </span>
           <div className="flex gap-4">
             <Link to={routes.privacyPolicy} className="transition hover:text-foreground">
