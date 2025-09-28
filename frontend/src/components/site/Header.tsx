@@ -16,19 +16,21 @@ type HeaderNavItem = {
 };
 
 const NAV_ITEMS: HeaderNavItem[] = [
-  { label: "Início", href: routes.home },
-  { label: "Serviços", href: routes.services },
-  {
-    label: "Nossos Produtos",
-    children: [
-      { label: "Suíte de CRM", href: routes.serviceCRM },
-      { label: "CRM para Advocacia", href: routes.serviceCRMAdvocacia },
-      { label: "Assistentes Virtuais com IA", href: routes.serviceAssistenteIA },
-      { label: "Automações Inteligentes", href: routes.serviceAutomacoes },
-      { label: "Desenvolvimento Sob Medida", href: routes.serviceDesenvolvimento },
-    ],
-  },
-  { label: "Sobre", href: routes.history },
+    { label: "Início", href: routes.home },
+    { label: "A Quantum", href: routes.history },
+   {label: "Serviços", href: routes.services
+   //    , children: [
+   //         { label: "Assistentes Virtuais com IA", href: routes.serviceAssistenteIA },
+   //         { label: "Automações Inteligentes", href: routes.serviceAutomacoes },
+   //         { label: "Consultoria em TI", href: routes.serviceDesenvolvimento },
+   //         { label: "Desenvolvimento Sob Medida", href: routes.serviceDesenvolvimento },
+   //         { label: "Servidores personalizados", href: routes.serviceDesenvolvimento },
+   //     ],
+
+    },
+  { label: "Nossos Produtos", href: routes.serviceCRM},
+    
+  
   { label: "Blog", href: routes.blog },
   { label: "Contato", href: "#contato" },
 ];
