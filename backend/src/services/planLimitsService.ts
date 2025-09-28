@@ -1,11 +1,12 @@
 import pool from './db';
 
-export type PlanLimitResource = 'usuarios' | 'processos' | 'propostas';
+export type PlanLimitResource = 'usuarios' | 'processos' | 'propostas' | 'clientes';
 
 export interface CompanyPlanLimits {
   limiteUsuarios: number | null;
   limiteProcessos: number | null;
   limitePropostas: number | null;
+  limiteClientes: number | null;
   sincronizacaoProcessosHabilitada: boolean | null;
   sincronizacaoProcessosCota: number | null;
 }
@@ -87,12 +88,14 @@ export const fetchPlanLimitsForCompany = async (
     limite_usuarios: unknown;
     limite_processos: unknown;
     limite_propostas: unknown;
+    limite_clientes: unknown;
     sincronizacao_processos_habilitada: unknown;
     sincronizacao_processos_cota: unknown;
   }>(
     `SELECT pl.limite_usuarios,
             pl.limite_processos,
             pl.limite_propostas,
+            pl.limite_clientes,
             pl.sincronizacao_processos_habilitada,
             pl.sincronizacao_processos_cota
        FROM public.empresas emp
@@ -112,6 +115,7 @@ export const fetchPlanLimitsForCompany = async (
     limiteUsuarios: toNonNegativeLimit(row.limite_usuarios),
     limiteProcessos: toNonNegativeLimit(row.limite_processos),
     limitePropostas: toNonNegativeLimit(row.limite_propostas),
+    limiteClientes: toNonNegativeLimit(row.limite_clientes),
     sincronizacaoProcessosHabilitada: toBoolean(
       row.sincronizacao_processos_habilitada,
     ),
@@ -128,6 +132,8 @@ const RESOURCE_QUERIES: Record<PlanLimitResource, string> = {
     'SELECT COUNT(*)::bigint AS total FROM public.processos WHERE idempresa IS NOT DISTINCT FROM $1',
   propostas:
     'SELECT COUNT(*)::bigint AS total FROM public.oportunidades WHERE idempresa IS NOT DISTINCT FROM $1',
+  clientes:
+    'SELECT COUNT(*)::bigint AS total FROM public.clientes WHERE idempresa IS NOT DISTINCT FROM $1',
 };
 
 export const countCompanyResource = async (
