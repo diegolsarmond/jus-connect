@@ -195,6 +195,10 @@ const parseErrorMessage = async (response: Response) => {
     console.warn("Failed to parse error response", error);
   }
 
+  if (response.status === 403) {
+    return "Confirme seu e-mail antes de acessar. Verifique sua caixa de entrada.";
+  }
+
   return response.status === 401
     ? "Credenciais inválidas. Verifique seu e-mail e senha."
     : "Não foi possível concluir a solicitação. Tente novamente.";
