@@ -7,6 +7,7 @@ import {
   deleteFlow,
   settleFlow,
   createAsaasChargeForFlow,
+  refundAsaasCharge,
 } from '../controllers/financialController';
 
 const router = Router();
@@ -18,5 +19,6 @@ router.put('/financial/flows/:id', updateFlow);
 router.delete('/financial/flows/:id', deleteFlow);
 router.post('/financial/flows/:id/settle', settleFlow);
 router.post('/financial/flows/:id/asaas-charge', createAsaasChargeForFlow);
+router.post('/financial/flows/:id/asaas/charges/refund', refundAsaasCharge);
 
 export default router;

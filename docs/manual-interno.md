@@ -28,6 +28,15 @@
 4. Documente divergências no quadro "Reconciliação" do Notion e atribua responsáveis com prazo de correção.
 5. Após os ajustes, gere um novo relatório consolidado e anexe ao fechamento contábil do mês.
 
+## Estorno de cobranças
+- **Fluxo padrão**:
+  1. Na tela **Financeiro > Lançamentos**, abra o lançamento com cobrança paga e clique em **Gerenciar cobrança**.
+  2. O painel mostra a seção *Solicitar estorno no Asaas* quando o status retornado pela API for `RECEIVED`, `CONFIRMED`, `RECEIVED_IN_CASH` ou `RECEIVED_PARTIALLY`.
+  3. Ao acionar o botão **Solicitar estorno**, o frontend chama `POST /financial/flows/{id}/asaas/charges/refund` e aguarda a confirmação do Asaas. O backend atualiza `asaas_charges.status` para `REFUNDED` e marca o `financial_flows.status` como `estornado`, limpando a data de pagamento. 【F:backend/src/controllers/financialController.ts†L1507-L1608】【F:frontend/src/components/financial/AsaasChargeDialog.tsx†L806-L861】
+  4. Assim que o estorno é concluído, o lançamento deixa de aparecer como pago e o filtro "Situação" passa a oferecer a opção **Estornados**. Os totais e badges consideram o novo status automaticamente. 【F:frontend/src/pages/operator/FinancialFlows.tsx†L326-L561】
+- **API direta**: o endpoint pode ser invocado manualmente em integrações (`POST /api/financial/flows/:id/asaas/charges/refund`). É necessário autenticar o usuário e garantir que o lançamento pertence à mesma empresa. O corpo aceita parâmetros opcionais (`value`, `description`, `keepCustomerFee`) repassados para o Asaas. 【F:backend/src/routes/financialRoutes.ts†L19-L22】【F:backend/src/services/asaas/asaasClient.ts†L280-L311】
+- **Sincronização**: o sincronizador periódico (`AsaasChargeSyncService`) agora acompanha também os status `REFUNDED` e derivados, mantendo `financial_flows` em `estornado` caso o estorno seja acionado diretamente no Asaas. 【F:backend/src/services/asaasChargeSync.ts†L12-L144】
+
 ## Boas práticas operacionais
 - Mantenha o `ASAAS_WEBHOOK_SECRET` atualizado sempre que gerar uma nova assinatura no portal Asaas.
 - Nunca compartilhe tokens em canais públicos; utilize o cofre de senhas da empresa.

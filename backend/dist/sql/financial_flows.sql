@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS financial_flows (
   vencimento DATE NOT NULL,
   pagamento DATE,
   valor NUMERIC NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','pago')),
+  status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente','pago','estornado')),
   external_provider TEXT,
   external_reference_id TEXT
 );
@@ -42,3 +42,7 @@ BEGIN
     );
   END LOOP;
 END $$;
+ALTER TABLE financial_flows DROP CONSTRAINT IF EXISTS financial_flows_status_check;
+ALTER TABLE financial_flows
+  ADD CONSTRAINT financial_flows_status_check
+  CHECK (status IN ('pendente','pago','estornado'));

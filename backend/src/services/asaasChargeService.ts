@@ -484,7 +484,18 @@ function extractCardInfo(response: AsaasClientChargeResponse): {
   return { last4, brand };
 }
 
-function mapFlowStatus(chargeStatus: string | undefined): 'pendente' | 'pago' {
+const REFUNDED_PAYMENT_STATUS_SET = new Set([
+  'REFUNDED',
+  'REFUND_REQUESTED',
+  'REFUND_PENDING',
+  'REFUND_IN_PROGRESS',
+  'REFUND_COMPLETED',
+  'CHARGEBACK',
+  'CHARGEBACK_REQUESTED',
+  'CHARGEBACK_DISPUTE',
+]);
+
+function mapFlowStatus(chargeStatus: string | undefined): 'pendente' | 'pago' | 'estornado' {
   if (!chargeStatus) {
     return 'pendente';
   }
@@ -499,6 +510,10 @@ function mapFlowStatus(chargeStatus: string | undefined): 'pendente' | 'pago' {
 
   if (paidStatuses.has(normalized)) {
     return 'pago';
+  }
+
+  if (REFUNDED_PAYMENT_STATUS_SET.has(normalized)) {
+    return 'estornado';
   }
 
   return 'pendente';
