@@ -85,6 +85,7 @@ const pathsEqual = (first: string | null | undefined, second: string | null | un
   return path.resolve(first) === path.resolve(second);
 };
 
+
 const loadEnvFilesInOrder = (paths: Array<string | null | undefined>) => {
   const seen = new Set<string>();
 
@@ -146,6 +147,14 @@ const loadDefaultEnvFile = () => {
   }
 
   fallbackCandidates.push(backendEnvPath, repoEnvPath);
+
+
+  const ancestorEnvFile = findEnvFileInAncestors(process.cwd());
+  const fallbackCandidates = [
+    ancestorEnvFile,
+    path.join(backendRoot, '.env'),
+    path.join(repoRoot, '.env'),
+  ];
 
   loadEnvFilesInOrder(fallbackCandidates);
 };

@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import {
+  countCompanyResource,
+  fetchPlanLimitsForCompany,
+} from '../services/planLimitsService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasCustomerService, {
   AsaasCustomerState,
@@ -162,6 +166,16 @@ export const createCliente = async (req: Request, res: Response) => {
       return res
         .status(400)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    const planLimits = await fetchPlanLimitsForCompany(empresaId);
+    if (planLimits?.limiteClientes != null) {
+      const clientesCount = await countCompanyResource(empresaId, 'clientes');
+      if (clientesCount >= planLimits.limiteClientes) {
+        return res
+          .status(403)
+          .json({ error: 'Limite de clientes do plano atingido.' });
+      }
     }
 
     const result = await pool.query(

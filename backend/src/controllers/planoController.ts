@@ -14,6 +14,7 @@ type PlanoRow = {
   limite_processos: number | string | null;
   limite_usuarios: number | string | null;
   limite_propostas: number | string | null;
+  limite_clientes: number | string | null;
   sincronizacao_processos_habilitada: boolean | number | string | null;
   sincronizacao_processos_cota: number | string | null;
 };
@@ -27,6 +28,7 @@ type PlanoResponseRow = Omit<
     | 'limite_processos'
     | 'limite_usuarios'
     | 'limite_propostas'
+    | 'limite_clientes'
     | 'sincronizacao_processos_habilitada'
     | 'sincronizacao_processos_cota'
     | 'ativo'
@@ -37,6 +39,7 @@ type PlanoResponseRow = Omit<
   limite_processos: number | null;
   limite_usuarios: number | null;
   limite_propostas: number | null;
+  limite_clientes: number | null;
   sincronizacao_processos_habilitada: boolean;
   sincronizacao_processos_cota: number | null;
   ativo: boolean;
@@ -137,6 +140,7 @@ type RecursosDetails = {
   limiteProcessos: number | null;
   limiteUsuarios: number | null;
   limitePropostas: number | null;
+  limiteClientes: number | null;
   sincronizacaoProcessosHabilitada: boolean | null;
   sincronizacaoProcessosCota: number | null;
 };
@@ -217,6 +221,13 @@ const LIMIT_PROPOSAL_KEYS = [
   'maxPropostas',
   'propostas',
 ] as const;
+const LIMIT_CLIENT_KEYS = [
+  'limite_clientes',
+  'limiteClientes',
+  'clientLimit',
+  'clientes',
+  'maxClientes',
+] as const;
 
 const SYNC_ENABLED_KEYS = [
   'sincronizacao_processos_habilitada',
@@ -265,6 +276,12 @@ const BODY_LIMITE_PROPOSTAS_KEYS = [
   'proposalLimit',
   'max_propostas',
   'maxPropostas',
+] as const;
+const BODY_LIMITE_CLIENTES_KEYS = [
+  'limite_clientes',
+  'limiteClientes',
+  'clientLimit',
+  'maxClientes',
 ] as const;
 const BODY_SYNC_ENABLED_KEYS = [
   'sincronizacao_processos_habilitada',
@@ -487,6 +504,7 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
   let limiteProcessos: number | null = null;
   let limiteUsuarios: number | null = null;
   let limitePropostas: number | null = null;
+  let limiteClientes: number | null = null;
   let sincronizacaoProcessosHabilitada: boolean | null = null;
   let sincronizacaoProcessosCota: number | null = null;
   const visited = new Set<unknown>();
@@ -577,6 +595,7 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
   const limitProcessKeySet = new Set<string>(LIMIT_PROCESS_KEYS);
   const limitUserKeySet = new Set<string>(LIMIT_USER_KEYS);
   const limitProposalKeySet = new Set<string>(LIMIT_PROPOSAL_KEYS);
+  const limitClientKeySet = new Set<string>(LIMIT_CLIENT_KEYS);
   const syncEnabledKeySet = new Set<string>(SYNC_ENABLED_KEYS);
   const syncQuotaKeySet = new Set<string>(SYNC_QUOTA_KEYS);
   const customResourceKeySet = new Set<string>(CUSTOM_RESOURCE_KEYS);
@@ -709,6 +728,16 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
         }
       }
 
+      for (const key of LIMIT_CLIENT_KEYS) {
+        if (key in obj && limiteClientes === null) {
+          const parsed = toInteger(obj[key]);
+          if (parsed !== null) {
+            limiteClientes = parsed;
+            break;
+          }
+        }
+      }
+
       for (const key of SYNC_ENABLED_KEYS) {
         if (key in obj && sincronizacaoProcessosHabilitada === null) {
           const parsed = parseBooleanFlag(obj[key]);
@@ -736,7 +765,12 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
         if (moduleKeySet.has(key) || featureKeySet.has(key)) {
           return;
         }
-        if (limitProcessKeySet.has(key) || limitUserKeySet.has(key) || limitProposalKeySet.has(key)) {
+        if (
+          limitProcessKeySet.has(key) ||
+          limitUserKeySet.has(key) ||
+          limitProposalKeySet.has(key) ||
+          limitClientKeySet.has(key)
+        ) {
           return;
         }
         if (syncEnabledKeySet.has(key) || syncQuotaKeySet.has(key)) {
@@ -760,6 +794,7 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
     limiteProcessos,
     limiteUsuarios,
     limitePropostas,
+    limiteClientes,
     sincronizacaoProcessosHabilitada,
     sincronizacaoProcessosCota,
   };
@@ -777,6 +812,7 @@ const prepareRecursosForStorage = ({
     limiteProcessos: number | null;
     limiteUsuarios: number | null;
     limitePropostas: number | null;
+    limiteClientes: number | null;
     sincronizacaoProcessosHabilitada: boolean;
     sincronizacaoProcessosCota: number | null;
   };
@@ -791,6 +827,7 @@ const prepareRecursosForStorage = ({
       limiteProcessos: null,
       limiteUsuarios: null,
       limitePropostas: null,
+      limiteClientes: null,
       sincronizacaoProcessosHabilitada: null,
       sincronizacaoProcessosCota: null,
     };
@@ -885,6 +922,11 @@ const prepareRecursosForStorage = ({
     limitsPayload.limitePropostas = limits.limitePropostas;
   }
 
+  if (limits.limiteClientes != null) {
+    limitsPayload.clientes = limits.limiteClientes;
+    limitsPayload.limiteClientes = limits.limiteClientes;
+  }
+
   if (Object.keys(limitsPayload).length) {
     payload.limites = limitsPayload;
   }
@@ -970,6 +1012,10 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     parseNullableInteger(row.limite_propostas) ??
     recursosDetalhes.limitePropostas ??
     null;
+  const limiteClientes =
+    parseNullableInteger(row.limite_clientes) ??
+    recursosDetalhes.limiteClientes ??
+    null;
 
   const sincronizacaoProcessosHabilitada =
     parseBooleanFlag(row.sincronizacao_processos_habilitada) ??
@@ -1003,6 +1049,7 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     limite_processos: limiteProcessos,
     limite_usuarios: limiteUsuarios,
     limite_propostas: limitePropostas,
+    limite_clientes: limiteClientes,
     sincronizacao_processos_habilitada: sincronizacaoProcessosHabilitada,
     sincronizacao_processos_cota: sincronizacaoProcessosCota,
     recursos_personalizados: customResources,
@@ -1012,7 +1059,7 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
 export const listPlanos = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos'
+      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos'
 
     );
     const formatted = result.rows.map((row) => formatPlanoRow(row as PlanoRow));
@@ -1130,6 +1177,19 @@ export const createPlano = async (req: Request, res: Response) => {
     return res.status(400).json({ error: message });
   }
 
+  const limiteClientesEntry = pickFirstDefined(body, BODY_LIMITE_CLIENTES_KEYS);
+  let limiteClientes: number | null;
+  try {
+    limiteClientes = parseOptionalIntegerOrDefault(
+      limiteClientesEntry.provided ? limiteClientesEntry.value : undefined,
+      'limite_clientes',
+      null
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'limite_clientes inválido';
+    return res.status(400).json({ error: message });
+  }
+
   const syncEnabledEntry = pickFirstDefined(body, BODY_SYNC_ENABLED_KEYS);
   let syncEnabled: boolean;
   try {
@@ -1167,6 +1227,7 @@ export const createPlano = async (req: Request, res: Response) => {
       limiteProcessos,
       limiteUsuarios,
       limitePropostas,
+      limiteClientes,
       sincronizacaoProcessosHabilitada: syncEnabled,
       sincronizacaoProcessosCota: syncQuota,
     },
@@ -1174,7 +1235,7 @@ export const createPlano = async (req: Request, res: Response) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO public.planos (nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota) VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11) RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
+      'INSERT INTO public.planos (nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota) VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
       [
         nome,
         valorMensal,
@@ -1185,6 +1246,7 @@ export const createPlano = async (req: Request, res: Response) => {
         limiteProcessos,
         limiteUsuarios,
         limitePropostas,
+        limiteClientes,
         syncEnabled,
         syncQuota,
       ]
@@ -1204,7 +1266,7 @@ export const updatePlano = async (req: Request, res: Response) => {
 
   try {
     const existingResult = await pool.query(
-      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos WHERE id = $1',
+      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos WHERE id = $1',
       [id]
     );
 
@@ -1332,6 +1394,19 @@ export const updatePlano = async (req: Request, res: Response) => {
       return res.status(400).json({ error: message });
     }
 
+    const limiteClientesEntry = pickFirstDefined(body, BODY_LIMITE_CLIENTES_KEYS);
+    let limiteClientesValue: number | null;
+    try {
+      limiteClientesValue = parseOptionalIntegerOrDefault(
+        limiteClientesEntry.provided ? limiteClientesEntry.value : undefined,
+        'limite_clientes',
+        currentPlano.limite_clientes
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'limite_clientes inválido';
+      return res.status(400).json({ error: message });
+    }
+
     const syncEnabledEntry = pickFirstDefined(body, BODY_SYNC_ENABLED_KEYS);
     let syncEnabledValue = currentPlano.sincronizacao_processos_habilitada;
     if (syncEnabledEntry.provided) {
@@ -1371,6 +1446,7 @@ export const updatePlano = async (req: Request, res: Response) => {
         limiteProcessos: limiteProcessosValue,
         limiteUsuarios: limiteUsuariosValue,
         limitePropostas: limitePropostasValue,
+        limiteClientes: limiteClientesValue,
         sincronizacaoProcessosHabilitada: syncEnabledValue,
         sincronizacaoProcessosCota: syncQuotaValue,
       },
@@ -1378,7 +1454,7 @@ export const updatePlano = async (req: Request, res: Response) => {
     });
 
     const result = await pool.query(
-      'UPDATE public.planos SET nome = $1, valor_mensal = $2, valor_anual = $3, ativo = $4, modulos = $5, recursos = $6, limite_processos = $7, limite_usuarios = $8, limite_propostas = $9, sincronizacao_processos_habilitada = $10, sincronizacao_processos_cota = $11 WHERE id = $12 RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
+      'UPDATE public.planos SET nome = $1, valor_mensal = $2, valor_anual = $3, ativo = $4, modulos = $5, recursos = $6, limite_processos = $7, limite_usuarios = $8, limite_propostas = $9, limite_clientes = $10, sincronizacao_processos_habilitada = $11, sincronizacao_processos_cota = $12 WHERE id = $13 RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
       [
         nomeValue,
         valorMensalValue,
@@ -1389,6 +1465,7 @@ export const updatePlano = async (req: Request, res: Response) => {
         limiteProcessosValue,
         limiteUsuariosValue,
         limitePropostasValue,
+        limiteClientesValue,
         syncEnabledValue,
         syncQuotaValue,
         id,
