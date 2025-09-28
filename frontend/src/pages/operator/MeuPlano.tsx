@@ -546,6 +546,7 @@ function MeuPlanoContent() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const subscriptionPlanId = toNumber(user?.subscription?.planId ?? null);
+  const isTrialing = user?.subscription?.status === "trialing";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -896,7 +897,9 @@ function MeuPlanoContent() {
       setPricingMode(nextPricingMode);
       toast({
         title: `Plano ${plan.nome} selecionado`,
-        description: "Revise as opções de pagamento para confirmar a alteração do seu plano.",
+        description: isTrialing
+          ? "Revise as opções de pagamento para concluir a contratação do plano escolhido."
+          : "Revise as opções de pagamento para confirmar a alteração do seu plano.",
       });
       navigate(routes.meuPlanoPayment, {
         state: {
@@ -917,7 +920,7 @@ function MeuPlanoContent() {
         },
       });
     },
-    [navigate, pricingMode, toast],
+    [isTrialing, navigate, pricingMode, toast],
   );
 
   const resetPreview = useCallback(() => {
@@ -939,7 +942,9 @@ function MeuPlanoContent() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold">Meu Plano</h1>
         <p className="text-muted-foreground">
-          Acompanhe as informações do plano contratado e compare facilmente com outras opções disponíveis.
+          {isTrialing
+            ? "Você está em período de avaliação. Escolha o plano ideal e finalize a contratação quando estiver pronto."
+            : "Acompanhe as informações do plano contratado e compare facilmente com outras opções disponíveis."}
         </p>
       </div>
 
@@ -1094,14 +1099,16 @@ function MeuPlanoContent() {
                 <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                   <DialogTrigger asChild>
                     <Button size="lg" className="rounded-full shadow-lg shadow-primary/20">
-                      Alterar plano
+                      {isTrialing ? "Contratar plano" : "Alterar plano"}
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl">
                     <DialogHeader>
-                      <DialogTitle>Escolha um novo plano</DialogTitle>
+                      <DialogTitle>{isTrialing ? "Escolha seu plano" : "Escolha um novo plano"}</DialogTitle>
                       <DialogDescription>
-                        Compare os planos disponíveis e avance para a etapa de pagamento da opção que melhor atende às necessidades do seu time.
+                        {isTrialing
+                          ? "Selecione o plano que deseja contratar ao final do período de avaliação e prossiga para o pagamento."
+                          : "Compare os planos disponíveis e avance para a etapa de pagamento da opção que melhor atende às necessidades do seu time."}
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6">
@@ -1255,9 +1262,9 @@ function MeuPlanoContent() {
                                           : "bg-primary text-primary-foreground hover:bg-primary/90",
                                       )}
                                       onClick={() => handlePlanSelection(plano)}
-                                      disabled={isAtual && !previewPlano}
+                                      disabled={isAtual && !previewPlano && !isTrialing}
                                     >
-                                      Escolher este plano
+                                      {isTrialing ? "Contratar este plano" : "Escolher este plano"}
                                     </Button>
                                   </CardFooter>
                                 </Card>
