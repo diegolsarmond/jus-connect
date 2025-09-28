@@ -214,6 +214,7 @@ const createFormStateFromPlan = (plan: Plan): PlanFormState => ({
   modules: [...plan.modules],
   customAvailableFeatures: plan.customAvailableFeatures.join(", "),
   customUnavailableFeatures: plan.customUnavailableFeatures.join(", "),
+  clientLimit: plan.clientLimit != null ? String(plan.clientLimit) : "",
   userLimit: plan.userLimit != null ? String(plan.userLimit) : "",
   processLimit: plan.processLimit != null ? String(plan.processLimit) : "",
   proposalLimit: plan.proposalLimit != null ? String(plan.proposalLimit) : "",
@@ -423,6 +424,7 @@ export default function Plans() {
     setEditError(null);
 
     const orderedModules = orderModules(editFormState.modules, availableModules);
+    const clientLimit = parseInteger(editFormState.clientLimit);
     const userLimit = parseInteger(editFormState.userLimit);
     const processLimit = parseInteger(editFormState.processLimit);
     const proposalLimit = parseInteger(editFormState.proposalLimit);
@@ -443,6 +445,9 @@ export default function Plans() {
         customAvailable,
         customUnavailable,
       }),
+      limite_clientes: clientLimit,
+      clientes_limit: clientLimit,
+      client_limit: clientLimit,
       limite_usuarios: userLimit,
       qtde_usuarios: userLimit,
       limite_processos: processLimit,
@@ -569,6 +574,9 @@ export default function Plans() {
                       <TableCell className="align-top">{renderModuleBadges(plan.modules)}</TableCell>
                       <TableCell className="align-top">
                         <div className="space-y-1 text-sm">
+                          <p>
+                            <span className="font-medium">Clientes:</span> {formatLimit(plan.clientLimit)}
+                          </p>
                           <p>
                             <span className="font-medium">Usuários:</span> {formatLimit(plan.userLimit)}
                           </p>
@@ -733,7 +741,22 @@ export default function Plans() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-plan-client-limit">Limite de clientes</Label>
+                <Input
+                  id="edit-plan-client-limit"
+                  inputMode="numeric"
+                  value={editFormState.clientLimit}
+                  onChange={(event) =>
+                    setEditFormState((prev) => ({
+                      ...prev,
+                      clientLimit: sanitizeLimitInput(event.target.value),
+                    }))
+                  }
+                  disabled={isSavingEdit}
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-plan-user-limit">Limite de usuários</Label>
                 <Input

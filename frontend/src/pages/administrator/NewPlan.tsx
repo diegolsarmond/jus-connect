@@ -267,6 +267,7 @@ export default function NewPlan() {
     setSubmitSuccess(null);
 
     const orderedModules = orderModules(formState.modules, availableModules);
+    const clientLimit = parseInteger(formState.clientLimit);
     const userLimit = parseInteger(formState.userLimit);
     const processLimit = parseInteger(formState.processLimit);
     const proposalLimit = parseInteger(formState.proposalLimit);
@@ -287,6 +288,9 @@ export default function NewPlan() {
         customAvailable,
         customUnavailable,
       }),
+      limite_clientes: clientLimit,
+      clientes_limit: clientLimit,
+      client_limit: clientLimit,
       limite_usuarios: userLimit,
       qtde_usuarios: userLimit,
       limite_processos: processLimit,
@@ -488,7 +492,26 @@ export default function NewPlan() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="plan-client-limit">Limite de clientes</Label>
+                <Input
+                  id="plan-client-limit"
+                  placeholder="Ilimitado"
+                  inputMode="numeric"
+                  value={formState.clientLimit}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      clientLimit: sanitizeLimitInput(event.target.value),
+                    }))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use valores inteiros. Campos em branco manterão o limite aberto.
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="plan-user-limit">Limite de usuários</Label>
                 <Input
