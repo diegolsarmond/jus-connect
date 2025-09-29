@@ -765,7 +765,7 @@ const ManagePlanPayment = () => {
                     <RadioGroupItem id="payment-cartao" value="cartao" />
                     <div>
                       <Label htmlFor="payment-cartao" className="font-medium">
-                        Cartão corporativo
+                        Cartão de Crédito
                       </Label>
                       <p className="text-sm text-muted-foreground">
                         Pagamento imediato e renovação automática com cobrança recorrente.
@@ -786,7 +786,7 @@ const ManagePlanPayment = () => {
                     <RadioGroupItem id="payment-boleto" value="boleto" />
                     <div>
                       <Label htmlFor="payment-boleto" className="font-medium">
-                        Boleto bancário
+                        Boleto Bancário
                       </Label>
                       <p className="text-sm text-muted-foreground">
                         Receba o boleto por e-mail após a confirmação.
@@ -807,7 +807,7 @@ const ManagePlanPayment = () => {
                     <RadioGroupItem id="payment-pix" value="pix" />
                     <div>
                       <Label htmlFor="payment-pix" className="font-medium">
-                        PIX empresarial
+                                              PIX QR Code/Copia e Cola
                       </Label>
                       <p className="text-sm text-muted-foreground">
                         Chave disponibilizada imediatamente para pagamento.
