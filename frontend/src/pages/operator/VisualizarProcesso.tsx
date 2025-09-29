@@ -81,8 +81,14 @@ interface ApiProcessoRelatedLawsuit {
   area?: string | null;
 }
 
+interface ApiProcessoLawyer {
+  name?: string | null;
+  document?: string | null;
+}
+
 interface ApiProcessoRepresentative {
   name?: string | null;
+  document?: string | null;
 }
 
 interface ApiProcessoParticipant {
@@ -92,7 +98,10 @@ interface ApiProcessoParticipant {
   role?: string | null;
   side?: string | null;
   type?: string | null;
+  person_type?: string | null;
+  party_role?: string | null;
   representatives?: ApiProcessoRepresentative[] | null;
+  lawyers?: ApiProcessoLawyer[] | null;
 }
 
 export interface ApiProcessoResponse {
@@ -147,13 +156,17 @@ interface GrupoMovimentacao {
 interface ParteNormalizada {
   nome: string;
   documento?: string | null;
-  advogado?: string | null;
+  tipoPessoa?: string | null;
+  advogados: string[];
+  polo?: "ativo" | "passivo" | null;
+  papel?: string | null;
 }
 
 interface PartesAgrupadas {
   ativo: ParteNormalizada[];
   passivo: ParteNormalizada[];
-  outros: Array<ParteNormalizada & { rotulo: string }>;
+  testemunhas: ParteNormalizada[];
+  outros: ParteNormalizada[];
   total: number;
 }
 
@@ -224,27 +237,6 @@ export interface ProcessoViewModel {
 
 const TEXTO_DICA =
   "Use filtros avançados para identificar rapidamente decisões, despachos e publicações relevantes para o seu cliente.";
-
-const KEYWORDS_ATIVO = [
-  "ATIVO",
-  "AUTOR",
-  "REQUERENTE",
-  "EXEQUENTE",
-  "IMPETRANTE",
-  "RECORRENTE",
-  "AGRAVANTE",
-];
-
-const KEYWORDS_PASSIVO = [
-  "PASSIVO",
-  "RÉU",
-  "REU",
-  "REQUERIDO",
-  "EXECUTADO",
-  "IMPUGNADO",
-  "RECORRIDO",
-  "AGRAVADO",
-];
 
 const DATA_LONGA_OPCOES: Intl.DateTimeFormatOptions = {
   day: "2-digit",
@@ -323,17 +315,18 @@ function mascararDocumento(documento?: string | null): string | null {
     return null;
   }
 
-  const numeros = documento.replace(/\D+/g, "");
+  const textoNormalizado = normalizarTexto(documento);
+  const numeros = textoNormalizado.replace(/\D+/g, "");
 
-  if (numeros.length === 11) {
-    return numeros.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  if (!numeros) {
+    return textoNormalizado || null;
   }
 
-  if (numeros.length === 14) {
-    return numeros.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  if (numeros.length <= 4) {
+    return numeros;
   }
 
-  return documento;
+  return numeros.replace(/\d(?=\d{4})/g, "*");
 }
 
 function normalizarGrau(valor?: string | null): string {
@@ -358,29 +351,133 @@ function normalizarGrau(valor?: string | null): string {
   return valor;
 }
 
-function extrairAdvogado(parte: ApiProcessoParticipant): string | null {
-  if (Array.isArray(parte.representatives) && parte.representatives.length > 0) {
-    const primeiro = parte.representatives.find((adv) => normalizarTexto(adv?.name));
-    if (primeiro?.name) {
-      return normalizarTexto(primeiro.name);
-    }
+function normalizarTipoPessoa(tipo?: string | null): string | null {
+  const texto = normalizarTexto(tipo ?? "");
+
+  if (!texto) {
+    return null;
+  }
+
+  const upper = texto.replace(/\s+/g, "_").toUpperCase();
+
+  if (["NATURAL_PERSON", "PESSOA_FISICA", "FISICA", "INDIVIDUAL"].includes(upper)) {
+    return "Pessoa física";
+  }
+
+  if (["LEGAL_ENTITY", "LEGAL_PERSON", "PESSOA_JURIDICA", "JURIDICA", "COMPANY"].includes(upper)) {
+    return "Pessoa jurídica";
+  }
+
+  if (["PUBLIC_AGENCY", "PUBLIC_ENTITY", "ORGAO_PUBLICO", "ENTIDADE_PUBLICA"].includes(upper)) {
+    return "Órgão público";
+  }
+
+  return texto
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letra) => letra.toUpperCase());
+}
+
+function normalizarSide(side?: string | null): "ativo" | "passivo" | null {
+  const texto = normalizarTexto(side ?? "");
+
+  if (!texto) {
+    return null;
+  }
+
+  const upper = texto.replace(/\s+/g, "_").toUpperCase();
+
+  if (
+    [
+      "ATIVO",
+      "PLAINTIFF",
+      "AUTHOR",
+      "CLAIMANT",
+      "REQUERENTE",
+      "EXEQUENTE",
+      "IMPETRANTE",
+      "RECORRENTE",
+      "AGRAVANTE",
+      "APPELLANT",
+    ].includes(upper)
+  ) {
+    return "ativo";
+  }
+
+  if (
+    [
+      "PASSIVO",
+      "DEFENDANT",
+      "RESPONDENT",
+      "REQUERIDO",
+      "EXECUTADO",
+      "IMPUGNADO",
+      "RECORRIDO",
+      "AGRAVADO",
+      "APPELLEE",
+    ].includes(upper)
+  ) {
+    return "passivo";
   }
 
   return null;
 }
 
-function classificarParte(parte: ApiProcessoParticipant): "ativo" | "passivo" | "outros" {
-  const polo = normalizarTexto(parte.side ?? parte.type ?? parte.role).toUpperCase();
+function formatarRole(role?: string | null): string | null {
+  const texto = normalizarTexto(role ?? "");
 
-  if (KEYWORDS_ATIVO.some((palavra) => polo.includes(palavra))) {
-    return "ativo";
+  if (!texto) {
+    return null;
   }
 
-  if (KEYWORDS_PASSIVO.some((palavra) => polo.includes(palavra))) {
-    return "passivo";
+  return texto
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letra) => letra.toUpperCase());
+}
+
+function ehTestemunha(role?: string | null): boolean {
+  const texto = normalizarTexto(role ?? "");
+
+  if (!texto) {
+    return false;
   }
 
-  return "outros";
+  const upper = texto.replace(/\s+/g, "_").toUpperCase();
+
+  return upper.includes("TESTEMUNHA") || upper.includes("WITNESS");
+}
+
+function extrairAdvogados(parte: ApiProcessoParticipant): string[] {
+  const listaPrincipais = Array.isArray(parte.lawyers) ? parte.lawyers : [];
+  const advogados = listaPrincipais
+    .map((advogado) => {
+      const nome = normalizarTexto(advogado?.name ?? "");
+      const documento = mascararDocumento(advogado?.document ?? null);
+
+      if (!nome && !documento) {
+        return null;
+      }
+
+      if (nome && documento) {
+        return `${nome} (${documento})`;
+      }
+
+      return nome || documento;
+    })
+    .filter((valor): valor is string => Boolean(valor));
+
+  if (advogados.length > 0) {
+    return advogados;
+  }
+
+  if (Array.isArray(parte.representatives)) {
+    return parte.representatives
+      .map((representante) => normalizarTexto(representante?.name ?? ""))
+      .filter((nome): nome is string => Boolean(nome));
+  }
+
+  return [];
 }
 
 function formatarListaAssuntos(valor?: unknown): string {
@@ -402,10 +499,16 @@ function formatarListaAssuntos(valor?: unknown): string {
 
 function mapearPartes(partes: ApiProcessoParticipant[] | null | undefined): PartesAgrupadas {
   if (!Array.isArray(partes) || partes.length === 0) {
-    return { ativo: [], passivo: [], outros: [], total: 0 };
+    return { ativo: [], passivo: [], testemunhas: [], outros: [], total: 0 };
   }
 
-  const agrupado: PartesAgrupadas = { ativo: [], passivo: [], outros: [], total: 0 };
+  const agrupado: PartesAgrupadas = {
+    ativo: [],
+    passivo: [],
+    testemunhas: [],
+    outros: [],
+    total: 0,
+  };
 
   partes.forEach((parte) => {
     const nome = normalizarTexto(parte.name ?? "");
@@ -414,27 +517,38 @@ function mapearPartes(partes: ApiProcessoParticipant[] | null | undefined): Part
     }
 
     const documento = mascararDocumento(parte.document ?? null);
-    const advogado = extrairAdvogado(parte);
-    const categoria = classificarParte(parte);
+    const tipoPessoa = normalizarTipoPessoa(parte.person_type);
+    const advogados = extrairAdvogados(parte);
+    const polo = normalizarSide(parte.side ?? parte.type ?? parte.role ?? "");
+    const papel = formatarRole(parte.party_role ?? parte.role ?? parte.type ?? parte.side ?? "");
+
+    const registro: ParteNormalizada = {
+      nome,
+      documento: documento || undefined,
+      tipoPessoa: tipoPessoa || undefined,
+      advogados,
+      polo,
+      papel: papel || undefined,
+    };
 
     agrupado.total += 1;
 
-    if (categoria === "ativo") {
-      agrupado.ativo.push({ nome, documento, advogado });
+    if (ehTestemunha(parte.party_role)) {
+      agrupado.testemunhas.push(registro);
       return;
     }
 
-    if (categoria === "passivo") {
-      agrupado.passivo.push({ nome, documento, advogado });
+    if (polo === "ativo") {
+      agrupado.ativo.push(registro);
       return;
     }
 
-    agrupado.outros.push({
-      nome,
-      documento,
-      advogado,
-      rotulo: normalizarTexto(parte.role ?? parte.type ?? parte.side ?? "") || "OUTROS",
-    });
+    if (polo === "passivo") {
+      agrupado.passivo.push(registro);
+      return;
+    }
+
+    agrupado.outros.push(registro);
   });
 
   return agrupado;
@@ -1030,27 +1144,23 @@ export function InformacoesProcesso({ dados, partes }: InformacoesProcessoProps)
           </h2>
         </div>
         <div className="space-y-6">
-          <SubsecaoPartes titulo="Polo ativo" itens={partes.ativo} />
-          <SubsecaoPartes titulo="Polo passivo" itens={partes.passivo} mostrarAdvogado />
+          <SubsecaoPartes titulo="Polo ativo" itens={partes.ativo} mostrarPolo />
+          <SubsecaoPartes titulo="Polo passivo" itens={partes.passivo} mostrarPolo />
+          {partes.testemunhas.length ? (
+            <SubsecaoPartes
+              titulo="Testemunhas"
+              itens={partes.testemunhas}
+              mostrarPolo
+              mostrarPapel
+            />
+          ) : null}
           {partes.outros.length ? (
-            <div className="space-y-3">
-              <h3 className="text-base font-semibold text-foreground">Outras partes</h3>
-              <div className="space-y-2">
-                {partes.outros.map((item, index) => (
-                  <div key={`${item.rotulo}-${index}`} className="rounded-lg border border-muted-foreground/10 bg-muted/30 p-3">
-                    <p className="text-sm font-semibold text-foreground">
-                      {item.rotulo} — {item.nome}
-                    </p>
-                    {item.documento ? (
-                      <p className="text-xs text-muted-foreground">Documento: {item.documento}</p>
-                    ) : null}
-                    {item.advogado ? (
-                      <p className="text-xs text-muted-foreground">Advogado: {item.advogado}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SubsecaoPartes
+              titulo="Outras partes"
+              itens={partes.outros}
+              mostrarPolo
+              mostrarPapel
+            />
           ) : null}
         </div>
       </section>
@@ -1076,10 +1186,11 @@ function CampoInformacao({ rotulo, valor, className }: CampoInformacaoProps) {
 interface SubsecaoPartesProps {
   titulo: string;
   itens: ParteNormalizada[];
-  mostrarAdvogado?: boolean;
+  mostrarPolo?: boolean;
+  mostrarPapel?: boolean;
 }
 
-function SubsecaoPartes({ titulo, itens, mostrarAdvogado }: SubsecaoPartesProps) {
+function SubsecaoPartes({ titulo, itens, mostrarPolo, mostrarPapel }: SubsecaoPartesProps) {
   return (
     <div className="space-y-3">
       <h3 className="text-base font-semibold text-foreground">{titulo}</h3>
@@ -1090,11 +1201,24 @@ function SubsecaoPartes({ titulo, itens, mostrarAdvogado }: SubsecaoPartesProps)
           {itens.map((parte, index) => (
             <div key={`${titulo}-${parte.nome}-${index}`} className="rounded-lg border border-muted-foreground/10 bg-muted/30 p-3">
               <p className="text-sm font-semibold text-foreground">{parte.nome}</p>
+              {mostrarPolo && parte.polo ? (
+                <p className="text-xs text-muted-foreground">
+                  Polo: {parte.polo === "ativo" ? "Ativo" : "Passivo"}
+                </p>
+              ) : null}
+              {parte.tipoPessoa ? (
+                <p className="text-xs text-muted-foreground">Tipo de pessoa: {parte.tipoPessoa}</p>
+              ) : null}
               {parte.documento ? (
                 <p className="text-xs text-muted-foreground">Documento: {parte.documento}</p>
               ) : null}
-              {mostrarAdvogado && parte.advogado ? (
-                <p className="text-xs text-muted-foreground">Advogado: {parte.advogado}</p>
+              {mostrarPapel && parte.papel ? (
+                <p className="text-xs text-muted-foreground">Papel: {parte.papel}</p>
+              ) : null}
+              {parte.advogados.length ? (
+                <p className="text-xs text-muted-foreground">
+                  Advogad{parte.advogados.length > 1 ? "os" : "o"}: {parte.advogados.join(", ")}
+                </p>
               ) : null}
             </div>
           ))}

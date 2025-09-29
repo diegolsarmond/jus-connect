@@ -106,6 +106,63 @@ describe("mapApiProcessoToViewModel", () => {
     expect(viewModel.movimentacoes[0].linhas[0].texto).toBe("Publicação");
   });
 
+  it("organiza partes com novo formato de dados", () => {
+    const resposta: ApiProcessoResponse = {
+      code: "1234567-89.2024.1.00.0000",
+      name: "Processo com partes",
+      participants: [
+        {
+          name: "João da Silva",
+          document: "12345678901",
+          side: "plaintiff",
+          person_type: "NATURAL_PERSON",
+          lawyers: [
+            { name: "Dra. Maria", document: "98765432100" },
+            { name: "", document: "11122233344" },
+          ],
+        },
+        {
+          name: "Empresa XPTO",
+          document: "00987654321000",
+          side: "defendant",
+          person_type: "LEGAL_ENTITY",
+          lawyers: [],
+        },
+        {
+          name: "Carlos Testemunha",
+          document: "55566677788",
+          side: "plaintiff",
+          party_role: "TESTEMUNHA",
+        },
+        {
+          name: "Observador",
+          party_role: "TERCEIRO INTERESSADO",
+          side: "outro",
+        },
+      ],
+    };
+
+    const viewModel = mapApiProcessoToViewModel(resposta);
+
+    expect(viewModel.partes.total).toBe(4);
+    expect(viewModel.partes.ativo).toHaveLength(1);
+    expect(viewModel.partes.ativo[0].documento).toBe("*******8901");
+    expect(viewModel.partes.ativo[0].tipoPessoa).toBe("Pessoa física");
+    expect(viewModel.partes.ativo[0].advogados).toEqual([
+      "Dra. Maria (*******2100)",
+      "*******3344",
+    ]);
+    expect(viewModel.partes.passivo).toHaveLength(1);
+    expect(viewModel.partes.passivo[0].tipoPessoa).toBe("Pessoa jurídica");
+    expect(viewModel.partes.passivo[0].documento).toBe("**********1000");
+    expect(viewModel.partes.testemunhas).toHaveLength(1);
+    expect(viewModel.partes.testemunhas[0].papel).toBe("Testemunha");
+    expect(viewModel.partes.testemunhas[0].polo).toBe("ativo");
+    expect(viewModel.partes.testemunhas[0].documento).toBe("*******7788");
+    expect(viewModel.partes.outros).toHaveLength(1);
+    expect(viewModel.partes.outros[0].papel).toBe("Terceiro Interessado");
+  });
+
   it("renderiza Informações e Partes com dados faltantes", () => {
     const resposta: ApiProcessoResponse = {
       code: "0001111-22.2024.1.00.0000",
