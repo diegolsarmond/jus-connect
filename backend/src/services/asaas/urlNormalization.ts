@@ -5,10 +5,21 @@ export const ASAAS_DEFAULT_BASE_URLS = {
 
 export type AsaasEnvironment = keyof typeof ASAAS_DEFAULT_BASE_URLS;
 
+const PRODUCAO_ALIASES = new Set(['producao', 'production', 'prod', 'live']);
+
 export function normalizeAsaasEnvironment(value: string | null | undefined): AsaasEnvironment {
-  if (typeof value === 'string' && value.trim().toLowerCase() === 'producao') {
-    return 'producao';
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+
+    if (normalized) {
+      const withoutDiacritics = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      if (PRODUCAO_ALIASES.has(withoutDiacritics)) {
+        return 'producao';
+      }
+    }
   }
+
   return 'homologacao';
 }
 

@@ -53,6 +53,33 @@ test('resolveAsaasIntegration returns sandbox base URL when environment is homol
   assert.deepEqual(pool.calls[0].params, ['asaas', EMPRESA_ID]);
 });
 
+test('resolveAsaasIntegration normalizes produção aliases to default base URL', async () => {
+  const aliases = ['produção', 'production', 'prod', 'live'];
+
+  for (const alias of aliases) {
+    const pool = new FakePool([
+      {
+        rowCount: 1,
+        rows: [
+          {
+            id: 99,
+            provider: 'asaas',
+            url_api: null,
+            key_value: 'alias-token',
+            environment: alias,
+            active: true,
+          },
+        ],
+      },
+    ]);
+
+    const integration = await resolveAsaasIntegration(EMPRESA_ID, pool as any);
+
+    assert.equal(integration.environment, 'producao');
+    assert.equal(integration.baseUrl, ASAAS_DEFAULT_BASE_URLS.producao);
+  }
+});
+
 test('resolveAsaasIntegration prioritizes custom API URL for production', async () => {
   const pool = new FakePool([
     {
