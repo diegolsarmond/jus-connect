@@ -25,8 +25,12 @@ Estrutura inicial do backend usando Express e TypeScript.
    utilize:
 
    ```bash
-   export DATABASE_URL="postgres://postgres:C@104rm0nd1994@easypanel02.quantumtecnologia.com.br:5438/quantumtecnologia?sslmode=disable"
+   export DATABASE_URL="postgres://usuario:senha@host:porta/nomedb?sslmode=disable"
    ```
+
+   Recomenda-se armazenar essas credenciais em um arquivo `.env` (não versionado)
+   ou no gerenciador de segredos da sua infraestrutura, carregando-as antes de
+   iniciar a aplicação.
 
    Caso prefira outra instância local, substitua a string acima pela conexão
    desejada.
