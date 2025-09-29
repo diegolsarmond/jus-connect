@@ -77,7 +77,12 @@ test('handleAsaasWebhook processes PAYMENT_RECEIVED and updates financial flow',
   const signature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
   const { calls, restore } = setupQueryMock([
-    { rows: [{ id: 1, credential_id: 55, financial_flow_id: 90, cliente_id: null }], rowCount: 1 },
+    {
+      rows: [
+        { id: 1, credential_id: 55, financial_flow_id: 90, cliente_id: null, company_id: null },
+      ],
+      rowCount: 1,
+    },
     { rows: [{ webhook_secret: secret }], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
@@ -163,7 +168,12 @@ test('handleAsaasWebhook logs error and skips updates when signature is invalid'
   const wrongSignature = crypto.createHmac('sha256', 'other-secret').update(rawBody).digest('hex');
 
   const { calls, restore } = setupQueryMock([
-    { rows: [{ id: 10, credential_id: 42, financial_flow_id: 77, cliente_id: null }], rowCount: 1 },
+    {
+      rows: [
+        { id: 10, credential_id: 42, financial_flow_id: 77, cliente_id: null, company_id: null },
+      ],
+      rowCount: 1,
+    },
     { rows: [{ webhook_secret: secret }], rowCount: 1 },
   ]);
 

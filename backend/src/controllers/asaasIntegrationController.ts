@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
+import resolveAsaasIntegration from '../services/asaas/integrationResolver';
 import pool from '../services/db';
 import {
   applySubscriptionOverdue,
@@ -17,6 +18,8 @@ interface AsaasPaymentPayload {
   id?: string;
   chargeId?: string;
   subscription?: string;
+  customer?: string;
+  externalReference?: string;
   status?: string;
   dueDate?: string;
   paymentDate?: string;
@@ -24,6 +27,9 @@ interface AsaasPaymentPayload {
   confirmedDate?: string;
   creditDate?: string;
   updatedDate?: string;
+  billingType?: string;
+  value?: number | string | null;
+  metadata?: Record<string, unknown> | null;
   [key: string]: unknown;
 }
 
@@ -39,6 +45,7 @@ type ChargeRecord = {
   credential_id: number | null;
   financial_flow_id: number | string | null;
   cliente_id: number | string | null;
+  company_id: number | null;
 };
 
 type CredentialRecord = {
@@ -119,6 +126,159 @@ function extractChargeId(payment: AsaasPaymentPayload | null | undefined): strin
   return null;
 }
 
+function normalizeCompanyId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function normalizeClienteId(value: unknown): number | string | null {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return null;
+}
+
+function sanitizeString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function extractCompanyIdFromMetadata(metadata: unknown): number | null {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+
+  const record = metadata as Record<string, unknown>;
+  const candidates = [record.empresaId, record.companyId, record.companyID, record.empresa];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeCompanyId(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function extractCompanyIdFromExternalReference(value: string | null | undefined): number | null {
+  const normalized = sanitizeString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/empresa[-_]?([0-9]+)/i);
+  if (match && match[1]) {
+    const parsed = Number.parseInt(match[1], 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+async function findCompanyIdBySubscriptionId(subscriptionId: string): Promise<number | null> {
+  const result = await pool.query<{ id: unknown }>(
+    'SELECT id FROM public.empresas WHERE asaas_subscription_id = $1 LIMIT 1',
+    [subscriptionId]
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return normalizeCompanyId(result.rows[0]?.id);
+}
+
+async function findCompanyIdByCustomerId(customerId: string): Promise<number | null> {
+  const result = await pool.query<{ id: unknown }>(
+    'SELECT id FROM public.empresas WHERE asaas_customer_id = $1 LIMIT 1',
+    [customerId]
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return normalizeCompanyId(result.rows[0]?.id);
+}
+
+async function resolveCompanyIdFromPayment(payment: AsaasPaymentPayload | null | undefined): Promise<number | null> {
+  if (!payment) {
+    return null;
+  }
+
+  const metadataCompanyId = extractCompanyIdFromMetadata(payment.metadata ?? null);
+  if (metadataCompanyId) {
+    return metadataCompanyId;
+  }
+
+  const externalReferenceCompanyId = extractCompanyIdFromExternalReference(payment.externalReference);
+  if (externalReferenceCompanyId) {
+    return externalReferenceCompanyId;
+  }
+
+  const subscriptionId = sanitizeString(payment.subscription);
+  if (subscriptionId) {
+    const companyId = await findCompanyIdBySubscriptionId(subscriptionId);
+    if (companyId) {
+      return companyId;
+    }
+  }
+
+  const customerId = sanitizeString(payment.customer);
+  if (customerId) {
+    const companyId = await findCompanyIdByCustomerId(customerId);
+    if (companyId) {
+      return companyId;
+    }
+  }
+
+  return null;
+}
+
+async function resolveCredentialIdForCompany(companyId: number): Promise<number | null> {
+  if (!Number.isInteger(companyId) || companyId <= 0) {
+    return null;
+  }
+
+  try {
+    const integration = await resolveAsaasIntegration(companyId);
+    return integration.credentialId ?? null;
+  } catch (error) {
+    console.error('[AsaasWebhook] Failed to resolve integration for company', companyId, error);
+    return null;
+  }
+}
+
 function normalizeEventName(event: string | null | undefined): string | null {
   if (typeof event !== 'string') {
     return null;
@@ -196,7 +356,14 @@ function extractChargeStatus(event: string, payment: AsaasPaymentPayload | null 
 
 async function findChargeByAsaasId(asaasChargeId: string): Promise<ChargeRecord | null> {
   const result = await pool.query<ChargeRecord>(
-    'SELECT id, credential_id, financial_flow_id, cliente_id FROM asaas_charges WHERE asaas_charge_id = $1',
+    `SELECT ac.id,
+            ac.credential_id,
+            ac.financial_flow_id,
+            ac.cliente_id,
+            ff.idempresa AS company_id
+       FROM asaas_charges ac
+       LEFT JOIN financial_flows ff ON ff.id = ac.financial_flow_id
+      WHERE ac.asaas_charge_id = $1`,
     [asaasChargeId]
   );
 
@@ -210,10 +377,103 @@ async function findChargeByAsaasId(asaasChargeId: string): Promise<ChargeRecord 
   }
 
   const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(row.financial_flow_id);
+  const normalizedCompanyId = normalizeCompanyId(row.company_id);
 
   return {
     ...row,
     financial_flow_id: normalizedFinancialFlowId,
+    company_id: normalizedCompanyId,
+  };
+}
+
+interface FlowContext {
+  financialFlowId: number | string | null;
+  clienteId: number | string | null;
+  companyId: number | null;
+}
+
+async function findFinancialFlowContextByExternalReference(
+  asaasChargeId: string,
+): Promise<FlowContext | null> {
+  const result = await pool.query<{ id: unknown; cliente_id: unknown; idempresa: unknown }>(
+    `SELECT id, cliente_id, idempresa
+       FROM financial_flows
+      WHERE external_reference_id = $1
+      LIMIT 1`,
+    [asaasChargeId]
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  const row = result.rows[0];
+
+  return {
+    financialFlowId: normalizeFinancialFlowIdentifier(row.id),
+    clienteId: normalizeClienteId(row.cliente_id),
+    companyId: normalizeCompanyId(row.idempresa),
+  };
+}
+
+interface ChargeContext {
+  charge: ChargeRecord | null;
+  credentialId: number | null;
+  financialFlowId: number | string | null;
+  clienteId: number | string | null;
+  companyId: number | null;
+}
+
+async function resolveChargeContext(
+  asaasChargeId: string,
+  payment: AsaasPaymentPayload | null,
+): Promise<ChargeContext | null> {
+  let charge: ChargeRecord | null = null;
+
+  try {
+    charge = await findChargeByAsaasId(asaasChargeId);
+  } catch (error) {
+    console.error('[AsaasWebhook] Failed to load charge', error);
+    return null;
+  }
+
+  if (charge) {
+    const companyId = charge.company_id ?? (await resolveCompanyIdFromPayment(payment));
+    return {
+      charge,
+      credentialId: charge.credential_id,
+      financialFlowId: charge.financial_flow_id,
+      clienteId: charge.cliente_id,
+      companyId: companyId ?? null,
+    };
+  }
+
+  const flowContext = await findFinancialFlowContextByExternalReference(asaasChargeId);
+
+  if (!flowContext) {
+    const companyId = await resolveCompanyIdFromPayment(payment);
+    return {
+      charge: null,
+      credentialId: companyId ? await resolveCredentialIdForCompany(companyId) : null,
+      financialFlowId: null,
+      clienteId: null,
+      companyId,
+    };
+  }
+
+  let companyId = flowContext.companyId;
+  if (!companyId) {
+    companyId = await resolveCompanyIdFromPayment(payment);
+  }
+
+  const credentialId = companyId ? await resolveCredentialIdForCompany(companyId) : null;
+
+  return {
+    charge: null,
+    credentialId,
+    financialFlowId: flowContext.financialFlowId,
+    clienteId: flowContext.clienteId,
+    companyId: companyId ?? null,
   };
 }
 
@@ -351,36 +611,36 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
     return res.status(202).json(buildWebhookResponse());
   }
 
-  let charge: ChargeRecord | null = null;
+  let context: ChargeContext | null = null;
 
   try {
-    charge = await findChargeByAsaasId(asaasChargeId);
+    context = await resolveChargeContext(asaasChargeId, payment);
   } catch (error) {
-    console.error('[AsaasWebhook] Failed to load charge', error);
+    console.error('[AsaasWebhook] Failed to resolve charge context', error);
     return res.status(202).json(buildWebhookResponse());
   }
 
-  if (!charge) {
-    console.warn('[AsaasWebhook] Charge not found for id', asaasChargeId);
+  if (!context) {
+    console.warn('[AsaasWebhook] Unable to resolve charge context for id', asaasChargeId);
     return res.status(202).json(buildWebhookResponse());
   }
 
-  if (!charge.credential_id) {
-    console.error('[AsaasWebhook] Charge without credential reference', charge.id);
+  if (!context.credentialId) {
+    console.error('[AsaasWebhook] Missing credential reference for charge', asaasChargeId);
     return res.status(202).json(buildWebhookResponse());
   }
 
   let secret: string | null = null;
 
   try {
-    secret = await findCredentialSecret(charge.credential_id);
+    secret = await findCredentialSecret(context.credentialId);
   } catch (error) {
     console.error('[AsaasWebhook] Failed to load credential secret', error);
     return res.status(202).json(buildWebhookResponse());
   }
 
   if (!secret) {
-    console.error('[AsaasWebhook] Missing webhook secret for credential', charge.credential_id);
+    console.error('[AsaasWebhook] Missing webhook secret for credential', context.credentialId);
     return res.status(202).json(buildWebhookResponse());
   }
 
@@ -417,28 +677,34 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
   const isRefunded = shouldMarkAsRefunded(normalizedEvent, status);
 
   try {
-    await updateCharge(asaasChargeId, normalizedEvent, status, paymentDate, payload ?? {});
+    if (context.charge) {
+      await updateCharge(asaasChargeId, normalizedEvent, status, paymentDate, payload ?? {});
+    }
 
-    if (charge.financial_flow_id) {
+    if (context.financialFlowId) {
       if (shouldMarkAsPaid(normalizedEvent)) {
-        await updateFinancialFlowAsPaid(charge.financial_flow_id, paymentDate);
+        await updateFinancialFlowAsPaid(context.financialFlowId, paymentDate);
       } else if (isRefunded) {
-        await updateFinancialFlowAsRefunded(charge.financial_flow_id);
+        await updateFinancialFlowAsRefunded(context.financialFlowId);
       }
     }
 
-    let companyId: number | null = null;
+    let companyId: number | null = context.companyId ?? null;
 
     try {
-      if (charge.financial_flow_id) {
-        companyId = await findCompanyIdForFinancialFlow(charge.financial_flow_id);
+      if (!companyId && context.financialFlowId) {
+        companyId = await findCompanyIdForFinancialFlow(context.financialFlowId);
       }
 
-      if (!companyId && charge.cliente_id != null) {
-        companyId = await findCompanyIdForCliente(charge.cliente_id);
+      if (!companyId && context.clienteId != null) {
+        companyId = await findCompanyIdForCliente(context.clienteId);
       }
     } catch (lookupError) {
-      console.error('[AsaasWebhook] Failed to resolve company for charge', charge.id, lookupError);
+      console.error('[AsaasWebhook] Failed to resolve company for charge', asaasChargeId, lookupError);
+    }
+
+    if (!companyId) {
+      companyId = await resolveCompanyIdFromPayment(payment);
     }
 
     if (companyId) {
