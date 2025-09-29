@@ -14,6 +14,7 @@ import { routes } from "@/config/routes";
 import { useToast } from "@/hooks/use-toast";
 import { useBlogPostBySlug, useBlogPosts } from "@/hooks/useBlogPosts";
 import { formatPostDateTime } from "@/lib/date";
+import { cn } from "@/lib/utils";
 
 const allowedTags = new Set([
   "p",
@@ -324,7 +325,10 @@ const BlogArticle = () => {
               </div>
             ) : post && hasArticleContent ? (
               <div
-                className="prose prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-em:text-foreground/90 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-primary/60 prose-blockquote:text-foreground/80 max-w-none"
+                className={cn(
+                  "prose max-w-none prose-headings:text-foreground prose-strong:text-foreground prose-em:text-foreground/90 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-primary/60 prose-blockquote:text-foreground/80",
+                  "dark:prose-invert dark:prose-headings:text-foreground dark:prose-strong:text-foreground dark:prose-em:text-foreground/90 dark:prose-blockquote:text-foreground/80",
+                )}
                 dangerouslySetInnerHTML={{ __html: sanitizedContent }}
               />
             ) : (
