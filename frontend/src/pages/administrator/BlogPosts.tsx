@@ -56,6 +56,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { adminApi, blogPostKeys, type BlogPost, type BlogPostInput } from "@/lib/adminApi";
 import { useBlogPosts, useBlogCategories } from "@/hooks/useBlogPosts";
+import { formatBlogPublicationDate } from "@/lib/date";
 import { useAuth } from "@/features/auth/AuthProvider";
 
 interface BlogPostFormState {
@@ -127,19 +128,6 @@ const buildInputPayload = (state: BlogPostFormState): BlogPostInput => {
     content: content.length > 0 ? content : undefined,
     tags: normalizeTags(state.tags),
   };
-};
-
-const formatDisplayDate = (value: string): string => {
-  const parsed = new Date(value);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  }
-
-  return value;
 };
 
 const BlogPosts = () => {
@@ -426,7 +414,7 @@ const BlogPosts = () => {
                       <TableCell className="whitespace-nowrap">{post.category}</TableCell>
                       <TableCell className="whitespace-nowrap">{post.author}</TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                        {formatDisplayDate(post.date)}
+                        {formatBlogPublicationDate(post.date)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
