@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { routes } from "@/config/routes";
 import { useToast } from "@/hooks/use-toast";
 import { useBlogPostBySlug, useBlogPosts } from "@/hooks/useBlogPosts";
+import { formatPostDateTime } from "@/lib/date";
 
 const allowedTags = new Set([
   "p",
@@ -193,6 +194,14 @@ const BlogArticle = () => {
     return allPosts.filter((item) => item.slug !== post.slug).slice(0, 3);
   }, [allPosts, post]);
 
+  const formattedPostDate = useMemo(() => {
+    if (!post) {
+      return "";
+    }
+
+    return formatPostDateTime(post.date);
+  }, [post]);
+
   const sanitizedContent = useMemo(() => {
     const rawContent = post?.content?.trim();
     if (rawContent) {
@@ -259,7 +268,7 @@ const BlogArticle = () => {
                 <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                   <span className="inline-flex items-center gap-2">
                     <Calendar className="h-4 w-4" aria-hidden />
-                    {post.date}
+                    {formattedPostDate}
                   </span>
                   <span className="inline-flex items-center gap-2">
                     <Clock className="h-4 w-4" aria-hidden />
@@ -402,7 +411,7 @@ const BlogArticle = () => {
                       </CardHeader>
                       <CardContent className="flex items-center justify-between text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
-                          <Calendar className="h-3.5 w-3.5" aria-hidden /> {related.date}
+                          <Calendar className="h-3.5 w-3.5" aria-hidden /> {formatPostDateTime(related.date)}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" aria-hidden /> {related.readTime}
