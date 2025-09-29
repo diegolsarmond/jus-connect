@@ -189,21 +189,6 @@ export const AsaasChargeDialog = ({
       currencyFormatter.format(Number.parseFloat(value ? value.toString() : '0') || 0),
     [currencyFormatter],
   );
-  const refundDisabledReason = useMemo(() => {
-    if (!flow) {
-      return 'Selecione um lançamento para solicitar estorno.';
-    }
-    if (!lastCharge) {
-      return 'Gere uma cobrança antes de solicitar estorno.';
-    }
-    if (isChargeRefunded) {
-      return 'A cobrança já foi estornada no Asaas.';
-    }
-    if (!canRefundCharge) {
-      return 'O Asaas precisa confirmar o pagamento antes de liberar o estorno.';
-    }
-    return null;
-  }, [flow, lastCharge, isChargeRefunded, canRefundCharge]);
   const [customerId, setCustomerId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<AsaasPaymentMethod>('PIX');
   const [installments, setInstallments] = useState<number>(1);
@@ -220,6 +205,21 @@ export const AsaasChargeDialog = ({
   }, [lastCharge?.status]);
   const isChargeRefunded = normalizedChargeStatus === 'REFUNDED';
   const canRefundCharge = Boolean(normalizedChargeStatus && REFUNDABLE_CHARGE_STATUSES.has(normalizedChargeStatus));
+  const refundDisabledReason = useMemo(() => {
+    if (!flow) {
+      return 'Selecione um lançamento para solicitar estorno.';
+    }
+    if (!lastCharge) {
+      return 'Gere uma cobrança antes de solicitar estorno.';
+    }
+    if (isChargeRefunded) {
+      return 'A cobrança já foi estornada no Asaas.';
+    }
+    if (!canRefundCharge) {
+      return 'O Asaas precisa confirmar o pagamento antes de liberar o estorno.';
+    }
+    return null;
+  }, [flow, lastCharge, isChargeRefunded, canRefundCharge]);
 
   useEffect(() => {
     if (open) {
