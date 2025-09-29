@@ -55,6 +55,7 @@ import {
 } from "./utils/processo-ui";
 import {
   mapApiJuditRequest,
+  parseOptionalString,
   parseResponseDataFromResult,
   type ProcessoJuditRequest,
   type ProcessoResponseData,
@@ -569,6 +570,106 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const cover = responseData?.cover ?? undefined;
   const metadata = (responseData?.metadata as Record<string, unknown> | undefined) ?? undefined;
 
+  const juditMovimentacoes: ApiProcessoMovimentacao[] = Array.isArray(responseData?.movimentacoes)
+    ? responseData!.movimentacoes
+        .map((entrada, index) => {
+          const data =
+            parseOptionalString(
+              entrada.data ??
+                entrada.data_hora ??
+                entrada.datahora ??
+                entrada.occurred_at ??
+                entrada.occurredAt ??
+                entrada.created_at ??
+                entrada.createdAt ??
+                entrada.updated_at ??
+                entrada.updatedAt,
+            ) ?? null;
+
+          const tipo =
+            parseOptionalString(entrada.tipo) ??
+            parseOptionalString(entrada.titulo) ??
+            parseOptionalString(entrada.title) ??
+            parseOptionalString(entrada.nome) ??
+            parseOptionalString(entrada.name) ??
+            parseOptionalString(entrada.evento) ??
+            parseOptionalString(entrada.event) ??
+            parseOptionalString(entrada.tipo_evento) ??
+            null;
+
+          const tipoPublicacao =
+            parseOptionalString(entrada.tipo_publicacao) ??
+            parseOptionalString(entrada.subtitulo) ??
+            parseOptionalString(entrada.subtitle) ??
+            parseOptionalString(entrada.categoria) ??
+            parseOptionalString(entrada.category) ??
+            null;
+
+          const conteudo =
+            parseOptionalString(entrada.conteudo) ??
+            parseOptionalString(entrada.descricao) ??
+            parseOptionalString(entrada.description) ??
+            parseOptionalString(entrada.detalhes) ??
+            parseOptionalString(entrada.details) ??
+            parseOptionalString(entrada.mensagem) ??
+            parseOptionalString(entrada.message) ??
+            null;
+
+          const textoCategoria =
+            parseOptionalString(entrada.texto_categoria) ??
+            parseOptionalString(entrada.observacao) ??
+            parseOptionalString(entrada.observacoes) ??
+            parseOptionalString(entrada.observation) ??
+            null;
+
+          const updatedAt =
+            parseOptionalString(
+              entrada.atualizado_em ??
+                entrada.atualizadoEm ??
+                entrada.updated_at ??
+                entrada.updatedAt,
+            ) ?? null;
+
+          const createdAt =
+            parseOptionalString(
+              entrada.criado_em ??
+                entrada.criadoEm ??
+                entrada.created_at ??
+                entrada.createdAt,
+            ) ?? updatedAt ?? data ?? null;
+
+          const idBase =
+            parseOptionalString(entrada.id) ??
+            parseOptionalString(entrada.identificador) ??
+            parseOptionalString(entrada.reference) ??
+            parseOptionalString(entrada.referencia) ??
+            parseOptionalString(entrada.codigo) ??
+            parseOptionalString(entrada.code) ??
+            parseOptionalString(entrada.event_id) ??
+            parseOptionalString(entrada.evento_id) ??
+            parseOptionalString(entrada.numero) ??
+            null;
+
+          const fallbackIdSource = [data ?? "", tipo ?? "", tipoPublicacao ?? "", conteudo ?? "", textoCategoria ?? ""]
+            .map((parte) => parte.toLowerCase())
+            .join("|");
+
+          const id = idBase ?? (fallbackIdSource ? `judit-${fallbackIdSource}` : `judit-${index}`);
+
+          return {
+            id,
+            data,
+            tipo,
+            tipo_publicacao: tipoPublicacao,
+            conteudo,
+            texto_categoria: textoCategoria,
+            atualizado_em: updatedAt,
+            criado_em: createdAt,
+          } satisfies ApiProcessoMovimentacao;
+        })
+        .filter((mov) => Boolean(mov.id))
+    : [];
+
   const numero = primeiroTextoValido(cover?.numero, processo.numero) || NAO_INFORMADO;
   const grau =
     primeiroTextoValido(
@@ -579,9 +680,10 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
         : null,
     ) || processo.status_processo || NAO_INFORMADO;
 
-  const movimentacoesOriginais = Array.isArray(processo.movimentacoes)
-    ? processo.movimentacoes
-    : [];
+  const movimentacoesOriginais = [
+    ...(Array.isArray(processo.movimentacoes) ? processo.movimentacoes : []),
+    ...juditMovimentacoes,
+  ];
   const movimentacoesDeduplicadas = deduplicarMovimentacoes(movimentacoesOriginais);
   const movimentos = movimentacoesDeduplicadas
     .map(construirMovimento)

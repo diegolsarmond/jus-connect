@@ -84,6 +84,36 @@ describe("mapApiProcessoToViewModel", () => {
     expect(viewModel.movimentacoes).toHaveLength(1);
   });
 
+  it("inclui movimentações vindas da Judit mesmo sem movimentações originais", () => {
+    const resposta: ApiProcessoResponse = {
+      numero: "0000000-00.0000.0.00.0000",
+      movimentacoes: [],
+      partes: [],
+      judit_last_request: {
+        request_id: "req-123",
+        status: "finished",
+        source: "judit",
+        result: {
+          response_data: {
+            movimentacoes: [
+              {
+                id: null,
+                data: "2024-04-12T10:00:00Z",
+                titulo: "Publicação",
+                descricao: "Conteúdo exibido pela Judit",
+              },
+            ],
+          },
+        },
+      } as any,
+    };
+
+    const viewModel = mapApiProcessoToViewModel(resposta);
+
+    expect(viewModel.movimentacoes).toHaveLength(1);
+    expect(viewModel.movimentacoes[0].linhas[0].texto).toBe("Publicação");
+  });
+
   it("renderiza Informações e Partes com dados faltantes", () => {
     const resposta: ApiProcessoResponse = {
       numero: "0001111-22.2024.1.00.0000",
