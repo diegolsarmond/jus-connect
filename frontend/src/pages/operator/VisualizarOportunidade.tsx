@@ -2424,6 +2424,7 @@ export default function VisualizarOportunidade() {
       const blob = await createSimplePdfFromHtml(
         doc.title ?? `Documento ${doc.id}`,
         doc.content_html && doc.content_html.length > 0 ? doc.content_html : "<p></p>",
+        { baseUrl: window.location.origin },
       );
       const url = URL.createObjectURL(blob);
       documentPdfUrlsRef.current.set(doc.id, url);

@@ -312,14 +312,49 @@ function createTextPdfBlob(title: string, html: string): Blob {
   return new Blob([pdfBytes], { type: "application/pdf" });
 }
 
-function getBaseUrl(): string {
+type PdfEnvironmentOptions = {
+  baseUrl?: string;
+};
+
+/**
+ * Obtains the base URL used to resolve relative asset references while exporting PDFs.
+ *
+ * The caller may provide an explicit base URL to support execution in environments where
+ * `document` or `window` are not available. When no override is provided, the function tries
+ * to infer the value from `document.baseURI` or from `globalThis.location.origin`.
+ *
+ * @throws {Error} When no valid base URL can be inferred or provided.
+ */
+function getBaseUrl(explicitBaseUrl?: string): string {
+  const trimmed = explicitBaseUrl?.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+
   if (typeof document !== "undefined" && typeof document.baseURI === "string" && document.baseURI) {
     return document.baseURI;
   }
-  if (typeof window !== "undefined" && typeof window.location?.href === "string") {
-    return window.location.href;
+
+  const globalLocation =
+    typeof globalThis !== "undefined" && "location" in globalThis
+      ? (globalThis as typeof globalThis & { location?: Location }).location
+      : undefined;
+
+  if (typeof globalLocation?.origin === "string" && globalLocation.origin.length > 0) {
+    return globalLocation.origin;
   }
-  return "http://localhost/";
+
+  if (typeof globalLocation?.href === "string" && globalLocation.href.length > 0) {
+    try {
+      return new URL(globalLocation.href).origin;
+    } catch {
+      return globalLocation.href;
+    }
+  }
+
+  throw new Error(
+    "Não foi possível determinar a URL base para exportação de PDF. Forneça uma URL base explicitamente.",
+  );
 }
 
 function isDataUrl(value: string): boolean {
@@ -727,10 +762,11 @@ function ensureTitleNode(container: HTMLElement, title: string): void {
   container.insertBefore(heading, container.firstChild);
 }
 
-type RenderToCanvasOptions = {
-  baseUrl?: string;
+type RenderToCanvasOptions = PdfEnvironmentOptions & {
   assetCache?: AssetCache;
 };
+
+type CreatePdfOptions = PdfEnvironmentOptions;
 
 async function renderElementToCanvas(
   element: HTMLElement,
@@ -754,7 +790,7 @@ async function renderElementToCanvas(
     }
   }
 
-  const baseUrl = options?.baseUrl ?? getBaseUrl();
+  const baseUrl = getBaseUrl(options?.baseUrl);
   await inlineExternalAssets(clone, baseUrl, options?.assetCache);
 
   const serialized = new XMLSerializer().serializeToString(clone);
@@ -987,7 +1023,11 @@ function canvasToPdf(canvas: HTMLCanvasElement): Uint8Array {
   return buildImagePdf(pages);
 }
 
-async function createRichPdfFromHtml(title: string, html: string): Promise<Blob> {
+async function createRichPdfFromHtml(
+  title: string,
+  html: string,
+  options?: CreatePdfOptions,
+): Promise<Blob> {
   const container = document.createElement("div");
   container.style.width = "794px"; // Aproximação de 210mm em 96 DPI
   container.style.boxSizing = "border-box";
@@ -1016,7 +1056,7 @@ async function createRichPdfFromHtml(title: string, html: string): Promise<Blob>
   document.body.appendChild(wrapper);
 
   try {
-    const baseUrl = getBaseUrl();
+    const baseUrl = getBaseUrl(options?.baseUrl);
     const assetCache = await inlineExternalAssets(container, baseUrl);
     await waitForImages(container);
     await waitForFonts();
@@ -1033,18 +1073,24 @@ export async function __inlineAssetsForTesting(
   container: HTMLElement,
   baseUrl?: string,
 ): Promise<AssetCache> {
-  return inlineExternalAssets(container, baseUrl ?? getBaseUrl());
+  return inlineExternalAssets(container, getBaseUrl(baseUrl));
 }
 
 export { createTextPdfBlob as __createTextPdfBlobForTesting };
 
-export async function createSimplePdfFromHtml(title: string, html: string): Promise<Blob> {
+export const __getBaseUrlForTesting = getBaseUrl;
+
+export async function createSimplePdfFromHtml(
+  title: string,
+  html: string,
+  options?: CreatePdfOptions,
+): Promise<Blob> {
   if (!hasDomSupport()) {
     return createTextPdfBlob(title, html);
   }
 
   try {
-    return await createRichPdfFromHtml(title, html);
+    return await createRichPdfFromHtml(title, html, options);
   } catch (error) {
     if (typeof console !== "undefined") {
       console.warn("Falha ao gerar PDF rico, retornando ao modo texto", error);

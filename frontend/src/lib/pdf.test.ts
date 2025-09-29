@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 
 import {
   __createTextPdfBlobForTesting,
+  __getBaseUrlForTesting,
   __inlineAssetsForTesting,
   createSimplePdfFromHtml,
 } from "./pdf";
@@ -15,6 +16,23 @@ async function decodePdfToLatin1(blob: Blob): Promise<string> {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
+  vi.unstubAllGlobals();
+});
+
+describe("getBaseUrl", () => {
+  it("throws when running without DOM or location information", () => {
+    vi.stubGlobal("document", undefined as unknown as Document);
+    vi.stubGlobal("window", undefined as unknown as Window & typeof globalThis);
+    vi.stubGlobal("location", undefined as unknown as Location);
+
+    expect(() => __getBaseUrlForTesting()).toThrow(
+      "Não foi possível determinar a URL base para exportação de PDF.",
+    );
+  });
+
+  it("returns the explicit base URL when provided", () => {
+    expect(__getBaseUrlForTesting("https://cdn.example.com")).toBe("https://cdn.example.com");
+  });
 });
 
 describe("inlineExternalAssets", () => {
