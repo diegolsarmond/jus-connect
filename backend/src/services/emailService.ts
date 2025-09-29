@@ -31,14 +31,32 @@ const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean
   return defaultValue;
 };
 
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASSWORD ?? process.env.SMTP_PASS;
+
+if (!smtpUser || !smtpPass) {
+  const missingParts: string[] = [];
+  if (!smtpUser) {
+    missingParts.push('SMTP_USER');
+  }
+  if (!smtpPass) {
+    missingParts.push('SMTP_PASSWORD (ou SMTP_PASS)');
+  }
+
+  const missingDescription = missingParts.join(' e ');
+  throw new Error(
+    `Configuração SMTP inválida. Defina ${missingDescription} como variáveis de ambiente antes de iniciar o servidor.`
+  );
+}
+
 const DEFAULT_SMTP_CONFIG: SmtpConfig = {
   host: process.env.SMTP_HOST || 'smtp.hostinger.com',
   port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
   secure: parseBoolean(process.env.SMTP_SECURE, true),
   rejectUnauthorized: parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED, true),
   auth: {
-    user: process.env.SMTP_USER || 'contato@quantumtecnologia.com.br',
-    pass: process.env.SMTP_PASSWORD || process.env.SMTP_PASS || 'C@104rm0nd1994',
+    user: smtpUser,
+    pass: smtpPass,
   },
 };
 
