@@ -33,34 +33,7 @@ interface IntegrationRow {
   key_value: string | null;
   environment: string | null;
   active: boolean;
-}
-
-async function findCredentialId(
-  db: Queryable,
-  integrationId: number,
-): Promise<number | null> {
-  const result = await db.query('SELECT id FROM asaas_credentials WHERE integration_api_key_id = $1', [
-    integrationId,
-  ]);
-
-  if (result.rowCount === 0) {
-    return null;
-  }
-
-  const rawId = (result.rows[0] as { id?: unknown })?.id;
-
-  if (typeof rawId === 'number' && Number.isFinite(rawId)) {
-    return Math.trunc(rawId);
-  }
-
-  if (typeof rawId === 'string' && rawId.trim()) {
-    const parsed = Number.parseInt(rawId.trim(), 10);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return null;
+  credential_id: number | null;
 }
 
 function resolveBooleanEnv(name: string, fallback: boolean): boolean {
@@ -104,65 +77,64 @@ async function findScopedIntegration(
   empresaId: number,
   environment?: AsaasEnvironment,
 ): Promise<IntegrationRow | null> {
-  const result = await db.query(
-    `SELECT id, provider, url_api, key_value, environment, active
-       FROM integration_api_keys
-       WHERE active = TRUE
-         AND (global IS DISTINCT FROM FALSE OR idempresa = $2)
-         AND LOWER(TRIM(provider)) = $1
-       ORDER BY updated_at DESC
-       LIMIT 20`,
-    [PROVIDER_FILTER, empresaId],
-  );
+  const params: unknown[] = [PROVIDER_FILTER, empresaId];
+  const where: string[] = [
+    'i.active = TRUE',
+    '(i.global IS TRUE OR i.idempresa = $2)',
+    'LOWER(TRIM(i.provider)) = $1',
+  ];
+
+  if (environment) {
+    params.push(environment);
+    where.push('i.environment = $3');
+  }
+
+  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id
+       FROM integration_api_keys i
+       LEFT JOIN asaas_credentials c ON c.integration_api_key_id = i.id
+       WHERE ${where.join('\n         AND ')}
+       ORDER BY i.updated_at DESC
+       LIMIT 20`;
+
+  const result = await db.query(query, params);
 
   if (result.rowCount === 0) {
     return null;
   }
 
   const rows = result.rows as IntegrationRow[];
-
-  if (environment) {
-    const matched = rows.find(
-      (row) => normalizeAsaasEnvironment(row.environment) === environment,
-    );
-    if (matched) {
-      return matched;
-    }
-  }
-
-  return rows[0] ?? null;
+  const [row] = rows;
+  return row ?? null;
 }
 
 async function findLegacyIntegration(
   db: Queryable,
   environment?: AsaasEnvironment,
 ): Promise<IntegrationRow | null> {
-  const result = await db.query(
-    `SELECT id, provider, url_api, key_value, environment, active
-         FROM integration_api_keys
-         WHERE active = TRUE
-           AND LOWER(TRIM(provider)) = $1
-         ORDER BY updated_at DESC
-         LIMIT 20`,
-    [PROVIDER_FILTER],
-  );
+  const params: unknown[] = [PROVIDER_FILTER];
+  const where: string[] = ['i.active = TRUE', 'LOWER(TRIM(i.provider)) = $1'];
+
+  if (environment) {
+    params.push(environment);
+    where.push('i.environment = $2');
+  }
+
+  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id
+         FROM integration_api_keys i
+         LEFT JOIN asaas_credentials c ON c.integration_api_key_id = i.id
+         WHERE ${where.join('\n           AND ')}
+         ORDER BY i.updated_at DESC
+         LIMIT 20`;
+
+  const result = await db.query(query, params);
 
   if (result.rowCount === 0) {
     return null;
   }
 
   const rows = result.rows as IntegrationRow[];
-
-  if (environment) {
-    const matched = rows.find(
-      (row) => normalizeAsaasEnvironment(row.environment) === environment,
-    );
-    if (matched) {
-      return matched;
-    }
-  }
-
-  return rows[0] ?? null;
+  const [row] = rows;
+  return row ?? null;
 }
 
 export async function resolveAsaasIntegration(
@@ -180,6 +152,10 @@ export async function resolveAsaasIntegration(
 
   let row = await findScopedIntegration(db, empresaId, normalizedEnvironment);
 
+  if (!row && normalizedEnvironment) {
+    row = await findScopedIntegration(db, empresaId);
+  }
+
   if (!row) {
     if (!allowLegacyFallback) {
       console.warn(
@@ -191,6 +167,10 @@ export async function resolveAsaasIntegration(
     console.warn('[Asaas] Nenhuma credencial global encontrada. Aplicando fallback legado.');
 
     row = await findLegacyIntegration(db, normalizedEnvironment);
+
+    if (!row && normalizedEnvironment) {
+      row = await findLegacyIntegration(db);
+    }
 
     if (!row) {
       console.warn('[Asaas] Fallback legado não encontrou credenciais ativas para o Asaas.');
@@ -206,9 +186,25 @@ export async function resolveAsaasIntegration(
   const baseUrl = normalizeAsaasBaseUrl(resolvedEnvironment, row.url_api);
   const accessToken = normalizeToken(row.key_value);
 
-  const credentialId = await findCredentialId(db, row.id);
+  const rawCredentialId = row.credential_id;
+  let credentialId: number | null = null;
 
-  return { baseUrl, accessToken, environment: resolvedEnvironment, integrationId: row.id, credentialId };
+  if (typeof rawCredentialId === 'number' && Number.isFinite(rawCredentialId)) {
+    credentialId = Math.trunc(rawCredentialId);
+  } else if (typeof rawCredentialId === 'string' && rawCredentialId.trim()) {
+    const parsed = Number.parseInt(rawCredentialId.trim(), 10);
+    if (Number.isFinite(parsed)) {
+      credentialId = parsed;
+    }
+  }
+
+  return {
+    baseUrl,
+    accessToken,
+    environment: resolvedEnvironment,
+    integrationId: row.id,
+    credentialId,
+  };
 }
 
 export async function createAsaasClient(
