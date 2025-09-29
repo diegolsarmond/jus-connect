@@ -35,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import { getApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -73,12 +74,18 @@ interface ApiProcessoAttachment {
   url?: string | null;
 }
 
+interface ApiCodigoNome {
+  code?: string | null;
+  name?: string | null;
+}
+
 interface ApiProcessoRelatedLawsuit {
   code?: string | null;
   name?: string | null;
   phase?: string | null;
   status?: string | null;
   area?: string | null;
+  instance?: string | null;
 }
 
 interface ApiProcessoLawyer {
@@ -116,12 +123,23 @@ export interface ApiProcessoResponse {
   county?: ApiProcessoCounty | string | null;
   instance?: string | null;
   justice_description?: string | null;
-  subjects?: Array<string | null> | null;
-  classifications?: Array<string | null> | null;
+  subjects?: Array<string | ApiCodigoNome | null> | null;
+  classifications?: Array<string | ApiCodigoNome | null> | null;
   steps?: ApiProcessoStep[] | null;
   attachments?: ApiProcessoAttachment[] | null;
   related_lawsuits?: ApiProcessoRelatedLawsuit[] | null;
-  tags?: Array<string | null> | null;
+  tags?:
+    | Array<string | null>
+    | ({
+        list?: Array<string | null> | null;
+        precatory?: boolean | string | null;
+        free_justice?: boolean | string | null;
+        secrecy_level?: string | null;
+      } & Record<string, unknown>)
+    | null;
+  precatory?: boolean | string | null;
+  free_justice?: boolean | string | null;
+  secrecy_level?: string | null;
   amount?: string | number | null;
   distribution_date?: string | null;
   updated_at?: string | null;
@@ -170,6 +188,11 @@ interface PartesAgrupadas {
   total: number;
 }
 
+interface CodigoNomeItem {
+  codigo: string;
+  nome: string;
+}
+
 interface DadosProcesso {
   tribunal: string;
   tribunalSigla: string;
@@ -181,9 +204,12 @@ interface DadosProcesso {
   state: string;
   distributionDate: string;
   amount: string;
-  subjects: string;
-  classifications: string;
-  tags: string;
+  subjects: CodigoNomeItem[];
+  classifications: CodigoNomeItem[];
+  tags: string[];
+  precatory: string;
+  freeJustice: string;
+  secrecyLevel: string;
   updatedAt: string;
 }
 
@@ -209,8 +235,7 @@ interface ProcessoRelacionadoView {
   id: string;
   codigo: string;
   nome: string;
-  status: string;
-  fase: string;
+  instancia: string;
 }
 
 interface JuditResumo {
@@ -222,7 +247,6 @@ interface JuditResumo {
   ultimaSincronizacao: string | null;
   trackingId: string | null;
   janela: string | null;
-  anexos: Array<{ titulo: string; data: string | null; url: string | null }>;
 }
 
 export interface ProcessoViewModel {
@@ -233,6 +257,7 @@ export interface ProcessoViewModel {
   grupos: GrupoMovimentacao[];
   relacionados: ProcessoRelacionadoView[];
   judit: JuditResumo;
+  anexos: Array<{ id: string; titulo: string; data: string | null; url: string | null }>;
 }
 
 const TEXTO_DICA =
@@ -564,6 +589,189 @@ function normalizarListaDeStrings(valores?: Array<string | null> | null): string
     .filter((valor): valor is string => Boolean(valor));
 }
 
+function interpretarBooleano(valor: unknown): boolean | null {
+  if (typeof valor === "boolean") {
+    return valor;
+  }
+
+  if (typeof valor === "number") {
+    if (valor === 1) {
+      return true;
+    }
+
+    if (valor === 0) {
+      return false;
+    }
+  }
+
+  if (typeof valor === "string") {
+    const texto = normalizarTexto(valor);
+
+    if (!texto) {
+      return null;
+    }
+
+    const comparacao = texto.toLowerCase();
+
+    if (["sim", "s", "true", "1", "yes"].includes(comparacao)) {
+      return true;
+    }
+
+    if (["não", "nao", "n", "false", "0", "no"].includes(comparacao)) {
+      return false;
+    }
+  }
+
+  return null;
+}
+
+function formatarIndicadorBooleano(valor: unknown): string {
+  const booleano = interpretarBooleano(valor);
+
+  if (booleano === true) {
+    return "Sim";
+  }
+
+  if (booleano === false) {
+    return "Não";
+  }
+
+  if (typeof valor === "string") {
+    const texto = normalizarTexto(valor);
+    return texto || NAO_INFORMADO;
+  }
+
+  if (typeof valor === "number") {
+    return String(valor);
+  }
+
+  return NAO_INFORMADO;
+}
+
+function formatarSecrecyLevel(valor: unknown): string {
+  if (typeof valor === "string") {
+    const texto = normalizarTexto(valor);
+    return texto || NAO_INFORMADO;
+  }
+
+  return NAO_INFORMADO;
+}
+
+function mapearCodigoNomeLista(
+  valores: Array<string | ApiCodigoNome | null> | null | undefined,
+  prefixoFallback: string,
+): CodigoNomeItem[] {
+  if (!Array.isArray(valores)) {
+    return [];
+  }
+
+  return valores
+    .map((valor, index) => {
+      if (!valor) {
+        return null;
+      }
+
+      if (typeof valor === "string") {
+        const texto = normalizarTexto(valor);
+
+        if (!texto) {
+          return null;
+        }
+
+        const marcador = " - ";
+        const posicaoSeparador = texto.indexOf(marcador);
+
+        if (posicaoSeparador > -1) {
+          const codigo = normalizarTexto(texto.slice(0, posicaoSeparador));
+          const nome = normalizarTexto(texto.slice(posicaoSeparador + marcador.length));
+
+          return {
+            codigo: codigo || `${prefixoFallback} ${index + 1}`,
+            nome: nome || codigo || NAO_INFORMADO,
+          };
+        }
+
+        return {
+          codigo: `${prefixoFallback} ${index + 1}`,
+          nome: texto,
+        };
+      }
+
+      const codigo = normalizarTexto(valor.code ?? "");
+      const nome = normalizarTexto(valor.name ?? "");
+
+      if (!codigo && !nome) {
+        return null;
+      }
+
+      return {
+        codigo: codigo || `${prefixoFallback} ${index + 1}`,
+        nome: nome || codigo || NAO_INFORMADO,
+      };
+    })
+    .filter((item): item is CodigoNomeItem => Boolean(item));
+}
+
+function extrairTagsEIndicadores(processo: ApiProcessoResponse): {
+  tags: string[];
+  precatory: string;
+  freeJustice: string;
+  secrecyLevel: string;
+} {
+  const bruto = processo.tags;
+  let precatoryFonte: unknown = processo.precatory;
+  let freeJusticeFonte: unknown = processo.free_justice;
+  let secrecyFonte: unknown = processo.secrecy_level;
+  const lista: string[] = [];
+
+  if (Array.isArray(bruto)) {
+    lista.push(...normalizarListaDeStrings(bruto));
+  } else if (bruto && typeof bruto === "object") {
+    const objeto = bruto as Record<string, unknown>;
+
+    if (Array.isArray(objeto.list)) {
+      lista.push(...normalizarListaDeStrings(objeto.list as Array<string | null>));
+    }
+
+    if (precatoryFonte === undefined || precatoryFonte === null) {
+      precatoryFonte = objeto.precatory;
+    }
+
+    if (freeJusticeFonte === undefined || freeJusticeFonte === null) {
+      freeJusticeFonte = objeto.free_justice;
+    }
+
+    if (secrecyFonte === undefined || secrecyFonte === null) {
+      secrecyFonte = objeto.secrecy_level;
+    }
+
+    const extras: Array<string | null> = [];
+
+    Object.entries(objeto).forEach(([chave, valor]) => {
+      if (["list", "precatory", "free_justice", "secrecy_level"].includes(chave)) {
+        return;
+      }
+
+      if (typeof valor === "string" || typeof valor === "number") {
+        extras.push(String(valor));
+      }
+    });
+
+    if (extras.length) {
+      lista.push(...normalizarListaDeStrings(extras));
+    }
+  }
+
+  const tagsUnicas = Array.from(new Set(lista));
+
+  return {
+    tags: tagsUnicas,
+    precatory: formatarIndicadorBooleano(precatoryFonte),
+    freeJustice: formatarIndicadorBooleano(freeJusticeFonte),
+    secrecyLevel: formatarSecrecyLevel(secrecyFonte),
+  };
+}
+
 function extrairLocalidade(valor: ApiProcessoResponse["county"]): {
   comarca: string;
   cidade: string;
@@ -699,9 +907,13 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const justiceDescription = primeiroTextoValido(processo.justice_description) || NAO_INFORMADO;
   const instance = normalizarGrau(primeiroTextoValido(processo.instance) || NAO_INFORMADO);
 
-  const subjectsArr = normalizarListaDeStrings(processo.subjects);
-  const classificationsArr = normalizarListaDeStrings(processo.classifications);
-  const tagsArr = normalizarListaDeStrings(processo.tags);
+  const subjectsDetalhados = mapearCodigoNomeLista(processo.subjects ?? null, "Assunto");
+  const classificationsDetalhadas = mapearCodigoNomeLista(
+    processo.classifications ?? null,
+    "Classificação",
+  );
+  const tagsInfo = extrairTagsEIndicadores(processo);
+  const tagsCabecalho = tagsInfo.tags;
 
   const passos = Array.isArray(processo.steps) ? processo.steps : [];
   const passosDeduplicados = deduplicarMovimentacoes(
@@ -743,26 +955,38 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const partes = mapearPartes(processo.participants ?? processo.parties ?? null);
 
   const relacionados: ProcessoRelacionadoView[] = Array.isArray(processo.related_lawsuits)
-    ? processo.related_lawsuits.map((item, index) => {
-        const codigoRelacionado = primeiroTextoValido(item.code) || NAO_INFORMADO;
-        const id = codigoRelacionado !== NAO_INFORMADO ? codigoRelacionado : `relacionado-${index}`;
+    ? processo.related_lawsuits
+        .map((item, index) => {
+          const codigoRelacionado = primeiroTextoValido(item.code) || NAO_INFORMADO;
+          const id = codigoRelacionado !== NAO_INFORMADO ? codigoRelacionado : `relacionado-${index}`;
 
-        return {
-          id,
-          codigo: codigoRelacionado,
-          nome: primeiroTextoValido(item.name) || NAO_INFORMADO,
-          status: primeiroTextoValido(item.status) || NAO_INFORMADO,
-          fase: primeiroTextoValido(item.phase) || NAO_INFORMADO,
-        };
-      })
+          return {
+            id,
+            codigo: codigoRelacionado,
+            nome: primeiroTextoValido(item.name) || NAO_INFORMADO,
+            instancia: normalizarGrau(primeiroTextoValido(item.instance) || NAO_INFORMADO),
+          };
+        })
+        .filter((rel): rel is ProcessoRelacionadoView => Boolean(rel))
     : [];
 
   const anexos = Array.isArray(processo.attachments)
-    ? processo.attachments.map((anexo, index) => ({
-        titulo: primeiroTextoValido(anexo.title) || `Documento ${index + 1}`,
-        data: formatarData(anexo.date ?? null, "hora"),
-        url: primeiroTextoValido(anexo.url),
-      }))
+    ? processo.attachments
+        .map((anexo, index) => {
+          const titulo = primeiroTextoValido(anexo.title) || `Documento ${index + 1}`;
+          const id =
+            typeof anexo.id === "string" || typeof anexo.id === "number"
+              ? String(anexo.id)
+              : `${index}-${titulo}`;
+
+          return {
+            id,
+            titulo,
+            data: formatarData(anexo.date ?? null, "hora"),
+            url: primeiroTextoValido(anexo.url) || null,
+          };
+        })
+        .filter((anexo) => Boolean(anexo.titulo))
     : [];
 
   const cabecalho: CabecalhoProcesso = {
@@ -779,8 +1003,8 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     instance,
     justiceDescription,
     ultimaAtualizacao,
-    tags: tagsArr,
-    subjects: subjectsArr,
+    tags: tagsCabecalho,
+    subjects: subjectsDetalhados.map((item) => item.nome || item.codigo),
   };
 
   const dados: DadosProcesso = {
@@ -794,9 +1018,12 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     state: localidade.estado,
     distributionDate: distribuidoEm,
     amount: valorCausa,
-    subjects: subjectsArr.length ? subjectsArr.join(", ") : NAO_INFORMADO,
-    classifications: classificationsArr.length ? classificationsArr.join(", ") : NAO_INFORMADO,
-    tags: tagsArr.length ? tagsArr.join(", ") : NAO_INFORMADO,
+    subjects: subjectsDetalhados,
+    classifications: classificationsDetalhadas,
+    tags: tagsCabecalho,
+    precatory: tagsInfo.precatory,
+    freeJustice: tagsInfo.freeJustice,
+    secrecyLevel: tagsInfo.secrecyLevel,
     updatedAt: ultimaAtualizacao ?? NAO_INFORMADO,
   };
 
@@ -809,7 +1036,6 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     ultimaSincronizacao: ultimaAtualizacao,
     trackingId: null,
     janela: fase !== NAO_INFORMADO ? fase : null,
-    anexos,
   };
 
   return {
@@ -820,6 +1046,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     grupos,
     relacionados,
     judit,
+    anexos,
   };
 }
 
@@ -1000,8 +1227,7 @@ function ProcessosRelacionadosTabela({ itens, onAbrir }: ProcessosRelacionadosPr
         <TableHeader>
           <TableRow>
             <TableHead>Nº PROCESSO</TableHead>
-            <TableHead>STATUS</TableHead>
-            <TableHead>FASE</TableHead>
+            <TableHead>INSTÂNCIA</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1009,7 +1235,7 @@ function ProcessosRelacionadosTabela({ itens, onAbrir }: ProcessosRelacionadosPr
             <TableRow
               key={item.id}
               className="cursor-pointer hover:bg-muted/40"
-              onClick={() => onAbrir(item.id)}
+              onClick={() => onAbrir(item.codigo)}
             >
               <TableCell>
                 <div className="flex flex-col">
@@ -1017,8 +1243,7 @@ function ProcessosRelacionadosTabela({ itens, onAbrir }: ProcessosRelacionadosPr
                   <span className="text-xs text-muted-foreground">{item.nome}</span>
                 </div>
               </TableCell>
-              <TableCell>{item.status}</TableCell>
-              <TableCell>{item.fase}</TableCell>
+              <TableCell>{item.instancia}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -1029,10 +1254,10 @@ function ProcessosRelacionadosTabela({ itens, onAbrir }: ProcessosRelacionadosPr
 
 interface JuditCardProps {
   resumo: JuditResumo;
-  onVerTodosAnexos: () => void;
+  onVerAnexos: () => void;
 }
 
-function JuditCard({ resumo, onVerTodosAnexos }: JuditCardProps) {
+function JuditCard({ resumo, onVerAnexos }: JuditCardProps) {
   return (
     <div className="space-y-4">
       <Card className="border-primary/30 bg-primary/5">
@@ -1077,27 +1302,14 @@ function JuditCard({ resumo, onVerTodosAnexos }: JuditCardProps) {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Anexos recebidos</CardTitle>
+          <CardTitle className="text-base font-semibold">Anexos e documentos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
-          {resumo.anexos.slice(0, 3).map((anexo, index) => (
-            <div key={`${anexo.titulo}-${index}`} className="rounded-md border border-muted-foreground/10 bg-muted/40 p-3">
-              <p className="font-medium text-foreground">{anexo.titulo}</p>
-              <p className="text-xs">{anexo.data ?? NAO_INFORMADO}</p>
-              {anexo.url ? (
-                <a
-                  href={anexo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-                >
-                  Abrir documento
-                </a>
-              ) : null}
-            </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={onVerTodosAnexos}>
-            Ver todos
+          <p>
+            Consulte a lista completa de documentos na aba <strong className="text-foreground">Informações</strong>.
+          </p>
+          <Button variant="outline" size="sm" onClick={onVerAnexos}>
+            Ver anexos
           </Button>
         </CardContent>
       </Card>
@@ -1108,11 +1320,64 @@ function JuditCard({ resumo, onVerTodosAnexos }: JuditCardProps) {
 interface InformacoesProcessoProps {
   dados: DadosProcesso;
   partes: PartesAgrupadas;
+  anexos: Array<{ id: string; titulo: string; data: string | null; url: string | null }>;
+  onVerTodosAnexos?: () => void;
 }
 
-export function InformacoesProcesso({ dados, partes }: InformacoesProcessoProps) {
+export function InformacoesProcesso({ dados, partes, anexos, onVerTodosAnexos }: InformacoesProcessoProps) {
+  const anexosVisiveis = anexos.slice(0, 5);
+  const possuiMaisAnexos = anexos.length > anexosVisiveis.length;
+
   return (
     <div className="space-y-8">
+      <section aria-labelledby="anexos-processo" className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h2 id="anexos-processo" className="text-lg font-semibold text-foreground">
+            Anexos
+          </h2>
+          <Badge variant="outline" className="border-muted-foreground/30 text-xs">
+            {anexos.length}
+          </Badge>
+        </div>
+        {anexos.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-muted-foreground/40 p-4 text-sm text-muted-foreground">
+            Nenhum anexo disponível.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {anexosVisiveis.map((anexo) => (
+              <div
+                key={anexo.id}
+                className="flex flex-col gap-2 rounded-lg border border-muted-foreground/10 bg-muted/30 p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{anexo.titulo}</p>
+                  <p className="text-xs text-muted-foreground">{anexo.data ?? NAO_INFORMADO}</p>
+                </div>
+                {anexo.url ? (
+                  <Button asChild variant="outline" size="sm" className="w-full md:w-auto">
+                    <a href={anexo.url} target="_blank" rel="noopener noreferrer">
+                      Abrir documento
+                    </a>
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" disabled className="w-full md:w-auto">
+                    Link indisponível
+                  </Button>
+                )}
+              </div>
+            ))}
+            {possuiMaisAnexos && onVerTodosAnexos ? (
+              <div className="pt-2">
+                <Button variant="secondary" size="sm" onClick={onVerTodosAnexos}>
+                  Ver todos os anexos
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </section>
+
       <section aria-labelledby="dados-processo" className="space-y-4">
         <div className="flex items-center gap-2">
           <h2 id="dados-processo" className="text-lg font-semibold text-foreground">
@@ -1130,9 +1395,16 @@ export function InformacoesProcesso({ dados, partes }: InformacoesProcessoProps)
           <CampoInformacao rotulo="Estado" valor={dados.state} />
           <CampoInformacao rotulo="Valor da causa" valor={dados.amount} />
           <CampoInformacao rotulo="Distribuído em" valor={dados.distributionDate} />
-          <CampoInformacao rotulo="Assuntos" valor={dados.subjects} className="md:col-span-2" />
-          <CampoInformacao rotulo="Classificações" valor={dados.classifications} className="md:col-span-2" />
-          <CampoInformacao rotulo="Tags" valor={dados.tags} className="md:col-span-2" />
+          <CampoInformacaoLista rotulo="Assuntos" itens={dados.subjects} className="md:col-span-2" />
+          <CampoInformacaoLista rotulo="Classificações" itens={dados.classifications} className="md:col-span-2" />
+          <CampoInformacao rotulo="Precatorio" valor={dados.precatory} />
+          <CampoInformacao rotulo="Justiça gratuita" valor={dados.freeJustice} />
+          <CampoInformacao rotulo="Nível de sigilo" valor={dados.secrecyLevel} />
+          <CampoInformacao
+            rotulo="Tags"
+            valor={dados.tags.length ? dados.tags.join(", ") : null}
+            className="md:col-span-2"
+          />
           <CampoInformacao rotulo="Última atualização" valor={dados.updatedAt} />
         </div>
       </section>
@@ -1170,15 +1442,45 @@ export function InformacoesProcesso({ dados, partes }: InformacoesProcessoProps)
 
 interface CampoInformacaoProps {
   rotulo: string;
-  valor: string;
+  valor: string | null | undefined;
   className?: string;
 }
 
 function CampoInformacao({ rotulo, valor, className }: CampoInformacaoProps) {
+  const exibicao = typeof valor === "string" && valor.trim() ? valor : valor ?? "";
+
   return (
     <div className={cn("rounded-lg border border-muted-foreground/10 bg-muted/30 p-4", className)}>
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{rotulo}</p>
-      <p className="mt-1 text-sm text-foreground">{valor || NAO_INFORMADO}</p>
+      <p className="mt-1 text-sm text-foreground">{exibicao || NAO_INFORMADO}</p>
+    </div>
+  );
+}
+
+interface CampoInformacaoListaProps {
+  rotulo: string;
+  itens: CodigoNomeItem[];
+  className?: string;
+}
+
+function CampoInformacaoLista({ rotulo, itens, className }: CampoInformacaoListaProps) {
+  const possuiItens = itens.length > 0;
+
+  return (
+    <div className={cn("rounded-lg border border-muted-foreground/10 bg-muted/30 p-4", className)}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{rotulo}</p>
+      {possuiItens ? (
+        <ul className="mt-2 space-y-2">
+          {itens.map((item, index) => (
+            <li key={`${rotulo}-${item.codigo}-${index}`} className="flex flex-col text-sm text-foreground">
+              <span className="font-semibold">{item.codigo}</span>
+              <span className="text-xs text-muted-foreground">{item.nome}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground">{NAO_INFORMADO}</p>
+      )}
     </div>
   );
 }
@@ -1238,6 +1540,7 @@ export default function VisualizarProcesso() {
   const [mesesVisiveis, setMesesVisiveis] = useState(MESES_INICIAIS);
   const [mesesAbertos, setMesesAbertos] = useState<string[]>([]);
   const [movimentosPorMes, setMovimentosPorMes] = useState<Record<string, number>>({});
+  const [mostrarTodosAnexos, setMostrarTodosAnexos] = useState(false);
 
   useEffect(() => {
     if (location.state?.initialTab) {
@@ -1344,7 +1647,8 @@ export default function VisualizarProcesso() {
   );
 
   const handleVerTodosAnexos = useCallback(() => {
-    setAbaAtiva("judit");
+    setAbaAtiva("informacoes");
+    setMostrarTodosAnexos(true);
   }, []);
 
   const conteudoMovimentacoes = useMemo(() => {
@@ -1405,7 +1709,12 @@ export default function VisualizarProcesso() {
   ]);
 
   const conteudoInformacoes = viewModel ? (
-    <InformacoesProcesso dados={viewModel.dados} partes={viewModel.partes} />
+    <InformacoesProcesso
+      dados={viewModel.dados}
+      partes={viewModel.partes}
+      anexos={viewModel.anexos}
+      onVerTodosAnexos={() => setMostrarTodosAnexos(true)}
+    />
   ) : null;
 
   const conteudoRelacionados = viewModel ? (
@@ -1413,7 +1722,7 @@ export default function VisualizarProcesso() {
   ) : null;
 
   const conteudoJudit = viewModel ? (
-    <JuditCard resumo={viewModel.judit} onVerTodosAnexos={handleVerTodosAnexos} />
+    <JuditCard resumo={viewModel.judit} onVerAnexos={handleVerTodosAnexos} />
   ) : null;
 
   return (
@@ -1616,6 +1925,44 @@ export default function VisualizarProcesso() {
           </TabsContent>
         </Tabs>
       </section>
+
+      <Dialog open={mostrarTodosAnexos} onOpenChange={setMostrarTodosAnexos}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Anexos do processo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {viewModel && viewModel.anexos.length ? (
+              viewModel.anexos.map((anexo) => (
+                <div
+                  key={anexo.id}
+                  className="flex flex-col gap-2 rounded-lg border border-muted-foreground/10 bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{anexo.titulo}</p>
+                    <p className="text-xs text-muted-foreground">{anexo.data ?? NAO_INFORMADO}</p>
+                  </div>
+                  {anexo.url ? (
+                    <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+                      <a href={anexo.url} target="_blank" rel="noopener noreferrer">
+                        Abrir documento
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled className="w-full sm:w-auto">
+                      Link indisponível
+                    </Button>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg border border-dashed border-muted-foreground/40 p-4 text-sm text-muted-foreground">
+                Nenhum anexo disponível.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

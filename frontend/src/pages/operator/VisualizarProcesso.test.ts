@@ -84,6 +84,9 @@ describe("mapApiProcessoToViewModel", () => {
     expect(viewModel.partes.total).toBe(0);
     expect(viewModel.dados.amount).toBe("Não informado");
     expect(viewModel.movimentacoes).toHaveLength(1);
+    expect(viewModel.dados.subjects).toHaveLength(0);
+    expect(viewModel.dados.precatory).toBe("Não informado");
+    expect(viewModel.anexos).toHaveLength(0);
   });
 
   it("mapeia passos da nova API quando não há dados adicionais", () => {
@@ -174,7 +177,11 @@ describe("mapApiProcessoToViewModel", () => {
     const viewModel = mapApiProcessoToViewModel(resposta);
 
     const html = renderToString(
-      <InformacoesProcessoComponent dados={viewModel.dados} partes={viewModel.partes} />,
+      <InformacoesProcessoComponent
+        dados={viewModel.dados}
+        partes={viewModel.partes}
+        anexos={viewModel.anexos}
+      />,
     );
 
     expect(html).toContain("Dados do processo");
@@ -182,5 +189,41 @@ describe("mapApiProcessoToViewModel", () => {
     expect(html).toContain("Sigla do tribunal");
     expect(html).toContain("Nenhum registro informado.");
     expect(html).toContain("Partes do processo");
+    expect(html).toContain("Anexos");
+  });
+
+  it("mapeia anexos, classificações e indicadores de tags", () => {
+    const resposta: ApiProcessoResponse = {
+      code: "0001111-22.2024.1.00.0000",
+      name: "Processo completo",
+      attachments: [
+        { id: 1, title: "Petição Inicial", date: "2024-05-10T12:30:00Z", url: "https://exemplo.com/1" },
+        { title: "Documento sem link" },
+      ],
+      subjects: [
+        { code: "001", name: "Direito Civil" },
+        "002 - Direito Empresarial",
+      ],
+      classifications: [
+        { code: "A123", name: "Classe A" },
+      ],
+      tags: {
+        list: ["Urgente"],
+        precatory: true,
+        free_justice: "nao",
+        secrecy_level: "Sigiloso",
+      },
+    };
+
+    const viewModel = mapApiProcessoToViewModel(resposta);
+
+    expect(viewModel.anexos).toHaveLength(2);
+    expect(viewModel.anexos[0]).toMatchObject({ titulo: "Petição Inicial", url: "https://exemplo.com/1" });
+    expect(viewModel.dados.subjects[0]).toEqual({ codigo: "001", nome: "Direito Civil" });
+    expect(viewModel.dados.classifications[0]).toEqual({ codigo: "A123", nome: "Classe A" });
+    expect(viewModel.dados.tags).toEqual(["Urgente"]);
+    expect(viewModel.dados.precatory).toBe("Sim");
+    expect(viewModel.dados.freeJustice).toBe("Não");
+    expect(viewModel.dados.secrecyLevel).toBe("Sigiloso");
   });
 });
