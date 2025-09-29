@@ -15,6 +15,7 @@ import { useBlogPosts, type BlogPost } from "@/hooks/useBlogPosts";
 import { cn } from "@/lib/utils";
 import { routes } from "@/config/routes";
 import { trackEvent } from "@/lib/analytics";
+import { formatPostDateTime } from "@/lib/date";
 
 const BlogPage = () => {
   const navigate = useNavigate();
@@ -232,7 +233,7 @@ const BlogPage = () => {
                     </Badge>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
-                      {featuredPost.date}
+                      {formatPostDateTime(featuredPost.date)}
                     </div>
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4" />
@@ -396,7 +397,7 @@ const BlogPage = () => {
                       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5" />
-                          {post.date}
+                          {formatPostDateTime(post.date)}
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" />
