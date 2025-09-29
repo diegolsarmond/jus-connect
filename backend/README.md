@@ -71,6 +71,30 @@ API hospedada pela Quantum em `https://quantumtecnologia.com.br`.
 Em produção recomenda-se executar `npm run build` seguido de `npm start`, ou
 utilizar a imagem Docker disponibilizada na raiz do monorepo.
 
+# Uploads de arquivos
+
+O endpoint `POST /uploads` aceita um formulário `multipart/form-data` com o
+campo `file` e persiste o conteúdo no filesystem local por padrão. Os arquivos
+ficam disponíveis em `backend/uploads/` e também podem ser servidos
+automaticamente pela API quando `FILE_STORAGE_PUBLIC_BASE_URL` aponta para um
+path relativo (ex.: `/uploads/`).
+
+Variáveis de ambiente relacionadas:
+
+- `FILE_STORAGE_DRIVER`: driver utilizado para salvar arquivos. Atualmente há o
+  driver `local` (padrão) e o modo `disabled`, que retorna HTTP 501
+  imediatamente.
+- `FILE_STORAGE_LOCAL_ROOT`: caminho onde os arquivos serão salvos quando o
+  driver local estiver ativo. Por padrão utiliza `<repo>/backend/uploads`.
+- `FILE_STORAGE_PUBLIC_BASE_URL`: base usada para montar a URL pública retornada
+  após o upload. Aceita caminhos relativos (`/uploads/`) ou URLs completas
+  (`https://cdn.example.com/uploads/`).
+- `UPLOAD_MAX_SIZE_MB`: tamanho máximo de arquivo aceito pela API (padrão 10
+  MB).
+- `UPLOAD_ALLOWED_MIME_TYPES`: lista separada por vírgula com os tipos MIME
+  permitidos. Quando não definida, a API aceita `image/jpeg`, `image/png`,
+  `image/webp`, `application/pdf` e `text/plain`.
+
 # Rodando testes
 
 Os testes automatizados ficam em `backend/tests/` e utilizam o runner nativo do

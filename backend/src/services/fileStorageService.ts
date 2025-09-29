@@ -1,0 +1,109 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import type { Express } from 'express';
+
+export type StoredFileMetadata = {
+  key: string;
+  url: string;
+  name: string;
+  size: number;
+  mimeType: string;
+};
+
+export class StorageUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StorageUnavailableError';
+  }
+}
+
+const DEFAULT_LOCAL_ROOT = path.resolve(process.cwd(), 'uploads');
+
+const ensureDirectoryExists = async (targetPath: string) => {
+  await fs.mkdir(targetPath, { recursive: true });
+};
+
+const sanitizeBaseUrl = (baseUrl: string): string => {
+  if (!baseUrl) {
+    return '';
+  }
+
+  if (/^https?:\/\//i.test(baseUrl)) {
+    return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  }
+
+  const normalized = baseUrl.startsWith('/') ? baseUrl : `/${baseUrl}`;
+  return normalized.endsWith('/') ? normalized : `${normalized}/`;
+};
+
+const resolveLocalRoot = (): string => {
+  const configuredRoot = process.env.FILE_STORAGE_LOCAL_ROOT;
+  return configuredRoot ? path.resolve(configuredRoot) : DEFAULT_LOCAL_ROOT;
+};
+
+const getPublicBaseUrl = (): string =>
+  sanitizeBaseUrl(process.env.FILE_STORAGE_PUBLIC_BASE_URL ?? '/uploads/');
+
+const resolveDriver = (): string =>
+  (process.env.FILE_STORAGE_DRIVER ?? 'local').trim().toLowerCase();
+
+const createFileKey = (originalName: string): string => {
+  const extension = path.extname(originalName ?? '').replace(/[^\w.]/g, '');
+  return `${crypto.randomUUID()}${extension}`;
+};
+
+const buildPublicUrl = (key: string): string => {
+  const baseUrl = getPublicBaseUrl();
+
+  if (!baseUrl) {
+    return key;
+  }
+
+  if (/^https?:\/\//i.test(baseUrl)) {
+    const url = new URL(key, baseUrl);
+    return url.toString();
+  }
+
+  return `${baseUrl}${key}`.replace(/\/{2,}/g, '/');
+};
+
+export const getFileStorageDriver = (): string => resolveDriver();
+
+export const getLocalStorageRoot = (): string => resolveLocalRoot();
+
+export const getPublicUploadsBasePath = (): string => getPublicBaseUrl();
+
+export const saveUploadedFile = async (
+  file: Express.Multer.File
+): Promise<StoredFileMetadata> => {
+  const driver = resolveDriver();
+
+  if (driver === 'disabled' || driver === 'none') {
+    throw new StorageUnavailableError(
+      'O armazenamento de arquivos não está habilitado. Entre em contato com o administrador.'
+    );
+  }
+
+  if (driver !== 'local') {
+    throw new StorageUnavailableError(
+      `Driver de armazenamento não suportado: ${driver}`
+    );
+  }
+
+  const destinationRoot = resolveLocalRoot();
+  await ensureDirectoryExists(destinationRoot);
+
+  const key = createFileKey(file.originalname);
+  const targetPath = path.join(destinationRoot, key);
+
+  await fs.writeFile(targetPath, file.buffer);
+
+  return {
+    key,
+    url: buildPublicUrl(key),
+    name: file.originalname,
+    size: file.size ?? file.buffer.length,
+    mimeType: file.mimetype,
+  } satisfies StoredFileMetadata;
+};
