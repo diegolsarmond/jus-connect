@@ -35,26 +35,110 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { getApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import {
-  agruparPorMes,
-  deduplicarMovimentacoes,
-  diasDesde,
-  normalizarTexto,
-} from "./utils/processo-ui";
+import { agruparPorMes, deduplicarMovimentacoes, normalizarTexto } from "./utils/processo-ui";
+import { SafeMarkdown } from "@/components/ui/safe-markdown";
 
 const NAO_INFORMADO = "Não informado";
 const MOVIMENTACOES_POR_LAJE = 25;
 const MESES_INICIAIS = 3;
-const ALTURA_ESTIMADA_ITEM = 160;
+const ALTURA_ESTIMADA_ITEM = 200;
+const LIMITE_CONTEUDO_RESUMO = 400;
+const LIMITE_LINHAS_RESUMO = 6;
+
+interface FiltroMovimentacaoOpcoes {
+  tipo?: string | null;
+  inicio?: string | null;
+  fim?: string | null;
+}
+
+function normalizarDataFiltro(valor: string | null | undefined, fimDoDia = false): Date | null {
+  if (!valor) {
+    return null;
+  }
+
+  const data = new Date(valor);
+
+  if (Number.isNaN(data.getTime())) {
+    return null;
+  }
+
+  if (fimDoDia) {
+    data.setHours(23, 59, 59, 999);
+  } else {
+    data.setHours(0, 0, 0, 0);
+  }
+
+  return data;
+}
+
+function normalizarTipoFiltro(valor?: string | null): string {
+  if (typeof valor !== "string") {
+    return "";
+  }
+
+  return valor.trim().toLowerCase();
+}
+
+export function filtrarMovimentacoes(
+  movimentacoes: MovimentacaoProcesso[],
+  { tipo, inicio, fim }: FiltroMovimentacaoOpcoes,
+): MovimentacaoProcesso[] {
+  if (!Array.isArray(movimentacoes) || movimentacoes.length === 0) {
+    return [];
+  }
+
+  const tipoNormalizado = normalizarTipoFiltro(tipo);
+  const inicioData = normalizarDataFiltro(inicio, false);
+  const fimData = normalizarDataFiltro(fim, true);
+
+  return movimentacoes.filter((mov) => {
+    if (tipoNormalizado) {
+      const tipoMov = normalizarTipoFiltro(mov.stepType);
+      if (!tipoMov || tipoMov !== tipoNormalizado) {
+        return false;
+      }
+    }
+
+    if (inicioData || fimData) {
+      if (!mov.data) {
+        return false;
+      }
+
+      if (inicioData && mov.data < inicioData) {
+        return false;
+      }
+
+      if (fimData && mov.data > fimData) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
 
 interface ApiProcessoCounty {
   name?: string | null;
   city?: string | null;
   state?: string | null;
+}
+
+interface ApiProcessoStepTags {
+  formatted?: string | null;
+  [key: string]: unknown;
 }
 
 interface ApiProcessoStep {
@@ -64,6 +148,11 @@ interface ApiProcessoStep {
   description?: string | null;
   type?: string | null;
   category?: string | null;
+  step_date?: string | null;
+  step_type?: string | null;
+  content?: string | null;
+  private?: boolean | null;
+  tags?: ApiProcessoStepTags | null;
 }
 
 interface ApiProcessoAttachment {
@@ -130,19 +219,15 @@ export interface ApiProcessoResponse {
   metadata?: Record<string, unknown> | null;
 }
 
-interface MovimentoLinha {
-  texto: string;
-  negrito?: boolean;
-}
-
-interface MovimentoNormalizado {
+interface MovimentacaoProcesso extends MovimentoComIdEData {
   id: string;
   data: Date | null;
-  dataCurta: string | null;
-  dataLonga: string | null;
-  dias: number | null;
-  linhas: MovimentoLinha[];
-  observacao?: string | null;
+  dataOriginal: string | null;
+  dataFormatada: string | null;
+  stepType: string | null;
+  conteudo: string | null;
+  privado: boolean;
+  tags: ApiProcessoStepTags | null;
 }
 
 interface GrupoMovimentacao {
@@ -150,7 +235,7 @@ interface GrupoMovimentacao {
   rotulo: string;
   ano: number | null;
   mes: number | null;
-  itens: MovimentoNormalizado[];
+  itens: MovimentacaoProcesso[];
 }
 
 interface ParteNormalizada {
@@ -229,7 +314,7 @@ export interface ProcessoViewModel {
   cabecalho: CabecalhoProcesso;
   dados: DadosProcesso;
   partes: PartesAgrupadas;
-  movimentacoes: MovimentoNormalizado[];
+  movimentacoes: MovimentacaoProcesso[];
   grupos: GrupoMovimentacao[];
   relacionados: ProcessoRelacionadoView[];
   judit: JuditResumo;
@@ -643,46 +728,6 @@ function extrairLocalidade(valor: ApiProcessoResponse["county"]): {
   return { comarca, cidade, estado, cidadeEstado };
 }
 
-function construirMovimento(mov: ApiProcessoStep): MovimentoNormalizado | null {
-  const id = mov.id !== null && mov.id !== undefined ? String(mov.id) : null;
-  const data = mov.date ? new Date(mov.date) : null;
-  const dataValida = data && !Number.isNaN(data.getTime()) ? data : null;
-  const dataLonga = formatarData(dataValida, "longa");
-  const dataCurta = formatarData(dataValida, "curta");
-  const dias = diasDesde(dataValida);
-
-  const linhas: MovimentoLinha[] = [];
-  const titulo = primeiroTextoValido(mov.title, mov.type);
-  if (titulo) {
-    linhas.push({ texto: titulo, negrito: true });
-  }
-
-  const descricao = normalizarTexto(mov.description ?? "");
-  if (descricao) {
-    linhas.push(...descricao.split("\n").map((texto) => ({ texto })));
-  }
-
-  const categoria = primeiroTextoValido(mov.category, mov.type);
-
-  if (!linhas.length && categoria) {
-    linhas.push({ texto: categoria, negrito: true });
-  }
-
-  if (!linhas.length) {
-    return null;
-  }
-
-  return {
-    id: id ?? `${mov.date ?? "sem-data"}-${titulo ?? categoria ?? "passo"}`,
-    data: dataValida,
-    dataCurta,
-    dataLonga,
-    dias,
-    linhas,
-    observacao: categoria && categoria !== titulo ? categoria : undefined,
-  };
-}
-
 export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): ProcessoViewModel {
   const codigo = primeiroTextoValido(processo.code) || NAO_INFORMADO;
   const nome = primeiroTextoValido(processo.name) || NAO_INFORMADO;
@@ -706,32 +751,83 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const passos = Array.isArray(processo.steps) ? processo.steps : [];
   const passosDeduplicados = deduplicarMovimentacoes(
     passos.map((step, index) => ({
-      id: step.id ?? `${index}-${step.date ?? ""}-${step.title ?? ""}`,
-      data: step.date ?? null,
-      tipo: step.title ?? step.type ?? null,
-      conteudo: step.description ?? null,
+      id: step.id ?? `${index}-${step.step_date ?? step.date ?? ""}`,
+      data: step.step_date ?? step.date ?? null,
+      tipo: step.step_type ?? step.type ?? step.title ?? null,
+      conteudo: step.content ?? step.description ?? null,
       texto_categoria: step.category ?? null,
       original: step,
     })),
   );
 
-  const movimentos = passosDeduplicados
-    .map((item) => {
-      const original = (item as typeof item & { original?: ApiProcessoStep }).original;
-      return construirMovimento({
+  const movimentacoes = passosDeduplicados
+    .map((item, index) => {
+      const original = (item as typeof item & { original?: ApiProcessoStep }).original ?? {
         id: item.id,
-        date: original?.date ?? item.data ?? null,
-        title: original?.title ?? item.tipo ?? null,
-        description: original?.description ?? item.conteudo ?? null,
-        type: original?.type ?? null,
-        category: original?.category ?? item.texto_categoria ?? null,
-      });
+        step_date: item.data,
+        step_type: item.tipo,
+        content: item.conteudo,
+        category: item.texto_categoria,
+      };
+
+      const fallbackId = `${index}-${item.data ?? ""}`;
+      const identificador =
+        original?.id !== null && original?.id !== undefined
+          ? String(original.id)
+          : typeof item.id === "string"
+            ? item.id
+            : fallbackId;
+
+      const textoData = original?.step_date ?? original?.date ?? item.data ?? null;
+      const dataObjeto = textoData ? new Date(textoData) : null;
+      const dataValida = dataObjeto && !Number.isNaN(dataObjeto.getTime()) ? dataObjeto : null;
+
+      const conteudoBruto =
+        typeof original?.content === "string" && original.content.trim().length > 0
+          ? original.content.trim()
+          : typeof original?.description === "string" && original.description.trim().length > 0
+            ? normalizarTexto(original.description)
+            : typeof item.conteudo === "string" && item.conteudo.trim().length > 0
+              ? normalizarTexto(item.conteudo)
+              : null;
+
+      const tipoPasso = primeiroTextoValido(
+        original?.step_type,
+        original?.type,
+        item.tipo,
+        original?.title,
+      );
+
+      if (!tipoPasso && !conteudoBruto) {
+        return null;
+      }
+
+      return {
+        id: identificador,
+        data: dataValida,
+        dataOriginal: textoData ?? null,
+        dataFormatada: formatarData(dataValida, "longa"),
+        stepType: tipoPasso || null,
+        conteudo: conteudoBruto,
+        privado: Boolean(original?.private),
+        tags: original?.tags ?? null,
+      } satisfies MovimentacaoProcesso;
     })
-    .filter((mov): mov is MovimentoNormalizado => mov !== null);
+    .filter((mov): mov is MovimentacaoProcesso => mov !== null)
+    .sort((a, b) => {
+      const dataA = a.data ? a.data.getTime() : Number.NEGATIVE_INFINITY;
+      const dataB = b.data ? b.data.getTime() : Number.NEGATIVE_INFINITY;
 
-  const grupos = agruparPorMes(movimentos);
+      if (dataA === dataB) {
+        return a.id.localeCompare(b.id);
+      }
 
-  const ultimaMovimentacaoData = movimentos.reduce<Date | null>((acc, mov) => {
+      return dataB - dataA;
+    });
+
+  const grupos = agruparPorMes(movimentacoes);
+
+  const ultimaMovimentacaoData = movimentacoes.reduce<Date | null>((acc, mov) => {
     if (mov.data && (!acc || mov.data > acc)) {
       return mov.data;
     }
@@ -816,7 +912,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     cabecalho,
     dados,
     partes,
-    movimentacoes: movimentos,
+    movimentacoes,
     grupos,
     relacionados,
     judit,
@@ -832,7 +928,7 @@ interface TimelineMesProps {
   virtualizado: boolean;
 }
 
-function TimelineMes({
+export function TimelineMes({
   grupo,
   aberto,
   onToggle,
@@ -841,9 +937,11 @@ function TimelineMes({
   virtualizado,
 }: TimelineMesProps) {
   const [intervalo, setIntervalo] = useState({ inicio: 0, fim: movimentacoesVisiveis });
+  const [expandidos, setExpandidos] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setIntervalo({ inicio: 0, fim: movimentacoesVisiveis });
+    setExpandidos({});
   }, [movimentacoesVisiveis, grupo.chave]);
 
   useEffect(() => {
@@ -918,15 +1016,21 @@ function TimelineMes({
                   movimentacoesVisiveis >= grupo.itens.length) ||
                 (virtualizado && intervalo.inicio + index === grupo.itens.length - 1);
 
+              const conteudo = item.conteudo ?? "";
+              const linhasConteudo = conteudo ? conteudo.split(/\n+/) : [];
+              const isMarkdown =
+                typeof item.tags?.formatted === "string" &&
+                item.tags.formatted.trim().toLowerCase() === "md";
+              const isLongo =
+                conteudo.length > LIMITE_CONTEUDO_RESUMO || linhasConteudo.length > LIMITE_LINHAS_RESUMO;
+              const expandido = Boolean(expandidos[item.id]);
+
               return (
                 <div key={item.id} className="relative flex gap-6 pb-8 last:pb-2">
                   <div className="w-28 text-right">
                     <p className="text-sm font-semibold text-emerald-600">
-                      {item.dataLonga ?? "Data não informada"}
+                      {item.dataFormatada ?? "Data não informada"}
                     </p>
-                    {item.dias !== null && (
-                      <p className="text-xs text-muted-foreground">{`${item.dias} dias`}</p>
-                    )}
                   </div>
                   <div className="relative flex-1">
                     {!isUltimo && (
@@ -937,24 +1041,69 @@ function TimelineMes({
                     )}
                     <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 shadow" />
                     <div className="rounded-lg border border-muted-foreground/10 bg-muted/40 p-4">
-                      <div className="space-y-2 text-sm">
-                        {item.linhas.map((linha, linhaIndex) => (
-                          <p
-                            key={`${item.id}-linha-${linhaIndex}`}
+                      <div className="space-y-3 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {item.stepType ? (
+                            <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700">
+                              {item.stepType}
+                            </Badge>
+                          ) : null}
+                          <Badge
+                            variant="secondary"
                             className={cn(
-                              "text-muted-foreground",
-                              linha.negrito ? "font-semibold text-foreground" : "",
+                              "rounded-full",
+                              item.privado
+                                ? "border-transparent bg-rose-100 text-rose-700"
+                                : "border-transparent bg-emerald-100 text-emerald-700",
                             )}
-                            style={{ whiteSpace: "pre-line" }}
                           >
-                            {linha.texto}
-                          </p>
-                        ))}
-                        {item.observacao && (
-                          <p className="text-xs text-muted-foreground" style={{ whiteSpace: "pre-line" }}>
-                            {item.observacao}
-                          </p>
-                        )}
+                            {item.privado ? "Privado" : "Público"}
+                          </Badge>
+                        </div>
+
+                        {conteudo ? (
+                          <div
+                            className={cn(
+                              "relative text-muted-foreground",
+                              isLongo && !expandido ? "max-h-48 overflow-hidden" : "",
+                            )}
+                          >
+                            {isMarkdown ? (
+                              <SafeMarkdown
+                                content={conteudo}
+                                className={cn(
+                                  "prose prose-sm max-w-none text-muted-foreground",
+                                  "dark:prose-invert",
+                                )}
+                              />
+                            ) : (
+                              <p className="whitespace-pre-wrap leading-relaxed">{conteudo}</p>
+                            )}
+                            {isLongo && !expandido ? (
+                              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-muted/90 via-muted/40 to-transparent" />
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {isLongo ? (
+                          <div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="px-0 text-emerald-700 hover:text-emerald-800"
+                              onClick={() =>
+                                setExpandidos((prev) => ({
+                                  ...prev,
+                                  [item.id]: !prev[item.id],
+                                }))
+                              }
+                              aria-expanded={expandido}
+                              data-testid={`expandir-${item.id}`}
+                            >
+                              {expandido ? "Recolher" : "Expandir"}
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1238,6 +1387,9 @@ export default function VisualizarProcesso() {
   const [mesesVisiveis, setMesesVisiveis] = useState(MESES_INICIAIS);
   const [mesesAbertos, setMesesAbertos] = useState<string[]>([]);
   const [movimentosPorMes, setMovimentosPorMes] = useState<Record<string, number>>({});
+  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [filtroInicio, setFiltroInicio] = useState("");
+  const [filtroFim, setFiltroFim] = useState("");
 
   useEffect(() => {
     if (location.state?.initialTab) {
@@ -1300,16 +1452,89 @@ export default function VisualizarProcesso() {
     };
   }, [processoId]);
 
-  const totalMovimentacoes = viewModel?.movimentacoes.length ?? 0;
-  const usarVirtualizacao = totalMovimentacoes > 300;
-
-  const gruposVisiveis = useMemo(() => {
+  const tiposDisponiveis = useMemo(() => {
     if (!viewModel) {
-      return [] as GrupoMovimentacao[];
+      return [] as string[];
     }
 
-    return viewModel.grupos.slice(0, mesesVisiveis);
-  }, [viewModel, mesesVisiveis]);
+    const conjunto = new Set<string>();
+    viewModel.movimentacoes.forEach((mov) => {
+      if (mov.stepType) {
+        conjunto.add(mov.stepType);
+      }
+    });
+
+    return Array.from(conjunto).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [viewModel]);
+
+  const movimentacoesFiltradas = useMemo(() => {
+    if (!viewModel) {
+      return [] as MovimentacaoProcesso[];
+    }
+
+    const tipoFiltro = filtroTipo === "todos" ? null : filtroTipo;
+
+    return filtrarMovimentacoes(viewModel.movimentacoes, {
+      tipo: tipoFiltro,
+      inicio: filtroInicio || null,
+      fim: filtroFim || null,
+    });
+  }, [viewModel, filtroTipo, filtroInicio, filtroFim]);
+
+  const gruposFiltrados = useMemo(
+    () => agruparPorMes(movimentacoesFiltradas),
+    [movimentacoesFiltradas],
+  );
+
+  const totalMovimentacoes = movimentacoesFiltradas.length;
+  const usarVirtualizacao = totalMovimentacoes > 300;
+
+  const gruposVisiveis = useMemo(
+    () => gruposFiltrados.slice(0, mesesVisiveis),
+    [gruposFiltrados, mesesVisiveis],
+  );
+  const totalGruposFiltrados = gruposFiltrados.length;
+
+  useEffect(() => {
+    if (!viewModel) {
+      setMesesAbertos([]);
+      setMovimentosPorMes({});
+      setMesesVisiveis(0);
+      return;
+    }
+
+    if (gruposFiltrados.length === 0) {
+      setMesesAbertos([]);
+      setMovimentosPorMes({});
+      setMesesVisiveis(0);
+      return;
+    }
+
+    setMesesAbertos((anteriores) => {
+      const chavesValidas = new Set(gruposFiltrados.map((grupo) => grupo.chave));
+      const ativos = anteriores.filter((chave) => chavesValidas.has(chave));
+      if (ativos.length) {
+        return ativos;
+      }
+      return [gruposFiltrados[0].chave];
+    });
+
+    setMovimentosPorMes((anteriores) => {
+      const atualizado: Record<string, number> = {};
+      gruposFiltrados.forEach((grupo) => {
+        atualizado[grupo.chave] = anteriores[grupo.chave] ?? MOVIMENTACOES_POR_LAJE;
+      });
+      return atualizado;
+    });
+
+    setMesesVisiveis((valor) => {
+      if (valor === 0) {
+        return Math.min(MESES_INICIAIS, gruposFiltrados.length);
+      }
+
+      return valor;
+    });
+  }, [viewModel, gruposFiltrados]);
 
   const handleToggleMes = useCallback(
     (chave: string) => {
@@ -1333,8 +1558,8 @@ export default function VisualizarProcesso() {
   );
 
   const handleCarregarMaisMeses = useCallback(() => {
-    setMesesVisiveis((valor) => (viewModel ? Math.min(viewModel.grupos.length, valor + 2) : valor));
-  }, [viewModel]);
+    setMesesVisiveis((valor) => Math.min(totalGruposFiltrados, valor + 2));
+  }, [totalGruposFiltrados]);
 
   const handleAbrirRelacionado = useCallback(
     (identificador: string) => {
@@ -1352,6 +1577,8 @@ export default function VisualizarProcesso() {
       return null;
     }
 
+    const temResultados = gruposFiltrados.length > 0;
+
     return (
       <div className="space-y-6">
         <Alert className="border-amber-300 bg-amber-50 text-amber-900">
@@ -1366,35 +1593,98 @@ export default function VisualizarProcesso() {
           </AlertDescription>
         </Alert>
 
-        <div className="space-y-4">
-          {gruposVisiveis.map((grupo) => (
-            <TimelineMes
-              key={grupo.chave}
-              grupo={{ ...grupo, itens: grupo.itens }}
-              aberto={mesesAbertos.includes(grupo.chave)}
-              onToggle={handleToggleMes}
-              movimentacoesVisiveis={movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE}
-              onVerMais={handleVerMaisMovimentos}
-              virtualizado={usarVirtualizacao}
-            />
-          ))}
+        <div className="rounded-xl border border-muted-foreground/10 bg-white p-4 shadow-sm">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_repeat(2,minmax(0,200px))]">
+            <div className="space-y-2">
+              <Label
+                htmlFor="filtro-tipo"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Tipo
+              </Label>
+              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                <SelectTrigger id="filtro-tipo" className="w-full">
+                  <SelectValue placeholder="Todos os tipos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os tipos</SelectItem>
+                  {tiposDisponiveis.map((tipo) => (
+                    <SelectItem key={tipo} value={tipo}>
+                      {tipo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label
+                htmlFor="filtro-inicio"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Data inicial
+              </Label>
+              <Input
+                id="filtro-inicio"
+                type="date"
+                value={filtroInicio}
+                onChange={(event) => setFiltroInicio(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label
+                htmlFor="filtro-fim"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                Data final
+              </Label>
+              <Input
+                id="filtro-fim"
+                type="date"
+                value={filtroFim}
+                onChange={(event) => setFiltroFim(event.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
-        {viewModel.grupos.length > gruposVisiveis.length ? (
-          <div className="text-center">
-            <Button
-              variant="outline"
-              onClick={handleCarregarMaisMeses}
-              aria-expanded={gruposVisiveis.length < viewModel.grupos.length}
-            >
-              Carregar mais meses
-            </Button>
+        {temResultados ? (
+          <>
+            <div className="space-y-4">
+              {gruposVisiveis.map((grupo) => (
+                <TimelineMes
+                  key={grupo.chave}
+                  grupo={{ ...grupo, itens: grupo.itens }}
+                  aberto={mesesAbertos.includes(grupo.chave)}
+                  onToggle={handleToggleMes}
+                  movimentacoesVisiveis={movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE}
+                  onVerMais={handleVerMaisMovimentos}
+                  virtualizado={usarVirtualizacao}
+                />
+              ))}
+            </div>
+
+            {totalGruposFiltrados > gruposVisiveis.length ? (
+              <div className="text-center">
+                <Button
+                  variant="outline"
+                  onClick={handleCarregarMaisMeses}
+                  aria-expanded={gruposVisiveis.length < totalGruposFiltrados}
+                >
+                  Carregar mais meses
+                </Button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="rounded-xl border border-muted-foreground/10 bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+            Nenhuma movimentação encontrada para os filtros selecionados.
           </div>
-        ) : null}
+        )}
       </div>
     );
   }, [
     viewModel,
+    gruposFiltrados,
     gruposVisiveis,
     mesesAbertos,
     movimentosPorMes,
@@ -1402,6 +1692,11 @@ export default function VisualizarProcesso() {
     handleToggleMes,
     handleVerMaisMovimentos,
     handleCarregarMaisMeses,
+    filtroTipo,
+    filtroInicio,
+    filtroFim,
+    tiposDisponiveis,
+    totalGruposFiltrados,
   ]);
 
   const conteudoInformacoes = viewModel ? (
