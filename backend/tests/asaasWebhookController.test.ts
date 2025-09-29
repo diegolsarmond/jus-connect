@@ -203,6 +203,120 @@ test('handleAsaasWebhook logs error and skips updates when signature is invalid'
   assert.match(String(errorMock.mock.calls[0]?.arguments?.[0] ?? ''), /Invalid signature/i);
 });
 
+test('handleAsaasWebhook uses ASAAS_WEBHOOK_SECRET when credential is missing', async () => {
+  const previousSecret = process.env.ASAAS_WEBHOOK_SECRET;
+  process.env.ASAAS_WEBHOOK_SECRET = '  env-fallback-secret  ';
+
+  const webhookBody = {
+    event: 'PAYMENT_CONFIRMED',
+    payment: {
+      id: 'pay_fallback_env',
+      status: 'CONFIRMED',
+    },
+  };
+
+  const rawBody = JSON.stringify(webhookBody);
+  const signature = crypto
+    .createHmac('sha256', 'env-fallback-secret')
+    .update(rawBody)
+    .digest('hex');
+
+  const { calls, restore } = setupQueryMock([
+    {
+      rows: [
+        { id: 1, credential_id: null, financial_flow_id: null, cliente_id: null, company_id: null },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: webhookBody,
+    rawBody,
+    headers: {
+      'asaas-signature': `sha256=${signature}`,
+    },
+  } as unknown as Request & { rawBody?: string };
+
+  const res = createMockResponse();
+
+  try {
+    await handleAsaasWebhook(req, res);
+  } finally {
+    restore();
+    if (previousSecret === undefined) {
+      delete process.env.ASAAS_WEBHOOK_SECRET;
+    } else {
+      process.env.ASAAS_WEBHOOK_SECRET = previousSecret;
+    }
+  }
+
+  assert.equal(res.statusCode, 202);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /FROM asaas_charges/i);
+  assert.match(calls[1]?.text ?? '', /UPDATE asaas_charges/i);
+});
+
+test('handleAsaasWebhook falls back to ASAAS_WEBHOOK_SECRET when credential secret is missing', async () => {
+  const previousSecret = process.env.ASAAS_WEBHOOK_SECRET;
+  process.env.ASAAS_WEBHOOK_SECRET = 'fallback-with-credential';
+
+  const webhookBody = {
+    event: 'PAYMENT_RECEIVED',
+    payment: {
+      id: 'pay_fallback_credential',
+      status: 'RECEIVED',
+    },
+  };
+
+  const rawBody = JSON.stringify(webhookBody);
+  const signature = crypto
+    .createHmac('sha256', 'fallback-with-credential')
+    .update(rawBody)
+    .digest('hex');
+
+  const { calls, restore } = setupQueryMock([
+    {
+      rows: [
+        { id: 2, credential_id: 99, financial_flow_id: null, cliente_id: null, company_id: null },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ webhook_secret: null }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: webhookBody,
+    rawBody,
+    headers: {
+      'asaas-signature': `sha256=${signature}`,
+    },
+  } as unknown as Request & { rawBody?: string };
+
+  const res = createMockResponse();
+
+  try {
+    await handleAsaasWebhook(req, res);
+  } finally {
+    restore();
+    if (previousSecret === undefined) {
+      delete process.env.ASAAS_WEBHOOK_SECRET;
+    } else {
+      process.env.ASAAS_WEBHOOK_SECRET = previousSecret;
+    }
+  }
+
+  assert.equal(res.statusCode, 202);
+  assert.deepEqual(res.body, { received: true });
+  assert.equal(calls.length, 3);
+  assert.match(calls[0]?.text ?? '', /FROM asaas_charges/i);
+  assert.match(calls[1]?.text ?? '', /FROM asaas_credentials/i);
+  assert.match(calls[2]?.text ?? '', /UPDATE asaas_charges/i);
+});
+
 test('getAsaasWebhookSecret returns secret and setup instructions', async () => {
   const { calls, restore } = setupQueryMock([
     { rows: [{ webhook_secret: 'shared-secret' }], rowCount: 1 },

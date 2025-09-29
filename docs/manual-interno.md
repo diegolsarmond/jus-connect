@@ -39,6 +39,7 @@
 
 ## Boas práticas operacionais
 - Mantenha o `ASAAS_WEBHOOK_SECRET` atualizado sempre que gerar uma nova assinatura no portal Asaas.
+- Caso um webhook seja configurado sem credencial associada no CRM, defina `ASAAS_WEBHOOK_SECRET` no ambiente: o backend usa o valor (após remover espaços extras) como fallback para validar as assinaturas recebidas.
 - Nunca compartilhe tokens em canais públicos; utilize o cofre de senhas da empresa.
 - Agende revisão trimestral dos planos e taxas no Asaas para garantir que o CRM reflita as condições atuais.
 
