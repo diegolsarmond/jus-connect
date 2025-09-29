@@ -65,47 +65,39 @@ describe("processo-ui utils", () => {
 describe("mapApiProcessoToViewModel", () => {
   it("fornece dados com fallbacks e partes vazias", () => {
     const resposta: ApiProcessoResponse = {
-      numero: null,
+      code: null,
+      name: null,
       status: null,
-      tipo: null,
-      movimentacoes: [
-        { id: 10, data: "2024-03-10", tipo: "Despacho" },
-        { id: 10, data: "2024-03-10", tipo: "Despacho" },
+      phase: null,
+      area: null,
+      steps: [
+        { id: 10, date: "2024-03-10", title: "Despacho" },
+        { id: 10, date: "2024-03-10", title: "Despacho" },
       ],
-      partes: [],
+      participants: [],
     };
 
     const viewModel = mapApiProcessoToViewModel(resposta);
 
-    expect(viewModel.cabecalho.numero).toBe("Não informado");
-    expect(viewModel.cabecalho.grau).toBe("Não informado");
+    expect(viewModel.cabecalho.codigo).toBe("Não informado");
+    expect(viewModel.cabecalho.nome).toBe("Não informado");
     expect(viewModel.partes.total).toBe(0);
-    expect(viewModel.dados.valorDaCausa).toBe("Não informado");
+    expect(viewModel.dados.amount).toBe("Não informado");
     expect(viewModel.movimentacoes).toHaveLength(1);
   });
 
-  it("inclui movimentações vindas da Judit mesmo sem movimentações originais", () => {
+  it("mapeia passos da nova API quando não há dados adicionais", () => {
     const resposta: ApiProcessoResponse = {
-      numero: "0000000-00.0000.0.00.0000",
-      movimentacoes: [],
-      partes: [],
-      judit_last_request: {
-        request_id: "req-123",
-        status: "finished",
-        source: "judit",
-        result: {
-          response_data: {
-            movimentacoes: [
-              {
-                id: null,
-                data: "2024-04-12T10:00:00Z",
-                titulo: "Publicação",
-                descricao: "Conteúdo exibido pela Judit",
-              },
-            ],
-          },
+      code: "0000000-00.0000.0.00.0000",
+      name: "Processo de Exemplo",
+      steps: [
+        {
+          id: null,
+          date: "2024-04-12T10:00:00Z",
+          title: "Publicação",
+          description: "Conteúdo exibido pela nova API",
         },
-      } as any,
+      ],
     };
 
     const viewModel = mapApiProcessoToViewModel(resposta);
@@ -116,9 +108,10 @@ describe("mapApiProcessoToViewModel", () => {
 
   it("renderiza Informações e Partes com dados faltantes", () => {
     const resposta: ApiProcessoResponse = {
-      numero: "0001111-22.2024.1.00.0000",
-      movimentacoes: [],
-      partes: [],
+      code: "0001111-22.2024.1.00.0000",
+      name: "Processo sem dados",
+      participants: [],
+      steps: [],
     };
 
     const viewModel = mapApiProcessoToViewModel(resposta);
@@ -128,6 +121,8 @@ describe("mapApiProcessoToViewModel", () => {
     );
 
     expect(html).toContain("Dados do processo");
+    expect(html).toContain("Tribunal");
+    expect(html).toContain("Sigla do tribunal");
     expect(html).toContain("Nenhum registro informado.");
     expect(html).toContain("Partes do processo");
   });
