@@ -513,6 +513,30 @@ async function findCredentialSecret(credentialId: number): Promise<string | null
   return row.webhook_secret;
 }
 
+function resolveEnvWebhookSecret(): string | null {
+  const value = process.env.ASAAS_WEBHOOK_SECRET;
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+async function resolveWebhookSecret(credentialId: number | null): Promise<string | null> {
+  if (!credentialId) {
+    return resolveEnvWebhookSecret();
+  }
+
+  const secret = await findCredentialSecret(credentialId);
+  if (secret) {
+    return secret;
+  }
+
+  return resolveEnvWebhookSecret();
+}
+
 async function updateCharge(
   asaasChargeId: string,
   event: string,
@@ -625,22 +649,26 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
     return res.status(202).json(buildWebhookResponse());
   }
 
-  if (!context.credentialId) {
-    console.error('[AsaasWebhook] Missing credential reference for charge', asaasChargeId);
-    return res.status(202).json(buildWebhookResponse());
-  }
-
   let secret: string | null = null;
 
   try {
-    secret = await findCredentialSecret(context.credentialId);
+    secret = await resolveWebhookSecret(context.credentialId ?? null);
   } catch (error) {
     console.error('[AsaasWebhook] Failed to load credential secret', error);
     return res.status(202).json(buildWebhookResponse());
   }
 
   if (!secret) {
-    console.error('[AsaasWebhook] Missing webhook secret for credential', context.credentialId);
+    if (context.credentialId) {
+      console.error(
+        '[AsaasWebhook] Missing webhook secret for credential and no fallback configured',
+        context.credentialId,
+      );
+    } else {
+      console.error(
+        '[AsaasWebhook] Missing webhook secret: no credential associated and ASAAS_WEBHOOK_SECRET not configured',
+      );
+    }
     return res.status(202).json(buildWebhookResponse());
   }
 
