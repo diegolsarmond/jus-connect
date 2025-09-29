@@ -97,63 +97,72 @@ function assertValidEmpresaId(empresaId: number): asserts empresaId is number {
   }
 }
 
+const PROVIDER_FILTER = 'asaas';
+
 async function findScopedIntegration(
   db: Queryable,
   empresaId: number,
   environment?: AsaasEnvironment,
 ): Promise<IntegrationRow | null> {
-  const baseQuery = `SELECT id, provider, url_api, key_value, environment, active
-     FROM integration_api_keys
-     WHERE provider = $1
-       AND active = TRUE
-       AND (global IS TRUE OR idempresa = $2)
-     ORDER BY updated_at DESC
-     LIMIT 1`;
+  const result = await db.query(
+    `SELECT id, provider, url_api, key_value, environment, active
+       FROM integration_api_keys
+       WHERE active = TRUE
+         AND (global IS DISTINCT FROM FALSE OR idempresa = $2)
+         AND LOWER(TRIM(provider)) = $1
+       ORDER BY updated_at DESC
+       LIMIT 20`,
+    [PROVIDER_FILTER, empresaId],
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  const rows = result.rows as IntegrationRow[];
 
   if (environment) {
-    const result = await db.query(
-      baseQuery.replace('ORDER BY', '       AND environment = $3\n     ORDER BY'),
-      ['asaas', empresaId, environment],
+    const matched = rows.find(
+      (row) => normalizeAsaasEnvironment(row.environment) === environment,
     );
-    if (result.rowCount > 0) {
-      return result.rows[0] as IntegrationRow;
+    if (matched) {
+      return matched;
     }
   }
 
-  const fallbackResult = await db.query(baseQuery, ['asaas', empresaId]);
-  if (fallbackResult.rowCount > 0) {
-    return fallbackResult.rows[0] as IntegrationRow;
-  }
-
-  return null;
+  return rows[0] ?? null;
 }
 
 async function findLegacyIntegration(
   db: Queryable,
   environment?: AsaasEnvironment,
 ): Promise<IntegrationRow | null> {
-  const baseQuery = `SELECT id, provider, url_api, key_value, environment, active
-       FROM integration_api_keys
-       WHERE provider = $1 AND active = TRUE
-       ORDER BY updated_at DESC
-       LIMIT 1`;
+  const result = await db.query(
+    `SELECT id, provider, url_api, key_value, environment, active
+         FROM integration_api_keys
+         WHERE active = TRUE
+           AND LOWER(TRIM(provider)) = $1
+         ORDER BY updated_at DESC
+         LIMIT 20`,
+    [PROVIDER_FILTER],
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  const rows = result.rows as IntegrationRow[];
 
   if (environment) {
-    const result = await db.query(
-      baseQuery.replace('ORDER BY', '         AND environment = $2\n       ORDER BY'),
-      ['asaas', environment],
+    const matched = rows.find(
+      (row) => normalizeAsaasEnvironment(row.environment) === environment,
     );
-    if (result.rowCount > 0) {
-      return result.rows[0] as IntegrationRow;
+    if (matched) {
+      return matched;
     }
   }
 
-  const fallbackResult = await db.query(baseQuery, ['asaas']);
-  if (fallbackResult.rowCount > 0) {
-    return fallbackResult.rows[0] as IntegrationRow;
-  }
-
-  return null;
+  return rows[0] ?? null;
 }
 
 export async function resolveAsaasIntegration(
