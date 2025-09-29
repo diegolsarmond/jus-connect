@@ -439,8 +439,8 @@ export function AppointmentForm({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2 md:col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="space-y-2 sm:col-span-2 xl:col-span-2">
               <Label>Data *</Label>
               <Popover>
                 <PopoverTrigger asChild>
@@ -485,7 +485,13 @@ export function AppointmentForm({
               </div>
             </div>
 
-            <div className="flex items-center gap-3 rounded-lg border border-dashed border-muted-foreground/30 px-4 py-3 md:self-end">
+            <div
+              className={cn(
+                'flex flex-col items-start gap-2 rounded-lg border border-dashed border-muted-foreground/30 px-4 py-3',
+                'sm:flex-row sm:items-center sm:gap-3 sm:col-span-2',
+                'xl:col-span-1 xl:self-end',
+              )}
+            >
               <Switch
                 id="allDay"
                 checked={isAllDay}

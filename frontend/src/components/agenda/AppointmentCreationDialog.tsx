@@ -257,7 +257,7 @@ export default function AppointmentCreationDialog({
         }
       }}
     >
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[min(100vw-2rem,64rem)] max-w-4xl max-h-[90vh] overflow-y-auto sm:w-[min(100vw-4rem,64rem)]">
         <DialogHeader>
           <DialogTitle>Novo Agendamento</DialogTitle>
         </DialogHeader>
