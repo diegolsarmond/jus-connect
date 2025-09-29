@@ -28,14 +28,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Table,
   TableBody,
   TableCell,
@@ -53,85 +45,79 @@ import {
   diasDesde,
   normalizarTexto,
 } from "./utils/processo-ui";
-import {
-  mapApiJuditRequest,
-  parseOptionalString,
-  parseResponseDataFromResult,
-  type ProcessoJuditRequest,
-  type ProcessoResponseData,
-} from "./utils/judit";
 
 const NAO_INFORMADO = "Não informado";
 const MOVIMENTACOES_POR_LAJE = 25;
 const MESES_INICIAIS = 3;
 const ALTURA_ESTIMADA_ITEM = 160;
 
-interface ApiProcessoCliente {
-  id?: number | string | null;
-  nome?: string | null;
-  documento?: string | null;
-  tipo?: string | null;
+interface ApiProcessoCounty {
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
 }
 
-interface ApiProcessoMovimentacao {
+interface ApiProcessoStep {
   id?: number | string | null;
-  data?: string | null;
-  tipo?: string | null;
-  tipo_publicacao?: string | null;
-  conteudo?: string | null;
-  texto_categoria?: string | null;
-  atualizado_em?: string | null;
-  criado_em?: string | null;
+  date?: string | null;
+  title?: string | null;
+  description?: string | null;
+  type?: string | null;
+  category?: string | null;
 }
 
-interface ApiProcessoParte {
+interface ApiProcessoAttachment {
   id?: number | string | null;
-  nome?: string | null;
-  documento?: string | null;
-  cpf?: string | null;
-  cnpj?: string | null;
-  tipo?: string | null;
-  papel?: string | null;
-  polo?: string | null;
-  categoria?: string | null;
-  advogado?: string | null;
-  advogado_nome?: string | null;
-  advogados?: Array<{ nome?: string | null }> | null;
+  title?: string | null;
+  date?: string | null;
+  url?: string | null;
 }
 
-interface ApiProcessoRelacionado {
+interface ApiProcessoRelatedLawsuit {
+  code?: string | null;
+  name?: string | null;
+  phase?: string | null;
+  status?: string | null;
+  area?: string | null;
+}
+
+interface ApiProcessoRepresentative {
+  name?: string | null;
+}
+
+interface ApiProcessoParticipant {
   id?: number | string | null;
-  numero?: string | null;
-  grau?: string | null;
-  classe?: string | null;
+  name?: string | null;
+  document?: string | null;
+  role?: string | null;
+  side?: string | null;
+  type?: string | null;
+  representatives?: ApiProcessoRepresentative[] | null;
 }
 
 export interface ApiProcessoResponse {
   id?: number | string | null;
-  numero?: string | null;
+  code?: string | null;
+  name?: string | null;
+  phase?: string | null;
   status?: string | null;
-  tipo?: string | null;
-  classe_judicial?: string | null;
-  assunto?: string | null;
-  orgao_julgador?: string | null;
-  jurisdicao?: string | null;
-  advogado_responsavel?: string | null;
-  data_distribuicao?: string | null;
-  movimentacoes?: ApiProcessoMovimentacao[] | null;
-  partes?: ApiProcessoParte[] | null;
-  relacionados?: ApiProcessoRelacionado[] | null;
-  consultas_api_count?: number | string | null;
-  ultima_sincronizacao?: string | null;
-  judit_tracking_id?: string | null;
-  judit_tracking_hour_range?: string | null;
-  judit_last_request?: ProcessoJuditRequest | null;
-  uf?: string | null;
-  municipio?: string | null;
-  orgao_julgador_nome?: string | null;
-  classe?: string | null;
-  cliente?: ApiProcessoCliente | null;
-  status_processo?: string | null;
-  fase?: string | null;
+  area?: string | null;
+  tribunal_acronym?: string | null;
+  tribunal?: string | null;
+  county?: ApiProcessoCounty | string | null;
+  instance?: string | null;
+  justice_description?: string | null;
+  subjects?: Array<string | null> | null;
+  classifications?: Array<string | null> | null;
+  steps?: ApiProcessoStep[] | null;
+  attachments?: ApiProcessoAttachment[] | null;
+  related_lawsuits?: ApiProcessoRelatedLawsuit[] | null;
+  tags?: Array<string | null> | null;
+  amount?: string | number | null;
+  distribution_date?: string | null;
+  updated_at?: string | null;
+  participants?: ApiProcessoParticipant[] | null;
+  parties?: ApiProcessoParticipant[] | null;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -172,38 +158,46 @@ interface PartesAgrupadas {
 }
 
 interface DadosProcesso {
-  tribunalDeOrigem: string;
-  comarca: string;
-  cidade: string;
-  estado: string;
-  segmento: string;
-  fase: string;
-  distribuidoEm: string;
-  valorDaCausa: string;
-  classeProcessual: string;
-  juizRelator: string;
-  grau: string;
-  orgaoJulgador: string;
-  assuntos: string;
+  tribunal: string;
+  tribunalSigla: string;
+  justiceDescription: string;
+  instance: string;
+  area: string;
+  county: string;
+  city: string;
+  state: string;
+  distributionDate: string;
+  amount: string;
+  subjects: string;
+  classifications: string;
+  tags: string;
+  updatedAt: string;
 }
 
 interface CabecalhoProcesso {
-  numero: string;
-  grau: string;
-  ultimaMovimentacao: string | null;
-  chips: string[];
+  codigo: string;
+  nome: string;
+  status: string;
+  fase: string;
+  area: string;
+  cidadeEstado: string;
+  comarca: string;
   tribunal: string;
-  valorDaCausa: string;
   distribuidoEm: string;
-  partesResumo: ParteNormalizada[];
-  classeProcessual: string;
+  valorDaCausa: string;
+  instance: string;
+  justiceDescription: string;
+  ultimaAtualizacao: string | null;
+  tags: string[];
+  subjects: string[];
 }
 
 interface ProcessoRelacionadoView {
   id: string;
-  numero: string;
-  grau: string;
-  classe: string;
+  codigo: string;
+  nome: string;
+  status: string;
+  fase: string;
 }
 
 interface JuditResumo {
@@ -226,7 +220,6 @@ export interface ProcessoViewModel {
   grupos: GrupoMovimentacao[];
   relacionados: ProcessoRelacionadoView[];
   judit: JuditResumo;
-  responseData: ProcessoResponseData | null;
 }
 
 const TEXTO_DICA =
@@ -365,71 +358,19 @@ function normalizarGrau(valor?: string | null): string {
   return valor;
 }
 
-function resolverChips(
-  status?: string | null,
-  fase?: string | null,
-  etiquetas?: unknown,
-): string[] {
-  const chips = new Set<string>();
-  const statusTexto = normalizarTexto(status ?? "");
-  const faseTexto = normalizarTexto(fase ?? "");
-
-  if (statusTexto) {
-    chips.add(statusTexto);
-  }
-
-  if (faseTexto) {
-    chips.add(faseTexto);
-  }
-
-  const statusFinal = `${statusTexto} ${faseTexto}`.toLowerCase();
-
-  if (
-    statusFinal.includes("final") ||
-    statusFinal.includes("encerr") ||
-    faseTexto.toLowerCase() === "arquivado"
-  ) {
-    chips.add("Finalizado");
-  }
-
-  if (Array.isArray(etiquetas)) {
-    etiquetas.forEach((etiqueta) => {
-      if (typeof etiqueta === "string" && etiqueta.trim()) {
-        chips.add(etiqueta.trim());
-      }
-    });
-  }
-
-  return Array.from(chips);
-}
-
-function extrairAdvogado(parte: ApiProcessoParte): string | null {
-  if (parte.advogado_nome) {
-    const texto = normalizarTexto(parte.advogado_nome);
-    if (texto) {
-      return texto;
-    }
-  }
-
-  if (parte.advogado) {
-    const texto = normalizarTexto(parte.advogado);
-    if (texto) {
-      return texto;
-    }
-  }
-
-  if (Array.isArray(parte.advogados) && parte.advogados.length > 0) {
-    const primeiro = parte.advogados.find((adv) => normalizarTexto(adv?.nome));
-    if (primeiro?.nome) {
-      return normalizarTexto(primeiro.nome);
+function extrairAdvogado(parte: ApiProcessoParticipant): string | null {
+  if (Array.isArray(parte.representatives) && parte.representatives.length > 0) {
+    const primeiro = parte.representatives.find((adv) => normalizarTexto(adv?.name));
+    if (primeiro?.name) {
+      return normalizarTexto(primeiro.name);
     }
   }
 
   return null;
 }
 
-function classificarParte(parte: ApiProcessoParte): "ativo" | "passivo" | "outros" {
-  const polo = normalizarTexto(parte.polo ?? parte.tipo ?? parte.papel ?? parte.categoria).toUpperCase();
+function classificarParte(parte: ApiProcessoParticipant): "ativo" | "passivo" | "outros" {
+  const polo = normalizarTexto(parte.side ?? parte.type ?? parte.role).toUpperCase();
 
   if (KEYWORDS_ATIVO.some((palavra) => polo.includes(palavra))) {
     return "ativo";
@@ -459,7 +400,7 @@ function formatarListaAssuntos(valor?: unknown): string {
   return NAO_INFORMADO;
 }
 
-function mapearPartes(partes: ApiProcessoParte[] | null | undefined): PartesAgrupadas {
+function mapearPartes(partes: ApiProcessoParticipant[] | null | undefined): PartesAgrupadas {
   if (!Array.isArray(partes) || partes.length === 0) {
     return { ativo: [], passivo: [], outros: [], total: 0 };
   }
@@ -467,12 +408,12 @@ function mapearPartes(partes: ApiProcessoParte[] | null | undefined): PartesAgru
   const agrupado: PartesAgrupadas = { ativo: [], passivo: [], outros: [], total: 0 };
 
   partes.forEach((parte) => {
-    const nome = normalizarTexto(parte.nome ?? "");
+    const nome = normalizarTexto(parte.name ?? "");
     if (!nome) {
       return;
     }
 
-    const documento = mascararDocumento(parte.documento ?? parte.cpf ?? parte.cnpj ?? null);
+    const documento = mascararDocumento(parte.document ?? null);
     const advogado = extrairAdvogado(parte);
     const categoria = classificarParte(parte);
 
@@ -492,201 +433,186 @@ function mapearPartes(partes: ApiProcessoParte[] | null | undefined): PartesAgru
       nome,
       documento,
       advogado,
-      rotulo: normalizarTexto(parte.tipo ?? parte.papel ?? parte.categoria ?? "") || "OUTROS",
+      rotulo: normalizarTexto(parte.role ?? parte.type ?? parte.side ?? "") || "OUTROS",
     });
   });
 
   return agrupado;
 }
 
-function extrairTribunal(
-  cover: ProcessoResponseData["cover"] | undefined,
-  uf?: string | null,
-): string {
-  const tribunalDireto = primeiroTextoValido(cover?.tribunal_sigla, cover?.tribunal);
-  if (tribunalDireto) {
-    return tribunalDireto;
+function normalizarListaDeStrings(valores?: Array<string | null> | null): string[] {
+  if (!Array.isArray(valores)) {
+    return [];
   }
 
-  if (uf) {
-    const textoUf = normalizarTexto(uf).toUpperCase();
-    if (textoUf.length === 2) {
-      return `TJ${textoUf}`;
-    }
-  }
-
-  return NAO_INFORMADO;
+  return valores
+    .map((valor) => normalizarTexto(valor ?? ""))
+    .filter((valor): valor is string => Boolean(valor));
 }
 
-function construirMovimento(mov: ApiProcessoMovimentacao): MovimentoNormalizado | null {
-  const id = mov.id !== null && mov.id !== undefined ? String(mov.id) : null;
-  if (!id) {
-    return null;
+function extrairLocalidade(valor: ApiProcessoResponse["county"]): {
+  comarca: string;
+  cidade: string;
+  estado: string;
+  cidadeEstado: string;
+} {
+  const padrao = {
+    comarca: NAO_INFORMADO,
+    cidade: NAO_INFORMADO,
+    estado: NAO_INFORMADO,
+    cidadeEstado: NAO_INFORMADO,
+  };
+
+  if (!valor) {
+    return padrao;
   }
 
-  const dataBase = primeiroTextoValido(mov.data, mov.criado_em, mov.atualizado_em);
-  const dataBruta = dataBase ? new Date(dataBase) : null;
-  const data = dataBruta && !Number.isNaN(dataBruta.getTime()) ? dataBruta : null;
-  const dataLonga = formatarData(data, "longa");
-  const dataCurta = formatarData(data, "curta");
-  const dias = diasDesde(data);
+  if (typeof valor === "string") {
+    const texto = normalizarTexto(valor);
+    if (!texto) {
+      return padrao;
+    }
+
+    let cidade = texto;
+    let estado = "";
+
+    ["/", "-", "–", ","].some((separador) => {
+      if (!texto.includes(separador)) {
+        return false;
+      }
+
+      const partes = texto.split(separador).map((parte) => normalizarTexto(parte));
+      if (partes.length < 2) {
+        return false;
+      }
+
+      const ultimaParte = partes[partes.length - 1];
+      if (ultimaParte && ultimaParte.length === 2) {
+        estado = ultimaParte.toUpperCase();
+        cidade = partes.slice(0, -1).join(" ") || cidade;
+      } else {
+        cidade = partes[0] ?? cidade;
+        estado = partes[1] ?? estado;
+      }
+
+      return true;
+    });
+
+    const estadoNormalizado = normalizarTexto(estado).toUpperCase();
+    const cidadeNormalizada = normalizarTexto(cidade);
+    const cidadeEstado = cidadeNormalizada
+      ? estadoNormalizado
+        ? `${cidadeNormalizada}/${estadoNormalizado}`
+        : cidadeNormalizada
+      : estadoNormalizado || NAO_INFORMADO;
+
+    return {
+      comarca: texto,
+      cidade: cidadeNormalizada || NAO_INFORMADO,
+      estado: estadoNormalizado || NAO_INFORMADO,
+      cidadeEstado,
+    };
+  }
+
+  const cidade = primeiroTextoValido(valor.city, valor.name) || NAO_INFORMADO;
+  const estado = primeiroTextoValido(valor.state) || NAO_INFORMADO;
+  const comarca = primeiroTextoValido(valor.name, valor.city) || NAO_INFORMADO;
+  const cidadeEstado =
+    cidade !== NAO_INFORMADO && estado !== NAO_INFORMADO
+      ? `${cidade}/${estado}`
+      : cidade !== NAO_INFORMADO
+        ? cidade
+        : estado !== NAO_INFORMADO
+          ? estado
+          : NAO_INFORMADO;
+
+  return { comarca, cidade, estado, cidadeEstado };
+}
+
+function construirMovimento(mov: ApiProcessoStep): MovimentoNormalizado | null {
+  const id = mov.id !== null && mov.id !== undefined ? String(mov.id) : null;
+  const data = mov.date ? new Date(mov.date) : null;
+  const dataValida = data && !Number.isNaN(data.getTime()) ? data : null;
+  const dataLonga = formatarData(dataValida, "longa");
+  const dataCurta = formatarData(dataValida, "curta");
+  const dias = diasDesde(dataValida);
 
   const linhas: MovimentoLinha[] = [];
-  const titulo = normalizarTexto(mov.tipo ?? "");
+  const titulo = primeiroTextoValido(mov.title, mov.type);
   if (titulo) {
     linhas.push({ texto: titulo, negrito: true });
   }
 
-  const subtitulo = normalizarTexto(mov.tipo_publicacao ?? "");
-  if (subtitulo) {
-    linhas.push({ texto: subtitulo });
+  const descricao = normalizarTexto(mov.description ?? "");
+  if (descricao) {
+    linhas.push(...descricao.split("\n").map((texto) => ({ texto })));
   }
 
-  const conteudo = normalizarTexto(mov.conteudo ?? "");
-  if (conteudo) {
-    linhas.push(...conteudo.split("\n").map((texto) => ({ texto })));
+  const categoria = primeiroTextoValido(mov.category, mov.type);
+
+  if (!linhas.length && categoria) {
+    linhas.push({ texto: categoria, negrito: true });
   }
 
-  const observacao = normalizarTexto(mov.texto_categoria ?? "");
+  if (!linhas.length) {
+    return null;
+  }
 
   return {
-    id,
-    data,
-    dataCurta: dataCurta,
-    dataLonga: dataLonga,
+    id: id ?? `${mov.date ?? "sem-data"}-${titulo ?? categoria ?? "passo"}`,
+    data: dataValida,
+    dataCurta,
+    dataLonga,
     dias,
     linhas,
-    observacao: observacao || null,
+    observacao: categoria && categoria !== titulo ? categoria : undefined,
   };
 }
 
 export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): ProcessoViewModel {
-  const juditLastRequest = processo.judit_last_request
-    ? mapApiJuditRequest(processo.judit_last_request)
-    : null;
-  const responseData = juditLastRequest
-    ? parseResponseDataFromResult(juditLastRequest.result)
-    : null;
-  const cover = responseData?.cover ?? undefined;
-  const metadata = (responseData?.metadata as Record<string, unknown> | undefined) ?? undefined;
+  const codigo = primeiroTextoValido(processo.code) || NAO_INFORMADO;
+  const nome = primeiroTextoValido(processo.name) || NAO_INFORMADO;
+  const status = primeiroTextoValido(processo.status) || NAO_INFORMADO;
+  const fase = primeiroTextoValido(processo.phase) || NAO_INFORMADO;
+  const area = primeiroTextoValido(processo.area) || NAO_INFORMADO;
 
-  const juditMovimentacoes: ApiProcessoMovimentacao[] = Array.isArray(responseData?.movimentacoes)
-    ? responseData!.movimentacoes
-        .map((entrada, index) => {
-          const data =
-            parseOptionalString(
-              entrada.data ??
-                entrada.data_hora ??
-                entrada.datahora ??
-                entrada.occurred_at ??
-                entrada.occurredAt ??
-                entrada.created_at ??
-                entrada.createdAt ??
-                entrada.updated_at ??
-                entrada.updatedAt,
-            ) ?? null;
+  const tribunalSigla = primeiroTextoValido(processo.tribunal_acronym, processo.tribunal) || NAO_INFORMADO;
+  const tribunalNome = primeiroTextoValido(processo.tribunal) || tribunalSigla;
 
-          const tipo =
-            parseOptionalString(entrada.tipo) ??
-            parseOptionalString(entrada.titulo) ??
-            parseOptionalString(entrada.title) ??
-            parseOptionalString(entrada.nome) ??
-            parseOptionalString(entrada.name) ??
-            parseOptionalString(entrada.evento) ??
-            parseOptionalString(entrada.event) ??
-            parseOptionalString(entrada.tipo_evento) ??
-            null;
+  const localidade = extrairLocalidade(processo.county ?? null);
+  const valorCausa = formatarMoeda(processo.amount);
+  const distribuidoEm = formatarData(processo.distribution_date, "curta") ?? NAO_INFORMADO;
+  const justiceDescription = primeiroTextoValido(processo.justice_description) || NAO_INFORMADO;
+  const instance = normalizarGrau(primeiroTextoValido(processo.instance) || NAO_INFORMADO);
 
-          const tipoPublicacao =
-            parseOptionalString(entrada.tipo_publicacao) ??
-            parseOptionalString(entrada.subtitulo) ??
-            parseOptionalString(entrada.subtitle) ??
-            parseOptionalString(entrada.categoria) ??
-            parseOptionalString(entrada.category) ??
-            null;
+  const subjectsArr = normalizarListaDeStrings(processo.subjects);
+  const classificationsArr = normalizarListaDeStrings(processo.classifications);
+  const tagsArr = normalizarListaDeStrings(processo.tags);
 
-          const conteudo =
-            parseOptionalString(entrada.conteudo) ??
-            parseOptionalString(entrada.descricao) ??
-            parseOptionalString(entrada.description) ??
-            parseOptionalString(entrada.detalhes) ??
-            parseOptionalString(entrada.details) ??
-            parseOptionalString(entrada.mensagem) ??
-            parseOptionalString(entrada.message) ??
-            null;
+  const passos = Array.isArray(processo.steps) ? processo.steps : [];
+  const passosDeduplicados = deduplicarMovimentacoes(
+    passos.map((step, index) => ({
+      id: step.id ?? `${index}-${step.date ?? ""}-${step.title ?? ""}`,
+      data: step.date ?? null,
+      tipo: step.title ?? step.type ?? null,
+      conteudo: step.description ?? null,
+      texto_categoria: step.category ?? null,
+      original: step,
+    })),
+  );
 
-          const textoCategoria =
-            parseOptionalString(entrada.texto_categoria) ??
-            parseOptionalString(entrada.observacao) ??
-            parseOptionalString(entrada.observacoes) ??
-            parseOptionalString(entrada.observation) ??
-            null;
-
-          const updatedAt =
-            parseOptionalString(
-              entrada.atualizado_em ??
-                entrada.atualizadoEm ??
-                entrada.updated_at ??
-                entrada.updatedAt,
-            ) ?? null;
-
-          const createdAt =
-            parseOptionalString(
-              entrada.criado_em ??
-                entrada.criadoEm ??
-                entrada.created_at ??
-                entrada.createdAt,
-            ) ?? updatedAt ?? data ?? null;
-
-          const idBase =
-            parseOptionalString(entrada.id) ??
-            parseOptionalString(entrada.identificador) ??
-            parseOptionalString(entrada.reference) ??
-            parseOptionalString(entrada.referencia) ??
-            parseOptionalString(entrada.codigo) ??
-            parseOptionalString(entrada.code) ??
-            parseOptionalString(entrada.event_id) ??
-            parseOptionalString(entrada.evento_id) ??
-            parseOptionalString(entrada.numero) ??
-            null;
-
-          const fallbackIdSource = [data ?? "", tipo ?? "", tipoPublicacao ?? "", conteudo ?? "", textoCategoria ?? ""]
-            .map((parte) => parte.toLowerCase())
-            .join("|");
-
-          const id = idBase ?? (fallbackIdSource ? `judit-${fallbackIdSource}` : `judit-${index}`);
-
-          return {
-            id,
-            data,
-            tipo,
-            tipo_publicacao: tipoPublicacao,
-            conteudo,
-            texto_categoria: textoCategoria,
-            atualizado_em: updatedAt,
-            criado_em: createdAt,
-          } satisfies ApiProcessoMovimentacao;
-        })
-        .filter((mov) => Boolean(mov.id))
-    : [];
-
-  const numero = primeiroTextoValido(cover?.numero, processo.numero) || NAO_INFORMADO;
-  const grau =
-    primeiroTextoValido(
-      cover?.grau_processual,
-      typeof metadata?.grau === "string" ? (metadata.grau as string) : null,
-      processo.metadata && typeof processo.metadata.grau === "string"
-        ? (processo.metadata.grau as string)
-        : null,
-    ) || processo.status_processo || NAO_INFORMADO;
-
-  const movimentacoesOriginais = [
-    ...(Array.isArray(processo.movimentacoes) ? processo.movimentacoes : []),
-    ...juditMovimentacoes,
-  ];
-  const movimentacoesDeduplicadas = deduplicarMovimentacoes(movimentacoesOriginais);
-  const movimentos = movimentacoesDeduplicadas
-    .map(construirMovimento)
+  const movimentos = passosDeduplicados
+    .map((item) => {
+      const original = (item as typeof item & { original?: ApiProcessoStep }).original;
+      return construirMovimento({
+        id: item.id,
+        date: original?.date ?? item.data ?? null,
+        title: original?.title ?? item.tipo ?? null,
+        description: original?.description ?? item.conteudo ?? null,
+        type: original?.type ?? null,
+        category: original?.category ?? item.texto_categoria ?? null,
+      });
+    })
     .filter((mov): mov is MovimentoNormalizado => mov !== null);
 
   const grupos = agruparPorMes(movimentos);
@@ -698,136 +624,77 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     return acc;
   }, null);
 
-  const ultimaMovimentacao = ultimaMovimentacaoData
-    ? formatarData(ultimaMovimentacaoData, "curta")
-    : null;
+  const ultimaAtualizacao = formatarData(ultimaMovimentacaoData ?? processo.updated_at ?? null, "hora");
 
-  const distribuicao =
-    formatarData(
-      primeiroTextoValido(cover?.data_distribuicao, processo.data_distribuicao),
-      "curta",
-    ) ?? NAO_INFORMADO;
+  const partes = mapearPartes(processo.participants ?? processo.parties ?? null);
 
-  const valorCausa = formatarMoeda(
-    cover?.valor_da_causa ??
-      (typeof metadata?.valor_causa === "string" || typeof metadata?.valor_causa === "number"
-        ? (metadata.valor_causa as string | number)
-        : undefined),
-  );
+  const relacionados: ProcessoRelacionadoView[] = Array.isArray(processo.related_lawsuits)
+    ? processo.related_lawsuits.map((item, index) => {
+        const codigoRelacionado = primeiroTextoValido(item.code) || NAO_INFORMADO;
+        const id = codigoRelacionado !== NAO_INFORMADO ? codigoRelacionado : `relacionado-${index}`;
 
-  const partes = mapearPartes((responseData?.partes as ApiProcessoParte[] | undefined) ?? processo.partes ?? []);
-
-  const dados: DadosProcesso = {
-    tribunalDeOrigem:
-      primeiroTextoValido(cover?.tribunal, metadata?.tribunal as string | undefined) ||
-      (processo.uf ? `${normalizarTexto(processo.uf)} — Tribunal não informado` : NAO_INFORMADO),
-    comarca:
-      primeiroTextoValido(cover?.comarca, metadata?.comarca as string | undefined) || NAO_INFORMADO,
-    cidade: primeiroTextoValido(cover?.cidade, processo.municipio) || NAO_INFORMADO,
-    estado: primeiroTextoValido(cover?.estado, processo.uf) || NAO_INFORMADO,
-    segmento:
-      primeiroTextoValido(
-        cover?.segmento_justica,
-        metadata?.segmento as string | undefined,
-      ) || NAO_INFORMADO,
-    fase: primeiroTextoValido(cover?.fase, processo.fase) || NAO_INFORMADO,
-    distribuidoEm: distribuicao,
-    valorDaCausa: valorCausa,
-    classeProcessual:
-      primeiroTextoValido(
-        processo.classe_judicial,
-        cover?.classe_processual,
-        processo.classe,
-      ) || NAO_INFORMADO,
-    juizRelator:
-      primeiroTextoValido(
-        cover?.juiz_relator,
-        metadata?.juiz as string | undefined,
-        processo.advogado_responsavel,
-      ) || NAO_INFORMADO,
-    grau: normalizarGrau(
-      primeiroTextoValido(
-        cover?.grau_processual,
-        metadata?.grau as string | undefined,
-        processo.status_processo,
-      ) || grau,
-    ),
-    orgaoJulgador:
-      primeiroTextoValido(cover?.orgao_julgador, processo.orgao_julgador, processo.orgao_julgador_nome) ||
-      NAO_INFORMADO,
-    assuntos:
-      formatarListaAssuntos(
-        cover?.assuntos ?? metadata?.assuntos ?? processo.assunto ?? processo.metadata?.assunto,
-      ),
-  };
-
-  const cabecalho: CabecalhoProcesso = {
-    numero,
-    grau: normalizarGrau(grau),
-    ultimaMovimentacao,
-    chips: resolverChips(
-      processo.status ?? processo.status_processo,
-      cover?.fase,
-      metadata?.etiquetas,
-    ),
-    tribunal: extrairTribunal(cover, processo.uf),
-    valorDaCausa: valorCausa,
-    distribuidoEm: distribuicao,
-    partesResumo: [...partes.ativo, ...partes.passivo].slice(0, 5),
-    classeProcessual:
-      primeiroTextoValido(
-        processo.classe_judicial,
-        cover?.classe_processual,
-        processo.classe,
-      ) || NAO_INFORMADO,
-  };
-
-  const relacionadosArray = (responseData?.relacionados as ApiProcessoRelacionado[] | undefined) ??
-    (processo.relacionados ?? []);
-
-  const relacionados: ProcessoRelacionadoView[] = Array.isArray(relacionadosArray)
-    ? relacionadosArray
-        .map((item, index) => {
-          const numeroProcesso = primeiroTextoValido(item.numero) || NAO_INFORMADO;
-          const id =
-            item.id !== null && item.id !== undefined
-              ? String(item.id)
-              : numeroProcesso !== NAO_INFORMADO
-                ? `${numeroProcesso}-${index}`
-                : `relacionado-${index}`;
-          return {
-            id,
-            numero: numeroProcesso,
-            grau: normalizarGrau(item.grau ?? ""),
-            classe: primeiroTextoValido(item.classe) || NAO_INFORMADO,
-          };
-        })
-        .filter(Boolean)
+        return {
+          id,
+          codigo: codigoRelacionado,
+          nome: primeiroTextoValido(item.name) || NAO_INFORMADO,
+          status: primeiroTextoValido(item.status) || NAO_INFORMADO,
+          fase: primeiroTextoValido(item.phase) || NAO_INFORMADO,
+        };
+      })
     : [];
 
-  const anexos = Array.isArray(responseData?.anexos)
-    ? responseData!.anexos.map((anexo: any) => ({
-        titulo: primeiroTextoValido(anexo.titulo, anexo.nome) || "Anexo",
-        data: formatarData(
-          primeiroTextoValido(anexo.attachment_date, anexo.created_at, anexo.updated_at),
-          "hora",
-        ),
-        url: primeiroTextoValido(anexo.link, anexo.url, anexo.href),
+  const anexos = Array.isArray(processo.attachments)
+    ? processo.attachments.map((anexo, index) => ({
+        titulo: primeiroTextoValido(anexo.title) || `Documento ${index + 1}`,
+        data: formatarData(anexo.date ?? null, "hora"),
+        url: primeiroTextoValido(anexo.url),
       }))
     : [];
 
+  const cabecalho: CabecalhoProcesso = {
+    codigo,
+    nome,
+    status,
+    fase,
+    area,
+    cidadeEstado: localidade.cidadeEstado,
+    comarca: localidade.comarca,
+    tribunal: tribunalNome,
+    distribuidoEm,
+    valorDaCausa: valorCausa,
+    instance,
+    justiceDescription,
+    ultimaAtualizacao,
+    tags: tagsArr,
+    subjects: subjectsArr,
+  };
+
+  const dados: DadosProcesso = {
+    tribunal: tribunalNome,
+    tribunalSigla: tribunalSigla,
+    justiceDescription,
+    instance,
+    area,
+    county: localidade.comarca,
+    city: localidade.cidade,
+    state: localidade.estado,
+    distributionDate: distribuidoEm,
+    amount: valorCausa,
+    subjects: subjectsArr.length ? subjectsArr.join(", ") : NAO_INFORMADO,
+    classifications: classificationsArr.length ? classificationsArr.join(", ") : NAO_INFORMADO,
+    tags: tagsArr.length ? tagsArr.join(", ") : NAO_INFORMADO,
+    updatedAt: ultimaAtualizacao ?? NAO_INFORMADO,
+  };
+
   const judit: JuditResumo = {
-    requestId: juditLastRequest?.requestId ?? null,
-    status: juditLastRequest?.status ?? null,
-    atualizadoEm: formatarData(juditLastRequest?.updatedAt ?? null, "hora"),
-    origem: juditLastRequest?.source ?? null,
-    consultas: Number(processo.consultas_api_count ?? 0) || 0,
-    ultimaSincronizacao: formatarData(
-      juditLastRequest?.updatedAt ?? processo.ultima_sincronizacao ?? null,
-      "hora",
-    ),
-    trackingId: processo.judit_tracking_id ?? null,
-    janela: processo.judit_tracking_hour_range ?? null,
+    requestId: codigo !== NAO_INFORMADO ? codigo : null,
+    status: status !== NAO_INFORMADO ? status : null,
+    atualizadoEm: ultimaAtualizacao,
+    origem: justiceDescription !== NAO_INFORMADO ? justiceDescription : null,
+    consultas: passos.length,
+    ultimaSincronizacao: ultimaAtualizacao,
+    trackingId: null,
+    janela: fase !== NAO_INFORMADO ? fase : null,
     anexos,
   };
 
@@ -839,9 +706,9 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     grupos,
     relacionados,
     judit,
-    responseData,
   };
 }
+
 interface TimelineMesProps {
   grupo: GrupoMovimentacao;
   aberto: boolean;
@@ -1019,8 +886,8 @@ function ProcessosRelacionadosTabela({ itens, onAbrir }: ProcessosRelacionadosPr
         <TableHeader>
           <TableRow>
             <TableHead>Nº PROCESSO</TableHead>
-            <TableHead>GRAU</TableHead>
-            <TableHead>CLASSE</TableHead>
+            <TableHead>STATUS</TableHead>
+            <TableHead>FASE</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1030,9 +897,14 @@ function ProcessosRelacionadosTabela({ itens, onAbrir }: ProcessosRelacionadosPr
               className="cursor-pointer hover:bg-muted/40"
               onClick={() => onAbrir(item.id)}
             >
-              <TableCell>{item.numero}</TableCell>
-              <TableCell>{item.grau}</TableCell>
-              <TableCell>{item.classe}</TableCell>
+              <TableCell>
+                <div className="flex flex-col">
+                  <span className="font-medium text-foreground">{item.codigo}</span>
+                  <span className="text-xs text-muted-foreground">{item.nome}</span>
+                </div>
+              </TableCell>
+              <TableCell>{item.status}</TableCell>
+              <TableCell>{item.fase}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -1051,42 +923,40 @@ function JuditCard({ resumo, onVerTodosAnexos }: JuditCardProps) {
     <div className="space-y-4">
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Status da última solicitação</CardTitle>
+          <CardTitle className="text-base font-semibold">Panorama do processo</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p>
-            <span className="font-semibold text-foreground">ID:</span> {resumo.requestId ?? NAO_INFORMADO}
+            <span className="font-semibold text-foreground">Código do processo:</span> {resumo.requestId ?? NAO_INFORMADO}
           </p>
           <p>
             <span className="font-semibold text-foreground">Status:</span> {resumo.status ?? NAO_INFORMADO}
           </p>
           <p>
+            <span className="font-semibold text-foreground">Fase monitorada:</span> {resumo.janela ?? NAO_INFORMADO}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Justiça:</span> {resumo.origem ?? NAO_INFORMADO}
+          </p>
+          <p>
             <span className="font-semibold text-foreground">Atualizado em:</span> {resumo.atualizadoEm ?? NAO_INFORMADO}
           </p>
-          {resumo.origem ? (
-            <p>
-              <span className="font-semibold text-foreground">Origem:</span> {resumo.origem}
-            </p>
-          ) : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Resumo da automação</CardTitle>
+          <CardTitle className="text-base font-semibold">Eventos e atualizações</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
-            <span className="font-semibold text-foreground">Consultas API:</span> {resumo.consultas}
+            <span className="font-semibold text-foreground">Eventos registrados:</span> {resumo.consultas}
           </p>
           <p>
-            <span className="font-semibold text-foreground">Última sincronização:</span> {resumo.ultimaSincronizacao ?? NAO_INFORMADO}
+            <span className="font-semibold text-foreground">Última atualização:</span> {resumo.ultimaSincronizacao ?? NAO_INFORMADO}
           </p>
           <p>
-            <span className="font-semibold text-foreground">Tracking:</span> {resumo.trackingId ?? NAO_INFORMADO}
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Janela:</span> {resumo.janela ?? NAO_INFORMADO}
+            <span className="font-semibold text-foreground">Fase monitorada:</span> {resumo.janela ?? NAO_INFORMADO}
           </p>
         </CardContent>
       </Card>
@@ -1136,19 +1006,20 @@ export function InformacoesProcesso({ dados, partes }: InformacoesProcessoProps)
           </h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <CampoInformacao rotulo="Tribunal de origem" valor={dados.tribunalDeOrigem} />
-          <CampoInformacao rotulo="Comarca" valor={dados.comarca} />
-          <CampoInformacao rotulo="Cidade" valor={dados.cidade} />
-          <CampoInformacao rotulo="Estado" valor={dados.estado} />
-          <CampoInformacao rotulo="Segmento da justiça" valor={dados.segmento} />
-          <CampoInformacao rotulo="Fase" valor={dados.fase} />
-          <CampoInformacao rotulo="Distribuído em" valor={dados.distribuidoEm} />
-          <CampoInformacao rotulo="Valor da causa" valor={dados.valorDaCausa} />
-          <CampoInformacao rotulo="Classe processual" valor={dados.classeProcessual} />
-          <CampoInformacao rotulo="Juiz/Relator" valor={dados.juizRelator} />
-          <CampoInformacao rotulo="Grau do processo" valor={dados.grau} />
-          <CampoInformacao rotulo="Órgão julgador" valor={dados.orgaoJulgador} />
-          <CampoInformacao rotulo="Assuntos" valor={dados.assuntos} className="md:col-span-2" />
+          <CampoInformacao rotulo="Tribunal" valor={dados.tribunal} />
+          <CampoInformacao rotulo="Sigla do tribunal" valor={dados.tribunalSigla} />
+          <CampoInformacao rotulo="Justiça" valor={dados.justiceDescription} />
+          <CampoInformacao rotulo="Instância" valor={dados.instance} />
+          <CampoInformacao rotulo="Área" valor={dados.area} />
+          <CampoInformacao rotulo="Comarca" valor={dados.county} />
+          <CampoInformacao rotulo="Cidade" valor={dados.city} />
+          <CampoInformacao rotulo="Estado" valor={dados.state} />
+          <CampoInformacao rotulo="Valor da causa" valor={dados.amount} />
+          <CampoInformacao rotulo="Distribuído em" valor={dados.distributionDate} />
+          <CampoInformacao rotulo="Assuntos" valor={dados.subjects} className="md:col-span-2" />
+          <CampoInformacao rotulo="Classificações" valor={dados.classifications} className="md:col-span-2" />
+          <CampoInformacao rotulo="Tags" valor={dados.tags} className="md:col-span-2" />
+          <CampoInformacao rotulo="Última atualização" valor={dados.updatedAt} />
         </div>
       </section>
 
@@ -1456,29 +1327,53 @@ export default function VisualizarProcesso() {
           </Alert>
         ) : viewModel ? (
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold text-foreground">{viewModel.cabecalho.numero}</h1>
-              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                {viewModel.cabecalho.grau}
-              </Badge>
-              {viewModel.cabecalho.ultimaMovimentacao ? (
-                <span className="text-sm text-muted-foreground">
-                  Última movimentação em {viewModel.cabecalho.ultimaMovimentacao}
-                </span>
-              ) : null}
+            <div className="space-y-1">
+              <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+                {viewModel.cabecalho.codigo}
+              </p>
+              <h1 className="text-3xl font-semibold text-foreground">{viewModel.cabecalho.nome}</h1>
             </div>
             <div className="flex flex-wrap gap-2">
-              {viewModel.cabecalho.chips.map((chip) => (
-                <Badge key={chip} className="bg-slate-100 text-slate-700">
-                  {chip}
-                </Badge>
-              ))}
+              <Badge className="bg-emerald-100 text-emerald-700">{viewModel.cabecalho.status}</Badge>
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                {viewModel.cabecalho.fase}
+              </Badge>
+              <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                {viewModel.cabecalho.area}
+              </Badge>
             </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>{viewModel.cabecalho.cidadeEstado}</span>
+              <span className="hidden sm:inline">•</span>
+              <span>{viewModel.cabecalho.tribunal}</span>
+              <span className="hidden sm:inline">•</span>
+              <span>{viewModel.cabecalho.instance}</span>
+              {viewModel.cabecalho.ultimaAtualizacao ? (
+                <>
+                  <span className="hidden sm:inline">•</span>
+                  <span>Atualizado em {viewModel.cabecalho.ultimaAtualizacao}</span>
+                </>
+              ) : null}
+            </div>
+            {viewModel.cabecalho.tags.length || viewModel.cabecalho.subjects.length ? (
+              <div className="flex flex-wrap gap-2">
+                {viewModel.cabecalho.tags.map((tag) => (
+                  <Badge key={`tag-${tag}`} variant="secondary" className="bg-primary/10 text-primary">
+                    {tag}
+                  </Badge>
+                ))}
+                {viewModel.cabecalho.subjects.map((subject) => (
+                  <Badge key={`subject-${subject}`} variant="outline" className="border-muted-foreground/30">
+                    {subject}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         {viewModel ? (
-          <div className="grid gap-4 lg:grid-cols-[repeat(4,minmax(0,1fr))_240px]">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
             <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
@@ -1486,6 +1381,30 @@ export default function VisualizarProcesso() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xl font-semibold">{viewModel.cabecalho.tribunal}</CardContent>
+            </Card>
+            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                  Cidade / Estado
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xl font-semibold">{viewModel.cabecalho.cidadeEstado}</CardContent>
+            </Card>
+            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                  Instância
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xl font-semibold">{viewModel.cabecalho.instance}</CardContent>
+            </Card>
+            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                  Justiça
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xl font-semibold">{viewModel.cabecalho.justiceDescription}</CardContent>
             </Card>
             <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
               <CardHeader className="pb-2">
@@ -1502,51 +1421,6 @@ export default function VisualizarProcesso() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xl font-semibold">{viewModel.cabecalho.distribuidoEm}</CardContent>
-            </Card>
-            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
-                  Partes
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex items-center justify-between">
-                <span className="text-xl font-semibold">{viewModel.partes.total}</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-emerald-800">
-                      Ver lista
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
-                    <DropdownMenuLabel>Partes cadastradas</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {viewModel.cabecalho.partesResumo.length ? (
-                      viewModel.cabecalho.partesResumo.map((parte, index) => (
-                        <DropdownMenuItem key={`${parte.nome}-${index}`} className="flex flex-col items-start">
-                          <span className="font-medium text-foreground">{parte.nome}</span>
-                          {parte.documento ? (
-                            <span className="text-xs text-muted-foreground">{parte.documento}</span>
-                          ) : null}
-                        </DropdownMenuItem>
-                      ))
-                    ) : (
-                      <DropdownMenuItem className="text-muted-foreground">
-                        Nenhuma parte informada
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </CardContent>
-            </Card>
-            <Card className="border-l-4 border-l-primary bg-primary/10 text-primary">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide">
-                  Classe processual
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-lg font-semibold text-primary">
-                {viewModel.cabecalho.classeProcessual}
-              </CardContent>
             </Card>
           </div>
         ) : null}
