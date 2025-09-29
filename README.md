@@ -140,11 +140,12 @@ Após iniciar, acesse o frontend em `http://localhost:5173` e utilize o menu **D
 
 Configure as seguintes variáveis antes de iniciar o backend. Utilize o arquivo [`.env.example`](./.env.example) como referência:
 
-| Variável               | Descrição                                                                                     |
-| ---------------------- | --------------------------------------------------------------------------------------------- |
-| `ASAAS_API_URL`        | URL base da API. Utilize `https://sandbox.asaas.com/api/v3` no ambiente de testes.            |
-| `ASAAS_ACCESS_TOKEN`   | Token pessoal ou de aplicação gerado no painel do Asaas (`Configurações > Integrações > API`). |
-| `ASAAS_WEBHOOK_SECRET` | Segredo configurado no webhook para validar a assinatura `x-asaas-signature`.                 |
+| Variável               | Descrição                                                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ASAAS_API_URL`        | URL base da API. Utilize `https://sandbox.asaas.com/api/v3` no ambiente de testes.                                                                  |
+| `ASAAS_ACCESS_TOKEN`   | Token pessoal ou de aplicação gerado no painel do Asaas (`Configurações > Integrações > API`).                                                       |
+| `ASAAS_WEBHOOK_SECRET` | Segredo configurado no webhook para validar a assinatura `x-asaas-signature`.                                                                       |
+| `ASAAS_ENVIRONMENT`    | Ambiente utilizado ao consumir a API. Aceita `homologacao` (padrão) ou os aliases de produção `producao`, `produção`, `production`, `prod` e `live`. |
 
 > 💡 Defina as mesmas chaves no ambiente de build do frontend caso ele consuma endpoints intermediários (`VITE_API_URL`).
 
