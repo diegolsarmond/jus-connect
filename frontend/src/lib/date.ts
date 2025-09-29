@@ -1,6 +1,23 @@
 const pad = (value: number) => value.toString().padStart(2, "0");
 
-export const formatPostDateTime = (value: string): string => {
+const createFormatter = () =>
+  new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+let blogPublicationFormatter: Intl.DateTimeFormat | undefined;
+
+const getBlogPublicationFormatter = () => {
+  if (!blogPublicationFormatter) {
+    blogPublicationFormatter = createFormatter();
+  }
+
+  return blogPublicationFormatter;
+};
+
+export const formatBlogPublicationDate = (value: string): string => {
   if (!value) {
     return "";
   }
@@ -12,15 +29,11 @@ export const formatPostDateTime = (value: string): string => {
   }
 
   try {
-    return new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(parsedDate);
+    return getBlogPublicationFormatter().format(parsedDate);
   } catch (error) {
-    return `${pad(parsedDate.getDate())}/${pad(parsedDate.getMonth() + 1)}/${parsedDate.getFullYear()} ${pad(parsedDate.getHours())}:${pad(parsedDate.getMinutes())}`;
+    return `${pad(parsedDate.getDate())}/${pad(parsedDate.getMonth() + 1)}/${parsedDate.getFullYear()}`;
   }
 };
+
+export const formatPostDateTime = (value: string): string =>
+  formatBlogPublicationDate(value);
