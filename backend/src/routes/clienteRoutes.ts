@@ -7,7 +7,7 @@ import {
   deleteCliente,
   countClientesAtivos,
 } from '../controllers/clienteController';
-import { getAsaasCustomerStatus } from '../controllers/asaasCustomerController';
+import { getAsaasCustomerStatus, syncAsaasCustomerNow } from '../controllers/asaasCustomerController';
 
 const router = Router();
 
@@ -185,6 +185,51 @@ router.post('/clientes', createCliente);
  *         description: Cliente não encontrado
  */
 router.get('/asaas/customers/:clienteId/status', getAsaasCustomerStatus);
+
+/**
+ * @swagger
+ * /api/asaas/customers/status:
+ *   get:
+ *     summary: Recupera o status de sincronização do cliente com o Asaas utilizando query string
+ *     tags: [Clientes]
+ *     parameters:
+ *       - in: query
+ *         name: customerId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Status de sincronização
+ *       404:
+ *         description: Cliente não encontrado
+ */
+router.get('/asaas/customers/status', getAsaasCustomerStatus);
+
+/**
+ * @swagger
+ * /api/asaas/customers/sync:
+ *   post:
+ *     summary: Solicita sincronização imediata do cliente com o Asaas
+ *     tags: [Clientes]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               customerId:
+ *                 type: integer
+ *             required:
+ *               - customerId
+ *     responses:
+ *       200:
+ *         description: Retorna o status atualizado da sincronização
+ *       404:
+ *         description: Cliente não encontrado
+ */
+router.post('/asaas/customers/sync', syncAsaasCustomerNow);
 
 /**
  * @swagger
