@@ -618,6 +618,12 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
   const statusLabel =
     trackingSummary?.status?.trim() || processo.status?.trim() || "Não informado";
 
+  const lastSyncAt =
+    juditLastRequest?.updatedAt ??
+    trackingSummary?.updatedAt ??
+    processo.ultima_sincronizacao ??
+    null;
+
   return {
     id: processo.id,
     numero: processo.numero,
@@ -637,7 +643,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     jurisdicao,
     orgaoJulgador: processo.orgao_julgador?.trim() || "Não informado",
     proposta,
-    ultimaSincronizacao: processo.ultima_sincronizacao ?? null,
+    ultimaSincronizacao: lastSyncAt,
     consultasApiCount: parseApiInteger(processo.consultas_api_count),
     movimentacoesCount: parseApiInteger(processo.movimentacoes_count),
     juditTrackingId: processo.judit_tracking_id ?? null,
@@ -1498,11 +1504,15 @@ export default function Processos() {
                 item.status
               : item.status;
 
-            const updatedAt = shouldApplyResult
-              ? trackingSummary?.updatedAt ??
-                item.trackingSummary?.updatedAt ??
-                null
+            const trackingUpdatedAt = shouldApplyResult
+              ? trackingSummary?.updatedAt ?? item.trackingSummary?.updatedAt ?? null
               : item.trackingSummary?.updatedAt ?? null;
+
+            const nextLastSync = shouldApplyResult
+              ? requestMapped?.updatedAt ??
+                trackingUpdatedAt ??
+                item.ultimaSincronizacao
+              : item.ultimaSincronizacao;
 
             return {
               ...item,
@@ -1512,9 +1522,7 @@ export default function Processos() {
               trackingSummary,
               responseData,
               status: trackingStatus || item.status,
-              ultimaSincronizacao: shouldApplyResult
-                ? updatedAt ?? item.ultimaSincronizacao
-                : item.ultimaSincronizacao,
+              ultimaSincronizacao: nextLastSync,
             };
           }),
         );

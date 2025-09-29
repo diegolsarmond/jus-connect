@@ -720,7 +720,10 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     atualizadoEm: formatarData(juditLastRequest?.updatedAt ?? null, "hora"),
     origem: juditLastRequest?.source ?? null,
     consultas: Number(processo.consultas_api_count ?? 0) || 0,
-    ultimaSincronizacao: formatarData(processo.ultima_sincronizacao ?? null, "hora"),
+    ultimaSincronizacao: formatarData(
+      juditLastRequest?.updatedAt ?? processo.ultima_sincronizacao ?? null,
+      "hora",
+    ),
     trackingId: processo.judit_tracking_id ?? null,
     janela: processo.judit_tracking_hour_range ?? null,
     anexos,
