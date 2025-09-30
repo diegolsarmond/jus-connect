@@ -686,62 +686,7 @@ const ManagePlanPayment = () => {
 
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <div className="space-y-6">
-          <Card className="rounded-3xl border border-primary/20 bg-primary/5">
-            <CardHeader className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <Badge className="rounded-full bg-primary/20 text-primary">Plano selecionado</Badge>
-                  <CardTitle className="mt-2 text-2xl">{selectedPlan.nome}</CardTitle>
-                  <CardDescription>
-                    Revise os benefícios incluídos antes de confirmar a alteração do plano.
-                  </CardDescription>
-                </div>
-                {formattedPrice && (
-                  <div className="rounded-2xl bg-white/70 px-5 py-3 text-center shadow-sm">
-                    <p className="text-xs font-medium uppercase tracking-wider text-primary/70">
-                      {pricingMode === "anual" ? "Cobrança anual" : "Cobrança mensal"}
-                    </p>
-                    <p className="text-3xl font-semibold text-primary">{formattedPrice}</p>
-                    <p className="text-xs text-muted-foreground">por {cadenceLabel}</p>
-                    {alternatePrice && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        equivalente a {alternatePrice} por {alternateCadence}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {selectedPlan.descricao && (
-                <div className="rounded-2xl bg-white/70 p-4 text-sm text-slate-700 shadow-sm">
-                  {selectedPlan.descricao}
-                </div>
-              )}
-              <div className="space-y-3">
-                <p className="text-sm font-semibold uppercase tracking-wide text-primary/80">
-                  Principais recursos inclusos
-                </p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {features.length > 0 ? (
-                    features.slice(0, 6).map((feature) => (
-                      <div
-                        key={feature}
-                        className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-white/80 p-3 text-sm text-slate-700"
-                      >
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
-                        <span>{feature}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-primary/30 bg-white/50 p-4 text-sm text-muted-foreground">
-                      Nenhum recurso foi listado para este plano ainda.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+
 
           <Card className="rounded-3xl border border-border/60">
             <CardHeader>
@@ -1026,80 +971,145 @@ const ManagePlanPayment = () => {
                 />
               </div>
             </CardContent>
-          </Card>
+                  </Card>
+
+                  <Card className="rounded-3xl border border-border/60">
+                      <CardHeader>
+                          <CardTitle>Resumo da cobrança</CardTitle>
+                          <CardDescription>Confirme os valores antes de concluir a alteração do plano.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-5">
+                          <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                  <span>Plano</span>
+                                  <span className="font-semibold text-foreground">{selectedPlan.nome}</span>
+                              </div>
+                              <Separator className="my-4" />
+                              <div className="space-y-3 text-sm">
+                                  <div className="flex items-center justify-between">
+                                      <span>Assinatura {pricingMode === "anual" ? "anual" : "mensal"}</span>
+                                      <span className="font-semibold text-foreground">{formattedPrice ?? "—"}</span>
+                                  </div>
+                                  {alternatePrice && (
+                                      <div className="flex items-center justify-between text-muted-foreground">
+                                          <span>Equivalente {alternateCadence}</span>
+                                          <span>{alternatePrice}</span>
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
+
+                          {pricingMode === "anual" && selectedPlan.economiaAnualFormatada && (
+                              <div className="flex items-center justify-between rounded-2xl border border-emerald-200/60 bg-emerald-50 p-4 text-sm text-emerald-700">
+                                  <span>Economia estimada no ano</span>
+                                  <span className="font-semibold">{selectedPlan.economiaAnualFormatada}</span>
+                              </div>
+                          )}
+
+                          <div className="rounded-2xl border border-border/60 bg-background/80 p-4 text-sm text-muted-foreground">
+                              <p>
+                                  Após a confirmação, o novo plano será ativado automaticamente e um comprovante será enviado ao e-mail
+                                  cadastrado.
+                              </p>
+                              <p className="mt-3 flex items-center gap-2 text-emerald-600">
+                                  <ShieldCheck className="h-4 w-4" />
+                                  Transação protegida com segurança bancária.
+                              </p>
+                          </div>
+                      </CardContent>
+                      <CardFooter className="flex flex-col gap-2">
+                          <Button
+                              size="lg"
+                              className="w-full rounded-full"
+                              onClick={handleSubmit}
+                              disabled={isConfirmDisabled}
+                          >
+                              {isSubmitting || isTokenizingCard ? (
+                                  <span className="flex items-center justify-center gap-2">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      {isTokenizingCard ? "Validando cartão…" : "Processando…"}
+                                  </span>
+                              ) : (
+                                  "Confirmar alteração de plano"
+                              )}
+                          </Button>
+                          <Button
+                              variant="outline"
+                              className="w-full rounded-full"
+                              onClick={handleReturnToPlanSelection}
+                              disabled={isSubmitting}
+                          >
+                              Cancelar e voltar
+                          </Button>
+                      </CardFooter>
+                  </Card>
         </div>
 
         <div className="space-y-6">
-          <Card className="rounded-3xl border border-border/60">
-            <CardHeader>
-              <CardTitle>Resumo da cobrança</CardTitle>
-              <CardDescription>Confirme os valores antes de concluir a alteração do plano.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>Plano</span>
-                  <span className="font-semibold text-foreground">{selectedPlan.nome}</span>
-                </div>
-                <Separator className="my-4" />
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Assinatura {pricingMode === "anual" ? "anual" : "mensal"}</span>
-                    <span className="font-semibold text-foreground">{formattedPrice ?? "—"}</span>
-                  </div>
-                  {alternatePrice && (
-                    <div className="flex items-center justify-between text-muted-foreground">
-                      <span>Equivalente {alternateCadence}</span>
-                      <span>{alternatePrice}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              {pricingMode === "anual" && selectedPlan.economiaAnualFormatada && (
-                <div className="flex items-center justify-between rounded-2xl border border-emerald-200/60 bg-emerald-50 p-4 text-sm text-emerald-700">
-                  <span>Economia estimada no ano</span>
-                  <span className="font-semibold">{selectedPlan.economiaAnualFormatada}</span>
-                </div>
-              )}
+                  <Card className="rounded-3xl border border-primary/20 bg-primary/5">
+                      <CardHeader className="flex flex-col gap-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                  <Badge className="rounded-full bg-primary/20 text-primary">Plano selecionado</Badge>
+                                  <CardTitle className="mt-2 text-2xl">{selectedPlan.nome}</CardTitle>
+                                  <CardDescription>
+                                      Revise os benefícios incluídos antes de confirmar a alteração do plano.
+                                  </CardDescription>
+                              </div>
+                              {formattedPrice && (
+                                  <div className="rounded-2xl bg-white/70 px-5 py-3 text-center shadow-sm">
+                                      <p className="text-xs font-medium uppercase tracking-wider text-primary/70">
+                                          {pricingMode === "anual" ? "Cobrança anual" : "Cobrança mensal"}
+                                      </p>
+                                      <p className="text-3xl font-semibold text-primary">{formattedPrice}</p>
+                                      <p className="text-xs text-muted-foreground">por {cadenceLabel}</p>
+                                      {alternatePrice && (
+                                          <p className="mt-1 text-[11px] text-muted-foreground">
+                                              equivalente a {alternatePrice} por {alternateCadence}
+                                          </p>
+                                      )}
+                                  </div>
+                              )}
+                          </div>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                          {selectedPlan.descricao && (
+                              <div className="rounded-2xl bg-white/70 p-4 text-sm text-slate-700 shadow-sm">
+                                  {selectedPlan.descricao}
+                              </div>
+                          )}
+                          <div className="space-y-3">
+                              <p className="text-sm font-semibold uppercase tracking-wide text-primary/80">
+                                  Principais recursos inclusos
+                              </p>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                  {features.length > 0 ? (
+                                      features.slice(0, 6).map((feature) => (
+                                          <div
+                                              key={feature}
+                                              className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-white/80 p-3 text-sm text-slate-700"
+                                          >
+                                              <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+                                              <span>{feature}</span>
+                                          </div>
+                                      ))
+                                  ) : (
+                                      <div className="rounded-2xl border border-dashed border-primary/30 bg-white/50 p-4 text-sm text-muted-foreground">
+                                          Nenhum recurso foi listado para este plano ainda.
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
+                      </CardContent>
+                  </Card>
 
-              <div className="rounded-2xl border border-border/60 bg-background/80 p-4 text-sm text-muted-foreground">
-                <p>
-                  Após a confirmação, o novo plano será ativado automaticamente e um comprovante será enviado ao e-mail
-                  cadastrado.
-                </p>
-                <p className="mt-3 flex items-center gap-2 text-emerald-600">
-                  <ShieldCheck className="h-4 w-4" />
-                  Transação protegida com segurança bancária.
-                </p>
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-2">
-              <Button
-                size="lg"
-                className="w-full rounded-full"
-                onClick={handleSubmit}
-                disabled={isConfirmDisabled}
-              >
-                {isSubmitting || isTokenizingCard ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {isTokenizingCard ? "Validando cartão…" : "Processando…"}
-                  </span>
-                ) : (
-                  "Confirmar alteração de plano"
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full rounded-full"
-                onClick={handleReturnToPlanSelection}
-                disabled={isSubmitting}
-              >
-                Cancelar e voltar
-              </Button>
-            </CardFooter>
-          </Card>
+
+
+
+
+
+                  
 
           {paymentResult && (
             <Card className="rounded-3xl border border-primary/30 bg-primary/5">
