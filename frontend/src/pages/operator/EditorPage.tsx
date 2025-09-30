@@ -740,7 +740,9 @@ export default function EditorPage() {
       try {
         const blob =
           format === 'pdf'
-            ? await createSimplePdfFromHtml(documentTitle, html)
+            ? await createSimplePdfFromHtml(documentTitle, html, {
+                baseUrl: window.location.origin,
+              })
             : createDocxBlobFromHtml(html);
 
         const url = URL.createObjectURL(blob);

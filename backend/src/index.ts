@@ -2,7 +2,7 @@ import './utils/loadEnv';
 import express, { Request, Router } from 'express';
 import { AddressInfo } from 'net';
 import path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
 import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
@@ -55,6 +55,11 @@ import { ensureSupportSchema } from './services/supportSchema';
 import { authenticateRequest } from './middlewares/authMiddleware';
 import { authorizeModules } from './middlewares/moduleAuthorization';
 import { getAuthSecret } from './constants/auth';
+import {
+  getFileStorageDriver,
+  getLocalStorageRoot,
+  getPublicUploadsBasePath,
+} from './services/fileStorageService';
 
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
@@ -86,6 +91,29 @@ app.use(
   })
 );
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+const registerStaticUploadHandler = () => {
+  if (getFileStorageDriver() !== 'local') {
+    return;
+  }
+
+  const uploadsRoot = getLocalStorageRoot();
+
+  if (!existsSync(uploadsRoot)) {
+    mkdirSync(uploadsRoot, { recursive: true });
+  }
+
+  const publicBase = getPublicUploadsBasePath();
+
+  if (!publicBase.startsWith('/')) {
+    return;
+  }
+
+  const mountPath = publicBase.replace(/\/+$/, '') || '/uploads';
+  app.use(mountPath, express.static(uploadsRoot));
+};
+
+registerStaticUploadHandler();
 
 const defaultAllowedOrigins = [
   'http://localhost:5173',

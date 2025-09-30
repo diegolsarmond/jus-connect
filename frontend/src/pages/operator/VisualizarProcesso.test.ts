@@ -1,9 +1,14 @@
+import { act } from "react-dom/test-utils";
+import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import {
   InformacoesProcesso as InformacoesProcessoComponent,
+  TimelineMes,
+  filtrarMovimentacoes,
   mapApiProcessoToViewModel,
+  type ProcessoViewModel,
   type ApiProcessoResponse,
 } from "./VisualizarProcesso";
 import {
@@ -87,6 +92,8 @@ describe("mapApiProcessoToViewModel", () => {
     expect(viewModel.dados.subjects).toHaveLength(0);
     expect(viewModel.dados.precatory).toBe("Não informado");
     expect(viewModel.anexos).toHaveLength(0);
+    expect(viewModel.movimentacoes[0].stepType).toBe("Despacho");
+    expect(viewModel.movimentacoes[0].privado).toBe(false);
   });
 
   it("mapeia passos da nova API quando não há dados adicionais", () => {
@@ -106,7 +113,40 @@ describe("mapApiProcessoToViewModel", () => {
     const viewModel = mapApiProcessoToViewModel(resposta);
 
     expect(viewModel.movimentacoes).toHaveLength(1);
-    expect(viewModel.movimentacoes[0].linhas[0].texto).toBe("Publicação");
+    expect(viewModel.movimentacoes[0].stepType).toBe("Publicação");
+    expect(viewModel.movimentacoes[0].conteudo).toBe("Conteúdo exibido pela nova API");
+    expect(viewModel.movimentacoes[0].dataFormatada).toBe("12/04/2024");
+  });
+
+  it("ordena movimentações por data em ordem decrescente", () => {
+    const resposta: ApiProcessoResponse = {
+      steps: [
+        {
+          id: 1,
+          step_date: "2024-05-02",
+          step_type: "Publicação",
+          content: "Primeira",
+        },
+        {
+          id: 2,
+          step_date: "2024-05-10",
+          step_type: "Decisão",
+          content: "Segunda",
+        },
+        {
+          id: 3,
+          step_type: "Sem data",
+          content: "Sem data",
+        },
+      ],
+    };
+
+    const viewModel = mapApiProcessoToViewModel(resposta);
+
+    expect(viewModel.movimentacoes.map((mov) => mov.id)).toEqual(["2", "1", "3"]);
+    expect(viewModel.grupos[0].itens[0].stepType).toBe("Decisão");
+    const ultimoGrupo = viewModel.grupos[viewModel.grupos.length - 1];
+    expect(ultimoGrupo.itens[ultimoGrupo.itens.length - 1].stepType).toBe("Sem data");
   });
 
   it("organiza partes com novo formato de dados", () => {
@@ -225,5 +265,119 @@ describe("mapApiProcessoToViewModel", () => {
     expect(viewModel.dados.precatory).toBe("Sim");
     expect(viewModel.dados.freeJustice).toBe("Não");
     expect(viewModel.dados.secrecyLevel).toBe("Sigiloso");
+  });
+});
+
+describe("filtrarMovimentacoes", () => {
+  it("aplica filtros de tipo e intervalo de datas", () => {
+    type Item = ProcessoViewModel["movimentacoes"][number];
+
+    const itens: Item[] = [
+      {
+        id: "1",
+        data: new Date("2024-05-02"),
+        dataOriginal: "2024-05-02",
+        dataFormatada: "02/05/2024",
+        stepType: "Decisão",
+        conteudo: "Decisão publicada",
+        privado: false,
+        tags: null,
+      },
+      {
+        id: "2",
+        data: new Date("2024-05-10"),
+        dataOriginal: "2024-05-10",
+        dataFormatada: "10/05/2024",
+        stepType: "Publicação",
+        conteudo: "Publicação no diário",
+        privado: false,
+        tags: { formatted: "md" },
+      },
+      {
+        id: "3",
+        data: null,
+        dataOriginal: null,
+        dataFormatada: null,
+        stepType: "Sem data",
+        conteudo: "Sem data disponível",
+        privado: false,
+        tags: null,
+      },
+    ];
+
+    const somenteDecisao = filtrarMovimentacoes(itens, {
+      tipo: "decisão",
+      inicio: "2024-05-01",
+      fim: "2024-05-05",
+    });
+
+    expect(somenteDecisao).toHaveLength(1);
+    expect(somenteDecisao[0].id).toBe("1");
+
+    const apenasPublicacao = filtrarMovimentacoes(itens, { tipo: "publicação" });
+    expect(apenasPublicacao).toHaveLength(1);
+    expect(apenasPublicacao[0].id).toBe("2");
+
+    const comIntervalo = filtrarMovimentacoes(itens, { inicio: "2024-05-01", fim: "2024-05-30" });
+    expect(comIntervalo.map((item) => item.id)).toEqual(["1", "2"]);
+  });
+});
+
+describe("TimelineMes", () => {
+  it("renderiza markdown e permite expandir conteúdo longo", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    const conteudoLongo = `**Negrito**\n\n- Item 1\n- Item 2\n\n${"Texto adicional ".repeat(40)}`;
+
+    act(() => {
+      root.render(
+        <TimelineMes
+          grupo={{
+            chave: "2024-05",
+            rotulo: "Maio de 2024",
+            ano: 2024,
+            mes: 5,
+            itens: [
+              {
+                id: "1",
+                data: new Date("2024-05-10"),
+                dataOriginal: "2024-05-10",
+                dataFormatada: "10/05/2024",
+                stepType: "Decisão",
+                conteudo: conteudoLongo,
+                privado: true,
+                tags: { formatted: "md" },
+              },
+            ],
+          }}
+          aberto
+          onToggle={() => {}}
+          movimentacoesVisiveis={5}
+          onVerMais={() => {}}
+          virtualizado={false}
+        />,
+      );
+    });
+
+    const strong = container.querySelector("strong");
+    expect(strong?.textContent).toBe("Negrito");
+    expect(container.querySelectorAll("li").length).toBeGreaterThan(0);
+
+    const botao = container.querySelector('[data-testid="expandir-1"]') as HTMLButtonElement | null;
+    expect(botao).not.toBeNull();
+    expect(botao?.textContent).toContain("Expandir");
+
+    act(() => {
+      botao?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(botao?.getAttribute("aria-expanded")).toBe("true");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
   });
 });
