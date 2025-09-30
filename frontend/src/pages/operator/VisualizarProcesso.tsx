@@ -144,6 +144,7 @@ interface ApiProcessoStepTags {
 
 interface ApiProcessoStep {
   id?: number | string | null;
+  step_id?: string | null;
   date?: string | null;
   title?: string | null;
   description?: string | null;
@@ -161,6 +162,13 @@ interface ApiProcessoAttachment {
   title?: string | null;
   date?: string | null;
   url?: string | null;
+  attachment_id?: number | string | null;
+  attachment_name?: string | null;
+  attachment_date?: string | null;
+  attachment_url?: string | null;
+  content?: string | null;
+  status?: string | null;
+  extension?: string | null;
 }
 
 interface ApiCodigoNome {
@@ -200,6 +208,16 @@ interface ApiProcessoParticipant {
   lawyers?: ApiProcessoLawyer[] | null;
 }
 
+interface ApiProcessoJuditLastRequest {
+  request_id?: string | null;
+  status?: string | null;
+  source?: string | null;
+  atualizado_em?: string | null;
+  criado_em?: string | null;
+  metadata?: Record<string, unknown> | null;
+  result?: ApiProcessoResponse | null;
+}
+
 export interface ApiProcessoResponse {
   id?: number | string | null;
   code?: string | null;
@@ -232,9 +250,21 @@ export interface ApiProcessoResponse {
   amount?: string | number | null;
   distribution_date?: string | null;
   updated_at?: string | null;
+  atualizado_em?: string | null;
   participants?: ApiProcessoParticipant[] | null;
   parties?: ApiProcessoParticipant[] | null;
   metadata?: Record<string, unknown> | null;
+  numero?: string | null;
+  classe_judicial?: string | null;
+  assunto?: string | null;
+  jurisdicao?: string | null;
+  data_distribuicao?: string | null;
+  consultas_api_count?: number | null;
+  movimentacoes_count?: number | null;
+  ultima_sincronizacao?: string | null;
+  judit_tracking_id?: string | null;
+  judit_tracking_hour_range?: string | null;
+  judit_last_request?: ApiProcessoJuditLastRequest | null;
 }
 
 interface MovimentacaoProcesso extends MovimentoComIdEData {
@@ -937,33 +967,85 @@ function extrairLocalidade(valor: ApiProcessoResponse["county"]): {
 }
 
 export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): ProcessoViewModel {
-  const codigo = primeiroTextoValido(processo.code) || NAO_INFORMADO;
-  const nome = primeiroTextoValido(processo.name) || NAO_INFORMADO;
-  const status = primeiroTextoValido(processo.status) || NAO_INFORMADO;
-  const fase = primeiroTextoValido(processo.phase) || NAO_INFORMADO;
-  const area = primeiroTextoValido(processo.area) || NAO_INFORMADO;
+  const juditResult = processo.judit_last_request?.result ?? null;
 
-  const tribunalSigla = primeiroTextoValido(processo.tribunal_acronym, processo.tribunal) || NAO_INFORMADO;
-  const tribunalNome = primeiroTextoValido(processo.tribunal) || tribunalSigla;
+  const codigo =
+    primeiroTextoValido(processo.code, processo.numero, juditResult?.code) || NAO_INFORMADO;
+  const nome = primeiroTextoValido(processo.name, juditResult?.name) || NAO_INFORMADO;
+  const status = primeiroTextoValido(processo.status, juditResult?.status) || NAO_INFORMADO;
+  const fase = primeiroTextoValido(processo.phase, juditResult?.phase) || NAO_INFORMADO;
+  const area = primeiroTextoValido(processo.area, juditResult?.area) || NAO_INFORMADO;
 
-  const localidade = extrairLocalidade(processo.county ?? null);
-  const valorCausa = formatarMoeda(processo.amount);
-  const distribuidoEm = formatarData(processo.distribution_date, "curta") ?? NAO_INFORMADO;
-  const justiceDescription = primeiroTextoValido(processo.justice_description) || NAO_INFORMADO;
-  const instance = normalizarGrau(primeiroTextoValido(processo.instance) || NAO_INFORMADO);
+  const tribunalSigla =
+    primeiroTextoValido(
+      processo.tribunal_acronym,
+      processo.tribunal,
+      juditResult?.tribunal_acronym,
+      juditResult?.tribunal,
+    ) || NAO_INFORMADO;
+  const tribunalNome =
+    primeiroTextoValido(processo.tribunal, juditResult?.tribunal, tribunalSigla) || tribunalSigla;
 
-  const subjectsDetalhados = mapearCodigoNomeLista(processo.subjects ?? null, "Assunto");
+  const localidade = extrairLocalidade(
+    processo.county ?? juditResult?.county ?? processo.jurisdicao ?? null,
+  );
+  const valorCausa = formatarMoeda(processo.amount ?? juditResult?.amount ?? null);
+  const distribuidoEm =
+    formatarData(
+      processo.distribution_date ??
+        processo.data_distribuicao ??
+        juditResult?.distribution_date ??
+        null,
+      "curta",
+    ) ?? NAO_INFORMADO;
+  const justiceDescription =
+    primeiroTextoValido(processo.justice_description, juditResult?.justice_description) ||
+    NAO_INFORMADO;
+  const instance = normalizarGrau(
+    primeiroTextoValido(processo.instance, juditResult?.instance) || NAO_INFORMADO,
+  );
+
+  const subjectsFonte =
+    (Array.isArray(processo.subjects) && processo.subjects.length > 0
+      ? processo.subjects
+      : Array.isArray(juditResult?.subjects)
+        ? juditResult?.subjects
+        : null) ?? null;
+  const classificationsFonte =
+    (Array.isArray(processo.classifications) && processo.classifications.length > 0
+      ? processo.classifications
+      : Array.isArray(juditResult?.classifications)
+        ? juditResult?.classifications
+        : null) ?? null;
+
+  const subjectsDetalhados = mapearCodigoNomeLista(subjectsFonte, "Assunto");
   const classificationsDetalhadas = mapearCodigoNomeLista(
-    processo.classifications ?? null,
+    classificationsFonte,
     "Classificação",
   );
-  const tagsInfo = extrairTagsEIndicadores(processo);
+
+  const processoParaTags: ApiProcessoResponse = {
+    ...(juditResult ?? {}),
+    ...processo,
+    tags: processo.tags ?? juditResult?.tags ?? null,
+    precatory: processo.precatory ?? juditResult?.precatory ?? null,
+    free_justice: processo.free_justice ?? juditResult?.free_justice ?? null,
+    secrecy_level: processo.secrecy_level ?? juditResult?.secrecy_level ?? null,
+  };
+
+  const tagsInfo = extrairTagsEIndicadores(processoParaTags);
   const tagsCabecalho = tagsInfo.tags;
 
-  const passos = Array.isArray(processo.steps) ? processo.steps : [];
+  const passosFonte: ApiProcessoStep[] =
+    Array.isArray(processo.steps) && processo.steps.length > 0
+      ? processo.steps
+      : Array.isArray(juditResult?.steps)
+        ? juditResult.steps
+        : [];
+
   const passosDeduplicados = deduplicarMovimentacoes(
-    passos.map((step, index) => ({
-      id: step.id ?? `${index}-${step.step_date ?? step.date ?? ""}`,
+    passosFonte.map((step, index) => ({
+      id: step.id ?? step.step_id ?? `${index}-${step.step_date ?? step.date ?? ""}`,
       data: step.step_date ?? step.date ?? null,
       tipo: step.step_type ?? step.type ?? step.title ?? null,
       conteudo: step.content ?? step.description ?? null,
@@ -976,6 +1058,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     .map((item, index) => {
       const original = (item as typeof item & { original?: ApiProcessoStep }).original ?? {
         id: item.id,
+        step_id: typeof item.id === "string" ? item.id : undefined,
         step_date: item.data,
         step_type: item.tipo,
         content: item.conteudo,
@@ -983,12 +1066,21 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
       };
 
       const fallbackId = `${index}-${item.data ?? ""}`;
-      const identificador =
-        original?.id !== null && original?.id !== undefined
-          ? String(original.id)
-          : typeof item.id === "string"
-            ? item.id
-            : fallbackId;
+      const identificador = (() => {
+        const candidatos = [
+          original?.id,
+          original?.step_id,
+          typeof item.id === "string" ? item.id : null,
+        ]
+          .map((valor) =>
+            typeof valor === "number" || typeof valor === "string" ? String(valor) : "",
+          )
+          .map((valor) => normalizarTexto(valor));
+
+        const escolhido = candidatos.find((valor) => Boolean(valor));
+
+        return escolhido && escolhido.length > 0 ? escolhido : fallbackId;
+      })();
 
       const textoData = original?.step_date ?? original?.date ?? item.data ?? null;
       const dataObjeto = textoData ? new Date(textoData) : null;
@@ -1046,44 +1138,72 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     return acc;
   }, null);
 
-  const ultimaAtualizacao = formatarData(ultimaMovimentacaoData ?? processo.updated_at ?? null, "hora");
+  const ultimaAtualizacao = formatarData(
+    ultimaMovimentacaoData ??
+      processo.updated_at ??
+      processo.atualizado_em ??
+      juditResult?.updated_at ??
+      processo.judit_last_request?.atualizado_em ??
+      null,
+    "hora",
+  );
 
-  const partes = mapearPartes(processo.participants ?? processo.parties ?? null);
+  const partes = mapearPartes(
+    processo.participants ??
+      processo.parties ??
+      juditResult?.participants ??
+      juditResult?.parties ??
+      null,
+  );
 
-  const relacionados: ProcessoRelacionadoView[] = Array.isArray(processo.related_lawsuits)
-    ? processo.related_lawsuits
-        .map((item, index) => {
-          const codigoRelacionado = primeiroTextoValido(item.code) || NAO_INFORMADO;
-          const id = codigoRelacionado !== NAO_INFORMADO ? codigoRelacionado : `relacionado-${index}`;
+  const relacionadosFonte: ApiProcessoRelatedLawsuit[] =
+    Array.isArray(processo.related_lawsuits) && processo.related_lawsuits.length > 0
+      ? processo.related_lawsuits
+      : Array.isArray(juditResult?.related_lawsuits)
+        ? juditResult.related_lawsuits
+        : [];
 
-          return {
-            id,
-            codigo: codigoRelacionado,
-            nome: primeiroTextoValido(item.name) || NAO_INFORMADO,
-            instancia: normalizarGrau(primeiroTextoValido(item.instance) || NAO_INFORMADO),
-          };
-        })
-        .filter((rel): rel is ProcessoRelacionadoView => Boolean(rel))
-    : [];
+  const relacionados: ProcessoRelacionadoView[] = relacionadosFonte
+    .map((item, index) => {
+      const codigoRelacionado = primeiroTextoValido(item.code) || NAO_INFORMADO;
+      const id = codigoRelacionado !== NAO_INFORMADO ? codigoRelacionado : `relacionado-${index}`;
 
-  const anexos = Array.isArray(processo.attachments)
-    ? processo.attachments
-        .map((anexo, index) => {
-          const titulo = primeiroTextoValido(anexo.title) || `Documento ${index + 1}`;
-          const id =
-            typeof anexo.id === "string" || typeof anexo.id === "number"
-              ? String(anexo.id)
-              : `${index}-${titulo}`;
+      return {
+        id,
+        codigo: codigoRelacionado,
+        nome: primeiroTextoValido(item.name) || NAO_INFORMADO,
+        instancia: normalizarGrau(primeiroTextoValido(item.instance) || NAO_INFORMADO),
+      };
+    })
+    .filter((rel): rel is ProcessoRelacionadoView => Boolean(rel));
 
-          return {
-            id,
-            titulo,
-            data: formatarData(anexo.date ?? null, "hora"),
-            url: primeiroTextoValido(anexo.url) || null,
-          };
-        })
-        .filter((anexo) => Boolean(anexo.titulo))
-    : [];
+  const anexosFonte: ApiProcessoAttachment[] =
+    Array.isArray(processo.attachments) && processo.attachments.length > 0
+      ? processo.attachments
+      : Array.isArray(juditResult?.attachments)
+        ? juditResult.attachments
+        : [];
+
+  const anexos = anexosFonte
+    .map((anexo, index) => {
+      const titulo =
+        primeiroTextoValido(anexo.title, anexo.attachment_name, anexo.content) ||
+        `Documento ${index + 1}`;
+      const id =
+        typeof anexo.id === "string" || typeof anexo.id === "number"
+          ? String(anexo.id)
+          : typeof anexo.attachment_id === "string" || typeof anexo.attachment_id === "number"
+            ? String(anexo.attachment_id)
+            : `${index}-${titulo}`;
+
+      return {
+        id,
+        titulo,
+        data: formatarData(anexo.date ?? anexo.attachment_date ?? null, "hora"),
+        url: primeiroTextoValido(anexo.url, anexo.attachment_url) || null,
+      };
+    })
+    .filter((anexo) => Boolean(anexo.titulo));
 
   const cabecalho: CabecalhoProcesso = {
     codigo,
@@ -1123,15 +1243,84 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     updatedAt: ultimaAtualizacao ?? NAO_INFORMADO,
   };
 
+  const metadata =
+    processo.judit_last_request?.metadata &&
+    typeof processo.judit_last_request.metadata === "object"
+      ? (processo.judit_last_request.metadata as Record<string, unknown>)
+      : null;
+
+  const metadataTrackingId =
+    metadata && typeof metadata.trackingId === "string"
+      ? (metadata.trackingId as string)
+      : null;
+  const metadataHourRange =
+    metadata && typeof metadata.hourRange === "string"
+      ? (metadata.hourRange as string)
+      : null;
+
+  const juditAtualizadoEm =
+    formatarData(
+      processo.judit_last_request?.atualizado_em ??
+        juditResult?.updated_at ??
+        processo.updated_at ??
+        processo.atualizado_em ??
+        ultimaMovimentacaoData ??
+        null,
+      "hora",
+    ) ?? ultimaAtualizacao;
+
+  const consultasTotal =
+    typeof processo.consultas_api_count === "number"
+      ? processo.consultas_api_count
+      : typeof processo.movimentacoes_count === "number"
+        ? processo.movimentacoes_count
+        : passosFonte.length;
+
+  const ultimaSincronizacao =
+    formatarData(
+      processo.ultima_sincronizacao ??
+        processo.judit_last_request?.result?.updated_at ??
+        processo.judit_last_request?.atualizado_em ??
+        processo.updated_at ??
+        null,
+      "hora",
+    ) ?? ultimaAtualizacao;
+
+  const trackingId =
+    primeiroTextoValido(processo.judit_tracking_id ?? null, metadataTrackingId) || null;
+
+  const janelaSincronizacao =
+    primeiroTextoValido(processo.judit_tracking_hour_range ?? null, metadataHourRange) ||
+    (fase !== NAO_INFORMADO ? fase : null);
+
+  const juditStatus =
+    primeiroTextoValido(
+      processo.judit_last_request?.status ?? null,
+      juditResult?.status ?? null,
+      status !== NAO_INFORMADO ? status : null,
+    ) || null;
+
+  const juditOrigem =
+    primeiroTextoValido(
+      processo.judit_last_request?.source ?? null,
+      justiceDescription !== NAO_INFORMADO ? justiceDescription : null,
+    ) || null;
+
+  const juditRequestId =
+    primeiroTextoValido(
+      processo.judit_last_request?.request_id ?? null,
+      codigo !== NAO_INFORMADO ? codigo : null,
+    ) || null;
+
   const judit: JuditResumo = {
-    requestId: codigo !== NAO_INFORMADO ? codigo : null,
-    status: status !== NAO_INFORMADO ? status : null,
-    atualizadoEm: ultimaAtualizacao,
-    origem: justiceDescription !== NAO_INFORMADO ? justiceDescription : null,
-    consultas: passos.length,
-    ultimaSincronizacao: ultimaAtualizacao,
-    trackingId: null,
-    janela: fase !== NAO_INFORMADO ? fase : null,
+    requestId: juditRequestId,
+    status: juditStatus,
+    atualizadoEm: juditAtualizadoEm,
+    origem: juditOrigem,
+    consultas: consultasTotal,
+    ultimaSincronizacao,
+    trackingId,
+    janela: janelaSincronizacao,
   };
 
   return {
