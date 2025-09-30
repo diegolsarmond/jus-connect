@@ -1444,23 +1444,23 @@ export function TimelineMes({
               return (
                 <div key={item.id} className="relative flex gap-6 pb-8 last:pb-2">
                   <div className="w-28 text-right">
-                    <p className="text-sm font-semibold text-emerald-600">
+                    <p className="text-sm font-semibold text-primary">
                       {item.dataFormatada ?? "Data não informada"}
                     </p>
                   </div>
                   <div className="relative flex-1">
                     {!isUltimo && (
                       <span
-                        className="absolute -left-6 top-4 h-[calc(100%+1rem)] w-px bg-emerald-200"
+                        className="absolute -left-6 top-4 h-[calc(100%+1rem)] w-px bg-primary/30"
                         aria-hidden
                       />
                     )}
-                    <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 shadow" />
+                    <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-white bg-primary shadow" />
                     <div className="rounded-lg border border-muted-foreground/10 bg-muted/40 p-4">
                       <div className="space-y-3 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
                           {item.stepType ? (
-                            <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700">
+                            <Badge variant="outline" className="rounded-full border-primary/20 bg-primary/10 text-primary">
                               {item.stepType}
                             </Badge>
                           ) : null}
@@ -1470,7 +1470,7 @@ export function TimelineMes({
                               "rounded-full",
                               item.privado
                                 ? "border-transparent bg-rose-100 text-rose-700"
-                                : "border-transparent bg-emerald-100 text-emerald-700",
+                                : "border-transparent bg-primary/10 text-primary",
                             )}
                           >
                             {item.privado ? "Privado" : "Público"}
@@ -1506,7 +1506,7 @@ export function TimelineMes({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="px-0 text-emerald-700 hover:text-emerald-800"
+                              className="px-0 text-primary hover:text-primary/80"
                               onClick={() =>
                                 setExpandidos((prev) => ({
                                   ...prev,
@@ -2243,97 +2243,101 @@ export default function VisualizarProcesso() {
             <AlertDescription>{erro}</AlertDescription>
           </Alert>
         ) : viewModel ? (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-                {viewModel.cabecalho.codigo}
-              </p>
-              <h1 className="text-3xl font-semibold text-foreground">{viewModel.cabecalho.nome}</h1>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge className="bg-emerald-100 text-emerald-700">{viewModel.cabecalho.status}</Badge>
-              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
-                {viewModel.cabecalho.fase}
-              </Badge>
-              <Badge variant="secondary" className="bg-slate-100 text-slate-700">
-                {viewModel.cabecalho.area}
-              </Badge>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>{viewModel.cabecalho.cidadeEstado}</span>
-              <span className="hidden sm:inline">•</span>
-              <span>{viewModel.cabecalho.tribunal}</span>
-              <span className="hidden sm:inline">•</span>
-              <span>{viewModel.cabecalho.instance}</span>
-              {viewModel.cabecalho.ultimaAtualizacao ? (
-                <>
-                  <span className="hidden sm:inline">•</span>
-                  <span>Atualizado em {viewModel.cabecalho.ultimaAtualizacao}</span>
-                </>
-              ) : null}
-            </div>
-            {viewModel.cabecalho.tags.length || viewModel.cabecalho.subjects.length ? (
-              <div className="flex flex-wrap gap-2">
-                {viewModel.cabecalho.tags.map((tag) => (
-                  <Badge key={`tag-${tag}`} variant="secondary" className="bg-primary/10 text-primary">
-                    {tag}
+          <Card className="border-none bg-card shadow-sm">
+            <CardContent className="space-y-4 p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+                    {viewModel.cabecalho.codigo}
+                  </p>
+                  <h1 className="text-3xl font-semibold text-foreground">{viewModel.cabecalho.nome}</h1>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>{viewModel.cabecalho.cidadeEstado}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span>{viewModel.cabecalho.tribunal}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span>{viewModel.cabecalho.instance}</span>
+                    {viewModel.cabecalho.ultimaAtualizacao ? (
+                      <>
+                        <span className="hidden sm:inline">•</span>
+                        <span>Atualizado em {viewModel.cabecalho.ultimaAtualizacao}</span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <Badge className="bg-primary/10 text-primary">{viewModel.cabecalho.status}</Badge>
+                  <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+                    {viewModel.cabecalho.fase}
                   </Badge>
-                ))}
-                {viewModel.cabecalho.subjects.map((subject) => (
-                  <Badge key={`subject-${subject}`} variant="outline" className="border-muted-foreground/30">
-                    {subject}
+                  <Badge variant="secondary" className="bg-muted text-foreground">
+                    {viewModel.cabecalho.area}
                   </Badge>
-                ))}
+                </div>
               </div>
-            ) : null}
-          </div>
+              {viewModel.cabecalho.tags.length || viewModel.cabecalho.subjects.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {viewModel.cabecalho.tags.map((tag) => (
+                    <Badge key={`tag-${tag}`} variant="secondary" className="bg-primary/10 text-primary">
+                      {tag}
+                    </Badge>
+                  ))}
+                  {viewModel.cabecalho.subjects.map((subject) => (
+                    <Badge key={`subject-${subject}`} variant="outline" className="border-muted-foreground/30">
+                      {subject}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         ) : null}
 
         {viewModel ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+            <Card className="border border-muted-foreground/10 bg-card text-foreground shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Tribunal
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xl font-semibold">{viewModel.cabecalho.tribunal}</CardContent>
             </Card>
-            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+            <Card className="border border-muted-foreground/10 bg-card text-foreground shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Cidade / Estado
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xl font-semibold">{viewModel.cabecalho.cidadeEstado}</CardContent>
             </Card>
-            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+            <Card className="border border-muted-foreground/10 bg-card text-foreground shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Instância
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xl font-semibold">{viewModel.cabecalho.instance}</CardContent>
             </Card>
-            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+            <Card className="border border-muted-foreground/10 bg-card text-foreground shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Justiça
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xl font-semibold">{viewModel.cabecalho.justiceDescription}</CardContent>
             </Card>
-            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+            <Card className="border border-muted-foreground/10 bg-card text-foreground shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Valor da causa
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-xl font-semibold">{viewModel.cabecalho.valorDaCausa}</CardContent>
             </Card>
-            <Card className="border-emerald-200 bg-emerald-50 text-emerald-900">
+            <Card className="border border-muted-foreground/10 bg-card text-foreground shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wide text-emerald-800">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Distribuído em
                 </CardTitle>
               </CardHeader>
