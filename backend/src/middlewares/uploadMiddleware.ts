@@ -174,7 +174,13 @@ declare module 'express-serve-static-core' {
   }
 }
 
-export const singleFileUpload = (req: Request, res: Response, next: NextFunction) => {
+type SingleFileUploadRequest = Request & { file?: UploadedFile };
+
+export const singleFileUpload = (
+  req: SingleFileUploadRequest,
+  res: Response,
+  next: NextFunction,
+) => {
   const contentType = req.headers['content-type'];
   if (!contentType || !contentType.includes('multipart/form-data')) {
     return res
