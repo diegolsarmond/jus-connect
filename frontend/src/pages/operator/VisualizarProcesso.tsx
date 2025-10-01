@@ -2353,7 +2353,7 @@ export default function VisualizarProcesso() {
             <TabsTrigger value="movimentacao">Movimentação processual</TabsTrigger>
             <TabsTrigger value="informacoes">Informações</TabsTrigger>
             <TabsTrigger value="relacionados">Processos relacionados</TabsTrigger>
-            <TabsTrigger value="judit">JUDIT IA</TabsTrigger>
+            <TabsTrigger value="judit">Sistema</TabsTrigger>
           </TabsList>
           <TabsContent value="movimentacao" className="space-y-4">
             {loading ? (
