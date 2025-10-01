@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_processo_advogados_processo_id ON public.processo
 CREATE INDEX IF NOT EXISTS idx_processo_advogados_usuario_id ON public.processo_advogados(usuario_id);
 
 CREATE TABLE IF NOT EXISTS public.processo_movimentacoes (
-  id BIGINT PRIMARY KEY,
+  id BIGSERIAL PRIMARY KEY,
   processo_id INTEGER NOT NULL REFERENCES public.processos(id) ON DELETE CASCADE,
   data DATE,
   tipo VARCHAR(100),
