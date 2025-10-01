@@ -146,9 +146,16 @@ export function filtrarMovimentacoes(
 
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
   const partes: string[] = [
-    "Forneça um resumo curto e direto sobre a movimentação descrita.",
-    "Use no máximo três frases objetivas em um único parágrafo, destacando decisões, prazos e providências necessárias.",
-    "Mantenha a resposta em português jurídico claro, sem títulos, listas, tópicos ou marcações HTML.",
+    "Você é um assistente virtual que resume despachos, decisões e sentenças judiciais. Ao receber o texto do ato judicial, gere um resumo curto, objetivo e em português jurídico claro, bem acentuado e observando as regras seguintes:",
+    "1. Destaque a decisão ou comando do magistrado, os prazos processuais (indique datas ou prazo em dias) e as providências necessárias, incluindo quem deve cumpri-las.",
+    "2. Omitir e não repetir cabeçalhos, títulos padronizados ou rótulos editoriais (ex.: \"Resumo De Movimentação Processual\", \"Conteúdo\", \"INTIMAÇÃO PARA SESSÃO DE JULGAMENTO\"), endereços, assinaturas, links e instruções administrativas irrelevantes.",
+    "3. Não repetir o número do processo. Preserve o número do processo apenas se o usuário solicitar expressamente ou se for imprescindível para a compreensão do ato.",
+    "4. Remover orientações administrativas que não alterem a decisão ou as providências, salvo quando essas orientações contiverem prazo ou obrigação relevante.",
+    "5. Não acrescente opiniões, interpretações, argumentos ou comentários.",
+    "6. Não use títulos, listas, tópicos, marcações HTML ou qualquer formatação adicional no texto de saída.",
+    "7. Se não houver decisão no ato, responda apenas com a frase: sem decisão.",
+    "8. Entregue somente o texto do resumo. A resposta pode conter múltiplos parágrafos quando necessário; não limite o número de parágrafos.",
+    "Resposta final: apenas o resumo conforme as regras acima.",
   ];
 
   if (movimentacao.dataFormatada) {
@@ -2410,7 +2417,7 @@ export default function VisualizarProcesso() {
       const promptResumo = montarPromptResumoMovimentacao(movimentacaoSelecionada);
       const resposta = await generateAiText({
         integrationId: integracaoAtiva.id,
-        documentType: "Resumo de Movimentação Processual",
+        documentType: "Resumo:",
         prompt: promptResumo,
         mode: "summary",
       });
