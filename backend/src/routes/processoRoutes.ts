@@ -8,11 +8,6 @@ import {
   updateProcesso,
   deleteProcesso,
 } from '../controllers/processoController';
-import {
-  triggerManualJuditSync,
-  getJuditRequestStatus,
-} from '../controllers/juditProcessController';
-
 const router = Router();
 
 /**
@@ -86,152 +81,6 @@ const router = Router();
  *               type: string
  *             tipo:
  *               type: string
- *         judit_syncs:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/ProcessoSync'
- *         judit_responses:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/ProcessoSyncResponse'
- *         judit_audit_trail:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/ProcessoSyncAudit'
- *     ProcessoSyncIntegration:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         provider:
- *           type: string
- *         environment:
- *           type: string
- *         apiUrl:
- *           type: string
- *           nullable: true
- *         active:
- *           type: boolean
- *     ProcessoSync:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         processoId:
- *           type: integer
- *           nullable: true
- *         integrationApiKeyId:
- *           type: integer
- *           nullable: true
- *         integration:
- *           $ref: '#/components/schemas/ProcessoSyncIntegration'
- *         remoteRequestId:
- *           type: string
- *           nullable: true
- *         requestType:
- *           type: string
- *         requestedBy:
- *           type: integer
- *           nullable: true
- *         requestedAt:
- *           type: string
- *           format: date-time
- *         requestPayload:
- *           type: object
- *           additionalProperties: true
- *         requestHeaders:
- *           type: object
- *           nullable: true
- *           additionalProperties: true
- *         status:
- *           type: string
- *         statusReason:
- *           type: string
- *           nullable: true
- *         completedAt:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         metadata:
- *           type: object
- *           additionalProperties: true
- *         createdAt:
- *           type: string
- *           format: date-time
- *         updatedAt:
- *           type: string
- *           format: date-time
- *     ProcessoSyncResponse:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         processoId:
- *           type: integer
- *           nullable: true
- *         processSyncId:
- *           type: integer
- *           nullable: true
- *         integrationApiKeyId:
- *           type: integer
- *           nullable: true
- *         integration:
- *           $ref: '#/components/schemas/ProcessoSyncIntegration'
- *         deliveryId:
- *           type: string
- *           nullable: true
- *         source:
- *           type: string
- *         statusCode:
- *           type: integer
- *           nullable: true
- *         receivedAt:
- *           type: string
- *           format: date-time
- *         payload:
- *           type: object
- *           additionalProperties: true
- *         headers:
- *           type: object
- *           nullable: true
- *           additionalProperties: true
- *         errorMessage:
- *           type: string
- *           nullable: true
- *         createdAt:
- *           type: string
- *           format: date-time
- *     ProcessoSyncAudit:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         processoId:
- *           type: integer
- *           nullable: true
- *         processSyncId:
- *           type: integer
- *           nullable: true
- *         processResponseId:
- *           type: integer
- *           nullable: true
- *         integrationApiKeyId:
- *           type: integer
- *           nullable: true
- *         integration:
- *           $ref: '#/components/schemas/ProcessoSyncIntegration'
- *         eventType:
- *           type: string
- *         eventDetails:
- *           type: object
- *           additionalProperties: true
- *         observedAt:
- *           type: string
- *           format: date-time
- *         createdAt:
- *           type: string
- *           format: date-time
-
 */
 
 /**
@@ -308,56 +157,6 @@ router.post('/processos/:id/movimentacoes', createProcessoMovimentacaoManual);
 
 /**
  * @swagger
-
-/**
- * @swagger
- * /api/processos/{id}/judit/sync:
- *   post:
- *     summary: Força sincronização manual do processo via Judit
- *     tags: [Processos]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: integer
- *         required: true
- *     responses:
- *       200:
- *         description: Dados da request acionada
- *       400:
- *         description: Parâmetros inválidos
- *       401:
- *         description: Não autorizado
- */
-router.post('/processos/:id/judit/sync', triggerManualJuditSync);
-
-/**
- * @swagger
- * /api/processos/{id}/judit/requests/{requestId}:
- *   get:
- *     summary: Consulta status e resultado de uma request Judit
- *     tags: [Processos]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: integer
- *         required: true
- *       - in: path
- *         name: requestId
- *         schema:
- *           type: string
- *         required: true
- *     responses:
- *       200:
- *         description: Status da request
- *       404:
- *         description: Request não encontrada
- */
-router.get('/processos/:id/judit/requests/:requestId', getJuditRequestStatus);
-
-/**
- * @swagger
  * /api/processos:
  *   post:
  *     summary: Cadastra um novo processo
@@ -414,9 +213,6 @@ router.get('/processos/:id/judit/requests/:requestId', getJuditRequestStatus);
  *         description: Número de processo já cadastrado
  */
 router.post('/processos', createProcesso);
-
-/**
- * @swagger
 
 /**
  * @swagger

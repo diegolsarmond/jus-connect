@@ -8,12 +8,6 @@ import asaasChargeSyncService, {
   AsaasConfigurationError,
   AsaasSyncResult,
 } from './asaasChargeSync';
-import juditProcessService from './juditProcessService';
-import pool from './db';
-import {
-  evaluateProcessSyncAvailability,
-  type ProcessSyncAvailabilityResult,
-} from './processSyncQuotaService';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -46,23 +40,6 @@ export interface AsaasSyncStatus {
   lastResult?: AsaasSyncResult;
   nextRunAt: string | null;
   lastManualTriggerAt: string | null;
-}
-
-export interface JuditScheduledRunStatus {
-  hour: number;
-  minute: number;
-  nextRunAt: string | null;
-}
-
-export interface JuditSyncStatus {
-  enabled: boolean;
-  running: boolean;
-  lastRunAt: string | null;
-  lastSuccessAt: string | null;
-  lastErrorAt: string | null;
-  lastErrorMessage?: string;
-  lastManualTriggerAt: string | null;
-  scheduledRun: JuditScheduledRunStatus | null;
 }
 
 interface InternalProjudiState {
@@ -98,21 +75,6 @@ export class CronJobsService {
     lastErrorMessage?: string;
     lastResult?: AsaasSyncResult;
     nextRunAt: Date | null;
-    lastManualTriggerAt: Date | null;
-  };
-  private juditSchedules: Array<{
-    hour: number;
-    minute: number;
-    timer: NodeJS.Timeout | null;
-    nextRunAt: Date | null;
-  }>;
-  private juditState: {
-    enabled: boolean;
-    running: boolean;
-    lastRunAt: Date | null;
-    lastSuccessAt: Date | null;
-    lastErrorAt: Date | null;
-    lastErrorMessage?: string;
     lastManualTriggerAt: Date | null;
   };
 
@@ -154,31 +116,6 @@ export class CronJobsService {
       nextRunAt: null,
       lastManualTriggerAt: null,
     };
-
-    this.juditSchedules = [
-      {
-        hour: 12,
-        minute: 0,
-        timer: null,
-        nextRunAt: null,
-      },
-    ];
-
-    this.juditState = {
-      enabled: false,
-      running: false,
-      lastRunAt: null,
-      lastSuccessAt: null,
-      lastErrorAt: null,
-      lastErrorMessage: undefined,
-      lastManualTriggerAt: null,
-    };
-
-    void this.initializeJuditIntegration();
-  }
-
-  public async refreshJuditIntegration(): Promise<void> {
-    await this.initializeJuditIntegration();
   }
 
   startProjudiSyncJob(): void {
@@ -339,242 +276,6 @@ export class CronJobsService {
       nextRunAt: formatOptionalDate(this.asaasState.nextRunAt),
       lastManualTriggerAt: formatOptionalDate(this.asaasState.lastManualTriggerAt),
     };
-  }
-
-  private async initializeJuditIntegration(): Promise<void> {
-    try {
-      const enabled = await juditProcessService.isEnabled();
-      this.juditState.enabled = enabled;
-
-      this.clearJuditSchedules();
-
-      if (enabled) {
-        this.startJuditSchedules();
-      }
-    } catch (error) {
-      console.error('[CronJobs] Falha ao inicializar agendamento da Judit.', error);
-      this.juditState.enabled = false;
-      this.clearJuditSchedules();
-    }
-  }
-
-  private startJuditSchedules(): void {
-    for (const schedule of this.juditSchedules) {
-      void this.scheduleNextJuditRun(schedule);
-    }
-  }
-
-  private clearJuditSchedules(): void {
-    for (const schedule of this.juditSchedules) {
-      if (schedule.timer) {
-        clearTimeout(schedule.timer);
-        schedule.timer = null;
-      }
-      schedule.nextRunAt = null;
-    }
-  }
-
-  private async scheduleNextJuditRun(schedule: {
-    hour: number;
-    minute: number;
-    timer: NodeJS.Timeout | null;
-    nextRunAt: Date | null;
-  }): Promise<void> {
-    try {
-      if (!(await juditProcessService.isEnabled())) {
-        this.juditState.enabled = false;
-        this.clearJuditSchedules();
-        return;
-      }
-
-      this.juditState.enabled = true;
-      const nextRun = this.computeNextJuditExecution(schedule.hour, schedule.minute);
-      schedule.nextRunAt = nextRun;
-      const delay = Math.max(0, nextRun.getTime() - Date.now());
-
-      schedule.timer = setTimeout(() => {
-        void this.executeScheduledJuditRun(schedule);
-      }, delay);
-    } catch (error) {
-      console.error('[CronJobs] Falha ao agendar próxima execução da Judit.', error);
-      this.juditState.enabled = false;
-      this.clearJuditSchedules();
-    }
-  }
-
-  private computeNextJuditExecution(hour: number, minute: number): Date {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(hour, minute, 0, 0);
-
-    if (next.getTime() <= now.getTime()) {
-      next.setDate(next.getDate() + 1);
-    }
-
-    while (next.getDay() === 0) {
-      next.setDate(next.getDate() + 1);
-    }
-
-    return next;
-  }
-
-  private async executeScheduledJuditRun(schedule: {
-    hour: number;
-    minute: number;
-    timer: NodeJS.Timeout | null;
-    nextRunAt: Date | null;
-  }): Promise<void> {
-    schedule.timer = null;
-    schedule.nextRunAt = null;
-
-    try {
-      await this.runJuditSync('scheduled');
-    } catch (error) {
-      console.error('[CronJobs] Falha ao executar job agendado da Judit.', error);
-    } finally {
-      await this.scheduleNextJuditRun(schedule);
-    }
-  }
-
-  async triggerJuditSyncNow(): Promise<{ status: JuditSyncStatus; triggered: boolean }> {
-    if (this.juditState.running) {
-      return { status: this.getJuditSyncStatus(), triggered: false };
-    }
-
-    await this.runJuditSync('manual');
-    return { status: this.getJuditSyncStatus(), triggered: true };
-  }
-
-  getJuditSyncStatus(): JuditSyncStatus {
-    const [schedule] = this.juditSchedules;
-    return {
-      enabled: this.juditState.enabled,
-      running: this.juditState.running,
-      lastRunAt: formatOptionalDate(this.juditState.lastRunAt),
-      lastSuccessAt: formatOptionalDate(this.juditState.lastSuccessAt),
-      lastErrorAt: formatOptionalDate(this.juditState.lastErrorAt),
-      lastErrorMessage: this.juditState.lastErrorMessage,
-      lastManualTriggerAt: formatOptionalDate(this.juditState.lastManualTriggerAt),
-      scheduledRun: schedule
-        ? {
-            hour: schedule.hour,
-            minute: schedule.minute,
-            nextRunAt: formatOptionalDate(schedule.nextRunAt),
-          }
-        : null,
-    };
-  }
-
-  private async runJuditSync(trigger: 'scheduled' | 'manual'): Promise<void> {
-    if (!(await juditProcessService.isEnabled())) {
-      this.juditState.enabled = false;
-      this.clearJuditSchedules();
-      return;
-    }
-
-    if (this.juditState.running) {
-      return;
-    }
-
-    this.juditState.enabled = true;
-    this.juditState.running = true;
-    this.juditState.lastRunAt = new Date();
-    if (trigger === 'manual') {
-      this.juditState.lastManualTriggerAt = new Date();
-    }
-
-    let errors = 0;
-    let processed = 0;
-
-    try {
-      const processos = await pool.query(
-        `SELECT p.id,
-                p.numero,
-                p.judit_tracking_id,
-                p.judit_tracking_hour_range,
-                p.idempresa
-           FROM public.processos p
-           JOIN public.empresas emp ON emp.id = p.idempresa
-           JOIN public.planos pl ON pl.id::text = emp.plano::text
-          WHERE p.numero IS NOT NULL
-            AND COALESCE(pl.sincronizacao_processos_habilitada, FALSE) = TRUE`
-      );
-
-      const availabilityCache = new Map<number, ProcessSyncAvailabilityResult>();
-
-      for (const row of processos.rows as Array<{
-        id: number;
-        numero: string;
-        judit_tracking_id: string | null;
-        judit_tracking_hour_range: string | null;
-        idempresa: number | null;
-      }>) {
-        const empresaId = row.idempresa ?? null;
-
-        if (!Number.isInteger(empresaId) || empresaId === null || empresaId <= 0) {
-          continue;
-        }
-
-        let availability = availabilityCache.get(empresaId);
-
-        if (!availability) {
-          availability = await evaluateProcessSyncAvailability(empresaId);
-          availabilityCache.set(empresaId, availability);
-        }
-
-        if (!availability.allowed) {
-          continue;
-        }
-
-        if (availability.remainingQuota != null && availability.remainingQuota <= 0) {
-          continue;
-        }
-
-        try {
-          await juditProcessService.ensureTrackingForProcess(row.id, row.numero, {
-            trackingId: row.judit_tracking_id,
-            hourRange: row.judit_tracking_hour_range,
-          });
-
-          await juditProcessService.triggerRequestForProcess(row.id, row.numero, {
-            source: 'cron',
-            skipIfPending: true,
-            onDemand: false,
-            withAttachments: true,
-          });
-          if (availability.remainingQuota != null) {
-            availability.remainingQuota = Math.max(0, availability.remainingQuota - 1);
-          }
-          processed += 1;
-        } catch (error) {
-          errors += 1;
-          console.error(
-            `[CronJobs] Falha ao sincronizar processo ${row.id} (${row.numero}) com a Judit.`,
-            error
-          );
-        }
-      }
-
-      this.juditState.lastSuccessAt = new Date();
-      this.juditState.lastErrorAt = errors > 0 ? new Date() : null;
-      this.juditState.lastErrorMessage =
-        errors > 0
-          ? `Ocorreram ${errors} falhas ao sincronizar processos com a Judit.`
-          : undefined;
-    } catch (error) {
-      this.juditState.lastErrorAt = new Date();
-      this.juditState.lastErrorMessage =
-        error instanceof Error ? error.message : 'Erro desconhecido ao executar sincronização Judit.';
-      throw error;
-    } finally {
-      this.juditState.running = false;
-    }
-
-    if (errors > 0) {
-      console.warn(
-        `[CronJobs] Sincronização Judit processou ${processed} processo(s) com ${errors} falha(s).`
-      );
-    }
   }
 
   private async runProjudiSync(manual: boolean): Promise<void> {

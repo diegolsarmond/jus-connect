@@ -74,18 +74,6 @@ const router = (0, express_1.Router)();
  *               type: string
  *             tipo:
  *               type: string
- *         judit_syncs:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/ProcessoSync'
- *         judit_responses:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/ProcessoSyncResponse'
- *         judit_audit_trail:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/ProcessoSyncAudit'
  *     ProcessoSyncIntegration:
  *       type: object
  *       properties:

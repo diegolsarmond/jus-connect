@@ -89,15 +89,6 @@ export interface ProcessoOportunidadeResumo {
   solicitante_nome: string | null;
 }
 
-export interface ProcessoJuditRequest {
-  request_id: string;
-  status: string;
-  source: string;
-  result: unknown;
-  criado_em: string;
-  atualizado_em: string;
-}
-
 export interface Processo {
   id: number;
   cliente_id: number;
@@ -119,14 +110,8 @@ export interface Processo {
   ultima_sincronizacao: string | null;
   consultas_api_count: number;
   movimentacoes_count: number;
-  judit_tracking_id?: string | null;
-  judit_tracking_hour_range?: string | null;
-  judit_last_request?: ProcessoJuditRequest | null;
   cliente?: ProcessoClienteResumo | null;
   oportunidade?: ProcessoOportunidadeResumo | null;
   advogados: ProcessoAdvogado[];
   movimentacoes?: ProcessoMovimentacao[];
-  juditSyncs?: ProcessoSync[];
-  juditResponses?: ProcessoSyncResponse[];
-  juditAuditTrail?: ProcessoSyncAudit[];
 }
