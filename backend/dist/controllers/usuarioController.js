@@ -79,7 +79,11 @@ const parseStatus = (value) => {
     }
     return 'invalid';
 };
-const baseUsuarioSelect = 'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, u.status, u.senha, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u';
+const baseUsuarioSelect = 'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, u.status, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u';
+const mapUsuarioRowToResponse = (row) => {
+    const { id, nome_completo, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao, } = row;
+    return { id, nome_completo, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao };
+};
 const fetchAuthenticatedUserEmpresa = async (userId) => {
     const empresaUsuarioResult = await db_1.default.query('SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1', [userId]);
     if (empresaUsuarioResult.rowCount === 0) {
@@ -117,7 +121,7 @@ const listUsuarios = async (req, res) => {
             return res.status(401).json({ error: 'Token inválido.' });
         }
         const result = await db_1.default.query(baseUsuarioSelect);
-        res.json(result.rows);
+        res.json(result.rows.map((row) => mapUsuarioRowToResponse(row)));
     }
     catch (error) {
         console.error(error);
@@ -141,7 +145,7 @@ const listUsuariosByEmpresa = async (req, res) => {
         const result = await db_1.default.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
             empresaId,
         ]);
-        res.json(result.rows);
+        res.json(result.rows.map((row) => mapUsuarioRowToResponse(row)));
     }
     catch (error) {
         console.error(error);
@@ -164,7 +168,7 @@ const getUsuarioById = async (req, res) => {
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
         }
-        res.json(result.rows[0]);
+        res.json(mapUsuarioRowToResponse(result.rows[0]));
     }
     catch (error) {
         console.error(error);
@@ -236,7 +240,7 @@ const createUsuario = async (req, res) => {
         }
         const temporaryPassword = (0, passwordResetService_1.generateTemporaryPassword)();
         const hashedPassword = (0, passwordUtils_1.hashPassword)(temporaryPassword);
-        const result = await db_1.default.query('INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao', [
+        const result = await db_1.default.query('INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao', [
             nome_completo,
             cpf,
             normalizedEmail,
@@ -276,7 +280,7 @@ const createUsuario = async (req, res) => {
                 .status(500)
                 .json({ error: 'Não foi possível enviar a senha provisória para o novo usuário.' });
         }
-        res.status(201).json(createdUser);
+        res.status(201).json(mapUsuarioRowToResponse(createdUser));
     }
     catch (error) {
         console.error(error);
@@ -316,7 +320,7 @@ const updateUsuario = async (req, res) => {
                     .json({ error: 'Setor informado não existe' });
             }
         }
-        const result = await db_1.default.query('UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao', [
+        const result = await db_1.default.query('UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao', [
             nome_completo,
             cpf,
             email,
@@ -334,7 +338,7 @@ const updateUsuario = async (req, res) => {
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
         }
-        res.json(result.rows[0]);
+        res.json(mapUsuarioRowToResponse(result.rows[0]));
     }
     catch (error) {
         console.error(error);
