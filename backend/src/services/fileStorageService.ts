@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Express } from 'express';
+import type { UploadedFile } from '../middlewares/uploadMiddleware';
 
 export type StoredFileMetadata = {
   key: string;
-  url: string;
+  url: string | null;
   name: string;
   size: number;
   mimeType: string;
@@ -45,6 +45,9 @@ const resolveLocalRoot = (): string => {
 const getPublicBaseUrl = (): string =>
   sanitizeBaseUrl(process.env.FILE_STORAGE_PUBLIC_BASE_URL ?? '/uploads/');
 
+const arePublicUrlsEnabled = (): boolean =>
+  (process.env.FILE_STORAGE_ENABLE_PUBLIC_URLS ?? '').toLowerCase() === 'true';
+
 const resolveDriver = (): string =>
   (process.env.FILE_STORAGE_DRIVER ?? 'local').trim().toLowerCase();
 
@@ -53,11 +56,15 @@ const createFileKey = (originalName: string): string => {
   return `${crypto.randomUUID()}${extension}`;
 };
 
-const buildPublicUrl = (key: string): string => {
+const buildPublicUrl = (key: string): string | null => {
+  if (!arePublicUrlsEnabled()) {
+    return null;
+  }
+
   const baseUrl = getPublicBaseUrl();
 
   if (!baseUrl) {
-    return key;
+    return null;
   }
 
   if (/^https?:\/\//i.test(baseUrl)) {
@@ -74,8 +81,10 @@ export const getLocalStorageRoot = (): string => resolveLocalRoot();
 
 export const getPublicUploadsBasePath = (): string => getPublicBaseUrl();
 
+export const isPublicFileAccessEnabled = (): boolean => arePublicUrlsEnabled();
+
 export const saveUploadedFile = async (
-  file: Express.Multer.File
+  file: UploadedFile
 ): Promise<StoredFileMetadata> => {
   const driver = resolveDriver();
 
@@ -97,13 +106,24 @@ export const saveUploadedFile = async (
   const key = createFileKey(file.originalname);
   const targetPath = path.join(destinationRoot, key);
 
-  await fs.writeFile(targetPath, file.buffer);
+  if (file.buffer.length > 0) {
+    await fs.writeFile(targetPath, file.buffer);
+  } else if (file.path) {
+    await fs.copyFile(file.path, targetPath);
+    await fs.unlink(file.path).catch(() => undefined);
+  } else {
+    throw new StorageUnavailableError(
+      'Arquivo recebido é inválido ou está vazio. Entre em contato com o administrador.'
+    );
+  }
 
   return {
     key,
     url: buildPublicUrl(key),
     name: file.originalname,
-    size: file.size ?? file.buffer.length,
+    size:
+      file.size ??
+      (file.buffer.length > 0 ? file.buffer.length : (await fs.stat(targetPath)).size),
     mimeType: file.mimetype,
   } satisfies StoredFileMetadata;
 };

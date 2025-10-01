@@ -186,7 +186,7 @@ export async function resolveAsaasIntegration(
   const baseUrl = normalizeAsaasBaseUrl(resolvedEnvironment, row.url_api);
   const accessToken = normalizeToken(row.key_value);
 
-  const rawCredentialId = row.credential_id;
+  const rawCredentialId = row.credential_id as unknown;
   let credentialId: number | null = null;
 
   if (typeof rawCredentialId === 'number' && Number.isFinite(rawCredentialId)) {

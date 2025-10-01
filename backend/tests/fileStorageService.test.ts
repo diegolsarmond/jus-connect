@@ -26,6 +26,7 @@ test('saveUploadedFile persiste o arquivo no diretório local configurado', asyn
   process.env.FILE_STORAGE_DRIVER = 'local';
   process.env.FILE_STORAGE_LOCAL_ROOT = tmpDir;
   process.env.FILE_STORAGE_PUBLIC_BASE_URL = 'https://cdn.example.com/uploads/';
+  process.env.FILE_STORAGE_ENABLE_PUBLIC_URLS = 'true';
 
   const service = await import('../src/services/fileStorageService');
   const metadata = await service.saveUploadedFile(createFakeFile('exemplo.txt', content));

@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -227,6 +228,7 @@ export interface ApiProcessoResponse {
   area?: string | null;
   tribunal_acronym?: string | null;
   tribunal?: string | null;
+  tribunal_name?: string | null;
   county?: ApiProcessoCounty | string | null;
   instance?: string | null;
   justice_description?: string | null;
@@ -276,6 +278,7 @@ interface MovimentacaoProcesso extends MovimentoComIdEData {
   conteudo: string | null;
   privado: boolean;
   tags: ApiProcessoStepTags | null;
+  anexos: AnexoProcesso[];
 }
 
 interface GrupoMovimentacao {
@@ -284,6 +287,13 @@ interface GrupoMovimentacao {
   ano: number | null;
   mes: number | null;
   itens: MovimentacaoProcesso[];
+}
+
+interface AnexoProcesso {
+  id: string;
+  titulo: string;
+  data: string | null;
+  url: string | null;
 }
 
 interface ParteNormalizada {
@@ -372,29 +382,11 @@ export interface ProcessoViewModel {
   grupos: GrupoMovimentacao[];
   relacionados: ProcessoRelacionadoView[];
   judit: JuditResumo;
-  anexos: Array<{ id: string; titulo: string; data: string | null; url: string | null }>;
+  anexos: AnexoProcesso[];
 }
 
 const TEXTO_DICA =
   "Use filtros avançados para identificar rapidamente decisões, despachos e publicações relevantes para o seu cliente.";
-
-const DATA_LONGA_OPCOES: Intl.DateTimeFormatOptions = {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-};
-
-const DATA_CURTA_OPCOES: Intl.DateTimeFormatOptions = {
-  day: "2-digit",
-  month: "2-digit",
-  year: "2-digit",
-};
-
-const DATA_HORA_OPCOES: Intl.DateTimeFormatOptions = {
-  ...DATA_LONGA_OPCOES,
-  hour: "2-digit",
-  minute: "2-digit",
-};
 
 const formatadorMoeda = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -429,10 +421,37 @@ function formatarData(
     return null;
   }
 
-  const opcoes =
-    tipo === "curta" ? DATA_CURTA_OPCOES : tipo === "hora" ? DATA_HORA_OPCOES : DATA_LONGA_OPCOES;
+  const dia = data.getDate().toString().padStart(2, "0");
+  const mes = (data.getMonth() + 1).toString().padStart(2, "0");
+  const ano = data.getFullYear().toString();
+  const base = `${dia}/${mes}/${ano}`;
 
-  return data.toLocaleDateString("pt-BR", opcoes);
+  if (tipo === "curta") {
+    return base;
+  }
+
+  const hora = data.getHours().toString().padStart(2, "0");
+  const minuto = data.getMinutes().toString().padStart(2, "0");
+
+  return `${base} ${hora}:${minuto}`;
+}
+
+function obterChaveDia(valor: string | Date | null | undefined): string | null {
+  if (!valor) {
+    return null;
+  }
+
+  const data = valor instanceof Date ? valor : new Date(valor);
+
+  if (Number.isNaN(data.getTime())) {
+    return null;
+  }
+
+  const ano = data.getFullYear().toString().padStart(4, "0");
+  const mes = (data.getMonth() + 1).toString().padStart(2, "0");
+  const dia = data.getDate().toString().padStart(2, "0");
+
+  return `${ano}-${mes}-${dia}`;
 }
 
 function formatarMoeda(valor?: string | number | null): string {
@@ -984,7 +1003,13 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
       juditResult?.tribunal,
     ) || NAO_INFORMADO;
   const tribunalNome =
-    primeiroTextoValido(processo.tribunal, juditResult?.tribunal, tribunalSigla) || tribunalSigla;
+    primeiroTextoValido(
+      processo.tribunal_name,
+      juditResult?.tribunal_name,
+      processo.tribunal,
+      juditResult?.tribunal,
+      tribunalSigla,
+    ) || tribunalSigla;
 
   const localidade = extrairLocalidade(
     processo.county ?? juditResult?.county ?? processo.jurisdicao ?? null,
@@ -996,7 +1021,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
         processo.data_distribuicao ??
         juditResult?.distribution_date ??
         null,
-      "curta",
+      "hora",
     ) ?? NAO_INFORMADO;
   const justiceDescription =
     primeiroTextoValido(processo.justice_description, juditResult?.justice_description) ||
@@ -1054,6 +1079,47 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     })),
   );
 
+  const anexosFonte: ApiProcessoAttachment[] =
+    Array.isArray(processo.attachments) && processo.attachments.length > 0
+      ? processo.attachments
+      : Array.isArray(juditResult?.attachments)
+        ? juditResult.attachments
+        : [];
+
+  const anexosPorDia = new Map<string, AnexoProcesso[]>();
+
+  const anexos: AnexoProcesso[] = anexosFonte
+    .map((anexo, index) => {
+      const titulo =
+        primeiroTextoValido(anexo.title, anexo.attachment_name, anexo.content) ||
+        `Documento ${index + 1}`;
+      const id =
+        typeof anexo.id === "string" || typeof anexo.id === "number"
+          ? String(anexo.id)
+          : typeof anexo.attachment_id === "string" || typeof anexo.attachment_id === "number"
+            ? String(anexo.attachment_id)
+            : `${index}-${titulo}`;
+      const dataOriginal = anexo.date ?? anexo.attachment_date ?? null;
+      const chaveDia = obterChaveDia(dataOriginal);
+
+      const model: AnexoProcesso = {
+        id,
+        titulo,
+        data: formatarData(dataOriginal, "hora"),
+        url: primeiroTextoValido(anexo.url, anexo.attachment_url) || null,
+      };
+
+      if (chaveDia) {
+        const existentes = anexosPorDia.get(chaveDia) ?? [];
+        anexosPorDia.set(chaveDia, [...existentes, model]);
+      }
+
+      return model;
+    })
+    .filter((anexo) => Boolean(anexo.titulo));
+
+  const diasAnexosDistribuidos = new Set<string>();
+
   const movimentacoes = passosDeduplicados
     .map((item, index) => {
       const original = (item as typeof item & { original?: ApiProcessoStep }).original ?? {
@@ -1106,15 +1172,26 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
         return null;
       }
 
+      const chaveDia = obterChaveDia(dataValida ?? textoData ?? null);
+      const anexosRelacionados =
+        chaveDia && !diasAnexosDistribuidos.has(chaveDia)
+          ? (anexosPorDia.get(chaveDia)?.slice() ?? [])
+          : [];
+
+      if (chaveDia && anexosRelacionados.length) {
+        diasAnexosDistribuidos.add(chaveDia);
+      }
+
       return {
         id: identificador,
         data: dataValida,
         dataOriginal: textoData ?? null,
-        dataFormatada: formatarData(dataValida, "longa"),
+        dataFormatada: formatarData(dataValida ?? textoData ?? null, "hora"),
         stepType: tipoPasso || null,
         conteudo: conteudoBruto,
         privado: Boolean(original?.private),
         tags: original?.tags ?? null,
+        anexos: anexosRelacionados,
       } satisfies MovimentacaoProcesso;
     })
     .filter((mov): mov is MovimentacaoProcesso => mov !== null)
@@ -1176,34 +1253,6 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
       };
     })
     .filter((rel): rel is ProcessoRelacionadoView => Boolean(rel));
-
-  const anexosFonte: ApiProcessoAttachment[] =
-    Array.isArray(processo.attachments) && processo.attachments.length > 0
-      ? processo.attachments
-      : Array.isArray(juditResult?.attachments)
-        ? juditResult.attachments
-        : [];
-
-  const anexos = anexosFonte
-    .map((anexo, index) => {
-      const titulo =
-        primeiroTextoValido(anexo.title, anexo.attachment_name, anexo.content) ||
-        `Documento ${index + 1}`;
-      const id =
-        typeof anexo.id === "string" || typeof anexo.id === "number"
-          ? String(anexo.id)
-          : typeof anexo.attachment_id === "string" || typeof anexo.attachment_id === "number"
-            ? String(anexo.attachment_id)
-            : `${index}-${titulo}`;
-
-      return {
-        id,
-        titulo,
-        data: formatarData(anexo.date ?? anexo.attachment_date ?? null, "hora"),
-        url: primeiroTextoValido(anexo.url, anexo.attachment_url) || null,
-      };
-    })
-    .filter((anexo) => Boolean(anexo.titulo));
 
   const cabecalho: CabecalhoProcesso = {
     codigo,
@@ -1344,7 +1393,7 @@ interface TimelineMesProps {
   virtualizado: boolean;
 }
 
-export function TimelineMes({
+export const TimelineMes = memo(function TimelineMes({
   grupo,
   aberto,
   onToggle,
@@ -1456,7 +1505,7 @@ export function TimelineMes({
                       />
                     )}
                     <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-white bg-primary shadow" />
-                    <div className="rounded-lg border border-muted-foreground/10 bg-muted/40 p-4">
+                    <div className="rounded-2xl border border-muted-foreground/10 bg-muted/40 p-4 shadow-sm">
                       <div className="space-y-3 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
                           {item.stepType ? (
@@ -1518,6 +1567,43 @@ export function TimelineMes({
                             >
                               {expandido ? "Recolher" : "Expandir"}
                             </Button>
+                          </div>
+                        ) : null}
+
+                        {item.anexos.length ? (
+                          <div className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                              Anexos do dia
+                            </p>
+                            <ul className="space-y-3">
+                              {item.anexos.map((anexo) => (
+                                <li
+                                  key={`${item.id}-anexo-${anexo.id}`}
+                                  className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-semibold text-foreground">{anexo.titulo}</p>
+                                    {anexo.data ? (
+                                      <p className="text-xs text-muted-foreground">{anexo.data}</p>
+                                    ) : null}
+                                  </div>
+                                  {anexo.url ? (
+                                    <Button
+                                      asChild
+                                      variant="link"
+                                      size="sm"
+                                      className="h-auto px-0 text-primary hover:text-primary/80"
+                                    >
+                                      <a href={anexo.url} target="_blank" rel="noopener noreferrer">
+                                        Abrir documento
+                                      </a>
+                                    </Button>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Link indisponível</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         ) : null}
                       </div>
@@ -1658,7 +1744,7 @@ function JuditCard({ resumo, onVerAnexos }: JuditCardProps) {
 interface InformacoesProcessoProps {
   dados: DadosProcesso;
   partes: PartesAgrupadas;
-  anexos: Array<{ id: string; titulo: string; data: string | null; url: string | null }>;
+  anexos: AnexoProcesso[];
   onVerTodosAnexos?: () => void;
 }
 
@@ -1979,7 +2065,7 @@ export default function VisualizarProcesso() {
   );
 
   const totalMovimentacoes = movimentacoesFiltradas.length;
-  const usarVirtualizacao = totalMovimentacoes > 300;
+  const usarVirtualizacao = totalMovimentacoes > 120;
 
   const gruposVisiveis = useMemo(
     () => gruposFiltrados.slice(0, mesesVisiveis),
@@ -2086,93 +2172,104 @@ export default function VisualizarProcesso() {
           </AlertDescription>
         </Alert>
 
-        <div className="rounded-xl border border-muted-foreground/10 bg-white p-4 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_repeat(2,minmax(0,200px))]">
-            <div className="space-y-2">
-              <Label
-                htmlFor="filtro-tipo"
-                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                Tipo
-              </Label>
-              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger id="filtro-tipo" className="w-full">
-                  <SelectValue placeholder="Todos os tipos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os tipos</SelectItem>
-                  {tiposDisponiveis.map((tipo) => (
-                    <SelectItem key={tipo} value={tipo}>
-                      {tipo}
-                    </SelectItem>
+        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <Card className="border border-muted-foreground/10 bg-white/90 shadow-sm backdrop-blur">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold text-muted-foreground">
+                  Refinar resultados
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="filtro-tipo"
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    Tipo
+                  </Label>
+                  <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                    <SelectTrigger id="filtro-tipo" className="w-full">
+                      <SelectValue placeholder="Todos os tipos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os tipos</SelectItem>
+                      {tiposDisponiveis.map((tipo) => (
+                        <SelectItem key={tipo} value={tipo}>
+                          {tipo}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="filtro-inicio"
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    Data inicial
+                  </Label>
+                  <Input
+                    id="filtro-inicio"
+                    type="date"
+                    value={filtroInicio}
+                    onChange={(event) => setFiltroInicio(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="filtro-fim"
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    Data final
+                  </Label>
+                  <Input
+                    id="filtro-fim"
+                    type="date"
+                    value={filtroFim}
+                    onChange={(event) => setFiltroFim(event.target.value)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-4">
+            {temResultados ? (
+              <>
+                <div className="space-y-4">
+                  {gruposVisiveis.map((grupo) => (
+                    <TimelineMes
+                      key={grupo.chave}
+                      grupo={{ ...grupo, itens: grupo.itens }}
+                      aberto={mesesAbertos.includes(grupo.chave)}
+                      onToggle={handleToggleMes}
+                      movimentacoesVisiveis={movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE}
+                      onVerMais={handleVerMaisMovimentos}
+                      virtualizado={usarVirtualizacao}
+                    />
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="filtro-inicio"
-                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                Data inicial
-              </Label>
-              <Input
-                id="filtro-inicio"
-                type="date"
-                value={filtroInicio}
-                onChange={(event) => setFiltroInicio(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="filtro-fim"
-                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                Data final
-              </Label>
-              <Input
-                id="filtro-fim"
-                type="date"
-                value={filtroFim}
-                onChange={(event) => setFiltroFim(event.target.value)}
-              />
-            </div>
+                </div>
+
+                {totalGruposFiltrados > gruposVisiveis.length ? (
+                  <div className="text-center">
+                    <Button
+                      variant="outline"
+                      onClick={handleCarregarMaisMeses}
+                      aria-expanded={gruposVisiveis.length < totalGruposFiltrados}
+                    >
+                      Carregar mais meses
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-muted-foreground/40 bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                Nenhuma movimentação encontrada para os filtros selecionados.
+              </div>
+            )}
           </div>
         </div>
-
-        {temResultados ? (
-          <>
-            <div className="space-y-4">
-              {gruposVisiveis.map((grupo) => (
-                <TimelineMes
-                  key={grupo.chave}
-                  grupo={{ ...grupo, itens: grupo.itens }}
-                  aberto={mesesAbertos.includes(grupo.chave)}
-                  onToggle={handleToggleMes}
-                  movimentacoesVisiveis={movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE}
-                  onVerMais={handleVerMaisMovimentos}
-                  virtualizado={usarVirtualizacao}
-                />
-              ))}
-            </div>
-
-            {totalGruposFiltrados > gruposVisiveis.length ? (
-              <div className="text-center">
-                <Button
-                  variant="outline"
-                  onClick={handleCarregarMaisMeses}
-                  aria-expanded={gruposVisiveis.length < totalGruposFiltrados}
-                >
-                  Carregar mais meses
-                </Button>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="rounded-xl border border-muted-foreground/10 bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-            Nenhuma movimentação encontrada para os filtros selecionados.
-          </div>
-        )}
       </div>
     );
   }, [
