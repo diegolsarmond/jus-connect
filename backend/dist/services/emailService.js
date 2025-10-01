@@ -21,29 +21,21 @@ const parseBoolean = (value, defaultValue) => {
 };
 const smtpUser = process.env.SMTP_USER;
 const smtpPass = process.env.SMTP_PASSWORD ?? process.env.SMTP_PASS;
-if (!smtpUser || !smtpPass) {
-    const missingParts = [];
-    if (!smtpUser) {
-        missingParts.push('SMTP_USER');
+const isSmtpConfigured = Boolean(smtpUser && smtpPass);
+const DEFAULT_SMTP_CONFIG = isSmtpConfigured
+    ? {
+        host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+        port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
+        secure: parseBoolean(process.env.SMTP_SECURE, true),
+        rejectUnauthorized: parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED, true),
+        auth: {
+            user: smtpUser,
+            pass: smtpPass,
+        },
     }
-    if (!smtpPass) {
-        missingParts.push('SMTP_PASSWORD (ou SMTP_PASS)');
-    }
-    const missingDescription = missingParts.join(' e ');
-    throw new Error(`Configuração SMTP inválida. Defina ${missingDescription} como variáveis de ambiente antes de iniciar o servidor.`);
-}
-const DEFAULT_SMTP_CONFIG = {
-    host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-    port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
-    secure: parseBoolean(process.env.SMTP_SECURE, true),
-    rejectUnauthorized: parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED, true),
-    auth: {
-        user: smtpUser,
-        pass: smtpPass,
-    },
-};
+    : null;
 const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
-const defaultFromAddress = process.env.SMTP_FROM || DEFAULT_SMTP_CONFIG.auth.user;
+const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'no-reply@localhost';
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 const CRLF = '\r\n';
 function waitForResponse(socket, timeoutMs = 15000) {
@@ -139,6 +131,10 @@ function buildMessageBody(text, html, boundary) {
     return parts.join(CRLF);
 }
 async function sendEmail({ to, subject, html, text }) {
+    if (!DEFAULT_SMTP_CONFIG) {
+        console.warn('Configuração SMTP ausente. Defina SMTP_USER e SMTP_PASSWORD (ou SMTP_PASS) para habilitar o envio de e-mails.');
+        return;
+    }
     const { host, port, auth, rejectUnauthorized } = DEFAULT_SMTP_CONFIG;
     const clientName = os_1.default.hostname() || 'localhost';
     const boundary = `----=_Boundary_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;

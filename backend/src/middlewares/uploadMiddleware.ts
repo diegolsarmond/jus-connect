@@ -29,6 +29,75 @@ const parseBoundary = (contentType: string): string | null => {
   return match[1].trim().replace(/^"|"$/g, '');
 };
 
+
+const startsWith = (buffer: Buffer, signature: Buffer): boolean => {
+  if (buffer.length < signature.length) {
+    return false;
+  }
+
+  return buffer.subarray(0, signature.length).equals(signature);
+};
+
+const isLikelyPlainText = (buffer: Buffer): boolean => {
+  const sample = buffer.subarray(0, Math.min(buffer.length, 512));
+
+  for (const byte of sample) {
+    if (byte === 0) {
+      return false;
+    }
+
+    if (byte < 0x09) {
+      return false;
+    }
+
+    if (byte > 0x0d && byte < 0x20) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PDF_SIGNATURE = Buffer.from('%PDF', 'ascii');
+
+const detectMimeType = (buffer: Buffer): string | null => {
+  if (startsWith(buffer, JPEG_SIGNATURE)) {
+    return 'image/jpeg';
+  }
+
+  if (startsWith(buffer, PNG_SIGNATURE)) {
+    return 'image/png';
+  }
+
+  if (buffer.length >= 12) {
+    const riffHeader = buffer.subarray(0, 4).toString('ascii');
+    const webpHeader = buffer.subarray(8, 12).toString('ascii');
+    if (riffHeader === 'RIFF' && webpHeader === 'WEBP') {
+      return 'image/webp';
+    }
+  }
+
+  if (startsWith(buffer, PDF_SIGNATURE)) {
+    return 'application/pdf';
+  }
+
+  if (isLikelyPlainText(buffer)) {
+    return 'text/plain';
+  }
+
+  return null;
+};
+
+type ParsedPart = {
+  fieldname: string;
+  filename?: string;
+  contentType?: string;
+  contentTransferEncoding?: string;
+  content: Buffer;
+};
+
 const parseHeaders = (buffer: Buffer): Record<string, string> => {
   const lines = buffer.toString('utf8').split('\r\n').filter(Boolean);
   const headers: Record<string, string> = {};
@@ -70,19 +139,21 @@ const parseContentDisposition = (value: string | undefined) => {
 const parseAllowedMimeTypes = (): Set<string> => {
   const raw = process.env.UPLOAD_ALLOWED_MIME_TYPES;
   if (!raw) {
-    return new Set([
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'application/pdf',
-      'text/plain',
-    ]);
+    return new Set(
+      [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'application/pdf',
+        'text/plain',
+      ].map((item) => item.toLowerCase())
+    );
   }
 
   return new Set(
     raw
       .split(',')
-      .map((item) => item.trim())
+      .map((item) => item.trim().toLowerCase())
       .filter(Boolean)
   );
 };
@@ -374,6 +445,47 @@ export const singleFileUpload = (req: Request, res: Response, next: NextFunction
         abortUpload(400, 'Não foi possível concluir o upload do arquivo.');
         return;
       }
+      const declaredMimeType =
+        filePart.contentType?.trim().toLowerCase() ?? 'application/octet-stream';
+      const buffer = filePart.content;
+      const detectedMimeType = detectMimeType(buffer);
+
+      if (
+        detectedMimeType &&
+        declaredMimeType !== 'application/octet-stream' &&
+        declaredMimeType !== detectedMimeType
+      ) {
+        return res.status(400).json({
+          error: 'Conteúdo do arquivo não corresponde ao tipo informado.',
+        });
+      }
+
+      const effectiveMimeType = detectedMimeType ?? declaredMimeType;
+
+      if (allowedMimeTypes.size > 0 && !allowedMimeTypes.has(effectiveMimeType)) {
+        return res.status(400).json({
+          error: `Tipo de arquivo não suportado. Permitidos: ${Array.from(
+            allowedMimeTypes
+          ).join(', ')}`,
+        });
+      }
+
+      req.file = {
+        fieldname: 'file',
+        originalname: filePart.filename,
+        encoding: filePart.contentTransferEncoding ?? '7bit',
+        mimetype: effectiveMimeType,
+        size: buffer.length,
+        buffer,
+        destination: '',
+        filename: filePart.filename,
+        path: '',
+        stream: toReadableStream(buffer),
+      } satisfies Express.Multer.File;
+
+      next();
+    } catch (error) {
+      next(error);
     }
 
     finalizeRequest();
