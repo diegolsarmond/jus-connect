@@ -114,7 +114,7 @@ function buildHighlights(prompt: string): string[] {
     .slice(0, 5);
 }
 
-function buildFallbackContent(documentType: string, prompt: string, providerLabel: string): string {
+function buildFallbackContent(documentType: string, prompt: string, _providerLabel: string): string {
   const highlights = buildHighlights(prompt);
 
   const introParagraph = `Em atendimento à solicitação apresentada, elaboramos o presente ${documentType.toLowerCase()} com base nas orientações fornecidas.`;
@@ -141,7 +141,6 @@ function buildFallbackContent(documentType: string, prompt: string, providerLabe
   }
 
   htmlParts.push(`<p>${escapeHtml(conclusionParagraph)}</p>`);
-  htmlParts.push(`<p>${escapeHtml(`Integração utilizada: ${providerLabel}.`)}</p>`);
 
   return htmlParts.join('');
 }
@@ -209,8 +208,6 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
 
     if (!htmlContent || !htmlContent.trim()) {
       htmlContent = buildFallbackContent(normalizedDocumentType, normalizedPrompt, providerLabel);
-    } else if (!/Integração utilizada/.test(htmlContent)) {
-      htmlContent = `${htmlContent}<p>${escapeHtml(`Integração utilizada: ${providerLabel}.`)}</p>`;
     }
 
     try {

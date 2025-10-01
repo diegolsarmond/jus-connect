@@ -93,7 +93,6 @@ function buildFallbackContent(documentType, prompt, providerLabel) {
         htmlParts.push(`<p>${(0, html_1.escapeHtml)(prompt)}</p>`);
     }
     htmlParts.push(`<p>${(0, html_1.escapeHtml)(conclusionParagraph)}</p>`);
-    htmlParts.push(`<p>${(0, html_1.escapeHtml)(`Integração utilizada: ${providerLabel}.`)}</p>`);
     return htmlParts.join('');
 }
 async function generateTextWithIntegration(req, res) {
@@ -137,8 +136,6 @@ async function generateTextWithIntegration(req, res) {
         if (!htmlContent || !htmlContent.trim()) {
             htmlContent = buildFallbackContent(normalizedDocumentType, normalizedPrompt, providerLabel);
         }
-        else if (!/Integração utilizada/.test(htmlContent)) {
-            htmlContent = `${htmlContent}<p>${(0, html_1.escapeHtml)(`Integração utilizada: ${providerLabel}.`)}</p>`;
         }
         try {
             await integrationService.update(parsedIntegrationId, { lastUsed: new Date() });

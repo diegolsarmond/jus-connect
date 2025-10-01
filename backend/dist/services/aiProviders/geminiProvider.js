@@ -37,7 +37,7 @@ function buildGeminiPrompt(documentType, prompt) {
     const sanitizedPrompt = prompt.trim();
     return [
         'Você é um assistente jurídico especializado em elaborar minutas estruturadas e coerentes.',
-        'Crie um rascunho detalhado para o documento descrito a seguir, mantendo linguagem formal e objetiva.',
+        'Elabore um documento detalhado para o caso descrito a seguir, mantendo linguagem formal e objetiva.',
         'Responda exclusivamente em JSON com o formato:',
         '{',
         '  "intro": "Resumo introdutório do documento",',
