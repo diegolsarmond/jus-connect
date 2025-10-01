@@ -289,16 +289,6 @@ interface ApiProcessoParticipant {
   lawyers?: ApiProcessoLawyer[] | null;
 }
 
-interface ApiProcessoJuditLastRequest {
-  request_id?: string | null;
-  status?: string | null;
-  source?: string | null;
-  atualizado_em?: string | null;
-  criado_em?: string | null;
-  metadata?: Record<string, unknown> | null;
-  result?: ApiProcessoResponse | null;
-}
-
 export interface ApiProcessoResponse {
   id?: number | string | null;
   code?: string | null;
@@ -344,9 +334,6 @@ export interface ApiProcessoResponse {
   consultas_api_count?: number | null;
   movimentacoes_count?: number | null;
   ultima_sincronizacao?: string | null;
-  judit_tracking_id?: string | null;
-  judit_tracking_hour_range?: string | null;
-  judit_last_request?: ApiProcessoJuditLastRequest | null;
 }
 
 interface MovimentacaoProcesso extends MovimentoComIdEData {
@@ -443,17 +430,6 @@ interface ProcessoRelacionadoView {
   instancia: string;
 }
 
-interface JuditResumo {
-  requestId: string | null;
-  status: string | null;
-  atualizadoEm: string | null;
-  origem: string | null;
-  consultas: number;
-  ultimaSincronizacao: string | null;
-  trackingId: string | null;
-  janela: string | null;
-}
-
 export interface ProcessoViewModel {
   cabecalho: CabecalhoProcesso;
   dados: DadosProcesso;
@@ -461,7 +437,6 @@ export interface ProcessoViewModel {
   movimentacoes: MovimentacaoProcesso[];
   grupos: GrupoMovimentacao[];
   relacionados: ProcessoRelacionadoView[];
-  judit: JuditResumo;
   anexos: AnexoProcesso[];
 }
 
@@ -1066,62 +1041,51 @@ function extrairLocalidade(valor: ApiProcessoResponse["county"]): {
 }
 
 export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): ProcessoViewModel {
-  const juditResult = processo.judit_last_request?.result ?? null;
-
   const codigo =
-    primeiroTextoValido(processo.code, processo.numero, juditResult?.code) || NAO_INFORMADO;
-  const nome = primeiroTextoValido(processo.name, juditResult?.name) || NAO_INFORMADO;
-  const status = primeiroTextoValido(processo.status, juditResult?.status) || NAO_INFORMADO;
-  const fase = primeiroTextoValido(processo.phase, juditResult?.phase) || NAO_INFORMADO;
-  const area = primeiroTextoValido(processo.area, juditResult?.area) || NAO_INFORMADO;
+    primeiroTextoValido(processo.code, processo.numero) || NAO_INFORMADO;
+  const nome = primeiroTextoValido(processo.name) || NAO_INFORMADO;
+  const status = primeiroTextoValido(processo.status) || NAO_INFORMADO;
+  const fase = primeiroTextoValido(processo.phase) || NAO_INFORMADO;
+  const area = primeiroTextoValido(processo.area) || NAO_INFORMADO;
 
   const tribunalSigla =
     primeiroTextoValido(
       processo.tribunal_acronym,
       processo.tribunal,
-      juditResult?.tribunal_acronym,
-      juditResult?.tribunal,
     ) || NAO_INFORMADO;
   const tribunalNome =
     primeiroTextoValido(
       processo.tribunal_name,
-      juditResult?.tribunal_name,
       processo.tribunal,
-      juditResult?.tribunal,
       tribunalSigla,
     ) || tribunalSigla;
 
   const localidade = extrairLocalidade(
-    processo.county ?? juditResult?.county ?? processo.jurisdicao ?? null,
+    processo.county ?? processo.jurisdicao ?? null,
   );
-  const valorCausa = formatarMoeda(processo.amount ?? juditResult?.amount ?? null);
+  const valorCausa = formatarMoeda(processo.amount ?? null);
   const distribuidoEm =
     formatarData(
       processo.distribution_date ??
         processo.data_distribuicao ??
-        juditResult?.distribution_date ??
         null,
       "hora",
     ) ?? NAO_INFORMADO;
   const justiceDescription =
-    primeiroTextoValido(processo.justice_description, juditResult?.justice_description) ||
+    primeiroTextoValido(processo.justice_description) ||
     NAO_INFORMADO;
   const instance = normalizarGrau(
-    primeiroTextoValido(processo.instance, juditResult?.instance) || NAO_INFORMADO,
+    primeiroTextoValido(processo.instance) || NAO_INFORMADO,
   );
 
   const subjectsFonte =
     (Array.isArray(processo.subjects) && processo.subjects.length > 0
       ? processo.subjects
-      : Array.isArray(juditResult?.subjects)
-        ? juditResult?.subjects
-        : null) ?? null;
+      : null) ?? null;
   const classificationsFonte =
     (Array.isArray(processo.classifications) && processo.classifications.length > 0
       ? processo.classifications
-      : Array.isArray(juditResult?.classifications)
-        ? juditResult?.classifications
-        : null) ?? null;
+      : null) ?? null;
 
   const subjectsDetalhados = mapearCodigoNomeLista(subjectsFonte, "Assunto");
   const classificationsDetalhadas = mapearCodigoNomeLista(
@@ -1129,24 +1093,13 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     "Classificação",
   );
 
-  const processoParaTags: ApiProcessoResponse = {
-    ...(juditResult ?? {}),
-    ...processo,
-    tags: processo.tags ?? juditResult?.tags ?? null,
-    precatory: processo.precatory ?? juditResult?.precatory ?? null,
-    free_justice: processo.free_justice ?? juditResult?.free_justice ?? null,
-    secrecy_level: processo.secrecy_level ?? juditResult?.secrecy_level ?? null,
-  };
-
-  const tagsInfo = extrairTagsEIndicadores(processoParaTags);
+  const tagsInfo = extrairTagsEIndicadores(processo);
   const tagsCabecalho = tagsInfo.tags;
 
   const passosFonte: ApiProcessoStep[] =
     Array.isArray(processo.steps) && processo.steps.length > 0
       ? processo.steps
-      : Array.isArray(juditResult?.steps)
-        ? juditResult.steps
-        : [];
+      : [];
 
   const passosDeduplicados = deduplicarMovimentacoes(
     passosFonte.map((step, index) => ({
@@ -1162,9 +1115,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const anexosFonte: ApiProcessoAttachment[] =
     Array.isArray(processo.attachments) && processo.attachments.length > 0
       ? processo.attachments
-      : Array.isArray(juditResult?.attachments)
-        ? juditResult.attachments
-        : [];
+      : [];
 
   const anexosPorDia = new Map<string, AnexoProcesso[]>();
 
@@ -1299,8 +1250,6 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     ultimaMovimentacaoData ??
       processo.updated_at ??
       processo.atualizado_em ??
-      juditResult?.updated_at ??
-      processo.judit_last_request?.atualizado_em ??
       null,
     "hora",
   );
@@ -1308,17 +1257,13 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const partes = mapearPartes(
     processo.participants ??
       processo.parties ??
-      juditResult?.participants ??
-      juditResult?.parties ??
       null,
   );
 
   const relacionadosFonte: ApiProcessoRelatedLawsuit[] =
     Array.isArray(processo.related_lawsuits) && processo.related_lawsuits.length > 0
       ? processo.related_lawsuits
-      : Array.isArray(juditResult?.related_lawsuits)
-        ? juditResult.related_lawsuits
-        : [];
+      : [];
 
   const relacionados: ProcessoRelacionadoView[] = relacionadosFonte
     .map((item, index) => {
@@ -1372,86 +1317,6 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     updatedAt: ultimaAtualizacao ?? NAO_INFORMADO,
   };
 
-  const metadata =
-    processo.judit_last_request?.metadata &&
-    typeof processo.judit_last_request.metadata === "object"
-      ? (processo.judit_last_request.metadata as Record<string, unknown>)
-      : null;
-
-  const metadataTrackingId =
-    metadata && typeof metadata.trackingId === "string"
-      ? (metadata.trackingId as string)
-      : null;
-  const metadataHourRange =
-    metadata && typeof metadata.hourRange === "string"
-      ? (metadata.hourRange as string)
-      : null;
-
-  const juditAtualizadoEm =
-    formatarData(
-      processo.judit_last_request?.atualizado_em ??
-        juditResult?.updated_at ??
-        processo.updated_at ??
-        processo.atualizado_em ??
-        ultimaMovimentacaoData ??
-        null,
-      "hora",
-    ) ?? ultimaAtualizacao;
-
-  const consultasTotal =
-    typeof processo.consultas_api_count === "number"
-      ? processo.consultas_api_count
-      : typeof processo.movimentacoes_count === "number"
-        ? processo.movimentacoes_count
-        : passosFonte.length;
-
-  const ultimaSincronizacao =
-    formatarData(
-      processo.ultima_sincronizacao ??
-        processo.judit_last_request?.result?.updated_at ??
-        processo.judit_last_request?.atualizado_em ??
-        processo.updated_at ??
-        null,
-      "hora",
-    ) ?? ultimaAtualizacao;
-
-  const trackingId =
-    primeiroTextoValido(processo.judit_tracking_id ?? null, metadataTrackingId) || null;
-
-  const janelaSincronizacao =
-    primeiroTextoValido(processo.judit_tracking_hour_range ?? null, metadataHourRange) ||
-    (fase !== NAO_INFORMADO ? fase : null);
-
-  const juditStatus =
-    primeiroTextoValido(
-      processo.judit_last_request?.status ?? null,
-      juditResult?.status ?? null,
-      status !== NAO_INFORMADO ? status : null,
-    ) || null;
-
-  const juditOrigem =
-    primeiroTextoValido(
-      processo.judit_last_request?.source ?? null,
-      justiceDescription !== NAO_INFORMADO ? justiceDescription : null,
-    ) || null;
-
-  const juditRequestId =
-    primeiroTextoValido(
-      processo.judit_last_request?.request_id ?? null,
-      codigo !== NAO_INFORMADO ? codigo : null,
-    ) || null;
-
-  const judit: JuditResumo = {
-    requestId: juditRequestId,
-    status: juditStatus,
-    atualizadoEm: juditAtualizadoEm,
-    origem: juditOrigem,
-    consultas: consultasTotal,
-    ultimaSincronizacao,
-    trackingId,
-    janela: janelaSincronizacao,
-  };
-
   return {
     cabecalho,
     dados,
@@ -1459,7 +1324,6 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     movimentacoes,
     grupos,
     relacionados,
-    judit,
     anexos,
   };
 }
@@ -1756,71 +1620,6 @@ function ProcessosRelacionadosTabela({ itens, onAbrir }: ProcessosRelacionadosPr
           ))}
         </TableBody>
       </Table>
-    </div>
-  );
-}
-
-interface JuditCardProps {
-  resumo: JuditResumo;
-  onVerAnexos: () => void;
-}
-
-function JuditCard({ resumo, onVerAnexos }: JuditCardProps) {
-  return (
-    <div className="space-y-4">
-      <Card className="border-primary/30 bg-primary/5">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Panorama do processo</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            <span className="font-semibold text-foreground">Código do processo:</span> {resumo.requestId ?? NAO_INFORMADO}
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Status:</span> {resumo.status ?? NAO_INFORMADO}
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Fase monitorada:</span> {resumo.janela ?? NAO_INFORMADO}
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Justiça:</span> {resumo.origem ?? NAO_INFORMADO}
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Atualizado em:</span> {resumo.atualizadoEm ?? NAO_INFORMADO}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Eventos e atualizações</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            <span className="font-semibold text-foreground">Eventos registrados:</span> {resumo.consultas}
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Última atualização:</span> {resumo.ultimaSincronizacao ?? NAO_INFORMADO}
-          </p>
-          <p>
-            <span className="font-semibold text-foreground">Fase monitorada:</span> {resumo.janela ?? NAO_INFORMADO}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">Anexos e documentos</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            Consulte a lista completa de documentos na aba <strong className="text-foreground">Informações</strong>.
-          </p>
-          <Button variant="outline" size="sm" onClick={onVerAnexos}>
-            Ver anexos
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -2630,10 +2429,6 @@ export default function VisualizarProcesso() {
     <ProcessosRelacionadosTabela itens={viewModel.relacionados} onAbrir={handleAbrirRelacionado} />
   ) : null;
 
-  const conteudoJudit = viewModel ? (
-    <JuditCard resumo={viewModel.judit} onVerAnexos={handleVerTodosAnexos} />
-  ) : null;
-
   const primeiroAnexoDisponivel =
     movimentacaoSelecionada?.anexos.find((anexo) => Boolean(anexo.url)) ?? null;
   const isMarkdownSelecionado = Boolean(
@@ -2787,7 +2582,6 @@ export default function VisualizarProcesso() {
             <TabsTrigger value="movimentacao">Movimentação processual</TabsTrigger>
             <TabsTrigger value="informacoes">Informações</TabsTrigger>
             <TabsTrigger value="relacionados">Processos relacionados</TabsTrigger>
-            <TabsTrigger value="judit">Sistema</TabsTrigger>
           </TabsList>
           <TabsContent value="movimentacao" className="space-y-4">
             {loading ? (
@@ -2830,19 +2624,6 @@ export default function VisualizarProcesso() {
               </Alert>
             ) : (
               conteudoRelacionados
-            )}
-          </TabsContent>
-          <TabsContent value="judit">
-            {loading ? (
-              <Skeleton className="h-64 w-full" />
-            ) : erro ? (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Erro ao carregar informações da JUDIT</AlertTitle>
-                <AlertDescription>{erro}</AlertDescription>
-              </Alert>
-            ) : (
-              conteudoJudit
             )}
           </TabsContent>
         </Tabs>
