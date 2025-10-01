@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -136,26 +136,9 @@ const EditarProcesso = () => {
     defaultValues,
   });
 
-  const tipoOptions = useMemo(() => {
-    if (processo?.tipo && !tipoOptionsBase.includes(processo.tipo)) {
-      return [processo.tipo, ...tipoOptionsBase];
-    }
-    return [...tipoOptionsBase];
-  }, [processo?.tipo]);
-
-  const areaOptions = useMemo(() => {
-    if (processo?.classeJudicial && !areaOptionsBase.includes(processo.classeJudicial)) {
-      return [processo.classeJudicial, ...areaOptionsBase];
-    }
-    return [...areaOptionsBase];
-  }, [processo?.classeJudicial]);
-
-  const statusOptions = useMemo(() => {
-    if (processo?.status && !statusOptionsBase.includes(processo.status)) {
-      return [processo.status, ...statusOptionsBase];
-    }
-    return [...statusOptionsBase];
-  }, [processo?.status]);
+  const tipoOptions = tipoOptionsBase;
+  const areaOptions = areaOptionsBase;
+  const statusOptions = statusOptionsBase;
 
   useEffect(() => {
     const carregarProcesso = async () => {
@@ -219,21 +202,11 @@ const EditarProcesso = () => {
           advogados,
         };
 
-        const resolvedTipoOptions =
-          processoDetalhe.tipo && !tipoOptionsBase.includes(processoDetalhe.tipo)
-            ? [processoDetalhe.tipo, ...tipoOptionsBase]
-            : [...tipoOptionsBase];
+        const resolvedTipoOptions = [...tipoOptionsBase];
 
-        const resolvedStatusOptions =
-          processoDetalhe.status && !statusOptionsBase.includes(processoDetalhe.status)
-            ? [processoDetalhe.status, ...statusOptionsBase]
-            : [...statusOptionsBase];
+        const resolvedStatusOptions = [...statusOptionsBase];
 
-        const resolvedAreaOptions =
-          processoDetalhe.classeJudicial &&
-          !areaOptionsBase.includes(processoDetalhe.classeJudicial)
-            ? [processoDetalhe.classeJudicial, ...areaOptionsBase]
-            : [...areaOptionsBase];
+        const resolvedAreaOptions = [...areaOptionsBase];
 
         const tipo =
           processoDetalhe.tipo && resolvedTipoOptions.includes(processoDetalhe.tipo)
