@@ -202,6 +202,10 @@ router.post('/integrations/providers/asaas/validate', validateAsaasIntegration);
  *                 type: string
  *               prompt:
  *                 type: string
+ *               mode:
+ *                 type: string
+ *                 enum: [default, summary]
+ *                 description: Define o comportamento da IA; usar "summary" para respostas resumidas.
  *     responses:
  *       200:
  *         description: Texto gerado com sucesso

@@ -57,10 +57,12 @@ import {
 } from "@/components/ui/select";
 
 import { getApiUrl } from "@/lib/api";
+import { fetchIntegrationApiKeys, generateAiText } from "@/lib/integrationApiKeys";
 import { cn } from "@/lib/utils";
 
 import { agruparPorMes, deduplicarMovimentacoes, normalizarTexto } from "./utils/processo-ui";
 import { SafeMarkdown } from "@/components/ui/safe-markdown";
+import { useToast } from "@/components/ui/use-toast";
 
 const NAO_INFORMADO = "Não informado";
 const MOVIMENTACOES_POR_LAJE = 25;
@@ -139,6 +141,33 @@ export function filtrarMovimentacoes(
 
     return true;
   });
+}
+
+function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
+  const partes: string[] = [
+    "Resuma o movimento abaixo em até 5 tópicos objetivos, destacando decisões, prazos e providências necessárias.",
+    "Seja conciso e responda em português jurídico claro.",
+  ];
+
+  if (movimentacao.dataFormatada) {
+    partes.push(`Data: ${movimentacao.dataFormatada}`);
+  }
+
+  if (movimentacao.stepType) {
+    partes.push(`Tipo da movimentação: ${movimentacao.stepType}`);
+  }
+
+  const conteudoNormalizado = normalizarTexto(movimentacao.conteudo) || "Sem conteúdo textual informado.";
+  partes.push(`Conteúdo:\n${conteudoNormalizado}`);
+
+  if (movimentacao.anexos.length) {
+    const listaAnexos = movimentacao.anexos
+      .map((anexo) => `- ${anexo.titulo}${anexo.data ? ` (${anexo.data})` : ""}`)
+      .join("\n");
+    partes.push(`Anexos associados:\n${listaAnexos}`);
+  }
+
+  return partes.filter(Boolean).join("\n\n");
 }
 
 interface ApiProcessoCounty {
@@ -1400,6 +1429,7 @@ interface TimelineMesProps {
   movimentacoesVisiveis: number;
   onVerMais: (chave: string) => void;
   virtualizado: boolean;
+  onMostrarConteudo: (movimentacao: MovimentacaoProcesso) => void;
 }
 
 export const TimelineMes = memo(function TimelineMes({
@@ -1409,13 +1439,12 @@ export const TimelineMes = memo(function TimelineMes({
   movimentacoesVisiveis,
   onVerMais,
   virtualizado,
+  onMostrarConteudo,
 }: TimelineMesProps) {
   const [intervalo, setIntervalo] = useState({ inicio: 0, fim: movimentacoesVisiveis });
-  const [expandidos, setExpandidos] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setIntervalo({ inicio: 0, fim: movimentacoesVisiveis });
-    setExpandidos({});
   }, [movimentacoesVisiveis, grupo.chave]);
 
   useEffect(() => {
@@ -1497,8 +1526,6 @@ export const TimelineMes = memo(function TimelineMes({
                 item.tags.formatted.trim().toLowerCase() === "md";
               const isLongo =
                 conteudo.length > LIMITE_CONTEUDO_RESUMO || linhasConteudo.length > LIMITE_LINHAS_RESUMO;
-              const expandido = Boolean(expandidos[item.id]);
-
               return (
                 <div key={item.id} className="relative flex gap-6 pb-8 last:pb-2">
                   <div className="w-28 text-right">
@@ -1539,7 +1566,7 @@ export const TimelineMes = memo(function TimelineMes({
                           <div
                             className={cn(
                               "relative text-muted-foreground",
-                              isLongo && !expandido ? "max-h-48 overflow-hidden" : "",
+                              isLongo ? "max-h-48 overflow-hidden" : "",
                             )}
                           >
                             {isMarkdown ? (
@@ -1553,7 +1580,7 @@ export const TimelineMes = memo(function TimelineMes({
                             ) : (
                               <p className="whitespace-pre-wrap leading-relaxed">{conteudo}</p>
                             )}
-                            {isLongo && !expandido ? (
+                            {isLongo ? (
                               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-muted/90 via-muted/40 to-transparent" />
                             ) : null}
                           </div>
@@ -1565,16 +1592,10 @@ export const TimelineMes = memo(function TimelineMes({
                               variant="ghost"
                               size="sm"
                               className="px-0 text-primary hover:text-primary/80"
-                              onClick={() =>
-                                setExpandidos((prev) => ({
-                                  ...prev,
-                                  [item.id]: !prev[item.id],
-                                }))
-                              }
-                              aria-expanded={expandido}
-                              data-testid={`expandir-${item.id}`}
+                              onClick={() => onMostrarConteudo(item)}
+                              data-testid={`detalhes-${item.id}`}
                             >
-                              {expandido ? "Recolher" : "Expandir"}
+                              Ver conteúdo completo
                             </Button>
                           </div>
                         ) : null}
@@ -1966,6 +1987,7 @@ export default function VisualizarProcesso() {
   const { processoId } = useParams<{ processoId: string }>();
   const navigate = useNavigate();
   const location = useLocation<{ initialTab?: string }>();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [viewModel, setViewModel] = useState<ProcessoViewModel | null>(null);
@@ -1992,6 +2014,11 @@ export default function VisualizarProcesso() {
   }>({});
   const [erroMovimentacao, setErroMovimentacao] = useState<string | null>(null);
   const [salvandoMovimentacao, setSalvandoMovimentacao] = useState(false);
+  const [movimentacaoSelecionada, setMovimentacaoSelecionada] = useState<MovimentacaoProcesso | null>(null);
+  const [resumoIa, setResumoIa] = useState<string | null>(null);
+  const [modalAberto, setModalAberto] = useState(false);
+  const [carregandoResumo, setCarregandoResumo] = useState(false);
+  const [erroResumo, setErroResumo] = useState<string | null>(null);
 
   const aplicarModelo = useCallback(
     (modelo: ProcessoViewModel) => {
@@ -2306,6 +2333,82 @@ export default function VisualizarProcesso() {
     setMostrarTodosAnexos(true);
   }, []);
 
+  const handleMostrarConteudo = useCallback((movimentacao: MovimentacaoProcesso) => {
+    setMovimentacaoSelecionada(movimentacao);
+    setResumoIa(null);
+    setErroResumo(null);
+    setCarregandoResumo(false);
+    setModalAberto(true);
+  }, []);
+
+  const handleAlterarModalConteudo = useCallback((aberto: boolean) => {
+    setModalAberto(aberto);
+    if (!aberto) {
+      setMovimentacaoSelecionada(null);
+      setResumoIa(null);
+      setErroResumo(null);
+      setCarregandoResumo(false);
+    }
+  }, []);
+
+  const handleGerarResumoIa = useCallback(async () => {
+    if (!movimentacaoSelecionada) {
+      return;
+    }
+
+    setCarregandoResumo(true);
+    setErroResumo(null);
+    setResumoIa(null);
+
+    try {
+      const integracoes = await fetchIntegrationApiKeys();
+      const integracaoAtiva = integracoes.find(
+        (integracao) =>
+          integracao.active &&
+          ["gemini", "openai"].includes(integracao.provider.trim().toLowerCase()),
+      );
+
+      if (!integracaoAtiva) {
+        throw new Error("Nenhuma integração de IA ativa disponível.");
+      }
+
+      const promptResumo = montarPromptResumoMovimentacao(movimentacaoSelecionada);
+      const resposta = await generateAiText({
+        integrationId: integracaoAtiva.id,
+        documentType: "Resumo de Movimentação Processual",
+        prompt: promptResumo,
+        mode: "summary",
+      });
+
+      const conteudoResumo = resposta.content?.trim();
+      setResumoIa(conteudoResumo || null);
+      setErroResumo(null);
+
+      const providerLabel =
+        integracaoAtiva.provider.trim().toLowerCase() === "gemini"
+          ? "Gemini"
+          : integracaoAtiva.provider.trim().toLowerCase() === "openai"
+            ? "OpenAI"
+            : integracaoAtiva.provider;
+
+      toast({
+        title: "Resumo gerado",
+        description: `Resumo criado com ${providerLabel}.`,
+      });
+    } catch (error) {
+      const mensagem =
+        error instanceof Error ? error.message : "Não foi possível gerar o resumo.";
+      setErroResumo(mensagem);
+      toast({
+        title: "Falha ao gerar resumo",
+        description: mensagem,
+        variant: "destructive",
+      });
+    } finally {
+      setCarregandoResumo(false);
+    }
+  }, [movimentacaoSelecionada, toast]);
+
   const conteudoMovimentacoes = useMemo(() => {
     if (!viewModel) {
       return null;
@@ -2415,6 +2518,7 @@ export default function VisualizarProcesso() {
                       movimentacoesVisiveis={movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE}
                       onVerMais={handleVerMaisMovimentos}
                       virtualizado={usarVirtualizacao}
+                      onMostrarConteudo={handleMostrarConteudo}
                     />
                   ))}
                 </div>
@@ -2450,6 +2554,7 @@ export default function VisualizarProcesso() {
     handleToggleMes,
     handleVerMaisMovimentos,
     handleCarregarMaisMeses,
+    handleMostrarConteudo,
     filtroTipo,
     filtroInicio,
     filtroFim,
@@ -2473,6 +2578,15 @@ export default function VisualizarProcesso() {
   const conteudoJudit = viewModel ? (
     <JuditCard resumo={viewModel.judit} onVerAnexos={handleVerTodosAnexos} />
   ) : null;
+
+  const primeiroAnexoDisponivel =
+    movimentacaoSelecionada?.anexos.find((anexo) => Boolean(anexo.url)) ?? null;
+  const isMarkdownSelecionado = Boolean(
+    movimentacaoSelecionada &&
+      typeof movimentacaoSelecionada.tags?.formatted === "string" &&
+      movimentacaoSelecionada.tags.formatted.trim().toLowerCase() === "md",
+  );
+  const conteudoSelecionado = movimentacaoSelecionada?.conteudo ?? "";
 
   return (
     <div className="space-y-6">
@@ -2678,6 +2792,114 @@ export default function VisualizarProcesso() {
           </TabsContent>
         </Tabs>
       </section>
+
+      <Dialog open={modalAberto} onOpenChange={handleAlterarModalConteudo}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {movimentacaoSelecionada?.stepType || "Movimentação selecionada"}
+            </DialogTitle>
+          </DialogHeader>
+          {movimentacaoSelecionada ? (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                {movimentacaoSelecionada.dataFormatada ?? "Data não informada"}
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Conteúdo
+                </h3>
+                <div className="rounded-lg border border-muted-foreground/10 bg-muted/40 p-4">
+                  {conteudoSelecionado ? (
+                    isMarkdownSelecionado ? (
+                      <SafeMarkdown content={conteudoSelecionado} className="text-foreground" />
+                    ) : (
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                        {conteudoSelecionado}
+                      </p>
+                    )
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Sem conteúdo disponível.</p>
+                  )}
+                </div>
+              </div>
+              {movimentacaoSelecionada.anexos.length ? (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Anexos
+                  </h3>
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    {movimentacaoSelecionada.anexos.map((anexo) => (
+                      <li key={`${movimentacaoSelecionada.id}-anexo-${anexo.id}`}>
+                        {anexo.titulo}
+                        {anexo.data ? ` • ${anexo.data}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {carregandoResumo ? (
+                <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Gerando resumo com IA...
+                </div>
+              ) : null}
+              {resumoIa ? (
+                <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <h3 className="text-sm font-semibold text-primary">Resumo com IA</h3>
+                  <SafeMarkdown content={resumoIa} className="text-primary" />
+                </div>
+              ) : null}
+              {erroResumo ? <p className="text-sm text-destructive">{erroResumo}</p> : null}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Selecione uma movimentação para visualizar.</p>
+          )}
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            {primeiroAnexoDisponivel ? (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-full sm:mr-auto sm:w-auto"
+              >
+                <a
+                  href={primeiroAnexoDisponivel.url ?? undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Abrir documento
+                </a>
+              </Button>
+            ) : null}
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleAlterarModalConteudo(false)}
+                className="w-full sm:w-auto"
+              >
+                Fechar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleGerarResumoIa}
+                disabled={carregandoResumo || !movimentacaoSelecionada}
+                className="w-full sm:w-auto"
+              >
+                {carregandoResumo ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Resumindo...
+                  </>
+                ) : (
+                  "Resumir com IA"
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={mostrarDialogMovimentacao} onOpenChange={handleAlterarDialogoMovimentacao}>
         <DialogContent className="sm:max-w-lg">
