@@ -1,11 +1,14 @@
 import type { Request, Response } from 'express';
+import type { UploadedFile } from '../middlewares/uploadMiddleware';
 import {
   saveUploadedFile,
   StorageUnavailableError,
 } from '../services/fileStorageService';
 import { buildErrorResponse } from '../utils/errorResponse';
 
-export const upload = async (req: Request, res: Response) => {
+type UploadRequest = Request & { file?: UploadedFile };
+
+export const upload = async (req: UploadRequest, res: Response) => {
   const file = req.file;
 
   if (!file) {

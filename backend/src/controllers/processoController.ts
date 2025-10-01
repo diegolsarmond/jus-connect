@@ -981,7 +981,7 @@ export const createProcessoMovimentacaoManual = async (
       throw new Error('Falha ao criar movimentação');
     }
 
-    const movimentacoes = parseMovimentacoes([insertedRow]);
+    const movimentacoes = parseMovimentacoes([insertedRow]) ?? [];
 
     if (movimentacoes.length === 0) {
       throw new Error('Falha ao processar movimentação criada');
