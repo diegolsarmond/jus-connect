@@ -202,7 +202,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
 
   const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
 
-  return resumoLimpo.length > 600 ? resumoLimpo.slice(0, 600).trim() : resumoLimpo;
+  return resumoConciso;
 }
 
 interface ApiProcessoCounty {
@@ -1638,7 +1638,7 @@ export const TimelineMes = memo(function TimelineMes({
                         {item.anexos.length ? (
                           <div className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                              Anexos do dia
+                              Anexos
                             </p>
                             <ul className="space-y-3">
                               {item.anexos.map((anexo) => (
