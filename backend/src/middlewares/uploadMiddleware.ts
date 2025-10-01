@@ -1,8 +1,24 @@
-import type { Express, NextFunction, Request, Response } from 'express';
-import { Readable } from 'node:stream';
+import type { NextFunction, Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 
 const CRLF = Buffer.from('\r\n');
 const HEADER_SEPARATOR = Buffer.from('\r\n\r\n');
+
+export type UploadedFile = {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+  destination: string;
+  filename: string;
+  path: string;
+  stream: NodeJS.ReadableStream;
+};
 
 const parseBoundary = (contentType: string): string | null => {
   const match = /boundary=([^;]+)/i.exec(contentType);
@@ -12,6 +28,7 @@ const parseBoundary = (contentType: string): string | null => {
 
   return match[1].trim().replace(/^"|"$/g, '');
 };
+
 
 const startsWith = (buffer: Buffer, signature: Buffer): boolean => {
   if (buffer.length < signature.length) {
@@ -119,79 +136,6 @@ const parseContentDisposition = (value: string | undefined) => {
   };
 };
 
-const extractParts = (body: Buffer, boundary: string): ParsedPart[] => {
-  const boundaryBuffer = Buffer.from(`--${boundary}`);
-  const parts: ParsedPart[] = [];
-  let searchIndex = 0;
-
-  while (searchIndex < body.length) {
-    const boundaryIndex = body.indexOf(boundaryBuffer, searchIndex);
-    if (boundaryIndex === -1) {
-      break;
-    }
-
-    let partStart = boundaryIndex + boundaryBuffer.length;
-
-    if (body[partStart] === 45 && body[partStart + 1] === 45) {
-      // Encontramos o boundary final "--boundary--"
-      break;
-    }
-
-    if (body[partStart] === CRLF[0] && body[partStart + 1] === CRLF[1]) {
-      partStart += CRLF.length;
-    } else if (body[partStart] === CRLF[1]) {
-      partStart += 1;
-    }
-
-    const headerEndIndex = body.indexOf(HEADER_SEPARATOR, partStart);
-    if (headerEndIndex === -1) {
-      break;
-    }
-
-    const headersBuffer = body.slice(partStart, headerEndIndex);
-    const headers = parseHeaders(headersBuffer);
-    const { fieldname, filename } = parseContentDisposition(
-      headers['content-disposition']
-    );
-
-    const contentStart = headerEndIndex + HEADER_SEPARATOR.length;
-    let nextBoundaryIndex = body.indexOf(boundaryBuffer, contentStart);
-
-    if (nextBoundaryIndex === -1) {
-      nextBoundaryIndex = body.length;
-    }
-
-    let contentEnd = nextBoundaryIndex;
-
-    if (
-      body[nextBoundaryIndex - 2] === CRLF[0] &&
-      body[nextBoundaryIndex - 1] === CRLF[1]
-    ) {
-      contentEnd -= CRLF.length;
-    } else if (body[nextBoundaryIndex - 1] === CRLF[1]) {
-      contentEnd -= 1;
-    }
-
-    const content = body.slice(contentStart, contentEnd);
-
-    parts.push({
-      fieldname: fieldname ?? '',
-      filename: filename ?? undefined,
-      contentType: headers['content-type'],
-      contentTransferEncoding: headers['content-transfer-encoding'],
-      content,
-    });
-
-    searchIndex = nextBoundaryIndex;
-  }
-
-  return parts;
-};
-
-const toReadableStream = (buffer: Buffer) => {
-  return Readable.from(buffer);
-};
-
 const parseAllowedMimeTypes = (): Set<string> => {
   const raw = process.env.UPLOAD_ALLOWED_MIME_TYPES;
   if (!raw) {
@@ -220,9 +164,13 @@ const resolveMaxFileSize = (): number => {
   return sizeInMb * 1024 * 1024;
 };
 
+const removeFileIfExists = async (filePath: string) => {
+  await fs.unlink(filePath).catch(() => undefined);
+};
+
 declare module 'express-serve-static-core' {
   interface Request {
-    file?: Express.Multer.File;
+    file?: UploadedFile;
   }
 }
 
@@ -234,9 +182,9 @@ export const singleFileUpload = (req: Request, res: Response, next: NextFunction
       .json({ error: 'Envie o arquivo usando multipart/form-data.' });
   }
 
-  const boundary = parseBoundary(contentType);
+  const boundaryValue = parseBoundary(contentType);
 
-  if (!boundary) {
+  if (!boundaryValue) {
     return res
       .status(400)
       .json({ error: 'Não foi possível identificar o boundary do upload.' });
@@ -244,45 +192,259 @@ export const singleFileUpload = (req: Request, res: Response, next: NextFunction
 
   const maxFileSize = resolveMaxFileSize();
   const allowedMimeTypes = parseAllowedMimeTypes();
-  const chunks: Buffer[] = [];
-  let totalSize = 0;
+  const allowedMimeTypesList = Array.from(allowedMimeTypes).join(', ');
+
+  const boundaryPrefix = Buffer.from(`--${boundaryValue}`);
+  const boundarySeparator = Buffer.from(`\r\n--${boundaryValue}`);
+  const closingBoundary = Buffer.from(`\r\n--${boundaryValue}--`);
+  const boundaryPadding = Math.max(boundarySeparator.length, closingBoundary.length);
+
+  const tempFilePath = path.join(tmpdir(), `jus-connect-upload-${randomUUID()}`);
+  const tempFileStream = createWriteStream(tempFilePath);
+
+  let buffer = Buffer.alloc(0);
+  let initialBoundaryConsumed = false;
+  let headersParsed = false;
+  let uploadFinished = false;
+  let requestEnded = false;
+  let streamFinished = false;
   let limitExceeded = false;
+  let responseSent = false;
+
+  let fileSize = 0;
+  let fileName: string | undefined;
+  let fileEncoding = '7bit';
+  let mimeType = 'application/octet-stream';
+
+  const finalizeRequest = () => {
+    if (responseSent || !requestEnded || !streamFinished) {
+      return;
+    }
+
+    if (!uploadFinished || !fileName) {
+      responseSent = true;
+      void removeFileIfExists(tempFilePath).finally(() => {
+        res.status(400).json({ error: 'Campo de arquivo "file" não encontrado.' });
+      });
+      return;
+    }
+
+    req.file = {
+      fieldname: 'file',
+      originalname: fileName,
+      encoding: fileEncoding,
+      mimetype: mimeType,
+      size: fileSize,
+      buffer: Buffer.alloc(0),
+      destination: path.dirname(tempFilePath),
+      filename: path.basename(tempFilePath),
+      path: tempFilePath,
+      stream: createReadStream(tempFilePath),
+    } satisfies UploadedFile;
+
+    next();
+  };
+
+  const abortUpload = (status: number, message: string) => {
+    if (responseSent) {
+      return;
+    }
+
+    responseSent = true;
+    tempFileStream.destroy();
+    void removeFileIfExists(tempFilePath).finally(() => {
+      if (!res.headersSent) {
+        res.status(status).json({ error: message });
+      }
+    });
+  };
+
+  const writeChunk = (chunk: Buffer): boolean => {
+    if (chunk.length === 0 || limitExceeded) {
+      return !limitExceeded;
+    }
+
+    const remaining = maxFileSize - fileSize;
+
+    if (remaining <= 0) {
+      limitExceeded = true;
+      return false;
+    }
+
+    if (chunk.length > remaining) {
+      tempFileStream.write(chunk.slice(0, remaining));
+      fileSize += remaining;
+      limitExceeded = true;
+      return false;
+    }
+
+    tempFileStream.write(chunk);
+    fileSize += chunk.length;
+    return true;
+  };
+
+  const processBuffer = () => {
+    while (!responseSent) {
+      if (!initialBoundaryConsumed) {
+        const index = buffer.indexOf(boundaryPrefix);
+        if (index === -1) {
+          break;
+        }
+
+        const expectedLength = index + boundaryPrefix.length + CRLF.length;
+        if (buffer.length < expectedLength) {
+          break;
+        }
+
+        if (
+          buffer[index + boundaryPrefix.length] !== CRLF[0] ||
+          buffer[index + boundaryPrefix.length + 1] !== CRLF[1]
+        ) {
+          abortUpload(400, 'Conteúdo de upload inválido.');
+          return;
+        }
+
+        buffer = buffer.slice(index + boundaryPrefix.length + CRLF.length);
+        initialBoundaryConsumed = true;
+        continue;
+      }
+
+      if (!headersParsed) {
+        const headerEndIndex = buffer.indexOf(HEADER_SEPARATOR);
+        if (headerEndIndex === -1) {
+          break;
+        }
+
+        const headersBuffer = buffer.slice(0, headerEndIndex);
+        const headers = parseHeaders(headersBuffer);
+        const { fieldname, filename } = parseContentDisposition(
+          headers['content-disposition']
+        );
+
+        if (!fieldname || fieldname !== 'file' || !filename) {
+          abortUpload(400, 'Campo de arquivo "file" não encontrado.');
+          return;
+        }
+
+        fileName = filename;
+        fileEncoding = headers['content-transfer-encoding'] ?? '7bit';
+        mimeType = headers['content-type'] ?? 'application/octet-stream';
+
+        if (allowedMimeTypes.size > 0 && !allowedMimeTypes.has(mimeType)) {
+          abortUpload(
+            400,
+            `Tipo de arquivo não suportado. Permitidos: ${allowedMimeTypesList}`
+          );
+          return;
+        }
+
+        buffer = buffer.slice(headerEndIndex + HEADER_SEPARATOR.length);
+        headersParsed = true;
+        continue;
+      }
+
+      if (uploadFinished) {
+        break;
+      }
+
+      const closingIndex = buffer.indexOf(closingBoundary);
+      const separatorIndex = buffer.indexOf(boundarySeparator);
+
+      let boundaryIndex = -1;
+      let boundaryLength = 0;
+
+      if (closingIndex !== -1 && (separatorIndex === -1 || closingIndex <= separatorIndex)) {
+        boundaryIndex = closingIndex;
+        boundaryLength = closingBoundary.length;
+      } else if (separatorIndex !== -1) {
+        boundaryIndex = separatorIndex;
+        boundaryLength = boundarySeparator.length;
+      }
+
+      if (boundaryIndex === -1) {
+        const safeLength = Math.max(0, buffer.length - boundaryPadding);
+        if (safeLength === 0) {
+          break;
+        }
+
+        const chunk = buffer.slice(0, safeLength);
+        if (!writeChunk(chunk)) {
+          break;
+        }
+
+        buffer = buffer.slice(safeLength);
+        continue;
+      }
+
+      let contentEnd = boundaryIndex;
+
+      if (
+        contentEnd >= CRLF.length &&
+        buffer[contentEnd - 2] === CRLF[0] &&
+        buffer[contentEnd - 1] === CRLF[1]
+      ) {
+        contentEnd -= CRLF.length;
+      }
+
+      const content = buffer.slice(0, Math.max(0, contentEnd));
+      if (!writeChunk(content)) {
+        break;
+      }
+
+      buffer = buffer.slice(boundaryIndex + boundaryLength);
+      uploadFinished = true;
+      tempFileStream.end();
+      break;
+    }
+  };
+
+  tempFileStream.on('finish', () => {
+    streamFinished = true;
+    finalizeRequest();
+  });
+
+  tempFileStream.on('error', (error) => {
+    if (responseSent) {
+      return;
+    }
+
+    responseSent = true;
+    removeFileIfExists(tempFilePath)
+      .catch(() => undefined)
+      .finally(() => {
+        next(error);
+      });
+  });
 
   req.on('data', (chunk: Buffer) => {
+    if (responseSent) {
+      return;
+    }
+
+    buffer = Buffer.concat([buffer, chunk]);
+    processBuffer();
+
     if (limitExceeded) {
-      return;
+      abortUpload(
+        413,
+        `Arquivo maior que o limite permitido de ${Math.round(
+          maxFileSize / 1024 / 1024
+        )}MB.`
+      );
+      req.destroy();
     }
-
-    totalSize += chunk.length;
-
-    if (totalSize > maxFileSize) {
-      limitExceeded = true;
-      return;
-    }
-
-    chunks.push(chunk);
   });
 
   req.on('end', () => {
-    if (limitExceeded) {
-      return res.status(413).json({
-        error: `Arquivo maior que o limite permitido de ${Math.round(
-          maxFileSize / 1024 / 1024
-        )}MB.`,
-      });
-    }
+    requestEnded = true;
 
-    try {
-      const body = Buffer.concat(chunks);
-      const parts = extractParts(body, boundary);
-      const filePart = parts.find((part) => part.fieldname === 'file');
+    if (!responseSent) {
+      processBuffer();
 
-      if (!filePart || !filePart.filename) {
-        return res
-          .status(400)
-          .json({ error: 'Campo de arquivo "file" não encontrado.' });
+      if (!uploadFinished) {
+        abortUpload(400, 'Não foi possível concluir o upload do arquivo.');
+        return;
       }
-
       const declaredMimeType =
         filePart.contentType?.trim().toLowerCase() ?? 'application/octet-stream';
       const buffer = filePart.content;
@@ -325,9 +487,31 @@ export const singleFileUpload = (req: Request, res: Response, next: NextFunction
     } catch (error) {
       next(error);
     }
+
+    finalizeRequest();
   });
 
   req.on('error', (error) => {
-    next(error);
+    if (responseSent) {
+      return;
+    }
+
+    responseSent = true;
+    tempFileStream.destroy(error);
+    removeFileIfExists(tempFilePath)
+      .catch(() => undefined)
+      .finally(() => {
+        next(error);
+      });
+  });
+
+  req.on('aborted', () => {
+    if (responseSent) {
+      return;
+    }
+
+    responseSent = true;
+    tempFileStream.destroy();
+    void removeFileIfExists(tempFilePath);
   });
 };

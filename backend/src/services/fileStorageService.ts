@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { Express } from 'express';
+import type { UploadedFile } from '../middlewares/uploadMiddleware';
 
 export type StoredFileMetadata = {
   key: string;
@@ -84,7 +84,7 @@ export const getPublicUploadsBasePath = (): string => getPublicBaseUrl();
 export const isPublicFileAccessEnabled = (): boolean => arePublicUrlsEnabled();
 
 export const saveUploadedFile = async (
-  file: Express.Multer.File
+  file: UploadedFile
 ): Promise<StoredFileMetadata> => {
   const driver = resolveDriver();
 
@@ -106,13 +106,24 @@ export const saveUploadedFile = async (
   const key = createFileKey(file.originalname);
   const targetPath = path.join(destinationRoot, key);
 
-  await fs.writeFile(targetPath, file.buffer);
+  if (file.buffer.length > 0) {
+    await fs.writeFile(targetPath, file.buffer);
+  } else if (file.path) {
+    await fs.copyFile(file.path, targetPath);
+    await fs.unlink(file.path).catch(() => undefined);
+  } else {
+    throw new StorageUnavailableError(
+      'Arquivo recebido é inválido ou está vazio. Entre em contato com o administrador.'
+    );
+  }
 
   return {
     key,
     url: buildPublicUrl(key),
     name: file.originalname,
-    size: file.size ?? file.buffer.length,
+    size:
+      file.size ??
+      (file.buffer.length > 0 ? file.buffer.length : (await fs.stat(targetPath)).size),
     mimeType: file.mimetype,
   } satisfies StoredFileMetadata;
 };
