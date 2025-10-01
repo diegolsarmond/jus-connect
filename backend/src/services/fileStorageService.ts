@@ -5,7 +5,7 @@ import type { Express } from 'express';
 
 export type StoredFileMetadata = {
   key: string;
-  url: string;
+  url: string | null;
   name: string;
   size: number;
   mimeType: string;
@@ -45,6 +45,9 @@ const resolveLocalRoot = (): string => {
 const getPublicBaseUrl = (): string =>
   sanitizeBaseUrl(process.env.FILE_STORAGE_PUBLIC_BASE_URL ?? '/uploads/');
 
+const arePublicUrlsEnabled = (): boolean =>
+  (process.env.FILE_STORAGE_ENABLE_PUBLIC_URLS ?? '').toLowerCase() === 'true';
+
 const resolveDriver = (): string =>
   (process.env.FILE_STORAGE_DRIVER ?? 'local').trim().toLowerCase();
 
@@ -53,11 +56,15 @@ const createFileKey = (originalName: string): string => {
   return `${crypto.randomUUID()}${extension}`;
 };
 
-const buildPublicUrl = (key: string): string => {
+const buildPublicUrl = (key: string): string | null => {
+  if (!arePublicUrlsEnabled()) {
+    return null;
+  }
+
   const baseUrl = getPublicBaseUrl();
 
   if (!baseUrl) {
-    return key;
+    return null;
   }
 
   if (/^https?:\/\//i.test(baseUrl)) {
@@ -73,6 +80,8 @@ export const getFileStorageDriver = (): string => resolveDriver();
 export const getLocalStorageRoot = (): string => resolveLocalRoot();
 
 export const getPublicUploadsBasePath = (): string => getPublicBaseUrl();
+
+export const isPublicFileAccessEnabled = (): boolean => arePublicUrlsEnabled();
 
 export const saveUploadedFile = async (
   file: Express.Multer.File
