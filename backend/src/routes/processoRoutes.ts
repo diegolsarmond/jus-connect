@@ -3,6 +3,7 @@ import {
   listProcessos,
   listProcessosByCliente,
   getProcessoById,
+  createProcessoMovimentacaoManual,
   createProcesso,
   updateProcesso,
   deleteProcesso,
@@ -302,6 +303,8 @@ router.get('/clientes/:clienteId/processos', listProcessosByCliente);
  *         description: Processo não encontrado
  */
 router.get('/processos/:id', getProcessoById);
+
+router.post('/processos/:id/movimentacoes', createProcessoMovimentacaoManual);
 
 /**
  * @swagger
