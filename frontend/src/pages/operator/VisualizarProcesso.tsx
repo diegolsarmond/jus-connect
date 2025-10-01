@@ -15,6 +15,7 @@ import {
   ChevronUp,
   Info,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -145,8 +146,9 @@ export function filtrarMovimentacoes(
 
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
   const partes: string[] = [
-    "Resuma o movimento abaixo em até 5 tópicos objetivos, destacando decisões, prazos e providências necessárias.",
-    "Seja conciso e responda em português jurídico claro.",
+    "Forneça um resumo curto e direto sobre a movimentação descrita.",
+    "Use no máximo três frases objetivas em um único parágrafo, destacando decisões, prazos e providências necessárias.",
+    "Mantenha a resposta em português jurídico claro, sem títulos, listas, tópicos ou marcações HTML.",
   ];
 
   if (movimentacao.dataFormatada) {
@@ -168,6 +170,37 @@ function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): str
   }
 
   return partes.filter(Boolean).join("\n\n");
+}
+
+function prepararResumoIa(conteudo?: string | null): string | null {
+  if (!conteudo) {
+    return null;
+  }
+
+  const textoNormalizado = normalizarTexto(conteudo);
+
+  if (!textoNormalizado) {
+    return null;
+  }
+
+  const paragrafoUnico = textoNormalizado
+    .split("\n")
+    .map((linha) => linha.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!paragrafoUnico) {
+    return null;
+  }
+
+  const frases = paragrafoUnico
+    .split(/(?<=[.!?])\s+/)
+    .filter((frase) => frase.trim().length > 0);
+  const resumoConciso = frases.slice(0, 3).join(" ") || paragrafoUnico;
+
+  return resumoConciso.length > 600 ? resumoConciso.slice(0, 600).trim() : resumoConciso;
 }
 
 interface ApiProcessoCounty {
@@ -2381,7 +2414,8 @@ export default function VisualizarProcesso() {
       });
 
       const conteudoResumo = resposta.content?.trim();
-      setResumoIa(conteudoResumo || null);
+      const resumoFormatado = prepararResumoIa(conteudoResumo);
+      setResumoIa(resumoFormatado);
       setErroResumo(null);
 
       const providerLabel =
@@ -2795,10 +2829,30 @@ export default function VisualizarProcesso() {
 
       <Dialog open={modalAberto} onOpenChange={handleAlterarModalConteudo}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
+          <DialogHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
             <DialogTitle>
               {movimentacaoSelecionada?.stepType || "Movimentação selecionada"}
             </DialogTitle>
+            {movimentacaoSelecionada ? (
+              <Button
+                type="button"
+                onClick={handleGerarResumoIa}
+                disabled={carregandoResumo}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {carregandoResumo ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Resumindo...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Resumir com IA
+                  </>
+                )}
+              </Button>
+            ) : null}
           </DialogHeader>
           {movimentacaoSelecionada ? (
             <div className="space-y-4">
@@ -2880,21 +2934,6 @@ export default function VisualizarProcesso() {
                 className="w-full sm:w-auto"
               >
                 Fechar
-              </Button>
-              <Button
-                type="button"
-                onClick={handleGerarResumoIa}
-                disabled={carregandoResumo || !movimentacaoSelecionada}
-                className="w-full sm:w-auto"
-              >
-                {carregandoResumo ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Resumindo...
-                  </>
-                ) : (
-                  "Resumir com IA"
-                )}
               </Button>
             </div>
           </DialogFooter>
