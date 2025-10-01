@@ -552,6 +552,7 @@ export default function VisualizarOportunidade() {
     null,
   );
   const [documentSubmitting, setDocumentSubmitting] = useState(false);
+  const lastTemplateLabelRef = useRef<string>("");
   const [documents, setDocuments] = useState<OpportunityDocument[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
@@ -1083,6 +1084,39 @@ export default function VisualizarOportunidade() {
       cancelled = true;
     };
   }, [apiUrl, documentDialogOpen, documentType]);
+
+  useEffect(() => {
+    if (!documentDialogOpen || documentType !== "modelo") {
+      lastTemplateLabelRef.current = "";
+      return;
+    }
+
+    const template = documentTemplates.find(
+      (option) => option.value === selectedTemplate,
+    );
+
+    if (!template) {
+      lastTemplateLabelRef.current = "";
+      return;
+    }
+
+    setDocumentTitle((current) => {
+      const trimmedCurrent = current.trim();
+      const previousLabel = lastTemplateLabelRef.current;
+      lastTemplateLabelRef.current = template.label;
+
+      if (trimmedCurrent.length === 0 || trimmedCurrent === previousLabel) {
+        return template.label;
+      }
+
+      return current;
+    });
+  }, [
+    documentDialogOpen,
+    documentType,
+    documentTemplates,
+    selectedTemplate,
+  ]);
 
   useEffect(() => {
     if (!opportunity || (opportunity as { _namesLoaded?: boolean })._namesLoaded)
