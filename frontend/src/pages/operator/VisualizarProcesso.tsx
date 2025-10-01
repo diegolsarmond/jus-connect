@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type FormEvent,
   type UIEventHandler,
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -13,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Loader2,
 } from "lucide-react";
 
 import {
@@ -36,9 +38,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -1968,25 +1977,61 @@ export default function VisualizarProcesso() {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroInicio, setFiltroInicio] = useState("");
   const [filtroFim, setFiltroFim] = useState("");
+  const [mostrarDialogMovimentacao, setMostrarDialogMovimentacao] = useState(false);
+  const [formMovimentacao, setFormMovimentacao] = useState({
+    data: "",
+    tipo: "",
+    tipoPublicacao: "",
+    textoCategoria: "",
+    conteudo: "",
+  });
+  const [errosMovimentacao, setErrosMovimentacao] = useState<{
+    data?: string;
+    tipo?: string;
+    conteudo?: string;
+  }>({});
+  const [erroMovimentacao, setErroMovimentacao] = useState<string | null>(null);
+  const [salvandoMovimentacao, setSalvandoMovimentacao] = useState(false);
 
-  useEffect(() => {
-    if (location.state?.initialTab) {
-      setAbaAtiva(location.state.initialTab);
-    }
-  }, [location.state]);
+  const aplicarModelo = useCallback(
+    (modelo: ProcessoViewModel) => {
+      setViewModel(modelo);
+      setMesesAbertos(modelo.grupos.length ? [modelo.grupos[0].chave] : []);
+      const inicial: Record<string, number> = {};
+      modelo.grupos.forEach((grupo) => {
+        inicial[grupo.chave] = MOVIMENTACOES_POR_LAJE;
+      });
+      setMovimentosPorMes(inicial);
+      setMesesVisiveis(Math.min(MESES_INICIAIS, modelo.grupos.length));
+    },
+    [setMesesAbertos, setMovimentosPorMes, setMesesVisiveis],
+  );
 
-  useEffect(() => {
-    let cancelado = false;
+  const carregarProcesso = useCallback(
+    async (
+      options: {
+        comLoading?: boolean;
+        sinalCancelamento?: { cancelado: boolean };
+      } = {},
+    ) => {
+      const { comLoading = true, sinalCancelamento } = options;
 
-    const carregar = async () => {
       if (!processoId) {
-        setErro("Processo não encontrado");
-        setLoading(false);
+        if (!sinalCancelamento?.cancelado) {
+          setErro("Processo não encontrado");
+          if (comLoading) {
+            setLoading(false);
+          }
+        }
         return;
       }
 
-      setLoading(true);
-      setErro(null);
+      if (!sinalCancelamento?.cancelado) {
+        setErro(null);
+        if (comLoading) {
+          setLoading(true);
+        }
+      }
 
       try {
         const resposta = await fetch(getApiUrl(`processos/${processoId}`), {
@@ -2000,35 +2045,145 @@ export default function VisualizarProcesso() {
         const json = (await resposta.json()) as ApiProcessoResponse;
         const modelo = mapApiProcessoToViewModel(json);
 
-        if (!cancelado) {
-          setViewModel(modelo);
-          setMesesAbertos(modelo.grupos.length ? [modelo.grupos[0].chave] : []);
-          const inicial: Record<string, number> = {};
-          modelo.grupos.forEach((grupo) => {
-            inicial[grupo.chave] = MOVIMENTACOES_POR_LAJE;
-          });
-          setMovimentosPorMes(inicial);
-          setMesesVisiveis(Math.min(MESES_INICIAIS, modelo.grupos.length));
+        if (!sinalCancelamento?.cancelado) {
+          aplicarModelo(modelo);
         }
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Erro ao carregar o processo";
-        if (!cancelado) {
+        if (!sinalCancelamento?.cancelado) {
           setErro(mensagem);
           setViewModel(null);
         }
       } finally {
-        if (!cancelado) {
+        if (comLoading && !sinalCancelamento?.cancelado) {
           setLoading(false);
         }
       }
-    };
+    },
+    [aplicarModelo, processoId],
+  );
 
-    void carregar();
+  const resetarFormularioMovimentacao = useCallback(() => {
+    setFormMovimentacao({
+      data: "",
+      tipo: "",
+      tipoPublicacao: "",
+      textoCategoria: "",
+      conteudo: "",
+    });
+    setErrosMovimentacao({});
+    setErroMovimentacao(null);
+  }, []);
+
+  const handleAlterarDialogoMovimentacao = useCallback(
+    (aberto: boolean) => {
+      setMostrarDialogMovimentacao(aberto);
+      if (!aberto) {
+        resetarFormularioMovimentacao();
+        setSalvandoMovimentacao(false);
+      }
+    },
+    [resetarFormularioMovimentacao],
+  );
+
+  const handleSubmitMovimentacao = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      const erros: { data?: string; tipo?: string; conteudo?: string } = {};
+
+      if (!formMovimentacao.data) {
+        erros.data = "Informe a data da movimentação.";
+      }
+
+      if (!formMovimentacao.tipo.trim()) {
+        erros.tipo = "Informe o tipo da movimentação.";
+      }
+
+      if (!formMovimentacao.conteudo.trim()) {
+        erros.conteudo = "Informe o conteúdo da movimentação.";
+      }
+
+      setErrosMovimentacao(erros);
+
+      if (Object.keys(erros).length > 0) {
+        return;
+      }
+
+      if (!processoId) {
+        setErroMovimentacao("Processo não encontrado.");
+        return;
+      }
+
+      setSalvandoMovimentacao(true);
+      setErroMovimentacao(null);
+
+      try {
+        const resposta = await fetch(getApiUrl(`processos/${processoId}/movimentacoes`), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            data: formMovimentacao.data,
+            tipo: formMovimentacao.tipo.trim(),
+            tipo_publicacao: formMovimentacao.tipoPublicacao.trim() || null,
+            texto_categoria: formMovimentacao.textoCategoria.trim() || null,
+            conteudo: formMovimentacao.conteudo.trim(),
+          }),
+        });
+
+        if (!resposta.ok) {
+          let mensagem = "Não foi possível registrar a movimentação.";
+          try {
+            const erroResposta = (await resposta.json()) as { error?: string };
+            if (erroResposta?.error) {
+              mensagem = erroResposta.error;
+            }
+          } catch {
+            // Ignora erros ao interpretar a resposta
+          }
+          throw new Error(mensagem);
+        }
+
+        await carregarProcesso({ comLoading: false });
+        handleAlterarDialogoMovimentacao(false);
+      } catch (error) {
+        const mensagem =
+          error instanceof Error ? error.message : "Não foi possível registrar a movimentação.";
+        setErroMovimentacao(mensagem);
+      } finally {
+        setSalvandoMovimentacao(false);
+      }
+    },
+    [
+      carregarProcesso,
+      formMovimentacao.conteudo,
+      formMovimentacao.data,
+      formMovimentacao.textoCategoria,
+      formMovimentacao.tipo,
+      formMovimentacao.tipoPublicacao,
+      processoId,
+      handleAlterarDialogoMovimentacao,
+    ],
+  );
+
+  useEffect(() => {
+    if (location.state?.initialTab) {
+      setAbaAtiva(location.state.initialTab);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    const sinal = { cancelado: false };
+
+    void carregarProcesso({ comLoading: true, sinalCancelamento: sinal });
 
     return () => {
-      cancelado = true;
+      sinal.cancelado = true;
     };
-  }, [processoId]);
+  }, [carregarProcesso]);
 
   const tiposDisponiveis = useMemo(() => {
     if (!viewModel) {
@@ -2160,6 +2315,19 @@ export default function VisualizarProcesso() {
 
     return (
       <div className="space-y-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <Button
+            type="button"
+            onClick={() => {
+              setErroMovimentacao(null);
+              setErrosMovimentacao({});
+              setMostrarDialogMovimentacao(true);
+            }}
+            className="w-full sm:w-auto"
+          >
+            Registrar movimentação
+          </Button>
+        </div>
         <Alert className="border-amber-300 bg-amber-50 text-amber-900">
           <AlertTitle className="flex items-center gap-2 text-sm font-semibold">
             <Info className="h-4 w-4" /> Dica
@@ -2510,6 +2678,127 @@ export default function VisualizarProcesso() {
           </TabsContent>
         </Tabs>
       </section>
+
+      <Dialog open={mostrarDialogMovimentacao} onOpenChange={handleAlterarDialogoMovimentacao}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Registrar movimentação</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmitMovimentacao} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="movimentacao-data" className="text-sm font-medium">
+                  Data
+                </Label>
+                <Input
+                  id="movimentacao-data"
+                  type="date"
+                  value={formMovimentacao.data}
+                  onChange={(event) =>
+                    setFormMovimentacao((anterior) => ({
+                      ...anterior,
+                      data: event.target.value,
+                    }))
+                  }
+                />
+                {errosMovimentacao.data ? (
+                  <p className="text-sm text-destructive">{errosMovimentacao.data}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="movimentacao-tipo" className="text-sm font-medium">
+                  Tipo
+                </Label>
+                <Input
+                  id="movimentacao-tipo"
+                  value={formMovimentacao.tipo}
+                  onChange={(event) =>
+                    setFormMovimentacao((anterior) => ({
+                      ...anterior,
+                      tipo: event.target.value,
+                    }))
+                  }
+                />
+                {errosMovimentacao.tipo ? (
+                  <p className="text-sm text-destructive">{errosMovimentacao.tipo}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="movimentacao-tipo-publicacao" className="text-sm font-medium">
+                  Tipo de publicação
+                </Label>
+                <Input
+                  id="movimentacao-tipo-publicacao"
+                  value={formMovimentacao.tipoPublicacao}
+                  onChange={(event) =>
+                    setFormMovimentacao((anterior) => ({
+                      ...anterior,
+                      tipoPublicacao: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="movimentacao-texto-categoria" className="text-sm font-medium">
+                  Categoria
+                </Label>
+                <Input
+                  id="movimentacao-texto-categoria"
+                  value={formMovimentacao.textoCategoria}
+                  onChange={(event) =>
+                    setFormMovimentacao((anterior) => ({
+                      ...anterior,
+                      textoCategoria: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="movimentacao-conteudo" className="text-sm font-medium">
+                Conteúdo
+              </Label>
+              <Textarea
+                id="movimentacao-conteudo"
+                rows={6}
+                value={formMovimentacao.conteudo}
+                onChange={(event) =>
+                  setFormMovimentacao((anterior) => ({
+                    ...anterior,
+                    conteudo: event.target.value,
+                  }))
+                }
+              />
+              {errosMovimentacao.conteudo ? (
+                <p className="text-sm text-destructive">{errosMovimentacao.conteudo}</p>
+              ) : null}
+            </div>
+            {erroMovimentacao ? (
+              <p className="text-sm text-destructive">{erroMovimentacao}</p>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleAlterarDialogoMovimentacao(false)}
+                disabled={salvandoMovimentacao}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={salvandoMovimentacao}>
+                {salvandoMovimentacao ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Salvar movimentação"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={mostrarTodosAnexos} onOpenChange={setMostrarTodosAnexos}>
         <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
