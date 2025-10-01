@@ -882,6 +882,115 @@ export const getProcessoById = async (req: Request, res: Response) => {
   }
 };
 
+const parseJsonField = (value: string | null): unknown => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+export const createProcessoMovimentacaoManual = async (
+  req: Request,
+  res: Response,
+) => {
+  const { id } = req.params;
+  const parsedId = Number(id);
+
+  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    const processoExists = await pool.query(
+      'SELECT 1 FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      [parsedId, empresaId],
+    );
+
+    if (processoExists.rowCount === 0) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    const preparedRecord = prepareMovimentacaoRecord({
+      id: 0,
+      data: req.body?.data ?? null,
+      tipo: req.body?.tipo ?? null,
+      tipo_publicacao: req.body?.tipo_publicacao ?? null,
+      classificacao_predita: req.body?.classificacao_predita ?? null,
+      conteudo: req.body?.conteudo ?? null,
+      texto_categoria: req.body?.texto_categoria ?? null,
+      fonte: req.body?.fonte ?? null,
+    });
+
+    if (!preparedRecord) {
+      return res.status(400).json({ error: 'Dados da movimentação inválidos' });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO public.processo_movimentacoes (
+         id,
+         processo_id,
+         data,
+         tipo,
+         tipo_publicacao,
+         classificacao_predita,
+         conteudo,
+         texto_categoria,
+         fonte
+       )
+       VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, processo_id, data, tipo, tipo_publicacao, classificacao_predita, conteudo, texto_categoria, fonte, criado_em, atualizado_em`,
+      [
+        parsedId,
+        preparedRecord.data,
+        preparedRecord.tipo,
+        preparedRecord.tipo_publicacao,
+        parseJsonField(preparedRecord.classificacao_predita),
+        preparedRecord.conteudo,
+        preparedRecord.texto_categoria,
+        parseJsonField(preparedRecord.fonte),
+      ],
+    );
+
+    const insertedRow = insertResult.rows[0];
+
+    if (!insertedRow) {
+      throw new Error('Falha ao criar movimentação');
+    }
+
+    const movimentacoes = parseMovimentacoes([insertedRow]);
+
+    if (movimentacoes.length === 0) {
+      throw new Error('Falha ao processar movimentação criada');
+    }
+
+    return res.status(201).json(movimentacoes[0]);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const createProcesso = async (req: Request, res: Response) => {
   const {
     cliente_id,
