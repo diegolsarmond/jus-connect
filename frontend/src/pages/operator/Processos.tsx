@@ -527,7 +527,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     parseOptionalInteger(processo.cliente_id) ??
     0;
   const documento = clienteResumo?.documento ?? "";
-  const jurisdicao =
+  let jurisdicao =
     processo.jurisdicao ||
     [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
     "Não informado";
@@ -539,6 +539,33 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
   const responseData = juditLastRequest
     ? parseResponseDataFromResult(juditLastRequest.result)
     : null;
+
+  const pickResponseString = (
+    ...keys: string[]
+  ): string | undefined => {
+    if (!responseData) {
+      return undefined;
+    }
+
+    for (const key of keys) {
+      const fromCover = parseOptionalString(responseData.cover?.[key]);
+      if (fromCover) {
+        return fromCover;
+      }
+
+      const fromMetadata = parseOptionalString(responseData.metadata?.[key]);
+      if (fromMetadata) {
+        return fromMetadata;
+      }
+
+      const fromRaw = parseOptionalString(responseData.raw?.[key]);
+      if (fromRaw) {
+        return fromRaw;
+      }
+    }
+
+    return undefined;
+  };
 
   const oportunidadeResumo = processo.oportunidade ?? null;
   const oportunidadeId = parseOptionalInteger(
@@ -618,6 +645,32 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
   const statusLabel =
     trackingSummary?.status?.trim() || processo.status?.trim() || "Não informado";
 
+  let tipo = processo.tipo?.trim() || "Não informado";
+  let classeJudicial = processo.classe_judicial?.trim() || "Não informada";
+  let assunto = processo.assunto?.trim() || "Não informado";
+  let orgaoJulgador = processo.orgao_julgador?.trim() || "Não informado";
+
+  tipo =
+    pickFirstNonEmptyString(pickResponseString("tipo"), tipo) ?? "Não informado";
+  classeJudicial =
+    pickFirstNonEmptyString(
+      pickResponseString("classeJudicial", "classe"),
+      classeJudicial,
+    ) ?? "Não informada";
+  assunto =
+    pickFirstNonEmptyString(pickResponseString("assunto", "tema"), assunto) ??
+    "Não informado";
+  jurisdicao =
+    pickFirstNonEmptyString(
+      pickResponseString("jurisdicao", "comarca"),
+      jurisdicao,
+    ) ?? "Não informado";
+  orgaoJulgador =
+    pickFirstNonEmptyString(
+      pickResponseString("orgaoJulgador", "orgao", "orgao_julgador"),
+      orgaoJulgador,
+    ) ?? "Não informado";
+
   const lastSyncAt =
     juditLastRequest?.updatedAt ??
     trackingSummary?.updatedAt ??
@@ -630,7 +683,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     dataDistribuicao:
       formatDateToPtBR(processo.data_distribuicao || processo.criado_em),
     status: statusLabel,
-    tipo: processo.tipo?.trim() || "Não informado",
+    tipo,
     cliente: {
       id: clienteId,
       nome: clienteResumo?.nome ?? "Cliente não informado",
@@ -638,10 +691,10 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
       papel: resolveClientePapel(clienteResumo?.tipo),
     },
     advogados,
-    classeJudicial: processo.classe_judicial?.trim() || "Não informada",
-    assunto: processo.assunto?.trim() || "Não informado",
+    classeJudicial,
+    assunto,
     jurisdicao,
-    orgaoJulgador: processo.orgao_julgador?.trim() || "Não informado",
+    orgaoJulgador,
     proposta,
     ultimaSincronizacao: lastSyncAt,
     consultasApiCount: parseApiInteger(processo.consultas_api_count),
