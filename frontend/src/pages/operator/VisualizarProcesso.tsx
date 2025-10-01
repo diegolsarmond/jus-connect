@@ -200,7 +200,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
     .filter((frase) => frase.trim().length > 0);
   const resumoConciso = frases.slice(0, 3).join(" ") || paragrafoUnico;
 
-  return resumoConciso.length > 600 ? resumoConciso.slice(0, 600).trim() : resumoConciso;
+  return resumoConciso;
 }
 
 interface ApiProcessoCounty {
