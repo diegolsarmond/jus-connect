@@ -438,70 +438,16 @@ export const singleFileUpload = (req: Request, res: Response, next: NextFunction
   req.on('end', () => {
     requestEnded = true;
 
-    if (!responseSent) {
-      processBuffer();
+    if (responseSent) {
+      finalizeRequest();
+      return;
+    }
 
-      if (!uploadFinished) {
-        abortUpload(400, 'Não foi possível concluir o upload do arquivo.');
-        return;
-      }
-      const declaredMimeType =
-        filePart.contentType?.trim().toLowerCase() ?? 'application/octet-stream';
-      const buffer = filePart.content;
-      const detectedMimeType = detectMimeType(buffer);
+    processBuffer();
 
-      if (
-        detectedMimeType &&
-        declaredMimeType !== 'application/octet-stream' &&
-        declaredMimeType !== detectedMimeType
-      ) {
-        return res.status(400).json({
-          error: 'Conteúdo do arquivo não corresponde ao tipo informado.',
-        });
-      }
-
-      const declaredMimeType =
-        filePart.contentType?.trim().toLowerCase() ?? 'application/octet-stream';
-      const buffer = filePart.content;
-      const detectedMimeType = detectMimeType(buffer);
-
-      if (
-        detectedMimeType &&
-        declaredMimeType !== 'application/octet-stream' &&
-        declaredMimeType !== detectedMimeType
-      ) {
-        return res.status(400).json({
-          error: 'Conteúdo do arquivo não corresponde ao tipo informado.',
-        });
-      }
-
-      const effectiveMimeType = detectedMimeType ?? declaredMimeType;
-
-
-      if (allowedMimeTypes.size > 0 && !allowedMimeTypes.has(effectiveMimeType)) {
-        return res.status(400).json({
-          error: `Tipo de arquivo não suportado. Permitidos: ${Array.from(
-            allowedMimeTypes
-          ).join(', ')}`,
-        });
-      }
-
-      req.file = {
-        fieldname: 'file',
-        originalname: filePart.filename,
-        encoding: filePart.contentTransferEncoding ?? '7bit',
-        mimetype: effectiveMimeType,
-        size: buffer.length,
-        buffer,
-        destination: '',
-        filename: filePart.filename,
-        path: '',
-        stream: toReadableStream(buffer),
-      } satisfies Express.Multer.File;
-
-      next();
-    } catch (error) {
-      next(error);
+    if (!uploadFinished) {
+      abortUpload(400, 'Não foi possível concluir o upload do arquivo.');
+      return;
     }
 
     finalizeRequest();
