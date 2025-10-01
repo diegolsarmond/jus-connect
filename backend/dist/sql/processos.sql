@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS public.processo_movimentacoes (
   atualizado_em TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+CREATE SEQUENCE IF NOT EXISTS public.processo_movimentacoes_id_seq AS bigint;
+SELECT setval('public.processo_movimentacoes_id_seq', COALESCE(MAX(id), 0) + 1, false) FROM public.processo_movimentacoes;
+ALTER TABLE public.processo_movimentacoes ALTER COLUMN id SET DEFAULT nextval('public.processo_movimentacoes_id_seq');
+ALTER SEQUENCE public.processo_movimentacoes_id_seq OWNED BY public.processo_movimentacoes.id;
+
 CREATE INDEX IF NOT EXISTS idx_processo_movimentacoes_processo_id ON public.processo_movimentacoes(processo_id);
 CREATE INDEX IF NOT EXISTS idx_processo_movimentacoes_data ON public.processo_movimentacoes(data);
 
