@@ -9,6 +9,7 @@ import juditProcessService, {
 import { fetchPlanLimitsForCompany } from '../services/planLimitsService';
 import { evaluateProcessSyncAvailability } from '../services/processSyncQuotaService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const mapRecordToResponse = (record: JuditRequestRecord) => ({
   request_id: record.requestId,
@@ -299,7 +300,14 @@ export const triggerManualJuditSync = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof JuditConfigurationError) {
-      return res.status(503).json({ error: error.message });
+      return res
+        .status(503)
+        .json(
+          buildErrorResponse(
+            error,
+            'Integração com a Judit indisponível no momento.'
+          )
+        );
     }
 
     if (error instanceof JuditApiError) {
@@ -373,7 +381,14 @@ export const getJuditRequestStatus = async (req: Request, res: Response) => {
       );
     } catch (error) {
       if (error instanceof JuditConfigurationError) {
-        return res.status(503).json({ error: error.message });
+        return res
+          .status(503)
+          .json(
+            buildErrorResponse(
+              error,
+              'Integração com a Judit indisponível no momento.'
+            )
+          );
       }
 
       console.error('[Processos] Falha ao consultar status da request Judit.', error);
@@ -392,7 +407,14 @@ export const getJuditRequestStatus = async (req: Request, res: Response) => {
     return res.json(mapRecordToResponse(responseRecord));
   } catch (error) {
     if (error instanceof JuditConfigurationError) {
-      return res.status(503).json({ error: error.message });
+      return res
+        .status(503)
+        .json(
+          buildErrorResponse(
+            error,
+            'Integração com a Judit indisponível no momento.'
+          )
+        );
     }
 
     console.error('[Processos] Falha ao recuperar status de request da Judit.', error);

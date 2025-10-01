@@ -7,6 +7,7 @@ import { AiProviderError } from '../services/aiProviders/errors';
 import { generateDocumentWithGemini } from '../services/aiProviders/geminiProvider';
 import { escapeHtml } from '../utils/html';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const DEFAULT_AI_BACKGROUND_PROMPT = `Contexto:
 Você atuará como advogado(a) responsável por elaborar minutas jurídicas estruturadas e adequadas ao caso apresentado.
@@ -192,7 +193,15 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
         });
       } catch (error) {
         if (error instanceof AiProviderError) {
-          return res.status(error.statusCode).json({ error: error.message });
+          return res
+            .status(error.statusCode)
+            .json(
+              buildErrorResponse(
+                error,
+                'Falha ao gerar conteúdo com o provedor de IA.',
+                { expose: error.statusCode >= 400 && error.statusCode < 500 }
+              )
+            );
         }
         throw error;
       }

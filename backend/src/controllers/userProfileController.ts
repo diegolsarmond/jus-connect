@@ -4,6 +4,7 @@ import UserProfileService, {
   UpdateProfileInput,
   ValidationError,
 } from '../services/userProfileService';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const service = new UserProfileService();
 
@@ -29,12 +30,28 @@ const extractPerformer = (req: Request) => {
 
 const handleControllerError = (res: Response, error: unknown) => {
   if (error instanceof ValidationError) {
-    res.status(400).json({ error: error.message });
+    res
+      .status(400)
+      .json(
+        buildErrorResponse(
+          error,
+          'Não foi possível atualizar os dados do perfil.',
+          { expose: true }
+        )
+      );
     return;
   }
 
   if (error instanceof NotFoundError) {
-    res.status(404).json({ error: error.message });
+    res
+      .status(404)
+      .json(
+        buildErrorResponse(
+          error,
+          'Registro de perfil não encontrado.',
+          { expose: true }
+        )
+      );
     return;
   }
 

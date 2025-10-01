@@ -3,6 +3,7 @@ import {
   saveUploadedFile,
   StorageUnavailableError,
 } from '../services/fileStorageService';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 export const upload = async (req: Request, res: Response) => {
   const file = req.file;
@@ -18,7 +19,11 @@ export const upload = async (req: Request, res: Response) => {
     return res.status(201).json(metadata);
   } catch (error) {
     if (error instanceof StorageUnavailableError) {
-      return res.status(501).json({ error: error.message });
+      return res
+        .status(501)
+        .json(
+          buildErrorResponse(error, 'Armazenamento temporariamente indisponível.')
+        );
     }
 
     console.error('Falha ao realizar upload de arquivo', error);

@@ -15,6 +15,7 @@ import {
   updateTypingState,
 } from '../realtime';
 import { fetchUserConversationVisibility } from '../utils/authUser';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const chatService = new ChatService();
 
@@ -231,7 +232,15 @@ export async function createConversationHandler(req: Request, res: Response) {
     publishConversationUpdate(conversation);
   } catch (error) {
     if (error instanceof ChatValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível criar a conversa. Verifique os dados enviados.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to create conversation', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -247,7 +256,15 @@ export async function getConversationMessagesHandler(req: Request, res: Response
     res.json(page);
   } catch (error) {
     if (error instanceof ChatValidationError) {
-      return res.status(404).json({ error: error.message });
+      return res
+        .status(404)
+        .json(
+          buildErrorResponse(
+            error,
+            'Conversa não encontrada ou parâmetros inválidos.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to load messages', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -272,7 +289,15 @@ export async function sendConversationMessageHandler(req: Request, res: Response
     }
   } catch (error) {
     if (error instanceof ChatValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível registrar a mensagem da conversa.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to record outgoing message', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -291,7 +316,15 @@ export async function updateConversationHandler(req: Request, res: Response) {
     publishConversationUpdate(updated);
   } catch (error) {
     if (error instanceof ChatValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível atualizar a conversa.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to update conversation', error);
     res.status(500).json({ error: 'Internal server error' });
