@@ -258,8 +258,14 @@ export default function EditorPage() {
   }, [integrationQuery.data, companyId]);
 
   const activeAiIntegrations = useMemo(() => {
+    const allowedProviders = ['gemini', 'openai'];
     return [...accessibleIntegrationKeys]
-      .filter(integration => integration.active)
+      .filter(integration => {
+        const provider = typeof integration.provider === 'string'
+          ? integration.provider.trim().toLowerCase()
+          : '';
+        return integration.active && allowedProviders.includes(provider);
+      })
       .sort((a, b) => {
         if (a.environment === b.environment) {
           const labelA = getApiKeyProviderLabel(a.provider) || a.provider;
