@@ -89,12 +89,12 @@ test('IntegrationApiKeyService.create normalizes payload and persists values', a
   assert.deepEqual(result, expected);
 });
 
-test('IntegrationApiKeyService.create normalizes Judit provider and omits default URL', async () => {
+test('IntegrationApiKeyService.create normalizes provider casing and omits default URL', async () => {
   const insertedRow = {
     id: 5,
-    provider: 'judit',
+    provider: 'asaas',
     url_api: null,
-    key_value: 'judit_token_value',
+    key_value: 'asaas_token_value',
     environment: 'homologacao',
     active: true,
     last_used: null,
@@ -113,17 +113,17 @@ test('IntegrationApiKeyService.create normalizes Judit provider and omits defaul
   const service = new IntegrationApiKeyService(pool as any);
 
   const payload: CreateIntegrationApiKeyInput = {
-    provider: '  JuDiT  ',
-    key: '  judit_token_value  ',
+    provider: '  AsAaS  ',
+    key: '  asaas_token_value  ',
     environment: ' Homologacao ',
   };
 
   const result = await service.create(payload);
 
   assert.deepEqual(pool.calls[0].values, [
-    'judit',
+    'asaas',
     null,
-    'judit_token_value',
+    'asaas_token_value',
     'homologacao',
     true,
     null,
@@ -131,7 +131,7 @@ test('IntegrationApiKeyService.create normalizes Judit provider and omits defaul
     false,
   ]);
 
-  assert.equal(result.provider, 'judit');
+  assert.equal(result.provider, 'asaas');
   assert.equal(result.apiUrl, null);
   assert.equal(result.environment, 'homologacao');
   assert.equal(result.empresaId, null);

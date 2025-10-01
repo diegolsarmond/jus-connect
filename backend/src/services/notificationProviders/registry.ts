@@ -1,6 +1,5 @@
 import type { INotificationProvider } from './types';
 import { pjeNotificationProvider } from './pjeNotificationService';
-import { juditNotificationProvider } from './juditNotificationService';
 import { projudiNotificationProvider } from './projudiNotificationService';
 
 const registry = new Map<string, INotificationProvider>();
@@ -31,7 +30,6 @@ export function listNotificationProviders(): INotificationProvider[] {
 }
 
 registerNotificationProvider(pjeNotificationProvider, 'pje');
-registerNotificationProvider(juditNotificationProvider, 'judit');
 registerNotificationProvider(projudiNotificationProvider, 'projudi');
 
 export const notificationProviderRegistry = registry;

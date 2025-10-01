@@ -7,7 +7,6 @@ exports.deleteProcesso = exports.updateProcesso = exports.createProcesso = expor
 const planLimitsService_1 = require("../services/planLimitsService");
 const db_1 = __importDefault(require("../services/db"));
 const notificationService_1 = require("../services/notificationService");
-const juditProcessService_1 = require("../services/juditProcessService");
 const authUser_1 = require("../utils/authUser");
 const normalizeString = (value) => {
     if (typeof value !== 'string') {
@@ -569,14 +568,6 @@ const getProcessoById = async (req, res) => {
         }
         const processo = mapProcessoRow(result.rows[0]);
         processo.movimentacoes = await fetchProcessoMovimentacoes(parsedId);
-        const [juditSyncs, juditResponses, juditAuditTrail] = await Promise.all([
-            (0, juditProcessService_1.listProcessSyncs)(parsedId),
-            (0, juditProcessService_1.listProcessResponses)(parsedId),
-            (0, juditProcessService_1.listSyncAudits)(parsedId),
-        ]);
-        processo.juditSyncs = juditSyncs;
-        processo.juditResponses = juditResponses;
-        processo.juditAuditTrail = juditAuditTrail;
         res.json(processo);
     }
     catch (error) {

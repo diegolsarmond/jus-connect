@@ -60,7 +60,7 @@ router.get('/integrations/api-keys/:id', integrationApiKeyController_1.getIntegr
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai, asaas, judit]
+ *                 enum: [gemini, openai, asaas]
  *               apiUrl:
  *                 type: string
  *                 format: uri
@@ -101,7 +101,7 @@ router.post('/integrations/api-keys', integrationApiKeyController_1.createIntegr
  *             properties:
  *               provider:
  *                 type: string
- *                 enum: [gemini, openai, asaas, judit]
+ *                 enum: [gemini, openai, asaas]
  *               apiUrl:
  *                 type: string
  *                 format: uri

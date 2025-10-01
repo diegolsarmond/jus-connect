@@ -7,7 +7,7 @@ exports.ASAAS_DEFAULT_API_URLS = exports.ValidationError = exports.API_KEY_ENVIR
 const crypto_1 = __importDefault(require("crypto"));
 const url_1 = require("url");
 const db_1 = __importDefault(require("./db"));
-exports.API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas', 'judit'];
+exports.API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas'];
 exports.API_KEY_ENVIRONMENTS = ['producao', 'homologacao'];
 class ValidationError extends Error {
     constructor(message) {
@@ -35,7 +35,7 @@ function normalizeProvider(value) {
         throw new ValidationError('Provider is required');
     }
     if (!exports.API_KEY_PROVIDERS.includes(normalized)) {
-        throw new ValidationError('Provider must be Gemini, OpenAI, Asaas or Judit');
+        throw new ValidationError('Provider must be Gemini, OpenAI ou Asaas');
     }
     return normalized;
 }
