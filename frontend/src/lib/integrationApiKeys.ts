@@ -80,10 +80,16 @@ export interface UpdateIntegrationApiKeyPayload {
   global?: boolean;
 }
 
+export type GenerateAiTextMode = 'default' | 'summary';
+
 export interface GenerateAiTextPayload {
   integrationId: number;
   documentType: string;
   prompt: string;
+  /**
+   * Define o modo de geração. Utilize 'summary' para solicitar respostas enxutas (ex.: resumos em tópicos).
+   */
+  mode?: GenerateAiTextMode;
 }
 
 export interface GenerateAiTextResponse {

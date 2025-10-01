@@ -32,8 +32,28 @@ const DOCUMENT_TYPE_BACKGROUND_PROMPTS: Record<string, string> = {
     'Para petições, inclua síntese dos fatos, fundamentação jurídica com dispositivos aplicáveis, pedidos bem delimitados e orientações sobre documentos anexos obrigatórios.',
 };
 
-function composeAiPrompt(documentType: string, userPrompt: string): string {
+function composeSummaryPrompt(documentType: string, userPrompt: string): string {
+  const segments = [
+    'Você é um assistente jurídico encarregado de sintetizar movimentações processuais.',
+    'Produza um resumo objetivo em tópicos curtos, enfatizando decisões, prazos e providências necessárias.',
+    'Utilize no máximo cinco tópicos e responda em português claro e profissional.',
+    `Tipo de resumo: ${documentType.trim()}.`,
+    userPrompt.trim(),
+  ];
+
+  return segments.filter(Boolean).join('\n\n');
+}
+
+function composeAiPrompt(
+  documentType: string,
+  userPrompt: string,
+  options: { summary?: boolean } = {},
+): string {
   const normalizedType = documentType.trim().toLowerCase();
+  if (options.summary || normalizedType.includes('resumo')) {
+    return composeSummaryPrompt(documentType, userPrompt);
+  }
+
   const backgroundSegments = [DEFAULT_AI_BACKGROUND_PROMPT.trim()];
   const contextualBackground = DOCUMENT_TYPE_BACKGROUND_PROMPTS[normalizedType];
 
@@ -114,8 +134,24 @@ function buildHighlights(prompt: string): string[] {
     .slice(0, 5);
 }
 
-function buildFallbackContent(documentType: string, prompt: string, _providerLabel: string): string {
+function buildFallbackContent(
+  documentType: string,
+  prompt: string,
+  _providerLabel: string,
+  options: { summary?: boolean } = {},
+): string {
+  const normalizedType = documentType.trim().toLowerCase();
   const highlights = buildHighlights(prompt);
+
+  if (options.summary || normalizedType.includes('resumo')) {
+    const itens = highlights.length > 0 ? highlights : [prompt.trim()].filter(Boolean);
+    if (!itens.length) {
+      return '- Sem conteúdo disponível para resumo.';
+    }
+
+    const linhas = itens.slice(0, 5).map(item => `- ${item}`);
+    return ['Resumo automático da movimentação:', ...linhas].join('\n');
+  }
 
   const introParagraph = `Em atendimento à solicitação apresentada, elaboramos o presente ${documentType.toLowerCase()} com base nas orientações fornecidas.`;
   const approachParagraph =
@@ -146,10 +182,11 @@ function buildFallbackContent(documentType: string, prompt: string, _providerLab
 }
 
 export async function generateTextWithIntegration(req: Request, res: Response) {
-  const { integrationId, documentType, prompt } = req.body as {
+  const { integrationId, documentType, prompt, mode } = req.body as {
     integrationId?: unknown;
     documentType?: unknown;
     prompt?: unknown;
+    mode?: unknown;
   };
 
   const parsedIntegrationId = Number(integrationId);
@@ -163,6 +200,13 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
 
   if (typeof prompt !== 'string' || !prompt.trim()) {
     return res.status(400).json({ error: 'prompt is required' });
+  }
+
+  if (mode !== undefined) {
+    const validModes = ['summary', 'default'];
+    if (typeof mode !== 'string' || !validModes.includes(mode.toLowerCase())) {
+      return res.status(400).json({ error: "mode must be 'summary' or 'default' when provided" });
+    }
   }
 
   const empresaId = await resolveEmpresaId(req, res);
@@ -179,6 +223,9 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
     const providerLabel = providerLabels[integration.provider] ?? integration.provider;
     const normalizedDocumentType = toTitleCase(documentType.trim());
     const normalizedPrompt = prompt.trim();
+    const isSummaryRequest =
+      (typeof mode === 'string' && mode.toLowerCase() === 'summary') ||
+      normalizedDocumentType.toLowerCase().includes('resumo');
     let htmlContent: string | null = null;
 
     if (integration.provider === 'gemini') {
@@ -187,7 +234,7 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
         htmlContent = await generateDocumentWithGemini({
           apiKey: integration.key,
           documentType: normalizedDocumentType,
-          prompt: composeAiPrompt(normalizedDocumentType, normalizedPrompt),
+          prompt: composeAiPrompt(normalizedDocumentType, normalizedPrompt, { summary: isSummaryRequest }),
           environment,
         });
       } catch (error) {
@@ -207,7 +254,9 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
     }
 
     if (!htmlContent || !htmlContent.trim()) {
-      htmlContent = buildFallbackContent(normalizedDocumentType, normalizedPrompt, providerLabel);
+      htmlContent = buildFallbackContent(normalizedDocumentType, normalizedPrompt, providerLabel, {
+        summary: isSummaryRequest,
+      });
     }
 
     try {
