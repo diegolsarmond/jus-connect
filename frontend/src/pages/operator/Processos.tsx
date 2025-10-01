@@ -66,6 +66,7 @@ import {
   Eye,
   ChevronsUpDown,
   RefreshCw,
+  Pencil,
 } from "lucide-react";
 import {
   formatResponseKey,
@@ -2389,6 +2390,14 @@ export default function Processos() {
                         >
                           <Eye className="mr-2 h-4 w-4" />
                           Visualizar detalhes
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/processos/${processo.id}/editar`)}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
                         </Button>
                       </div>
                     </div>

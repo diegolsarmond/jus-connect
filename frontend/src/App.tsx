@@ -17,6 +17,7 @@ import NovoFornecedor from "./pages/operator/NovoFornecedor";
 import EditarFornecedor from "./pages/operator/EditarFornecedor";
 import VisualizarFornecedor from "./pages/operator/VisualizarFornecedor";
 import NovoProcesso from "./pages/operator/NovoProcesso";
+import EditarProcesso from "./pages/operator/EditarProcesso";
 import VisualizarProcesso from "./pages/operator/VisualizarProcesso";
 import ContratoPreview from "./pages/operator/ContratoPreview";
 import Pipeline from "./pages/operator/Pipeline";
@@ -193,6 +194,10 @@ const App = () => (
                 <Route path="/agenda" element={withModule("agenda", <Agenda />)} />
                 <Route path="/tarefas" element={withModule("tarefas", <Tarefas />)} />
                 <Route path="/processos" element={withModule("processos", <Processos />)} />
+                <Route
+                  path="/processos/:processoId/editar"
+                  element={withModule("processos", <EditarProcesso />)}
+                />
                 <Route path="/intimacoes" element={withModule("intimacoes", <Intimacoes />)} />
                 <Route path="/documentos">
                   <Route index element={withModule("documentos", <LibraryPage />)} />
