@@ -1862,7 +1862,7 @@ export default function Processos() {
             </div>
             <div className="space-y-1 text-right">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Sincronizações Judit
+                Sincronizações do Processo
               </p>
               <p className="text-2xl font-semibold">{totalSincronizacoes}</p>
               <p className="text-xs text-muted-foreground">Consultas manuais acumuladas</p>

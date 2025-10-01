@@ -146,9 +146,16 @@ export function filtrarMovimentacoes(
 
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
   const partes: string[] = [
-    "Forneça um resumo curto e direto sobre a movimentação descrita.",
-    "Use no máximo três frases objetivas em um único parágrafo, destacando decisões, prazos e providências necessárias.",
-    "Mantenha a resposta em português jurídico claro, sem títulos, listas, tópicos ou marcações HTML.",
+    "Você é um assistente virtual que resume despachos, decisões e sentenças judiciais. Ao receber o texto do ato judicial, gere um resumo curto, objetivo e em português jurídico claro, bem acentuado e observando as regras seguintes:",
+    "1. Destaque a decisão ou comando do magistrado, os prazos processuais (indique datas ou prazo em dias) e as providências necessárias, incluindo quem deve cumpri-las.",
+    "2. Omitir e não repetir cabeçalhos, títulos padronizados ou rótulos editoriais (ex.: \"Resumo De Movimentação Processual\", \"Conteúdo\", \"INTIMAÇÃO PARA SESSÃO DE JULGAMENTO\"), endereços, assinaturas, links e instruções administrativas irrelevantes.",
+    "3. Não repetir o número do processo. Preserve o número do processo apenas se o usuário solicitar expressamente ou se for imprescindível para a compreensão do ato.",
+    "4. Remover orientações administrativas que não alterem a decisão ou as providências, salvo quando essas orientações contiverem prazo ou obrigação relevante.",
+    "5. Não acrescente opiniões, interpretações, argumentos ou comentários.",
+    "6. Não use títulos, listas, tópicos, marcações HTML ou qualquer formatação adicional no texto de saída.",
+    "7. Se não houver decisão no ato, responda apenas com a frase: sem decisão.",
+    "8. Entregue somente o texto do resumo. A resposta pode conter múltiplos parágrafos quando necessário; não limite o número de parágrafos.",
+    "Resposta final: apenas o resumo conforme as regras acima.",
   ];
 
   if (movimentacao.dataFormatada) {
@@ -1479,8 +1486,20 @@ export const TimelineMes = memo(function TimelineMes({
   const [intervalo, setIntervalo] = useState({ inicio: 0, fim: movimentacoesVisiveis });
 
   useEffect(() => {
-    setIntervalo({ inicio: 0, fim: movimentacoesVisiveis });
-  }, [movimentacoesVisiveis, grupo.chave]);
+    if (!virtualizado) {
+      setIntervalo({ inicio: 0, fim: movimentacoesVisiveis });
+      return;
+    }
+
+    setIntervalo((atual) => {
+      if (movimentacoesVisiveis <= atual.fim) {
+        return atual;
+      }
+
+      const fim = Math.min(grupo.itens.length, movimentacoesVisiveis);
+      return { inicio: atual.inicio, fim };
+    });
+  }, [movimentacoesVisiveis, grupo.chave, virtualizado, grupo.itens.length]);
 
   useEffect(() => {
     if (!aberto || !virtualizado) {
@@ -1519,7 +1538,7 @@ export const TimelineMes = memo(function TimelineMes({
     : 0;
 
   return (
-    <div className="rounded-xl border border-muted-foreground/10 bg-white shadow-sm">
+    <div className="rounded-xl border border-muted-foreground/10 bg-card shadow-sm">
       <button
         type="button"
         onClick={() => onToggle(grupo.chave)}
@@ -1575,8 +1594,8 @@ export const TimelineMes = memo(function TimelineMes({
                         aria-hidden
                       />
                     )}
-                    <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-white bg-primary shadow" />
-                    <div className="rounded-2xl border border-muted-foreground/10 bg-muted/40 p-4 shadow-sm">
+                    <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-background bg-primary shadow" />
+                    <div className="rounded-2xl border border-muted-foreground/10 bg-card p-4 shadow-sm">
                       <div className="space-y-3 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
                           {item.stepType ? (
@@ -1589,8 +1608,8 @@ export const TimelineMes = memo(function TimelineMes({
                             className={cn(
                               "rounded-full",
                               item.privado
-                                ? "border-transparent bg-rose-100 text-rose-700"
-                                : "border-transparent bg-primary/10 text-primary",
+                                ? "border-transparent bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-100"
+                                : "border-transparent bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-foreground",
                             )}
                           >
                             {item.privado ? "Privado" : "Público"}
@@ -2282,7 +2301,7 @@ export default function VisualizarProcesso() {
   );
 
   const totalMovimentacoes = movimentacoesFiltradas.length;
-  const usarVirtualizacao = totalMovimentacoes > 120;
+  const usarVirtualizacao = false;
 
   const gruposVisiveis = useMemo(
     () => gruposFiltrados.slice(0, mesesVisiveis),
@@ -2410,7 +2429,7 @@ export default function VisualizarProcesso() {
       const promptResumo = montarPromptResumoMovimentacao(movimentacaoSelecionada);
       const resposta = await generateAiText({
         integrationId: integracaoAtiva.id,
-        documentType: "Resumo de Movimentação Processual",
+        documentType: "Resumo:",
         prompt: promptResumo,
         mode: "summary",
       });
@@ -2562,9 +2581,9 @@ export default function VisualizarProcesso() {
                 {totalGruposFiltrados > gruposVisiveis.length ? (
                   <div className="text-center">
                     <Button
-                      variant="outline"
                       onClick={handleCarregarMaisMeses}
                       aria-expanded={gruposVisiveis.length < totalGruposFiltrados}
+                      className="font-semibold"
                     >
                       Carregar mais meses
                     </Button>
