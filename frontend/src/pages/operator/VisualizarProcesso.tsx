@@ -200,6 +200,8 @@ function prepararResumoIa(conteudo?: string | null): string | null {
     .filter((frase) => frase.trim().length > 0);
   const resumoConciso = frases.slice(0, 3).join(" ") || paragrafoUnico;
 
+  const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
+
   return resumoConciso;
 }
 
@@ -2859,6 +2861,19 @@ export default function VisualizarProcesso() {
               <div className="text-sm text-muted-foreground">
                 {movimentacaoSelecionada.dataFormatada ?? "Data não informada"}
               </div>
+              {carregandoResumo ? (
+                <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Gerando resumo com IA...
+                </div>
+              ) : null}
+              {resumoIa ? (
+                <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <h3 className="text-sm font-semibold text-primary">Resumo com IA</h3>
+                  <SafeMarkdown content={resumoIa} className="text-primary" />
+                </div>
+              ) : null}
+              {erroResumo ? <p className="text-sm text-destructive">{erroResumo}</p> : null}
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Conteúdo
@@ -2869,7 +2884,7 @@ export default function VisualizarProcesso() {
                       <SafeMarkdown content={conteudoSelecionado} className="text-foreground" />
                     ) : (
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                        {conteudoSelecionado}
+                        {conteudoSelecionado.replace(/\*\*/g, "")}
                       </p>
                     )
                   ) : (
@@ -2892,19 +2907,6 @@ export default function VisualizarProcesso() {
                   </ul>
                 </div>
               ) : null}
-              {carregandoResumo ? (
-                <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Gerando resumo com IA...
-                </div>
-              ) : null}
-              {resumoIa ? (
-                <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
-                  <h3 className="text-sm font-semibold text-primary">Resumo com IA</h3>
-                  <SafeMarkdown content={resumoIa} className="text-primary" />
-                </div>
-              ) : null}
-              {erroResumo ? <p className="text-sm text-destructive">{erroResumo}</p> : null}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Selecione uma movimentação para visualizar.</p>
