@@ -50,7 +50,6 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Archive,
   Check,
@@ -68,21 +67,6 @@ import {
   RefreshCw,
   Pencil,
 } from "lucide-react";
-import {
-  formatResponseKey,
-  formatResponseValue,
-  isMetadataEntryList,
-  mapApiJuditRequest,
-  parseOptionalString,
-  parseResponseDataFromResult,
-  parseTrackingSummaryFromResult,
-  toRecord,
-  type ApiProcessoJuditRequest,
-  type ProcessoJuditRequest,
-  type ProcessoResponseData,
-  type ProcessoTrackingSummary,
-} from "./utils/judit";
-import { renderMetadataEntries } from "./components/metadata-renderer";
 
 interface ProcessoCliente {
   id: number;
@@ -119,11 +103,6 @@ export interface Processo {
   ultimaSincronizacao: string | null;
   consultasApiCount: number;
   movimentacoesCount: number;
-  juditTrackingId: string | null;
-  juditTrackingHourRange: string | null;
-  juditLastRequest: ProcessoJuditRequest | null;
-  trackingSummary: ProcessoTrackingSummary | null;
-  responseData: ProcessoResponseData | null;
 }
 
 interface Uf {
@@ -190,9 +169,6 @@ interface ApiProcesso {
   ultima_sincronizacao?: string | null;
   consultas_api_count?: number | string | null;
   movimentacoes_count?: number | string | null;
-  judit_tracking_id?: string | null;
-  judit_tracking_hour_range?: string | null;
-  judit_last_request?: ApiProcessoJuditRequest | null;
 }
 
 interface ApiProcessoAdvogado {
@@ -248,26 +224,12 @@ export interface ManualSyncRequestPlan {
   path: string;
   method: "GET" | "POST";
   body: Record<string, unknown> | null;
-  isStatusCheck: boolean;
-  requestId: string | null;
 }
 
 export const planManualSyncRequest = (
   processo: Processo,
   flags?: ManualSyncFlags,
 ): ManualSyncRequestPlan => {
-  const requestId = processo.juditLastRequest?.requestId?.trim();
-
-  if (requestId) {
-    return {
-      path: `processos/${processo.id}/judit/requests/${requestId}`,
-      method: "GET",
-      body: null,
-      isStatusCheck: true,
-      requestId,
-    };
-  }
-
   const payload: Record<string, unknown> = {};
 
   if (typeof flags?.withAttachments === "boolean") {
@@ -282,28 +244,7 @@ export const planManualSyncRequest = (
     path: `processos/${processo.id}/judit/sync`,
     method: "POST",
     body: payload,
-    isStatusCheck: false,
-    requestId: null,
   };
-};
-
-const extractErrorMessageFromResult = (result: unknown): string | null => {
-  if (typeof result === "string") {
-    const trimmed = result.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-
-  const record = toRecord(result);
-  if (!record) {
-    return null;
-  }
-
-  return (
-    parseOptionalString(record.error) ??
-    parseOptionalString(record.message) ??
-    parseOptionalString(record.reason) ??
-    null
-  );
 };
 
 const formatProcessNumber = (value: string) => {
@@ -429,44 +370,6 @@ const parseOptionalInteger = (value: unknown): number | null => {
   return null;
 };
 
-const resolveCountValue = (value: unknown): number | null => {
-  if (Array.isArray(value)) {
-    return value.length;
-  }
-
-  const parsed = parseOptionalInteger(value);
-  if (typeof parsed === "number" && Number.isFinite(parsed)) {
-    return Math.max(parsed, 0);
-  }
-
-  return null;
-};
-
-const extractCountFromRecords = (
-  sources: Array<Record<string, unknown> | null | undefined>,
-  keys: string[],
-): number | null => {
-  for (const source of sources) {
-    const record = toRecord(source);
-    if (!record) {
-      continue;
-    }
-
-    for (const key of keys) {
-      if (!(key in record)) {
-        continue;
-      }
-
-      const count = resolveCountValue(record[key]);
-      if (typeof count === "number") {
-        return count;
-      }
-    }
-  }
-
-  return null;
-};
-
 const normalizeClienteTipo = (value: string | null | undefined): string => {
   if (!value) {
     return "";
@@ -571,41 +474,6 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     [processo.municipio, processo.uf].filter(Boolean).join(" - ") ||
     "Não informado";
 
-  const juditLastRequest = mapApiJuditRequest(processo.judit_last_request);
-  const trackingSummary = juditLastRequest
-    ? parseTrackingSummaryFromResult(juditLastRequest.result)
-    : null;
-  const responseData = juditLastRequest
-    ? parseResponseDataFromResult(juditLastRequest.result)
-    : null;
-
-  const pickResponseString = (
-    ...keys: string[]
-  ): string | undefined => {
-    if (!responseData) {
-      return undefined;
-    }
-
-    for (const key of keys) {
-      const fromCover = parseOptionalString(responseData.cover?.[key]);
-      if (fromCover) {
-        return fromCover;
-      }
-
-      const fromMetadata = parseOptionalString(responseData.metadata?.[key]);
-      if (fromMetadata) {
-        return fromMetadata;
-      }
-
-      const fromRaw = parseOptionalString(responseData.raw?.[key]);
-      if (fromRaw) {
-        return fromRaw;
-      }
-    }
-
-    return undefined;
-  };
-
   const oportunidadeResumo = processo.oportunidade ?? null;
   const oportunidadeId = parseOptionalInteger(
     processo.oportunidade_id ?? oportunidadeResumo?.id ?? null,
@@ -681,98 +549,23 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
         }
       : null;
 
-  const statusLabel =
-    trackingSummary?.status?.trim() || processo.status?.trim() || "Não informado";
+  const statusLabel = processo.status?.trim() || "Não informado";
 
-  let tipo = processo.tipo?.trim() || "Não informado";
-  let classeJudicial = processo.classe_judicial?.trim() || "Não informada";
-  let assunto = processo.assunto?.trim() || "Não informado";
-  let orgaoJulgador = processo.orgao_julgador?.trim() || "Não informado";
+  const tipo = processo.tipo?.trim() || "Não informado";
+  const classeJudicial = processo.classe_judicial?.trim() || "Não informada";
+  const assunto = processo.assunto?.trim() || "Não informado";
+  const orgaoJulgador = processo.orgao_julgador?.trim() || "Não informado";
 
-  tipo =
-    pickFirstNonEmptyString(pickResponseString("tipo"), tipo) ?? "Não informado";
-  classeJudicial =
-    pickFirstNonEmptyString(
-      pickResponseString("classeJudicial", "classe"),
-      classeJudicial,
-    ) ?? "Não informada";
-  assunto =
-    pickFirstNonEmptyString(pickResponseString("assunto", "tema"), assunto) ??
-    "Não informado";
-  jurisdicao =
-    pickFirstNonEmptyString(
-      pickResponseString("jurisdicao", "comarca"),
-      jurisdicao,
-    ) ?? "Não informado";
-  orgaoJulgador =
-    pickFirstNonEmptyString(
-      pickResponseString("orgaoJulgador", "orgao", "orgao_julgador"),
-      orgaoJulgador,
-    ) ?? "Não informado";
+  const lastSyncAt = processo.ultima_sincronizacao ?? null;
 
-  const lastSyncAt =
-    juditLastRequest?.updatedAt ??
-    trackingSummary?.updatedAt ??
-    processo.ultima_sincronizacao ??
-    null;
-
-  const persistedMovCount = Math.max(
+  const movimentacoesCount = Math.max(
     parseApiInteger(processo.movimentacoes_count),
     0,
   );
-  const responseMovCount = responseData?.movimentacoes
-    ? responseData.movimentacoes.length
-    : null;
-  const metadataMovCount = extractCountFromRecords(
-    [responseData?.metadata ?? null, responseData?.raw ?? null],
-    [
-      "movimentacoes_count",
-      "movements_count",
-      "movimentos_count",
-      "total_movimentacoes",
-      "total_movements",
-      "quantidade_movimentacoes",
-      "quantidade_movimentos",
-    ],
-  );
-  const movimentacoesCount = Math.max(
-    persistedMovCount,
-    responseMovCount ?? 0,
-    metadataMovCount ?? 0,
-  );
 
-  const persistedSyncCount = Math.max(
+  const consultasApiCount = Math.max(
     parseApiInteger(processo.consultas_api_count),
     0,
-  );
-  const trackingRaw = trackingSummary?.raw ?? null;
-  const syncSources: Array<Record<string, unknown> | null | undefined> = [
-    trackingRaw,
-  ];
-
-  if (trackingRaw) {
-    syncSources.push(
-      toRecord(trackingRaw["tracking"] ?? null),
-      toRecord(trackingRaw["tracking_status"] ?? null),
-      toRecord(trackingRaw["sync"] ?? null),
-    );
-  }
-
-  syncSources.push(responseData?.metadata ?? null, responseData?.raw ?? null);
-
-  const syncMetadataCount = extractCountFromRecords(syncSources, [
-    "sync_count",
-    "sincronizacoes_count",
-    "total_syncs",
-    "total_requests",
-    "requests_count",
-    "consultas_api_count",
-    "consultas_count",
-    "consultas",
-  ]);
-  const consultasApiCount = Math.max(
-    persistedSyncCount,
-    syncMetadataCount ?? 0,
   );
 
   return {
@@ -797,11 +590,6 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     ultimaSincronizacao: lastSyncAt,
     consultasApiCount,
     movimentacoesCount,
-    juditTrackingId: processo.judit_tracking_id ?? null,
-    juditTrackingHourRange: processo.judit_tracking_hour_range ?? null,
-    juditLastRequest,
-    trackingSummary,
-    responseData,
   };
 };
 
@@ -1603,156 +1391,37 @@ export default function Processos() {
         });
 
         const text = await res.text();
-        let json: unknown = null;
-
-        if (text) {
-          try {
-            json = JSON.parse(text);
-          } catch (error) {
-            console.error(
-              "Não foi possível interpretar a resposta de sincronização manual",
-              error,
-            );
-          }
-        }
+        let parsedError: string | null = null;
 
         if (!res.ok) {
-          const message =
-            json && typeof json === "object" && "error" in (json as { error?: unknown })
-              ? String((json as { error?: unknown }).error ?? "Falha ao sincronizar processo")
-              : `Não foi possível sincronizar o processo (HTTP ${res.status})`;
-          throw new Error(message);
-        }
-
-        const responseRecord = toRecord(json) ?? {};
-        const trackingRecord =
-          toRecord(responseRecord["tracking"] ?? null) ??
-          toRecord(responseRecord["tracking_status"] ?? null) ??
-          toRecord(responseRecord["sync"] ?? null);
-        const requestRecord =
-          toRecord(responseRecord["request"] ?? null) ??
-          (requestPlan.isStatusCheck ? responseRecord : null);
-        const requestMapped = mapApiJuditRequest(
-          (requestRecord ?? null) as ApiProcessoJuditRequest | null,
-        );
-
-        const requestStatus = requestMapped?.status ?? null;
-        const shouldApplyResult = requestStatus === "completed";
-
-        setProcessos((prev) =>
-          prev.map((item) => {
-            if (item.id !== processoToSync.id) {
-              return item;
-            }
-
-            const trackingSummary = shouldApplyResult
-              ? parseTrackingSummaryFromResult(requestMapped?.result) ??
-                item.trackingSummary
-              : item.trackingSummary;
-            const responseData = shouldApplyResult
-              ? parseResponseDataFromResult(requestMapped?.result) ??
-                item.responseData
-              : item.responseData;
-
-            const trackingId = shouldApplyResult
-              ? parseOptionalString(
-                  trackingRecord?.tracking_id ?? trackingRecord?.id ?? null,
-                ) ?? item.juditTrackingId
-              : item.juditTrackingId;
-            const trackingHourRange = shouldApplyResult
-              ? parseOptionalString(trackingRecord?.hour_range) ??
-                item.juditTrackingHourRange
-              : item.juditTrackingHourRange;
-
-            const trackingStatus = shouldApplyResult
-              ? parseOptionalString(trackingRecord?.status) ??
-                trackingSummary?.status ??
-                item.status
-              : item.status;
-
-            const trackingUpdatedAt = shouldApplyResult
-              ? trackingSummary?.updatedAt ?? item.trackingSummary?.updatedAt ?? null
-              : item.trackingSummary?.updatedAt ?? null;
-
-            const nextLastSync = shouldApplyResult
-              ? requestMapped?.updatedAt ??
-                trackingUpdatedAt ??
-                item.ultimaSincronizacao
-              : item.ultimaSincronizacao;
-
-            return {
-              ...item,
-              juditTrackingId: trackingId,
-              juditTrackingHourRange: trackingHourRange,
-              juditLastRequest: requestMapped ?? item.juditLastRequest,
-              trackingSummary,
-              responseData,
-              status: trackingStatus || item.status,
-              ultimaSincronizacao: nextLastSync,
-            };
-          }),
-        );
-
-        if (requestStatus === "error") {
-          const errorMessage =
-            extractErrorMessageFromResult(requestMapped?.result) ??
-            "A Judit retornou um erro ao processar a solicitação.";
-          setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: errorMessage }));
-          toast({
-            title: "Erro ao sincronizar processo",
-            description: errorMessage,
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const shouldRefreshProcessList =
-          !requestPlan.isStatusCheck || shouldApplyResult;
-
-        if (shouldRefreshProcessList) {
-          try {
-            const refreshed = await loadProcessos();
-            setProcessos(refreshed);
-          } catch (refreshError) {
-            console.error(
-              "Falha ao atualizar lista após sincronização manual",
-              refreshError,
-            );
-          }
-        }
-
-        if (requestPlan.isStatusCheck) {
-          if (shouldApplyResult) {
-            toast({
-              title: "Dados do processo atualizados",
-              description:
-                "A consulta manual anterior foi concluída e os dados foram atualizados.",
-            });
-          } else {
-            const pendingStatuses = new Set(["pending", "processing", "queued"]);
-            const isPending =
-              !requestStatus || pendingStatuses.has(requestStatus.toLowerCase());
-
-            if (isPending) {
-              toast({
-                title: "Ainda buscando os dados do processo",
-                description:
-                  "A Judit ainda está processando esta solicitação. Verifique novamente em alguns minutos.",
-              });
-            } else {
-              toast({
-                title: "Status da solicitação verificado",
-                description: `Status atual: ${requestStatus}.`,
-              });
+          if (text) {
+            try {
+              const json = JSON.parse(text) as { error?: unknown };
+              parsedError = json.error ? String(json.error) : text;
+            } catch {
+              parsedError = text;
             }
           }
-        } else {
-          toast({
-            title: "Solicitação enviada para a Judit",
-            description:
-              "Primeira solicitação manual registrada. Avisaremos quando os dados forem atualizados.",
-          });
+
+          throw new Error(
+            parsedError ?? `Não foi possível sincronizar o processo (HTTP ${res.status})`,
+          );
         }
+
+        try {
+          const refreshed = await loadProcessos();
+          setProcessos(refreshed);
+        } catch (refreshError) {
+          console.error(
+            "Falha ao atualizar lista após sincronização manual",
+            refreshError,
+          );
+        }
+
+        toast({
+          title: "Solicitação de atualização registrada",
+          description: "Os dados do processo serão atualizados assim que a sincronização for concluída.",
+        });
       } catch (error) {
         console.error(error);
         const message =
@@ -1874,10 +1543,6 @@ export default function Processos() {
         processo.advogados.map((adv) => adv.nome).join(" "),
         processo.proposta?.label,
         processo.proposta?.solicitante ?? null,
-        processo.trackingSummary?.status ?? null,
-        processo.trackingSummary?.phase ?? null,
-        processo.trackingSummary?.lastStep?.label ?? null,
-        processo.trackingSummary?.tags.join(" ") ?? null,
       ];
 
       const hasTextMatch = searchPool.some((value) => {
@@ -2088,56 +1753,16 @@ export default function Processos() {
             const clienteDocumento =
               processo.cliente?.documento?.trim() || "Documento não informado";
             const clientePapel = processo.cliente?.papel?.trim();
-            const trackingUpdatedAt = processo.trackingSummary?.updatedAt ?? null;
-            const ultimaAtualizacaoLabel = trackingUpdatedAt
-              ? formatDateTimeToPtBR(trackingUpdatedAt)
-              : processo.ultimaSincronizacao
-                ? formatDateTimeToPtBR(processo.ultimaSincronizacao)
-                : "Sem registros recentes";
+            const ultimaAtualizacaoLabel = processo.ultimaSincronizacao
+              ? formatDateTimeToPtBR(processo.ultimaSincronizacao)
+              : "Sem registros recentes";
             const movimentacoesLabel =
               processo.movimentacoesCount === 1
                 ? "1 movimentação registrada"
                 : `${processo.movimentacoesCount} movimentações registradas`;
-            const trackingPhase = processo.trackingSummary?.phase?.trim() || null;
-            const trackingTags = processo.trackingSummary?.tags ?? [];
-            const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
-            const trackingLastStepLabel =
-              trackingLastStep?.label ?? trackingLastStep?.name ?? null;
-            const trackingLastStepDescription = trackingLastStep?.description ?? null;
-            const trackingLastStepUpdatedAt = trackingLastStep?.updatedAt ?? null;
-            const statusTrimmed = processo.status.trim();
-            const fallbackStageLabel =
-              trackingPhase ??
-              trackingLastStepDescription ??
-              (statusTrimmed && statusTrimmed !== "Não informado" ? statusTrimmed : null);
-            const trackingLastStepContent = trackingLastStepLabel
-              ? trackingLastStepDescription || trackingLastStepUpdatedAt
-                ? (
-                    <Tooltip>
-                      <TooltipTrigger className="text-left">
-                        Etapa atual: {trackingLastStepLabel}
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs space-y-1">
-                        {trackingLastStepDescription ? (
-                          <p className="text-xs text-muted-foreground">{trackingLastStepDescription}</p>
-                        ) : null}
-                        {trackingLastStepUpdatedAt ? (
-                          <p className="text-xs text-muted-foreground">
-                            Atualizado em {formatDateTimeToPtBR(trackingLastStepUpdatedAt)}
-                          </p>
-                        ) : null}
-                      </TooltipContent>
-                    </Tooltip>
-                  )
-                : (
-                    <>Etapa atual: {trackingLastStepLabel}</>
-                  )
-              : fallbackStageLabel ? (
-                  <>Etapa atual: {fallbackStageLabel}</>
-                ) : (
-                  <>Etapa atual: Não informada</>
-                );
-              const trackingIncrements = processo.trackingSummary?.increments ?? [];
+            const etapaAtualLabel = processo.status && processo.status !== "Não informado"
+              ? `Etapa atual: ${processo.status}`
+              : "Etapa atual: Não informada";
             const isSyncing = syncingProcessIds.includes(processo.id);
             const syncError = syncErrors[processo.id] ?? null;
 
@@ -2171,23 +1796,6 @@ export default function Processos() {
                           >
                             {processo.tipo}
                           </Badge>
-                          {trackingPhase ? (
-                            <Badge
-                              variant="outline"
-                              className="rounded-full border-purple-200 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-700"
-                            >
-                              Fase: {trackingPhase}
-                            </Badge>
-                          ) : null}
-                          {trackingTags.map((tag, index) => (
-                            <Badge
-                              key={`${processo.id}-tag-${index}-${tag}`}
-                              variant="outline"
-                              className="rounded-full border-primary/30 bg-primary/5 px-3 py-1 text-xs font-medium text-primary"
-                            >
-                              {tag}
-                            </Badge>
-                          ))}
                         </div>
                       </div>
                       <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-5">
@@ -2205,7 +1813,7 @@ export default function Processos() {
                         </span>
                         <span className="flex items-center gap-1.5">
                           <ChevronsUpDown className="h-3.5 w-3.5 text-primary" />
-                          {trackingLastStepContent}
+                          {etapaAtualLabel}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <RefreshCw className="h-3.5 w-3.5 text-primary" />
@@ -2331,183 +1939,7 @@ export default function Processos() {
                           </Badge>
                         </div>
                       </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Última solicitação Judit
-                        </p>
-                        <div className="mt-3 space-y-1 text-sm text-foreground">
-                          {processo.juditLastRequest ? (
-                            <>
-                              <p className="font-medium text-foreground">
-                                #{processo.juditLastRequest.requestId} · {processo.juditLastRequest.status}
-                              </p>
-                              {processo.juditLastRequest.updatedAt ? (
-                                <p className="text-xs text-muted-foreground">
-                                  Atualizado em {formatDateTimeToPtBR(processo.juditLastRequest.updatedAt)}
-                                </p>
-                              ) : null}
-                              <p className="text-xs text-muted-foreground">
-                                Origem: {processo.juditLastRequest.source}
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Nenhuma solicitação registrada até o momento.
-                            </p>
-                          )}
-                        </div>
-                      </div>
                     </div>
-                    {processo.responseData ? (
-                      <div className="space-y-4">
-                        {processo.responseData.cover ? (
-                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Capa do processo
-                            </p>
-                            <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                              {Object.entries(processo.responseData.cover).map(([key, value]) => {
-                                const formattedValue = formatResponseValue(value);
-                                const isStructured = isMetadataEntryList(formattedValue);
-                                const entryKey = `${processo.id}-cover-${key}`;
-
-                                return (
-                                  <div key={entryKey} className="space-y-1">
-                                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                      {formatResponseKey(key)}
-                                    </dt>
-                                    <dd
-                                      className={cn(
-                                        "break-words",
-                                        isStructured
-                                          ? "text-foreground"
-                                          : "text-sm text-foreground",
-                                      )}
-                                    >
-                                      {isStructured
-                                        ? renderMetadataEntries(formattedValue, {
-                                            keyPrefix: entryKey,
-                                            containerClassName: "space-y-2",
-                                            nestedContainerClassName: "space-y-2",
-                                            valueClassName:
-                                              "text-sm text-foreground break-words",
-                                            nestedValueClassName:
-                                              "text-xs text-foreground/90 break-words",
-                                          })
-                                        : formattedValue}
-                                    </dd>
-                                  </div>
-                                );
-                              })}
-                            </dl>
-                          </div>
-                        ) : null}
-                        {processo.responseData.movimentacoes.length > 0 ? (
-                          <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              Movimentações recentes (Judit)
-                            </p>
-                            <div className="mt-3 space-y-3">
-                              {processo.responseData.movimentacoes.map((movimentacao, index) => {
-                                const descricao =
-                                  parseOptionalString(movimentacao.descricao) ??
-                                  parseOptionalString(movimentacao.description) ??
-                                  parseOptionalString(movimentacao.titulo) ??
-                                  parseOptionalString(movimentacao.title) ??
-                                  `Movimentação ${index + 1}`;
-                                const dataMovimentacao =
-                                  parseOptionalString(movimentacao.data) ??
-                                  parseOptionalString(movimentacao.date) ??
-                                  parseOptionalString(movimentacao.timestamp);
-                                return (
-                                  <div
-                                    key={`${processo.id}-mov-${index}-${descricao}`}
-                                    className="rounded-md border border-border/40 bg-background/60 p-3"
-                                  >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <p className="text-sm font-medium text-foreground">{descricao}</p>
-                                      {dataMovimentacao ? (
-                                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                          {formatDateTimeToPtBR(dataMovimentacao)}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                                      {Object.entries(movimentacao)
-                                        .filter(([key]) => !["descricao", "description", "titulo", "title", "data", "date", "timestamp"].includes(key))
-                                        .map(([key, value]) => {
-                                          const formattedValue = formatResponseValue(value);
-                                          const isStructured = isMetadataEntryList(formattedValue);
-                                          const entryKey = `${processo.id}-mov-${index}-${key}`;
-
-                                          return (
-                                            <div key={entryKey} className="space-y-1">
-                                              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                                                {formatResponseKey(key)}
-                                              </dt>
-                                              <dd
-                                                className={cn(
-                                                  "break-words",
-                                                  isStructured
-                                                    ? "text-foreground"
-                                                    : "text-xs text-foreground",
-                                                )}
-                                              >
-                                                {isStructured
-                                                  ? renderMetadataEntries(formattedValue, {
-                                                      keyPrefix: entryKey,
-                                                      containerClassName: "space-y-2",
-                                                      nestedContainerClassName: "space-y-2",
-                                                      valueClassName:
-                                                        "text-xs text-foreground break-words",
-                                                      nestedValueClassName:
-                                                        "text-[11px] text-foreground/90 break-words",
-                                                    })
-                                                  : formattedValue}
-                                              </dd>
-                                            </div>
-                                          );
-                                        })}
-                                    </dl>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {trackingIncrements.length > 0 ? (
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Incrementos recentes recebidos
-                        </p>
-                        <ul className="mt-3 space-y-3 text-sm text-foreground">
-                          {trackingIncrements.map((increment, index) => (
-                            <li
-                              key={`${processo.id}-increment-${increment.id}-${index}`}
-                              className="space-y-1"
-                            >
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                {increment.type ? (
-                                  <span className="font-medium text-foreground">{increment.type}</span>
-                                ) : null}
-                                {increment.occurredAt ? (
-                                  <span>{formatDateTimeToPtBR(increment.occurredAt)}</span>
-                                ) : null}
-                              </div>
-                              <p className="text-sm text-foreground">
-                                {increment.description
-                                  ? increment.description
-                                  : typeof increment.raw === "string"
-                                    ? increment.raw
-                                    : "Atualização registrada pelo webhook."}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
                     <div className="grid gap-4 lg:grid-cols-[1.5fr,1fr]">
                       <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

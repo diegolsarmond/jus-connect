@@ -21,11 +21,6 @@ const createBaseProcesso = (): Processo => ({
   ultimaSincronizacao: null,
   consultasApiCount: 0,
   movimentacoesCount: 0,
-  juditTrackingId: null,
-  juditTrackingHourRange: null,
-  juditLastRequest: null,
-  trackingSummary: null,
-  responseData: null,
 });
 
 describe("planManualSyncRequest", () => {
@@ -37,23 +32,13 @@ describe("planManualSyncRequest", () => {
 
     expect(plan.path).toBe(`processos/${processo.id}/judit/sync`);
     expect(plan.method).toBe("POST");
-    expect(plan.isStatusCheck).toBe(false);
-    expect(plan.requestId).toBeNull();
     expect(plan.body).toMatchObject({ withAttachments: true, onDemand: true });
   });
 
-  it("reutiliza a solicitação existente quando há um requestId", () => {
+  it("sempre utiliza POST para solicitar sincronização manual", () => {
     const processo = {
       ...createBaseProcesso(),
       id: 42,
-      juditLastRequest: {
-        requestId: "abc-123",
-        status: "pending",
-        source: "manual",
-        result: null,
-        createdAt: null,
-        updatedAt: null,
-      },
     } satisfies Processo;
 
     const plan = planManualSyncRequest(processo, {
@@ -61,10 +46,8 @@ describe("planManualSyncRequest", () => {
       onDemand: true,
     });
 
-    expect(plan.path).toBe(`processos/${processo.id}/judit/requests/abc-123`);
-    expect(plan.method).toBe("GET");
-    expect(plan.isStatusCheck).toBe(true);
-    expect(plan.requestId).toBe("abc-123");
-    expect(plan.body).toBeNull();
+    expect(plan.path).toBe(`processos/${processo.id}/judit/sync`);
+    expect(plan.method).toBe("POST");
+    expect(plan.body).toMatchObject({ withAttachments: false, onDemand: true });
   });
 });

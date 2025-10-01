@@ -3,10 +3,7 @@ import { Calendar, FileText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  parseOptionalString,
-  type ProcessoResponseData,
-} from "@/pages/operator/utils/judit";
+import { parseOptionalString } from "@/pages/operator/utils/judit";
 
 const ATTACHMENT_DATE_KEYS = [
   "data",
@@ -116,7 +113,7 @@ const resolveAttachmentLink = (attachment: Record<string, unknown>): string | nu
 };
 
 export interface AttachmentsSummaryCardProps {
-  attachments: ProcessoResponseData["anexos"];
+  attachments: Array<Record<string, unknown>>;
   className?: string;
   onViewAttachments?: () => void;
   viewAttachmentsLabel?: string;
