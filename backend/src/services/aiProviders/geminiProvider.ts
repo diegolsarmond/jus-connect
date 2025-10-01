@@ -88,7 +88,7 @@ function extractGeminiErrorMessage(payload: unknown, status: number): string {
 }
 
 function buildGeminiPrompt(documentType: string, prompt: string): string {
-  const sanitizedPrompt = prompt.trim();
+  const sanitizedPrompt = prompt.replace(/\r\n/g, '\n').trim();
   return [
     'Você é um assistente jurídico especializado em elaborar minutas estruturadas e coerentes.',
     'Crie um rascunho detalhado para o documento descrito a seguir, mantendo linguagem formal e objetiva.',
