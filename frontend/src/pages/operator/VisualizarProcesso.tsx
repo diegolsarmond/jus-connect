@@ -2301,7 +2301,7 @@ export default function VisualizarProcesso() {
   );
 
   const totalMovimentacoes = movimentacoesFiltradas.length;
-  const usarVirtualizacao = totalMovimentacoes > 120;
+  const usarVirtualizacao = false;
 
   const gruposVisiveis = useMemo(
     () => gruposFiltrados.slice(0, mesesVisiveis),
