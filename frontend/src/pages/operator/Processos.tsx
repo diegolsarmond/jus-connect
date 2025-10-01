@@ -429,6 +429,44 @@ const parseOptionalInteger = (value: unknown): number | null => {
   return null;
 };
 
+const resolveCountValue = (value: unknown): number | null => {
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+
+  const parsed = parseOptionalInteger(value);
+  if (typeof parsed === "number" && Number.isFinite(parsed)) {
+    return Math.max(parsed, 0);
+  }
+
+  return null;
+};
+
+const extractCountFromRecords = (
+  sources: Array<Record<string, unknown> | null | undefined>,
+  keys: string[],
+): number | null => {
+  for (const source of sources) {
+    const record = toRecord(source);
+    if (!record) {
+      continue;
+    }
+
+    for (const key of keys) {
+      if (!(key in record)) {
+        continue;
+      }
+
+      const count = resolveCountValue(record[key]);
+      if (typeof count === "number") {
+        return count;
+      }
+    }
+  }
+
+  return null;
+};
+
 const normalizeClienteTipo = (value: string | null | undefined): string => {
   if (!value) {
     return "";
@@ -678,6 +716,65 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     processo.ultima_sincronizacao ??
     null;
 
+  const persistedMovCount = Math.max(
+    parseApiInteger(processo.movimentacoes_count),
+    0,
+  );
+  const responseMovCount = responseData?.movimentacoes
+    ? responseData.movimentacoes.length
+    : null;
+  const metadataMovCount = extractCountFromRecords(
+    [responseData?.metadata ?? null, responseData?.raw ?? null],
+    [
+      "movimentacoes_count",
+      "movements_count",
+      "movimentos_count",
+      "total_movimentacoes",
+      "total_movements",
+      "quantidade_movimentacoes",
+      "quantidade_movimentos",
+    ],
+  );
+  const movimentacoesCount = Math.max(
+    persistedMovCount,
+    responseMovCount ?? 0,
+    metadataMovCount ?? 0,
+  );
+
+  const persistedSyncCount = Math.max(
+    parseApiInteger(processo.consultas_api_count),
+    0,
+  );
+  const trackingRaw = trackingSummary?.raw ?? null;
+  const syncSources: Array<Record<string, unknown> | null | undefined> = [
+    trackingRaw,
+  ];
+
+  if (trackingRaw) {
+    syncSources.push(
+      toRecord(trackingRaw["tracking"] ?? null),
+      toRecord(trackingRaw["tracking_status"] ?? null),
+      toRecord(trackingRaw["sync"] ?? null),
+    );
+  }
+
+  syncSources.push(responseData?.metadata ?? null, responseData?.raw ?? null);
+
+  const syncMetadataCount = extractCountFromRecords(syncSources, [
+    "sync_count",
+    "sincronizacoes_count",
+    "total_syncs",
+    "total_requests",
+    "requests_count",
+    "consultas_api_count",
+    "consultas_count",
+    "consultas",
+  ]);
+  const consultasApiCount = Math.max(
+    persistedSyncCount,
+    syncMetadataCount ?? 0,
+  );
+
   return {
     id: processo.id,
     numero: processo.numero,
@@ -698,8 +795,8 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     orgaoJulgador,
     proposta,
     ultimaSincronizacao: lastSyncAt,
-    consultasApiCount: parseApiInteger(processo.consultas_api_count),
-    movimentacoesCount: parseApiInteger(processo.movimentacoes_count),
+    consultasApiCount,
+    movimentacoesCount,
     juditTrackingId: processo.judit_tracking_id ?? null,
     juditTrackingHourRange: processo.judit_tracking_hour_range ?? null,
     juditLastRequest,
