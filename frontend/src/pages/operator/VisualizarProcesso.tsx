@@ -1630,7 +1630,7 @@ export const TimelineMes = memo(function TimelineMes({
       ) : null}
     </div>
   );
-}
+  });
 interface ProcessosRelacionadosProps {
   itens: ProcessoRelacionadoView[];
   onAbrir: (identificador: string) => void;
