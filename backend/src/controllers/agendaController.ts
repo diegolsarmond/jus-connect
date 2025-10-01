@@ -65,6 +65,33 @@ const normalizeAgendaStatus = (value: unknown): number => {
   return 1;
 };
 
+const normalizeAgendaLocationType = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === '') {
+    return null;
+  }
+
+  if (normalized === 'interno' || normalized === 'interna' || normalized === 'presencial') {
+    return 'Interno';
+  }
+
+  if (
+    normalized === 'externo' ||
+    normalized === 'externa' ||
+    normalized === 'online' ||
+    normalized === 'virtual'
+  ) {
+    return 'Externo';
+  }
+
+  return null;
+};
+
 const buildAgendaSelect = (cteName: string): string => `
   SELECT
     ${cteName}.id,
@@ -314,6 +341,7 @@ export const createAgenda = async (req: Request, res: Response) => {
   } = req.body;
 
   const normalizedStatus = normalizeAgendaStatus(status);
+  const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
 
   try {
     if (!req.auth) {
@@ -368,7 +396,7 @@ export const createAgenda = async (req: Request, res: Response) => {
         hora_inicio,
         hora_fim,
         cliente,
-        tipo_local,
+        normalizedLocationType,
         local,
         lembrete,
         normalizedStatus,
@@ -426,6 +454,7 @@ export const updateAgenda = async (req: Request, res: Response) => {
   } = req.body;
 
   const normalizedStatus = normalizeAgendaStatus(status);
+  const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
 
   try {
     if (!req.auth) {
@@ -475,7 +504,7 @@ export const updateAgenda = async (req: Request, res: Response) => {
         hora_inicio,
         hora_fim,
         cliente,
-        tipo_local,
+        normalizedLocationType,
         local,
         lembrete,
         normalizedStatus,
