@@ -8,6 +8,44 @@ import { generateDocumentWithGemini } from '../services/aiProviders/geminiProvid
 import { escapeHtml } from '../utils/html';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
+const DEFAULT_AI_BACKGROUND_PROMPT = `Contexto:
+Você atuará como advogado(a) responsável por elaborar minutas jurídicas estruturadas e adequadas ao caso apresentado.
+
+Estrutura esperada:
+1. Cabeçalho e qualificação das partes com campos [PREENCHER] para dados variáveis.
+2. Seções temáticas que exponham fatos, fundamentos jurídicos (incluindo referências normativas e jurisprudenciais pertinentes) e pedidos ou cláusulas específicas.
+3. Orientações práticas ou condicionantes relevantes ao documento.
+
+Diretrizes adicionais:
+- Utilize linguagem técnica, objetiva e compatível com a praxe forense brasileira.
+- Garanta que cada seção tenha parágrafos coesos e, quando apropriado, listas para obrigações, condições ou etapas.
+- Insira fundamentos legais com referências claras (ex.: artigos de lei, súmulas, precedentes) sempre que couber.
+- Finalize com um checklist de validação contendo itens em formato de lista com campos [PREENCHER] para informações que o usuário deve confirmar.
+- Destaque eventuais prazos ou alertas relevantes ao documento.
+`;
+
+const DOCUMENT_TYPE_BACKGROUND_PROMPTS: Record<string, string> = {
+  contrato:
+    'Para contratos, detalhe cláusulas essenciais como objeto, obrigações das partes, prazo, pagamento, garantias, penalidades e foro, sempre deixando campos [PREENCHER] para dados específicos.',
+  peticao:
+    'Para petições, inclua síntese dos fatos, fundamentação jurídica com dispositivos aplicáveis, pedidos bem delimitados e orientações sobre documentos anexos obrigatórios.',
+};
+
+function composeAiPrompt(documentType: string, userPrompt: string): string {
+  const normalizedType = documentType.trim().toLowerCase();
+  const backgroundSegments = [DEFAULT_AI_BACKGROUND_PROMPT.trim()];
+  const contextualBackground = DOCUMENT_TYPE_BACKGROUND_PROMPTS[normalizedType];
+
+  if (contextualBackground) {
+    backgroundSegments.push(contextualBackground);
+  }
+
+  backgroundSegments.push(`Tipo de documento: ${documentType.trim()}.`);
+
+  const segments = [...backgroundSegments, userPrompt.trim()].filter(Boolean);
+  return segments.join('\n\n');
+}
+
 const providerLabels: Record<string, string> = {
   gemini: 'Gemini',
   openai: 'OpenAI',
@@ -149,7 +187,7 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
         htmlContent = await generateDocumentWithGemini({
           apiKey: integration.key,
           documentType: normalizedDocumentType,
-          prompt: normalizedPrompt,
+          prompt: composeAiPrompt(normalizedDocumentType, normalizedPrompt),
           environment,
         });
       } catch (error) {
