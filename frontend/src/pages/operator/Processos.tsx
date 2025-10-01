@@ -1420,19 +1420,34 @@ export default function Processos() {
 
   const totalProcessos = useMemo(() => processos.length, [processos]);
 
-  const processosEmAndamento = useMemo(
-    () =>
-      processos.filter((processo) =>
-        processo.status.toLowerCase().includes("andamento") ||
-        processo.status.toLowerCase().includes("ativo"),
-      ).length,
-    [processos],
-  );
+  const processosStatusResumo = useMemo(() => {
+    let andamento = 0;
+    let arquivados = 0;
 
-  const processosArquivados = useMemo(
-    () => processos.filter((processo) => processo.status.toLowerCase().includes("arquiv")).length,
-    [processos],
-  );
+    const normalizeStatusText = (status: string) =>
+      status
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+
+    const arquivadoKeywords = ["arquiv", "baix", "encerr", "finaliz", "transit", "extint"];
+
+    processos.forEach((processo) => {
+      const normalized = normalizeStatusText(processo.status);
+      if (arquivadoKeywords.some((keyword) => normalized.includes(keyword))) {
+        arquivados += 1;
+        return;
+      }
+
+      andamento += 1;
+    });
+
+    return { andamento, arquivados };
+  }, [processos]);
+
+  const processosEmAndamento = processosStatusResumo.andamento;
+
+  const processosArquivados = processosStatusResumo.arquivados;
 
   const clientesAtivos = useMemo(
     () => new Set(processos.map((processo) => processo.cliente.id)).size,
@@ -2088,31 +2103,40 @@ export default function Processos() {
             const trackingLastStep = processo.trackingSummary?.lastStep ?? null;
             const trackingLastStepLabel =
               trackingLastStep?.label ?? trackingLastStep?.name ?? null;
-              const trackingLastStepDescription = trackingLastStep?.description ?? null;
-              const trackingLastStepUpdatedAt = trackingLastStep?.updatedAt ?? null;
-              const trackingLastStepContent = trackingLastStepLabel ? (
-                trackingLastStepDescription || trackingLastStepUpdatedAt ? (
-                  <Tooltip>
-                    <TooltipTrigger className="text-left">
-                      Etapa atual: {trackingLastStepLabel}
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs space-y-1">
-                      {trackingLastStepDescription ? (
-                        <p className="text-xs text-muted-foreground">{trackingLastStepDescription}</p>
-                      ) : null}
-                      {trackingLastStepUpdatedAt ? (
-                        <p className="text-xs text-muted-foreground">
-                          Atualizado em {formatDateTimeToPtBR(trackingLastStepUpdatedAt)}
-                        </p>
-                      ) : null}
-                    </TooltipContent>
-                  </Tooltip>
+            const trackingLastStepDescription = trackingLastStep?.description ?? null;
+            const trackingLastStepUpdatedAt = trackingLastStep?.updatedAt ?? null;
+            const statusTrimmed = processo.status.trim();
+            const fallbackStageLabel =
+              trackingPhase ??
+              trackingLastStepDescription ??
+              (statusTrimmed && statusTrimmed !== "Não informado" ? statusTrimmed : null);
+            const trackingLastStepContent = trackingLastStepLabel
+              ? trackingLastStepDescription || trackingLastStepUpdatedAt
+                ? (
+                    <Tooltip>
+                      <TooltipTrigger className="text-left">
+                        Etapa atual: {trackingLastStepLabel}
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs space-y-1">
+                        {trackingLastStepDescription ? (
+                          <p className="text-xs text-muted-foreground">{trackingLastStepDescription}</p>
+                        ) : null}
+                        {trackingLastStepUpdatedAt ? (
+                          <p className="text-xs text-muted-foreground">
+                            Atualizado em {formatDateTimeToPtBR(trackingLastStepUpdatedAt)}
+                          </p>
+                        ) : null}
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                : (
+                    <>Etapa atual: {trackingLastStepLabel}</>
+                  )
+              : fallbackStageLabel ? (
+                  <>Etapa atual: {fallbackStageLabel}</>
                 ) : (
-                  <>Etapa atual: {trackingLastStepLabel}</>
-                )
-              ) : (
-                <>Etapa atual: Não informada</>
-              );
+                  <>Etapa atual: Não informada</>
+                );
               const trackingIncrements = processo.trackingSummary?.increments ?? [];
             const isSyncing = syncingProcessIds.includes(processo.id);
             const syncError = syncErrors[processo.id] ?? null;
