@@ -57,6 +57,22 @@ const normalizeAgendaStatus = (value) => {
     }
     return 1;
 };
+const normalizeAgendaLocationType = (value) => {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '') {
+        return null;
+    }
+    if (normalized === 'interno' || normalized === 'interna' || normalized === 'presencial') {
+        return 'Interno';
+    }
+    if (normalized === 'externo' || normalized === 'externa' || normalized === 'online' || normalized === 'virtual') {
+        return 'Externo';
+    }
+    return null;
+};
 const buildAgendaSelect = (cteName) => `
   SELECT
     ${cteName}.id,
@@ -259,6 +275,7 @@ exports.getTotalCompromissosHoje = getTotalCompromissosHoje;
 const createAgenda = async (req, res) => {
     const { titulo, tipo, descricao, data, hora_inicio, hora_fim, cliente, tipo_local, local, lembrete, status, } = req.body;
     const normalizedStatus = normalizeAgendaStatus(status);
+    const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
     try {
         if (!req.auth) {
             return res.status(401).json({ error: 'Token inválido.' });
@@ -305,7 +322,7 @@ const createAgenda = async (req, res) => {
             hora_inicio,
             hora_fim,
             cliente,
-            tipo_local,
+            normalizedLocationType,
             local,
             lembrete,
             normalizedStatus,
@@ -348,6 +365,7 @@ const updateAgenda = async (req, res) => {
     const { id } = req.params;
     const { titulo, tipo, descricao, data, hora_inicio, hora_fim, cliente, tipo_local, local, lembrete, status, } = req.body;
     const normalizedStatus = normalizeAgendaStatus(status);
+    const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
     try {
         if (!req.auth) {
             return res.status(401).json({ error: 'Token inválido.' });
@@ -389,7 +407,7 @@ const updateAgenda = async (req, res) => {
             hora_inicio,
             hora_fim,
             cliente,
-            tipo_local,
+            normalizedLocationType,
             local,
             lembrete,
             normalizedStatus,
