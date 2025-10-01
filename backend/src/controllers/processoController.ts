@@ -717,7 +717,7 @@ export const listProcessos = async (req: Request, res: Response) => {
 
     const result = await pool.query(
       `${baseProcessoSelect}
-       WHERE p.idempresa IS NOT DISTINCT FROM $1
+       WHERE p.idempresa = $1
        ORDER BY p.criado_em DESC`,
       [empresaId]
     );
@@ -757,7 +757,7 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
     const result = await pool.query(
       `${baseProcessoSelect}
        WHERE p.cliente_id = $1
-         AND p.idempresa IS NOT DISTINCT FROM $2
+         AND p.idempresa = $2
        ORDER BY p.criado_em DESC`,
       [parsedClienteId, empresaId]
     );
@@ -797,7 +797,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
     const result = await pool.query(
       `${baseProcessoSelect}
        WHERE p.id = $1
-         AND p.idempresa IS NOT DISTINCT FROM $2
+         AND p.idempresa = $2
        LIMIT 1`,
       [parsedId, empresaId]
     );
@@ -807,13 +807,16 @@ export const getProcessoById = async (req: Request, res: Response) => {
     }
 
     const processo = mapProcessoRow(result.rows[0]);
-    processo.movimentacoes = await fetchProcessoMovimentacoes(parsedId);
 
-    const [juditSyncs, juditResponses, juditAuditTrail] = await Promise.all([
-      listProcessSyncs(parsedId),
-      listProcessResponses(parsedId),
-      listSyncAudits(parsedId),
-    ]);
+    const [movimentacoes, juditSyncs, juditResponses, juditAuditTrail] =
+      await Promise.all([
+        fetchProcessoMovimentacoes(parsedId),
+        listProcessSyncs(parsedId),
+        listProcessResponses(parsedId),
+        listSyncAudits(parsedId),
+      ]);
+
+    processo.movimentacoes = movimentacoes;
 
     processo.juditSyncs = juditSyncs;
     processo.juditResponses = juditResponses;
