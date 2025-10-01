@@ -464,6 +464,30 @@ export default function VisualizarCliente() {
   const navigate = useNavigate();
   const [client, setClient] = useState<LocalClient | null>(null);
   const [loading, setLoading] = useState(true);
+  const allowedDocumentMimeTypes = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'application/pdf',
+    'text/plain',
+  ] as const;
+  const allowedDocumentLabels = allowedDocumentMimeTypes.map((type) => {
+    switch (type) {
+      case 'image/jpeg':
+        return 'JPG ou JPEG';
+      case 'image/png':
+        return 'PNG';
+      case 'image/webp':
+        return 'WEBP';
+      case 'application/pdf':
+        return 'PDF';
+      case 'text/plain':
+        return 'TXT';
+      default:
+        return type;
+    }
+  });
+
   const [documents, setDocuments] = useState<
     Array<{ id: number; filename: string; type: string; base64: string }>
   >([]);
@@ -1209,13 +1233,19 @@ export default function VisualizarCliente() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    type="file"
-                    onChange={(e) =>
-                      setSelectedFile(e.target.files?.[0] ?? null)
-                    }
-                    className="w-full"
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      type="file"
+                      accept={allowedDocumentMimeTypes.join(',')}
+                      onChange={(e) =>
+                        setSelectedFile(e.target.files?.[0] ?? null)
+                      }
+                      className="w-full"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Tipos permitidos: {allowedDocumentLabels.join(', ')}.
+                    </p>
+                  </div>
                   <Button
                     onClick={handleAddDocument}
                     disabled={!selectedFile || !selectedType}

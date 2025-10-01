@@ -460,7 +460,23 @@ export const singleFileUpload = (req: Request, res: Response, next: NextFunction
         });
       }
 
+      const declaredMimeType =
+        filePart.contentType?.trim().toLowerCase() ?? 'application/octet-stream';
+      const buffer = filePart.content;
+      const detectedMimeType = detectMimeType(buffer);
+
+      if (
+        detectedMimeType &&
+        declaredMimeType !== 'application/octet-stream' &&
+        declaredMimeType !== detectedMimeType
+      ) {
+        return res.status(400).json({
+          error: 'Conteúdo do arquivo não corresponde ao tipo informado.',
+        });
+      }
+
       const effectiveMimeType = detectedMimeType ?? declaredMimeType;
+
 
       if (allowedMimeTypes.size > 0 && !allowedMimeTypes.has(effectiveMimeType)) {
         return res.status(400).json({
