@@ -174,16 +174,30 @@ const parseTrackingStep = (value: unknown): ProcessoTrackingStep | null => {
     parseOptionalString(record.nome) ||
     parseOptionalString(record.codigo) ||
     parseOptionalString(record.id) ||
+    parseOptionalString(record.step) ||
+    parseOptionalString(record.stage) ||
+    parseOptionalString(record.etapa) ||
+    parseOptionalString(record.etapa_atual) ||
+    parseOptionalString(record.etapaAtual) ||
     null;
   const label =
     parseOptionalString(record.label) ||
     parseOptionalString(record.descricao) ||
     parseOptionalString(record.description) ||
     parseOptionalString(record.nome) ||
+    parseOptionalString(record.titulo) ||
+    parseOptionalString(record.title) ||
+    parseOptionalString(record.step) ||
+    parseOptionalString(record.stage) ||
+    parseOptionalString(record.etapa) ||
+    parseOptionalString(record.etapa_atual) ||
+    parseOptionalString(record.etapaAtual) ||
     name;
   const description =
     parseOptionalString(record.descricao) ||
     parseOptionalString(record.description) ||
+    parseOptionalString(record.detalhes) ||
+    parseOptionalString(record.details) ||
     null;
   const updatedAt =
     parseOptionalString(
@@ -328,8 +342,20 @@ export const parseTrackingSummaryFromResult = (
   const lastStep = parseTrackingStep(
     trackingSource.last_step ??
       trackingSource.lastStep ??
+      trackingSource.current_step ??
+      trackingSource.currentStep ??
+      trackingSource.step ??
+      trackingSource.stage ??
+      trackingSource.etapa_atual ??
+      trackingSource.etapaAtual ??
       payload.last_step ??
-      payload.lastStep,
+      payload.lastStep ??
+      payload.current_step ??
+      payload.currentStep ??
+      payload.step ??
+      payload.stage ??
+      payload.etapa_atual ??
+      payload.etapaAtual,
   );
 
   const updatedAt =
