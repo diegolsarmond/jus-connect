@@ -8,8 +8,29 @@ import {
   register,
 } from '../controllers/authController';
 import { authenticateRequest } from '../middlewares/authMiddleware';
+import createRateLimiter from '../middlewares/rateLimitMiddleware';
 
 const router = Router();
+
+const sensitiveIpRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxAttempts: 20,
+});
+
+const loginRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxAttempts: 10,
+  keyGenerator: (req) => {
+    const segments: string[] = [req.ip || 'unknown'];
+    const body = req.body as { email?: unknown } | undefined;
+
+    if (body && typeof body.email === 'string') {
+      segments.push(body.email.trim().toLowerCase());
+    }
+
+    return segments.join('|');
+  },
+});
 
 /**
  * @swagger
@@ -71,7 +92,7 @@ const router = Router();
  *       409:
  *         description: E-mail já cadastrado
  */
-router.post('/auth/register', register);
+router.post('/auth/register', sensitiveIpRateLimiter, register);
 
 /**
  * @swagger
@@ -100,7 +121,7 @@ router.post('/auth/register', register);
  *       409:
  *         description: Token já utilizado
  */
-router.post('/auth/confirm-email', confirmEmail);
+router.post('/auth/confirm-email', sensitiveIpRateLimiter, confirmEmail);
 
 /**
  * @swagger
@@ -153,7 +174,7 @@ router.post('/auth/confirm-email', confirmEmail);
  *       401:
  *         description: Credenciais inválidas
  */
-router.post('/auth/login', login);
+router.post('/auth/login', loginRateLimiter, login);
 
 /**
  * @swagger
