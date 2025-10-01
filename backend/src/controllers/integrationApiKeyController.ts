@@ -8,6 +8,7 @@ import IntegrationApiKeyValidationService from '../services/integrationApiKeyVal
 import juditProcessService from '../services/juditProcessService';
 import cronJobs from '../services/cronJobs';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const service = new IntegrationApiKeyService();
 const validationService = new IntegrationApiKeyValidationService();
@@ -173,7 +174,15 @@ export async function createIntegrationApiKey(req: Request, res: Response) {
     return res.status(201).json(created);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível criar a credencial de integração.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to create integration API key:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -234,7 +243,15 @@ export async function updateIntegrationApiKey(req: Request, res: Response) {
     return res.json(updated);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível atualizar a credencial de integração.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to update integration API key:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -287,7 +304,15 @@ export async function validateAsaasIntegration(req: Request, res: Response) {
     return res.json(result);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível validar a integração com o Asaas.',
+            { expose: true }
+          )
+        );
     }
 
     console.error('Failed to validate Asaas integration API key:', error);

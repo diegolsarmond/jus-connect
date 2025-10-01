@@ -21,6 +21,7 @@ import pjeNotificationService, {
 } from '../services/pjeNotificationService';
 import cronJobs from '../services/cronJobs';
 import { ProjudiConfigurationError } from '../services/projudiNotificationService';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 function resolveUserId(req: Request): string {
   const queryUserId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
@@ -97,7 +98,15 @@ export const getNotificationHandler = async (req: Request, res: Response) => {
     res.json(notification);
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
-      return res.status(404).json({ error: error.message });
+      return res
+        .status(404)
+        .json(
+          buildErrorResponse(
+            error,
+            'Notificação não encontrada.',
+            { expose: true }
+          )
+        );
     }
 
     console.error(error);
@@ -142,7 +151,15 @@ export const markNotificationAsReadHandler = async (req: Request, res: Response)
     res.json(notification);
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
-      return res.status(404).json({ error: error.message });
+      return res
+        .status(404)
+        .json(
+          buildErrorResponse(
+            error,
+            'Notificação não encontrada.',
+            { expose: true }
+          )
+        );
     }
 
     console.error(error);
@@ -158,7 +175,15 @@ export const markNotificationAsUnreadHandler = async (req: Request, res: Respons
     res.json(notification);
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
-      return res.status(404).json({ error: error.message });
+      return res
+        .status(404)
+        .json(
+          buildErrorResponse(
+            error,
+            'Notificação não encontrada.',
+            { expose: true }
+          )
+        );
     }
 
     console.error(error);
@@ -185,7 +210,15 @@ export const deleteNotificationHandler = async (req: Request, res: Response) => 
     res.status(204).send();
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
-      return res.status(404).json({ error: error.message });
+      return res
+        .status(404)
+        .json(
+          buildErrorResponse(
+            error,
+            'Notificação não encontrada.',
+            { expose: true }
+          )
+        );
     }
 
     console.error(error);
@@ -285,11 +318,26 @@ export const receivePjeNotificationHandler = async (req: Request, res: Response)
     res.status(202).json({ received: true, id: record.id });
   } catch (error) {
     if (error instanceof PjeWebhookSignatureError) {
-      return res.status(401).json({ error: error.message });
+      return res
+        .status(401)
+        .json(
+          buildErrorResponse(
+            error,
+            'Assinatura da requisição inválida.',
+            { expose: true }
+          )
+        );
     }
 
     if (error instanceof PjeConfigurationError) {
-      return res.status(500).json({ error: error.message });
+      return res
+        .status(500)
+        .json(
+          buildErrorResponse(
+            error,
+            'Configuração do PJE indisponível.'
+          )
+        );
     }
 
     console.error('Failed to process PJE notification', error);
@@ -311,7 +359,15 @@ export const triggerProjudiSyncHandler = async (req: Request, res: Response) => 
     res.json({ triggered: result.triggered, status: result.status });
   } catch (error) {
     if (error instanceof ProjudiConfigurationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Configuração do Projudi inválida.',
+            { expose: true }
+          )
+        );
     }
 
     console.error('Failed to trigger Projudi sync job', error);

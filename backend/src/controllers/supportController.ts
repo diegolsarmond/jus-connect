@@ -11,6 +11,7 @@ import SupportService, {
   UpdateSupportRequestInput,
   ValidationError,
 } from '../services/supportService';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const supportService = new SupportService();
 
@@ -236,7 +237,15 @@ export async function createSupportRequest(req: Request, res: Response) {
     return res.status(201).json(request);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível criar o chamado de suporte.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to create support request:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -288,7 +297,15 @@ export async function listSupportRequests(req: Request, res: Response) {
     return res.json(result);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível listar os chamados de suporte.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to list support requests:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -357,7 +374,15 @@ export async function createSupportRequestMessage(req: Request, res: Response) {
     attachments = parseMessageAttachments((req.body as { attachments?: unknown }).attachments);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível processar os anexos da mensagem.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to parse support message attachments:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -394,7 +419,15 @@ export async function createSupportRequestMessage(req: Request, res: Response) {
     return res.status(201).json(created);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível enviar a mensagem de suporte.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to create support request message:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -499,7 +532,15 @@ export async function updateSupportRequest(req: Request, res: Response) {
     return res.json(updated);
   } catch (error) {
     if (error instanceof ValidationError) {
-      return res.status(400).json({ error: error.message });
+      return res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível atualizar a solicitação de suporte.',
+            { expose: true }
+          )
+        );
     }
     console.error('Failed to update support request:', error);
     return res.status(500).json({ error: 'Internal server error' });

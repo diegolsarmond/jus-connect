@@ -11,6 +11,7 @@ import AsaasChargeService, {
 } from '../services/asaasChargeService';
 import { createAsaasClient } from '../services/asaas/integrationResolver';
 import { AsaasApiError, RefundChargePayload } from '../services/asaas/asaasClient';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const getAuthenticatedUser = (
   req: Request,
@@ -1977,7 +1978,23 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
 
     if (error instanceof AsaasApiError) {
       const statusCode = error.status >= 400 && error.status < 600 ? error.status : 502;
-      res.status(statusCode).json({ error: error.message, code: error.errorCode, details: error.responseBody });
+      const responsePayload: Record<string, unknown> = {
+        ...buildErrorResponse(
+          error,
+          'Não foi possível processar a solicitação com o Asaas.',
+          { expose: statusCode >= 400 && statusCode < 500 }
+        ),
+      };
+
+      if (error.errorCode) {
+        responsePayload.code = error.errorCode;
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        responsePayload.details = error.responseBody;
+      }
+
+      res.status(statusCode).json(responsePayload);
       return;
     }
 

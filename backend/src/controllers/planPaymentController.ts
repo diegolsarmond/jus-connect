@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { buildErrorResponse } from '../utils/errorResponse';
 import resolveAsaasIntegration, {
   AsaasIntegrationNotConfiguredError,
 } from '../services/asaas/integrationResolver';
@@ -29,9 +30,13 @@ function handleAsaasError(
       Number.isInteger(error.status) && error.status >= 400 && error.status < 600
         ? error.status
         : fallbackStatus;
-    const rawMessage = typeof error.message === 'string' ? error.message.trim() : '';
-    const message = rawMessage.length > 0 ? rawMessage : fallbackMessage;
-    res.status(normalizedStatus).json({ error: message });
+    res
+      .status(normalizedStatus)
+      .json(
+        buildErrorResponse(error, fallbackMessage, {
+          expose: normalizedStatus < 500,
+        })
+      );
     return true;
   }
 
@@ -806,11 +811,27 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (error instanceof AsaasChargeValidationError) {
-      res.status(400).json({ error: error.message });
+      res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Não foi possível validar os dados da cobrança do plano.',
+            { expose: true }
+          )
+        );
       return;
     }
     if (error instanceof ChargeConflictError) {
-      res.status(409).json({ error: error.message });
+      res
+        .status(409)
+        .json(
+          buildErrorResponse(
+            error,
+            'Já existe uma cobrança ativa para este plano.',
+            { expose: true }
+          )
+        );
       return;
     }
     if (handleAsaasError(res, error, 'Não foi possível criar a cobrança do plano no Asaas.')) {

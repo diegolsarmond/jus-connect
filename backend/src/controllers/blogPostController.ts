@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const BLOG_POST_RETURNING_COLUMNS = `
   id,
@@ -346,7 +347,15 @@ export const createBlogPost = async (req: Request, res: Response) => {
     }
 
     if (error instanceof ValidationError) {
-      res.status(400).json({ error: error.message });
+      res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Dados inválidos para criação de artigo do blog.',
+            { expose: true }
+          )
+        );
       return;
     }
 
@@ -414,7 +423,15 @@ export const updateBlogPost = async (req: Request, res: Response) => {
     }
 
     if (error instanceof ValidationError) {
-      res.status(400).json({ error: error.message });
+      res
+        .status(400)
+        .json(
+          buildErrorResponse(
+            error,
+            'Dados inválidos para atualização de artigo do blog.',
+            { expose: true }
+          )
+        );
       return;
     }
 

@@ -7,6 +7,7 @@ import { AiProviderError } from '../services/aiProviders/errors';
 import { generateDocumentWithGemini } from '../services/aiProviders/geminiProvider';
 import { escapeHtml } from '../utils/html';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { buildErrorResponse } from '../utils/errorResponse';
 
 const providerLabels: Record<string, string> = {
   gemini: 'Gemini',
@@ -154,7 +155,15 @@ export async function generateTextWithIntegration(req: Request, res: Response) {
         });
       } catch (error) {
         if (error instanceof AiProviderError) {
-          return res.status(error.statusCode).json({ error: error.message });
+          return res
+            .status(error.statusCode)
+            .json(
+              buildErrorResponse(
+                error,
+                'Falha ao gerar conteúdo com o provedor de IA.',
+                { expose: error.statusCode >= 400 && error.statusCode < 500 }
+              )
+            );
         }
         throw error;
       }
