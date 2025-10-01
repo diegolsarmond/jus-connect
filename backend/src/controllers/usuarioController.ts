@@ -114,7 +114,57 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
 };
 
 const baseUsuarioSelect =
-  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, u.status, u.senha, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u';
+  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, u.status, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u';
+
+type UsuarioRow = {
+  id: number;
+  nome_completo: string;
+  cpf: string | null;
+  email: string;
+  perfil: string | null;
+  empresa: number | null;
+  setor: number | null;
+  oab: string | null;
+  status: boolean;
+  telefone: string | null;
+  ultimo_login: Date | string | null;
+  observacoes: string | null;
+  datacriacao: Date | string;
+};
+
+type UsuarioResponse = Omit<UsuarioRow, 'cpf'>;
+
+const mapUsuarioRowToResponse = (row: UsuarioRow): UsuarioResponse => {
+  const {
+    id,
+    nome_completo,
+    email,
+    perfil,
+    empresa,
+    setor,
+    oab,
+    status,
+    telefone,
+    ultimo_login,
+    observacoes,
+    datacriacao,
+  } = row;
+
+  return {
+    id,
+    nome_completo,
+    email,
+    perfil,
+    empresa,
+    setor,
+    oab,
+    status,
+    telefone,
+    ultimo_login,
+    observacoes,
+    datacriacao,
+  };
+};
 
 type EmpresaLookupResult =
   | { success: true; empresaId: number | null }
@@ -158,7 +208,7 @@ export const listUsuarios = async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(baseUsuarioSelect);
-    res.json(result.rows);
+    res.json(result.rows.map((row) => mapUsuarioRowToResponse(row as UsuarioRow)));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -187,7 +237,7 @@ export const listUsuariosByEmpresa = async (req: Request, res: Response) => {
     const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
       empresaId,
     ]);
-    res.json(result.rows);
+    res.json(result.rows.map((row) => mapUsuarioRowToResponse(row as UsuarioRow)));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -217,7 +267,7 @@ export const getUsuarioById = async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
-    res.json(result.rows[0]);
+    res.json(mapUsuarioRowToResponse(result.rows[0] as UsuarioRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -324,7 +374,7 @@ export const createUsuario = async (req: Request, res: Response) => {
     const hashedPassword = await hashPassword(temporaryPassword);
 
     const result = await pool.query(
-      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao',
+      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
         cpf,
@@ -371,7 +421,7 @@ export const createUsuario = async (req: Request, res: Response) => {
         .json({ error: 'Não foi possível enviar a senha provisória para o novo usuário.' });
     }
 
-    res.status(201).json(createdUser);
+    res.status(201).json(mapUsuarioRowToResponse(createdUser as UsuarioRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -435,8 +485,18 @@ export const updateUsuario = async (req: Request, res: Response) => {
       }
     }
 
+    let senhaParaAtualizar = senha;
+    if (
+      typeof senha === 'string' &&
+      senha.length > 0 &&
+      !senha.startsWith('argon2:') &&
+      !senha.startsWith('sha256:')
+    ) {
+      senhaParaAtualizar = await hashPassword(senha);
+    }
+
     const result = await pool.query(
-      'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
+      'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
         cpf,
@@ -446,7 +506,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
         setorId,
         oab,
         parsedStatus,
-        senha,
+        senhaParaAtualizar,
         telefone,
         ultimo_login,
         observacoes,
@@ -456,7 +516,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
-    res.json(result.rows[0]);
+    res.json(mapUsuarioRowToResponse(result.rows[0] as UsuarioRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
