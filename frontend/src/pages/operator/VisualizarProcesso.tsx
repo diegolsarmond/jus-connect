@@ -1538,7 +1538,7 @@ export const TimelineMes = memo(function TimelineMes({
     : 0;
 
   return (
-    <div className="rounded-xl border border-muted-foreground/10 bg-white shadow-sm">
+    <div className="rounded-xl border border-muted-foreground/10 bg-card shadow-sm">
       <button
         type="button"
         onClick={() => onToggle(grupo.chave)}
@@ -1594,8 +1594,8 @@ export const TimelineMes = memo(function TimelineMes({
                         aria-hidden
                       />
                     )}
-                    <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-white bg-primary shadow" />
-                    <div className="rounded-2xl border border-muted-foreground/10 bg-muted/40 p-4 shadow-sm">
+                    <span className="absolute -left-[1.6rem] top-3 h-3 w-3 rounded-full border-2 border-background bg-primary shadow" />
+                    <div className="rounded-2xl border border-muted-foreground/10 bg-card p-4 shadow-sm">
                       <div className="space-y-3 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
                           {item.stepType ? (
@@ -1608,8 +1608,8 @@ export const TimelineMes = memo(function TimelineMes({
                             className={cn(
                               "rounded-full",
                               item.privado
-                                ? "border-transparent bg-rose-100 text-rose-700"
-                                : "border-transparent bg-primary/10 text-primary",
+                                ? "border-transparent bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-100"
+                                : "border-transparent bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-foreground",
                             )}
                           >
                             {item.privado ? "Privado" : "Público"}
