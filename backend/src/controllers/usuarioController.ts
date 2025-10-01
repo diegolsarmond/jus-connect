@@ -435,6 +435,16 @@ export const updateUsuario = async (req: Request, res: Response) => {
       }
     }
 
+    let senhaParaAtualizar = senha;
+    if (
+      typeof senha === 'string' &&
+      senha.length > 0 &&
+      !senha.startsWith('argon2:') &&
+      !senha.startsWith('sha256:')
+    ) {
+      senhaParaAtualizar = await hashPassword(senha);
+    }
+
     const result = await pool.query(
       'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao',
       [
@@ -446,7 +456,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
         setorId,
         oab,
         parsedStatus,
-        senha,
+        senhaParaAtualizar,
         telefone,
         ultimo_login,
         observacoes,
