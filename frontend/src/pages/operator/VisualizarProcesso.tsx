@@ -1486,8 +1486,20 @@ export const TimelineMes = memo(function TimelineMes({
   const [intervalo, setIntervalo] = useState({ inicio: 0, fim: movimentacoesVisiveis });
 
   useEffect(() => {
-    setIntervalo({ inicio: 0, fim: movimentacoesVisiveis });
-  }, [movimentacoesVisiveis, grupo.chave]);
+    if (!virtualizado) {
+      setIntervalo({ inicio: 0, fim: movimentacoesVisiveis });
+      return;
+    }
+
+    setIntervalo((atual) => {
+      if (movimentacoesVisiveis <= atual.fim) {
+        return atual;
+      }
+
+      const fim = Math.min(grupo.itens.length, movimentacoesVisiveis);
+      return { inicio: atual.inicio, fim };
+    });
+  }, [movimentacoesVisiveis, grupo.chave, virtualizado, grupo.itens.length]);
 
   useEffect(() => {
     if (!aberto || !virtualizado) {
@@ -2569,9 +2581,9 @@ export default function VisualizarProcesso() {
                 {totalGruposFiltrados > gruposVisiveis.length ? (
                   <div className="text-center">
                     <Button
-                      variant="outline"
                       onClick={handleCarregarMaisMeses}
                       aria-expanded={gruposVisiveis.length < totalGruposFiltrados}
+                      className="font-semibold"
                     >
                       Carregar mais meses
                     </Button>
