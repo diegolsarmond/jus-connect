@@ -62,7 +62,7 @@ export interface JuditSyncStatus {
   lastErrorAt: string | null;
   lastErrorMessage?: string;
   lastManualTriggerAt: string | null;
-  scheduledRuns: JuditScheduledRunStatus[];
+  scheduledRun: JuditScheduledRunStatus | null;
 }
 
 interface InternalProjudiState {
@@ -155,12 +155,14 @@ export class CronJobsService {
       lastManualTriggerAt: null,
     };
 
-    this.juditSchedules = [8, 12, 16].map((hour) => ({
-      hour,
-      minute: 0,
-      timer: null,
-      nextRunAt: null,
-    }));
+    this.juditSchedules = [
+      {
+        hour: 12,
+        minute: 0,
+        timer: null,
+        nextRunAt: null,
+      },
+    ];
 
     this.juditState = {
       enabled: false,
@@ -344,13 +346,13 @@ export class CronJobsService {
       const enabled = await juditProcessService.isEnabled();
       this.juditState.enabled = enabled;
 
+      this.clearJuditSchedules();
+
       if (enabled) {
         this.startJuditSchedules();
-      } else {
-        this.clearJuditSchedules();
       }
     } catch (error) {
-      console.error('[CronJobs] Falha ao inicializar agendamentos da Judit.', error);
+      console.error('[CronJobs] Falha ao inicializar agendamento da Judit.', error);
       this.juditState.enabled = false;
       this.clearJuditSchedules();
     }
@@ -444,6 +446,7 @@ export class CronJobsService {
   }
 
   getJuditSyncStatus(): JuditSyncStatus {
+    const [schedule] = this.juditSchedules;
     return {
       enabled: this.juditState.enabled,
       running: this.juditState.running,
@@ -452,11 +455,13 @@ export class CronJobsService {
       lastErrorAt: formatOptionalDate(this.juditState.lastErrorAt),
       lastErrorMessage: this.juditState.lastErrorMessage,
       lastManualTriggerAt: formatOptionalDate(this.juditState.lastManualTriggerAt),
-      scheduledRuns: this.juditSchedules.map((schedule) => ({
-        hour: schedule.hour,
-        minute: schedule.minute,
-        nextRunAt: formatOptionalDate(schedule.nextRunAt),
-      })),
+      scheduledRun: schedule
+        ? {
+            hour: schedule.hour,
+            minute: schedule.minute,
+            nextRunAt: formatOptionalDate(schedule.nextRunAt),
+          }
+        : null,
     };
   }
 
