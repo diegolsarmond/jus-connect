@@ -59,6 +59,7 @@ import {
   getFileStorageDriver,
   getLocalStorageRoot,
   getPublicUploadsBasePath,
+  isPublicFileAccessEnabled,
 } from './services/fileStorageService';
 
 const app = express();
@@ -104,6 +105,10 @@ const registerStaticUploadHandler = () => {
   }
 
   const publicBase = getPublicUploadsBasePath();
+
+  if (!isPublicFileAccessEnabled()) {
+    return;
+  }
 
   if (!publicBase.startsWith('/')) {
     return;

@@ -8,7 +8,7 @@ import test from 'node:test';
 
 type UploadResponse = {
   key: string;
-  url: string;
+  url: string | null;
   name: string;
   size: number;
   mimeType: string;
@@ -77,7 +77,7 @@ test('upload persiste o arquivo e retorna metadados reais', async () => {
     assert.equal(body.size, payload.length);
     assert.equal(body.mimeType, 'text/plain');
     assert.ok(body.key.endsWith('.txt'));
-    assert.ok(body.url.startsWith('/arquivos/'));
+    assert.equal(body.url, null);
 
     await stat(path.join(uploadsDir, body.key));
   } finally {
