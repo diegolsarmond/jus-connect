@@ -1636,7 +1636,7 @@ export const TimelineMes = memo(function TimelineMes({
                         {item.anexos.length ? (
                           <div className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                              Anexos do dia
+                              Anexos
                             </p>
                             <ul className="space-y-3">
                               {item.anexos.map((anexo) => (
