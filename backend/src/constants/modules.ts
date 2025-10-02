@@ -36,6 +36,7 @@ export const SYSTEM_MODULES: SystemModule[] = [
   { id: 'configuracoes-parametros-situacao-processo', nome: 'Configurações - Parâmetros - Situação do Processo', categoria: 'Configurações' },
   { id: 'configuracoes-parametros-tipo-processo', nome: 'Configurações - Parâmetros - Tipo de Processo', categoria: 'Configurações' },
   { id: 'configuracoes-parametros-tipo-evento', nome: 'Configurações - Parâmetros - Tipo de Evento', categoria: 'Configurações' },
+  { id: 'configuracoes-parametros-tipo-envolvimento', nome: 'Configurações - Parâmetros - Tipo de Envolvimento', categoria: 'Configurações' },
   { id: 'configuracoes-parametros-situacao-cliente', nome: 'Configurações - Parâmetros - Situação do Cliente', categoria: 'Configurações' },
   {
     id: 'configuracoes-parametros-situacao-proposta',
