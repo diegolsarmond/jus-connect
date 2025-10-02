@@ -4,11 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getApiBaseUrl } from "@/lib/api";
 
-interface Item { id: number; nome: string; [key: string]: string | number | boolean }
+interface Item { id: number; nome: string; [key: string]: string | number | boolean | null }
 
 interface BooleanField { key: string; label: string; default?: boolean }
+
+interface SelectField { key: string; label: string; optionsEndpoint: string }
+
+interface SelectOption { value: string; label: string }
 
 interface ParameterPageProps {
     title: string;
@@ -17,6 +22,7 @@ interface ParameterPageProps {
     emptyMessage: string;
     endpoint?: string; // ex.: "/api/areas"
     booleanFields?: BooleanField[];
+    selectField?: SelectField;
 }
 
 // junta base + path sem barras duplicadas/faltando
@@ -27,18 +33,73 @@ function joinUrl(base: string, path = "") {
 }
 
 export default function ParameterPage({
-    title, description, placeholder, emptyMessage, endpoint, booleanFields,
+    title, description, placeholder, emptyMessage, endpoint, booleanFields, selectField,
 }: ParameterPageProps) {
     const apiUrl = getApiBaseUrl();
 
     const [items, setItems] = useState<Item[]>([]);
     const [newItem, setNewItem] = useState("");
     const [newBooleans, setNewBooleans] = useState<Record<string, boolean>>({});
+    const [newSelectValue, setNewSelectValue] = useState<string | undefined>(undefined);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editingName, setEditingName] = useState("");
     const [editingBooleans, setEditingBooleans] = useState<Record<string, boolean>>({});
+    const [editingSelectValue, setEditingSelectValue] = useState<string | undefined>(undefined);
+    const [selectOptions, setSelectOptions] = useState<SelectOption[]>([]);
+    const [selectLoading, setSelectLoading] = useState(false);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!selectField) {
+            setSelectOptions([]);
+            setNewSelectValue(undefined);
+            setEditingSelectValue(undefined);
+            return;
+        }
+        const url = joinUrl(apiUrl, selectField.optionsEndpoint);
+        let cancelled = false;
+        setSelectLoading(true);
+        (async () => {
+            try {
+                const res = await fetch(url, { headers: { Accept: "application/json" } });
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+                const data = await res.json();
+                const parsed: unknown[] =
+                    Array.isArray(data) ? data :
+                        Array.isArray(data?.rows) ? data.rows :
+                            Array.isArray(data?.data?.rows) ? data.data.rows :
+                                Array.isArray(data?.data) ? data.data : [];
+                if (!cancelled) {
+                    setSelectOptions(parsed.map((r) => {
+                        const option = r as { id?: number | string; nome?: string; descricao?: string; label?: string };
+                        const value = option?.id != null ? String(option.id) : "";
+                        const label = option?.nome ?? option?.descricao ?? option?.label ?? value;
+                        return { value, label };
+                    }));
+                }
+            } catch (e) {
+                console.error(e);
+                if (!cancelled) {
+                    setSelectOptions([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setSelectLoading(false);
+                }
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [apiUrl, selectField]);
+
+    const resolveSelectLabel = (value: unknown) => {
+        if (value == null) return "";
+        const strValue = String(value);
+        const found = selectOptions.find((option) => option.value === strValue);
+        return found?.label ?? strValue;
+    };
 
     useEffect(() => {
         if (!endpoint) return;
@@ -61,10 +122,12 @@ export default function ParameterPage({
                     booleanFields?.forEach(f => {
                         extra[f.key] = typeof item[f.key] === 'boolean' ? (item[f.key] as boolean) : f.default ?? false;
                     });
+                    const selectValue = selectField ? (item[selectField.key] as string | number | null | undefined) : undefined;
                     return {
                         id: Number(item.id),
                         nome: item.nome ?? item.descricao ?? item.name ?? "",
                         ...extra,
+                        ...(selectField ? { [selectField.key]: selectValue == null ? null : (typeof selectValue === 'number' ? selectValue : Number(selectValue)) } : {}),
                     };
                 }));
             } catch (e: unknown) {
@@ -75,7 +138,7 @@ export default function ParameterPage({
                 setLoading(false);
             }
         })();
-    }, [apiUrl, endpoint, booleanFields]);
+    }, [apiUrl, endpoint, booleanFields, selectField]);
 
     const addItem = async () => {
         const nome = newItem.trim();
@@ -84,6 +147,9 @@ export default function ParameterPage({
         booleanFields?.forEach(f => {
             payload[f.key] = newBooleans[f.key] ?? f.default ?? false;
         });
+        if (selectField) {
+            payload[selectField.key] = newSelectValue ? Number(newSelectValue) : null;
+        }
         if (endpoint) {
             try {
                 const res = await fetch(joinUrl(apiUrl, endpoint), {
@@ -93,6 +159,7 @@ export default function ParameterPage({
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
                 const created = await res.json();
+                const currentSelectValue = selectField ? (newSelectValue ? Number(newSelectValue) : null) : undefined;
                 const added: Item = {
                     id: Number(created?.id ?? created?.data?.id ?? Date.now()),
                     nome: created?.nome ?? created?.data?.nome ?? nome,
@@ -100,6 +167,10 @@ export default function ParameterPage({
                 booleanFields?.forEach(f => {
                     added[f.key] = (created?.[f.key] ?? created?.data?.[f.key] ?? payload[f.key]) as boolean;
                 });
+                if (selectField) {
+                    const responseValue = created?.[selectField.key] ?? created?.data?.[selectField.key] ?? currentSelectValue ?? null;
+                    added[selectField.key] = responseValue == null ? null : (typeof responseValue === 'number' ? responseValue : Number(responseValue));
+                }
                 setItems((prev) => [...prev, added]);
             } catch (e) {
                 console.error(e);
@@ -110,6 +181,7 @@ export default function ParameterPage({
         }
         setNewItem("");
         setNewBooleans({});
+        setNewSelectValue(undefined);
     };
 
     const startEdit = (item: Item) => {
@@ -118,6 +190,10 @@ export default function ParameterPage({
         const extras: Record<string, boolean> = {};
         booleanFields?.forEach(f => { extras[f.key] = item[f.key]; });
         setEditingBooleans(extras);
+        if (selectField) {
+            const value = item[selectField.key];
+            setEditingSelectValue(value == null ? undefined : String(value));
+        }
     };
 
     const saveEdit = async () => {
@@ -128,6 +204,9 @@ export default function ParameterPage({
         booleanFields?.forEach(f => {
             payload[f.key] = editingBooleans[f.key];
         });
+        if (selectField) {
+            payload[selectField.key] = editingSelectValue ? Number(editingSelectValue) : null;
+        }
         if (endpoint) {
             try {
                 const res = await fetch(joinUrl(apiUrl, `${endpoint}/${editingId}`), {
@@ -147,6 +226,10 @@ export default function ParameterPage({
                         booleanFields?.forEach(f => {
                             newItem[f.key] = (updated?.[f.key] ?? payload[f.key]) as boolean;
                         });
+                        if (selectField) {
+                            const responseValue = updated?.[selectField.key] ?? payload[selectField.key] ?? null;
+                            newItem[selectField.key] = responseValue == null ? null : (typeof responseValue === 'number' ? responseValue : Number(responseValue));
+                        }
                         return newItem;
                     })
                 );
@@ -160,9 +243,10 @@ export default function ParameterPage({
         setEditingId(null);
         setEditingName("");
         setEditingBooleans({});
+        setEditingSelectValue(undefined);
     };
 
-    const cancelEdit = () => { setEditingId(null); setEditingName(""); setEditingBooleans({}); };
+    const cancelEdit = () => { setEditingId(null); setEditingName(""); setEditingBooleans({}); setEditingSelectValue(undefined); };
 
     const deleteItem = async (id: number) => {
         if (endpoint) {
@@ -178,6 +262,8 @@ export default function ParameterPage({
         setItems((prev) => prev.filter((i) => i.id !== id));
     };
 
+    const columnsCount = 1 + (selectField ? 1 : 0) + (booleanFields?.length ?? 0) + 1;
+
     return (
         <div className="p-4 sm:p-6 space-y-6">
             <div>
@@ -192,6 +278,34 @@ export default function ParameterPage({
                     onChange={(e) => setNewItem(e.target.value)}
                     className="max-w-sm"
                 />
+                {selectField && (
+                    <Select
+                        value={newSelectValue}
+                        onValueChange={setNewSelectValue}
+                        disabled={selectLoading}
+                    >
+                        <SelectTrigger className="w-[200px]">
+                            <SelectValue placeholder={`Selecione ${selectField.label.toLowerCase()}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {selectLoading ? (
+                                <SelectItem value="__loading" disabled>
+                                    Carregando...
+                                </SelectItem>
+                            ) : selectOptions.length > 0 ? (
+                                selectOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))
+                            ) : (
+                                <SelectItem value="__empty" disabled>
+                                    Nenhuma opção disponível
+                                </SelectItem>
+                            )}
+                        </SelectContent>
+                    </Select>
+                )}
                 {booleanFields?.map(f => (
                     <div key={f.key} className="flex items-center gap-2">
                         <Checkbox
@@ -215,6 +329,9 @@ export default function ParameterPage({
                 <TableHeader>
                     <TableRow>
                         <TableHead>Nome</TableHead>
+                        {selectField && (
+                            <TableHead className="w-48">{selectField.label}</TableHead>
+                        )}
                         {booleanFields?.map(f => (
                             <TableHead key={f.key} className="w-32">{f.label}</TableHead>
                         ))}
@@ -231,6 +348,40 @@ export default function ParameterPage({
                                     item.nome
                                 )}
                             </TableCell>
+                            {selectField && (
+                                <TableCell>
+                                    {editingId === item.id ? (
+                                        <Select
+                                            value={editingSelectValue}
+                                            onValueChange={setEditingSelectValue}
+                                            disabled={selectLoading}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={`Selecione ${selectField.label.toLowerCase()}`} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {selectLoading ? (
+                                                    <SelectItem value="__loading" disabled>
+                                                        Carregando...
+                                                    </SelectItem>
+                                                ) : selectOptions.length > 0 ? (
+                                                    selectOptions.map((option) => (
+                                                        <SelectItem key={option.value} value={option.value}>
+                                                            {option.label}
+                                                        </SelectItem>
+                                                    ))
+                                                ) : (
+                                                    <SelectItem value="__empty" disabled>
+                                                        Nenhuma opção disponível
+                                                    </SelectItem>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        resolveSelectLabel(item[selectField.key]) || "—"
+                                    )}
+                                </TableCell>
+                            )}
                             {booleanFields?.map(f => (
                                 <TableCell key={f.key}>
                                     {editingId === item.id ? (
@@ -266,7 +417,7 @@ export default function ParameterPage({
                     ))}
                     {!loading && items.length === 0 && (
                         <TableRow>
-                            <TableCell colSpan={2} className="text-center text-muted-foreground">
+                            <TableCell colSpan={columnsCount} className="text-center text-muted-foreground">
                                 {emptyMessage}
                             </TableCell>
                         </TableRow>
