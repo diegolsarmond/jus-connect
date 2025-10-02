@@ -709,6 +709,7 @@ export default function Processos() {
     const [ufs, setUfs] = useState<Uf[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
+    const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
     const [clientes, setClientes] = useState<ClienteResumo[]>([]);
     const [clientesLoading, setClientesLoading] = useState(false);
     const [clientePopoverOpen, setClientePopoverOpen] = useState(false);
@@ -1344,6 +1345,16 @@ export default function Processos() {
                 ? "Nenhum cliente disponível"
                 : "Selecione o cliente";
 
+    const municipioButtonLabel = !processForm.uf
+        ? "Selecione a UF primeiro"
+        : municipiosLoading
+            ? "Carregando municípios..."
+            : processForm.municipio
+                ? processForm.municipio
+                : municipios.length === 0
+                    ? "Nenhum município encontrado"
+                    : "Selecione o município";
+
 
     const propostaButtonLabel = selectedProposta
         ? selectedProposta.label
@@ -1538,6 +1549,12 @@ export default function Processos() {
             cancelled = true;
         };
     }, [processForm.uf]);
+
+    useEffect(() => {
+        if (!processForm.uf || municipiosLoading) {
+            setMunicipioPopoverOpen(false);
+        }
+    }, [processForm.uf, municipiosLoading]);
 
     const statusOptions = useMemo(() => {
         const values = Array.from(
@@ -2417,36 +2434,63 @@ export default function Processos() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="process-municipio">Município</Label>
-                            <Select
-                                value={processForm.municipio}
-                                onValueChange={(value) =>
-                                    setProcessForm((prev) => ({ ...prev, municipio: value }))
-                                }
+                            <Popover
+                                open={municipioPopoverOpen}
+                                onOpenChange={setMunicipioPopoverOpen}
                             >
-                                <SelectTrigger
-                                    id="process-municipio"
-                                    disabled={!processForm.uf || municipiosLoading}
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        id="process-municipio"
+                                        type="button"
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={municipioPopoverOpen}
+                                        className="w-full justify-between"
+                                        disabled={!processForm.uf || municipiosLoading}
+                                    >
+                                        <span className="truncate">{municipioButtonLabel}</span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    className="w-[var(--radix-popover-trigger-width)] p-0"
+                                    align="start"
                                 >
-                                    <SelectValue
-                                        placeholder={
-                                            !processForm.uf
-                                                ? "Selecione a UF primeiro"
-                                                : municipiosLoading
+                                    <Command>
+                                        <CommandInput placeholder="Pesquisar município..." />
+                                        <CommandList>
+                                            <CommandEmpty>
+                                                {municipiosLoading
                                                     ? "Carregando municípios..."
-                                                    : municipios.length > 0
-                                                        ? "Selecione o município"
-                                                        : "Nenhum município encontrado"
-                                        }
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {municipios.map((municipio) => (
-                                        <SelectItem key={municipio.id} value={municipio.nome}>
-                                            {municipio.nome}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                                    : "Nenhum município encontrado"}
+                                            </CommandEmpty>
+                                            <CommandGroup>
+                                                {municipios.map((municipio) => {
+                                                    const selected = processForm.municipio === municipio.nome;
+                                                    return (
+                                                        <CommandItem
+                                                            key={municipio.id}
+                                                            value={municipio.nome}
+                                                            onSelect={() => {
+                                                                setProcessForm((prev) => ({
+                                                                    ...prev,
+                                                                    municipio: municipio.nome,
+                                                                }));
+                                                                setMunicipioPopoverOpen(false);
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={`mr-2 h-4 w-4 ${selected ? "opacity-100" : "opacity-0"}`}
+                                                            />
+                                                            {municipio.nome}
+                                                        </CommandItem>
+                                                    );
+                                                })}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                         <div className="space-y-2 sm:col-span-2">
                             <Label>Advogados responsáveis</Label>
