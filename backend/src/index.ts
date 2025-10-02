@@ -17,6 +17,7 @@ import categoriaRoutes from './routes/categoriaRoutes';
 import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
 import situacaoPropostaRoutes from './routes/situacaoPropostaRoutes';
 import etiquetaRoutes from './routes/etiquetaRoutes';
+import sistemaCnjRoutes from './routes/sistemaCnjRoutes';
 import usuarioRoutes from './routes/usuarioRoutes';
 import empresaRoutes from './routes/empresaRoutes';
 import clienteRoutes from './routes/clienteRoutes';
@@ -290,6 +291,10 @@ registerModuleRoutes(
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-categorias'],
   categoriaRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-sistemas-cnj'],
+  sistemaCnjRoutes
 );
 registerModuleRoutes(['configuracoes', 'dashboard'], empresaRoutes);
 registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);
