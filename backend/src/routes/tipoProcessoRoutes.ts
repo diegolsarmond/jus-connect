@@ -24,6 +24,9 @@ const router = Router();
  *           type: string
  *         ativo:
  *           type: boolean
+ *         area_atuacao_id:
+ *           type: integer
+ *           nullable: true
  *         datacriacao:
  *           type: string
  *           format: date-time
@@ -35,6 +38,13 @@ const router = Router();
  *   get:
  *     summary: Lista todos os tipos de processo
  *     tags: [TiposProcesso]
+ *     parameters:
+ *       - in: query
+ *         name: area_atuacao_id
+ *         schema:
+ *           type: integer
+ *           nullable: true
+ *         required: false
  *     responses:
  *       200:
  *         description: Lista de tipos de processo
@@ -64,6 +74,9 @@ router.get('/tipo-processos', listTiposProcesso);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               area_atuacao_id:
+ *                 type: integer
+ *                 nullable: true
  *     responses:
  *       201:
  *         description: Tipo de processo criado
@@ -97,6 +110,9 @@ router.post('/tipo-processos', createTipoProcesso);
  *                 type: string
  *               ativo:
  *                 type: boolean
+ *               area_atuacao_id:
+ *                 type: integer
+ *                 nullable: true
  *     responses:
  *       200:
  *         description: Tipo de processo atualizado
