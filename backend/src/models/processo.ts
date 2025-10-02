@@ -21,6 +21,11 @@ export interface ProcessoMovimentacao {
   fonte: Record<string, unknown> | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
+  numero_cnj?: string | null;
+  instancia_processo?: string | null;
+  sigiloso?: boolean | null;
+  crawl_id?: string | null;
+  data_cadastro?: string | null;
 }
 
 export interface ProcessoSyncIntegrationInfo {
