@@ -425,22 +425,6 @@ const MOVIMENTACOES_BASE_QUERY = `
     FROM public.trigger_movimentacao_processo tmp
     JOIN public.processos p ON p.numero = tmp.numero_cnj
     WHERE p.id = $1
-
-    UNION ALL
-
-    SELECT
-      pm.id::text AS id,
-      pm.data,
-      pm.tipo,
-      pm.tipo_publicacao,
-      pm.classificacao_predita,
-      pm.conteudo,
-      pm.texto_categoria,
-      pm.fonte,
-      pm.criado_em,
-      pm.atualizado_em
-    FROM public.processo_movimentacoes pm
-    WHERE pm.processo_id = $1
   )
   SELECT
     id,
