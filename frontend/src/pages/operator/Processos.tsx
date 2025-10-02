@@ -2634,46 +2634,18 @@ export default function Processos() {
                     }))
                   }
                 >
-                  <Command>
-                    <CommandInput placeholder="Pesquisar área..." />
-                    <CommandList>
-                      <CommandEmpty>
-                        {areaLoading
-                          ? "Carregando áreas..."
-                          : areaError ?? "Nenhuma área encontrada"}
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {areaOptions.map((option) => (
-                          <CommandItem
-                            key={option.id}
-                            value={`${option.nome} ${option.id}`}
-                            onSelect={() => {
-                              setProcessForm((prev) => ({
-                                ...prev,
-                                areaAtuacaoId:
-                                  prev.areaAtuacaoId === option.id ? "" : option.id,
-                              }));
-                              setAreaPopoverOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={`mr-2 h-4 w-4 ${
-                                processForm.areaAtuacaoId === option.id
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              }`}
-                            />
-                            {option.nome}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              {areaError ? (
-                <p className="text-xs text-destructive">{areaError}</p>
-              ) : null}
+                  <SelectTrigger id="process-instancia">
+                    <SelectValue placeholder="Selecione a instância" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INSTANCIA_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2 sm:col-span-1">
               <Label htmlFor="process-tipo-processo">Tipo de processo</Label>
