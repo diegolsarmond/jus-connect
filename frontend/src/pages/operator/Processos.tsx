@@ -2189,7 +2189,8 @@ export default function Processos() {
       </Dialog>
 
       <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+
           <DialogHeader>
             <DialogTitle>Cadastrar processo</DialogTitle>
             <DialogDescription>
@@ -2197,7 +2198,7 @@ export default function Processos() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 sm:col-span-1">
               <Label htmlFor="process-client">Cliente</Label>
               <Select
                 value={processForm.clienteId}
@@ -2232,7 +2233,7 @@ export default function Processos() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 sm:col-span-1">
               <Label htmlFor="process-proposta">Proposta vinculada</Label>
               <Popover
                 open={propostasPopoverOpen}
@@ -2476,6 +2477,7 @@ export default function Processos() {
                 </p>
               )}
             </div>
+
             <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-tipo-processo">Tipo de processo</Label>
               <Popover
@@ -2561,6 +2563,7 @@ export default function Processos() {
                 <PopoverContent
                   className="w-[var(--radix-popover-trigger-width)] p-0"
                   align="start"
+
                 >
                   <Command>
                     <CommandInput placeholder="Pesquisar área..." />
@@ -2631,36 +2634,182 @@ export default function Processos() {
                     }))
                   }
                 >
-                  <SelectTrigger id="process-instancia">
-                    <SelectValue placeholder="Selecione a instância" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INSTANCIA_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {isInstanciaOutroSelected ? (
-                <div className="space-y-2">
-                  <Label htmlFor="process-instancia-outro">Especificar instância</Label>
-                  <Input
-                    id="process-instancia-outro"
-                    placeholder="Descreva a instância"
-                    value={processForm.instanciaOutro}
-                    onChange={(event) =>
-                      setProcessForm((prev) => ({
-                        ...prev,
-                        instanciaOutro: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
+                  <Command>
+                    <CommandInput placeholder="Pesquisar área..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {areaLoading
+                          ? "Carregando áreas..."
+                          : areaError ?? "Nenhuma área encontrada"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {areaOptions.map((option) => (
+                          <CommandItem
+                            key={option.id}
+                            value={`${option.nome} ${option.id}`}
+                            onSelect={() => {
+                              setProcessForm((prev) => ({
+                                ...prev,
+                                areaAtuacaoId:
+                                  prev.areaAtuacaoId === option.id ? "" : option.id,
+                              }));
+                              setAreaPopoverOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                processForm.areaAtuacaoId === option.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }`}
+                            />
+                            {option.nome}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {areaError ? (
+                <p className="text-xs text-destructive">{areaError}</p>
               ) : null}
-
             </div>
+            <div className="space-y-2 sm:col-span-1">
+              <Label htmlFor="process-tipo-processo">Tipo de processo</Label>
+              <Popover
+                open={tipoProcessoPopoverOpen}
+                onOpenChange={setTipoProcessoPopoverOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={tipoProcessoPopoverOpen}
+                    className="w-full justify-between"
+                    id="process-tipo-processo"
+                    disabled={tipoProcessoLoading && tipoProcessoOptions.length === 0}
+                  >
+                    <span className="truncate">{tipoProcessoButtonLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Pesquisar tipo..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {tipoProcessoLoading
+                          ? "Carregando tipos..."
+                          : tipoProcessoError ?? "Nenhum tipo encontrado"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {tipoProcessoOptions.map((option) => (
+                          <CommandItem
+                            key={option.id}
+                            value={`${option.nome} ${option.id}`}
+                            onSelect={() => {
+                              setProcessForm((prev) => ({
+                                ...prev,
+                                tipoProcessoId:
+                                  prev.tipoProcessoId === option.id ? "" : option.id,
+                              }));
+                              setTipoProcessoPopoverOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                processForm.tipoProcessoId === option.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }`}
+                            />
+                            {option.nome}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {tipoProcessoError ? (
+                <p className="text-xs text-destructive">{tipoProcessoError}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2 sm:col-span-2 md:col-span-1">
+              <Label htmlFor="process-number">Número do processo</Label>
+              <Input
+                id="process-number"
+                placeholder="0000000-00.0000.0.00.0000"
+                value={processForm.numero}
+                onChange={(event) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    numero: formatProcessNumber(event.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-1">
+              <Label htmlFor="process-instancia">Instância do processo</Label>
+              <Select
+                value={processForm.instancia}
+                onValueChange={(value) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    instancia: value,
+                    instanciaOutro:
+                      value === INSTANCIA_OUTRO_VALUE ? prev.instanciaOutro : "",
+                  }))
+                }
+              >
+                <SelectTrigger id="process-instancia">
+                  <SelectValue placeholder="Selecione a instância" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INSTANCIA_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 sm:col-span-1">
+
+              <Label htmlFor="process-distribution-date">Data da distribuição</Label>
+              <Input
+                id="process-distribution-date"
+                type="date"
+                value={processForm.dataDistribuicao}
+                onChange={(event) =>
+                  setProcessForm((prev) => ({
+                    ...prev,
+                    dataDistribuicao: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            {isInstanciaOutroSelected ? (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="process-instancia-outro">Especificar instância</Label>
+                <Input
+                  id="process-instancia-outro"
+                  placeholder="Descreva a instância"
+                  value={processForm.instanciaOutro}
+                  onChange={(event) =>
+                    setProcessForm((prev) => ({
+                      ...prev,
+                      instanciaOutro: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            ) : null}
             <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-sistema-cnj">Sistema judicial</Label>
               <Popover open={sistemaPopoverOpen} onOpenChange={setSistemaPopoverOpen}>
@@ -2723,20 +2872,7 @@ export default function Processos() {
                 <p className="text-xs text-destructive">{sistemaError}</p>
               ) : null}
             </div>
-            <div className="space-y-2 sm:col-span-2 md:col-span-1">
-              <Label htmlFor="process-distribution-date">Data da distribuição</Label>
-              <Input
-                id="process-distribution-date"
-                type="date"
-                value={processForm.dataDistribuicao}
-                onChange={(event) =>
-                  setProcessForm((prev) => ({
-                    ...prev,
-                    dataDistribuicao: event.target.value,
-                  }))
-                }
-              />
-            </div>
+
             <div className="sm:col-span-2">
               <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
                 <div className="space-y-1">
