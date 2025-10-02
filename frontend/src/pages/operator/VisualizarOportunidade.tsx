@@ -138,6 +138,7 @@ interface ParticipantData {
   telefone?: string;
   endereco?: string;
   relacao?: string;
+  polo?: string;
 }
 
 interface StatusOption {
@@ -1302,6 +1303,7 @@ export default function VisualizarOportunidade() {
     telefone: "Telefone",
     endereco: "Endereço",
     relacao: "Relação",
+    polo: "Polo",
   };
 
   const formatLabel = (key: string) =>

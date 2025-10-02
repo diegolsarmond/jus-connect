@@ -62,6 +62,7 @@ const formSchema = z.object({
         telefone: z.string().optional(),
         endereco: z.string().optional(),
         relacao: z.string().optional(),
+        polo: z.string().optional(),
       }),
     )
     .optional(),
@@ -157,7 +158,14 @@ export default function EditarOportunidade() {
       solicitante_telefone: "",
       cliente_tipo: "",
       envolvidos: [
-        { nome: "", cpf_cnpj: "", telefone: "", endereco: "", relacao: "" },
+        {
+          nome: "",
+          cpf_cnpj: "",
+          telefone: "",
+          endereco: "",
+          relacao: "",
+          polo: "",
+        },
       ],
       valor_causa: "",
       valor_honorarios: "",
@@ -300,8 +308,18 @@ export default function EditarOportunidade() {
                   telefone: env.telefone || "",
                   endereco: env.endereco || "",
                   relacao: env.relacao || "",
+                  polo: env.polo || "",
                 }))
-              : [{ nome: "", cpf_cnpj: "", telefone: "", endereco: "", relacao: "" }],
+              : [
+                  {
+                    nome: "",
+                    cpf_cnpj: "",
+                    telefone: "",
+                    endereco: "",
+                    relacao: "",
+                    polo: "",
+                  },
+                ],
           valor_causa:
             data.valor_causa !== null && data.valor_causa !== undefined
               ? new Intl.NumberFormat("pt-BR", {
@@ -457,6 +475,26 @@ export default function EditarOportunidade() {
     try {
       const isProcessoDistribuido = values.processo_distribuido === "sim";
 
+      const envolvidosNormalizados =
+        values.envolvidos?.map((envolvido) => ({
+          nome: envolvido.nome?.trim() || "",
+          cpf_cnpj: envolvido.cpf_cnpj || "",
+          telefone: envolvido.telefone || "",
+          endereco: envolvido.endereco?.trim() || "",
+          relacao: envolvido.relacao || "",
+          polo: envolvido.polo?.trim() || "",
+        })) || [];
+
+      const envolvidosFiltrados = envolvidosNormalizados.filter(
+        (envolvido) =>
+          envolvido.nome ||
+          envolvido.cpf_cnpj ||
+          envolvido.telefone ||
+          envolvido.endereco ||
+          envolvido.relacao ||
+          envolvido.polo
+      );
+
       const payload = {
         tipo_processo_id: Number(values.tipo_processo),
         area_atuacao_id: values.area_atuacao ? Number(values.area_atuacao) : null,
@@ -485,11 +523,7 @@ export default function EditarOportunidade() {
         detalhes: values.detalhes || null,
         documentos_anexados: null,
         criado_por: null,
-        envolvidos:
-          values.envolvidos?.filter(
-            (e) =>
-              e.nome || e.cpf_cnpj || e.telefone || e.endereco || e.relacao
-          ) || [],
+        envolvidos: envolvidosFiltrados,
       };
 
       const res = await fetch(`${apiUrl}/api/oportunidades/${id}`, {
@@ -1168,6 +1202,31 @@ export default function EditarOportunidade() {
                           )}
                         />
 
+                        <FormField
+                          control={form.control}
+                          name={`envolvidos.${index}.polo`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Polo</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o polo" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Ativo">Ativo</SelectItem>
+                                  <SelectItem value="Passivo">Passivo</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
                         <div className="flex md:col-span-2 justify-end">
                           <Button
                             type="button"
@@ -1188,6 +1247,7 @@ export default function EditarOportunidade() {
                           telefone: "",
                           endereco: "",
                           relacao: "",
+                          polo: "",
                         })
                       }
                     >
