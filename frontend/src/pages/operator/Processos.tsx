@@ -2189,7 +2189,7 @@ export default function Processos() {
       </Dialog>
 
       <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Cadastrar processo</DialogTitle>
             <DialogDescription>
