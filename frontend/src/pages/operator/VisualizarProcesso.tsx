@@ -17,6 +17,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
+import { ModernTimeline } from "@/components/ui/modern-timeline";
 
 import {
   Breadcrumb,
@@ -2362,20 +2363,19 @@ export default function VisualizarProcesso() {
           <div className="space-y-4">
             {temResultados ? (
               <>
-                <div className="space-y-4">
-                  {gruposVisiveis.map((grupo) => (
-                    <TimelineMes
-                      key={grupo.chave}
-                      grupo={{ ...grupo, itens: grupo.itens }}
-                      aberto={mesesAbertos.includes(grupo.chave)}
-                      onToggle={handleToggleMes}
-                      movimentacoesVisiveis={movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE}
-                      onVerMais={handleVerMaisMovimentos}
-                      virtualizado={usarVirtualizacao}
-                      onMostrarConteudo={handleMostrarConteudo}
-                    />
-                  ))}
-                </div>
+                <ModernTimeline
+                  groups={gruposVisiveis.map((grupo) => ({
+                    label: grupo.rotulo,
+                    events: grupo.itens.slice(0, movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE).map((item) => ({
+                      id: item.id,
+                      date: item.dataFormatada,
+                      title: item.stepType || "Movimentação",
+                      description: item.conteudo,
+                      type: item.stepType,
+                      isPrivate: item.privado,
+                    })),
+                  }))}
+                />
 
                 {totalGruposFiltrados > gruposVisiveis.length ? (
                   <div className="text-center">

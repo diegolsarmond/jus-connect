@@ -423,7 +423,7 @@ const MOVIMENTACOES_BASE_QUERY = `
       NULL::timestamptz AS criado_em,
       tmp.atualizado_em
     FROM public.trigger_movimentacao_processo tmp
-    JOIN public.processos p ON p.numero = tmp.numero_cnj
+    JOIN public.processos p ON p.numero_cnj = tmp.numero_cnj
     WHERE p.id = $1
   )
   SELECT
@@ -527,14 +527,14 @@ const baseProcessoSelect = `
     p.id,
     p.cliente_id,
     p.idempresa,
-    p.numero,
+    p.numero_cnj AS numero,
     p.uf,
     p.municipio,
     COALESCE(dp.orgao_julgador, p.orgao_julgador) AS orgao_julgador,
-    COALESCE(dp.area,p.tipo) as tipo,
-    COALESCE(dp.situacao,p.status) as status,
-    COALESCE(dp.classificacao_principal_nome, p.classe_judicial) as classe_judicial,
-    dp.assunto,
+    COALESCE(dp.area, tp.nome) AS tipo,
+    COALESCE(dp.situacao, sp.nome) AS status,
+    COALESCE(dp.classificacao_principal_nome, p.classe_judicial) AS classe_judicial,
+    COALESCE(dp.assunto, p.assunto) AS assunto,
     p.jurisdicao,
     p.oportunidade_id,
     o.sequencial_empresa AS oportunidade_sequencial_empresa,
@@ -546,9 +546,31 @@ const baseProcessoSelect = `
     p.advogado_responsavel,
     COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
     p.criado_em,
-    mp.data_andamento as atualizado_em,
+    mp.data_andamento AS atualizado_em,
+    p.atualizado_em AS ultima_sincronizacao,
     COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
-    p.consultas_api_count,
+    (
+      SELECT COUNT(*)::int
+      FROM public.processo_consultas_api pc
+      WHERE pc.processo_id = p.id
+    ) AS consultas_api_count,
+    p.situacao_processo_id,
+    p.tipo_processo_id,
+    p.area_atuacao_id,
+    p.instancia,
+    p.sistema_cnj_id,
+    p.monitorar_processo,
+    p.envolvidos_id,
+    p.descricao,
+    p.setor_id,
+    p.data_citacao,
+    p.data_recebimento,
+    p.data_arquivamento,
+    p.data_encerramento,
+    sp.nome AS situacao_processo_nome,
+    tp.nome AS tipo_processo_nome,
+    aa.nome AS area_atuacao_nome,
+    setor.nome AS setor_nome,
     c.nome AS cliente_nome,
     c.documento AS cliente_documento,
     c.tipo AS cliente_tipo,
@@ -569,11 +591,15 @@ const baseProcessoSelect = `
     (
       SELECT COUNT(*)::int
       FROM public.trigger_movimentacao_processo tmp
-      WHERE tmp.numero_cnj = p.numero
+      WHERE tmp.numero_cnj = p.numero_cnj
     ) AS movimentacoes_count
 FROM public.processos p
-LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero
-LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
+LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
+LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
+LEFT JOIN public.escritorios setor ON setor.id = p.setor_id
+LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
 LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
 LEFT JOIN public.clientes c ON c.id = p.cliente_id
 LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
@@ -619,6 +645,23 @@ const mapProcessoRow = (row: any): Processo => {
     ultima_movimentacao: normalizeTimestamp(row.ultima_movimentacao),
     ultima_sincronizacao: normalizeTimestamp(row.ultima_sincronizacao),
     consultas_api_count: parseInteger(row.consultas_api_count),
+    situacao_processo_id: parseOptionalInteger(row.situacao_processo_id),
+    situacao_processo_nome: normalizeString(row.situacao_processo_nome),
+    tipo_processo_id: parseOptionalInteger(row.tipo_processo_id),
+    tipo_processo_nome: normalizeString(row.tipo_processo_nome),
+    area_atuacao_id: parseOptionalInteger(row.area_atuacao_id),
+    area_atuacao_nome: normalizeString(row.area_atuacao_nome),
+    instancia: normalizeString(row.instancia),
+    sistema_cnj_id: parseOptionalInteger(row.sistema_cnj_id),
+    monitorar_processo: parseBooleanFlag(row.monitorar_processo) ?? false,
+    envolvidos_id: parseOptionalInteger(row.envolvidos_id),
+    descricao: normalizeString(row.descricao),
+    setor_id: parseOptionalInteger(row.setor_id),
+    setor_nome: normalizeString(row.setor_nome),
+    data_citacao: normalizeDate(row.data_citacao),
+    data_recebimento: normalizeDate(row.data_recebimento),
+    data_arquivamento: normalizeDate(row.data_arquivamento),
+    data_encerramento: normalizeDate(row.data_encerramento),
     movimentacoes_count: parseInteger(row.movimentacoes_count),
     cliente: row.cliente_id
       ? {
@@ -883,6 +926,19 @@ export const createProcesso = async (req: Request, res: Response) => {
     advogado_responsavel,
     data_distribuicao,
     advogados,
+    situacao_processo_id,
+    tipo_processo_id,
+    area_atuacao_id,
+    instancia,
+    sistema_cnj_id,
+    monitorar_processo,
+    envolvidos_id,
+    descricao,
+    setor_id,
+    data_citacao,
+    data_recebimento,
+    data_arquivamento,
+    data_encerramento,
   } = req.body;
 
   const parsedClienteId = Number(cliente_id);
@@ -918,6 +974,67 @@ export const createProcesso = async (req: Request, res: Response) => {
   }
 
   const oportunidadeIdValue = oportunidadeResolution.value;
+  const situacaoProcessoResolution = resolveNullablePositiveInteger(
+    situacao_processo_id,
+  );
+
+  if (!situacaoProcessoResolution.ok) {
+    return res.status(400).json({ error: 'situacao_processo_id inválido' });
+  }
+
+  let situacaoProcessoIdValue = situacaoProcessoResolution.value;
+
+  const tipoProcessoResolution = resolveNullablePositiveInteger(
+    tipo_processo_id,
+  );
+
+  if (!tipoProcessoResolution.ok) {
+    return res.status(400).json({ error: 'tipo_processo_id inválido' });
+  }
+
+  let tipoProcessoIdValue = tipoProcessoResolution.value;
+
+  const areaAtuacaoResolution = resolveNullablePositiveInteger(
+    area_atuacao_id,
+  );
+
+  if (!areaAtuacaoResolution.ok) {
+    return res.status(400).json({ error: 'area_atuacao_id inválido' });
+  }
+
+  const areaAtuacaoIdValue = areaAtuacaoResolution.value;
+
+  const sistemaCnjResolution = resolveNullablePositiveInteger(sistema_cnj_id);
+
+  if (!sistemaCnjResolution.ok) {
+    return res.status(400).json({ error: 'sistema_cnj_id inválido' });
+  }
+
+  const sistemaCnjIdValue = sistemaCnjResolution.value;
+
+  const envolvidosResolution = resolveNullablePositiveInteger(envolvidos_id);
+
+  if (!envolvidosResolution.ok) {
+    return res.status(400).json({ error: 'envolvidos_id inválido' });
+  }
+
+  const envolvidosIdValue = envolvidosResolution.value;
+
+  const setorResolution = resolveNullablePositiveInteger(setor_id);
+
+  if (!setorResolution.ok) {
+    return res.status(400).json({ error: 'setor_id inválido' });
+  }
+
+  const setorIdValue = setorResolution.value;
+  const instanciaValue = normalizeString(instancia);
+  const descricaoValue = normalizeString(descricao);
+  const monitorarProcessoFlag = parseBooleanFlag(monitorar_processo);
+  let monitorarProcessoValue = monitorarProcessoFlag;
+  const dataCitacaoValue = normalizeDate(data_citacao);
+  const dataRecebimentoValue = normalizeDate(data_recebimento);
+  const dataArquivamentoValue = normalizeDate(data_arquivamento);
+  const dataEncerramentoValue = normalizeDate(data_encerramento);
   const rawAdvogados = Array.isArray(advogados) ? advogados : [];
   const advogadoIds = Array.from(
     new Set(
@@ -986,15 +1103,35 @@ export const createProcesso = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Cliente não encontrado' });
     }
 
-    const oportunidadeResolution = resolveNullablePositiveInteger(
-      req.body?.oportunidade_id ?? req.body?.proposta_id ?? null,
-    );
+    if (tipoProcessoIdValue === null && tipoValue && empresaId !== null) {
+      const tipoLookup = await pool.query(
+        'SELECT id FROM public.tipo_processo WHERE idempresa IS NOT DISTINCT FROM $1 AND LOWER(nome) = LOWER($2) LIMIT 1',
+        [empresaId, tipoValue],
+      );
 
-    if (!oportunidadeResolution.ok) {
-      return res.status(400).json({ error: 'oportunidade_id inválido' });
+      if (tipoLookup.rowCount > 0) {
+        const resolvedId = parseOptionalInteger(tipoLookup.rows[0]?.id);
+        if (resolvedId) {
+          tipoProcessoIdValue = resolvedId;
+        }
+      }
     }
 
-    const oportunidadeIdValue = oportunidadeResolution.value;
+    if (situacaoProcessoIdValue === null && statusValue) {
+      const situacaoLookup = await pool.query(
+        'SELECT id FROM public.situacao_processo WHERE LOWER(nome) = LOWER($1) LIMIT 1',
+        [statusValue],
+      );
+
+      if (situacaoLookup.rowCount > 0) {
+        const resolvedSituacaoId = parseOptionalInteger(
+          situacaoLookup.rows[0]?.id,
+        );
+        if (resolvedSituacaoId) {
+          situacaoProcessoIdValue = resolvedSituacaoId;
+        }
+      }
+    }
 
     if (oportunidadeIdValue !== null) {
       const oportunidadeExists = await pool.query(
@@ -1051,6 +1188,7 @@ export const createProcesso = async (req: Request, res: Response) => {
       .join(', ');
 
     const advogadoColumnValue = advogadoConcatValue || advogadoValue;
+    const finalMonitorarProcesso = monitorarProcessoValue ?? false;
 
     const clientDb = await pool.connect();
 
@@ -1060,21 +1198,58 @@ export const createProcesso = async (req: Request, res: Response) => {
       const insertResult = await clientDb.query(
         `INSERT INTO public.processos (
             cliente_id,
-            numero,
+            numero_cnj,
             uf,
             municipio,
             orgao_julgador,
-            tipo,
-            status,
+            situacao_processo_id,
             classe_judicial,
             assunto,
             jurisdicao,
             oportunidade_id,
             advogado_responsavel,
             data_distribuicao,
-            idempresa
+            idempresa,
+            area_atuacao_id,
+            tipo_processo_id,
+            instancia,
+            sistema_cnj_id,
+            monitorar_processo,
+            envolvidos_id,
+            descricao,
+            setor_id,
+            data_citacao,
+            data_recebimento,
+            data_arquivamento,
+            data_encerramento
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12,
+            $13,
+            $14,
+            $15,
+            $16,
+            $17,
+            $18,
+            $19,
+            $20,
+            $21,
+            $22,
+            $23,
+            $24,
+            $25
+          )
           RETURNING id`,
         [
           parsedClienteId,
@@ -1082,8 +1257,7 @@ export const createProcesso = async (req: Request, res: Response) => {
           ufValue,
           municipioValue,
           orgaoValue,
-          tipoValue,
-          statusValue,
+          situacaoProcessoIdValue,
           classeValue,
           assuntoValue,
           jurisdicaoValue,
@@ -1091,6 +1265,18 @@ export const createProcesso = async (req: Request, res: Response) => {
           advogadoColumnValue,
           dataDistribuicaoValue,
           empresaId,
+          areaAtuacaoIdValue,
+          tipoProcessoIdValue,
+          instanciaValue,
+          sistemaCnjIdValue,
+          finalMonitorarProcesso,
+          envolvidosIdValue,
+          descricaoValue,
+          setorIdValue,
+          dataCitacaoValue,
+          dataRecebimentoValue,
+          dataArquivamentoValue,
+          dataEncerramentoValue,
         ]
       );
 
@@ -1209,6 +1395,19 @@ export const updateProcesso = async (req: Request, res: Response) => {
     advogado_responsavel,
     data_distribuicao,
     advogados,
+    situacao_processo_id,
+    tipo_processo_id,
+    area_atuacao_id,
+    instancia,
+    sistema_cnj_id,
+    monitorar_processo,
+    envolvidos_id,
+    descricao,
+    setor_id,
+    data_citacao,
+    data_recebimento,
+    data_arquivamento,
+    data_encerramento,
   } = req.body;
 
   const parsedClienteId = Number(cliente_id);
@@ -1244,6 +1443,67 @@ export const updateProcesso = async (req: Request, res: Response) => {
   }
 
   const oportunidadeIdValue = oportunidadeResolution.value;
+  const situacaoProcessoResolution = resolveNullablePositiveInteger(
+    situacao_processo_id,
+  );
+
+  if (!situacaoProcessoResolution.ok) {
+    return res.status(400).json({ error: 'situacao_processo_id inválido' });
+  }
+
+  let situacaoProcessoIdValue = situacaoProcessoResolution.value;
+
+  const tipoProcessoResolution = resolveNullablePositiveInteger(
+    tipo_processo_id,
+  );
+
+  if (!tipoProcessoResolution.ok) {
+    return res.status(400).json({ error: 'tipo_processo_id inválido' });
+  }
+
+  let tipoProcessoIdValue = tipoProcessoResolution.value;
+
+  const areaAtuacaoResolution = resolveNullablePositiveInteger(
+    area_atuacao_id,
+  );
+
+  if (!areaAtuacaoResolution.ok) {
+    return res.status(400).json({ error: 'area_atuacao_id inválido' });
+  }
+
+  const areaAtuacaoIdValue = areaAtuacaoResolution.value;
+
+  const sistemaCnjResolution = resolveNullablePositiveInteger(sistema_cnj_id);
+
+  if (!sistemaCnjResolution.ok) {
+    return res.status(400).json({ error: 'sistema_cnj_id inválido' });
+  }
+
+  const sistemaCnjIdValue = sistemaCnjResolution.value;
+
+  const envolvidosResolution = resolveNullablePositiveInteger(envolvidos_id);
+
+  if (!envolvidosResolution.ok) {
+    return res.status(400).json({ error: 'envolvidos_id inválido' });
+  }
+
+  const envolvidosIdValue = envolvidosResolution.value;
+
+  const setorResolution = resolveNullablePositiveInteger(setor_id);
+
+  if (!setorResolution.ok) {
+    return res.status(400).json({ error: 'setor_id inválido' });
+  }
+
+  const setorIdValue = setorResolution.value;
+  const instanciaValue = normalizeString(instancia);
+  const descricaoValue = normalizeString(descricao);
+  const monitorarProcessoFlag = parseBooleanFlag(monitorar_processo);
+  let monitorarProcessoValue = monitorarProcessoFlag;
+  const dataCitacaoValue = normalizeDate(data_citacao);
+  const dataRecebimentoValue = normalizeDate(data_recebimento);
+  const dataArquivamentoValue = normalizeDate(data_arquivamento);
+  const dataEncerramentoValue = normalizeDate(data_encerramento);
   const rawAdvogados = Array.isArray(advogados) ? advogados : [];
   const advogadoIds = Array.from(
     new Set(
@@ -1302,12 +1562,17 @@ export const updateProcesso = async (req: Request, res: Response) => {
     }
 
     const existingProcess = await pool.query(
-      'SELECT id FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      'SELECT monitorar_processo FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
       [parsedId, empresaId]
     );
 
     if (existingProcess.rowCount === 0) {
       return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    if (monitorarProcessoValue === null) {
+      monitorarProcessoValue =
+        existingProcess.rows[0]?.monitorar_processo === true;
     }
 
     const clienteExists = await pool.query(
@@ -1317,6 +1582,36 @@ export const updateProcesso = async (req: Request, res: Response) => {
 
     if (clienteExists.rowCount === 0) {
       return res.status(400).json({ error: 'Cliente não encontrado' });
+    }
+
+    if (tipoProcessoIdValue === null && tipoValue && empresaId !== null) {
+      const tipoLookup = await pool.query(
+        'SELECT id FROM public.tipo_processo WHERE idempresa IS NOT DISTINCT FROM $1 AND LOWER(nome) = LOWER($2) LIMIT 1',
+        [empresaId, tipoValue],
+      );
+
+      if (tipoLookup.rowCount > 0) {
+        const resolvedId = parseOptionalInteger(tipoLookup.rows[0]?.id);
+        if (resolvedId) {
+          tipoProcessoIdValue = resolvedId;
+        }
+      }
+    }
+
+    if (situacaoProcessoIdValue === null && statusValue) {
+      const situacaoLookup = await pool.query(
+        'SELECT id FROM public.situacao_processo WHERE LOWER(nome) = LOWER($1) LIMIT 1',
+        [statusValue],
+      );
+
+      if (situacaoLookup.rowCount > 0) {
+        const resolvedSituacaoId = parseOptionalInteger(
+          situacaoLookup.rows[0]?.id,
+        );
+        if (resolvedSituacaoId) {
+          situacaoProcessoIdValue = resolvedSituacaoId;
+        }
+      }
     }
 
     let advogadosSelecionados: Array<{ id: number; nome: string | null }> = [];
@@ -1363,6 +1658,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
       .join(', ');
 
     const advogadoColumnValue = advogadoConcatValue || advogadoValue;
+    const finalMonitorarProcesso = monitorarProcessoValue ?? false;
 
     const clientDb = await pool.connect();
 
@@ -1372,21 +1668,32 @@ export const updateProcesso = async (req: Request, res: Response) => {
       const updateResult = await clientDb.query(
         `UPDATE public.processos
             SET cliente_id = $1,
-                numero = $2,
+                numero_cnj = $2,
                 uf = $3,
                 municipio = $4,
                 orgao_julgador = $5,
-                tipo = $6,
-                status = $7,
-                classe_judicial = $8,
-                assunto = $9,
-                jurisdicao = $10,
-                oportunidade_id = $11,
-                advogado_responsavel = $12,
-                data_distribuicao = $13,
+                situacao_processo_id = $6,
+                classe_judicial = $7,
+                assunto = $8,
+                jurisdicao = $9,
+                oportunidade_id = $10,
+                advogado_responsavel = $11,
+                data_distribuicao = $12,
+                area_atuacao_id = $13,
+                tipo_processo_id = $14,
+                instancia = $15,
+                sistema_cnj_id = $16,
+                monitorar_processo = $17,
+                envolvidos_id = $18,
+                descricao = $19,
+                setor_id = $20,
+                data_citacao = $21,
+                data_recebimento = $22,
+                data_arquivamento = $23,
+                data_encerramento = $24,
                 atualizado_em = NOW()
-          WHERE id = $14
-            AND idempresa IS NOT DISTINCT FROM $15
+          WHERE id = $25
+            AND idempresa IS NOT DISTINCT FROM $26
           RETURNING id`,
         [
           parsedClienteId,
@@ -1394,14 +1701,25 @@ export const updateProcesso = async (req: Request, res: Response) => {
           ufValue,
           municipioValue,
           orgaoValue,
-          tipoValue,
-          statusValue,
+          situacaoProcessoIdValue,
           classeValue,
           assuntoValue,
           jurisdicaoValue,
           oportunidadeIdValue,
           advogadoColumnValue,
           dataDistribuicaoValue,
+          areaAtuacaoIdValue,
+          tipoProcessoIdValue,
+          instanciaValue,
+          sistemaCnjIdValue,
+          finalMonitorarProcesso,
+          envolvidosIdValue,
+          descricaoValue,
+          setorIdValue,
+          dataCitacaoValue,
+          dataRecebimentoValue,
+          dataArquivamentoValue,
+          dataEncerramentoValue,
           parsedId,
           empresaId,
         ]

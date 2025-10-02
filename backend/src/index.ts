@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from 'fs';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
 import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
+import tipoEnvolvimentoRoutes from './routes/tipoEnvolvimentoRoutes';
 import escritorioRoutes from './routes/escritorioRoutes';
 import perfilRoutes from './routes/perfilRoutes';
 import planoRoutes, { publicPlanoRoutes } from './routes/planoRoutes';
@@ -251,6 +252,10 @@ registerModuleRoutes(
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-tipo-processo'],
   tipoProcessoRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-tipo-envolvimento'],
+  tipoEnvolvimentoRoutes
 );
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-tipos-documento'],
