@@ -209,6 +209,7 @@ interface PropostaOption {
     solicitante?: string | null;
     sequencial?: number | null;
     dataCriacao?: string | null;
+    solicitanteId: string | null;
 }
 
 interface ProcessFormState {
@@ -1186,6 +1187,14 @@ export default function Processos() {
                             ? (item["data_criacao"] as string)
                             : null;
 
+                    const solicitanteIdValue = parseOptionalInteger(
+                        item["solicitante_id"],
+                    );
+                    const solicitanteId =
+                        solicitanteIdValue && solicitanteIdValue > 0
+                            ? String(solicitanteIdValue)
+                            : null;
+
                     const solicitanteNome =
                         pickFirstNonEmptyString(
                             typeof item["solicitante_nome"] === "string"
@@ -1212,6 +1221,7 @@ export default function Processos() {
                         solicitante: solicitanteNome,
                         sequencial: sequencialValue,
                         dataCriacao: dataCriacaoValue,
+                        solicitanteId,
                     });
                     seen.add(idValue);
                 }
@@ -1259,20 +1269,32 @@ export default function Processos() {
         });
     }, [advogadosOptions]);
 
+    const filteredPropostas = useMemo(() => {
+        if (!processForm.clienteId) {
+            return propostas;
+        }
+
+        return propostas.filter(
+            (proposta) => proposta.solicitanteId === processForm.clienteId,
+        );
+    }, [processForm.clienteId, propostas]);
+
     useEffect(() => {
         setProcessForm((prev) => {
             if (!prev.propostaId) {
                 return prev;
             }
 
-            const exists = propostas.some((option) => option.id === prev.propostaId);
+            const exists = filteredPropostas.some(
+                (option) => option.id === prev.propostaId,
+            );
             if (exists) {
                 return prev;
             }
 
             return { ...prev, propostaId: "" };
         });
-    }, [propostas]);
+    }, [filteredPropostas]);
 
     const selectedAdvogados = useMemo(
         () =>
@@ -1289,8 +1311,9 @@ export default function Processos() {
     );
 
     const selectedProposta = useMemo(
-        () => propostas.find((option) => option.id === processForm.propostaId) ?? null,
-        [processForm.propostaId, propostas],
+        () =>
+            filteredPropostas.find((option) => option.id === processForm.propostaId) ?? null,
+        [processForm.propostaId, filteredPropostas],
     );
 
     const selectedArea = useMemo(
@@ -1328,7 +1351,7 @@ export default function Processos() {
             ? "Carregando propostas..."
             : processForm.propostaId
                 ? `Proposta #${processForm.propostaId}`
-                : propostas.length === 0
+                : filteredPropostas.length === 0
                     ? "Nenhuma proposta disponível"
                     : "Selecione a proposta";
 
@@ -2323,7 +2346,7 @@ export default function Processos() {
                                                     />
                                                     Nenhuma proposta vinculada
                                                 </CommandItem>
-                                                {propostas.map((proposta) => {
+                                                {filteredPropostas.map((proposta) => {
                                                     const selected = processForm.propostaId === proposta.id;
                                                     return (
                                                         <CommandItem
