@@ -390,7 +390,7 @@ const baseProcessoSelect = `
     p.id,
     p.cliente_id,
     p.idempresa,
-    p.numero,
+    p.numero_cnj AS numero,
     p.uf,
     p.municipio,
     p.orgao_julgador,
