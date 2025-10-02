@@ -8,6 +8,7 @@ export default function TipoProcesso() {
       placeholder="Novo tipo de processo"
       emptyMessage="Nenhum tipo cadastrado"
       endpoint="/api/tipo-processos"
+      selectField={{ key: "area_atuacao_id", label: "Área", optionsEndpoint: "/api/areas" }}
     />
   );
 }
