@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Popover,
   PopoverContent,
@@ -189,6 +190,11 @@ interface AdvogadoOption {
   descricao?: string;
 }
 
+interface SimpleOption {
+  id: string;
+  nome: string;
+}
+
 interface ApiOportunidade {
   id?: number | string | null;
   sequencial_empresa?: number | string | null;
@@ -215,6 +221,10 @@ interface ProcessFormState {
   dataDistribuicao: string;
   instancia: string;
   instanciaOutro: string;
+  areaAtuacaoId: string;
+  tipoProcessoId: string;
+  sistemaCnjId: string;
+  monitorarProcesso: boolean;
 }
 
 export interface ManualSyncFlags {
@@ -372,6 +382,45 @@ const parseOptionalInteger = (value: unknown): number | null => {
   return null;
 };
 
+const extractOptionItems = (
+  payload: unknown,
+): Record<string, unknown>[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter(
+      (item): item is Record<string, unknown> =>
+        item !== null && typeof item === "object",
+    );
+  }
+
+  if (payload && typeof payload === "object") {
+    const directData = (payload as { data?: unknown }).data;
+    if (Array.isArray(directData)) {
+      return directData.filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === "object",
+      );
+    }
+
+    const directRows = (payload as { rows?: unknown }).rows;
+    if (Array.isArray(directRows)) {
+      return directRows.filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === "object",
+      );
+    }
+
+    const nestedRows = (payload as { data?: { rows?: unknown } }).data?.rows;
+    if (Array.isArray(nestedRows)) {
+      return nestedRows.filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === "object",
+      );
+    }
+  }
+
+  return [];
+};
+
 const normalizeClienteTipo = (value: string | null | undefined): string => {
   if (!value) {
     return "";
@@ -462,6 +511,10 @@ const createEmptyProcessForm = (): ProcessFormState => ({
   dataDistribuicao: "",
   instancia: "",
   instanciaOutro: "",
+  areaAtuacaoId: "",
+  tipoProcessoId: "",
+  sistemaCnjId: "",
+  monitorarProcesso: false,
 });
 
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
@@ -640,6 +693,18 @@ export default function Processos() {
   const [propostasLoading, setPropostasLoading] = useState(false);
   const [propostasError, setPropostasError] = useState<string | null>(null);
   const [propostasPopoverOpen, setPropostasPopoverOpen] = useState(false);
+  const [areaOptions, setAreaOptions] = useState<SimpleOption[]>([]);
+  const [areaLoading, setAreaLoading] = useState(false);
+  const [areaError, setAreaError] = useState<string | null>(null);
+  const [areaPopoverOpen, setAreaPopoverOpen] = useState(false);
+  const [tipoProcessoOptions, setTipoProcessoOptions] = useState<SimpleOption[]>([]);
+  const [tipoProcessoLoading, setTipoProcessoLoading] = useState(false);
+  const [tipoProcessoError, setTipoProcessoError] = useState<string | null>(null);
+  const [tipoProcessoPopoverOpen, setTipoProcessoPopoverOpen] = useState(false);
+  const [sistemaOptions, setSistemaOptions] = useState<SimpleOption[]>([]);
+  const [sistemaLoading, setSistemaLoading] = useState(false);
+  const [sistemaError, setSistemaError] = useState<string | null>(null);
+  const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
   const [ufs, setUfs] = useState<Uf[]>([]);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [municipiosLoading, setMunicipiosLoading] = useState(false);
@@ -850,6 +915,222 @@ export default function Processos() {
   useEffect(() => {
     let cancelled = false;
 
+    const fetchTipoProcessos = async () => {
+      setTipoProcessoLoading(true);
+      setTipoProcessoError(null);
+
+      try {
+        const res = await fetch(getApiUrl("tipo-processos"), {
+          headers: { Accept: "application/json" },
+        });
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error(
+            "Não foi possível interpretar a resposta de tipos de processo",
+            error,
+          );
+        }
+
+        if (!res.ok) {
+          throw new Error(
+            json && typeof json === "object" && "error" in json &&
+              typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível carregar os tipos de processo (HTTP ${res.status})`,
+          );
+        }
+
+        const items = extractOptionItems(json);
+        const options = items
+          .map((item) => {
+            const id = parseOptionalInteger(item.id);
+            const nome =
+              typeof item.nome === "string" ? item.nome.trim() : "";
+            if (!id || id <= 0 || !nome) {
+              return null;
+            }
+            return { id: String(id), nome };
+          })
+          .filter((option): option is SimpleOption => option !== null)
+          .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+        if (!cancelled) {
+          setTipoProcessoOptions(options);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setTipoProcessoOptions([]);
+          setTipoProcessoError(
+            error instanceof Error
+              ? error.message
+              : "Erro ao carregar tipos de processo",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setTipoProcessoLoading(false);
+        }
+      }
+    };
+
+    fetchTipoProcessos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchAreas = async () => {
+      setAreaLoading(true);
+      setAreaError(null);
+
+      try {
+        const res = await fetch(getApiUrl("areas"), {
+          headers: { Accept: "application/json" },
+        });
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error(
+            "Não foi possível interpretar a resposta de áreas",
+            error,
+          );
+        }
+
+        if (!res.ok) {
+          throw new Error(
+            json && typeof json === "object" && "error" in json &&
+              typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível carregar as áreas de atuação (HTTP ${res.status})`,
+          );
+        }
+
+        const items = extractOptionItems(json);
+        const options = items
+          .map((item) => {
+            const id = parseOptionalInteger(item.id);
+            const nome =
+              typeof item.nome === "string" ? item.nome.trim() : "";
+            if (!id || id <= 0 || !nome) {
+              return null;
+            }
+            return { id: String(id), nome };
+          })
+          .filter((option): option is SimpleOption => option !== null)
+          .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+        if (!cancelled) {
+          setAreaOptions(options);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setAreaOptions([]);
+          setAreaError(
+            error instanceof Error
+              ? error.message
+              : "Erro ao carregar áreas de atuação",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setAreaLoading(false);
+        }
+      }
+    };
+
+    fetchAreas();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchSistemas = async () => {
+      setSistemaLoading(true);
+      setSistemaError(null);
+
+      try {
+        const res = await fetch(getApiUrl("sistemas-cnj"), {
+          headers: { Accept: "application/json" },
+        });
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error(
+            "Não foi possível interpretar a resposta de sistemas CNJ",
+            error,
+          );
+        }
+
+        if (!res.ok) {
+          throw new Error(
+            json && typeof json === "object" && "error" in json &&
+              typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível carregar os sistemas judiciais (HTTP ${res.status})`,
+          );
+        }
+
+        const items = extractOptionItems(json);
+        const options = items
+          .map((item) => {
+            const id = parseOptionalInteger(item.id);
+            const nome =
+              typeof item.nome === "string" ? item.nome.trim() : "";
+            if (!id || id <= 0 || !nome) {
+              return null;
+            }
+            return { id: String(id), nome };
+          })
+          .filter((option): option is SimpleOption => option !== null)
+          .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+        if (!cancelled) {
+          setSistemaOptions(options);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setSistemaOptions([]);
+          setSistemaError(
+            error instanceof Error
+              ? error.message
+              : "Erro ao carregar sistemas judiciais",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setSistemaLoading(false);
+        }
+      }
+    };
+
+    fetchSistemas();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const fetchPropostas = async () => {
       setPropostasLoading(true);
       setPropostasError(null);
@@ -1005,6 +1286,26 @@ export default function Processos() {
     [processForm.propostaId, propostas],
   );
 
+  const selectedArea = useMemo(
+    () =>
+      areaOptions.find((option) => option.id === processForm.areaAtuacaoId) ?? null,
+    [processForm.areaAtuacaoId, areaOptions],
+  );
+
+  const selectedTipoProcesso = useMemo(
+    () =>
+      tipoProcessoOptions.find(
+        (option) => option.id === processForm.tipoProcessoId,
+      ) ?? null,
+    [processForm.tipoProcessoId, tipoProcessoOptions],
+  );
+
+  const selectedSistema = useMemo(
+    () =>
+      sistemaOptions.find((option) => option.id === processForm.sistemaCnjId) ?? null,
+    [processForm.sistemaCnjId, sistemaOptions],
+  );
+
   const propostaButtonLabel = selectedProposta
     ? selectedProposta.label
     : propostasLoading && propostas.length === 0
@@ -1014,6 +1315,33 @@ export default function Processos() {
         : propostas.length === 0
           ? "Nenhuma proposta disponível"
           : "Selecione a proposta";
+
+  const tipoProcessoButtonLabel =
+    tipoProcessoLoading && tipoProcessoOptions.length === 0
+      ? "Carregando tipos..."
+      : selectedTipoProcesso
+        ? selectedTipoProcesso.nome
+        : tipoProcessoOptions.length === 0
+          ? tipoProcessoError ?? "Nenhum tipo disponível"
+          : "Selecione o tipo de processo";
+
+  const areaButtonLabel =
+    areaLoading && areaOptions.length === 0
+      ? "Carregando áreas..."
+      : selectedArea
+        ? selectedArea.nome
+        : areaOptions.length === 0
+          ? areaError ?? "Nenhuma área disponível"
+          : "Selecione a área de atuação";
+
+  const sistemaButtonLabel =
+    sistemaLoading && sistemaOptions.length === 0
+      ? "Carregando sistemas..."
+      : selectedSistema
+        ? selectedSistema.nome
+        : sistemaOptions.length === 0
+          ? sistemaError ?? "Nenhum sistema disponível"
+          : "Selecione o sistema judicial";
 
   const toggleAdvogadoSelection = useCallback((id: string) => {
     setProcessForm((prev) => {
@@ -1254,6 +1582,9 @@ export default function Processos() {
     if (!open) {
       setAdvogadosPopoverOpen(false);
       setPropostasPopoverOpen(false);
+      setAreaPopoverOpen(false);
+      setTipoProcessoPopoverOpen(false);
+      setSistemaPopoverOpen(false);
       setProcessForm(createEmptyProcessForm());
       setCreateError(null);
     }
@@ -1304,7 +1635,7 @@ export default function Processos() {
           ? processForm.instanciaOutro.trim()
           : processForm.instancia.trim();
       if (instanciaPayload) {
-        payload.orgao_julgador = instanciaPayload;
+        payload.instancia = instanciaPayload;
       }
 
       const dataDistribuicaoPayload = processForm.dataDistribuicao.trim();
@@ -1316,6 +1647,23 @@ export default function Processos() {
       if (propostaId && propostaId > 0) {
         payload.oportunidade_id = propostaId;
       }
+
+      const tipoProcessoId = parseOptionalInteger(processForm.tipoProcessoId);
+      if (tipoProcessoId && tipoProcessoId > 0) {
+        payload.tipo_processo_id = tipoProcessoId;
+      }
+
+      const areaAtuacaoId = parseOptionalInteger(processForm.areaAtuacaoId);
+      if (areaAtuacaoId && areaAtuacaoId > 0) {
+        payload.area_atuacao_id = areaAtuacaoId;
+      }
+
+      const sistemaCnjId = parseOptionalInteger(processForm.sistemaCnjId);
+      if (sistemaCnjId && sistemaCnjId > 0) {
+        payload.sistema_cnj_id = sistemaCnjId;
+      }
+
+      payload.monitorar_processo = processForm.monitorarProcesso;
 
       const res = await fetch(getApiUrl("processos"), {
         method: "POST",
@@ -1841,7 +2189,7 @@ export default function Processos() {
       </Dialog>
 
       <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Cadastrar processo</DialogTitle>
             <DialogDescription>
@@ -2128,6 +2476,133 @@ export default function Processos() {
                 </p>
               )}
             </div>
+            <div className="space-y-2 sm:col-span-2 md:col-span-1">
+              <Label htmlFor="process-tipo-processo">Tipo de processo</Label>
+              <Popover
+                open={tipoProcessoPopoverOpen}
+                onOpenChange={setTipoProcessoPopoverOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={tipoProcessoPopoverOpen}
+                    className="w-full justify-between"
+                    id="process-tipo-processo"
+                    disabled={tipoProcessoLoading && tipoProcessoOptions.length === 0}
+                  >
+                    <span className="truncate">{tipoProcessoButtonLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Pesquisar tipo..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {tipoProcessoLoading
+                          ? "Carregando tipos..."
+                          : tipoProcessoError ?? "Nenhum tipo encontrado"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {tipoProcessoOptions.map((option) => (
+                          <CommandItem
+                            key={option.id}
+                            value={`${option.nome} ${option.id}`}
+                            onSelect={() => {
+                              setProcessForm((prev) => ({
+                                ...prev,
+                                tipoProcessoId:
+                                  prev.tipoProcessoId === option.id ? "" : option.id,
+                              }));
+                              setTipoProcessoPopoverOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                processForm.tipoProcessoId === option.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }`}
+                            />
+                            {option.nome}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {tipoProcessoError ? (
+                <p className="text-xs text-destructive">{tipoProcessoError}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2 sm:col-span-2 md:col-span-1">
+              <Label htmlFor="process-area-atuacao">Área de atuação</Label>
+              <Popover open={areaPopoverOpen} onOpenChange={setAreaPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={areaPopoverOpen}
+                    className="w-full justify-between"
+                    id="process-area-atuacao"
+                    disabled={areaLoading && areaOptions.length === 0}
+                  >
+                    <span className="truncate">{areaButtonLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Pesquisar área..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {areaLoading
+                          ? "Carregando áreas..."
+                          : areaError ?? "Nenhuma área encontrada"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {areaOptions.map((option) => (
+                          <CommandItem
+                            key={option.id}
+                            value={`${option.nome} ${option.id}`}
+                            onSelect={() => {
+                              setProcessForm((prev) => ({
+                                ...prev,
+                                areaAtuacaoId:
+                                  prev.areaAtuacaoId === option.id ? "" : option.id,
+                              }));
+                              setAreaPopoverOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                processForm.areaAtuacaoId === option.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }`}
+                            />
+                            {option.nome}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {areaError ? (
+                <p className="text-xs text-destructive">{areaError}</p>
+              ) : null}
+            </div>
             <div className="space-y-4 sm:col-span-2 md:col-span-1">
               <div className="space-y-2">
                 <Label htmlFor="process-number">Número do processo</Label>
@@ -2187,6 +2662,68 @@ export default function Processos() {
 
             </div>
             <div className="space-y-2 sm:col-span-2 md:col-span-1">
+              <Label htmlFor="process-sistema-cnj">Sistema judicial</Label>
+              <Popover open={sistemaPopoverOpen} onOpenChange={setSistemaPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={sistemaPopoverOpen}
+                    className="w-full justify-between"
+                    id="process-sistema-cnj"
+                    disabled={sistemaLoading && sistemaOptions.length === 0}
+                  >
+                    <span className="truncate">{sistemaButtonLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Pesquisar sistema..." />
+                    <CommandList>
+                      <CommandEmpty>
+                        {sistemaLoading
+                          ? "Carregando sistemas..."
+                          : sistemaError ?? "Nenhum sistema encontrado"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {sistemaOptions.map((option) => (
+                          <CommandItem
+                            key={option.id}
+                            value={`${option.nome} ${option.id}`}
+                            onSelect={() => {
+                              setProcessForm((prev) => ({
+                                ...prev,
+                                sistemaCnjId:
+                                  prev.sistemaCnjId === option.id ? "" : option.id,
+                              }));
+                              setSistemaPopoverOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${
+                                processForm.sistemaCnjId === option.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }`}
+                            />
+                            {option.nome}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {sistemaError ? (
+                <p className="text-xs text-destructive">{sistemaError}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2 sm:col-span-2 md:col-span-1">
               <Label htmlFor="process-distribution-date">Data da distribuição</Label>
               <Input
                 id="process-distribution-date"
@@ -2199,6 +2736,28 @@ export default function Processos() {
                   }))
                 }
               />
+            </div>
+            <div className="sm:col-span-2">
+              <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+                <div className="space-y-1">
+                  <Label htmlFor="process-monitorar" className="text-sm font-medium">
+                    Monitorar processo
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Ative para acompanhar automaticamente atualizações deste processo.
+                  </p>
+                </div>
+                <Switch
+                  id="process-monitorar"
+                  checked={processForm.monitorarProcesso}
+                  onCheckedChange={(checked) =>
+                    setProcessForm((prev) => ({
+                      ...prev,
+                      monitorarProcesso: checked,
+                    }))
+                  }
+                />
+              </div>
             </div>
           </div>
           {createError ? (
