@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from 'fs';
 import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
 import tipoEventoRoutes from './routes/tipoEventoRoutes';
 import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
+import tipoEnvolvimentoRoutes from './routes/tipoEnvolvimentoRoutes';
 import escritorioRoutes from './routes/escritorioRoutes';
 import perfilRoutes from './routes/perfilRoutes';
 import planoRoutes, { publicPlanoRoutes } from './routes/planoRoutes';
@@ -16,6 +17,7 @@ import categoriaRoutes from './routes/categoriaRoutes';
 import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
 import situacaoPropostaRoutes from './routes/situacaoPropostaRoutes';
 import etiquetaRoutes from './routes/etiquetaRoutes';
+import sistemaCnjRoutes from './routes/sistemaCnjRoutes';
 import usuarioRoutes from './routes/usuarioRoutes';
 import empresaRoutes from './routes/empresaRoutes';
 import clienteRoutes from './routes/clienteRoutes';
@@ -252,6 +254,10 @@ registerModuleRoutes(
   tipoProcessoRoutes
 );
 registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-tipo-envolvimento'],
+  tipoEnvolvimentoRoutes
+);
+registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-tipos-documento'],
   tipoDocumentoRoutes
 );
@@ -285,6 +291,10 @@ registerModuleRoutes(
 registerModuleRoutes(
   ['configuracoes-parametros', 'configuracoes-parametros-categorias'],
   categoriaRoutes
+);
+registerModuleRoutes(
+  ['configuracoes-parametros', 'configuracoes-parametros-sistemas-cnj'],
+  sistemaCnjRoutes
 );
 registerModuleRoutes(['configuracoes', 'dashboard'], empresaRoutes);
 registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);
