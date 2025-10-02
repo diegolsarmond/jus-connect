@@ -2522,71 +2522,7 @@ export default function Processos() {
                                 </p>
                             )}
                         </div>
-                        <div className="space-y-2 sm:col-span-1">
 
-                            <Label htmlFor="process-tipo-processo">Tipo de processo</Label>
-                            <Popover
-                                open={tipoProcessoPopoverOpen}
-                                onOpenChange={setTipoProcessoPopoverOpen}
-                            >
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        role="combobox"
-                                        aria-expanded={tipoProcessoPopoverOpen}
-                                        className="w-full justify-between"
-                                        id="process-tipo-processo"
-                                        disabled={tipoProcessoLoading && tipoProcessoOptions.length === 0}
-                                    >
-                                        <span className="truncate">{tipoProcessoButtonLabel}</span>
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                    className="w-[var(--radix-popover-trigger-width)] p-0"
-                                    align="start"
-                                >
-                                    <Command>
-                                        <CommandInput placeholder="Pesquisar tipo..." />
-                                        <CommandList>
-                                            <CommandEmpty>
-                                                {tipoProcessoLoading
-                                                    ? "Carregando tipos..."
-                                                    : tipoProcessoError ?? "Nenhum tipo encontrado"}
-                                            </CommandEmpty>
-                                            <CommandGroup>
-                                                {tipoProcessoOptions.map((option) => (
-                                                    <CommandItem
-                                                        key={option.id}
-                                                        value={`${option.nome} ${option.id}`}
-                                                        onSelect={() => {
-                                                            setProcessForm((prev) => ({
-                                                                ...prev,
-                                                                tipoProcessoId:
-                                                                    prev.tipoProcessoId === option.id ? "" : option.id,
-                                                            }));
-                                                            setTipoProcessoPopoverOpen(false);
-                                                        }}
-                                                    >
-                                                        <Check
-                                                            className={`mr-2 h-4 w-4 ${processForm.tipoProcessoId === option.id
-                                                                    ? "opacity-100"
-                                                                    : "opacity-0"
-                                                                }`}
-                                                        />
-                                                        {option.nome}
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
-                            {tipoProcessoError ? (
-                                <p className="text-xs text-destructive">{tipoProcessoError}</p>
-                            ) : null}
-                        </div>
                         <div className="space-y-2 sm:col-span-2 md:col-span-1">
                             <Label htmlFor="process-area-atuacao">Área de atuação</Label>
                             <Popover open={areaPopoverOpen} onOpenChange={setAreaPopoverOpen}>
@@ -2648,6 +2584,72 @@ export default function Processos() {
                                 <p className="text-xs text-destructive">{areaError}</p>
                             ) : null}
 
+                        </div>
+
+                        <div className="space-y-2 sm:col-span-1">
+
+                            <Label htmlFor="process-tipo-processo">Tipo de processo</Label>
+                            <Popover
+                                open={tipoProcessoPopoverOpen}
+                                onOpenChange={setTipoProcessoPopoverOpen}
+                            >
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={tipoProcessoPopoverOpen}
+                                        className="w-full justify-between"
+                                        id="process-tipo-processo"
+                                        disabled={tipoProcessoLoading && tipoProcessoOptions.length === 0}
+                                    >
+                                        <span className="truncate">{tipoProcessoButtonLabel}</span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    className="w-[var(--radix-popover-trigger-width)] p-0"
+                                    align="start"
+                                >
+                                    <Command>
+                                        <CommandInput placeholder="Pesquisar tipo..." />
+                                        <CommandList>
+                                            <CommandEmpty>
+                                                {tipoProcessoLoading
+                                                    ? "Carregando tipos..."
+                                                    : tipoProcessoError ?? "Nenhum tipo encontrado"}
+                                            </CommandEmpty>
+                                            <CommandGroup>
+                                                {tipoProcessoOptions.map((option) => (
+                                                    <CommandItem
+                                                        key={option.id}
+                                                        value={`${option.nome} ${option.id}`}
+                                                        onSelect={() => {
+                                                            setProcessForm((prev) => ({
+                                                                ...prev,
+                                                                tipoProcessoId:
+                                                                    prev.tipoProcessoId === option.id ? "" : option.id,
+                                                            }));
+                                                            setTipoProcessoPopoverOpen(false);
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={`mr-2 h-4 w-4 ${processForm.tipoProcessoId === option.id
+                                                                ? "opacity-100"
+                                                                : "opacity-0"
+                                                                }`}
+                                                        />
+                                                        {option.nome}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                            {tipoProcessoError ? (
+                                <p className="text-xs text-destructive">{tipoProcessoError}</p>
+                            ) : null}
                         </div>
                         <div className="space-y-2 sm:col-span-2 md:col-span-1">
                             <Label htmlFor="process-number">Número do processo</Label>
