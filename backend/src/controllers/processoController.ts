@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import { PoolClient } from 'pg';
 import {
@@ -802,18 +803,6 @@ export const getProcessoById = async (req: Request, res: Response) => {
   }
 };
 
-const parseJsonField = (value: string | null): unknown => {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-};
-
 export const createProcessoMovimentacaoManual = async (
   req: Request,
   res: Response,
@@ -842,14 +831,18 @@ export const createProcessoMovimentacaoManual = async (
       return res.status(404).json({ error: 'Processo não encontrado' });
     }
 
-    const processoExists = await pool.query(
-      'SELECT 1 FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+    const processoResult = await pool.query(
+      'SELECT numero_cnj, instancia FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
       [parsedId, empresaId],
     );
 
-    if (processoExists.rowCount === 0) {
+    if (processoResult.rowCount === 0) {
       return res.status(404).json({ error: 'Processo não encontrado' });
     }
+
+    const processoData = processoResult.rows[0];
+    const numeroCnj = normalizeString(processoData?.numero_cnj);
+    const instanciaProcesso = normalizeString(processoData?.instancia);
 
     const preparedRecord = prepareMovimentacaoRecord({
       id: 0,
@@ -866,29 +859,40 @@ export const createProcessoMovimentacaoManual = async (
       return res.status(400).json({ error: 'Dados da movimentação inválidos' });
     }
 
+    const sigilosoValue = parseBooleanFlag(req.body?.sigiloso) ?? false;
     const insertResult = await pool.query(
-      `INSERT INTO public.processo_movimentacoes (
-         id,
-         processo_id,
-         data,
-         tipo,
-         tipo_publicacao,
-         classificacao_predita,
+      `INSERT INTO public.trigger_movimentacao_processo (
+         id_andamento,
+         numero_cnj,
+         instancia_processo,
+         tipo_andamento,
          conteudo,
-         texto_categoria,
-         fonte
+         sigiloso,
+         data_andamento,
+         criado_em,
+         atualizado_em,
+         crawl_id
        )
-       VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, processo_id, data, tipo, tipo_publicacao, classificacao_predita, conteudo, texto_categoria, fonte, criado_em, atualizado_em`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NULL)
+       RETURNING
+         id_andamento::text AS id,
+         data_andamento AS data,
+         tipo_andamento AS tipo,
+         NULL::text AS tipo_publicacao,
+         NULL::jsonb AS classificacao_predita,
+         conteudo,
+         NULL::text AS texto_categoria,
+         NULL::jsonb AS fonte,
+         criado_em,
+         atualizado_em`,
       [
-        parsedId,
-        preparedRecord.data,
+        randomUUID(),
+        numeroCnj,
+        instanciaProcesso,
         preparedRecord.tipo,
-        preparedRecord.tipo_publicacao,
-        parseJsonField(preparedRecord.classificacao_predita),
         preparedRecord.conteudo,
-        preparedRecord.texto_categoria,
-        parseJsonField(preparedRecord.fonte),
+        sigilosoValue,
+        preparedRecord.data,
       ],
     );
 
