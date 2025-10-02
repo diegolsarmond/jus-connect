@@ -335,15 +335,23 @@ const parseAdvogados = (value: unknown): Processo['advogados'] => {
 
 type RawMovimentacao = {
   id?: number | string | null;
-  data?: string | null;
+  id_andamento?: number | string | null;
+  numero_cnj?: string | null;
+  instancia_processo?: string | null;
   tipo?: string | null;
+  tipo_andamento?: string | null;
   tipo_publicacao?: string | null;
   classificacao_predita?: Record<string, unknown> | null;
   conteudo?: string | null;
   texto_categoria?: string | null;
   fonte?: Record<string, unknown> | null;
+  sigiloso?: boolean | number | string | null;
+  crawl_id?: string | null;
+  data?: string | null;
+  data_andamento?: string | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
+  data_cadastro?: string | null;
 };
 
 const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
@@ -355,7 +363,7 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
     }
 
     const raw = item as RawMovimentacao;
-    const idCandidate = raw.id ?? null;
+    const idCandidate = raw.id_andamento ?? raw.id ?? null;
     let parsedId: string | null = null;
 
     if (typeof idCandidate === 'number' && Number.isFinite(idCandidate)) {
@@ -371,17 +379,43 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
       return;
     }
 
+    const dataValue =
+      normalizeTimestamp(raw.data_andamento ?? raw.data) ?? raw.data ?? null;
+
+    const tipoValue = raw.tipo_andamento ?? raw.tipo ?? null;
+    const numeroCnjValue = normalizeString(raw.numero_cnj);
+    const instanciaProcessoValue = normalizeString(raw.instancia_processo);
+    const sigilosoValue = parseBooleanFlag(raw.sigiloso);
+    const crawlIdValueRaw =
+      raw.crawl_id === null || raw.crawl_id === undefined
+        ? null
+        : typeof raw.crawl_id === 'string'
+          ? normalizeString(raw.crawl_id)
+          : String(raw.crawl_id);
+    const crawlIdValue =
+      typeof crawlIdValueRaw === 'string'
+        ? crawlIdValueRaw.trim() || null
+        : crawlIdValueRaw;
+    const dataCadastroValue =
+      normalizeTimestamp(raw.data_cadastro) ?? raw.data_cadastro ?? null;
+
     movimentacoes.push({
       id: parsedId,
-      data: raw.data ?? null,
-      tipo: raw.tipo ?? null,
+      data: dataValue,
+      tipo: tipoValue,
       tipo_publicacao: raw.tipo_publicacao ?? null,
       classificacao_predita: raw.classificacao_predita ?? null,
       conteudo: raw.conteudo ?? null,
       texto_categoria: raw.texto_categoria ?? null,
       fonte: raw.fonte ?? null,
-      criado_em: raw.criado_em ?? null,
-      atualizado_em: raw.atualizado_em ?? null,
+      criado_em: normalizeTimestamp(raw.criado_em) ?? raw.criado_em ?? null,
+      atualizado_em:
+        normalizeTimestamp(raw.atualizado_em) ?? raw.atualizado_em ?? null,
+      numero_cnj: numeroCnjValue,
+      instancia_processo: instanciaProcessoValue,
+      sigiloso: sigilosoValue ?? null,
+      crawl_id: crawlIdValue,
+      data_cadastro: dataCadastroValue,
     });
   };
 
@@ -411,52 +445,48 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
 const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 
 const MOVIMENTACOES_BASE_QUERY = `
-  WITH movimentacoes AS (
-    SELECT
-      tmp.id_andamento::text AS id,
-      tmp.data_andamento AS data,
-      NULL::text AS tipo,
-      NULL::text AS tipo_publicacao,
-      NULL::jsonb AS classificacao_predita,
-      NULL::text AS conteudo,
-      NULL::text AS texto_categoria,
-      NULL::jsonb AS fonte,
-      NULL::timestamptz AS criado_em,
-      tmp.atualizado_em
-    FROM public.trigger_movimentacao_processo tmp
-    JOIN public.processos p ON p.numero_cnj = tmp.numero_cnj
-    WHERE p.id = $1
-  )
   SELECT
     id,
-    data,
-    tipo,
-    tipo_publicacao,
-    classificacao_predita,
+    id_andamento,
+    numero_cnj,
+    instancia_processo,
+    tipo_andamento,
     conteudo,
-    texto_categoria,
-    fonte,
+    sigiloso,
+    data_andamento,
     criado_em,
-    atualizado_em
-  FROM movimentacoes
+    atualizado_em,
+    crawl_id,
+    data_cadastro
+  FROM public.trigger_movimentacao_processo
+  WHERE numero_cnj = $1
   ORDER BY
-    data DESC NULLS LAST,
-    CASE WHEN id ~ '^[0-9]+$' THEN id::bigint ELSE NULL END DESC NULLS LAST,
-    id DESC
+    data_andamento DESC NULLS LAST,
+    CASE
+      WHEN id_andamento::text ~ '^[0-9]+$' THEN (id_andamento::text)::bigint
+      ELSE NULL
+    END DESC NULLS LAST,
+    id_andamento::text DESC
 `;
 
 const fetchProcessoMovimentacoes = async (
-  processoId: number,
+  numeroCnj: string | null | undefined,
   client?: PoolClient,
   limit: number = MOVIMENTACOES_DEFAULT_LIMIT,
 ): Promise<Processo['movimentacoes']> => {
+  const normalizedNumero = normalizeString(numeroCnj);
+
+  if (!normalizedNumero) {
+    return [];
+  }
+
   const executor = client ?? pool;
   const trimmedLimit = Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : 0;
   const query =
     trimmedLimit > 0
       ? `${MOVIMENTACOES_BASE_QUERY}\n  LIMIT $2`
       : MOVIMENTACOES_BASE_QUERY;
-  const params = trimmedLimit > 0 ? [processoId, trimmedLimit] : [processoId];
+  const params = trimmedLimit > 0 ? [normalizedNumero, trimmedLimit] : [normalizedNumero];
   const result = await executor.query(query, params);
   return parseMovimentacoes(result.rows);
 };
@@ -792,7 +822,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
 
     const processo = mapProcessoRow(result.rows[0]);
 
-    const movimentacoes = await fetchProcessoMovimentacoes(parsedId);
+    const movimentacoes = await fetchProcessoMovimentacoes(processo.numero);
 
     processo.movimentacoes = movimentacoes;
 
@@ -875,16 +905,18 @@ export const createProcessoMovimentacaoManual = async (
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NULL)
        RETURNING
-         id_andamento::text AS id,
-         data_andamento AS data,
-         tipo_andamento AS tipo,
-         NULL::text AS tipo_publicacao,
-         NULL::jsonb AS classificacao_predita,
+         id,
+         id_andamento,
+         numero_cnj,
+         instancia_processo,
+         tipo_andamento,
          conteudo,
-         NULL::text AS texto_categoria,
-         NULL::jsonb AS fonte,
+         sigiloso,
+         data_andamento,
          criado_em,
-         atualizado_em`,
+         atualizado_em,
+         crawl_id,
+         data_cadastro`,
       [
         randomUUID(),
         numeroCnj,
