@@ -2473,7 +2473,7 @@ export default function Processos() {
                 <p className="text-xs text-muted-foreground">
                   {advogadosError
                     ? advogadosError
-                    : "Selecione os advogados responsáveis pelo processo (opcional)."}
+                    : ""}
                 </p>
               )}
             </div>
