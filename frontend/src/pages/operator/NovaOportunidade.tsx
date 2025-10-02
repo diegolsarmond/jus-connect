@@ -63,6 +63,7 @@ const formSchema = z.object({
         telefone: z.string().optional(),
         endereco: z.string().optional(),
         relacao: z.string().optional(),
+        polo: z.string().optional(),
       }),
     )
     .optional(),
@@ -248,7 +249,14 @@ export default function NovaOportunidade() {
       solicitante_telefone: "",
       cliente_tipo: "",
       envolvidos: [
-        { nome: "", cpf_cnpj: "", telefone: "", endereco: "", relacao: "" },
+        {
+          nome: "",
+          cpf_cnpj: "",
+          telefone: "",
+          endereco: "",
+          relacao: "",
+          polo: "",
+        },
       ],
       valor_causa: "",
       valor_honorarios: "",
@@ -492,6 +500,7 @@ export default function NovaOportunidade() {
           const telefoneDigits = extractDigits(envolvido.telefone || "");
           const endereco = envolvido.endereco?.trim() || "";
           const relacao = envolvido.relacao || "";
+          const polo = envolvido.polo?.trim() || "";
 
           return {
             nome,
@@ -499,6 +508,7 @@ export default function NovaOportunidade() {
             telefone: telefoneDigits,
             endereco,
             relacao,
+            polo,
           };
         }) || [];
 
@@ -508,7 +518,8 @@ export default function NovaOportunidade() {
           envolvido.cpf_cnpj ||
           envolvido.telefone ||
           envolvido.endereco ||
-          envolvido.relacao
+          envolvido.relacao ||
+          envolvido.polo
       );
 
       const payload = {
@@ -1275,7 +1286,7 @@ export default function NovaOportunidade() {
                                     <SelectValue placeholder="Selecione" />
                                   </SelectTrigger>
                                 </FormControl>
-                              <SelectContent>
+                                <SelectContent>
                                   <SelectItem value="Réu">Réu</SelectItem>
                                   <SelectItem value="Autor">Autor</SelectItem>
                                   <SelectItem value="Promovente">Promovente</SelectItem>
@@ -1283,6 +1294,31 @@ export default function NovaOportunidade() {
                                   <SelectItem value="Reclamante">Reclamante</SelectItem>
                                   <SelectItem value="Exequente">Exequente</SelectItem>
                                   <SelectItem value="Outro">Outro</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`envolvidos.${index}.polo`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Polo</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o polo" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Ativo">Ativo</SelectItem>
+                                  <SelectItem value="Passivo">Passivo</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -1310,6 +1346,7 @@ export default function NovaOportunidade() {
                           telefone: "",
                           endereco: "",
                           relacao: "",
+                          polo: "",
                         })
                       }
                     >
