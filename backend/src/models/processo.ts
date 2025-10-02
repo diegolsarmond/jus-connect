@@ -10,6 +10,32 @@ export interface ProcessoAdvogado {
   nome: string | null;
 }
 
+export interface ProcessoParticipantLawyer {
+  name: string | null;
+  document: string | null;
+}
+
+export interface ProcessoParticipantRepresentative {
+  name: string | null;
+  document: string | null;
+}
+
+export interface ProcessoParticipant {
+  id?: number | string | null;
+  name: string | null;
+  document: string | null;
+  document_type?: string | null;
+  side: 'ativo' | 'passivo' | null;
+  type: string | null;
+  person_type: string | null;
+  role: string | null;
+  party_role: string | null;
+  lawyers?: ProcessoParticipantLawyer[] | null;
+  representatives?: ProcessoParticipantRepresentative[] | null;
+  registered_at?: string | null;
+  source?: string | null;
+}
+
 export interface ProcessoMovimentacao {
   id: string;
   data: string | null;
@@ -137,4 +163,5 @@ export interface Processo {
   oportunidade?: ProcessoOportunidadeResumo | null;
   advogados: ProcessoAdvogado[];
   movimentacoes?: ProcessoMovimentacao[];
+  participants?: ProcessoParticipant[] | null;
 }

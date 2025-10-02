@@ -8,7 +8,7 @@ import {
 
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
-import { Processo } from '../models/processo';
+import { Processo, ProcessoParticipant } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import { evaluateProcessSyncAvailability } from '../services/processSyncQuotaService';
 
@@ -24,6 +24,99 @@ const normalizeString = (value: unknown): string | null => {
 const normalizeUppercase = (value: unknown): string | null => {
   const normalized = normalizeString(value);
   return normalized ? normalized.toUpperCase() : null;
+};
+
+const stripDiacritics = (value: string): string =>
+  value.normalize('NFD').replace(/\p{M}/gu, '');
+
+const normalizeParticipantSide = (
+  value: unknown,
+): 'ativo' | 'passivo' | null => {
+  const normalized = normalizeString(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const sanitized = stripDiacritics(normalized)
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (
+    [
+      'ativo',
+      'ativa',
+      'autor',
+      'autora',
+      'reclamante',
+      'exequente',
+      'agravante',
+      'apelante',
+      'impetrante',
+      'embargante',
+      'requerente',
+      'demandante',
+      'parte ativa',
+      'polo ativo',
+    ].some((token) => sanitized === token || sanitized.includes(token))
+  ) {
+    return 'ativo';
+  }
+
+  if (
+    [
+      'passivo',
+      'passiva',
+      'reu',
+      'reus',
+      're',
+      'reclamado',
+      'executado',
+      'agravado',
+      'apelado',
+      'impetrado',
+      'embargado',
+      'requerido',
+      'demandado',
+      'parte passiva',
+      'polo passivo',
+    ].some((token) => sanitized === token || sanitized.includes(token))
+  ) {
+    return 'passivo';
+  }
+
+  return null;
+};
+
+const normalizeParticipantDocument = (
+  value: unknown,
+): { display: string | null; key: string | null } => {
+  const normalized = normalizeString(value);
+
+  if (!normalized) {
+    return { display: null, key: null };
+  }
+
+  const digitsOnly = normalized.replace(/\D+/g, '');
+  const key = digitsOnly || stripDiacritics(normalized).toLowerCase();
+
+  return { display: normalized, key };
+};
+
+const resolveDocumentKey = (document: string | null): string | null => {
+  if (!document) {
+    return null;
+  }
+
+  const digits = document.replace(/\D+/g, '');
+
+  if (digits.length >= 5) {
+    return digits;
+  }
+
+  return stripDiacritics(document).toLowerCase();
 };
 
 const resolveNullablePositiveInteger = (
@@ -491,6 +584,377 @@ const fetchProcessoMovimentacoes = async (
   return parseMovimentacoes(result.rows);
 };
 
+type RawCrawlerParticipant = {
+  nome?: unknown;
+  polo?: unknown;
+  tipo_pessoa?: unknown;
+  documento_principal?: unknown;
+  tipo_documento_principal?: unknown;
+  possui_advogados?: unknown;
+  data_cadastro?: unknown;
+};
+
+type RawOpportunityParticipant = {
+  id?: unknown;
+  oportunidade_id?: unknown;
+  nome?: unknown;
+  documento?: unknown;
+  telefone?: unknown;
+  endereco?: unknown;
+  relacao?: unknown;
+  polo?: unknown;
+  tipo_pessoa?: unknown;
+  numero_cnj?: unknown;
+  party_role?: unknown;
+  side?: unknown;
+};
+
+const mergeNamedCollections = <
+  T extends { name: string | null; document: string | null }
+>(
+  target: T[] | null | undefined,
+  source: T[] | null | undefined,
+): T[] | null => {
+  if (!Array.isArray(source) || source.length === 0) {
+    return target ?? null;
+  }
+
+  const base = Array.isArray(target) ? target.slice() : [];
+  const seen = new Set(
+    base.map((item) =>
+      `${normalizeString(item?.name ?? '') ?? ''}|${normalizeString(item?.document ?? '') ?? ''}`,
+    ),
+  );
+
+  source.forEach((item) => {
+    if (!item) {
+      return;
+    }
+
+    const normalizedName = normalizeString(item.name ?? '');
+    const normalizedDocument = normalizeString(item.document ?? '');
+    const key = `${normalizedName ?? ''}|${normalizedDocument ?? ''}`;
+
+    if (seen.has(key)) {
+      return;
+    }
+
+    base.push({
+      ...item,
+      name: normalizedName,
+      document: normalizedDocument,
+    });
+    seen.add(key);
+  });
+
+  return base;
+};
+
+const mergeParticipantData = (
+  target: ProcessoParticipant,
+  source: ProcessoParticipant,
+) => {
+  if (!target.name && source.name) {
+    target.name = source.name;
+  }
+
+  if (!target.document && source.document) {
+    target.document = source.document;
+  }
+
+  if (!target.document_type && source.document_type) {
+    target.document_type = source.document_type;
+  }
+
+  if (!target.side && source.side) {
+    target.side = source.side;
+  }
+
+  if (!target.type && source.type) {
+    target.type = source.type;
+  }
+
+  if (!target.person_type && source.person_type) {
+    target.person_type = source.person_type;
+  }
+
+  if (!target.role && source.role) {
+    target.role = source.role;
+  }
+
+  if (!target.party_role && source.party_role) {
+    target.party_role = source.party_role;
+  }
+
+  if (!target.registered_at && source.registered_at) {
+    target.registered_at = source.registered_at;
+  }
+
+  if (!target.source && source.source) {
+    target.source = source.source;
+  }
+
+  target.lawyers = mergeNamedCollections(target.lawyers, source.lawyers);
+  target.representatives = mergeNamedCollections(
+    target.representatives,
+    source.representatives,
+  );
+};
+
+const buildCrawlerParticipant = (
+  row: RawCrawlerParticipant,
+): ProcessoParticipant | null => {
+  const name = normalizeString(row.nome);
+  const documentInfo = normalizeParticipantDocument(row.documento_principal);
+
+  if (!name && !documentInfo.display) {
+    return null;
+  }
+
+  const hasLawyers = parseBooleanFlag(row.possui_advogados);
+
+  const participant: ProcessoParticipant = {
+    name: name ?? null,
+    document: documentInfo.display,
+    document_type: normalizeUppercase(row.tipo_documento_principal),
+    side: normalizeParticipantSide(row.polo),
+    type: normalizeString(row.polo),
+    person_type: normalizeUppercase(row.tipo_pessoa),
+    role: null,
+    party_role: null,
+    lawyers: hasLawyers === true ? [] : null,
+    representatives: null,
+    registered_at: normalizeTimestamp(row.data_cadastro),
+    source: 'crawler',
+  };
+
+  return participant;
+};
+
+const buildOpportunityParticipant = (
+  row: RawOpportunityParticipant,
+): ProcessoParticipant | null => {
+  const name = normalizeString(row.nome);
+  const documentInfo = normalizeParticipantDocument(row.documento);
+
+  if (!name && !documentInfo.display) {
+    return null;
+  }
+
+  let idValue: number | string | null = null;
+
+  if (typeof row.id === 'number' && Number.isFinite(row.id)) {
+    idValue = Math.trunc(row.id);
+  } else if (typeof row.id === 'string') {
+    const trimmed = row.id.trim();
+    if (trimmed) {
+      const parsed = Number.parseInt(trimmed, 10);
+      idValue = Number.isFinite(parsed) ? parsed : trimmed;
+    }
+  }
+
+  const participant: ProcessoParticipant = {
+    id: idValue,
+    name: name ?? null,
+    document: documentInfo.display,
+    document_type: null,
+    side:
+      normalizeParticipantSide(row.side) ??
+      normalizeParticipantSide(row.polo) ??
+      normalizeParticipantSide(row.relacao),
+    type: normalizeString(row.side ?? row.polo),
+    person_type: normalizeUppercase(row.tipo_pessoa),
+    role: normalizeString(row.relacao),
+    party_role: normalizeString(row.party_role),
+    lawyers: null,
+    representatives: null,
+    registered_at: null,
+    source: 'opportunity',
+  };
+
+  return participant;
+};
+
+const fetchProcessParticipants = async (
+  numeroCnj: string | null | undefined,
+  oportunidadeId: number | null | undefined,
+  client?: PoolClient,
+): Promise<ProcessoParticipant[]> => {
+  const normalizedNumero = normalizeString(numeroCnj);
+  const executor = client ?? pool;
+
+  let crawlerRows: RawCrawlerParticipant[] = [];
+
+  if (normalizedNumero) {
+    const crawlerResult = await executor.query(
+      `SELECT
+         nome,
+         polo,
+         tipo_pessoa,
+         documento_principal,
+         tipo_documento_principal,
+         possui_advogados,
+         data_cadastro
+       FROM public.trigger_envolvidos_processo
+       WHERE numero_cnj = $1`,
+      [normalizedNumero],
+    );
+
+    crawlerRows = Array.isArray(crawlerResult.rows)
+      ? (crawlerResult.rows as RawCrawlerParticipant[])
+      : [];
+  }
+
+  let oportunidadeRows: RawOpportunityParticipant[] = [];
+
+  const opportunityConditions: string[] = [];
+  const opportunityParams: Array<string | number> = [];
+
+  if (
+    typeof oportunidadeId === 'number' &&
+    Number.isInteger(oportunidadeId) &&
+    oportunidadeId > 0
+  ) {
+    opportunityParams.push(oportunidadeId);
+    const index = opportunityParams.length;
+    opportunityConditions.push(`oportunidade_id = $${index}`);
+  }
+
+  if (normalizedNumero) {
+    opportunityParams.push(normalizedNumero);
+    const numeroIndex = opportunityParams.length;
+    opportunityConditions.push(
+      `(
+        to_jsonb(oe)->>'numero_cnj' = $${numeroIndex}
+        OR to_jsonb(oe)->>'numero_processo_cnj' = $${numeroIndex}
+      )`,
+    );
+  }
+
+  if (opportunityConditions.length > 0) {
+    const whereClause = opportunityConditions
+      .map((condition) => `(${condition})`)
+      .join(' OR ');
+
+    const oportunidadeResult = await executor.query(
+      `SELECT
+         id,
+         oportunidade_id,
+         nome,
+         documento,
+         telefone,
+         endereco,
+         relacao,
+         to_jsonb(oe)->>'polo' AS polo,
+         to_jsonb(oe)->>'tipo_pessoa' AS tipo_pessoa,
+         to_jsonb(oe)->>'numero_cnj' AS numero_cnj,
+         to_jsonb(oe)->>'party_role' AS party_role,
+         to_jsonb(oe)->>'side' AS side
+       FROM public.oportunidade_envolvidos oe
+       WHERE ${whereClause}`,
+      opportunityParams,
+    );
+
+    oportunidadeRows = Array.isArray(oportunidadeResult.rows)
+      ? (oportunidadeResult.rows as RawOpportunityParticipant[])
+      : [];
+  }
+
+  const participants: ProcessoParticipant[] = [];
+  const participantsByDocument = new Map<string, ProcessoParticipant>();
+
+  const registerParticipant = (participant: ProcessoParticipant | null) => {
+    if (!participant) {
+      return;
+    }
+
+    const documentKey = resolveDocumentKey(participant.document ?? null);
+
+    if (documentKey) {
+      const existing = participantsByDocument.get(documentKey);
+
+      if (existing) {
+        if (!existing.side && participant.side) {
+          existing.side = participant.side;
+        } else if (!participant.side && existing.side) {
+          participant.side = existing.side;
+        }
+
+        mergeParticipantData(existing, participant);
+        return;
+      }
+
+      participantsByDocument.set(documentKey, participant);
+    }
+
+    participants.push(participant);
+  };
+
+  crawlerRows.forEach((row) => {
+    registerParticipant(buildCrawlerParticipant(row));
+  });
+
+  oportunidadeRows.forEach((row) => {
+    registerParticipant(buildOpportunityParticipant(row));
+  });
+
+  return participants.map((participant) => {
+    const normalizedName = normalizeString(participant.name);
+    const normalizedDocument = normalizeString(participant.document);
+    const normalizedType = normalizeString(participant.type);
+    const normalizedRole = normalizeString(participant.role);
+    const normalizedPartyRole = normalizeString(participant.party_role);
+    const normalizedPersonType = normalizeUppercase(participant.person_type);
+    const normalizedDocumentType = normalizeUppercase(participant.document_type);
+    const normalizedRegisteredAt = normalizeTimestamp(participant.registered_at);
+
+    const resolvedSide =
+      participant.side ??
+      normalizeParticipantSide(normalizedType) ??
+      normalizeParticipantSide(normalizedRole) ??
+      normalizeParticipantSide(normalizedPartyRole);
+
+    const normalizedLawyers = Array.isArray(participant.lawyers)
+      ? participant.lawyers
+          .map((lawyer) => ({
+            name: normalizeString(lawyer?.name ?? ''),
+            document: normalizeString(lawyer?.document ?? ''),
+          }))
+          .filter(
+            (lawyer): lawyer is { name: string | null; document: string | null } =>
+              Boolean(lawyer.name) || Boolean(lawyer.document),
+          )
+      : null;
+
+    const normalizedRepresentatives = Array.isArray(participant.representatives)
+      ? participant.representatives
+          .map((rep) => ({
+            name: normalizeString(rep?.name ?? ''),
+            document: normalizeString(rep?.document ?? ''),
+          }))
+          .filter(
+            (rep): rep is { name: string | null; document: string | null } =>
+              Boolean(rep.name) || Boolean(rep.document),
+          )
+      : null;
+
+    return {
+      ...participant,
+      name: normalizedName,
+      document: normalizedDocument,
+      document_type: normalizedDocumentType,
+      side: resolvedSide,
+      type: normalizedType,
+      role: normalizedRole,
+      party_role: normalizedPartyRole,
+      person_type: normalizedPersonType,
+      registered_at: normalizedRegisteredAt,
+      lawyers: normalizedLawyers,
+      representatives: normalizedRepresentatives,
+    };
+  });
+};
+
 const safeJsonStringify = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -822,9 +1286,15 @@ export const getProcessoById = async (req: Request, res: Response) => {
 
     const processo = mapProcessoRow(result.rows[0]);
 
+    const participants = await fetchProcessParticipants(
+      processo.numero,
+      processo.oportunidade_id,
+    );
+
     const movimentacoes = await fetchProcessoMovimentacoes(processo.numero);
 
     processo.movimentacoes = movimentacoes;
+    processo.participants = participants.length > 0 ? participants : [];
 
     res.json(processo);
   } catch (error) {
@@ -1145,7 +1615,7 @@ export const createProcesso = async (req: Request, res: Response) => {
         [empresaId, tipoValue],
       );
 
-      if (tipoLookup.rowCount > 0) {
+      if ((tipoLookup.rowCount ?? 0) > 0) {
         const resolvedId = parseOptionalInteger(tipoLookup.rows[0]?.id);
         if (resolvedId) {
           tipoProcessoIdValue = resolvedId;
@@ -1159,7 +1629,7 @@ export const createProcesso = async (req: Request, res: Response) => {
         [statusValue],
       );
 
-      if (situacaoLookup.rowCount > 0) {
+      if ((situacaoLookup.rowCount ?? 0) > 0) {
         const resolvedSituacaoId = parseOptionalInteger(
           situacaoLookup.rows[0]?.id,
         );
@@ -1626,7 +2096,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
         [empresaId, tipoValue],
       );
 
-      if (tipoLookup.rowCount > 0) {
+      if ((tipoLookup.rowCount ?? 0) > 0) {
         const resolvedId = parseOptionalInteger(tipoLookup.rows[0]?.id);
         if (resolvedId) {
           tipoProcessoIdValue = resolvedId;
@@ -1640,7 +2110,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
         [statusValue],
       );
 
-      if (situacaoLookup.rowCount > 0) {
+      if ((situacaoLookup.rowCount ?? 0) > 0) {
         const resolvedSituacaoId = parseOptionalInteger(
           situacaoLookup.rows[0]?.id,
         );
