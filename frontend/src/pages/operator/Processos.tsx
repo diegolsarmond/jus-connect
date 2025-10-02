@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ProcessCard } from "@/components/ui/process-card";
 import {
   Dialog,
   DialogContent,
@@ -1749,274 +1750,30 @@ export default function Processos() {
           </CardContent>
         </Card>
       ) : (
-        <Accordion type="multiple" className="space-y-4">
+        <div className="space-y-4">
           {filteredProcessos.map((processo) => {
-            const clienteDocumento =
-              processo.cliente?.documento?.trim() || "Documento não informado";
-            const clientePapel = processo.cliente?.papel?.trim();
-            const ultimaAtualizacaoLabel = processo.ultimaSincronizacao
-              ? formatDateTimeToPtBR(processo.ultimaSincronizacao)
-              : "Sem registros recentes";
-            const movimentacoesLabel =
-              processo.movimentacoesCount === 1
-                ? "1 movimentação registrada"
-                : `${processo.movimentacoesCount} movimentações registradas`;
-            const etapaAtualLabel = processo.status && processo.status !== "Não informado"
-              ? `Etapa atual: ${processo.status}`
-              : "Etapa atual: Não informada";
             const isSyncing = syncingProcessIds.includes(processo.id);
-            const syncError = syncErrors[processo.id] ?? null;
-
+            
             return (
-              <AccordionItem
+              <ProcessCard
                 key={processo.id}
-                value={String(processo.id)}
-                className="overflow-hidden rounded-xl border border-border/60 bg-card/60 text-card-foreground shadow-sm transition hover:border-primary/40 hover:shadow-md data-[state=open]:shadow-md"
-              >
-                <AccordionTrigger className="px-6 py-6 text-left hover:no-underline sm:px-8">
-                  <div className="flex w-full flex-col gap-4 text-left">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="space-y-1">
-                        <CardTitle className="text-xl font-semibold">
-                          Processo {processo.numero}
-                        </CardTitle>
-                        <CardDescription className="text-sm text-muted-foreground">
-                          {processo.cliente.nome} · {processo.classeJudicial}
-                        </CardDescription>
-                      </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClassName(processo.status)}`}
-                          >
-                            {processo.status}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className={`rounded-full px-3 py-1 text-xs font-medium ${getTipoBadgeClassName(processo.tipo)}`}
-                          >
-                            {processo.tipo}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-5">
-                        <span className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5 text-primary" />
-                          Distribuído em {processo.dataDistribuicao}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
-                          Última atualização: {ultimaAtualizacaoLabel}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <FileText className="h-3.5 w-3.5 text-primary" />
-                          {movimentacoesLabel}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <ChevronsUpDown className="h-3.5 w-3.5 text-primary" />
-                          {etapaAtualLabel}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <RefreshCw className="h-3.5 w-3.5 text-primary" />
-                          {processo.consultasApiCount === 1
-                            ? "1 sincronização"
-                            : `${processo.consultasApiCount} sincronizações`}
-                        </span>
-                      </div>
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="border-t border-border/40 px-6 pb-6 pt-6 sm:px-8">
-                  <div className="space-y-6">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Cliente
-                        </p>
-                        <div className="mt-3 flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {processo.cliente.nome}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{clienteDocumento}</p>
-                          </div>
-                          {clientePapel ? (
-                            <Badge
-                              variant="outline"
-                              className="rounded-full border-muted-foreground/20 bg-background px-2.5 py-1 text-[10px] uppercase tracking-wide text-muted-foreground"
-                            >
-                              {clientePapel}
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                      {processo.proposta ? (
-                        <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Proposta vinculada
-                          </p>
-                          <div className="mt-3 flex items-start gap-2 text-sm text-foreground">
-                            <Archive className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="font-medium text-foreground">
-                                {processo.proposta.label}
-                              </p>
-                              {processo.proposta.solicitante ? (
-                                <p className="text-xs text-muted-foreground">
-                                  Solicitante: {processo.proposta.solicitante}
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Jurisdição
-                        </p>
-                        <div className="mt-3 flex items-start gap-2 text-sm text-foreground">
-                          <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <span>{processo.jurisdicao}</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Órgão julgador
-                        </p>
-                        <div className="mt-3 flex items-start gap-2 text-sm text-foreground">
-                          <Landmark className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <span>{processo.orgaoJulgador}</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Classe judicial
-                        </p>
-                        <div className="mt-3 flex items-start gap-2 text-sm text-foreground">
-                          <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <span>{processo.classeJudicial}</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Assunto principal
-                        </p>
-                        <div className="mt-3 flex items-start gap-2 text-sm text-foreground">
-                          <GavelIcon className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <span>{processo.assunto}</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Data da distribuição
-                        </p>
-                        <div className="mt-3 flex items-start gap-2 text-sm text-foreground">
-                          <Calendar className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                          <span>{processo.dataDistribuicao}</span>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Status atual
-                        </p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClassName(processo.status)}`}
-                          >
-                            {processo.status}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Tipo do processo
-                        </p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className={`rounded-full px-3 py-1 text-xs font-medium ${getTipoBadgeClassName(processo.tipo)}`}
-                          >
-                            {processo.tipo}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid gap-4 lg:grid-cols-[1.5fr,1fr]">
-                      <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Equipe jurídica
-                        </p>
-                        {processo.advogados.length > 0 ? (
-                          <ul className="mt-3 space-y-2 text-sm text-foreground">
-                            {processo.advogados.map((advogado) => (
-                              <li
-                                key={`${processo.id}-adv-${advogado.id}-${advogado.nome}`}
-                                className="space-y-0.5"
-                              >
-                                <p className="font-medium">{advogado.nome}</p>
-                                {advogado.funcao ? (
-                                  <p className="text-xs text-muted-foreground">{advogado.funcao}</p>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-3 text-xs text-muted-foreground">
-                            Nenhum advogado cadastrado para este processo.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        ID interno: {processo.id}
-                      </span>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRequestManualSync(processo)}
-                          disabled={isSyncing}
-                        >
-                          {isSyncing ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Sincronizando...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              Sincronizar
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewProcessDetails(processo)}
-                        >
-                          <Eye className="mr-2 h-4 w-4" />
-                          Visualizar detalhes
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/processos/${processo.id}/editar`)}
-                        >
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Editar
-                        </Button>
-                      </div>
-                    </div>
-                    {syncError ? (
-                      <p className="text-xs text-destructive">{syncError}</p>
-                    ) : null}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
+                numero={processo.numero}
+                status={processo.status}
+                cliente={processo.cliente.nome}
+                dataDistribuicao={processo.dataDistribuicao}
+                jurisdicao={processo.jurisdicao}
+                orgaoJulgador={processo.orgaoJulgador}
+                isSyncing={isSyncing}
+                onView={() => handleViewProcessDetails(processo)}
+                onSync={() => {
+                  setManualSyncProcess(processo);
+                  setManualSyncWithAttachments(false);
+                  setManualSyncOnDemand(false);
+                }}
+              />
             );
           })}
-        </Accordion>
+        </div>
       )}
 
       <Dialog open={manualSyncProcess !== null} onOpenChange={handleManualSyncDialogOpenChange}>
