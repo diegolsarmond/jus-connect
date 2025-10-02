@@ -410,20 +410,54 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
 const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 
 const MOVIMENTACOES_BASE_QUERY = `
+  WITH movimentacoes AS (
+    SELECT
+      tmp.id_andamento::text AS id,
+      tmp.data_andamento AS data,
+      NULL::text AS tipo,
+      NULL::text AS tipo_publicacao,
+      NULL::jsonb AS classificacao_predita,
+      NULL::text AS conteudo,
+      NULL::text AS texto_categoria,
+      NULL::jsonb AS fonte,
+      NULL::timestamptz AS criado_em,
+      tmp.atualizado_em
+    FROM public.trigger_movimentacao_processo tmp
+    JOIN public.processos p ON p.numero = tmp.numero_cnj
+    WHERE p.id = $1
+
+    UNION ALL
+
+    SELECT
+      pm.id::text AS id,
+      pm.data,
+      pm.tipo,
+      pm.tipo_publicacao,
+      pm.classificacao_predita,
+      pm.conteudo,
+      pm.texto_categoria,
+      pm.fonte,
+      pm.criado_em,
+      pm.atualizado_em
+    FROM public.processo_movimentacoes pm
+    WHERE pm.processo_id = $1
+  )
   SELECT
-    pm.id,
-    pm.data,
-    pm.tipo,
-    pm.tipo_publicacao,
-    pm.classificacao_predita,
-    pm.conteudo,
-    pm.texto_categoria,
-    pm.fonte,
-    pm.criado_em,
-    pm.atualizado_em
-  FROM public.processo_movimentacoes pm
-  WHERE pm.processo_id = $1
-  ORDER BY pm.data DESC NULLS LAST, pm.id DESC
+    id,
+    data,
+    tipo,
+    tipo_publicacao,
+    classificacao_predita,
+    conteudo,
+    texto_categoria,
+    fonte,
+    criado_em,
+    atualizado_em
+  FROM movimentacoes
+  ORDER BY
+    data DESC NULLS LAST,
+    CASE WHEN id ~ '^[0-9]+$' THEN id::bigint ELSE NULL END DESC NULLS LAST,
+    id DESC
 `;
 
 const fetchProcessoMovimentacoes = async (
