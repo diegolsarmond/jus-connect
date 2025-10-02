@@ -512,11 +512,11 @@ const baseProcessoSelect = `
     p.numero,
     p.uf,
     p.municipio,
-    p.orgao_julgador,
-    p.tipo,
-    p.status,
-    p.classe_judicial,
-    p.assunto,
+    COALESCE(dp.orgao_julgador, p.orgao_julgador) AS orgao_julgador,
+    COALESCE(dp.area,p.tipo) as tipo,
+    COALESCE(dp.situacao,p.status) as status,
+    COALESCE(dp.classificacao_principal_nome, p.classe_judicial) as classe_judicial,
+    dp.assunto,
     p.jurisdicao,
     p.oportunidade_id,
     o.sequencial_empresa AS oportunidade_sequencial_empresa,
@@ -528,8 +528,7 @@ const baseProcessoSelect = `
     p.advogado_responsavel,
     COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
     p.criado_em,
-    p.atualizado_em,
-    p.ultima_sincronizacao,
+    mp.data_andamento as atualizado_em,
     COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
     p.consultas_api_count,
     c.nome AS cliente_nome,
@@ -537,8 +536,12 @@ const baseProcessoSelect = `
     c.tipo AS cliente_tipo,
     (
       SELECT COALESCE(
-        jsonb_agg(jsonb_build_object('id', pa.usuario_id, 'nome', u.nome_completo) ORDER BY u.nome_completo)
-          FILTER (WHERE pa.usuario_id IS NOT NULL),
+        jsonb_agg(
+          jsonb_build_object(
+            'id', pa.usuario_id,
+            'nome', u.nome_completo
+          ) ORDER BY u.nome_completo
+        ) FILTER (WHERE pa.usuario_id IS NOT NULL),
         '[]'::jsonb
       )
       FROM public.processo_advogados pa
@@ -550,13 +553,12 @@ const baseProcessoSelect = `
       FROM public.trigger_movimentacao_processo tmp
       WHERE tmp.numero_cnj = p.numero
     ) AS movimentacoes_count
-  FROM public.processos p
-  LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero
-  LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero
-  LEFT JOIN public.trigger_assuntos_processo ap ON ap.numero_cnj = p.numero
-  LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
-  LEFT JOIN public.clientes c ON c.id = p.cliente_id
-  LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
+FROM public.processos p
+LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero
+LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
+LEFT JOIN public.clientes c ON c.id = p.cliente_id
+LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
 `;
 
 const mapProcessoRow = (row: any): Processo => {
