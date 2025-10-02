@@ -108,6 +108,7 @@ export interface Processo {
   criado_em: string;
   atualizado_em: string;
   ultima_sincronizacao: string | null;
+  ultima_movimentacao?: string | null;
   consultas_api_count: number;
   movimentacoes_count: number;
   cliente?: ProcessoClienteResumo | null;

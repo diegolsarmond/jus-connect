@@ -167,6 +167,7 @@ interface ApiProcesso {
   oportunidade?: ApiProcessoOportunidade | null;
   advogados?: ApiProcessoAdvogado[] | null;
   ultima_sincronizacao?: string | null;
+  ultima_movimentacao?: string | null;
   consultas_api_count?: number | string | null;
   movimentacoes_count?: number | string | null;
 }

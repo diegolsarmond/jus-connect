@@ -505,7 +505,7 @@ const prepareMovimentacaoRecord = (
 };
 
 const baseProcessoSelect = `
-  SELECT
+  SELECT DISTINCT
     p.id,
     p.cliente_id,
     p.idempresa,
@@ -526,10 +526,11 @@ const baseProcessoSelect = `
     o.solicitante_id AS oportunidade_solicitante_id,
     solicitante.nome AS oportunidade_solicitante_nome,
     p.advogado_responsavel,
-    p.data_distribuicao,
+    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
     p.criado_em,
     p.atualizado_em,
     p.ultima_sincronizacao,
+    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
     p.consultas_api_count,
     c.nome AS cliente_nome,
     c.documento AS cliente_documento,
@@ -546,10 +547,13 @@ const baseProcessoSelect = `
     ) AS advogados,
     (
       SELECT COUNT(*)::int
-      FROM public.processo_movimentacoes pm
-      WHERE pm.processo_id = p.id
+      FROM public.trigger_movimentacao_processo tmp
+      WHERE tmp.numero_cnj = p.numero
     ) AS movimentacoes_count
   FROM public.processos p
+  LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero
+  LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero
+  LEFT JOIN public.trigger_assuntos_processo ap ON ap.numero_cnj = p.numero
   LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
   LEFT JOIN public.clientes c ON c.id = p.cliente_id
   LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
@@ -592,6 +596,7 @@ const mapProcessoRow = (row: any): Processo => {
     data_distribuicao: row.data_distribuicao,
     criado_em: row.criado_em,
     atualizado_em: row.atualizado_em,
+    ultima_movimentacao: normalizeTimestamp(row.ultima_movimentacao),
     ultima_sincronizacao: normalizeTimestamp(row.ultima_sincronizacao),
     consultas_api_count: parseInteger(row.consultas_api_count),
     movimentacoes_count: parseInteger(row.movimentacoes_count),
