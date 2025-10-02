@@ -115,6 +115,7 @@ type EnvolvidoRow = {
   telefone: string | null;
   endereco: string | null;
   relacao: string | null;
+  polo: string | null;
 };
 
 type OpportunityAudience = {
@@ -773,6 +774,7 @@ function buildVariables({
       assign(`${base}.documento`, doc);
       assign(`${base}.telefone`, envolvido.telefone);
       assign(`${base}.endereco`, envolvido.endereco);
+      assign(`${base}.polo`, envolvido.polo);
       if (relationSlug) {
         assign(`${base}.relacao`, envolvido.relacao);
       }
@@ -855,7 +857,7 @@ async function fetchOpportunityData(
   };
 
   const envolvidosResult = await pool.query<EnvolvidoRow>(
-    `SELECT nome, documento, telefone, endereco, relacao
+    `SELECT nome, documento, telefone, endereco, relacao, polo
        FROM public.oportunidade_envolvidos
       WHERE oportunidade_id = $1`,
     [id],

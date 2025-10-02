@@ -492,7 +492,7 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Oportunidade não encontrada' });
     }
     const envolvidosResult = await pool.query(
-      `SELECT nome, documento, telefone, endereco, relacao
+      `SELECT nome, documento, telefone, endereco, relacao, polo
        FROM public.oportunidade_envolvidos
        WHERE oportunidade_id = $1`,
       [parsedId]
@@ -504,6 +504,7 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
       telefone: env.telefone,
       endereco: env.endereco,
       relacao: env.relacao,
+      polo: env.polo,
     }));
     res.json(oportunidade);
   } catch (error) {
@@ -541,7 +542,7 @@ export const listEnvolvidosByOportunidade = async (
     }
 
     const result = await pool.query(
-      `SELECT id, oportunidade_id, nome, documento, telefone, endereco, relacao
+      `SELECT id, oportunidade_id, nome, documento, telefone, endereco, relacao, polo
        FROM public.oportunidade_envolvidos
        WHERE oportunidade_id = $1`,
       [parsedId],
@@ -682,8 +683,8 @@ export const createOportunidade = async (req: Request, res: Response) => {
       const queries = envolvidos.map((env: any) =>
         dbClient.query(
           `INSERT INTO public.oportunidade_envolvidos
-           (oportunidade_id, nome, documento, telefone, endereco, relacao)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+           (oportunidade_id, nome, documento, telefone, endereco, relacao, polo)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             oportunidade.id,
             env.nome || null,
@@ -691,6 +692,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
             env.telefone || null,
             env.endereco || null,
             env.relacao || null,
+            env.polo || null,
           ]
         )
       );
@@ -829,8 +831,8 @@ export const updateOportunidade = async (req: Request, res: Response) => {
       const queries = envolvidos.map((env: any) =>
         client!.query(
           `INSERT INTO public.oportunidade_envolvidos
-           (oportunidade_id, nome, documento, telefone, endereco, relacao)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+           (oportunidade_id, nome, documento, telefone, endereco, relacao, polo)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             id,
             env.nome || null,
@@ -838,6 +840,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
             env.telefone || null,
             env.endereco || null,
             env.relacao || null,
+            env.polo || null,
           ],
         ),
       );
