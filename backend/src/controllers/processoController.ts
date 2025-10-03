@@ -909,21 +909,20 @@ const fetchProcessoMovimentacoes = async (
 };
 
 const ANEXOS_BASE_QUERY = `
-  SELECT
-    id,
-    id_andamento,
-    id_anexo,
-    nome,
-    tipo,
-    data_cadastro,
-    data_andamento,
-    instancia_processo,
-    crawl_id
-  FROM public.trigger_anexos_processo
-  WHERE numero_cnj = $1
-  ORDER BY
-    data_cadastro DESC NULLS LAST,
-    id DESC
+SELECT DISTINCT ON (ap.id_anexo)
+  ap.id_anexo,
+  ap.id,
+  ap.id_andamento,
+  ap.nome,
+  ap.tipo,
+  ap.data_cadastro,
+  mp.data_andamento,
+  ap.instancia_processo,
+  ap.crawl_id
+FROM public.trigger_anexos_processo ap
+INNER JOIN public.trigger_movimentacao_processo mp ON mp.id_andamento = ap.id_andamento
+WHERE ap.numero_cnj = $1
+ORDER BY ap.id_anexo, mp.data_andamento DESC NULLS LAST, ap.id DESC
 `;
 
 const fetchProcessoAnexos = async (
