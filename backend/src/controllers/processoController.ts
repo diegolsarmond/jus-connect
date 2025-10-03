@@ -1385,6 +1385,70 @@ const prepareMovimentacaoRecord = (
   };
 };
 
+const listProcessoSelect = `
+  SELECT DISTINCT
+    p.id,
+    p.cliente_id,
+    p.idempresa,
+    p.numero_cnj AS numero,
+    p.uf,
+    p.municipio,
+    COALESCE(dp.orgao_julgador, p.orgao_julgador) AS orgao_julgador,
+    COALESCE(dp.area, tp.nome) AS tipo,
+    COALESCE(dp.situacao, sp.nome) AS status,
+    COALESCE(dp.classificacao_principal_nome, p.classe_judicial) AS classe_judicial,
+    COALESCE(dp.assunto, p.assunto) AS assunto,
+    p.jurisdicao,
+    p.oportunidade_id,
+    o.sequencial_empresa AS oportunidade_sequencial_empresa,
+    o.data_criacao AS oportunidade_data_criacao,
+    o.numero_processo_cnj AS oportunidade_numero_processo_cnj,
+    o.numero_protocolo AS oportunidade_numero_protocolo,
+    o.solicitante_id AS oportunidade_solicitante_id,
+    solicitante.nome AS oportunidade_solicitante_nome,
+    p.advogado_responsavel,
+    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
+    p.criado_em,
+    mp.data_andamento AS atualizado_em,
+    p.atualizado_em AS ultima_sincronizacao,
+    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
+    (
+      SELECT COUNT(*)::int
+      FROM public.processo_consultas_api pc
+      WHERE pc.processo_id = p.id
+    ) AS consultas_api_count,
+    (
+      SELECT COUNT(*)::int
+      FROM public.trigger_movimentacao_processo tmp
+      WHERE tmp.numero_cnj = p.numero_cnj
+    ) AS movimentacoes_count,
+    c.nome AS cliente_nome,
+    c.documento AS cliente_documento,
+    c.tipo AS cliente_tipo,
+    (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', pa.usuario_id,
+            'nome', u.nome_completo
+          ) ORDER BY u.nome_completo
+        ) FILTER (WHERE pa.usuario_id IS NOT NULL),
+        '[]'::jsonb
+      )
+      FROM public.processo_advogados pa
+      LEFT JOIN public.usuarios u ON u.id = pa.usuario_id
+      WHERE pa.processo_id = p.id
+    ) AS advogados
+FROM public.processos p
+LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
+LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
+LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
+LEFT JOIN public.clientes c ON c.id = p.cliente_id
+LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
+`;
+
 const baseProcessoSelect = `
   SELECT DISTINCT
     p.id,
@@ -1468,6 +1532,92 @@ LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
 LEFT JOIN public.clientes c ON c.id = p.cliente_id
 LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
 `;
+
+const mapProcessoListRow = (row: any): Processo => {
+  const oportunidadeId = parseOptionalInteger(row.oportunidade_id);
+  const sequencial = parseOptionalInteger(row.oportunidade_sequencial_empresa);
+  const solicitanteId = parseOptionalInteger(row.oportunidade_solicitante_id);
+  const solicitanteNome = normalizeString(row.oportunidade_solicitante_nome);
+
+  const oportunidade =
+    oportunidadeId && oportunidadeId > 0
+      ? {
+          id: oportunidadeId,
+          sequencial_empresa: sequencial ?? null,
+          data_criacao: row.oportunidade_data_criacao ?? null,
+          numero_processo_cnj: row.oportunidade_numero_processo_cnj ?? null,
+          numero_protocolo: row.oportunidade_numero_protocolo ?? null,
+          solicitante_id: solicitanteId ?? null,
+          solicitante_nome: solicitanteNome,
+        }
+      : null;
+
+  const dataDistribuicao =
+    normalizeTimestamp(row.data_distribuicao) ??
+    normalizeDate(row.data_distribuicao) ??
+    (typeof row.data_distribuicao === 'string' ? row.data_distribuicao : null);
+
+  const ultimaSincronizacao =
+    normalizeTimestamp(row.ultima_sincronizacao) ?? row.ultima_sincronizacao ?? null;
+
+  const ultimaMovimentacao = normalizeTimestamp(row.ultima_movimentacao);
+
+  const clienteResumo = row.cliente_id
+    ? {
+        id: row.cliente_id,
+        nome: row.cliente_nome ?? null,
+        documento: row.cliente_documento ?? null,
+        tipo:
+          row.cliente_tipo === null || row.cliente_tipo === undefined
+            ? null
+            : String(row.cliente_tipo),
+      }
+    : null;
+
+  return {
+    id: row.id,
+    cliente_id: row.cliente_id,
+    idempresa: row.idempresa ?? null,
+    numero: row.numero,
+    uf: row.uf ?? null,
+    municipio: row.municipio ?? null,
+    orgao_julgador: row.orgao_julgador ?? null,
+    tipo: row.tipo ?? null,
+    status: row.status ?? null,
+    classe_judicial: row.classe_judicial ?? null,
+    assunto: row.assunto ?? null,
+    jurisdicao: row.jurisdicao ?? null,
+    oportunidade_id: oportunidade?.id ?? null,
+    advogado_responsavel: row.advogado_responsavel ?? null,
+    data_distribuicao: dataDistribuicao,
+    criado_em: row.criado_em,
+    atualizado_em: row.atualizado_em,
+    ultima_sincronizacao: ultimaSincronizacao,
+    ultima_movimentacao: ultimaMovimentacao,
+    consultas_api_count: parseInteger(row.consultas_api_count),
+    situacao_processo_id: parseOptionalInteger(row.situacao_processo_id),
+    situacao_processo_nome: normalizeString(row.situacao_processo_nome),
+    tipo_processo_id: parseOptionalInteger(row.tipo_processo_id),
+    tipo_processo_nome: normalizeString(row.tipo_processo_nome),
+    area_atuacao_id: parseOptionalInteger(row.area_atuacao_id),
+    area_atuacao_nome: normalizeString(row.area_atuacao_nome),
+    instancia: normalizeString(row.instancia),
+    sistema_cnj_id: parseOptionalInteger(row.sistema_cnj_id),
+    monitorar_processo: parseBooleanFlag(row.monitorar_processo) ?? false,
+    envolvidos_id: parseOptionalInteger(row.envolvidos_id),
+    descricao: normalizeString(row.descricao),
+    setor_id: parseOptionalInteger(row.setor_id),
+    setor_nome: normalizeString(row.setor_nome),
+    data_citacao: normalizeDate(row.data_citacao),
+    data_recebimento: normalizeDate(row.data_recebimento),
+    data_arquivamento: normalizeDate(row.data_arquivamento),
+    data_encerramento: normalizeDate(row.data_encerramento),
+    movimentacoes_count: parseInteger(row.movimentacoes_count),
+    cliente: clienteResumo,
+    oportunidade,
+    advogados: parseAdvogados(row.advogados),
+  };
+};
 
 const mapProcessoRow = (row: any): Processo => {
   const oportunidadeId = parseOptionalInteger(row.oportunidade_id);
@@ -1720,13 +1870,13 @@ export const listProcessos = async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `${baseProcessoSelect}
+      `${listProcessoSelect}
        WHERE p.idempresa = $1
        ORDER BY p.criado_em DESC`,
       [empresaId]
     );
 
-    return res.json(result.rows.map(mapProcessoRow));
+    return res.json(result.rows.map(mapProcessoListRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1759,14 +1909,14 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      `${baseProcessoSelect}
+      `${listProcessoSelect}
        WHERE p.cliente_id = $1
          AND p.idempresa = $2
        ORDER BY p.criado_em DESC`,
       [parsedClienteId, empresaId]
     );
 
-    res.json(result.rows.map(mapProcessoRow));
+    res.json(result.rows.map(mapProcessoListRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
