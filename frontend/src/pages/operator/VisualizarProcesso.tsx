@@ -141,7 +141,7 @@ export function filtrarMovimentacoes(
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
   const tipoAndamento = movimentacao.stepType?.trim() || "movimentação processual";
   const partes: string[] = [
-      `Com base no(na) ${tipoAndamento} descrito abaixo, utilize 4 frases para destacar decisões, determinações, pedidos e próximos passos relevantes.`,
+      `Responda de forma direta ao(à) ${tipoAndamento} descrito abaixo. Traga apenas 4 frases objetivas com decisões, determinações, pedidos e próximos passos, sem introduções ou menções a resumo.`,
   ];
 
 
