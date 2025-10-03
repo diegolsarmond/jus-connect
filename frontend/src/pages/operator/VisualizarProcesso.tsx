@@ -1720,7 +1720,7 @@ export function InformacoesProcesso({ dados, partes, anexos, onVerTodosAnexos }:
       <section aria-labelledby="partes-processo" className="space-y-4">
         <div className="flex items-center gap-2">
           <h2 id="partes-processo" className="text-lg font-semibold text-foreground">
-            Partes do processo
+            Envolvidos do processo
           </h2>
         </div>
         <div className="space-y-6">
