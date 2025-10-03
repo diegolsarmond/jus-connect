@@ -177,11 +177,23 @@ function prepararResumoIa(conteudo?: string | null): string | null {
   const frases = paragrafoUnico
     .split(/(?<=[.!?])\s+/)
     .filter((frase) => frase.trim().length > 0);
-  const resumoConciso = frases.slice(0, 3).join(" ") || paragrafoUnico;
+  let frasesParaResumo = frases;
+
+  if (frases.length > 0) {
+    const primeiraFraseNormalizada = frases[0].trim().toLowerCase();
+    const prefixosRemoviveis = ["resumo", "síntese", "este documento"];
+
+    if (prefixosRemoviveis.some((prefixo) => primeiraFraseNormalizada.startsWith(prefixo))) {
+      const restantes = frases.slice(1);
+      frasesParaResumo = restantes.length > 0 ? restantes : frases;
+    }
+  }
+
+  const resumoConciso = frasesParaResumo.slice(0, 4).join(" ") || paragrafoUnico;
 
   const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
 
-  return resumoConciso;
+  return resumoLimpo || resumoConciso;
 }
 
 interface ApiProcessoCounty {
