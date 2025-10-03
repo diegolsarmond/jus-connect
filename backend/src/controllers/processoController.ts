@@ -921,7 +921,7 @@ SELECT DISTINCT ON (ap.id_anexo)
   ap.nome,
   ap.tipo,
   ap.data_cadastro,
-  ap.data_andamento,
+  ap.data_cadastro AS data_andamento,
   ap.instancia_processo,
   ap.crawl_id,
   mp.criado_em AS movimentacao_criado_em,
@@ -931,7 +931,7 @@ LEFT JOIN public.trigger_movimentacao_processo mp
   ON mp.numero_cnj = ap.numero_cnj
  AND (
        (ap.id_andamento IS NOT NULL AND mp.id_andamento = ap.id_andamento)
-    OR (ap.id_andamento IS NULL AND ap.data_andamento IS NOT NULL AND mp.data_andamento = ap.data_andamento)
+    OR (ap.id_andamento IS NULL AND ap.data_cadastro IS NOT NULL AND mp.data_andamento = ap.data_cadastro)
   )
 WHERE ap.numero_cnj = $1
 ORDER BY ap.id_anexo, mp.data_andamento DESC NULLS LAST, ap.id DESC
