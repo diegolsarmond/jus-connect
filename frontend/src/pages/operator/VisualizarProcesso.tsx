@@ -237,6 +237,8 @@ interface ApiProcessoMovimentacao {
 
 interface ApiProcessoAttachment {
   id?: number | string | null;
+  id_andamento?: number | string | null;
+  id_anexo?: number | string | null;
   title?: string | null;
   date?: string | null;
   url?: string | null;
@@ -244,6 +246,11 @@ interface ApiProcessoAttachment {
   attachment_name?: string | null;
   attachment_date?: string | null;
   attachment_url?: string | null;
+  nome?: string | null;
+  tipo?: string | null;
+  data_cadastro?: string | null;
+  instancia_processo?: string | null;
+  crawl_id?: string | null;
   content?: string | null;
   status?: string | null;
   extension?: string | null;
@@ -298,6 +305,7 @@ export interface ApiProcessoResponse {
   tribunal_name?: string | null;
   county?: ApiProcessoCounty | string | null;
   instance?: string | null;
+  instancia?: string | null;
   justice_description?: string | null;
   subjects?: Array<string | ApiCodigoNome | null> | null;
   classifications?: Array<string | ApiCodigoNome | null> | null;
@@ -360,6 +368,11 @@ interface AnexoProcesso {
   titulo: string;
   data: string | null;
   url: string | null;
+  idAndamento: string | null;
+  instancia: string | null;
+  idAnexo: string | null;
+  tipo: string | null;
+  crawlId: string | null;
 }
 
 interface ParteNormalizada {
@@ -437,6 +450,8 @@ export interface ProcessoViewModel {
   grupos: GrupoMovimentacao[];
   relacionados: ProcessoRelacionadoView[];
   anexos: AnexoProcesso[];
+  numeroCnj: string | null;
+  instanciaProcesso: string | null;
 }
 
 const formatadorMoeda = new Intl.NumberFormat("pt-BR", {
@@ -1095,9 +1110,9 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const justiceDescription =
     primeiroTextoValido(processo.justice_description) ||
     NAO_INFORMADO;
-  const instance = normalizarGrau(
-    primeiroTextoValido(processo.instance) || NAO_INFORMADO,
-  );
+  const numeroCnj = primeiroTextoValido(processo.numero) || null;
+  const instanciaBruta = primeiroTextoValido(processo.instance ?? processo.instancia) || null;
+  const instance = normalizarGrau(instanciaBruta || NAO_INFORMADO);
 
   const subjectsFonte =
     (Array.isArray(processo.subjects) && processo.subjects.length > 0
@@ -1157,39 +1172,70 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
       ? processo.attachments
       : [];
 
-  const anexosPorDia = new Map<string, AnexoProcesso[]>();
+  const normalizarIdentificador = (valor: unknown): string | null => {
+    if (typeof valor === "number" && Number.isFinite(valor)) {
+      return String(Math.trunc(valor));
+    }
+
+    if (typeof valor === "string") {
+      const texto = valor.trim();
+      return texto.length > 0 ? texto : null;
+    }
+
+    return null;
+  };
+
+  const anexosPorMovimentacao = new Map<string, AnexoProcesso[]>();
 
   const anexos: AnexoProcesso[] = anexosFonte
     .map((anexo, index) => {
       const titulo =
-        primeiroTextoValido(anexo.title, anexo.attachment_name, anexo.content) ||
+        primeiroTextoValido(anexo.nome, anexo.attachment_name, anexo.title, anexo.content) ||
         `Documento ${index + 1}`;
-      const id =
-        typeof anexo.id === "string" || typeof anexo.id === "number"
-          ? String(anexo.id)
-          : typeof anexo.attachment_id === "string" || typeof anexo.attachment_id === "number"
-            ? String(anexo.attachment_id)
-            : `${index}-${titulo}`;
-      const dataOriginal = anexo.date ?? anexo.attachment_date ?? null;
-      const chaveDia = obterChaveDia(dataOriginal);
+
+      if (!titulo) {
+        return null;
+      }
+
+      const idIdentificador =
+        normalizarIdentificador(anexo.id ?? anexo.id_anexo ?? anexo.attachment_id) ??
+        `${index}-${titulo}`;
+      const dataOriginal =
+        anexo.data_cadastro ?? anexo.date ?? anexo.attachment_date ?? null;
+      const idAnexo = normalizarIdentificador(
+        anexo.id_anexo ?? anexo.attachment_id ?? anexo.id,
+      );
+      const idAndamentoBase = normalizarIdentificador(
+        anexo.id_andamento ?? anexo.attachment_id,
+      );
+      const idAndamento = idAndamentoBase
+        ? normalizarTexto(idAndamentoBase) || idAndamentoBase
+        : null;
+      const instanciaProcesso = primeiroTextoValido(anexo.instancia_processo) || null;
+      const url = primeiroTextoValido(anexo.url, anexo.attachment_url) || null;
+      const tipo = primeiroTextoValido(anexo.tipo) || null;
+      const crawlId = primeiroTextoValido(anexo.crawl_id) || null;
 
       const model: AnexoProcesso = {
-        id,
+        id: idIdentificador,
         titulo,
         data: formatarData(dataOriginal, "hora"),
-        url: primeiroTextoValido(anexo.url, anexo.attachment_url) || null,
+        url,
+        idAndamento,
+        instancia: instanciaProcesso,
+        idAnexo,
+        tipo,
+        crawlId,
       };
 
-      if (chaveDia) {
-        const existentes = anexosPorDia.get(chaveDia) ?? [];
-        anexosPorDia.set(chaveDia, [...existentes, model]);
+      if (model.idAndamento) {
+        const existentes = anexosPorMovimentacao.get(model.idAndamento) ?? [];
+        anexosPorMovimentacao.set(model.idAndamento, [...existentes, model]);
       }
 
       return model;
     })
-    .filter((anexo) => Boolean(anexo.titulo));
-
-  const diasAnexosDistribuidos = new Set<string>();
+    .filter((anexo): anexo is AnexoProcesso => Boolean(anexo));
 
   const movimentacoes = passosDeduplicados
     .map((item, index) => {
@@ -1248,15 +1294,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
         return null;
       }
 
-      const chaveDia = obterChaveDia(dataValida ?? textoData ?? null);
-      const anexosRelacionados =
-        chaveDia && !diasAnexosDistribuidos.has(chaveDia)
-          ? (anexosPorDia.get(chaveDia)?.slice() ?? [])
-          : [];
-
-      if (chaveDia && anexosRelacionados.length) {
-        diasAnexosDistribuidos.add(chaveDia);
-      }
+      const anexosRelacionados = anexosPorMovimentacao.get(identificador) ?? [];
 
       return {
         id: identificador,
@@ -1371,6 +1409,8 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
     grupos,
     relacionados,
     anexos,
+    numeroCnj,
+    instanciaProcesso: instanciaBruta,
   };
 }
 
@@ -1382,6 +1422,8 @@ interface TimelineMesProps {
   onVerMais: (chave: string) => void;
   virtualizado: boolean;
   onMostrarConteudo: (movimentacao: MovimentacaoProcesso) => void;
+  onAbrirAnexo?: (anexo: AnexoProcesso) => void;
+  podeAbrirAnexo?: (anexo: AnexoProcesso) => boolean;
 }
 
 export const TimelineMes = memo(function TimelineMes({
@@ -1392,6 +1434,8 @@ export const TimelineMes = memo(function TimelineMes({
   onVerMais,
   virtualizado,
   onMostrarConteudo,
+  onAbrirAnexo,
+  podeAbrirAnexo,
 }: TimelineMesProps) {
   const [intervalo, setIntervalo] = useState({ inicio: 0, fim: movimentacoesVisiveis });
 
@@ -1581,20 +1625,23 @@ export const TimelineMes = memo(function TimelineMes({
                                       <p className="text-xs text-muted-foreground">{anexo.data}</p>
                                     ) : null}
                                   </div>
-                                  {anexo.url ? (
-                                    <Button
-                                      asChild
-                                      variant="link"
-                                      size="sm"
-                                      className="h-auto px-0 text-primary hover:text-primary/80"
-                                    >
-                                      <a href={anexo.url} target="_blank" rel="noopener noreferrer">
+                                  {(() => {
+                                    const habilitado = podeAbrirAnexo
+                                      ? podeAbrirAnexo(anexo)
+                                      : Boolean(onAbrirAnexo);
+                                    return habilitado ? (
+                                      <Button
+                                        variant="link"
+                                        size="sm"
+                                        className="h-auto px-0 text-primary hover:text-primary/80"
+                                        onClick={() => onAbrirAnexo?.(anexo)}
+                                      >
                                         Abrir documento
-                                      </a>
-                                    </Button>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">Link indisponível</span>
-                                  )}
+                                      </Button>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Link indisponível</span>
+                                    );
+                                  })()}
                                 </li>
                               ))}
                             </ul>
@@ -1675,9 +1722,18 @@ interface InformacoesProcessoProps {
   partes: PartesAgrupadas;
   anexos: AnexoProcesso[];
   onVerTodosAnexos?: () => void;
+  onAbrirAnexo?: (anexo: AnexoProcesso) => void;
+  podeAbrirAnexo?: (anexo: AnexoProcesso) => boolean;
 }
 
-export function InformacoesProcesso({ dados, partes, anexos, onVerTodosAnexos }: InformacoesProcessoProps) {
+export function InformacoesProcesso({
+  dados,
+  partes,
+  anexos,
+  onVerTodosAnexos,
+  onAbrirAnexo,
+  podeAbrirAnexo,
+}: InformacoesProcessoProps) {
   const anexosVisiveis = anexos.slice(0, 5);
   const possuiMaisAnexos = anexos.length > anexosVisiveis.length;
 
@@ -1707,17 +1763,20 @@ export function InformacoesProcesso({ dados, partes, anexos, onVerTodosAnexos }:
                   <p className="text-sm font-semibold text-foreground">{anexo.titulo}</p>
                   <p className="text-xs text-muted-foreground">{anexo.data ?? NAO_INFORMADO}</p>
                 </div>
-                {anexo.url ? (
-                  <Button asChild variant="outline" size="sm" className="w-full md:w-auto">
-                    <a href={anexo.url} target="_blank" rel="noopener noreferrer">
-                      Abrir documento
-                    </a>
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" disabled className="w-full md:w-auto">
-                    Link indisponível
-                  </Button>
-                )}
+                {(() => {
+                  const habilitado = podeAbrirAnexo ? podeAbrirAnexo(anexo) : Boolean(onAbrirAnexo);
+                  return (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full md:w-auto"
+                      onClick={() => onAbrirAnexo?.(anexo)}
+                      disabled={!habilitado}
+                    >
+                      {habilitado ? "Abrir documento" : "Link indisponível"}
+                    </Button>
+                  );
+                })()}
               </div>
             ))}
             {possuiMaisAnexos && onVerTodosAnexos ? (
@@ -1920,6 +1979,125 @@ export default function VisualizarProcesso() {
   const [erroResumo, setErroResumo] = useState<string | null>(null);
   const [gerarResumoAoAbrir, setGerarResumoAoAbrir] = useState(false);
   const [, startTransition] = useTransition();
+
+  const numeroCnjProcesso = viewModel?.numeroCnj ?? null;
+  const instanciaProcessoPadrao = viewModel?.instanciaProcesso ?? null;
+
+  const podeAbrirAnexo = useCallback(
+    (anexo: AnexoProcesso) => {
+      if (!anexo) {
+        return false;
+      }
+
+      if (anexo.url) {
+        return true;
+      }
+
+      if (!numeroCnjProcesso) {
+        return false;
+      }
+
+      const idDestino = anexo.idAnexo ?? anexo.id;
+      const instanciaDestino = anexo.instancia ?? instanciaProcessoPadrao;
+
+      return Boolean(idDestino && instanciaDestino);
+    },
+    [numeroCnjProcesso, instanciaProcessoPadrao],
+  );
+
+  const handleAbrirAnexo = useCallback(
+    async (anexo: AnexoProcesso) => {
+      const numero = numeroCnjProcesso;
+      const instanciaDestino = anexo.instancia ?? instanciaProcessoPadrao;
+      const idDestino = anexo.idAnexo ?? anexo.id;
+
+      if (!numero || !instanciaDestino || !idDestino) {
+        if (anexo.url) {
+          window.open(anexo.url, "_blank", "noopener,noreferrer");
+          return;
+        }
+
+        toast({
+          variant: "destructive",
+          description: "Não foi possível abrir o anexo.",
+        });
+        return;
+      }
+
+      const requestUrl = `https://lawsuits.production.judit.io/lawsuits/${encodeURIComponent(numero)}/${encodeURIComponent(instanciaDestino)}/attachments/${encodeURIComponent(idDestino)}`;
+
+      const extrairNomeArquivo = (valor: string | null): string | null => {
+        if (!valor) {
+          return null;
+        }
+
+        const matchEstendido = valor.match(/filename\*=UTF-8''([^;]+)/i);
+        if (matchEstendido && matchEstendido[1]) {
+          try {
+            return decodeURIComponent(matchEstendido[1]);
+          } catch {
+            return matchEstendido[1];
+          }
+        }
+
+        const matchPadrao = valor.match(/filename="?([^";]+)"?/i);
+        if (matchPadrao && matchPadrao[1]) {
+          return matchPadrao[1];
+        }
+
+        return null;
+      };
+
+      const sanitizarNome = (valor: string | null | undefined): string | null => {
+        if (!valor) {
+          return null;
+        }
+
+        const texto = valor.replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, " ").trim();
+        return texto.length > 0 ? texto : null;
+      };
+
+      try {
+        const resposta = await fetch(requestUrl, {
+          headers: {
+            "api-key": "37c7486a-1757-4b67-9c2c-cb8585bcce2d",
+          },
+        });
+
+        if (!resposta.ok) {
+          throw new Error(`Falha ao baixar anexo (${resposta.status})`);
+        }
+
+        const blob = await resposta.blob();
+        const nomeArquivo =
+          sanitizarNome(extrairNomeArquivo(resposta.headers.get("content-disposition"))) ??
+          sanitizarNome(anexo.titulo) ??
+          sanitizarNome(anexo.idAnexo) ??
+          sanitizarNome(anexo.id) ??
+          `anexo-${Date.now()}`;
+
+        const urlObjeto = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = urlObjeto;
+        link.download = nomeArquivo;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(urlObjeto);
+      } catch (error) {
+        console.error(error);
+        toast({
+          variant: "destructive",
+          description: "Não foi possível baixar o anexo. Tentando link alternativo...",
+        });
+
+        if (anexo.url) {
+          window.open(anexo.url, "_blank", "noopener,noreferrer");
+        }
+      }
+    },
+    [numeroCnjProcesso, instanciaProcessoPadrao, toast],
+  );
 
   const aplicarModelo = useCallback(
     (modelo: ProcessoViewModel) => {
@@ -2496,6 +2674,8 @@ export default function VisualizarProcesso() {
       partes={viewModel.partes}
       anexos={viewModel.anexos}
       onVerTodosAnexos={() => setMostrarTodosAnexos(true)}
+      onAbrirAnexo={handleAbrirAnexo}
+      podeAbrirAnexo={podeAbrirAnexo}
     />
   ) : null;
 
@@ -2504,7 +2684,11 @@ export default function VisualizarProcesso() {
   ) : null;
 
   const primeiroAnexoDisponivel =
-    movimentacaoSelecionada?.anexos.find((anexo) => Boolean(anexo.url)) ?? null;
+    movimentacaoSelecionada?.anexos.find((anexo) => podeAbrirAnexo(anexo)) ??
+    movimentacaoSelecionada?.anexos[0] ??
+    null;
+  const podeAbrirPrimeiroAnexo =
+    primeiroAnexoDisponivel ? podeAbrirAnexo(primeiroAnexoDisponivel) : false;
   const isMarkdownSelecionado = Boolean(
     movimentacaoSelecionada &&
       typeof movimentacaoSelecionada.tags?.formatted === "string" &&
@@ -2795,18 +2979,14 @@ export default function VisualizarProcesso() {
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center">
             {primeiroAnexoDisponivel ? (
               <Button
-                asChild
+                type="button"
                 variant="outline"
                 size="sm"
                 className="w-full sm:mr-auto sm:w-auto"
+                onClick={() => handleAbrirAnexo(primeiroAnexoDisponivel)}
+                disabled={!podeAbrirPrimeiroAnexo}
               >
-                <a
-                  href={primeiroAnexoDisponivel.url ?? undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Abrir documento
-                </a>
+                {podeAbrirPrimeiroAnexo ? "Abrir documento" : "Link indisponível"}
               </Button>
             ) : null}
             <Button
@@ -2958,17 +3138,20 @@ export default function VisualizarProcesso() {
                     <p className="text-sm font-semibold text-foreground">{anexo.titulo}</p>
                     <p className="text-xs text-muted-foreground">{anexo.data ?? NAO_INFORMADO}</p>
                   </div>
-                  {anexo.url ? (
-                    <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                      <a href={anexo.url} target="_blank" rel="noopener noreferrer">
-                        Abrir documento
-                      </a>
-                    </Button>
-                  ) : (
-                    <Button variant="outline" size="sm" disabled className="w-full sm:w-auto">
-                      Link indisponível
-                    </Button>
-                  )}
+                  {(() => {
+                    const habilitado = podeAbrirAnexo(anexo);
+                    return (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => handleAbrirAnexo(anexo)}
+                        disabled={!habilitado}
+                      >
+                        {habilitado ? "Abrir documento" : "Link indisponível"}
+                      </Button>
+                    );
+                  })()}
                 </div>
               ))
             ) : (
