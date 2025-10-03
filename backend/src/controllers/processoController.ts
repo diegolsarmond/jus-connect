@@ -589,7 +589,11 @@ const parseAttachments = (value: unknown): Processo['attachments'] => {
         normalizeTimestamp(raw.data_cadastro) ??
         normalizeDate(raw.data_cadastro) ??
         null,
-      instancia_processo: normalizeString(raw.instancia_processo),
+      instancia_processo:
+        normalizeString(raw.instancia_processo) ??
+        (typeof raw.instancia_processo === 'number' && Number.isFinite(raw.instancia_processo)
+          ? String(Math.trunc(raw.instancia_processo))
+          : null),
       crawl_id: normalizeString(raw.crawl_id),
     };
 
