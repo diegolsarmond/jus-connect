@@ -1,4 +1,4 @@
-import { Calendar, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, Clock, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import { Card, CardContent } from "./card";
@@ -19,6 +19,7 @@ interface TimelineEvent {
 interface TimelineGroup {
   label: string;
   events: TimelineEvent[];
+  defaultExpanded?: boolean;
 }
 
 interface ModernTimelineProps {
@@ -40,14 +41,14 @@ export function ModernTimeline({ groups, className }: ModernTimelineProps) {
   );
 }
 
-function TimelineGroupComponent({ 
-  group, 
-  isLast 
-}: { 
-  group: TimelineGroup; 
+function TimelineGroupComponent({
+  group,
+  isLast
+}: {
+  group: TimelineGroup;
   isLast: boolean;
 }) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(Boolean(group.defaultExpanded));
 
   return (
     <div className="relative">
@@ -153,6 +154,7 @@ function TimelineEventComponent({
         {event.onGenerateSummary ? (
           <div className="mt-4">
             <Button type="button" onClick={event.onGenerateSummary} className="gap-2">
+              <Sparkles className="h-4 w-4" />
               Resumir com IA
             </Button>
           </div>
