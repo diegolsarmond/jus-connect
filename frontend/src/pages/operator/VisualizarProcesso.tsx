@@ -239,6 +239,17 @@ interface ApiProcessoStep {
   tags?: ApiProcessoStepTags | null;
 }
 
+interface ApiProcessoMovimentacao {
+  id?: number | string | null;
+  data?: string | null;
+  tipo?: string | null;
+  tipo_publicacao?: string | null;
+  classificacao_predita?: unknown;
+  conteudo?: string | null;
+  texto_categoria?: string | null;
+  sigiloso?: unknown;
+}
+
 interface ApiProcessoAttachment {
   id?: number | string | null;
   title?: string | null;
@@ -308,6 +319,7 @@ export interface ApiProcessoResponse {
   steps?: ApiProcessoStep[] | null;
   attachments?: ApiProcessoAttachment[] | null;
   related_lawsuits?: ApiProcessoRelatedLawsuit[] | null;
+  movimentacoes?: ApiProcessoMovimentacao[] | null;
   tags?:
     | Array<string | null>
     | ({
@@ -1041,6 +1053,31 @@ function extrairLocalidade(valor: ApiProcessoResponse["county"]): {
   return { comarca, cidade, estado, cidadeEstado };
 }
 
+function parseMovimentacaoTags(valor: unknown): ApiProcessoStepTags | null {
+  if (!valor) {
+    return null;
+  }
+
+  if (typeof valor === "string") {
+    try {
+      const parsed = JSON.parse(valor);
+      if (parsed && typeof parsed === "object") {
+        return parsed as ApiProcessoStepTags;
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
+  if (typeof valor === "object") {
+    return valor as ApiProcessoStepTags;
+  }
+
+  return null;
+}
+
 export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): ProcessoViewModel {
   const codigo =
     primeiroTextoValido(processo.code, processo.numero) || NAO_INFORMADO;
@@ -1097,13 +1134,31 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   const tagsInfo = extrairTagsEIndicadores(processo);
   const tagsCabecalho = tagsInfo.tags;
 
-  const passosFonte: ApiProcessoStep[] =
+  const passosOriginais: ApiProcessoStep[] =
     Array.isArray(processo.steps) && processo.steps.length > 0
       ? processo.steps
       : [];
 
+  const movimentacoesOriginais =
+    Array.isArray(processo.movimentacoes) && processo.movimentacoes.length > 0
+      ? processo.movimentacoes
+      : [];
+
   const passosDeduplicados = deduplicarMovimentacoes(
-    passosFonte.map((step, index) => ({
+    [...passosOriginais, ...movimentacoesOriginais.map((mov) => ({
+      id: mov.id,
+      step_id: typeof mov.id === "string" ? mov.id : null,
+      date: mov.data ?? null,
+      step_date: mov.data ?? null,
+      step_type: mov.tipo ?? mov.tipo_publicacao ?? null,
+      type: mov.tipo ?? mov.tipo_publicacao ?? null,
+      title: mov.tipo ?? mov.tipo_publicacao ?? null,
+      content: mov.conteudo ?? null,
+      description: mov.conteudo ?? null,
+      category: mov.texto_categoria ?? null,
+      private: interpretarBooleano(mov.sigiloso),
+      tags: parseMovimentacaoTags(mov.classificacao_predita),
+    }))].map((step, index) => ({
       id: step.id ?? step.step_id ?? `${index}-${step.step_date ?? step.date ?? ""}`,
       data: step.step_date ?? step.date ?? null,
       tipo: step.step_type ?? step.type ?? step.title ?? null,
