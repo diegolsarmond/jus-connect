@@ -189,7 +189,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
     }
   }
 
-  const resumoConciso = frasesParaResumo.slice(0, 3).join(" ") || paragrafoUnico;
+  const resumoConciso = frasesParaResumo.slice(0, 4).join(" ") || paragrafoUnico;
 
   const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
 
