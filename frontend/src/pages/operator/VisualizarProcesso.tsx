@@ -2458,6 +2458,7 @@ export default function VisualizarProcesso() {
                       onGenerateSummary: item.tipoAndamento
                         ? () => handleMostrarResumoIa(item)
                         : undefined,
+
                     })),
                   }))}
                 />
