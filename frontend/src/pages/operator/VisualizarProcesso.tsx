@@ -2519,7 +2519,7 @@ export default function VisualizarProcesso() {
   const conteudoSelecionado = movimentacaoSelecionada?.conteudo ?? "";
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col space-y-6 px-4 lg:px-0">
+    <div className="mx-auto flex w-full max-w-7xl flex-col space-y-6 px-4 lg:px-0">
       <header className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
