@@ -68,7 +68,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 const NAO_INFORMADO = "Não informado";
 const MOVIMENTACOES_POR_LAJE = 25;
-const MESES_INICIAIS = 3;
+const MESES_INICIAIS = 6;
 const ALTURA_ESTIMADA_ITEM = 200;
 const LIMITE_CONTEUDO_RESUMO = 400;
 const LIMITE_LINHAS_RESUMO = 6;
@@ -2448,18 +2448,24 @@ export default function VisualizarProcesso() {
                 <ModernTimeline
                   groups={gruposVisiveis.map((grupo) => ({
                     label: grupo.rotulo,
-                    events: grupo.itens.slice(0, movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE).map((item) => ({
-                      id: item.id,
-                      date: item.dataFormatada,
-                      title: item.stepType || "Movimentação",
-                      description: item.conteudo,
-                      type: item.stepType,
-                      isPrivate: item.privado,
-                      onGenerateSummary: item.tipoAndamento
-                        ? () => handleMostrarResumoIa(item)
-                        : undefined,
+                    events: grupo.itens
+                      .slice(0, movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE)
+                      .map((item) => {
+                        const podeResumir = item.tipoAndamento != null;
 
-                    })),
+                        return {
+                          id: item.id,
+                          date: item.dataFormatada,
+                          title: item.stepType || "Movimentação",
+                          description: item.conteudo,
+                          type: item.stepType,
+                          isPrivate: item.privado,
+                          onGenerateSummary: podeResumir
+                            ? () => handleMostrarResumoIa(item)
+                            : undefined,
+                        };
+                      }),
+
                   }))}
                 />
 
