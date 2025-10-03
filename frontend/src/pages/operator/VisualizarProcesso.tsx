@@ -141,16 +141,9 @@ export function filtrarMovimentacoes(
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
   const tipoAndamento = movimentacao.stepType?.trim() || "movimentação processual";
   const partes: string[] = [
-    `Explique em português claro, para um leigo, o(a) ${tipoAndamento} descrito abaixo. Resuma em até 4 frases curtas, destacando decisões, determinações, pedidos e próximos passos relevantes.`,
+      `Com base no(na) ${tipoAndamento} descrito abaixo, utilize 4 frases para destacar decisões, determinações, pedidos e próximos passos relevantes.`,
   ];
 
-  if (movimentacao.dataFormatada) {
-    partes.push(`Data: ${movimentacao.dataFormatada}`);
-  }
-
-  if (movimentacao.stepType) {
-    partes.push(`Tipo da movimentação: ${movimentacao.stepType}`);
-  }
 
   const conteudoNormalizado = normalizarTexto(movimentacao.conteudo) || "Sem conteúdo textual informado.";
   partes.push(`Conteúdo:\n${conteudoNormalizado}`);
