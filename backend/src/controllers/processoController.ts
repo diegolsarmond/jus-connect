@@ -496,6 +496,7 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
       id: parsedId,
       data: dataValue,
       tipo: tipoValue,
+      tipo_andamento: raw.tipo_andamento ?? null,
       tipo_publicacao: raw.tipo_publicacao ?? null,
       classificacao_predita: raw.classificacao_predita ?? null,
       conteudo: raw.conteudo ?? null,

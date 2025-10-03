@@ -234,6 +234,7 @@ interface ApiProcessoStep {
   category?: string | null;
   step_date?: string | null;
   step_type?: string | null;
+  tipo_andamento?: string | null;
   content?: string | null;
   private?: boolean | null;
   tags?: ApiProcessoStepTags | null;
@@ -243,6 +244,7 @@ interface ApiProcessoMovimentacao {
   id?: number | string | null;
   data?: string | null;
   tipo?: string | null;
+  tipo_andamento?: string | null;
   tipo_publicacao?: string | null;
   classificacao_predita?: unknown;
   conteudo?: string | null;
@@ -355,6 +357,7 @@ interface MovimentacaoProcesso extends MovimentoComIdEData {
   dataOriginal: string | null;
   dataFormatada: string | null;
   stepType: string | null;
+  tipoAndamento: string | null;
   conteudo: string | null;
   privado: boolean;
   tags: ApiProcessoStepTags | null;
@@ -1153,6 +1156,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
       step_type: mov.tipo ?? mov.tipo_publicacao ?? null,
       type: mov.tipo ?? mov.tipo_publicacao ?? null,
       title: mov.tipo ?? mov.tipo_publicacao ?? null,
+      tipo_andamento: mov.tipo_andamento ?? null,
       content: mov.conteudo ?? null,
       description: mov.conteudo ?? null,
       category: mov.texto_categoria ?? null,
@@ -1255,6 +1259,11 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
         original?.title,
       );
 
+      const tipoAndamento = primeiroTextoValido(
+        original?.tipo_andamento,
+        item.tipo_andamento,
+      );
+
       if (!tipoPasso && !conteudoBruto) {
         return null;
       }
@@ -1275,6 +1284,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
         dataOriginal: textoData ?? null,
         dataFormatada: formatarData(dataValida ?? textoData ?? null, "hora"),
         stepType: tipoPasso || null,
+        tipoAndamento: tipoAndamento || null,
         conteudo: conteudoBruto,
         privado: Boolean(original?.private),
         tags: original?.tags ?? null,
@@ -1928,6 +1938,7 @@ export default function VisualizarProcesso() {
   const [modalAberto, setModalAberto] = useState(false);
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const [erroResumo, setErroResumo] = useState<string | null>(null);
+  const [gerarResumoAoAbrir, setGerarResumoAoAbrir] = useState(false);
 
   const aplicarModelo = useCallback(
     (modelo: ProcessoViewModel) => {
@@ -2250,6 +2261,14 @@ export default function VisualizarProcesso() {
     setModalAberto(true);
   }, []);
 
+  const handleMostrarResumoIa = useCallback(
+    (movimentacao: MovimentacaoProcesso) => {
+      setGerarResumoAoAbrir(true);
+      handleMostrarConteudo(movimentacao);
+    },
+    [handleMostrarConteudo],
+  );
+
   const handleAlterarModalConteudo = useCallback((aberto: boolean) => {
     setModalAberto(aberto);
     if (!aberto) {
@@ -2257,6 +2276,7 @@ export default function VisualizarProcesso() {
       setResumoIa(null);
       setErroResumo(null);
       setCarregandoResumo(false);
+      setGerarResumoAoAbrir(false);
     }
   }, []);
 
@@ -2318,6 +2338,13 @@ export default function VisualizarProcesso() {
       setCarregandoResumo(false);
     }
   }, [movimentacaoSelecionada, toast]);
+
+  useEffect(() => {
+    if (gerarResumoAoAbrir && movimentacaoSelecionada && modalAberto) {
+      setGerarResumoAoAbrir(false);
+      void handleGerarResumoIa();
+    }
+  }, [gerarResumoAoAbrir, movimentacaoSelecionada, modalAberto, handleGerarResumoIa]);
 
   const conteudoMovimentacoes = useMemo(() => {
     if (!viewModel) {
@@ -2428,6 +2455,9 @@ export default function VisualizarProcesso() {
                       description: item.conteudo,
                       type: item.stepType,
                       isPrivate: item.privado,
+                      onGenerateSummary: item.tipoAndamento
+                        ? () => handleMostrarResumoIa(item)
+                        : undefined,
                     })),
                   }))}
                 />
@@ -2464,6 +2494,7 @@ export default function VisualizarProcesso() {
     handleVerMaisMovimentos,
     handleCarregarMaisMeses,
     handleMostrarConteudo,
+    handleMostrarResumoIa,
     filtroTipo,
     filtroInicio,
     filtroFim,
@@ -2766,7 +2797,7 @@ export default function VisualizarProcesso() {
           ) : (
             <p className="text-sm text-muted-foreground">Selecione uma movimentação para visualizar.</p>
           )}
-          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center">
             {primeiroAnexoDisponivel ? (
               <Button
                 asChild
@@ -2783,16 +2814,14 @@ export default function VisualizarProcesso() {
                 </a>
               </Button>
             ) : null}
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleAlterarModalConteudo(false)}
-                className="w-full sm:w-auto"
-              >
-                Fechar
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleAlterarModalConteudo(false)}
+              className="w-full sm:w-auto"
+            >
+              Fechar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

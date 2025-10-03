@@ -17,6 +17,7 @@ export interface MovimentacaoBruta {
   id?: string | number | null;
   data?: string | null;
   tipo?: string | null;
+  tipo_andamento?: string | null;
   conteudo?: string | null;
   texto_categoria?: string | null;
 }
