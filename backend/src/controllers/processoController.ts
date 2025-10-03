@@ -546,6 +546,8 @@ type RawAttachment = {
   data_andamento?: unknown;
   instancia_processo?: unknown;
   crawl_id?: unknown;
+  movimentacao_criado_em?: unknown;
+  movimentacao_data_andamento?: unknown;
 };
 
 const parseAttachments = (value: unknown): Processo['attachments'] => {
@@ -587,11 +589,14 @@ const parseAttachments = (value: unknown): Processo['attachments'] => {
       nome: normalizeString(raw.nome),
       tipo: normalizeString(raw.tipo),
       data_cadastro:
+        normalizeTimestamp(raw.movimentacao_criado_em) ??
         normalizeTimestamp(raw.data_cadastro) ??
         normalizeDate(raw.data_cadastro) ??
         null,
       data_andamento:
+        normalizeTimestamp(raw.movimentacao_data_andamento) ??
         normalizeTimestamp(raw.data_andamento) ??
+        normalizeDate(raw.movimentacao_data_andamento) ??
         normalizeDate(raw.data_andamento) ??
         null,
       instancia_processo:
@@ -916,11 +921,18 @@ SELECT DISTINCT ON (ap.id_anexo)
   ap.nome,
   ap.tipo,
   ap.data_cadastro,
-  mp.data_andamento,
+  ap.data_andamento,
   ap.instancia_processo,
-  ap.crawl_id
+  ap.crawl_id,
+  mp.criado_em AS movimentacao_criado_em,
+  mp.data_andamento AS movimentacao_data_andamento
 FROM public.trigger_anexos_processo ap
-INNER JOIN public.trigger_movimentacao_processo mp ON mp.id_andamento = ap.id_andamento
+LEFT JOIN public.trigger_movimentacao_processo mp
+  ON mp.numero_cnj = ap.numero_cnj
+ AND (
+       (ap.id_andamento IS NOT NULL AND mp.id_andamento = ap.id_andamento)
+    OR (ap.id_andamento IS NULL AND ap.data_andamento IS NOT NULL AND mp.data_andamento = ap.data_andamento)
+  )
 WHERE ap.numero_cnj = $1
 ORDER BY ap.id_anexo, mp.data_andamento DESC NULLS LAST, ap.id DESC
 `;
