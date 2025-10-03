@@ -294,6 +294,8 @@ export default function NovaOportunidade() {
       : [];
   };
 
+  const areaAtuacaoWatch = form.watch("area_atuacao");
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -325,14 +327,6 @@ export default function NovaOportunidade() {
           })
         );
 
-        const tiposData = await fetchJson(`${apiUrl}/api/tipo-processos`);
-        setTipos(
-          tiposData.map((t) => {
-            const item = t as any;
-            return { id: String(item.id), name: item.nome } as Option;
-          })
-        );
-
         const areasData = await fetchJson(`${apiUrl}/api/areas`);
         setAreas(
           areasData.map((a) => {
@@ -359,6 +353,92 @@ export default function NovaOportunidade() {
     };
     fetchData();
   }, [apiUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchTipos = async () => {
+      const normalizedAreaId = areaAtuacaoWatch?.trim() || "";
+      const query = normalizedAreaId ? `?area_atuacao_id=${normalizedAreaId}` : "";
+
+      try {
+        const res = await fetch(`${apiUrl}/api/tipo-processos${query}`, {
+          headers: { Accept: "application/json" },
+        });
+
+        let json: unknown = null;
+        try {
+          json = await res.json();
+        } catch (error) {
+          console.error(
+            "Não foi possível interpretar a resposta de tipos de processo",
+            error,
+          );
+        }
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const records = Array.isArray(json)
+          ? json
+          : Array.isArray((json as { rows?: unknown[] })?.rows)
+          ? ((json as { rows: unknown[] }).rows)
+          : Array.isArray((json as { data?: { rows?: unknown[] } })?.data?.rows)
+          ? ((json as { data: { rows: unknown[] } }).data.rows)
+          : Array.isArray((json as { data?: unknown[] })?.data)
+          ? ((json as { data: unknown[] }).data)
+          : [];
+
+        const options = records
+          .map((record) => {
+            const item = record as any;
+            const id = item?.id;
+            const nome = typeof item?.nome === "string" ? item.nome.trim() : "";
+            if (!id || !nome) {
+              return null;
+            }
+            return { id: String(id), name: nome } as Option;
+          })
+          .filter((option): option is Option => option !== null)
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+
+        if (cancelled) {
+          return;
+        }
+
+        setTipos(options);
+
+        const currentValue = form.getValues("tipo_processo")?.trim() || "";
+        if (currentValue && !options.some((option) => option.id === currentValue)) {
+          form.setValue("tipo_processo", "", {
+            shouldDirty: true,
+            shouldTouch: true,
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        if (cancelled) {
+          return;
+        }
+
+        setTipos([]);
+        const currentValue = form.getValues("tipo_processo")?.trim() || "";
+        if (currentValue) {
+          form.setValue("tipo_processo", "", {
+            shouldDirty: true,
+            shouldTouch: true,
+          });
+        }
+      }
+    };
+
+    fetchTipos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, areaAtuacaoWatch, form]);
 
   const faseValue = form.watch("fase");
   const formaPagamento = form.watch("forma_pagamento");
