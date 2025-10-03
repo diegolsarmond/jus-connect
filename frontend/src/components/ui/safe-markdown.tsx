@@ -92,7 +92,7 @@ export function SafeMarkdown({ content, className }: SafeMarkdownProps) {
   return (
     <div
       className={cn(
-        "prose prose-sm max-w-none break-words text-muted-foreground dark:prose-invert",
+        "prose prose-sm max-w-none text-muted-foreground dark:prose-invert",
         className,
       )}
       dangerouslySetInnerHTML={{ __html: html }}
