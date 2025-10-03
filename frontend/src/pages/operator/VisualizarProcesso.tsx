@@ -139,8 +139,9 @@ export function filtrarMovimentacoes(
 }
 
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
+  const tipoAndamento = movimentacao.stepType?.trim() || "movimentação processual";
   const partes: string[] = [
-      "Explique de forma clara, objetiva e acessível para um leigo o conteúdo do texto jurídico a seguir. Destaque com clareza o que foi decidido, determinado, concedido ou solicitado pela autoridade responsável.",
+    `Explique em português claro, para um leigo, o(a) ${tipoAndamento} descrito abaixo. Resuma em até 4 frases curtas, destacando decisões, determinações, pedidos e próximos passos relevantes.`,
   ];
 
   if (movimentacao.dataFormatada) {
