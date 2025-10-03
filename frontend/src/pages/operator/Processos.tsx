@@ -922,8 +922,13 @@ export default function Processos() {
             setTipoProcessoLoading(true);
             setTipoProcessoError(null);
 
+            const areaId = parseOptionalInteger(processForm.areaAtuacaoId);
+            const path = areaId
+                ? `tipo-processos?area_atuacao_id=${areaId}`
+                : "tipo-processos";
+
             try {
-                const res = await fetch(getApiUrl("tipo-processos"), {
+                const res = await fetch(getApiUrl(path), {
                     headers: { Accept: "application/json" },
                 });
 
@@ -962,6 +967,21 @@ export default function Processos() {
 
                 if (!cancelled) {
                     setTipoProcessoOptions(options);
+                    setProcessForm((prev) => {
+                        if (!prev.tipoProcessoId) {
+                            return prev;
+                        }
+
+                        const exists = options.some(
+                            (option) => option.id === prev.tipoProcessoId,
+                        );
+
+                        if (exists) {
+                            return prev;
+                        }
+
+                        return { ...prev, tipoProcessoId: "" };
+                    });
                 }
             } catch (error) {
                 console.error(error);
@@ -972,6 +992,12 @@ export default function Processos() {
                             ? error.message
                             : "Erro ao carregar tipos de processo",
                     );
+                    setProcessForm((prev) => {
+                        if (!prev.tipoProcessoId) {
+                            return prev;
+                        }
+                        return { ...prev, tipoProcessoId: "" };
+                    });
                 }
             } finally {
                 if (!cancelled) {
@@ -985,7 +1011,7 @@ export default function Processos() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [processForm.areaAtuacaoId]);
 
     useEffect(() => {
         let cancelled = false;
