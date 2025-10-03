@@ -282,6 +282,7 @@ describe("filtrarMovimentacoes", () => {
         conteudo: "Decisão publicada",
         privado: false,
         tags: null,
+        anexos: [],
       },
       {
         id: "2",
@@ -292,6 +293,7 @@ describe("filtrarMovimentacoes", () => {
         conteudo: "Publicação no diário",
         privado: false,
         tags: { formatted: "md" },
+        anexos: [],
       },
       {
         id: "3",
@@ -302,6 +304,7 @@ describe("filtrarMovimentacoes", () => {
         conteudo: "Sem data disponível",
         privado: false,
         tags: null,
+        anexos: [],
       },
     ];
 

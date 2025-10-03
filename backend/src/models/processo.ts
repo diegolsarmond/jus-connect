@@ -55,6 +55,17 @@ export interface ProcessoMovimentacao {
   data_cadastro?: string | null;
 }
 
+export interface ProcessoAttachment {
+  id: string;
+  id_andamento: string | null;
+  id_anexo: string | null;
+  nome: string | null;
+  tipo: string | null;
+  data_cadastro: string | null;
+  instancia_processo: string | null;
+  crawl_id: string | null;
+}
+
 export interface ProcessoSyncIntegrationInfo {
   id: number;
   provider: string;
@@ -177,5 +188,6 @@ export interface Processo {
   oportunidade?: ProcessoOportunidadeResumo | null;
   advogados: ProcessoAdvogado[];
   movimentacoes?: ProcessoMovimentacao[];
+  attachments?: ProcessoAttachment[];
   participants?: ProcessoParticipant[] | null;
 }

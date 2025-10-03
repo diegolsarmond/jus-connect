@@ -8,7 +8,7 @@ import {
 
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
-import { Processo, ProcessoParticipant } from '../models/processo';
+import { Processo, ProcessoAttachment, ProcessoParticipant } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import { evaluateProcessSyncAvailability } from '../services/processSyncQuotaService';
 
@@ -536,6 +536,96 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
   return movimentacoes;
 };
 
+type RawAttachment = {
+  id?: unknown;
+  id_andamento?: unknown;
+  id_anexo?: unknown;
+  nome?: unknown;
+  tipo?: unknown;
+  data_cadastro?: unknown;
+  instancia_processo?: unknown;
+  crawl_id?: unknown;
+};
+
+const parseAttachments = (value: unknown): Processo['attachments'] => {
+  const attachments: ProcessoAttachment[] = [];
+
+  const normalizeIdentifier = (raw: unknown): string | null => {
+    if (raw === null || raw === undefined) {
+      return null;
+    }
+
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return String(Math.trunc(raw));
+    }
+
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      return trimmed ? trimmed : null;
+    }
+
+    return null;
+  };
+
+  const processItem = (item: unknown) => {
+    if (!item || typeof item !== 'object') {
+      return;
+    }
+
+    const raw = item as RawAttachment;
+    const idValue = normalizeIdentifier(raw.id ?? raw.id_anexo);
+
+    if (!idValue) {
+      return;
+    }
+
+    const attachment: ProcessoAttachment = {
+      id: idValue,
+      id_andamento: normalizeIdentifier(raw.id_andamento),
+      id_anexo: normalizeIdentifier(raw.id_anexo ?? raw.id),
+      nome: normalizeString(raw.nome),
+      tipo: normalizeString(raw.tipo),
+      data_cadastro:
+        normalizeTimestamp(raw.data_cadastro) ??
+        normalizeDate(raw.data_cadastro) ??
+        null,
+      instancia_processo: normalizeString(raw.instancia_processo),
+      crawl_id: normalizeString(raw.crawl_id),
+    };
+
+    attachments.push(attachment);
+  };
+
+  if (Array.isArray(value)) {
+    value.forEach(processItem);
+    return attachments;
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(processItem);
+      } else {
+        processItem(parsed);
+      }
+    } catch {
+      return attachments;
+    }
+
+    return attachments;
+  }
+
+  if (value && typeof value === 'object' && 'rows' in (value as Record<string, unknown>)) {
+    const possibleArray = (value as { rows?: unknown[] }).rows;
+    if (Array.isArray(possibleArray)) {
+      possibleArray.forEach(processItem);
+    }
+  }
+
+  return attachments;
+};
+
 const parseJsonColumn = (value: unknown): unknown => {
   if (value === null || value === undefined) {
     return null;
@@ -705,6 +795,38 @@ const fetchProcessoMovimentacoes = async (
   const params = trimmedLimit > 0 ? [normalizedNumero, trimmedLimit] : [normalizedNumero];
   const result = await executor.query(query, params);
   return parseMovimentacoes(result.rows);
+};
+
+const ANEXOS_BASE_QUERY = `
+  SELECT
+    id,
+    id_andamento,
+    id_anexo,
+    nome,
+    tipo,
+    data_cadastro,
+    instancia_processo,
+    crawl_id
+  FROM public.trigger_anexos_processo
+  WHERE numero_cnj = $1
+  ORDER BY
+    data_cadastro DESC NULLS LAST,
+    id DESC
+`;
+
+const fetchProcessoAnexos = async (
+  numeroCnj: string | null | undefined,
+  client?: PoolClient,
+): Promise<Processo['attachments']> => {
+  const normalizedNumero = normalizeString(numeroCnj);
+
+  if (!normalizedNumero) {
+    return [];
+  }
+
+  const executor = client ?? pool;
+  const result = await executor.query(ANEXOS_BASE_QUERY, [normalizedNumero]);
+  return parseAttachments(result.rows);
 };
 
 type RawCrawlerParticipant = {
@@ -1452,6 +1574,7 @@ const mapProcessoRow = (row: any): Processo => {
     oportunidade,
     advogados: parseAdvogados(row.advogados),
     movimentacoes: parseMovimentacoes(row.movimentacoes),
+    attachments: parseAttachments(row.attachments),
   };
 };
 
@@ -1566,14 +1689,14 @@ export const getProcessoById = async (req: Request, res: Response) => {
 
     const processo = mapProcessoRow(result.rows[0]);
 
-    const participants = await fetchProcessParticipants(
-      processo.numero,
-      processo.oportunidade_id,
-    );
-
-    const movimentacoes = await fetchProcessoMovimentacoes(processo.numero);
+    const [participants, movimentacoes, attachments] = await Promise.all([
+      fetchProcessParticipants(processo.numero, processo.oportunidade_id),
+      fetchProcessoMovimentacoes(processo.numero),
+      fetchProcessoAnexos(processo.numero),
+    ]);
 
     processo.movimentacoes = movimentacoes;
+    processo.attachments = attachments;
     processo.participants = participants.length > 0 ? participants : [];
 
     res.json(processo);
