@@ -2711,7 +2711,7 @@ export default function VisualizarProcesso() {
       </section>
 
       <Dialog open={modalAberto} onOpenChange={handleAlterarModalConteudo}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto overflow-x-hidden sm:max-w-2xl">
           <DialogHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
             <DialogTitle>
               {movimentacaoSelecionada?.stepType || "Movimentação selecionada"}
