@@ -140,16 +140,7 @@ export function filtrarMovimentacoes(
 
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
   const partes: string[] = [
-    "Você é um assistente virtual que resume despachos, decisões e sentenças judiciais. Ao receber o texto do ato judicial, gere um resumo curto, objetivo e em português jurídico claro, bem acentuado e observando as regras seguintes:",
-    "1. Destaque a decisão ou comando do magistrado, os prazos processuais (indique datas ou prazo em dias) e as providências necessárias, incluindo quem deve cumpri-las.",
-    "2. Omitir e não repetir cabeçalhos, títulos padronizados ou rótulos editoriais (ex.: \"Resumo De Movimentação Processual\", \"Conteúdo\", \"INTIMAÇÃO PARA SESSÃO DE JULGAMENTO\"), endereços, assinaturas, links e instruções administrativas irrelevantes.",
-    "3. Não repetir o número do processo. Preserve o número do processo apenas se o usuário solicitar expressamente ou se for imprescindível para a compreensão do ato.",
-    "4. Remover orientações administrativas que não alterem a decisão ou as providências, salvo quando essas orientações contiverem prazo ou obrigação relevante.",
-    "5. Não acrescente opiniões, interpretações, argumentos ou comentários.",
-    "6. Não use títulos, listas, tópicos, marcações HTML ou qualquer formatação adicional no texto de saída.",
-    "7. Se não houver decisão no ato, responda apenas com a frase: sem decisão.",
-    "8. Entregue somente o texto do resumo. A resposta pode conter múltiplos parágrafos quando necessário; não limite o número de parágrafos.",
-    "Resposta final: apenas o resumo conforme as regras acima.",
+      "Explique de forma clara, objetiva e acessível para um leigo o conteúdo do texto jurídico a seguir. Destaque com clareza o que foi decidido, determinado, concedido ou solicitado pela autoridade responsável.",
   ];
 
   if (movimentacao.dataFormatada) {
