@@ -1928,6 +1928,7 @@ export default function VisualizarProcesso() {
   const [modalAberto, setModalAberto] = useState(false);
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const [erroResumo, setErroResumo] = useState<string | null>(null);
+  const [gerarResumoAoAbrir, setGerarResumoAoAbrir] = useState(false);
 
   const aplicarModelo = useCallback(
     (modelo: ProcessoViewModel) => {
@@ -2250,6 +2251,14 @@ export default function VisualizarProcesso() {
     setModalAberto(true);
   }, []);
 
+  const handleMostrarResumoIa = useCallback(
+    (movimentacao: MovimentacaoProcesso) => {
+      setGerarResumoAoAbrir(true);
+      handleMostrarConteudo(movimentacao);
+    },
+    [handleMostrarConteudo],
+  );
+
   const handleAlterarModalConteudo = useCallback((aberto: boolean) => {
     setModalAberto(aberto);
     if (!aberto) {
@@ -2257,6 +2266,7 @@ export default function VisualizarProcesso() {
       setResumoIa(null);
       setErroResumo(null);
       setCarregandoResumo(false);
+      setGerarResumoAoAbrir(false);
     }
   }, []);
 
@@ -2318,6 +2328,13 @@ export default function VisualizarProcesso() {
       setCarregandoResumo(false);
     }
   }, [movimentacaoSelecionada, toast]);
+
+  useEffect(() => {
+    if (gerarResumoAoAbrir && movimentacaoSelecionada && modalAberto) {
+      setGerarResumoAoAbrir(false);
+      void handleGerarResumoIa();
+    }
+  }, [gerarResumoAoAbrir, movimentacaoSelecionada, modalAberto, handleGerarResumoIa]);
 
   const conteudoMovimentacoes = useMemo(() => {
     if (!viewModel) {
@@ -2428,6 +2445,7 @@ export default function VisualizarProcesso() {
                       description: item.conteudo,
                       type: item.stepType,
                       isPrivate: item.privado,
+                      onGenerateSummary: () => handleMostrarResumoIa(item),
                     })),
                   }))}
                 />
@@ -2464,6 +2482,7 @@ export default function VisualizarProcesso() {
     handleVerMaisMovimentos,
     handleCarregarMaisMeses,
     handleMostrarConteudo,
+    handleMostrarResumoIa,
     filtroTipo,
     filtroInicio,
     filtroFim,

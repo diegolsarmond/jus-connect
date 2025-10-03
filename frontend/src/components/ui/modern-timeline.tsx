@@ -13,6 +13,7 @@ interface TimelineEvent {
   description?: string | null;
   type?: string;
   isPrivate?: boolean;
+  onGenerateSummary?: () => void;
 }
 
 interface TimelineGroup {
@@ -81,10 +82,10 @@ function TimelineGroupComponent({
   );
 }
 
-function TimelineEventComponent({ 
-  event, 
-  isLast 
-}: { 
+function TimelineEventComponent({
+  event,
+  isLast
+}: {
   event: TimelineEvent;
   isLast: boolean;
 }) {
@@ -94,7 +95,7 @@ function TimelineEventComponent({
   return (
     <Card className="relative ml-6 group hover:shadow-md transition-all duration-200">
       <div className="absolute -left-9 top-6 w-4 h-4 rounded-full bg-primary border-4 border-background shadow-sm" />
-      
+
       <CardContent className="pt-4">
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex-1 space-y-1">
@@ -149,6 +150,13 @@ function TimelineEventComponent({
             )}
           </div>
         )}
+        {event.onGenerateSummary ? (
+          <div className="mt-4">
+            <Button type="button" onClick={event.onGenerateSummary} className="gap-2">
+              Resumir com IA
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
