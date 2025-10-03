@@ -53,6 +53,7 @@ export interface ProcessoMovimentacao {
   sigiloso?: boolean | null;
   crawl_id?: string | null;
   data_cadastro?: string | null;
+  attachments?: ProcessoAttachment[];
 }
 
 export interface ProcessoAttachment {
@@ -64,6 +65,7 @@ export interface ProcessoAttachment {
   data_cadastro: string | null;
   instancia_processo: string | null;
   crawl_id: string | null;
+  data_andamento?: string | null;
 }
 
 export interface ProcessoSyncIntegrationInfo {

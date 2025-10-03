@@ -543,6 +543,7 @@ type RawAttachment = {
   nome?: unknown;
   tipo?: unknown;
   data_cadastro?: unknown;
+  data_andamento?: unknown;
   instancia_processo?: unknown;
   crawl_id?: unknown;
 };
@@ -589,6 +590,10 @@ const parseAttachments = (value: unknown): Processo['attachments'] => {
         normalizeTimestamp(raw.data_cadastro) ??
         normalizeDate(raw.data_cadastro) ??
         null,
+      data_andamento:
+        normalizeTimestamp(raw.data_andamento) ??
+        normalizeDate(raw.data_andamento) ??
+        null,
       instancia_processo:
         normalizeString(raw.instancia_processo) ??
         (typeof raw.instancia_processo === 'number' && Number.isFinite(raw.instancia_processo)
@@ -628,6 +633,108 @@ const parseAttachments = (value: unknown): Processo['attachments'] => {
   }
 
   return attachments;
+};
+
+const mergeMovimentacoesWithAttachments = (
+  movimentacoes: Processo['movimentacoes'],
+  attachments: Processo['attachments'],
+): Processo['movimentacoes'] => {
+  if (!Array.isArray(movimentacoes) || movimentacoes.length === 0) {
+    return Array.isArray(movimentacoes) ? movimentacoes : [];
+  }
+
+  if (!Array.isArray(attachments) || attachments.length === 0) {
+    return movimentacoes;
+  }
+
+  const movimentacoesComAnexos = movimentacoes.map((movimentacao) => ({
+    ...movimentacao,
+    attachments: Array.isArray(movimentacao.attachments)
+      ? movimentacao.attachments.slice()
+      : [],
+  }));
+
+  const movimentacoesPorId = new Map<string, (typeof movimentacoesComAnexos)[number]>();
+  const movimentacoesPorTimestamp = new Map<
+    string,
+    Array<(typeof movimentacoesComAnexos)[number]>
+  >();
+  const movimentacoesPorDia = new Map<string, Array<(typeof movimentacoesComAnexos)[number]>>();
+
+  movimentacoesComAnexos.forEach((movimentacao) => {
+    movimentacoesPorId.set(movimentacao.id, movimentacao);
+
+    const timestamp = normalizeTimestamp(movimentacao.data);
+
+    if (timestamp) {
+      const existentesMesmoTimestamp = movimentacoesPorTimestamp.get(timestamp);
+      if (existentesMesmoTimestamp) {
+        existentesMesmoTimestamp.push(movimentacao);
+      } else {
+        movimentacoesPorTimestamp.set(timestamp, [movimentacao]);
+      }
+
+      const diaChave = timestamp.slice(0, 10);
+      if (diaChave) {
+        const existentesMesmoDia = movimentacoesPorDia.get(diaChave);
+        if (existentesMesmoDia) {
+          existentesMesmoDia.push(movimentacao);
+        } else {
+          movimentacoesPorDia.set(diaChave, [movimentacao]);
+        }
+      }
+    }
+  });
+
+  const anexar = (
+    destino: (typeof movimentacoesComAnexos)[number] | undefined,
+    anexo: ProcessoAttachment,
+  ): boolean => {
+    if (!destino) {
+      return false;
+    }
+
+    if (!Array.isArray(destino.attachments)) {
+      destino.attachments = [];
+    }
+
+    destino.attachments.push(anexo);
+    return true;
+  };
+
+  attachments.forEach((anexo) => {
+    const identificador = anexo.id_andamento;
+
+    if (identificador && movimentacoesPorId.has(identificador)) {
+      anexar(movimentacoesPorId.get(identificador), anexo);
+      return;
+    }
+
+    const timestampAnexo =
+      normalizeTimestamp(anexo.data_andamento) ?? normalizeTimestamp(anexo.data_cadastro);
+
+    if (!timestampAnexo) {
+      return;
+    }
+
+    const candidatosMesmoTimestamp = movimentacoesPorTimestamp.get(timestampAnexo);
+    if (candidatosMesmoTimestamp && candidatosMesmoTimestamp.length > 0) {
+      anexar(candidatosMesmoTimestamp[0], anexo);
+      return;
+    }
+
+    const chaveDia = timestampAnexo.slice(0, 10);
+    if (!chaveDia) {
+      return;
+    }
+
+    const candidatosMesmoDia = movimentacoesPorDia.get(chaveDia);
+    if (candidatosMesmoDia && candidatosMesmoDia.length > 0) {
+      anexar(candidatosMesmoDia[0], anexo);
+    }
+  });
+
+  return movimentacoesComAnexos;
 };
 
 const parseJsonColumn = (value: unknown): unknown => {
@@ -809,6 +916,7 @@ const ANEXOS_BASE_QUERY = `
     nome,
     tipo,
     data_cadastro,
+    data_andamento,
     instancia_processo,
     crawl_id
   FROM public.trigger_anexos_processo
@@ -1699,7 +1807,10 @@ export const getProcessoById = async (req: Request, res: Response) => {
       fetchProcessoAnexos(processo.numero),
     ]);
 
-    processo.movimentacoes = movimentacoes;
+    processo.movimentacoes = mergeMovimentacoesWithAttachments(
+      movimentacoes,
+      attachments,
+    );
     processo.attachments = attachments;
     processo.participants = participants.length > 0 ? participants : [];
 
