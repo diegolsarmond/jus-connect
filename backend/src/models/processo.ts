@@ -40,6 +40,7 @@ export interface ProcessoMovimentacao {
   id: string;
   data: string | null;
   tipo: string | null;
+  tipo_andamento: string | null;
   tipo_publicacao: string | null;
   classificacao_predita: Record<string, unknown> | null;
   conteudo: string | null;
