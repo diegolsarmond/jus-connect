@@ -193,7 +193,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
 
   const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
 
-  return resumoConciso;
+  return resumoLimpo || resumoConciso;
 }
 
 interface ApiProcessoCounty {
