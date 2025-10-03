@@ -4,19 +4,12 @@ import {
   useEffect,
   useMemo,
   useState,
+  useTransition,
   type FormEvent,
   type UIEventHandler,
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  Info,
-  Loader2,
-  Sparkles,
-} from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Loader2, Sparkles } from "lucide-react";
 import { ModernTimeline } from "@/components/ui/modern-timeline";
 
 import {
@@ -455,9 +448,6 @@ export interface ProcessoViewModel {
   relacionados: ProcessoRelacionadoView[];
   anexos: AnexoProcesso[];
 }
-
-const TEXTO_DICA =
-  "Use filtros avançados para identificar rapidamente decisões, despachos e publicações relevantes para o seu cliente.";
 
 const formatadorMoeda = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -1939,19 +1929,22 @@ export default function VisualizarProcesso() {
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const [erroResumo, setErroResumo] = useState<string | null>(null);
   const [gerarResumoAoAbrir, setGerarResumoAoAbrir] = useState(false);
+  const [, startTransition] = useTransition();
 
   const aplicarModelo = useCallback(
     (modelo: ProcessoViewModel) => {
-      setViewModel(modelo);
-      setMesesAbertos(modelo.grupos.length ? [modelo.grupos[0].chave] : []);
-      const inicial: Record<string, number> = {};
-      modelo.grupos.forEach((grupo) => {
-        inicial[grupo.chave] = MOVIMENTACOES_POR_LAJE;
+      startTransition(() => {
+        setViewModel(modelo);
+        setMesesAbertos(modelo.grupos.length ? [modelo.grupos[0].chave] : []);
+        const inicial: Record<string, number> = {};
+        modelo.grupos.forEach((grupo) => {
+          inicial[grupo.chave] = MOVIMENTACOES_POR_LAJE;
+        });
+        setMovimentosPorMes(inicial);
+        setMesesVisiveis(Math.min(MESES_INICIAIS, modelo.grupos.length));
       });
-      setMovimentosPorMes(inicial);
-      setMesesVisiveis(Math.min(MESES_INICIAIS, modelo.grupos.length));
     },
-    [setMesesAbertos, setMovimentosPorMes, setMesesVisiveis],
+    [startTransition],
   );
 
   const carregarProcesso = useCallback(
@@ -2241,6 +2234,12 @@ export default function VisualizarProcesso() {
     setMesesVisiveis((valor) => Math.min(totalGruposFiltrados, valor + 2));
   }, [totalGruposFiltrados]);
 
+  const handleLimparFiltros = useCallback(() => {
+    setFiltroTipo("todos");
+    setFiltroInicio("");
+    setFiltroFim("");
+  }, []);
+
   const handleAbrirRelacionado = useCallback(
     (identificador: string) => {
       navigate(`/processos/${identificador}`);
@@ -2368,21 +2367,9 @@ export default function VisualizarProcesso() {
             Registrar movimentação
           </Button>
         </div>
-        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
-          <AlertTitle className="flex items-center gap-2 text-sm font-semibold">
-            <Info className="h-4 w-4" /> Dica
-          </AlertTitle>
-          <AlertDescription className="text-sm text-amber-900/80">
-            {TEXTO_DICA}{" "}
-            <Button variant="link" size="sm" className="h-auto p-0 align-baseline">
-              Configurar filtros
-            </Button>
-          </AlertDescription>
-        </Alert>
-
-        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <Card className="border border-muted-foreground/10 bg-white/90 shadow-sm backdrop-blur">
+        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">
+          <div className="space-y-4 lg:sticky lg:top-24">
+            <Card className="border border-muted-foreground/10 bg-card shadow-sm dark:border-muted/30 dark:bg-muted/40">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold text-muted-foreground">
                   Refinar resultados
@@ -2438,6 +2425,9 @@ export default function VisualizarProcesso() {
                     onChange={(event) => setFiltroFim(event.target.value)}
                   />
                 </div>
+                <Button type="button" variant="outline" className="w-full" onClick={handleLimparFiltros}>
+                  Limpar filtros
+                </Button>
               </CardContent>
             </Card>
           </div>
@@ -2446,12 +2436,13 @@ export default function VisualizarProcesso() {
             {temResultados ? (
               <>
                 <ModernTimeline
-                  groups={gruposVisiveis.map((grupo) => ({
+                  groups={gruposVisiveis.map((grupo, grupoIndex) => ({
                     label: grupo.rotulo,
+                    defaultExpanded: grupoIndex === 0,
                     events: grupo.itens
                       .slice(0, movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE)
                       .map((item) => {
-                        const podeResumir = item.tipoAndamento != null;
+                        const podeResumir = Boolean(item.conteudo && item.conteudo.trim().length > 0);
 
                         return {
                           id: item.id,
@@ -2494,13 +2485,9 @@ export default function VisualizarProcesso() {
     viewModel,
     gruposFiltrados,
     gruposVisiveis,
-    mesesAbertos,
     movimentosPorMes,
-    usarVirtualizacao,
-    handleToggleMes,
-    handleVerMaisMovimentos,
     handleCarregarMaisMeses,
-    handleMostrarConteudo,
+    handleLimparFiltros,
     handleMostrarResumoIa,
     filtroTipo,
     filtroInicio,
@@ -2532,7 +2519,7 @@ export default function VisualizarProcesso() {
   const conteudoSelecionado = movimentacaoSelecionada?.conteudo ?? "";
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-col space-y-6 px-4 lg:px-0">
       <header className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
