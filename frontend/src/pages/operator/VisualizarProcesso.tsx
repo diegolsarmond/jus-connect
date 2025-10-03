@@ -1724,6 +1724,7 @@ interface InformacoesProcessoProps {
   onVerTodosAnexos?: () => void;
   onAbrirAnexo?: (anexo: AnexoProcesso) => void;
   podeAbrirAnexo?: (anexo: AnexoProcesso) => boolean;
+  anexoEmCarregamentoId?: string | number | null;
 }
 
 export function InformacoesProcesso({
@@ -1733,6 +1734,7 @@ export function InformacoesProcesso({
   onVerTodosAnexos,
   onAbrirAnexo,
   podeAbrirAnexo,
+  anexoEmCarregamentoId,
 }: InformacoesProcessoProps) {
   const anexosVisiveis = anexos.slice(0, 5);
   const possuiMaisAnexos = anexos.length > anexosVisiveis.length;
@@ -1765,15 +1767,18 @@ export function InformacoesProcesso({
                 </div>
                 {(() => {
                   const habilitado = podeAbrirAnexo ? podeAbrirAnexo(anexo) : Boolean(onAbrirAnexo);
+                  const identificador = anexo.idAnexo ?? anexo.id;
+                  const carregando =
+                    identificador != null && anexoEmCarregamentoId === identificador;
                   return (
                     <Button
                       variant="outline"
                       size="sm"
                       className="w-full md:w-auto"
                       onClick={() => onAbrirAnexo?.(anexo)}
-                      disabled={!habilitado}
+                      disabled={!habilitado || carregando}
                     >
-                      {habilitado ? "Abrir documento" : "Link indisponível"}
+                      {habilitado ? (carregando ? "Abrindo..." : "Abrir documento") : "Link indisponível"}
                     </Button>
                   );
                 })()}
@@ -1978,6 +1983,12 @@ export default function VisualizarProcesso() {
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const [erroResumo, setErroResumo] = useState<string | null>(null);
   const [gerarResumoAoAbrir, setGerarResumoAoAbrir] = useState(false);
+  const [anexoEmCarregamentoId, setAnexoEmCarregamentoId] = useState<string | number | null>(null);
+  const [anexoVisualizado, setAnexoVisualizado] = useState<{
+    titulo: string;
+    conteudo: string;
+    tipo: string | null;
+  } | null>(null);
   const [, startTransition] = useTransition();
 
   const numeroCnjProcesso = viewModel?.numeroCnj ?? null;
@@ -1998,29 +2009,47 @@ export default function VisualizarProcesso() {
       }
 
       const idDestino = anexo.idAnexo ?? anexo.id;
-      const instanciaDestino = anexo.instancia ?? instanciaProcessoPadrao;
+      const instanciaDestino = anexo.instancia;
 
       return Boolean(idDestino && instanciaDestino);
     },
-    [numeroCnjProcesso, instanciaProcessoPadrao],
+    [numeroCnjProcesso],
   );
 
   const handleAbrirAnexo = useCallback(
     async (anexo: AnexoProcesso) => {
       const numero = numeroCnjProcesso;
-      const instanciaDestino = anexo.instancia ?? instanciaProcessoPadrao;
+      const instanciaDestino = anexo.instancia;
       const idDestino = anexo.idAnexo ?? anexo.id;
+      const identificador = idDestino ?? anexo.id ?? anexo.idAnexo ?? null;
+
+      setAnexoVisualizado(null);
+      setAnexoEmCarregamentoId(identificador ?? null);
+
+      const apresentarNoModal = (conteudo: string, tipo: string | null, tituloPadrao?: string | null) => {
+        const titulo =
+          tituloPadrao ??
+          anexo.titulo ??
+          (typeof anexo.idAnexo === "string" ? anexo.idAnexo : null) ??
+          (typeof anexo.id === "string" ? anexo.id : null) ??
+          "Anexo";
+        setAnexoVisualizado({
+          titulo,
+          conteudo,
+          tipo,
+        });
+      };
 
       if (!numero || !instanciaDestino || !idDestino) {
         if (anexo.url) {
-          window.open(anexo.url, "_blank", "noopener,noreferrer");
-          return;
+          apresentarNoModal(anexo.url, null);
+        } else {
+          toast({
+            variant: "destructive",
+            description: "Não foi possível abrir o anexo.",
+          });
         }
-
-        toast({
-          variant: "destructive",
-          description: "Não foi possível abrir o anexo.",
-        });
+        setAnexoEmCarregamentoId(null);
         return;
       }
 
@@ -2057,6 +2086,18 @@ export default function VisualizarProcesso() {
         return texto.length > 0 ? texto : null;
       };
 
+      const lerComoDataUrl = (blob: Blob) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve(typeof reader.result === "string" ? reader.result : "");
+          };
+          reader.onerror = () => {
+            reject(reader.error ?? new Error("Falha ao ler anexo"));
+          };
+          reader.readAsDataURL(blob);
+        });
+
       try {
         const resposta = await fetch(requestUrl, {
           headers: {
@@ -2065,9 +2106,10 @@ export default function VisualizarProcesso() {
         });
 
         if (!resposta.ok) {
-          throw new Error(`Falha ao baixar anexo (${resposta.status})`);
+          throw new Error(`Falha ao carregar anexo (${resposta.status})`);
         }
 
+        const contentType = resposta.headers.get("content-type");
         const blob = await resposta.blob();
         const nomeArquivo =
           sanitizarNome(extrairNomeArquivo(resposta.headers.get("content-disposition"))) ??
@@ -2076,28 +2118,30 @@ export default function VisualizarProcesso() {
           sanitizarNome(anexo.id) ??
           `anexo-${Date.now()}`;
 
-        const urlObjeto = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = urlObjeto;
-        link.download = nomeArquivo;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(urlObjeto);
+        const dataUrl = await lerComoDataUrl(blob);
+        apresentarNoModal(dataUrl, contentType, nomeArquivo);
       } catch (error) {
         console.error(error);
         toast({
           variant: "destructive",
-          description: "Não foi possível baixar o anexo. Tentando link alternativo...",
+          description: "Não foi possível exibir o anexo. Tentando link alternativo...",
         });
 
         if (anexo.url) {
-          window.open(anexo.url, "_blank", "noopener,noreferrer");
+          apresentarNoModal(anexo.url, null);
         }
+      } finally {
+        setAnexoEmCarregamentoId(null);
       }
     },
-    [numeroCnjProcesso, instanciaProcessoPadrao, toast],
+    [numeroCnjProcesso, toast],
   );
+
+  const handleAlterarVisualizadorAnexo = useCallback((aberto: boolean) => {
+    if (!aberto) {
+      setAnexoVisualizado(null);
+    }
+  }, []);
 
   const aplicarModelo = useCallback(
     (modelo: ProcessoViewModel) => {
@@ -2676,6 +2720,7 @@ export default function VisualizarProcesso() {
       onVerTodosAnexos={() => setMostrarTodosAnexos(true)}
       onAbrirAnexo={handleAbrirAnexo}
       podeAbrirAnexo={podeAbrirAnexo}
+      anexoEmCarregamentoId={anexoEmCarregamentoId}
     />
   ) : null;
 
@@ -2689,6 +2734,10 @@ export default function VisualizarProcesso() {
     null;
   const podeAbrirPrimeiroAnexo =
     primeiroAnexoDisponivel ? podeAbrirAnexo(primeiroAnexoDisponivel) : false;
+  const identificadorPrimeiroAnexo =
+    primeiroAnexoDisponivel?.idAnexo ?? primeiroAnexoDisponivel?.id ?? null;
+  const carregandoPrimeiroAnexo =
+    identificadorPrimeiroAnexo != null && anexoEmCarregamentoId === identificadorPrimeiroAnexo;
   const isMarkdownSelecionado = Boolean(
     movimentacaoSelecionada &&
       typeof movimentacaoSelecionada.tags?.formatted === "string" &&
@@ -2984,9 +3033,13 @@ export default function VisualizarProcesso() {
                 size="sm"
                 className="w-full sm:mr-auto sm:w-auto"
                 onClick={() => handleAbrirAnexo(primeiroAnexoDisponivel)}
-                disabled={!podeAbrirPrimeiroAnexo}
+                disabled={!podeAbrirPrimeiroAnexo || carregandoPrimeiroAnexo}
               >
-                {podeAbrirPrimeiroAnexo ? "Abrir documento" : "Link indisponível"}
+                {podeAbrirPrimeiroAnexo
+                  ? carregandoPrimeiroAnexo
+                    ? "Abrindo..."
+                    : "Abrir documento"
+                  : "Link indisponível"}
               </Button>
             ) : null}
             <Button
@@ -3140,15 +3193,17 @@ export default function VisualizarProcesso() {
                   </div>
                   {(() => {
                     const habilitado = podeAbrirAnexo(anexo);
+                    const identificador = anexo.idAnexo ?? anexo.id;
+                    const carregando = identificador != null && anexoEmCarregamentoId === identificador;
                     return (
                       <Button
                         variant="outline"
                         size="sm"
                         className="w-full sm:w-auto"
                         onClick={() => handleAbrirAnexo(anexo)}
-                        disabled={!habilitado}
+                        disabled={!habilitado || carregando}
                       >
-                        {habilitado ? "Abrir documento" : "Link indisponível"}
+                        {habilitado ? (carregando ? "Abrindo..." : "Abrir documento") : "Link indisponível"}
                       </Button>
                     );
                   })()}
@@ -3160,6 +3215,24 @@ export default function VisualizarProcesso() {
               </p>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(anexoVisualizado)} onOpenChange={handleAlterarVisualizadorAnexo}>
+        <DialogContent className="max-h-[90vh] w-full max-w-5xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>{anexoVisualizado?.titulo ?? "Anexo"}</DialogTitle>
+          </DialogHeader>
+          {anexoVisualizado ? (
+            <div className="h-[75vh] w-full overflow-hidden">
+              <iframe
+                title={anexoVisualizado.titulo}
+                src={anexoVisualizado.conteudo}
+                className="h-full w-full rounded-md border border-muted-foreground/20 bg-background"
+                allowFullScreen
+              />
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
