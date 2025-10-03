@@ -2009,17 +2009,17 @@ export default function VisualizarProcesso() {
       }
 
       const idDestino = anexo.idAnexo ?? anexo.id;
-      const instanciaDestino = anexo.instancia ?? instanciaProcessoPadrao;
+      const instanciaDestino = anexo.instancia;
 
       return Boolean(idDestino && instanciaDestino);
     },
-    [numeroCnjProcesso, instanciaProcessoPadrao],
+    [numeroCnjProcesso],
   );
 
   const handleAbrirAnexo = useCallback(
     async (anexo: AnexoProcesso) => {
       const numero = numeroCnjProcesso;
-      const instanciaDestino = anexo.instancia ?? instanciaProcessoPadrao;
+      const instanciaDestino = anexo.instancia;
       const idDestino = anexo.idAnexo ?? anexo.id;
       const identificador = idDestino ?? anexo.id ?? anexo.idAnexo ?? null;
 
@@ -2134,7 +2134,8 @@ export default function VisualizarProcesso() {
         setAnexoEmCarregamentoId(null);
       }
     },
-    [instanciaProcessoPadrao, numeroCnjProcesso, toast],
+    [numeroCnjProcesso, toast],
+
   );
 
   const handleAlterarVisualizadorAnexo = useCallback((aberto: boolean) => {
