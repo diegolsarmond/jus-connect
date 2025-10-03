@@ -249,6 +249,7 @@ interface ApiProcessoAttachment {
   nome?: string | null;
   tipo?: string | null;
   data_cadastro?: string | null;
+  data_andamento?: string | null;
   instancia_processo?: string | null;
   crawl_id?: string | null;
   content?: string | null;
@@ -1186,6 +1187,11 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   };
 
   const anexosPorMovimentacao = new Map<string, AnexoProcesso[]>();
+  const anexosSemIdentificador: Array<{
+    anexo: AnexoProcesso;
+    dataReferenciaIso: string | null;
+    dataReferenciaDia: string | null;
+  }> = [];
 
   const anexos: AnexoProcesso[] = anexosFonte
     .map((anexo, index) => {
@@ -1202,6 +1208,21 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
         `${index}-${titulo}`;
       const dataOriginal =
         anexo.data_cadastro ?? anexo.date ?? anexo.attachment_date ?? null;
+      const dataOrganizacaoBruta =
+        primeiroTextoValido(
+          anexo.data_cadastro,
+          anexo.data_andamento,
+          anexo.date,
+          anexo.attachment_date,
+        ) || null;
+      const dataOrganizacaoIso = (() => {
+        if (!dataOrganizacaoBruta) {
+          return null;
+        }
+
+        const dataReferencia = new Date(dataOrganizacaoBruta);
+        return Number.isNaN(dataReferencia.getTime()) ? null : dataReferencia.toISOString();
+      })();
       const idAnexo = normalizarIdentificador(
         anexo.id_anexo ?? anexo.attachment_id ?? anexo.id,
       );
@@ -1219,7 +1240,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
       const model: AnexoProcesso = {
         id: idIdentificador,
         titulo,
-        data: formatarData(dataOriginal, "hora"),
+        data: formatarData(dataOriginal ?? dataOrganizacaoBruta, "hora"),
         url,
         idAndamento,
         instancia: instanciaProcesso,
@@ -1231,6 +1252,12 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
       if (model.idAndamento) {
         const existentes = anexosPorMovimentacao.get(model.idAndamento) ?? [];
         anexosPorMovimentacao.set(model.idAndamento, [...existentes, model]);
+      } else {
+        anexosSemIdentificador.push({
+          anexo: model,
+          dataReferenciaIso: dataOrganizacaoIso,
+          dataReferenciaDia: dataOrganizacaoIso ? dataOrganizacaoIso.slice(0, 10) : null,
+        });
       }
 
       return model;
@@ -1320,6 +1347,45 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
 
       return dataB - dataA;
     });
+
+  if (anexosSemIdentificador.length > 0 && movimentacoes.length > 0) {
+    const movimentacoesPorTimestamp = new Map<string, MovimentacaoProcesso>();
+    const movimentacoesPorDia = new Map<string, MovimentacaoProcesso>();
+
+    movimentacoes.forEach((movimentacao) => {
+      if (movimentacao.data) {
+        const iso = movimentacao.data.toISOString();
+        movimentacoesPorTimestamp.set(iso, movimentacao);
+        movimentacoesPorDia.set(iso.slice(0, 10), movimentacao);
+      }
+
+      if (movimentacao.dataOriginal) {
+        const dataBruta = new Date(movimentacao.dataOriginal);
+        if (!Number.isNaN(dataBruta.getTime())) {
+          const iso = dataBruta.toISOString();
+          movimentacoesPorTimestamp.set(iso, movimentacao);
+          movimentacoesPorDia.set(iso.slice(0, 10), movimentacao);
+        }
+      }
+    });
+
+    anexosSemIdentificador.forEach(({ anexo, dataReferenciaIso, dataReferenciaDia }) => {
+      if (dataReferenciaIso) {
+        const destino = movimentacoesPorTimestamp.get(dataReferenciaIso);
+        if (destino) {
+          destino.anexos.push(anexo);
+          return;
+        }
+      }
+
+      if (dataReferenciaDia) {
+        const destino = movimentacoesPorDia.get(dataReferenciaDia);
+        if (destino) {
+          destino.anexos.push(anexo);
+        }
+      }
+    });
+  }
 
   const grupos = agruparPorMes(movimentacoes);
 
