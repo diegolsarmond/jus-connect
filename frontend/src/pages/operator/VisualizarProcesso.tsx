@@ -141,7 +141,7 @@ export function filtrarMovimentacoes(
 function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): string {
   const tipoAndamento = movimentacao.stepType?.trim() || "movimentação processual";
   const partes: string[] = [
-      `Responda de forma direta ao(à) ${tipoAndamento} descrito abaixo. Traga apenas 4 frases objetivas com decisões, determinações, pedidos e próximos passos, sem introduções ou menções a resumo.`,
+      `Responda de forma direta ao(à) ${tipoAndamento} descrito abaixo. Traga frases objetivas com decisões, determinações, pedidos e próximos passos, sem introduções ou menções a resumo.`,
   ];
 
 
@@ -189,7 +189,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
     }
   }
 
-  const resumoConciso = frasesParaResumo.slice(0, 4).join(" ") || paragrafoUnico;
+  const resumoConciso = frasesParaResumo.slice(0, 10).join(" ") || paragrafoUnico;
 
   const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
 
