@@ -536,6 +536,128 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
   return movimentacoes;
 };
 
+const parseJsonColumn = (value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (value instanceof Buffer) {
+    const decoded = value.toString('utf-8').trim();
+    if (!decoded) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(decoded);
+    } catch {
+      return decoded;
+    }
+  }
+
+  return value;
+};
+
+const asPlainObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+};
+
+const pickTriggerValue = (
+  source: Record<string, unknown> | null,
+  keys: string[],
+): unknown => {
+  if (!source) {
+    return null;
+  }
+
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      return source[key];
+    }
+  }
+
+  return null;
+};
+
+const toArrayOrNull = (value: unknown): unknown[] | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      return [trimmed];
+    }
+  }
+
+  if (value && typeof value === 'object' && 'rows' in (value as Record<string, unknown>)) {
+    const possible = (value as { rows?: unknown[] }).rows;
+    if (Array.isArray(possible)) {
+      return possible;
+    }
+  }
+
+  return null;
+};
+
+const normalizeMixedCollection = (
+  value: unknown[] | null,
+): Array<string | Record<string, unknown> | null> | null => {
+  if (!value) {
+    return null;
+  }
+
+  return value.map((item) => {
+    if (item === null || item === undefined) {
+      return null;
+    }
+
+    if (typeof item === 'string') {
+      return item;
+    }
+
+    if (typeof item === 'number' || typeof item === 'boolean') {
+      return String(item);
+    }
+
+    if (typeof item === 'object') {
+      return item as Record<string, unknown>;
+    }
+
+    return null;
+  });
+};
+
 const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 
 const MOVIMENTACOES_BASE_QUERY = `
@@ -1088,7 +1210,8 @@ const baseProcessoSelect = `
       SELECT COUNT(*)::int
       FROM public.trigger_movimentacao_processo tmp
       WHERE tmp.numero_cnj = p.numero_cnj
-    ) AS movimentacoes_count
+    ) AS movimentacoes_count,
+    to_jsonb(dp) AS trigger_dados_processo
 FROM public.processos p
 LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
 LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
@@ -1106,6 +1229,149 @@ const mapProcessoRow = (row: any): Processo => {
   const sequencial = parseOptionalInteger(row.oportunidade_sequencial_empresa);
   const solicitanteId = parseOptionalInteger(row.oportunidade_solicitante_id);
   const solicitanteNome = normalizeString(row.oportunidade_solicitante_nome);
+
+  const triggerDados = asPlainObject(parseJsonColumn(row.trigger_dados_processo));
+  const getTriggerValue = (keys: string[]): unknown => pickTriggerValue(triggerDados, keys);
+  const getTriggerString = (keys: string[]): string | null => {
+    const value = getTriggerValue(keys);
+    if (typeof value === 'string') {
+      return normalizeString(value);
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+
+    return null;
+  };
+  const getTriggerTimestamp = (keys: string[]): string | null => {
+    const raw = getTriggerValue(keys);
+    return normalizeTimestamp(raw) ?? normalizeDate(raw);
+  };
+  const getTriggerJson = (keys: string[]): unknown => parseJsonColumn(getTriggerValue(keys));
+  const indicadoresDados = asPlainObject(getTriggerJson(['indicadores']));
+  const getIndicatorRaw = (keys: string[]): unknown => {
+    const primary = getTriggerValue(keys);
+    if (primary !== null && primary !== undefined) {
+      return primary;
+    }
+
+    if (indicadoresDados) {
+      const nested = pickTriggerValue(indicadoresDados, keys);
+      if (nested !== null && nested !== undefined) {
+        return nested;
+      }
+    }
+
+    return null;
+  };
+  const getIndicatorValue = (keys: string[]): boolean | string | null => {
+    const parsed = parseJsonColumn(getIndicatorRaw(keys));
+    const booleanCandidate = parseBooleanFlag(parsed);
+    if (booleanCandidate !== null) {
+      return booleanCandidate;
+    }
+
+    if (parsed === null || parsed === undefined) {
+      return null;
+    }
+
+    if (typeof parsed === 'string') {
+      return normalizeString(parsed);
+    }
+
+    if (typeof parsed === 'number') {
+      return parsed === 0 ? false : true;
+    }
+
+    if (typeof parsed === 'boolean') {
+      return parsed;
+    }
+
+    return null;
+  };
+  const getIndicatorString = (keys: string[]): string | null => {
+    const parsed = parseJsonColumn(getIndicatorRaw(keys));
+
+    if (parsed === null || parsed === undefined) {
+      return null;
+    }
+
+    if (typeof parsed === 'string') {
+      return normalizeString(parsed);
+    }
+
+    if (typeof parsed === 'number' || typeof parsed === 'boolean') {
+      return String(parsed);
+    }
+
+    return null;
+  };
+
+  const tribunalAcronym = getTriggerString([
+    'tribunal_acronym',
+    'tribunal_sigla',
+    'tribunalAcronym',
+    'tribunalSigla',
+  ]);
+  const tribunalName =
+    getTriggerString(['tribunal_name', 'tribunal_nome', 'tribunalName', 'nome_tribunal']) ?? null;
+  const tribunalDescricao =
+    getTriggerString(['tribunal', 'tribunal_descricao', 'nome_tribunal']) ?? tribunalName;
+  const justiceDescription =
+    getTriggerString(['justice_description', 'justica_descricao', 'descricao_justica', 'justica']) ??
+    null;
+  const countyRaw = getTriggerJson(['county', 'comarca', 'localidade']);
+  let county: Processo['county'] = null;
+  if (typeof countyRaw === 'string') {
+    county = normalizeString(countyRaw);
+  } else if (countyRaw && typeof countyRaw === 'object') {
+    county = countyRaw as Record<string, unknown>;
+  }
+
+  const amountRaw = getTriggerJson(['amount', 'valor_causa', 'valor_da_causa']);
+  let amount: Processo['amount'] = null;
+  if (typeof amountRaw === 'number' && Number.isFinite(amountRaw)) {
+    amount = amountRaw;
+  } else if (typeof amountRaw === 'string') {
+    const trimmed = amountRaw.trim();
+    amount = trimmed ? trimmed : null;
+  }
+
+  const distributionDate =
+    getTriggerTimestamp(['distribution_date', 'data_distribuicao']) ?? normalizeTimestamp(row.data_distribuicao);
+  const subjectsRaw = getTriggerJson(['subjects', 'assuntos']);
+  const classificationsRaw = getTriggerJson(['classifications', 'classificacoes']);
+  const tagsRaw = getTriggerJson(['tags']);
+  const precatory = getIndicatorValue(['precatory', 'precatorio']);
+  const freeJustice = getIndicatorValue(['free_justice', 'justica_gratuita', 'gratuidade_justica']);
+  const secrecyLevel =
+    getIndicatorString(['secrecy_level', 'nivel_sigilo', 'nivel_de_sigilo']) ??
+    getTriggerString(['secrecy', 'sigilo']);
+
+  const parseSubjects = toArrayOrNull(subjectsRaw);
+  const parseClassifications = toArrayOrNull(classificationsRaw);
+  const normalizedSubjects = normalizeMixedCollection(parseSubjects);
+  const normalizedClassifications = normalizeMixedCollection(parseClassifications);
+  const subjectsList =
+    normalizedSubjects ??
+    (subjectsRaw && typeof subjectsRaw === 'object' && !Array.isArray(subjectsRaw)
+      ? [subjectsRaw as Record<string, unknown>]
+      : null);
+  const classificationsList =
+    normalizedClassifications ??
+    (classificationsRaw && typeof classificationsRaw === 'object' && !Array.isArray(classificationsRaw)
+      ? [classificationsRaw as Record<string, unknown>]
+      : null);
+  let tags: Processo['tags'] = null;
+
+  if (Array.isArray(tagsRaw)) {
+    tags = tagsRaw;
+  } else if (tagsRaw && typeof tagsRaw === 'object') {
+    tags = tagsRaw as Record<string, unknown>;
+  } else if (typeof tagsRaw === 'string') {
+    tags = normalizeString(tagsRaw);
+  }
 
   const oportunidade =
     oportunidadeId && oportunidadeId > 0
@@ -1133,6 +1399,19 @@ const mapProcessoRow = (row: any): Processo => {
     classe_judicial: row.classe_judicial,
     assunto: row.assunto,
     jurisdicao: row.jurisdicao,
+    tribunal_acronym: tribunalAcronym,
+    tribunal: tribunalDescricao ?? tribunalAcronym,
+    tribunal_name: tribunalName ?? tribunalDescricao ?? tribunalAcronym,
+    justice_description: justiceDescription,
+    county,
+    amount,
+    distribution_date: distributionDate,
+    subjects: subjectsList,
+    classifications: classificationsList,
+    tags,
+    precatory,
+    free_justice: freeJustice,
+    secrecy_level: secrecyLevel,
     oportunidade_id: oportunidade?.id ?? null,
     advogado_responsavel: row.advogado_responsavel,
     data_distribuicao: row.data_distribuicao,
