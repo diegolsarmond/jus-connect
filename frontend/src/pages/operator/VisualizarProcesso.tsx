@@ -2433,7 +2433,11 @@ export default function VisualizarProcesso() {
                     events: grupo.itens
                       .slice(0, movimentosPorMes[grupo.chave] ?? MOVIMENTACOES_POR_LAJE)
                       .map((item) => {
-                        const podeResumir = Boolean(item.conteudo && item.conteudo.trim().length > 0);
+                        const temTipoAndamento =
+                          typeof item.tipoAndamento === "string" && item.tipoAndamento.trim().length > 0;
+                        const podeResumir = Boolean(
+                          temTipoAndamento && item.conteudo && item.conteudo.trim().length > 0,
+                        );
 
                         return {
                           id: item.id,
@@ -2508,6 +2512,13 @@ export default function VisualizarProcesso() {
       movimentacaoSelecionada.tags.formatted.trim().toLowerCase() === "md",
   );
   const conteudoSelecionado = movimentacaoSelecionada?.conteudo ?? "";
+  const podeResumirMovimentacaoSelecionada = Boolean(
+    movimentacaoSelecionada &&
+      typeof movimentacaoSelecionada.tipoAndamento === "string" &&
+      movimentacaoSelecionada.tipoAndamento.trim().length > 0 &&
+      movimentacaoSelecionada.conteudo &&
+      movimentacaoSelecionada.conteudo.trim().length > 0,
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col space-y-6 px-4 lg:px-0">
@@ -2706,7 +2717,7 @@ export default function VisualizarProcesso() {
             <DialogTitle>
               {movimentacaoSelecionada?.stepType || "Movimentação selecionada"}
             </DialogTitle>
-            {movimentacaoSelecionada ? (
+            {podeResumirMovimentacaoSelecionada ? (
               <Button
                 type="button"
                 onClick={handleGerarResumoIa}
