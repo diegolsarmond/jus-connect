@@ -154,13 +154,6 @@ function montarPromptResumoMovimentacao(movimentacao: MovimentacaoProcesso): str
   const conteudoNormalizado = normalizarTexto(movimentacao.conteudo) || "Sem conteúdo textual informado.";
   partes.push(`Conteúdo:\n${conteudoNormalizado}`);
 
-  if (movimentacao.anexos.length) {
-    const listaAnexos = movimentacao.anexos
-      .map((anexo) => `- ${anexo.titulo}${anexo.data ? ` (${anexo.data})` : ""}`)
-      .join("\n");
-    partes.push(`Anexos associados:\n${listaAnexos}`);
-  }
-
   return partes.filter(Boolean).join("\n\n");
 }
 
