@@ -233,6 +233,7 @@ interface ApiProcessoMovimentacao {
   conteudo?: string | null;
   texto_categoria?: string | null;
   sigiloso?: unknown;
+  attachments?: ApiProcessoAttachment[] | null;
 }
 
 interface ApiProcessoAttachment {
@@ -1186,56 +1187,205 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
   };
 
   const anexosPorMovimentacao = new Map<string, AnexoProcesso[]>();
+  const anexos: AnexoProcesso[] = [];
+  const anexosPorId = new Map<string, AnexoProcesso>();
+  let fallbackIndiceAnexo = 0;
 
-  const anexos: AnexoProcesso[] = anexosFonte
-    .map((anexo, index) => {
-      const titulo =
-        primeiroTextoValido(anexo.nome, anexo.attachment_name, anexo.title, anexo.content) ||
-        `Documento ${index + 1}`;
+  const construirAnexo = (
+    anexo: ApiProcessoAttachment,
+    fallbackIdAndamento?: string | null,
+  ): AnexoProcesso | null => {
+    const tituloBase = primeiroTextoValido(
+      anexo.nome,
+      anexo.attachment_name,
+      anexo.title,
+      anexo.content,
+    );
+    const titulo = tituloBase ?? "Documento";
 
-      if (!titulo) {
+    const dataOriginal =
+      anexo.data_cadastro ?? anexo.date ?? anexo.attachment_date ?? null;
+    const idAnexo = normalizarIdentificador(anexo.id_anexo ?? anexo.attachment_id ?? anexo.id);
+    const instanciaProcesso = primeiroTextoValido(anexo.instancia_processo) || null;
+    const url = primeiroTextoValido(anexo.url, anexo.attachment_url) || null;
+    const tipo = primeiroTextoValido(anexo.tipo) || null;
+    const crawlId = primeiroTextoValido(anexo.crawl_id) || null;
+    const idPrincipal = normalizarIdentificador(
+      anexo.id ?? anexo.id_anexo ?? anexo.attachment_id,
+    );
+
+    let idIdentificador = idPrincipal;
+
+    if (!idIdentificador) {
+      const chaveComposta = `${titulo}|${dataOriginal ?? ""}|${url ?? ""}|${crawlId ?? ""}`;
+      const chaveNormalizada = normalizarTexto(chaveComposta);
+
+      idIdentificador =
+        (chaveNormalizada.length > 0 ? chaveNormalizada : chaveComposta) ||
+        `${fallbackIndiceAnexo++}-${titulo}`;
+    }
+
+    const idAndamentoBase =
+      normalizarIdentificador(anexo.id_andamento ?? anexo.attachment_id) ??
+      (fallbackIdAndamento ? normalizarIdentificador(fallbackIdAndamento) : null);
+    const idAndamento = idAndamentoBase
+      ? normalizarTexto(idAndamentoBase) || idAndamentoBase
+      : null;
+
+    return {
+      id: idIdentificador,
+      titulo,
+      data: formatarData(dataOriginal, "hora"),
+      url,
+      idAndamento,
+      instancia: instanciaProcesso,
+      idAnexo,
+      tipo,
+      crawlId,
+    };
+  };
+
+  const anexarNaMovimentacao = (chave: string | null, anexo: AnexoProcesso) => {
+    if (!chave) {
+      return;
+    }
+
+    const existentes = anexosPorMovimentacao.get(chave);
+    if (existentes) {
+      if (!existentes.includes(anexo)) {
+        existentes.push(anexo);
+      }
+      return;
+    }
+
+    anexosPorMovimentacao.set(chave, [anexo]);
+  };
+
+  const registrarAnexo = (
+    anexo: ApiProcessoAttachment,
+    fallbackMovimentacaoId?: string | null,
+  ) => {
+    const modelo = construirAnexo(anexo, fallbackMovimentacaoId);
+
+    if (!modelo) {
+      return;
+    }
+
+    const localizarExistente = (): AnexoProcesso | undefined => {
+      const candidatos = [
+        modelo.id,
+        modelo.idAnexo,
+        modelo.url,
+        modelo.crawlId,
+      ].filter((chave): chave is string => Boolean(chave && chave.length > 0));
+
+      for (const chave of candidatos) {
+        const encontrado = anexosPorId.get(chave);
+        if (encontrado) {
+          return encontrado;
+        }
+      }
+
+      return anexos.find((item) => {
+        if (modelo.idAnexo && item.idAnexo && modelo.idAnexo === item.idAnexo) {
+          return true;
+        }
+
+        if (modelo.url && item.url && modelo.url === item.url) {
+          return true;
+        }
+
+        if (modelo.crawlId && item.crawlId && modelo.crawlId === item.crawlId) {
+          return true;
+        }
+
+        if (modelo.titulo === item.titulo && modelo.data === item.data) {
+          return true;
+        }
+
+        return false;
+      });
+    };
+
+    const destino = localizarExistente() ?? modelo;
+
+    if (destino === modelo) {
+      anexos.push(destino);
+    }
+
+    const registrarChaves = (
+      alvo: AnexoProcesso,
+      ...chaves: Array<string | null | undefined>
+    ) => {
+      chaves.forEach((chave) => {
+        if (chave && chave.length > 0) {
+          anexosPorId.set(chave, alvo);
+        }
+      });
+    };
+
+    registrarChaves(destino, destino.id, modelo.id, modelo.idAnexo, modelo.url, modelo.crawlId);
+
+    if (!destino.idAndamento && modelo.idAndamento) {
+      destino.idAndamento = modelo.idAndamento;
+    }
+
+    if (!destino.data && modelo.data) {
+      destino.data = modelo.data;
+    }
+
+    if (!destino.url && modelo.url) {
+      destino.url = modelo.url;
+    }
+
+    if (!destino.instancia && modelo.instancia) {
+      destino.instancia = modelo.instancia;
+    }
+
+    if (!destino.tipo && modelo.tipo) {
+      destino.tipo = modelo.tipo;
+    }
+
+    if (!destino.crawlId && modelo.crawlId) {
+      destino.crawlId = modelo.crawlId;
+    }
+
+    const chaveMovimentacao =
+      (fallbackMovimentacaoId && fallbackMovimentacaoId.length > 0
+        ? fallbackMovimentacaoId
+        : destino.idAndamento ?? modelo.idAndamento ?? null) ?? null;
+
+    anexarNaMovimentacao(chaveMovimentacao, destino);
+  };
+
+  anexosFonte.forEach((anexo) => {
+    registrarAnexo(anexo);
+  });
+
+  movimentacoesOriginais.forEach((movimentacao) => {
+    const anexosDaMovimentacao = Array.isArray(movimentacao.attachments)
+      ? movimentacao.attachments
+      : [];
+
+    if (anexosDaMovimentacao.length === 0) {
+      return;
+    }
+
+    const chaveMovimentacao = (() => {
+      const idBase = normalizarIdentificador(movimentacao.id ?? null);
+
+      if (!idBase) {
         return null;
       }
 
-      const idIdentificador =
-        normalizarIdentificador(anexo.id ?? anexo.id_anexo ?? anexo.attachment_id) ??
-        `${index}-${titulo}`;
-      const dataOriginal =
-        anexo.data_cadastro ?? anexo.date ?? anexo.attachment_date ?? null;
-      const idAnexo = normalizarIdentificador(
-        anexo.id_anexo ?? anexo.attachment_id ?? anexo.id,
-      );
-      const idAndamentoBase = normalizarIdentificador(
-        anexo.id_andamento ?? anexo.attachment_id,
-      );
-      const idAndamento = idAndamentoBase
-        ? normalizarTexto(idAndamentoBase) || idAndamentoBase
-        : null;
-      const instanciaProcesso = primeiroTextoValido(anexo.instancia_processo) || null;
-      const url = primeiroTextoValido(anexo.url, anexo.attachment_url) || null;
-      const tipo = primeiroTextoValido(anexo.tipo) || null;
-      const crawlId = primeiroTextoValido(anexo.crawl_id) || null;
+      const normalizado = normalizarTexto(idBase);
+      return normalizado.length > 0 ? normalizado : idBase;
+    })();
 
-      const model: AnexoProcesso = {
-        id: idIdentificador,
-        titulo,
-        data: formatarData(dataOriginal, "hora"),
-        url,
-        idAndamento,
-        instancia: instanciaProcesso,
-        idAnexo,
-        tipo,
-        crawlId,
-      };
-
-      if (model.idAndamento) {
-        const existentes = anexosPorMovimentacao.get(model.idAndamento) ?? [];
-        anexosPorMovimentacao.set(model.idAndamento, [...existentes, model]);
-      }
-
-      return model;
-    })
-    .filter((anexo): anexo is AnexoProcesso => Boolean(anexo));
+    anexosDaMovimentacao.forEach((anexo) => {
+      registrarAnexo(anexo, chaveMovimentacao);
+    });
+  });
 
   const movimentacoes = passosDeduplicados
     .map((item, index) => {
