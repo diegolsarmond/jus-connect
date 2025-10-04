@@ -27,11 +27,13 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   loadAdminAnalyticsOverview,
+  loadProcessSyncReport,
   type AdminAnalyticsOverview,
   type RevenueByPlanSlice,
   type CohortPoint,
   type FunnelStage,
   type AdminMonthlyPoint,
+  type ProcessSyncReport,
 } from "@/services/analytics";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))"];
@@ -41,6 +43,7 @@ const formatCurrency = (value: number) =>
 
 export default function Analytics() {
   const [analytics, setAnalytics] = useState<AdminAnalyticsOverview | null>(null);
+  const [syncReport, setSyncReport] = useState<ProcessSyncReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,11 +54,15 @@ export default function Analytics() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const data = await loadAdminAnalyticsOverview(controller.signal);
+        const [overview, report] = await Promise.all([
+          loadAdminAnalyticsOverview(controller.signal),
+          loadProcessSyncReport(controller.signal),
+        ]);
         if (!mounted) {
           return;
         }
-        setAnalytics(data);
+        setAnalytics(overview);
+        setSyncReport(report);
         setError(null);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
@@ -64,6 +71,7 @@ export default function Analytics() {
         console.error("Falha ao carregar analytics administrativos", err);
         if (mounted) {
           setError("Não foi possível carregar as métricas de analytics.");
+          setSyncReport(null);
         }
       } finally {
         if (mounted) {
@@ -119,6 +127,20 @@ export default function Analytics() {
     }),
     [retention.gross, retention.net, retention.logo],
   );
+
+  const syncPeriodLabel = useMemo(() => {
+    if (!syncReport) {
+      return "—";
+    }
+    const { from, to } = syncReport.period;
+    if (from && to) {
+      return `${from} — ${to}`;
+    }
+    if (from || to) {
+      return from ?? to ?? "—";
+    }
+    return "Não informado";
+  }, [syncReport]);
 
   return (
     <div className="space-y-6">
@@ -391,6 +413,72 @@ export default function Analytics() {
               <span className="text-sm">Trial to Paid Conversion</span>
               <span className="font-medium">{customerMetrics.trialConversion.toFixed(1)}%</span>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-3">
+          <CardHeader>
+            <CardTitle>Relatório de Sincronização Judit</CardTitle>
+            <CardDescription>
+              Custos consolidados por serviço{syncReport ? ` (${syncPeriodLabel})` : ""}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isLoading ? (
+              <div className="text-sm text-muted-foreground">Carregando relatório...</div>
+            ) : syncReport ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-sm text-muted-foreground">Período consultado</span>
+                    <div className="text-sm font-medium">{syncPeriodLabel}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-6 text-sm">
+                    <div className="space-y-1 text-right">
+                      <span className="text-muted-foreground">Total de requisições</span>
+                      <div className="text-lg font-semibold">
+                        {syncReport.totalRequests.toLocaleString("pt-BR")}
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-right">
+                      <span className="text-muted-foreground">Custo total</span>
+                      <div className="text-lg font-semibold">{formatCurrency(syncReport.totalCost)}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-border text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Serviço</th>
+                        <th className="py-2 pr-4 font-medium text-right">Quantidade</th>
+                        <th className="py-2 font-medium text-right">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {syncReport.subtotals.map((item) => (
+                        <tr key={item.service}>
+                          <td className="py-2 pr-4">{item.service}</td>
+                          <td className="py-2 pr-4 text-right">{item.quantity.toLocaleString("pt-BR")}</td>
+                          <td className="py-2 text-right">{formatCurrency(item.totalCost)}</td>
+                        </tr>
+                      ))}
+                      {syncReport.subtotals.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-4 text-center text-muted-foreground">
+                            Nenhum subtotal disponível para o período.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Nenhum dado disponível para o período selecionado.
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
