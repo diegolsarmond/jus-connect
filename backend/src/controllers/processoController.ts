@@ -1156,14 +1156,18 @@ const fetchProcessParticipants = async (
   if (normalizedNumero) {
     const crawlerResult = await executor.query(
       `SELECT
-         nome,
-         polo,
-         tipo_pessoa,
-         documento_principal,
-         tipo_documento_principal,
-         possui_advogados,
-         data_cadastro
-       FROM public.trigger_envolvidos_processo
+          nome,
+          CASE
+            WHEN polo = 'Passive' THEN 'Passivo'
+            WHEN polo = 'Active' THEN 'Ativo'
+            ELSE polo
+          END AS polo,
+          tipo_pessoa,
+          documento_principal,
+          tipo_documento_principal,
+          possui_advogados,
+          data_cadastro
+        FROM public.trigger_envolvidos_processo
        WHERE numero_cnj = $1`,
       [normalizedNumero],
     );
