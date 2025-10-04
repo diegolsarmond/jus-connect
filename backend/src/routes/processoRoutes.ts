@@ -4,6 +4,7 @@ import {
   listProcessosByCliente,
   getProcessoById,
   createProcessoMovimentacaoManual,
+  syncProcessoWithJudit,
   createProcesso,
   updateProcesso,
   deleteProcesso,
@@ -154,6 +155,8 @@ router.get('/clientes/:clienteId/processos', listProcessosByCliente);
 router.get('/processos/:id', getProcessoById);
 
 router.post('/processos/:id/movimentacoes', createProcessoMovimentacaoManual);
+
+router.post('/processos/:id/judit/sync', syncProcessoWithJudit);
 
 /**
  * @swagger
