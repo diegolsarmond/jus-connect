@@ -382,7 +382,7 @@ interface ParteNormalizada {
   tipoPessoa?: string | null;
   advogados: string[];
   polo?: "ativo" | "passivo" | null;
-  papel?: string | null;
+  papel?: string | "Não Informado";
 }
 
 interface PartesAgrupadas {
@@ -742,11 +742,11 @@ function mapearPartes(partes: ApiProcessoParticipant[] | null | undefined): Part
       return;
     }
 
-    const documento = mascararDocumento(parte.document ?? null);
+    const documento = mascararDocumento(parte.document ?? "Não Informado");
     const tipoPessoa = normalizarTipoPessoa(parte.person_type);
     const advogados = extrairAdvogados(parte);
     const polo = normalizarSide(parte.side ?? parte.type ?? parte.role ?? "");
-    const papel = formatarRole(parte.party_role ?? parte.role ?? parte.type ?? parte.side ?? "");
+    const papel = formatarRole(parte.party_role ?? parte.role ?? parte.type ?? parte.side ?? "Não Informado");
 
     const registro: ParteNormalizada = {
       nome,
@@ -1992,7 +1992,7 @@ function SubsecaoPartes({ titulo, itens, mostrarPolo, mostrarPapel }: SubsecaoPa
                 </p>
               ) : null}
               {parte.tipoPessoa ? (
-                <p className="text-xs text-muted-foreground">Tipo de pessoa: {parte.tipoPessoa}</p>
+                <p className="text-xs text-muted-foreground">Tipo de Envolvimento: {parte.tipoPessoa}</p>
               ) : null}
               {parte.documento ? (
                 <p className="text-xs text-muted-foreground">Documento: {parte.documento}</p>
@@ -2960,9 +2960,9 @@ export default function VisualizarProcesso() {
       <section>
         <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="space-y-4">
           <TabsList>
-            <TabsTrigger value="movimentacao">Movimentação processual</TabsTrigger>
-            <TabsTrigger value="informacoes">Informações</TabsTrigger>
-            <TabsTrigger value="relacionados">Processos relacionados</TabsTrigger>
+            <TabsTrigger value="movimentacao">Movimentação Processual</TabsTrigger>
+            <TabsTrigger value="informacoes">Informações do Processo</TabsTrigger>
+            <TabsTrigger value="relacionados">Processos Relacionados</TabsTrigger>
           </TabsList>
           <TabsContent value="movimentacao" className="space-y-4">
             {loading ? (
