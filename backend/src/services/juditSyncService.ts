@@ -660,6 +660,7 @@ const persistDataset = async (
     processId: number;
     numeroCnj: string;
     instanciaAtual: string | null;
+    withAttachments: boolean;
   },
 ) => {
   const client = await pool.connect();
@@ -671,9 +672,12 @@ const persistDataset = async (
     await client.query('DELETE FROM public.trigger_assuntos_processo WHERE numero_cnj = $1', [
       options.numeroCnj,
     ]);
-    await client.query('DELETE FROM public.trigger_anexos_processo WHERE numero_cnj = $1', [
-      options.numeroCnj,
-    ]);
+    const shouldPersistAttachments = options.withAttachments;
+    if (shouldPersistAttachments) {
+      await client.query('DELETE FROM public.trigger_anexos_processo WHERE numero_cnj = $1', [
+        options.numeroCnj,
+      ]);
+    }
     await client.query(
       'DELETE FROM public.trigger_movimentacao_processo WHERE numero_cnj = $1',
       [options.numeroCnj],
@@ -811,34 +815,36 @@ const persistDataset = async (
       );
     }
 
-    for (const attachment of dataset.attachments) {
-      await client.query(
-        `INSERT INTO public.trigger_anexos_processo (
-           numero_cnj,
-           instancia_processo,
-           id_andamento,
-           id_anexo,
-           nome,
-           tipo,
-           criado_em,
-           crawl_id,
-           situacao,
-           origem
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          attachment.numeroCnj,
-          attachment.instancia,
-          attachment.andamentoId,
-          attachment.anexoId,
-          attachment.nome,
-          attachment.tipo,
-          attachment.criadoEm,
-          attachment.crawlId,
-          attachment.situacao,
-          attachment.origem,
-        ],
-      );
+    if (shouldPersistAttachments) {
+      for (const attachment of dataset.attachments) {
+        await client.query(
+          `INSERT INTO public.trigger_anexos_processo (
+             numero_cnj,
+             instancia_processo,
+             id_andamento,
+             id_anexo,
+             nome,
+             tipo,
+             criado_em,
+             crawl_id,
+             situacao,
+             origem
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            attachment.numeroCnj,
+            attachment.instancia,
+            attachment.andamentoId,
+            attachment.anexoId,
+            attachment.nome,
+            attachment.tipo,
+            attachment.criadoEm,
+            attachment.crawlId,
+            attachment.situacao,
+            attachment.origem,
+          ],
+        );
+      }
     }
 
     await client.query(
@@ -855,12 +861,26 @@ const persistDataset = async (
       ],
     );
 
+    let attachmentsCount = dataset.attachments.length;
+    if (!shouldPersistAttachments) {
+      const attachmentsCountResult = await client.query(
+        'SELECT COUNT(*)::int AS count FROM public.trigger_anexos_processo WHERE numero_cnj = $1',
+        [options.numeroCnj],
+      );
+      const countRow = attachmentsCountResult.rows[0] as QueryResultRow | undefined;
+      const parsedCount = countRow?.count;
+      attachmentsCount =
+        typeof parsedCount === 'number'
+          ? parsedCount
+          : Number.parseInt(String(parsedCount ?? '0'), 10);
+    }
+
     await client.query('COMMIT');
 
     return {
       parties: dataset.parties.length,
       movements: dataset.movements.length,
-      attachments: dataset.attachments.length,
+      attachments: attachmentsCount,
       subjects: dataset.subjects.length,
     };
   } catch (error) {
@@ -1048,6 +1068,7 @@ export const executeJuditProcessSync = async (
       processId: params.processId,
       numeroCnj: params.numeroCnj,
       instanciaAtual: params.instanciaAtual,
+      withAttachments: params.withAttachments,
     });
 
     if (syncId) {
