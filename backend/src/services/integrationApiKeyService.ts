@@ -95,7 +95,7 @@ function normalizeProvider(value: string | undefined): ApiKeyProvider {
     throw new ValidationError('Provider is required');
   }
   if (!API_KEY_PROVIDERS.includes(normalized as ApiKeyProvider)) {
-    throw new ValidationError('Provider must be Gemini, OpenAI ou Asaas');
+    throw new ValidationError('Provider must be Gemini, OpenAI, Asaas ou Judit');
   }
   return normalized as ApiKeyProvider;
 }
