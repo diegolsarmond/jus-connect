@@ -11,6 +11,7 @@ import { createNotification } from '../services/notificationService';
 import { Processo, ProcessoAttachment, ProcessoParticipant } from '../models/processo';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import { evaluateProcessSyncAvailability } from '../services/processSyncQuotaService';
+import executeJuditProcessSync from '../services/juditSyncService';
 
 const normalizeString = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -2093,6 +2094,99 @@ export const createProcessoMovimentacaoManual = async (
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const syncProcessoWithJudit = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const parsedId = Number(id);
+
+  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+
+  const withAttachments = req.body?.withAttachments === true;
+  const onDemand = req.body?.onDemand === true;
+
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    const processoResult = await pool.query(
+      'SELECT numero_cnj, instancia FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2 LIMIT 1',
+      [parsedId, empresaId],
+    );
+
+    if (processoResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
+
+    const processoData = processoResult.rows[0] as {
+      numero_cnj?: unknown;
+      instancia?: unknown;
+    };
+    const numeroCnj = normalizeString(processoData?.numero_cnj);
+
+    if (!numeroCnj) {
+      return res.status(400).json({ error: 'Processo sem número CNJ cadastrado' });
+    }
+
+    const instanciaAtual = normalizeString(processoData?.instancia);
+
+    const availability = await evaluateProcessSyncAvailability(empresaId);
+
+    if (!availability.allowed) {
+      if (availability.reason === 'disabled') {
+        return res
+          .status(403)
+          .json({ error: 'Sincronização de processos não habilitada no plano atual.' });
+      }
+
+      if (availability.reason === 'quota_exceeded') {
+        return res
+          .status(429)
+          .json({ error: 'Limite de sincronizações atingido no plano atual.' });
+      }
+
+      return res.status(403).json({ error: 'Sincronização indisponível para o plano atual.' });
+    }
+
+    const result = await executeJuditProcessSync({
+      processId: parsedId,
+      empresaId,
+      numeroCnj,
+      instanciaAtual,
+      requestedByUserId: req.auth.userId ?? null,
+      withAttachments,
+      onDemand,
+    });
+
+    return res.json({
+      message: 'Processo sincronizado com sucesso',
+      requestId: result.requestId,
+      summary: result.summary,
+    });
+  } catch (error) {
+    console.error(error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Erro ao sincronizar processo com a Judit';
+    const statusCode = message.includes('Integração') ? 400 : 500;
+    return res.status(statusCode).json({ error: message });
   }
 };
 

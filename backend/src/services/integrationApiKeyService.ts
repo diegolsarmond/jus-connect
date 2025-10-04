@@ -3,7 +3,7 @@ import { QueryResultRow } from 'pg';
 import { URL } from 'url';
 import pool from './db';
 
-export const API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas'] as const;
+export const API_KEY_PROVIDERS = ['gemini', 'openai', 'asaas', 'judit'] as const;
 export type ApiKeyProvider = (typeof API_KEY_PROVIDERS)[number];
 
 export const API_KEY_ENVIRONMENTS = ['producao', 'homologacao'] as const;
