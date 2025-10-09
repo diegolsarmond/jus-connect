@@ -67,10 +67,6 @@ CREATE TABLE IF NOT EXISTS public.processo_consultas_api (
 CREATE INDEX IF NOT EXISTS idx_processo_consultas_api_processo_id ON public.processo_consultas_api(processo_id);
 CREATE INDEX IF NOT EXISTS idx_processo_consultas_api_consultado_em ON public.processo_consultas_api(consultado_em);
 
-ALTER TABLE public.processos
-  ADD COLUMN IF NOT EXISTS judit_tracking_id TEXT,
-  ADD COLUMN IF NOT EXISTS judit_tracking_hour_range TEXT;
-
 CREATE TABLE IF NOT EXISTS public.processo_sync (
   id SERIAL PRIMARY KEY,
   processo_id INTEGER NOT NULL REFERENCES public.processos(id) ON DELETE CASCADE,
@@ -101,16 +97,3 @@ CREATE INDEX IF NOT EXISTS idx_processo_sync_provider ON public.processo_sync(pr
 CREATE INDEX IF NOT EXISTS idx_processo_sync_history_provider ON public.processo_sync_history(provider);
 CREATE INDEX IF NOT EXISTS idx_processo_sync_history_request ON public.processo_sync_history(request_id);
 
-CREATE TABLE IF NOT EXISTS public.processo_judit_requests (
-  id SERIAL PRIMARY KEY,
-  processo_id INTEGER NOT NULL REFERENCES public.processos(id) ON DELETE CASCADE,
-  request_id TEXT NOT NULL,
-  status VARCHAR(50) NOT NULL,
-  source VARCHAR(50) NOT NULL DEFAULT 'unknown',
-  result JSONB,
-  criado_em TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-  atualizado_em TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-  UNIQUE (request_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_processo_judit_requests_processo ON public.processo_judit_requests(processo_id);

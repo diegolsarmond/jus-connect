@@ -69,32 +69,9 @@ em `integration_api_keys`:
 Não são necessárias variáveis de ambiente adicionais além das credenciais
 registradas na tabela.
 
-### Integração com JUDIT
-
-Para consumir os recursos do JUDIT utilizando credenciais gerenciadas em
-`integration_api_keys`:
-
-1. Execute `psql -f sql/integration_api_keys.sql` para atualizar o `CHECK`
-   de provedores com o valor `judit`, caso ainda não tenha aplicado o script
-   recentemente.
-2. Cadastre uma chave com `provider` igual a `judit` (via API ou pela tela de
-   integrações), informando o token fornecido pelo JUDIT e o ambiente desejado.
-3. Se necessário auditar os acessos, utilize a consulta administrativa
-   [`backend/sql/queries/judit_credentials_audit.sql`](backend/sql/queries/judit_credentials_audit.sql)
-   para listar todas as credenciais cadastradas, com datas de uso e status.
-4. Caso utilize a chave diretamente por variável de ambiente (`JUDIT_API_KEY`),
-   defina também `JUDIT_BASE_URL` (ou `JUDIT_API_URL`) para apontar para o
-   endpoint base desejado. Quando a coluna `url_api` estiver vazia no banco, o
-   backend utilizará esse valor como fallback antes de recorrer aos domínios de
-   produção da JUDIT.
-
-O backend não define URL padrão para o JUDIT; mantenha o campo `apiUrl` em
-branco para usar a configuração padrão do provedor ou preencha manualmente
-quando um endpoint específico for exigido.
-
 ### Estrutura de sincronização de processos
 
-Os eventos de requisição e resposta do JUDIT são persistidos automaticamente
+Os eventos de requisição e resposta das sincronizações são persistidos automaticamente
 pelas novas tabelas:
 
 - `process_sync`: fila de solicitações abertas pelo CRM. Depende de
@@ -112,15 +89,8 @@ pelas novas tabelas:
 Para relacionar processos existentes, é possível criar um histórico inicial
 preenchendo `process_sync` manualmente. Exemplo:
 
-```sql
-INSERT INTO process_sync (processo_id, integration_api_key_id, remote_request_id, request_type)
-SELECT p.id, ik.id, CONCAT('retrofit-', p.id), 'retrofit'
-FROM public.processos p
-JOIN public.integration_api_keys ik ON ik.provider = 'judit'
-WHERE p.numero = '0000000-00.0000.0.00.0000';
-```
 
-Após a inserção, o próximo webhook do JUDIT será associado ao registro via
+Após a inserção, o próximo webhook será associado ao registro via
 `remote_request_id` ou pelo número do processo.
 
 ## Frontend

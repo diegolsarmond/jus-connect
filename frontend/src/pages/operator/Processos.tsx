@@ -19,7 +19,6 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import {
     Popover,
@@ -35,7 +34,6 @@ import {
     CommandList,
 } from "@/components/ui/command";
 import { getApiUrl } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
     Card,
@@ -227,38 +225,6 @@ interface ProcessFormState {
     sistemaCnjId: string;
     monitorarProcesso: boolean;
 }
-
-export interface ManualSyncFlags {
-    withAttachments?: boolean;
-    onDemand?: boolean;
-}
-
-export interface ManualSyncRequestPlan {
-    path: string;
-    method: "GET" | "POST";
-    body: Record<string, unknown> | null;
-}
-
-export const planManualSyncRequest = (
-    processo: Processo,
-    flags?: ManualSyncFlags,
-): ManualSyncRequestPlan => {
-    const payload: Record<string, unknown> = {};
-
-    if (typeof flags?.withAttachments === "boolean") {
-        payload.withAttachments = flags.withAttachments;
-    }
-
-    if (typeof flags?.onDemand === "boolean") {
-        payload.onDemand = flags.onDemand;
-    }
-
-    return {
-        path: `processos/${processo.id}/judit/sync`,
-        method: "POST",
-        body: payload,
-    };
-};
 
 const formatProcessNumber = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 20);
@@ -717,11 +683,6 @@ export default function Processos() {
     const [processosError, setProcessosError] = useState<string | null>(null);
     const [createError, setCreateError] = useState<string | null>(null);
     const [creatingProcess, setCreatingProcess] = useState(false);
-    const [syncingProcessIds, setSyncingProcessIds] = useState<number[]>([]);
-    const [syncErrors, setSyncErrors] = useState<Record<number, string | null>>({});
-    const [manualSyncProcess, setManualSyncProcess] = useState<Processo | null>(null);
-    const [manualSyncWithAttachments, setManualSyncWithAttachments] = useState(false);
-    const [manualSyncOnDemand, setManualSyncOnDemand] = useState(false);
     useEffect(() => {
         let cancelled = false;
 
@@ -1798,115 +1759,6 @@ export default function Processos() {
         }
     };
 
-    const handleManualSync = useCallback(
-        async (processoToSync: Processo, flags?: ManualSyncFlags) => {
-            setSyncingProcessIds((prev) =>
-                prev.includes(processoToSync.id) ? prev : [...prev, processoToSync.id],
-            );
-            setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: null }));
-
-            const requestPlan = planManualSyncRequest(processoToSync, flags);
-
-            try {
-                const headers: Record<string, string> = { Accept: "application/json" };
-
-                if (requestPlan.method === "POST") {
-                    headers["Content-Type"] = "application/json";
-                }
-
-                const res = await fetch(getApiUrl(requestPlan.path), {
-                    method: requestPlan.method,
-                    headers,
-                    ...(requestPlan.method === "POST"
-                        ? { body: JSON.stringify(requestPlan.body ?? {}) }
-                        : {}),
-                });
-
-                const text = await res.text();
-                let parsedError: string | null = null;
-
-                if (!res.ok) {
-                    if (text) {
-                        try {
-                            const json = JSON.parse(text) as { error?: unknown };
-                            parsedError = json.error ? String(json.error) : text;
-                        } catch {
-                            parsedError = text;
-                        }
-                    }
-
-                    throw new Error(
-                        parsedError ?? `Não foi possível sincronizar o processo (HTTP ${res.status})`,
-                    );
-                }
-
-                try {
-                    const refreshed = await loadProcessos();
-                    setProcessos(refreshed);
-                } catch (refreshError) {
-                    console.error(
-                        "Falha ao atualizar lista após sincronização manual",
-                        refreshError,
-                    );
-                }
-
-                toast({
-                    title: "Solicitação de atualização registrada",
-                    description: "Os dados do processo serão atualizados assim que a sincronização for concluída.",
-                });
-            } catch (error) {
-                console.error(error);
-                const message =
-                    error instanceof Error
-                        ? error.message
-                        : "Não foi possível acionar a sincronização manual.";
-                setSyncErrors((prev) => ({ ...prev, [processoToSync.id]: message }));
-                toast({
-                    title: "Erro ao sincronizar processo",
-                    description: message,
-                    variant: "destructive",
-                });
-            } finally {
-                setSyncingProcessIds((prev) => prev.filter((id) => id !== processoToSync.id));
-            }
-        },
-        [loadProcessos, toast],
-    );
-
-    const handleManualSyncDialogOpenChange = useCallback((open: boolean) => {
-        if (!open) {
-            setManualSyncProcess(null);
-            setManualSyncWithAttachments(false);
-            setManualSyncOnDemand(false);
-        }
-    }, []);
-
-    const handleRequestManualSync = useCallback((processo: Processo) => {
-        setManualSyncProcess(processo);
-        setManualSyncWithAttachments(false);
-        setManualSyncOnDemand(false);
-    }, []);
-
-    const handleConfirmManualSync = useCallback(() => {
-        if (!manualSyncProcess) {
-            return;
-        }
-
-        const processo = manualSyncProcess;
-        void handleManualSync(processo, {
-            withAttachments: manualSyncWithAttachments,
-            onDemand: manualSyncOnDemand,
-        });
-        setManualSyncProcess(null);
-        setManualSyncWithAttachments(false);
-        setManualSyncOnDemand(false);
-    }, [
-        handleManualSync,
-        manualSyncOnDemand,
-        manualSyncProcess,
-        manualSyncWithAttachments,
-    ]);
-
     const navigateToProcess = useCallback(
         (
             processoToView: Processo,
@@ -2181,94 +2033,20 @@ export default function Processos() {
                 </Card>
             ) : (
                 <div className="space-y-4">
-                    {filteredProcessos.map((processo) => {
-                        const isSyncing = syncingProcessIds.includes(processo.id);
-
-                        return (
-                            <ProcessCard
-                                key={processo.id}
-                                numero={processo.numero}
-                                status={processo.status}
-                                cliente={processo.cliente.nome}
-                                dataDistribuicao={processo.dataDistribuicao}
-                                jurisdicao={processo.jurisdicao}
-                                orgaoJulgador={processo.orgaoJulgador}
-                                isSyncing={isSyncing}
-                                onView={() => handleViewProcessDetails(processo)}
-                                onSync={() => {
-                                    setManualSyncProcess(processo);
-                                    setManualSyncWithAttachments(false);
-                                    setManualSyncOnDemand(false);
-                                }}
-                            />
-                        );
-                    })}
+                    {filteredProcessos.map((processo) => (
+                        <ProcessCard
+                            key={processo.id}
+                            numero={processo.numero}
+                            status={processo.status}
+                            cliente={processo.cliente.nome}
+                            dataDistribuicao={processo.dataDistribuicao}
+                            jurisdicao={processo.jurisdicao}
+                            orgaoJulgador={processo.orgaoJulgador}
+                            onView={() => handleViewProcessDetails(processo)}
+                        />
+                    ))}
                 </div>
             )}
-
-            <Dialog open={manualSyncProcess !== null} onOpenChange={handleManualSyncDialogOpenChange}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Sincronizar processo com a Judit</DialogTitle>
-                        <DialogDescription>
-                            Configure os parâmetros da consulta manual antes de enviá-la para a Judit.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                        <div className="space-y-1">
-                            <p className="text-sm font-medium text-foreground">
-                                Processo selecionado
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                                {manualSyncProcess?.numero ?? "Nenhum processo selecionado"}
-                            </p>
-                        </div>
-                        <div className="flex items-start space-x-3">
-                            <Checkbox
-                                id="manual-sync-attachments"
-                                checked={manualSyncWithAttachments}
-                                onCheckedChange={(checked) =>
-                                    setManualSyncWithAttachments(checked === true)
-                                }
-                            />
-                            <div className="space-y-1">
-                                <Label htmlFor="manual-sync-attachments">Incluir anexos</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Solicitar que a Judit busque e entregue anexos disponíveis junto com o processo.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-start space-x-3">
-                            <Checkbox
-                                id="manual-sync-on-demand"
-                                checked={manualSyncOnDemand}
-                                onCheckedChange={(checked) => setManualSyncOnDemand(checked === true)}
-                            />
-                            <div className="space-y-1">
-                                <Label htmlFor="manual-sync-on-demand">Busca sob demanda</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Forçar uma consulta imediata ao processo na Judit, sem aguardar o rastreamento automático.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => handleManualSyncDialogOpenChange(false)}>
-                            Cancelar
-                        </Button>
-                        <Button
-                            onClick={handleConfirmManualSync}
-                            disabled={
-                                manualSyncProcess === null ||
-                                (manualSyncProcess !== null &&
-                                    syncingProcessIds.includes(manualSyncProcess.id))
-                            }
-                        >
-                            Solicitar sincronização
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
 
             <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
                 <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">

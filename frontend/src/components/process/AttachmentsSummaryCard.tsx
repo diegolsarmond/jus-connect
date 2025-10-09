@@ -3,7 +3,22 @@ import { Calendar, FileText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { parseOptionalString } from "@/pages/operator/utils/judit";
+const parseOptionalString = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+
+  return null;
+};
 
 const ATTACHMENT_DATE_KEYS = [
   "data",
