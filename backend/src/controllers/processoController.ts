@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import { PoolClient } from 'pg';
 import {
@@ -435,12 +434,14 @@ type RawMovimentacao = {
   tipo_publicacao?: string | null;
   classificacao_predita?: Record<string, unknown> | null;
   conteudo?: string | null;
+  descricao?: string | null;
   texto_categoria?: string | null;
   fonte?: Record<string, unknown> | null;
   sigiloso?: boolean | number | string | null;
   crawl_id?: string | null;
   data?: string | null;
   data_andamento?: string | null;
+  data_movimentacao?: string | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
   data_cadastro?: string | null;
@@ -472,11 +473,18 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
     }
 
     const dataValue =
-      normalizeTimestamp(raw.data_andamento ?? raw.data) ?? raw.data ?? null;
+      normalizeTimestamp(raw.data_andamento ?? raw.data ?? raw.data_movimentacao) ??
+      raw.data ??
+      raw.data_movimentacao ??
+      null;
 
     const tipoValue = raw.tipo_andamento ?? raw.tipo ?? null;
     const numeroCnjValue = normalizeString(raw.numero_cnj);
-    const instanciaProcessoValue = normalizeString(raw.instancia_processo);
+    const instanciaProcessoValue =
+      normalizeString(raw.instancia_processo) ??
+      (typeof raw.instancia_processo === 'number' && Number.isFinite(raw.instancia_processo)
+        ? String(Math.trunc(raw.instancia_processo))
+        : null);
     const sigilosoValue = parseBooleanFlag(raw.sigiloso);
     const crawlIdValueRaw =
       raw.crawl_id === null || raw.crawl_id === undefined
@@ -498,12 +506,19 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
       tipo_andamento: raw.tipo_andamento ?? null,
       tipo_publicacao: raw.tipo_publicacao ?? null,
       classificacao_predita: raw.classificacao_predita ?? null,
-      conteudo: raw.conteudo ?? null,
+      conteudo: raw.conteudo ?? raw.descricao ?? null,
       texto_categoria: raw.texto_categoria ?? null,
       fonte: raw.fonte ?? null,
-      criado_em: normalizeTimestamp(raw.criado_em) ?? raw.criado_em ?? null,
+      criado_em:
+        normalizeTimestamp(raw.criado_em ?? raw.data_cadastro) ??
+        raw.criado_em ??
+        raw.data_cadastro ??
+        null,
       atualizado_em:
-        normalizeTimestamp(raw.atualizado_em) ?? raw.atualizado_em ?? null,
+        normalizeTimestamp(raw.atualizado_em ?? raw.data_cadastro) ??
+        raw.atualizado_em ??
+        raw.data_cadastro ??
+        null,
       numero_cnj: numeroCnjValue,
       instancia_processo: instanciaProcessoValue,
       sigiloso: sigilosoValue ?? null,
@@ -868,26 +883,18 @@ const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 const MOVIMENTACOES_BASE_QUERY = `
   SELECT
     id,
-    id_andamento,
     numero_cnj,
     instancia_processo,
     tipo_andamento,
-    conteudo,
+    descricao,
     sigiloso,
-    data_andamento,
-    criado_em,
-    atualizado_em,
-    crawl_id,
+    data_movimentacao,
     data_cadastro
   FROM public.trigger_movimentacao_processo
   WHERE numero_cnj = $1
   ORDER BY
-    data_andamento DESC NULLS LAST,
-    CASE
-      WHEN id_andamento::text ~ '^[0-9]+$' THEN (id_andamento::text)::bigint
-      ELSE NULL
-    END DESC NULLS LAST,
-    id_andamento::text DESC
+    data_movimentacao DESC NULLS LAST,
+    id DESC
 `;
 
 const fetchProcessoMovimentacoes = async (
@@ -913,27 +920,25 @@ const fetchProcessoMovimentacoes = async (
 };
 
 const ANEXOS_BASE_QUERY = `
-SELECT DISTINCT ON (ap.id_anexo)
-  ap.id_anexo,
+SELECT DISTINCT ON (ap.id)
+  ap.id AS id_anexo,
   ap.id,
-  ap.id_andamento,
+  ap.sequencia AS id_andamento,
   ap.nome,
   ap.tipo,
   ap.data_cadastro,
-  ap.data_cadastro AS data_andamento,
+  ap."dataHoraJuntada" AS data_andamento,
   ap.instancia_processo,
-  ap.crawl_id,
-  mp.criado_em AS movimentacao_criado_em,
-  mp.data_andamento AS movimentacao_data_andamento
+  NULL::text AS crawl_id,
+  mp.data_cadastro AS movimentacao_criado_em,
+  mp.data_movimentacao AS movimentacao_data_andamento
 FROM public.trigger_anexos_processo ap
 LEFT JOIN public.trigger_movimentacao_processo mp
   ON mp.numero_cnj = ap.numero_cnj
- AND (
-       (ap.id_andamento IS NOT NULL AND mp.id_andamento = ap.id_andamento)
-    OR (ap.id_andamento IS NULL AND ap.data_cadastro IS NOT NULL AND mp.data_andamento = ap.data_cadastro)
-  )
+ AND mp.instancia_processo = ap.instancia_processo
+ AND mp.data_movimentacao = ap."dataHoraJuntada"
 WHERE ap.numero_cnj = $1
-ORDER BY ap.id_anexo, mp.data_andamento DESC NULLS LAST, ap.id DESC
+ORDER BY ap.id, mp.data_movimentacao DESC NULLS LAST
 `;
 
 const fetchProcessoAnexos = async (
@@ -957,7 +962,6 @@ type RawCrawlerParticipant = {
   tipo_pessoa?: unknown;
   documento_principal?: unknown;
   tipo_documento_principal?: unknown;
-  possui_advogados?: unknown;
   data_cadastro?: unknown;
 };
 
@@ -1078,8 +1082,6 @@ const buildCrawlerParticipant = (
     return null;
   }
 
-  const hasLawyers = parseBooleanFlag(row.possui_advogados);
-
   const participant: ProcessoParticipant = {
     name: name ?? null,
     document: documentInfo.display,
@@ -1089,7 +1091,7 @@ const buildCrawlerParticipant = (
     person_type: normalizeUppercase(row.tipo_pessoa),
     role: null,
     party_role: null,
-    lawyers: hasLawyers === true ? [] : null,
+    lawyers: null,
     representatives: null,
     registered_at: normalizeTimestamp(row.data_cadastro),
     source: 'crawler',
@@ -1164,7 +1166,6 @@ const fetchProcessParticipants = async (
           tipo_pessoa,
           documento_principal,
           tipo_documento_principal,
-          possui_advogados,
           data_cadastro
         FROM public.trigger_envolvidos_processo
        WHERE numero_cnj = $1`,
@@ -1340,7 +1341,6 @@ const safeJsonStringify = (value: unknown): string | null => {
 };
 
 type PreparedMovimentacaoRecord = {
-  id: string;
   data: string | null;
   tipo: string | null;
   tipo_publicacao: string | null;
@@ -1358,26 +1358,10 @@ const prepareMovimentacaoRecord = (
   }
 
   const raw = item as Record<string, unknown>;
-  const idCandidate = raw.id;
-  let id: string | null = null;
-
-  if (typeof idCandidate === 'number' && Number.isFinite(idCandidate)) {
-    id = String(Math.trunc(idCandidate));
-  } else if (typeof idCandidate === 'string') {
-    const trimmed = idCandidate.trim();
-    if (trimmed) {
-      id = trimmed;
-    }
-  }
-
-  if (!id) {
-    return null;
-  }
 
   const dataValue = normalizeDate(raw.data) ?? normalizeString(raw.data);
 
   return {
-    id,
     data: dataValue,
     tipo: normalizeString(raw.tipo),
     tipo_publicacao: normalizeString(raw.tipo_publicacao),
@@ -1411,11 +1395,11 @@ const listProcessoSelect = `
     o.solicitante_id AS oportunidade_solicitante_id,
     solicitante.nome AS oportunidade_solicitante_nome,
     p.advogado_responsavel,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao, p.data_distribuicao) AS data_distribuicao,
     p.criado_em,
-    mp.data_andamento AS atualizado_em,
+    mp.data_movimentacao AS atualizado_em,
     p.atualizado_em AS ultima_sincronizacao,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao) AS ultima_movimentacao,
     (
       SELECT COUNT(*)::int
       FROM public.processo_consultas_api pc
@@ -1471,7 +1455,13 @@ LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
 LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
 LEFT JOIN public.escritorios setor ON setor.id = p.setor_id
 LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
-LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN LATERAL (
+  SELECT tmp.*
+  FROM public.trigger_movimentacao_processo tmp
+  WHERE tmp.numero_cnj = p.numero_cnj
+  ORDER BY tmp.data_movimentacao DESC NULLS LAST, tmp.id DESC
+  LIMIT 1
+) mp ON true
 LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
 LEFT JOIN public.clientes c ON c.id = p.cliente_id
 LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
@@ -1500,11 +1490,11 @@ const baseProcessoSelect = `
     o.solicitante_id AS oportunidade_solicitante_id,
     solicitante.nome AS oportunidade_solicitante_nome,
     p.advogado_responsavel,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao, p.data_distribuicao) AS data_distribuicao,
     p.criado_em,
-    mp.data_andamento AS atualizado_em,
+    mp.data_movimentacao AS atualizado_em,
     p.atualizado_em AS ultima_sincronizacao,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao) AS ultima_movimentacao,
     (
       SELECT COUNT(*)::int
       FROM public.processo_consultas_api pc
@@ -1561,7 +1551,13 @@ LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
 LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
 LEFT JOIN public.escritorios setor ON setor.id = p.setor_id
 LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
-LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN LATERAL (
+  SELECT tmp.*
+  FROM public.trigger_movimentacao_processo tmp
+  WHERE tmp.numero_cnj = p.numero_cnj
+  ORDER BY tmp.data_movimentacao DESC NULLS LAST, tmp.id DESC
+  LIMIT 1
+) mp ON true
 LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
 LEFT JOIN public.clientes c ON c.id = p.cliente_id
 LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
@@ -2081,10 +2077,17 @@ export const createProcessoMovimentacaoManual = async (
 
     const processoData = processoResult.rows[0];
     const numeroCnj = normalizeString(processoData?.numero_cnj);
-    const instanciaProcesso = normalizeString(processoData?.instancia);
+    const instanciaRaw = processoData?.instancia;
+    let instanciaProcesso: number | null = null;
+
+    if (typeof instanciaRaw === 'number' && Number.isFinite(instanciaRaw)) {
+      instanciaProcesso = Math.trunc(instanciaRaw);
+    } else if (typeof instanciaRaw === 'string') {
+      const parsed = Number.parseInt(instanciaRaw.trim(), 10);
+      instanciaProcesso = Number.isFinite(parsed) ? parsed : null;
+    }
 
     const preparedRecord = prepareMovimentacaoRecord({
-      id: 0,
       data: req.body?.data ?? null,
       tipo: req.body?.tipo ?? null,
       tipo_publicacao: req.body?.tipo_publicacao ?? null,
@@ -2101,33 +2104,24 @@ export const createProcessoMovimentacaoManual = async (
     const sigilosoValue = parseBooleanFlag(req.body?.sigiloso) ?? false;
     const insertResult = await pool.query(
       `INSERT INTO public.trigger_movimentacao_processo (
-         id_andamento,
          numero_cnj,
          instancia_processo,
          tipo_andamento,
-         conteudo,
+         descricao,
          sigiloso,
-         data_andamento,
-         criado_em,
-         atualizado_em,
-         crawl_id
+         data_movimentacao
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NULL)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING
          id,
-         id_andamento,
          numero_cnj,
          instancia_processo,
          tipo_andamento,
-         conteudo,
+         descricao,
          sigiloso,
-         data_andamento,
-         criado_em,
-         atualizado_em,
-         crawl_id,
+         data_movimentacao,
          data_cadastro`,
       [
-        randomUUID(),
         numeroCnj,
         instanciaProcesso,
         preparedRecord.tipo,
