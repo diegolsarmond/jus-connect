@@ -12,6 +12,7 @@ import {
   updateNotificationPreferencesHandler,
   receivePjeNotificationHandler,
   triggerProjudiSyncHandler,
+  listIntimacoesHandler,
 } from '../controllers/notificationController';
 import { getNotificationProvider } from '../services/notificationProviders/registry';
 import { NotificationProviderError } from '../services/notificationProviders/types';
@@ -19,6 +20,7 @@ import { NotificationProviderError } from '../services/notificationProviders/typ
 const router = Router();
 
 router.get('/notifications', listNotificationsHandler);
+router.get('/intimacoes', listIntimacoesHandler);
 router.get('/notifications/unread-count', getUnreadCountHandler);
 router.get('/notifications/preferences', getNotificationPreferencesHandler);
 router.get('/notifications/:id', getNotificationHandler);
