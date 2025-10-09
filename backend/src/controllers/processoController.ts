@@ -1404,70 +1404,7 @@ const listProcessoSelect = `
     COALESCE(dp.classificacao_principal_nome, p.classe_judicial) AS classe_judicial,
     COALESCE(dp.assunto, p.assunto) AS assunto,
     p.jurisdicao,
-    p.oportunidade_id,
-    o.sequencial_empresa AS oportunidade_sequencial_empresa,
-    o.data_criacao AS oportunidade_data_criacao,
-    o.numero_processo_cnj AS oportunidade_numero_processo_cnj,
-    o.numero_protocolo AS oportunidade_numero_protocolo,
-    o.solicitante_id AS oportunidade_solicitante_id,
-    solicitante.nome AS oportunidade_solicitante_nome,
-    p.advogado_responsavel,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
-    p.criado_em,
-    mp.data_andamento AS atualizado_em,
-    p.atualizado_em AS ultima_sincronizacao,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
-    (
-      SELECT COUNT(*)::int
-      FROM public.processo_consultas_api pc
-      WHERE pc.processo_id = p.id
-    ) AS consultas_api_count,
-    (
-      SELECT COUNT(*)::int
-      FROM public.trigger_movimentacao_processo tmp
-      WHERE tmp.numero_cnj = p.numero_cnj
-    ) AS movimentacoes_count,
-    c.nome AS cliente_nome,
-    c.documento AS cliente_documento,
-    c.tipo AS cliente_tipo,
-    (
-      SELECT COALESCE(
-        jsonb_agg(
-          jsonb_build_object(
-            'id', pa.usuario_id,
-            'nome', u.nome_completo
-          ) ORDER BY u.nome_completo
-        ) FILTER (WHERE pa.usuario_id IS NOT NULL),
-        '[]'::jsonb
-      )
-      FROM public.processo_advogados pa
-      LEFT JOIN public.usuarios u ON u.id = pa.usuario_id
-      WHERE pa.processo_id = p.id
-    ) AS advogados
-FROM public.processos p
-LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
-LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
-LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
-LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
-LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
-LEFT JOIN public.clientes c ON c.id = p.cliente_id
-LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
-`;
-
-const baseProcessoSelect = `
-  SELECT DISTINCT
-    p.id,
-    p.cliente_id,
-    p.idempresa,
-    p.numero_cnj AS numero,
-    p.uf,
-    p.municipio,
-    COALESCE(dp.orgao_julgador, p.orgao_julgador) AS orgao_julgador,
-    COALESCE(dp.area, tp.nome) AS tipo,
-    COALESCE(dp.situacao, sp.nome) AS status,
-    COALESCE(dp.classificacao_principal_nome, p.classe_judicial) AS classe_judicial,
-    COALESCE(dp.assunto, p.assunto) AS assunto,
-    p.jurisdicao,
+    p.grau,
     p.oportunidade_id,
     o.sequencial_empresa AS oportunidade_sequencial_empresa,
     o.data_criacao AS oportunidade_data_criacao,
@@ -1499,6 +1436,100 @@ const baseProcessoSelect = `
     p.data_recebimento,
     p.data_arquivamento,
     p.data_encerramento,
+    p.justica_gratuita,
+    p.liminar,
+    p.nivel_sigilo,
+    p.tramitacaoatual,
+    p.permite_peticionar,
+    (
+      SELECT COUNT(*)::int
+      FROM public.trigger_movimentacao_processo tmp
+      WHERE tmp.numero_cnj = p.numero_cnj
+    ) AS movimentacoes_count,
+    sp.nome AS situacao_processo_nome,
+    tp.nome AS tipo_processo_nome,
+    aa.nome AS area_atuacao_nome,
+    setor.nome AS setor_nome,
+    c.nome AS cliente_nome,
+    c.documento AS cliente_documento,
+    c.tipo AS cliente_tipo,
+    (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', pa.usuario_id,
+            'nome', u.nome_completo
+          ) ORDER BY u.nome_completo
+        ) FILTER (WHERE pa.usuario_id IS NOT NULL),
+        '[]'::jsonb
+      )
+      FROM public.processo_advogados pa
+      LEFT JOIN public.usuarios u ON u.id = pa.usuario_id
+      WHERE pa.processo_id = p.id
+    ) AS advogados
+FROM public.processos p
+LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
+LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
+LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
+LEFT JOIN public.escritorios setor ON setor.id = p.setor_id
+LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
+LEFT JOIN public.clientes c ON c.id = p.cliente_id
+LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
+`;
+
+const baseProcessoSelect = `
+  SELECT DISTINCT
+    p.id,
+    p.cliente_id,
+    p.idempresa,
+    p.numero_cnj AS numero,
+    p.uf,
+    p.municipio,
+    COALESCE(dp.orgao_julgador, p.orgao_julgador) AS orgao_julgador,
+    COALESCE(dp.area, tp.nome) AS tipo,
+    COALESCE(dp.situacao, sp.nome) AS status,
+    COALESCE(dp.classificacao_principal_nome, p.classe_judicial) AS classe_judicial,
+    COALESCE(dp.assunto, p.assunto) AS assunto,
+    p.jurisdicao,
+    p.grau,
+    p.oportunidade_id,
+    o.sequencial_empresa AS oportunidade_sequencial_empresa,
+    o.data_criacao AS oportunidade_data_criacao,
+    o.numero_processo_cnj AS oportunidade_numero_processo_cnj,
+    o.numero_protocolo AS oportunidade_numero_protocolo,
+    o.solicitante_id AS oportunidade_solicitante_id,
+    solicitante.nome AS oportunidade_solicitante_nome,
+    p.advogado_responsavel,
+    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
+    p.criado_em,
+    mp.data_andamento AS atualizado_em,
+    p.atualizado_em AS ultima_sincronizacao,
+    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
+    (
+      SELECT COUNT(*)::int
+      FROM public.processo_consultas_api pc
+      WHERE pc.processo_id = p.id
+    ) AS consultas_api_count,
+    p.situacao_processo_id,
+    p.tipo_processo_id,
+    p.area_atuacao_id,
+    p.instancia,
+    p.sistema_cnj_id,
+    p.monitorar_processo,
+    p.envolvidos_id,
+    p.descricao,
+    p.setor_id,
+    p.data_citacao,
+    p.data_recebimento,
+    p.data_arquivamento,
+    p.data_encerramento,
+    p.justica_gratuita,
+    p.liminar,
+    p.nivel_sigilo,
+    p.tramitacaoatual,
+    p.permite_peticionar,
     sp.nome AS situacao_processo_nome,
     tp.nome AS tipo_processo_nome,
     aa.nome AS area_atuacao_nome,
@@ -1566,6 +1597,13 @@ const mapProcessoListRow = (row: any): Processo => {
     normalizeTimestamp(row.ultima_sincronizacao) ?? row.ultima_sincronizacao ?? null;
 
   const ultimaMovimentacao = normalizeTimestamp(row.ultima_movimentacao);
+  const grauValue = typeof row.grau === 'string' ? row.grau : null;
+  const justicaGratuitaValue = parseBooleanFlag(row.justica_gratuita);
+  const liminarValue = parseBooleanFlag(row.liminar);
+  const nivelSigiloValue = parseOptionalInteger(row.nivel_sigilo);
+  const tramitacaoAtualValue = normalizeString(row.tramitacaoatual);
+  const permitePeticionarValue =
+    parseBooleanFlag(row.permite_peticionar) ?? true;
 
   const clienteResumo = row.cliente_id
     ? {
@@ -1584,6 +1622,7 @@ const mapProcessoListRow = (row: any): Processo => {
     cliente_id: row.cliente_id,
     idempresa: row.idempresa ?? null,
     numero: row.numero,
+    grau: grauValue ?? '',
     uf: row.uf ?? null,
     municipio: row.municipio ?? null,
     orgao_julgador: row.orgao_julgador ?? null,
@@ -1609,6 +1648,11 @@ const mapProcessoListRow = (row: any): Processo => {
     instancia: normalizeString(row.instancia),
     sistema_cnj_id: parseOptionalInteger(row.sistema_cnj_id),
     monitorar_processo: parseBooleanFlag(row.monitorar_processo) ?? false,
+    justica_gratuita: justicaGratuitaValue,
+    liminar: liminarValue,
+    nivel_sigilo: nivelSigiloValue,
+    tramitacao_atual: tramitacaoAtualValue,
+    permite_peticionar: permitePeticionarValue,
     envolvidos_id: parseOptionalInteger(row.envolvidos_id),
     descricao: normalizeString(row.descricao),
     setor_id: parseOptionalInteger(row.setor_id),
@@ -1785,12 +1829,20 @@ const mapProcessoRow = (row: any): Processo => {
           solicitante_nome: solicitanteNome,
         }
       : null;
+  const grauValue = typeof row.grau === 'string' ? row.grau : null;
+  const justicaGratuitaValue = parseBooleanFlag(row.justica_gratuita);
+  const liminarValue = parseBooleanFlag(row.liminar);
+  const nivelSigiloValue = parseOptionalInteger(row.nivel_sigilo);
+  const tramitacaoAtualValue = normalizeString(row.tramitacaoatual);
+  const permitePeticionarValue =
+    parseBooleanFlag(row.permite_peticionar) ?? true;
 
   return {
     id: row.id,
     cliente_id: row.cliente_id,
     idempresa: row.idempresa ?? null,
     numero: row.numero,
+    grau: grauValue ?? '',
     uf: row.uf,
     municipio: row.municipio,
     orgao_julgador: row.orgao_julgador,
@@ -1829,6 +1881,11 @@ const mapProcessoRow = (row: any): Processo => {
     instancia: normalizeString(row.instancia),
     sistema_cnj_id: parseOptionalInteger(row.sistema_cnj_id),
     monitorar_processo: parseBooleanFlag(row.monitorar_processo) ?? false,
+    justica_gratuita: justicaGratuitaValue,
+    liminar: liminarValue,
+    nivel_sigilo: nivelSigiloValue,
+    tramitacao_atual: tramitacaoAtualValue,
+    permite_peticionar: permitePeticionarValue,
     envolvidos_id: parseOptionalInteger(row.envolvidos_id),
     descricao: normalizeString(row.descricao),
     setor_id: parseOptionalInteger(row.setor_id),
@@ -2234,10 +2291,12 @@ export const createProcesso = async (req: Request, res: Response) => {
   const ufValue = normalizeUppercase(uf);
   const municipioValue = normalizeString(municipio);
   const orgaoValue = normalizeString(orgao_julgador);
+  const grauValue = normalizeString(req.body?.grau);
 
-  if (!numeroValue || !ufValue || !municipioValue) {
+  if (!numeroValue || !ufValue || !municipioValue || !grauValue) {
     return res.status(400).json({
-      error: 'Os campos cliente_id, numero, uf e municipio são obrigatórios',
+      error:
+        'Os campos cliente_id, numero, uf, municipio e grau são obrigatórios',
     });
   }
 
@@ -2248,6 +2307,18 @@ export const createProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
+  const justicaGratuitaFlag = parseBooleanFlag(req.body?.justica_gratuita);
+  const liminarFlag = parseBooleanFlag(req.body?.liminar);
+  const permitePeticionarFlag = parseBooleanFlag(req.body?.permite_peticionar);
+  const nivelSigiloValue = parseOptionalInteger(req.body?.nivel_sigilo);
+
+  if (nivelSigiloValue !== null && nivelSigiloValue < 0) {
+    return res.status(400).json({ error: 'nivel_sigilo inválido' });
+  }
+
+  const tramitacaoAtualValue = normalizeString(
+    req.body?.tramitacao_atual ?? req.body?.tramitacaoatual,
+  );
   const oportunidadeResolution = resolveNullablePositiveInteger(
     req.body?.oportunidade_id ?? req.body?.proposta_id ?? null,
   );
@@ -2472,6 +2543,7 @@ export const createProcesso = async (req: Request, res: Response) => {
 
     const advogadoColumnValue = advogadoConcatValue || advogadoValue;
     const finalMonitorarProcesso = monitorarProcessoValue ?? false;
+    const finalPermitePeticionar = permitePeticionarFlag ?? true;
 
     const clientDb = await pool.connect();
 
@@ -2504,7 +2576,13 @@ export const createProcesso = async (req: Request, res: Response) => {
             data_citacao,
             data_recebimento,
             data_arquivamento,
-            data_encerramento
+            data_encerramento,
+            grau,
+            justica_gratuita,
+            liminar,
+            nivel_sigilo,
+            tramitacaoatual,
+            permite_peticionar
           )
           VALUES (
             $1,
@@ -2531,7 +2609,13 @@ export const createProcesso = async (req: Request, res: Response) => {
             $22,
             $23,
             $24,
-            $25
+            $25,
+            $26,
+            $27,
+            $28,
+            $29,
+            $30,
+            $31
           )
           RETURNING id`,
         [
@@ -2560,6 +2644,12 @@ export const createProcesso = async (req: Request, res: Response) => {
           dataRecebimentoValue,
           dataArquivamentoValue,
           dataEncerramentoValue,
+          grauValue,
+          justicaGratuitaFlag,
+          liminarFlag,
+          nivelSigiloValue,
+          tramitacaoAtualValue,
+          finalPermitePeticionar,
         ]
       );
 
@@ -2703,10 +2793,12 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const ufValue = normalizeUppercase(uf);
   const municipioValue = normalizeString(municipio);
   const orgaoValue = normalizeString(orgao_julgador);
+  const grauValue = normalizeString(req.body?.grau);
 
-  if (!numeroValue || !ufValue || !municipioValue) {
+  if (!numeroValue || !ufValue || !municipioValue || !grauValue) {
     return res.status(400).json({
-      error: 'Os campos cliente_id, numero, uf e municipio são obrigatórios',
+      error:
+        'Os campos cliente_id, numero, uf, municipio e grau são obrigatórios',
     });
   }
 
@@ -2717,6 +2809,18 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const jurisdicaoValue = normalizeString(jurisdicao);
   const advogadoValue = normalizeString(advogado_responsavel);
   const dataDistribuicaoValue = normalizeDate(data_distribuicao);
+  const justicaGratuitaFlag = parseBooleanFlag(req.body?.justica_gratuita);
+  const liminarFlag = parseBooleanFlag(req.body?.liminar);
+  const permitePeticionarFlag = parseBooleanFlag(req.body?.permite_peticionar);
+  const nivelSigiloValue = parseOptionalInteger(req.body?.nivel_sigilo);
+
+  if (nivelSigiloValue !== null && nivelSigiloValue < 0) {
+    return res.status(400).json({ error: 'nivel_sigilo inválido' });
+  }
+
+  const tramitacaoAtualValue = normalizeString(
+    req.body?.tramitacao_atual ?? req.body?.tramitacaoatual,
+  );
   const oportunidadeResolution = resolveNullablePositiveInteger(
     req.body?.oportunidade_id ?? req.body?.proposta_id ?? null,
   );
@@ -2942,6 +3046,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
 
     const advogadoColumnValue = advogadoConcatValue || advogadoValue;
     const finalMonitorarProcesso = monitorarProcessoValue ?? false;
+    const finalPermitePeticionar = permitePeticionarFlag ?? true;
 
     const clientDb = await pool.connect();
 
@@ -2974,9 +3079,15 @@ export const updateProcesso = async (req: Request, res: Response) => {
                 data_recebimento = $22,
                 data_arquivamento = $23,
                 data_encerramento = $24,
+                grau = $25,
+                justica_gratuita = $26,
+                liminar = $27,
+                nivel_sigilo = $28,
+                tramitacaoatual = $29,
+                permite_peticionar = $30,
                 atualizado_em = NOW()
-          WHERE id = $25
-            AND idempresa IS NOT DISTINCT FROM $26
+          WHERE id = $31
+            AND idempresa IS NOT DISTINCT FROM $32
           RETURNING id`,
         [
           parsedClienteId,
@@ -3003,6 +3114,12 @@ export const updateProcesso = async (req: Request, res: Response) => {
           dataRecebimentoValue,
           dataArquivamentoValue,
           dataEncerramentoValue,
+          grauValue,
+          justicaGratuitaFlag,
+          liminarFlag,
+          nivelSigiloValue,
+          tramitacaoAtualValue,
+          finalPermitePeticionar,
           parsedId,
           empresaId,
         ]
