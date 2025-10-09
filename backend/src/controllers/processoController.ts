@@ -962,7 +962,6 @@ type RawCrawlerParticipant = {
   tipo_pessoa?: unknown;
   documento_principal?: unknown;
   tipo_documento_principal?: unknown;
-  possui_advogados?: unknown;
   data_cadastro?: unknown;
 };
 
@@ -1083,8 +1082,6 @@ const buildCrawlerParticipant = (
     return null;
   }
 
-  const hasLawyers = parseBooleanFlag(row.possui_advogados);
-
   const participant: ProcessoParticipant = {
     name: name ?? null,
     document: documentInfo.display,
@@ -1094,7 +1091,7 @@ const buildCrawlerParticipant = (
     person_type: normalizeUppercase(row.tipo_pessoa),
     role: null,
     party_role: null,
-    lawyers: hasLawyers === true ? [] : null,
+    lawyers: null,
     representatives: null,
     registered_at: normalizeTimestamp(row.data_cadastro),
     source: 'crawler',
@@ -1169,7 +1166,6 @@ const fetchProcessParticipants = async (
           tipo_pessoa,
           documento_principal,
           tipo_documento_principal,
-          possui_advogados,
           data_cadastro
         FROM public.trigger_envolvidos_processo
        WHERE numero_cnj = $1`,
