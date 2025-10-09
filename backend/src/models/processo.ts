@@ -147,6 +147,12 @@ export interface Processo {
   classe_judicial: string | null;
   assunto: string | null;
   jurisdicao: string | null;
+  grau: string;
+  justica_gratuita: boolean | null;
+  liminar: boolean | null;
+  nivel_sigilo: number | null;
+  tramitacao_atual: string | null;
+  permite_peticionar: boolean;
   tribunal_acronym?: string | null;
   tribunal?: string | null;
   tribunal_name?: string | null;
