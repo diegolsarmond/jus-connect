@@ -778,39 +778,21 @@ const persistDataset = async (
     for (const movement of dataset.movements) {
       await client.query(
         `INSERT INTO public.trigger_movimentacao_processo (
-           id_andamento,
            numero_cnj,
            instancia_processo,
            tipo_andamento,
            conteudo,
            sigiloso,
-           data_andamento,
-           criado_em,
-           atualizado_em,
-           crawl_id
+           data_movimentacao
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (id_andamento) DO UPDATE
-         SET numero_cnj = EXCLUDED.numero_cnj,
-             instancia_processo = EXCLUDED.instancia_processo,
-             tipo_andamento = EXCLUDED.tipo_andamento,
-             conteudo = EXCLUDED.conteudo,
-             sigiloso = EXCLUDED.sigiloso,
-             data_andamento = EXCLUDED.data_andamento,
-             criado_em = EXCLUDED.criado_em,
-             atualizado_em = EXCLUDED.atualizado_em,
-             crawl_id = EXCLUDED.crawl_id`,
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
-          movement.id,
           movement.numeroCnj,
           movement.instancia,
           movement.tipo,
           movement.conteudo,
           movement.sigiloso,
           movement.dataAndamento,
-          movement.criadoEm,
-          movement.atualizadoEm,
-          movement.crawlId,
         ],
       );
     }

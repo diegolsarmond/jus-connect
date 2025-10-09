@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import { PoolClient } from 'pg';
 import {
@@ -442,6 +441,7 @@ type RawMovimentacao = {
   sigiloso?: boolean | number | string | null;
   crawl_id?: string | null;
   data?: string | null;
+  data_movimentacao?: string | null;
   data_andamento?: string | null;
   criado_em?: string | null;
   atualizado_em?: string | null;
@@ -474,7 +474,9 @@ const parseMovimentacoes = (value: unknown): Processo['movimentacoes'] => {
     }
 
     const dataValue =
-      normalizeTimestamp(raw.data_andamento ?? raw.data) ?? raw.data ?? null;
+      normalizeTimestamp(raw.data_movimentacao ?? raw.data_andamento ?? raw.data) ??
+      normalizeDate(raw.data_movimentacao ?? raw.data_andamento ?? raw.data) ??
+      (typeof raw.data === 'string' ? raw.data : null);
 
     const tipoValue = raw.tipo_andamento ?? raw.tipo ?? null;
     const numeroCnjValue = normalizeString(raw.numero_cnj);
@@ -870,26 +872,18 @@ const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 const MOVIMENTACOES_BASE_QUERY = `
   SELECT
     id,
-    id_andamento,
     numero_cnj,
     instancia_processo,
     tipo_andamento,
     conteudo,
     sigiloso,
-    data_andamento,
-    criado_em,
-    atualizado_em,
-    crawl_id,
+    data_movimentacao,
     data_cadastro
   FROM public.trigger_movimentacao_processo
   WHERE numero_cnj = $1
   ORDER BY
-    data_andamento DESC NULLS LAST,
-    CASE
-      WHEN id_andamento::text ~ '^[0-9]+$' THEN (id_andamento::text)::bigint
-      ELSE NULL
-    END DESC NULLS LAST,
-    id_andamento::text DESC
+    data_movimentacao DESC NULLS LAST,
+    id DESC
 `;
 
 const fetchProcessoMovimentacoes = async (
@@ -925,17 +919,17 @@ SELECT DISTINCT ON (ap.id_anexo)
   ap.data_cadastro AS data_andamento,
   ap.instancia_processo,
   ap.crawl_id,
-  mp.criado_em AS movimentacao_criado_em,
-  mp.data_andamento AS movimentacao_data_andamento
+  mp.data_cadastro AS movimentacao_criado_em,
+  mp.data_movimentacao AS movimentacao_data_andamento
 FROM public.trigger_anexos_processo ap
 LEFT JOIN public.trigger_movimentacao_processo mp
   ON mp.numero_cnj = ap.numero_cnj
  AND (
-       (ap.id_andamento IS NOT NULL AND mp.id_andamento = ap.id_andamento)
-    OR (ap.id_andamento IS NULL AND ap.data_cadastro IS NOT NULL AND mp.data_andamento = ap.data_cadastro)
+       (ap.id_andamento IS NOT NULL AND mp.id::text = ap.id_andamento::text)
+    OR (ap.id_andamento IS NULL AND ap.data_cadastro IS NOT NULL AND mp.data_movimentacao = ap.data_cadastro)
   )
 WHERE ap.numero_cnj = $1
-ORDER BY ap.id_anexo, mp.data_andamento DESC NULLS LAST, ap.id DESC
+ORDER BY ap.id_anexo, mp.data_movimentacao DESC NULLS LAST, ap.id DESC
 `;
 
 const fetchProcessoAnexos = async (
@@ -1412,11 +1406,11 @@ const listProcessoSelect = `
     o.solicitante_id AS oportunidade_solicitante_id,
     solicitante.nome AS oportunidade_solicitante_nome,
     p.advogado_responsavel,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao, p.data_distribuicao) AS data_distribuicao,
     p.criado_em,
-    mp.data_andamento AS atualizado_em,
+    mp.data_movimentacao AS atualizado_em,
     p.atualizado_em AS ultima_sincronizacao,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao) AS ultima_movimentacao,
     (
       SELECT COUNT(*)::int
       FROM public.processo_consultas_api pc
@@ -1448,7 +1442,13 @@ FROM public.processos p
 LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
 LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
 LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
-LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN LATERAL (
+  SELECT tmp.data_movimentacao
+  FROM public.trigger_movimentacao_processo tmp
+  WHERE tmp.numero_cnj = p.numero_cnj
+  ORDER BY tmp.data_movimentacao DESC NULLS LAST, tmp.id DESC
+  LIMIT 1
+) mp ON TRUE
 LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
 LEFT JOIN public.clientes c ON c.id = p.cliente_id
 LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
@@ -1476,11 +1476,11 @@ const baseProcessoSelect = `
     o.solicitante_id AS oportunidade_solicitante_id,
     solicitante.nome AS oportunidade_solicitante_nome,
     p.advogado_responsavel,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em, p.data_distribuicao) AS data_distribuicao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao, p.data_distribuicao) AS data_distribuicao,
     p.criado_em,
-    mp.data_andamento AS atualizado_em,
+    mp.data_movimentacao AS atualizado_em,
     p.atualizado_em AS ultima_sincronizacao,
-    COALESCE(dp.data_distribuicao, mp.atualizado_em) AS ultima_movimentacao,
+    COALESCE(dp.data_distribuicao, mp.data_movimentacao) AS ultima_movimentacao,
     (
       SELECT COUNT(*)::int
       FROM public.processo_consultas_api pc
@@ -1532,7 +1532,13 @@ LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
 LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
 LEFT JOIN public.escritorios setor ON setor.id = p.setor_id
 LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
-LEFT JOIN public.trigger_movimentacao_processo mp ON mp.numero_cnj = p.numero_cnj and mp.id_andamento = dp.id_ultimo_andamento
+LEFT JOIN LATERAL (
+  SELECT tmp.data_movimentacao
+  FROM public.trigger_movimentacao_processo tmp
+  WHERE tmp.numero_cnj = p.numero_cnj
+  ORDER BY tmp.data_movimentacao DESC NULLS LAST, tmp.id DESC
+  LIMIT 1
+) mp ON TRUE
 LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
 LEFT JOIN public.clientes c ON c.id = p.cliente_id
 LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
@@ -2046,33 +2052,24 @@ export const createProcessoMovimentacaoManual = async (
     const sigilosoValue = parseBooleanFlag(req.body?.sigiloso) ?? false;
     const insertResult = await pool.query(
       `INSERT INTO public.trigger_movimentacao_processo (
-         id_andamento,
          numero_cnj,
          instancia_processo,
          tipo_andamento,
          conteudo,
          sigiloso,
-         data_andamento,
-         criado_em,
-         atualizado_em,
-         crawl_id
+         data_movimentacao
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), NULL)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING
          id,
-         id_andamento,
          numero_cnj,
          instancia_processo,
          tipo_andamento,
          conteudo,
          sigiloso,
-         data_andamento,
-         criado_em,
-         atualizado_em,
-         crawl_id,
+         data_movimentacao,
          data_cadastro`,
       [
-        randomUUID(),
         numeroCnj,
         instanciaProcesso,
         preparedRecord.tipo,
