@@ -2057,37 +2057,13 @@ export default function VisualizarProcesso() {
   } | null>(null);
   const [, startTransition] = useTransition();
 
-  const numeroCnjProcesso = viewModel?.numeroCnj ?? null;
-  const instanciaProcessoPadrao = viewModel?.instanciaProcesso ?? null;
-
-  const podeAbrirAnexo = useCallback(
-    (anexo: AnexoProcesso) => {
-      if (!anexo) {
-        return false;
-      }
-
-      if (anexo.url) {
-        return true;
-      }
-
-      if (!numeroCnjProcesso) {
-        return false;
-      }
-
-      const idDestino = anexo.idAnexo ?? anexo.id;
-      const instanciaDestino = anexo.instancia;
-
-      return Boolean(idDestino && instanciaDestino);
-    },
-    [numeroCnjProcesso],
-  );
+  const podeAbrirAnexo = useCallback((anexo: AnexoProcesso) => {
+    return Boolean(anexo && anexo.url);
+  }, []);
 
   const handleAbrirAnexo = useCallback(
     async (anexo: AnexoProcesso) => {
-      const numero = numeroCnjProcesso;
-      const instanciaDestino = anexo.instancia;
-      const idDestino = anexo.idAnexo ?? anexo.id;
-      const identificador = idDestino ?? anexo.id ?? anexo.idAnexo ?? null;
+      const identificador = anexo.idAnexo ?? anexo.id ?? null;
 
       setAnexoVisualizado(null);
       setAnexoEmCarregamentoId(identificador ?? null);
@@ -2106,102 +2082,21 @@ export default function VisualizarProcesso() {
         });
       };
 
-      if (!numero || !instanciaDestino || !idDestino) {
-        if (anexo.url) {
-          apresentarNoModal(anexo.url, null);
-        } else {
-          toast({
-            variant: "destructive",
-            description: "Não foi possível abrir o anexo.",
-          });
-        }
-        setAnexoEmCarregamentoId(null);
-        return;
-      }
-
-      const requestUrl = `https://lawsuits.production.judit.io/lawsuits/${encodeURIComponent(numero)}/${encodeURIComponent(instanciaDestino)}/attachments/${encodeURIComponent(idDestino)}`;
-
-      const extrairNomeArquivo = (valor: string | null): string | null => {
-        if (!valor) {
-          return null;
-        }
-
-        const matchEstendido = valor.match(/filename\*=UTF-8''([^;]+)/i);
-        if (matchEstendido && matchEstendido[1]) {
-          try {
-            return decodeURIComponent(matchEstendido[1]);
-          } catch {
-            return matchEstendido[1];
-          }
-        }
-
-        const matchPadrao = valor.match(/filename="?([^";]+)"?/i);
-        if (matchPadrao && matchPadrao[1]) {
-          return matchPadrao[1];
-        }
-
-        return null;
-      };
-
-      const sanitizarNome = (valor: string | null | undefined): string | null => {
-        if (!valor) {
-          return null;
-        }
-
-        const texto = valor.replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, " ").trim();
-        return texto.length > 0 ? texto : null;
-      };
-
-      const lerComoDataUrl = (blob: Blob) =>
-        new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            resolve(typeof reader.result === "string" ? reader.result : "");
-          };
-          reader.onerror = () => {
-            reject(reader.error ?? new Error("Falha ao ler anexo"));
-          };
-          reader.readAsDataURL(blob);
-        });
-
       try {
-        const resposta = await fetch(requestUrl, {
-          headers: {
-            "api-key": "37c7486a-1757-4b67-9c2c-cb8585bcce2d",
-          },
-        });
-
-        if (!resposta.ok) {
-          throw new Error(`Falha ao carregar anexo (${resposta.status})`);
+        if (typeof anexo.url === "string" && anexo.url.trim().length > 0) {
+          apresentarNoModal(anexo.url, null);
+          return;
         }
 
-        const contentType = resposta.headers.get("content-type");
-        const blob = await resposta.blob();
-        const nomeArquivo =
-          sanitizarNome(extrairNomeArquivo(resposta.headers.get("content-disposition"))) ??
-          sanitizarNome(anexo.titulo) ??
-          sanitizarNome(anexo.idAnexo) ??
-          sanitizarNome(anexo.id) ??
-          `anexo-${Date.now()}`;
-
-        const dataUrl = await lerComoDataUrl(blob);
-        apresentarNoModal(dataUrl, contentType, nomeArquivo);
-      } catch (error) {
-        console.error(error);
         toast({
           variant: "destructive",
-          description: "Não foi possível exibir o anexo. Tentando link alternativo...",
+          description: "Não foi possível abrir o anexo.",
         });
-
-        if (anexo.url) {
-          apresentarNoModal(anexo.url, null);
-        }
       } finally {
         setAnexoEmCarregamentoId(null);
       }
     },
-    [numeroCnjProcesso, toast],
-
+    [toast],
   );
 
   const handleAlterarVisualizadorAnexo = useCallback((aberto: boolean) => {

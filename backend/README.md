@@ -111,7 +111,7 @@ npm test
 ```
 
 O script `npm test` configura um `DATABASE_URL` fictício e todos os cenários
-mockam dependências externas (JUDIT, Postgres, etc.), portanto não é necessário
+mockam dependências externas (Postgres etc.), portanto não é necessário
 ter serviços auxiliares em execução. Caso queira filtrar algum teste específico,
 use `npm test -- --test-name-pattern="<trecho-do-nome>"`.
 

@@ -2,7 +2,11 @@ import { type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-import type { MetadataEntry } from "../utils/judit";
+export interface MetadataEntry {
+  key: string;
+  label: string;
+  value: string | MetadataEntry[];
+}
 
 export interface RenderMetadataEntriesOptions {
   level?: number;
