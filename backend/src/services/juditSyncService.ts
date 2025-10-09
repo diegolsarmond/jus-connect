@@ -775,8 +775,10 @@ const persistDataset = async (
       );
     }
 
+    const movementIdentifierMap = new Map<string, string>();
+
     for (const movement of dataset.movements) {
-      await client.query(
+      const insertResult = await client.query(
         `INSERT INTO public.trigger_movimentacao_processo (
            numero_cnj,
            instancia_processo,
@@ -785,7 +787,8 @@ const persistDataset = async (
            sigiloso,
            data_movimentacao
          )
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
         [
           movement.numeroCnj,
           movement.instancia,
@@ -795,6 +798,11 @@ const persistDataset = async (
           movement.dataAndamento,
         ],
       );
+
+      const insertedId = insertResult.rows?.[0]?.id;
+      if (insertedId !== null && insertedId !== undefined) {
+        movementIdentifierMap.set(movement.id, String(insertedId));
+      }
     }
 
     if (shouldPersistAttachments) {
@@ -812,11 +820,20 @@ const persistDataset = async (
              situacao,
              origem
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             attachment.numeroCnj,
             attachment.instancia,
-            attachment.andamentoId,
+            (() => {
+              if (!attachment.andamentoId) {
+                return null;
+              }
+
+              const mapped = movementIdentifierMap.get(attachment.andamentoId);
+              const resolved = mapped ?? attachment.andamentoId;
+              const normalized = String(resolved).trim();
+              return normalized ? normalized : null;
+            })(),
             attachment.anexoId,
             attachment.nome,
             attachment.tipo,
