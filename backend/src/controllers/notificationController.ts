@@ -1,6 +1,4 @@
 import { Request, Response } from 'express';
-import pool from '../services/db';
-import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import {
   listNotifications,
   getNotification,
@@ -680,4 +678,5 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+main
 
