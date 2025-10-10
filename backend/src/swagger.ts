@@ -170,6 +170,49 @@ const swaggerOptions = {
           },
         },
       },
+      '/api/intimacoes/{id}/read': {
+        patch: {
+          summary: 'Marca uma intimação como lida para a empresa do usuário autenticado',
+          tags: ['Intimacoes'],
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer' },
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Intimação marcada como lida com sucesso',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'integer' },
+                      nao_lida: { type: 'boolean' },
+                      updated_at: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+              },
+            },
+            400: {
+              description: 'Identificador de intimação inválido.',
+            },
+            401: {
+              description: 'Token inválido.',
+            },
+            404: {
+              description: 'Intimação não encontrada.',
+            },
+            500: {
+              description: 'Erro interno do servidor',
+            },
+          },
+        },
+      },
     },
   },
   apis: [
