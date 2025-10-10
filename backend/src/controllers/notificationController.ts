@@ -25,11 +25,44 @@ import { buildErrorResponse } from '../utils/errorResponse';
 import pool from '../services/db';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
-function resolveUserId(req: Request): string {
-  const queryUserId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
-  const body = req.body ?? {};
-  const bodyUserId = typeof body.userId === 'string' ? body.userId : undefined;
-  return queryUserId || bodyUserId || 'default';
+function readUserId(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getRequestedUserId(req: Request): string | undefined {
+  const queryUserId = readUserId(req.query.userId);
+  if (queryUserId) {
+    return queryUserId;
+  }
+
+  const body = req.body;
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    return readUserId((body as { userId?: unknown }).userId);
+  }
+
+  return undefined;
+}
+
+function resolveAuthorizedUserId(req: Request, res: Response): string | null {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return null;
+  }
+
+  const authUserId = String(req.auth.userId);
+  const requestedUserId = getRequestedUserId(req);
+
+  if (requestedUserId && requestedUserId !== authUserId) {
+    res.status(403).json({ error: 'Você não tem permissão para acessar notificações de outro usuário.' });
+    return null;
+  }
+
+  return requestedUserId ?? authUserId;
 }
 
 function parseBoolean(value: unknown): boolean | undefined {
@@ -61,7 +94,10 @@ function parsePositiveInteger(value: unknown): number | undefined {
 
 export const listNotificationsHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const onlyUnread = parseBoolean(req.query.onlyUnread);
     const limit = parsePositiveInteger(req.query.limit) ?? parsePositiveInteger(req.query.pageSize);
     const offsetParam = parsePositiveInteger(req.query.offset);
@@ -94,7 +130,10 @@ export const listNotificationsHandler = async (req: Request, res: Response) => {
 
 export const getNotificationHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const { id } = req.params;
     const notification = await getNotification(userId, id);
     res.json(notification);
@@ -118,11 +157,12 @@ export const getNotificationHandler = async (req: Request, res: Response) => {
 
 export const createNotificationHandler = async (req: Request, res: Response) => {
   try {
-    const { userId, title, message, category, type, metadata, actionUrl } = req.body ?? {};
-
-    if (typeof userId !== 'string' || userId.trim() === '') {
-      return res.status(400).json({ error: 'userId is required' });
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
     }
+
+    const { title, message, category, type, metadata, actionUrl } = req.body ?? {};
 
     if (!title || !message || !category) {
       return res.status(400).json({ error: 'title, message and category are required' });
@@ -147,7 +187,10 @@ export const createNotificationHandler = async (req: Request, res: Response) => 
 
 export const markNotificationAsReadHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const { id } = req.params;
     const notification = await markNotificationAsRead(userId, id);
     res.json(notification);
@@ -171,7 +214,10 @@ export const markNotificationAsReadHandler = async (req: Request, res: Response)
 
 export const markNotificationAsUnreadHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const { id } = req.params;
     const notification = await markNotificationAsUnread(userId, id);
     res.json(notification);
@@ -195,7 +241,10 @@ export const markNotificationAsUnreadHandler = async (req: Request, res: Respons
 
 export const markAllNotificationsAsReadHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const notifications = await markAllNotificationsAsRead(userId);
     res.json({ updated: notifications.length, notifications });
   } catch (error) {
@@ -206,7 +255,10 @@ export const markAllNotificationsAsReadHandler = async (req: Request, res: Respo
 
 export const deleteNotificationHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const { id } = req.params;
     await deleteNotification(userId, id);
     res.status(204).send();
@@ -230,7 +282,10 @@ export const deleteNotificationHandler = async (req: Request, res: Response) => 
 
 export const getUnreadCountHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const groupBy = typeof req.query.groupBy === 'string' ? req.query.groupBy.toLowerCase() : undefined;
 
@@ -249,7 +304,10 @@ export const getUnreadCountHandler = async (req: Request, res: Response) => {
 
 export const getNotificationPreferencesHandler = async (req: Request, res: Response) => {
   try {
-    const userId = resolveUserId(req);
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
     const preferences = await getNotificationPreferences(userId);
     res.json(preferences);
   } catch (error) {
@@ -260,15 +318,20 @@ export const getNotificationPreferencesHandler = async (req: Request, res: Respo
 
 export const updateNotificationPreferencesHandler = async (req: Request, res: Response) => {
   try {
-    const { userId, ...updates } = req.body ?? {};
+    const payload = req.body ?? {};
 
-    if (typeof userId !== 'string' || userId.trim() === '') {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    if (updates === null || typeof updates !== 'object') {
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
       return res.status(400).json({ error: 'Request body must contain preference updates' });
     }
+
+    const userId = resolveAuthorizedUserId(req, res);
+    if (!userId) {
+      return;
+    }
+
+    const { userId: _ignoredUserId, ...updates } = payload as {
+      userId?: unknown;
+    } & NotificationPreferenceUpdates;
 
     const updated = await updateNotificationPreferences(userId, updates as NotificationPreferenceUpdates);
     res.json(updated);
