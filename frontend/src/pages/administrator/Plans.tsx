@@ -284,24 +284,31 @@ export default function Plans() {
 
   const normalizePlans = (rawPlans: Plan[], modules: ModuleInfo[]) =>
     rawPlans
-      .map((plan) => ({
-        ...plan,
-        modules: orderModules(
-          Array.from(
-            new Set([
-              ...plan.modules,
-              ...plan.publicConsultationModules,
-            ]).filter((id) => modules.some((module) => module.id === id)),
+      .map((plan) => {
+        const moduleIds = Array.isArray(plan.modules) ? plan.modules : [];
+        const publicConsultationModuleIds = Array.isArray(plan.publicConsultationModules)
+          ? plan.publicConsultationModules
+          : [];
+
+        return {
+          ...plan,
+          modules: orderModules(
+            Array.from(
+              new Set([
+                ...moduleIds,
+                ...publicConsultationModuleIds,
+              ]).filter((id) => modules.some((module) => module.id === id)),
+            ),
+            modules
           ),
-          modules
-        ),
-        publicConsultationModules: orderModules(
-          plan.publicConsultationModules.filter((id) =>
-            modules.some((module) => module.id === id)
+          publicConsultationModules: orderModules(
+            publicConsultationModuleIds.filter((id) =>
+              modules.some((module) => module.id === id)
+            ),
+            modules
           ),
-          modules
-        ),
-      }))
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
   const loadInitialData = async () => {
