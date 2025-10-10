@@ -640,8 +640,8 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
                 created_at,
                 updated_at,
                 CASE
-                  WHEN (payload ->> 'idempresa') ~ '^-?\\d+$' THEN (payload ->> 'idempresa')::bigint
-                  WHEN (payload ->> 'empresaId') ~ '^-?\\d+$' THEN (payload ->> 'empresaId')::bigint
+                  WHEN (payload ->> 'idempresa') ~ '^-?\\d+$' THEN (payload ->> 'idempresa')::numeric
+                  WHEN (payload ->> 'empresaId') ~ '^-?\\d+$' THEN (payload ->> 'empresaId')::numeric
                   ELSE NULL
                 END AS payload_empresa_id
            FROM public.intimacoes
@@ -661,7 +661,7 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
               created_at,
               updated_at
          FROM intimacoes_enriched
-        WHERE payload_empresa_id = $1
+        WHERE payload_empresa_id = $1::numeric
            OR payload_empresa_id IS NULL
         ORDER BY recebida_em DESC NULLS LAST,
                  fonte_atualizada_em DESC NULLS LAST,
