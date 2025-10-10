@@ -48,7 +48,9 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
               idusuario,
               idempresa,
               nao_lida,
-              arquivada
+              arquivada,
+              idusuario_leitura,
+              lida_em
          FROM public.intimacoes
         WHERE idempresa = $1 AND "tipoComunicacao" <> 'Lista de distribuição'
         ORDER BY data_disponibilizacao DESC NULLS LAST,
@@ -135,16 +137,26 @@ export const markIntimacaoAsReadHandler = async (req: Request, res: Response) =>
       return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
     }
 
+    const usuarioId = Number(req.auth.userId);
+
+    if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
+      return res.status(400).json({ error: 'Usuário autenticado inválido.' });
+    }
+
     const result = await pool.query(
       `UPDATE public.intimacoes
           SET nao_lida = FALSE,
-              updated_at = NOW()
+              updated_at = NOW(),
+              idusuario_leitura = $3::bigint,
+              lida_em = NOW()
         WHERE id = $1
           AND idempresa = $2
         RETURNING id,
                   nao_lida,
-                  updated_at`,
-      [intimacaoId, empresaId],
+                  updated_at,
+                  idusuario_leitura,
+                  lida_em`,
+      [intimacaoId, empresaId, usuarioId],
     );
 
     if (result.rowCount === 0) {

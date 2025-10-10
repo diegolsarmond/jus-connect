@@ -195,8 +195,18 @@ export interface Intimacao {
   destinatarios_advogados: unknown;
   idusuario: number | null;
   idempresa: number | null;
+  idusuario_leitura: number | null;
+  lida_em: string | null;
   nao_lida: boolean | null;
   arquivada: boolean | null;
+}
+
+export interface MarkIntimacaoAsReadResponse {
+  id: number;
+  nao_lida: boolean;
+  updated_at: string;
+  idusuario_leitura: number | null;
+  lida_em: string | null;
 }
 
 function isRecord(value: unknown): value is AnyRecord {
@@ -673,7 +683,7 @@ export async function archiveIntimacao(
 
 export async function markIntimacaoAsRead(
   id: number | string,
-): Promise<{ id: number; nao_lida: boolean; updated_at: string }>
+): Promise<MarkIntimacaoAsReadResponse>
 {
   const response = await fetch(getApiUrl(`intimacoes/${id}/read`), {
     method: "PATCH",
@@ -684,7 +694,7 @@ export async function markIntimacaoAsRead(
     throw new Error(`Falha ao marcar intimação como lida (${response.status}).`);
   }
 
-  return (await response.json()) as { id: number; nao_lida: boolean; updated_at: string };
+  return (await response.json()) as MarkIntimacaoAsReadResponse;
 }
 
 export async function fetchIntimacoesOverview(signal?: AbortSignal): Promise<IntimacoesOverview> {
