@@ -663,7 +663,7 @@ function InfoItem({ label, children }: { label: string; children?: ReactNode }) 
 
 export default function Intimacoes() {
   const [intimacoes, setIntimacoes] = useState<Intimacao[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [archivingId, setArchivingId] = useState<string | null>(null);
