@@ -554,6 +554,7 @@ type RawAttachment = {
   id?: unknown;
   id_andamento?: unknown;
   id_anexo?: unknown;
+  sequencia_anexo?: unknown;
   nome?: unknown;
   tipo?: unknown;
   data_cadastro?: unknown;
@@ -598,7 +599,7 @@ const parseAttachments = (value: unknown): Processo['attachments'] => {
 
     const attachment: ProcessoAttachment = {
       id: idValue,
-      id_andamento: normalizeIdentifier(raw.id_andamento),
+      id_andamento: normalizeIdentifier(raw.id_andamento ?? raw.sequencia_anexo),
       id_anexo: normalizeIdentifier(raw.id_anexo ?? raw.id),
       nome: normalizeString(raw.nome),
       tipo: normalizeString(raw.tipo),
@@ -923,7 +924,8 @@ const ANEXOS_BASE_QUERY = `
 SELECT DISTINCT ON (ap.id)
   ap.id AS id_anexo,
   ap.id,
-  ap.sequencia AS id_andamento,
+  ap.sequencia AS sequencia_anexo,
+  mp.id AS id_andamento,
   ap.nome,
   ap.tipo,
   ap.data_cadastro,
