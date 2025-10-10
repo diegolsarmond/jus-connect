@@ -102,6 +102,23 @@ export interface Processo {
     movimentacoesCount: number;
 }
 
+interface ProcessoSummary {
+    andamento: number;
+    arquivados: number;
+    clientes: number;
+    totalSincronizacoes: number;
+    statusOptions: string[];
+    tipoOptions: string[];
+}
+
+interface ProcessoLoadResult {
+    items: Processo[];
+    total: number;
+    page: number;
+    pageSize: number;
+    summary: ProcessoSummary;
+}
+
 interface Uf {
     sigla: string;
     nome: string;
@@ -759,6 +776,57 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     };
 };
 
+const ARQUIVADO_KEYWORDS = ["arquiv", "baix", "encerr", "finaliz", "transit", "extint"];
+
+const normalizeStatusForSummary = (status: string) =>
+    status
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+
+const computeProcessosSummary = (itens: Processo[]): ProcessoSummary => {
+    let andamento = 0;
+    let arquivados = 0;
+    let totalSincronizacoes = 0;
+    const clientes = new Set<number>();
+    const statusSet = new Set<string>();
+    const tipoSet = new Set<string>();
+
+    itens.forEach((processo) => {
+        const statusValue = processo.status?.trim() || "Não informado";
+        if (statusValue.toLowerCase() !== "não informado") {
+            statusSet.add(statusValue);
+        }
+
+        const normalizedStatus = normalizeStatusForSummary(statusValue);
+        if (normalizedStatus && ARQUIVADO_KEYWORDS.some((keyword) => normalizedStatus.includes(keyword))) {
+            arquivados += 1;
+        } else {
+            andamento += 1;
+        }
+
+        const tipoValue = processo.tipo?.trim() || "Não informado";
+        if (tipoValue.toLowerCase() !== "não informado") {
+            tipoSet.add(tipoValue);
+        }
+
+        if (processo.cliente?.id) {
+            clientes.add(processo.cliente.id);
+        }
+
+        totalSincronizacoes += processo.consultasApiCount;
+    });
+
+    return {
+        andamento,
+        arquivados,
+        clientes: clientes.size,
+        totalSincronizacoes,
+        statusOptions: Array.from(statusSet).sort((a, b) => a.localeCompare(b)),
+        tipoOptions: Array.from(tipoSet).sort((a, b) => a.localeCompare(b)),
+    };
+};
+
 const getStatusBadgeClassName = (status: string) => {
     const normalized = status.toLowerCase();
 
@@ -825,11 +893,31 @@ export default function Processos() {
     const [clientePopoverOpen, setClientePopoverOpen] = useState(false);
     const [processosLoading, setProcessosLoading] = useState(false);
     const [processosError, setProcessosError] = useState<string | null>(null);
+    const [totalProcessos, setTotalProcessos] = useState(0);
+    const [processosEmAndamento, setProcessosEmAndamento] = useState(0);
+    const [processosArquivados, setProcessosArquivados] = useState(0);
+    const [clientesAtivos, setClientesAtivos] = useState(0);
+    const [totalSincronizacoes, setTotalSincronizacoes] = useState(0);
+    const [statusOptions, setStatusOptions] = useState<string[]>([]);
+    const [tipoOptions, setTipoOptions] = useState<string[]>([]);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
     const [createError, setCreateError] = useState<string | null>(null);
     const [creatingProcess, setCreatingProcess] = useState(false);
     const [editingProcessId, setEditingProcessId] = useState<number | null>(null);
     const [editingProcessGrau, setEditingProcessGrau] = useState<string | null>(null);
     const [loadingProcessForm, setLoadingProcessForm] = useState(false);
+
+    const applyProcessosData = useCallback((data: ProcessoLoadResult) => {
+        setProcessos(data.items);
+        setTotalProcessos(data.total);
+        setProcessosEmAndamento(data.summary.andamento);
+        setProcessosArquivados(data.summary.arquivados);
+        setClientesAtivos(data.summary.clientes);
+        setTotalSincronizacoes(data.summary.totalSincronizacoes);
+        setStatusOptions(data.summary.statusOptions);
+        setTipoOptions(data.summary.tipoOptions);
+    }, []);
     useEffect(() => {
         let cancelled = false;
 
@@ -1538,40 +1626,125 @@ export default function Processos() {
         });
     }, []);
 
-    const loadProcessos = useCallback(async () => {
-        const res = await fetch(getApiUrl("processos"), {
-            headers: { Accept: "application/json" },
-        });
+    const loadProcessos = useCallback(
+        async (options?: { signal?: AbortSignal; page?: number; pageSize?: number }): Promise<ProcessoLoadResult> => {
+            const currentPage = options?.page ?? page;
+            const currentPageSize = options?.pageSize ?? pageSize;
 
-        let json: unknown = null;
-        try {
-            json = await res.json();
-        } catch (error) {
-            console.error("Não foi possível interpretar a resposta de processos", error);
-        }
+            const url = new URL(getApiUrl("processos"));
+            url.searchParams.set("page", String(currentPage));
+            url.searchParams.set("pageSize", String(currentPageSize));
 
-        if (!res.ok) {
-            const message =
-                json && typeof json === "object" &&
+            const res = await fetch(url.toString(), {
+                headers: { Accept: "application/json" },
+                signal: options?.signal,
+            });
+
+            let json: unknown = null;
+            try {
+                json = await res.json();
+            } catch (error) {
+                console.error("Não foi possível interpretar a resposta de processos", error);
+            }
+
+            if (!res.ok) {
+                const message =
+                    json && typeof json === "object" &&
                     "error" in json &&
                     typeof (json as { error: unknown }).error === "string"
-                    ? (json as { error: string }).error
-                    : `Não foi possível carregar os processos (HTTP ${res.status})`;
-            throw new Error(message);
-        }
+                        ? (json as { error: string }).error
+                        : `Não foi possível carregar os processos (HTTP ${res.status})`;
+                throw new Error(message);
+            }
 
-        const data: ApiProcesso[] = Array.isArray(json)
-            ? (json as ApiProcesso[])
-            : Array.isArray((json as { rows?: ApiProcesso[] })?.rows)
-                ? ((json as { rows: ApiProcesso[] }).rows)
-                : Array.isArray((json as { data?: { rows?: ApiProcesso[] } })?.data?.rows)
-                    ? ((json as { data: { rows: ApiProcesso[] } }).data.rows)
-                    : Array.isArray((json as { data?: ApiProcesso[] })?.data)
-                        ? ((json as { data: ApiProcesso[] }).data)
-                        : [];
+            const data: ApiProcesso[] = Array.isArray(json)
+                ? (json as ApiProcesso[])
+                : Array.isArray((json as { rows?: ApiProcesso[] })?.rows)
+                    ? ((json as { rows: ApiProcesso[] }).rows)
+                    : Array.isArray((json as { data?: { rows?: ApiProcesso[] } })?.data?.rows)
+                        ? ((json as { data: { rows: ApiProcesso[] } }).data.rows)
+                        : Array.isArray((json as { data?: ApiProcesso[] })?.data)
+                            ? ((json as { data: ApiProcesso[] }).data)
+                            : [];
 
-        return data.map(mapApiProcessoToProcesso);
-    }, []);
+            const mapped = data.map(mapApiProcessoToProcesso);
+
+            const headerTotal = Number.parseInt(res.headers.get("x-total-count") ?? "", 10);
+            const payload = json as { total?: unknown; summary?: unknown };
+
+            const payloadTotal = (() => {
+                if (typeof payload?.total === "number" && Number.isFinite(payload.total)) {
+                    return payload.total;
+                }
+
+                if (typeof payload?.total === "string") {
+                    const parsed = Number.parseInt(payload.total, 10);
+                    return Number.isFinite(parsed) ? parsed : undefined;
+                }
+
+                return undefined;
+            })();
+
+            const total =
+                typeof payloadTotal === "number"
+                    ? payloadTotal
+                    : Number.isFinite(headerTotal)
+                        ? headerTotal
+                        : mapped.length;
+
+            const summaryPayload =
+                payload?.summary && typeof payload.summary === "object"
+                    ? (payload.summary as Partial<ProcessoSummary>)
+                    : undefined;
+
+            const fallbackSummary = computeProcessosSummary(mapped);
+
+            const ensureStringArray = (value: unknown): string[] | undefined => {
+                if (!Array.isArray(value)) {
+                    return undefined;
+                }
+
+                const filtered = value.filter((item): item is string => typeof item === "string");
+                if (filtered.length !== value.length) {
+                    return undefined;
+                }
+
+                return filtered.slice().sort((a, b) => a.localeCompare(b));
+            };
+
+            const summary: ProcessoSummary = {
+                andamento:
+                    typeof summaryPayload?.andamento === "number"
+                        ? summaryPayload.andamento
+                        : fallbackSummary.andamento,
+                arquivados:
+                    typeof summaryPayload?.arquivados === "number"
+                        ? summaryPayload.arquivados
+                        : fallbackSummary.arquivados,
+                clientes:
+                    typeof summaryPayload?.clientes === "number"
+                        ? summaryPayload.clientes
+                        : fallbackSummary.clientes,
+                totalSincronizacoes:
+                    typeof summaryPayload?.totalSincronizacoes === "number"
+                        ? summaryPayload.totalSincronizacoes
+                        : fallbackSummary.totalSincronizacoes,
+                statusOptions:
+                    ensureStringArray(summaryPayload?.statusOptions) ?? fallbackSummary.statusOptions,
+                tipoOptions:
+                    ensureStringArray(summaryPayload?.tipoOptions) ?? fallbackSummary.tipoOptions,
+            };
+
+            return {
+                items: mapped,
+                total,
+                page: currentPage,
+                pageSize: currentPageSize,
+                summary,
+            };
+        },
+        [page, pageSize],
+    );
 
     useEffect(() => {
         let active = true;
@@ -1581,16 +1754,34 @@ export default function Processos() {
             setProcessosError(null);
             try {
                 const data = await loadProcessos();
-                if (!active) return;
-                setProcessos(data);
+                if (!active) {
+                    return;
+                }
+
+                if (page > 1 && data.items.length === 0 && data.total > 0) {
+                    setPage((prev) => Math.max(1, prev - 1));
+                    return;
+                }
+
+                applyProcessosData(data);
             } catch (error) {
                 console.error(error);
-                if (!active) return;
+                if (!active) {
+                    return;
+                }
+
                 const message =
                     error instanceof Error
                         ? error.message
                         : "Erro ao carregar processos";
                 setProcessos([]);
+                setTotalProcessos(0);
+                setProcessosEmAndamento(0);
+                setProcessosArquivados(0);
+                setClientesAtivos(0);
+                setTotalSincronizacoes(0);
+                setStatusOptions([]);
+                setTipoOptions([]);
                 setProcessosError(message);
                 toast({
                     title: "Erro ao carregar processos",
@@ -1609,7 +1800,7 @@ export default function Processos() {
         return () => {
             active = false;
         };
-    }, [loadProcessos, toast]);
+    }, [applyProcessosData, loadProcessos, page, toast]);
 
     useEffect(() => {
         if (typeof window === "undefined") {
@@ -1623,7 +1814,12 @@ export default function Processos() {
             try {
                 const data = await loadProcessos();
                 if (!cancelled) {
-                    setProcessos(data);
+                    if (page > 1 && data.items.length === 0 && data.total > 0) {
+                        setPage((prev) => Math.max(1, prev - 1));
+                        return;
+                    }
+
+                    applyProcessosData(data);
                 }
             } catch (error) {
                 if (!cancelled) {
@@ -1640,7 +1836,7 @@ export default function Processos() {
             cancelled = true;
             window.clearInterval(intervalId);
         };
-    }, [loadProcessos]);
+    }, [applyProcessosData, loadProcessos, page]);
 
     useEffect(() => {
         if (
@@ -1690,30 +1886,6 @@ export default function Processos() {
         }
     }, [processForm.uf, municipiosLoading]);
 
-    const statusOptions = useMemo(() => {
-        const values = Array.from(
-            new Set(
-                processos
-                    .map((processo) => processo.status?.trim())
-                    .filter((status): status is string => Boolean(status) && status !== "Não informado"),
-            ),
-        ).sort((a, b) => a.localeCompare(b));
-
-        return values;
-    }, [processos]);
-
-    const tipoOptions = useMemo(() => {
-        const values = Array.from(
-            new Set(
-                processos
-                    .map((processo) => processo.tipo?.trim())
-                    .filter((tipo): tipo is string => Boolean(tipo) && tipo !== "Não informado"),
-            ),
-        ).sort((a, b) => a.localeCompare(b));
-
-        return values;
-    }, [processos]);
-
     useEffect(() => {
         if (statusFilter !== "todos" && !statusOptions.includes(statusFilter)) {
             setStatusFilter("todos");
@@ -1726,46 +1898,36 @@ export default function Processos() {
         }
     }, [tipoFilter, tipoOptions]);
 
-    const totalProcessos = useMemo(() => processos.length, [processos]);
+    const totalPages = useMemo(() => {
+        if (pageSize <= 0) {
+            return 1;
+        }
 
-    const processosStatusResumo = useMemo(() => {
-        let andamento = 0;
-        let arquivados = 0;
+        const pages = Math.ceil(totalProcessos / pageSize);
+        return Math.max(1, pages || 1);
+    }, [pageSize, totalProcessos]);
 
-        const normalizeStatusText = (status: string) =>
-            status
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")
-                .toLowerCase();
+    const pageStart = useMemo(() => {
+        if (totalProcessos === 0 || pageSize <= 0) {
+            return 0;
+        }
 
-        const arquivadoKeywords = ["arquiv", "baix", "encerr", "finaliz", "transit", "extint"];
+        return (page - 1) * pageSize + 1;
+    }, [page, pageSize, totalProcessos]);
 
-        processos.forEach((processo) => {
-            const normalized = normalizeStatusText(processo.status);
-            if (arquivadoKeywords.some((keyword) => normalized.includes(keyword))) {
-                arquivados += 1;
-                return;
-            }
+    const pageEnd = useMemo(() => {
+        if (totalProcessos === 0 || pageSize <= 0) {
+            return 0;
+        }
 
-            andamento += 1;
-        });
+        return Math.min(totalProcessos, page * pageSize);
+    }, [page, pageSize, totalProcessos]);
 
-        return { andamento, arquivados };
-    }, [processos]);
-
-    const processosEmAndamento = processosStatusResumo.andamento;
-
-    const processosArquivados = processosStatusResumo.arquivados;
-
-    const clientesAtivos = useMemo(
-        () => new Set(processos.map((processo) => processo.cliente.id)).size,
-        [processos],
-    );
-
-    const totalSincronizacoes = useMemo(
-        () => processos.reduce((acc, processo) => acc + processo.consultasApiCount, 0),
-        [processos],
-    );
+    useEffect(() => {
+        if (page > totalPages) {
+            setPage(totalPages);
+        }
+    }, [page, totalPages]);
 
     const handleDialogOpenChange = useCallback((open: boolean) => {
         setIsDialogOpen(open);
@@ -1903,23 +2065,22 @@ export default function Processos() {
                 );
             }
 
-            const mapped = mapApiProcessoToProcesso(json as ApiProcesso);
-            setProcessos((prev) => {
-                const index = prev.findIndex((p) => p.id === mapped.id);
-                if (index === -1) {
-                    return [mapped, ...prev];
-                }
-
-                const updated = [...prev];
-                updated[index] = mapped;
-                return updated;
-            });
             toast({
                 title: isEditingProcess
                     ? "Processo atualizado com sucesso"
                     : "Processo cadastrado com sucesso",
             });
             handleDialogOpenChange(false);
+            try {
+                if (isEditingProcess || page === 1) {
+                    const data = await loadProcessos();
+                    applyProcessosData(data);
+                } else {
+                    setPage(1);
+                }
+            } catch (refreshError) {
+                console.error("Erro ao atualizar lista de processos", refreshError);
+            }
         } catch (error) {
             console.error(error);
             const message =
@@ -2327,6 +2488,61 @@ export default function Processos() {
                             onEdit={() => handleEditProcess(processo)}
                         />
                     ))}
+
+                    <div className="flex flex-col gap-4 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-muted-foreground">
+                            {totalProcessos === 0
+                                ? "Nenhum processo para exibir"
+                                : `Mostrando ${pageStart}–${pageEnd} de ${totalProcessos} processos`}
+                        </p>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground">Itens por página</span>
+                                <Select
+                                    value={String(pageSize)}
+                                    onValueChange={(value) => {
+                                        const parsed = Number.parseInt(value, 10);
+                                        if (Number.isFinite(parsed) && parsed > 0) {
+                                            setPageSize(parsed);
+                                            setPage(1);
+                                        }
+                                    }}
+                                >
+                                    <SelectTrigger className="h-9 w-[84px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {[10, 20, 50].map((option) => (
+                                            <SelectItem key={option} value={String(option)}>
+                                                {option}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-center justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                                    disabled={page <= 1}
+                                >
+                                    Anterior
+                                </Button>
+                                <span className="text-sm text-muted-foreground">
+                                    Página {page} de {totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                                    disabled={page >= totalPages}
+                                >
+                                    Próxima
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 
