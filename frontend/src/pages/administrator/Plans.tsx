@@ -75,6 +75,9 @@ interface ModuleMultiSelectProps {
   disabled?: boolean;
 }
 
+const areArraysEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 function ModuleMultiSelect({ modules, selected, onChange, disabled }: ModuleMultiSelectProps) {
   const [open, setOpen] = useState(false);
 
@@ -237,6 +240,11 @@ export default function Plans() {
   const [editFormState, setEditFormState] = useState<PlanFormState>(initialPlanFormState);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editPublicConsultationModules, setEditPublicConsultationModules] = useState<string[]>([]);
+  const [editIntimationSyncEnabled, setEditIntimationSyncEnabled] = useState(false);
+  const [editIntimationSyncQuota, setEditIntimationSyncQuota] = useState("");
+  const [editProcessMonitorLawyerLimit, setEditProcessMonitorLawyerLimit] = useState("");
+  const [editIntimationMonitorLawyerLimit, setEditIntimationMonitorLawyerLimit] = useState("");
 
   const moduleLabelMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -246,12 +254,57 @@ export default function Plans() {
     return map;
   }, [availableModules]);
 
+  const matchesPublicConsultation = (value: string | undefined): boolean => {
+    if (!value) {
+      return false;
+    }
+
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    return normalized.includes("consulta publica");
+  };
+
+  const availablePublicConsultationModules = useMemo(
+    () =>
+      availableModules.filter(
+        (module) =>
+          matchesPublicConsultation(module.categoria) || matchesPublicConsultation(module.nome),
+      ),
+    [availableModules],
+  );
+
+  const publicConsultationModuleIdSet = useMemo(
+    () => new Set(availablePublicConsultationModules.map((module) => module.id)),
+    [availablePublicConsultationModules],
+  );
+
+  useEffect(() => {
+    const nextPublicModules = orderModules(
+      editFormState.modules.filter((id) => publicConsultationModuleIdSet.has(id)),
+      availableModules,
+    );
+
+    setEditPublicConsultationModules((previous) =>
+      areArraysEqual(previous, nextPublicModules) ? previous : nextPublicModules,
+    );
+  }, [availableModules, publicConsultationModuleIdSet, editFormState.modules]);
+
   const normalizePlans = (rawPlans: Plan[], modules: ModuleInfo[]) =>
     rawPlans
       .map((plan) => ({
         ...plan,
         modules: orderModules(
           plan.modules.filter((id) => modules.some((module) => module.id === id)),
+          modules
+        ),
+        publicConsultationModules: orderModules(
+          plan.publicConsultationModules.filter((id) =>
+            modules.some((module) => module.id === id)
+          ),
           modules
         ),
       }))
@@ -367,6 +420,24 @@ export default function Plans() {
   const openEditDialog = (plan: Plan) => {
     setEditingPlan(plan);
     setEditFormState(createFormStateFromPlan(plan));
+    setEditPublicConsultationModules(
+      orderModules(
+        plan.publicConsultationModules.filter((id) =>
+          availableModules.some((module) => module.id === id)
+        ),
+        availableModules
+      )
+    );
+    setEditIntimationSyncEnabled(plan.intimationSyncEnabled);
+    setEditIntimationSyncQuota(
+      plan.intimationSyncQuota != null ? String(plan.intimationSyncQuota) : ""
+    );
+    setEditProcessMonitorLawyerLimit(
+      plan.processMonitorLawyerLimit != null ? String(plan.processMonitorLawyerLimit) : ""
+    );
+    setEditIntimationMonitorLawyerLimit(
+      plan.intimationMonitorLawyerLimit != null ? String(plan.intimationMonitorLawyerLimit) : ""
+    );
     setEditError(null);
     setIsEditDialogOpen(true);
   };
@@ -375,17 +446,33 @@ export default function Plans() {
     setIsEditDialogOpen(false);
     setEditingPlan(null);
     setEditFormState(initialPlanFormState);
+    setEditPublicConsultationModules([]);
+    setEditIntimationSyncEnabled(false);
+    setEditIntimationSyncQuota("");
+    setEditProcessMonitorLawyerLimit("");
+    setEditIntimationMonitorLawyerLimit("");
     setEditError(null);
   };
 
   const handleEditModuleChange = (modules: string[]) => {
+    const normalizedModules = orderModules(
+      modules.filter((id) => availableModules.some((module) => module.id === id)),
+      availableModules
+    );
+
     setEditFormState((previous) => ({
       ...previous,
-      modules: orderModules(
-        modules.filter((id) => availableModules.some((module) => module.id === id)),
-        availableModules
-      ),
+      modules: normalizedModules,
     }));
+
+    setEditPublicConsultationModules((previous) => {
+      const nextPublicModules = orderModules(
+        normalizedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
+        availableModules
+      );
+
+      return areArraysEqual(previous, nextPublicModules) ? previous : nextPublicModules;
+    });
   };
 
   const editCustomAvailableTopics = useMemo(
@@ -424,6 +511,10 @@ export default function Plans() {
     setEditError(null);
 
     const orderedModules = orderModules(editFormState.modules, availableModules);
+    const orderedPublicConsultationModules = orderModules(
+      editPublicConsultationModules,
+      availableModules
+    );
     const clientLimit = parseInteger(editFormState.clientLimit);
     const userLimit = parseInteger(editFormState.userLimit);
     const processLimit = parseInteger(editFormState.processLimit);
@@ -431,8 +522,13 @@ export default function Plans() {
     const processSyncQuota = editFormState.processSyncEnabled
       ? parseInteger(editFormState.processSyncQuota)
       : null;
+    const intimationSyncQuotaValue = editIntimationSyncEnabled
+      ? parseInteger(editIntimationSyncQuota)
+      : null;
     const customAvailable = splitFeatureInput(editFormState.customAvailableFeatures);
     const customUnavailable = splitFeatureInput(editFormState.customUnavailableFeatures);
+    const processMonitorLawyerLimitValue = parseInteger(editProcessMonitorLawyerLimit);
+    const intimationMonitorLawyerLimitValue = parseInteger(editIntimationMonitorLawyerLimit);
 
     const payload: Record<string, unknown> = {
       nome: name,
@@ -455,6 +551,24 @@ export default function Plans() {
       limite_propostas: proposalLimit,
       sincronizacao_processos_habilitada: editFormState.processSyncEnabled,
       sincronizacao_processos_cota: editFormState.processSyncEnabled ? processSyncQuota : null,
+      consulta_publica_modulos: orderedPublicConsultationModules,
+      consultaPublicaModulos: orderedPublicConsultationModules,
+      publicConsultationModules: orderedPublicConsultationModules,
+      recursos_consulta_publica: orderedPublicConsultationModules,
+      sincronizacao_intimacoes_habilitada: editIntimationSyncEnabled,
+      sincronizacaoIntimacoesHabilitada: editIntimationSyncEnabled,
+      intimationSyncEnabled: editIntimationSyncEnabled,
+      sincronizacao_intimacoes_cota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
+      sincronizacaoIntimacoesCota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
+      intimationSyncQuota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
+      limite_advogados_processos: processMonitorLawyerLimitValue,
+      limiteAdvogadosProcessos: processMonitorLawyerLimitValue,
+      limite_advogados_processos_monitorados: processMonitorLawyerLimitValue,
+      processMonitorLawyerLimit: processMonitorLawyerLimitValue,
+      limite_advogados_intimacoes: intimationMonitorLawyerLimitValue,
+      limiteAdvogadosIntimacoes: intimationMonitorLawyerLimitValue,
+      limite_advogados_intimacoes_monitoradas: intimationMonitorLawyerLimitValue,
+      intimationMonitorLawyerLimit: intimationMonitorLawyerLimitValue,
     };
 
     try {
@@ -480,6 +594,12 @@ export default function Plans() {
             ...parsed,
             modules: orderModules(
               parsed.modules.filter((id) => availableModules.some((module) => module.id === id)),
+              availableModules
+            ),
+            publicConsultationModules: orderModules(
+              parsed.publicConsultationModules.filter((id) =>
+                availableModules.some((module) => module.id === id)
+              ),
               availableModules
             ),
           };
@@ -802,6 +922,38 @@ export default function Plans() {
                   disabled={isSavingEdit}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-plan-process-monitor-lawyer-limit">
+                  Advogados monitorados (processos)
+                </Label>
+                <Input
+                  id="edit-plan-process-monitor-lawyer-limit"
+                  inputMode="numeric"
+                  value={editProcessMonitorLawyerLimit}
+                  onChange={(event) =>
+                    setEditProcessMonitorLawyerLimit(
+                      sanitizeLimitInput(event.target.value)
+                    )
+                  }
+                  disabled={isSavingEdit}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-plan-intimation-monitor-lawyer-limit">
+                  Advogados monitorados (intimações)
+                </Label>
+                <Input
+                  id="edit-plan-intimation-monitor-lawyer-limit"
+                  inputMode="numeric"
+                  value={editIntimationMonitorLawyerLimit}
+                  onChange={(event) =>
+                    setEditIntimationMonitorLawyerLimit(
+                      sanitizeLimitInput(event.target.value)
+                    )
+                  }
+                  disabled={isSavingEdit}
+                />
+              </div>
             </div>
 
             <div className="space-y-4 rounded-lg border p-4">
@@ -840,6 +992,48 @@ export default function Plans() {
                         ...prev,
                         processSyncQuota: sanitizeLimitInput(event.target.value),
                       }))
+                    }
+                    disabled={isSavingEdit}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label htmlFor="edit-plan-intimation-sync" className="text-base">
+                    Sincronização de intimações
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Utilize esta opção para controlar a sincronização automática de intimações e,
+                    se necessário, ajuste a cota mensal disponível para o plano.
+                  </p>
+                </div>
+                <Switch
+                  id="edit-plan-intimation-sync"
+                  checked={editIntimationSyncEnabled}
+                  onCheckedChange={(checked) => {
+                    setEditIntimationSyncEnabled(checked);
+                    if (!checked) {
+                      setEditIntimationSyncQuota("");
+                    }
+                  }}
+                  disabled={isSavingEdit}
+                />
+              </div>
+
+              {editIntimationSyncEnabled ? (
+                <div className="space-y-2 sm:w-64">
+                  <Label htmlFor="edit-plan-intimation-sync-quota">Cota de intimações</Label>
+                  <Input
+                    id="edit-plan-intimation-sync-quota"
+                    inputMode="numeric"
+                    value={editIntimationSyncQuota}
+                    onChange={(event) =>
+                      setEditIntimationSyncQuota(
+                        sanitizeLimitInput(event.target.value)
+                      )
                     }
                     disabled={isSavingEdit}
                   />
