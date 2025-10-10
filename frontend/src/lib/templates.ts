@@ -51,11 +51,24 @@ function ensureJsonContent(value: unknown): EditorJsonContent | null {
   return null;
 }
 
+function pickFirstNonEmpty(...values: Array<unknown>): string {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return '';
+}
+
 export function parseTemplate(dto: TemplateDTO): Template {
   const rawContent = dto.content ?? '';
   let contentHtml = rawContent || '<p></p>';
   let contentJson: EditorJsonContent | null = null;
   let metadata = defaultTemplateMetadata;
+  let title = pickFirstNonEmpty(dto.title);
 
   if (rawContent) {
     try {
@@ -63,10 +76,19 @@ export function parseTemplate(dto: TemplateDTO): Template {
         content_html?: string;
         content_editor_json?: unknown;
         metadata?: Partial<TemplateMetadata>;
+        title?: unknown;
+        nome?: unknown;
       };
       contentHtml = parsed?.content_html ?? contentHtml;
       contentJson = ensureJsonContent(parsed?.content_editor_json);
       metadata = normalizeMetadata(parsed?.metadata);
+      title = pickFirstNonEmpty(
+        title,
+        parsed?.title,
+        parsed?.nome,
+        (parsed?.metadata as { title?: unknown } | undefined)?.title,
+        (parsed?.metadata as { nome?: unknown } | undefined)?.nome,
+      );
     } catch (error) {
       console.info('Template content stored as raw HTML. Using fallback format.');
     }
@@ -74,7 +96,7 @@ export function parseTemplate(dto: TemplateDTO): Template {
 
   return {
     id: dto.id,
-    title: dto.title,
+    title,
     content: rawContent,
     content_html: contentHtml,
     content_editor_json: contentJson,
