@@ -3100,7 +3100,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
     }
 
     const existingProcess = await pool.query(
-      `SELECT monitorar_processo, numero_cnj, numero, uf, municipio, grau
+      `SELECT monitorar_processo, numero_cnj, uf, municipio, grau
          FROM public.processos
         WHERE id = $1
           AND idempresa IS NOT DISTINCT FROM $2`,
@@ -3119,9 +3119,9 @@ export const updateProcesso = async (req: Request, res: Response) => {
     const existingRow = existingProcess.rows[0] ?? {};
 
     if (!finalNumeroValue) {
-      const existingNumero =
-        normalizeString((existingRow as { numero_cnj?: unknown }).numero_cnj) ??
-        normalizeString((existingRow as { numero?: unknown }).numero);
+      const existingNumero = normalizeString(
+        (existingRow as { numero_cnj?: unknown }).numero_cnj,
+      );
       finalNumeroValue = existingNumero;
     }
 
