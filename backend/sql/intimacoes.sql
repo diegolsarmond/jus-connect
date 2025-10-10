@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS intimacoes (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_intimacoes_origem_external
   ON intimacoes (origem, external_id);
 
+ALTER TABLE intimacoes ADD COLUMN IF NOT EXISTS idusuario_leitura BIGINT;
+ALTER TABLE intimacoes ADD COLUMN IF NOT EXISTS lida_em TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS idx_intimacoes_status
   ON intimacoes (status)
   WHERE status IS NOT NULL;
