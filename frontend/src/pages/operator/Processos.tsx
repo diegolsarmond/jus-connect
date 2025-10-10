@@ -76,6 +76,9 @@ import {
     ChevronRight,
 } from "lucide-react";
 
+const NO_EXISTING_CLIENT_SELECT_VALUE = "__no_existing_client__";
+const NO_PROPOSTA_SELECT_VALUE = "__no_proposta__";
+
 interface ProcessoCliente {
     id: number;
     nome: string;
@@ -2171,6 +2174,8 @@ export default function Processos() {
     );
 
     const handleExistingClientSelection = useCallback((processId: number, clientId: string) => {
+        const normalizedClientId =
+            clientId === NO_EXISTING_CLIENT_SELECT_VALUE ? "" : clientId;
         setUnassignedDetails((prev) => {
             const current = prev[processId];
             if (!current) {
@@ -2181,13 +2186,15 @@ export default function Processos() {
                 ...prev,
                 [processId]: {
                     ...current,
-                    selectedExistingClientId: clientId,
+                    selectedExistingClientId: normalizedClientId,
                 },
             };
         });
     }, []);
 
     const handleSelectedPropostaChange = useCallback((processId: number, propostaId: string) => {
+        const normalizedPropostaId =
+            propostaId === NO_PROPOSTA_SELECT_VALUE ? "" : propostaId;
         setUnassignedDetails((prev) => {
             const current = prev[processId];
             if (!current) {
@@ -2198,7 +2205,7 @@ export default function Processos() {
                 ...prev,
                 [processId]: {
                     ...current,
-                    selectedPropostaId: propostaId,
+                    selectedPropostaId: normalizedPropostaId,
                 },
             };
         });
@@ -3871,7 +3878,10 @@ export default function Processos() {
                                                 <div className="space-y-2">
                                                     <Label>Cliente existente</Label>
                                                     <Select
-                                                        value={detail.selectedExistingClientId}
+                                                        value={
+                                                            detail.selectedExistingClientId ||
+                                                            NO_EXISTING_CLIENT_SELECT_VALUE
+                                                        }
                                                         onValueChange={(value) =>
                                                             handleExistingClientSelection(processId, value)
                                                         }
@@ -3880,7 +3890,9 @@ export default function Processos() {
                                                             <SelectValue placeholder="Selecione um cliente" />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            <SelectItem value="">Sem cliente</SelectItem>
+                                                            <SelectItem value={NO_EXISTING_CLIENT_SELECT_VALUE}>
+                                                                Sem cliente
+                                                            </SelectItem>
                                                             {clientes.map((cliente) => (
                                                                 <SelectItem key={cliente.id} value={String(cliente.id)}>
                                                                     {cliente.nome}
@@ -3899,7 +3911,10 @@ export default function Processos() {
                                                 <div className="space-y-2">
                                                     <Label>Proposta relacionada</Label>
                                                     <Select
-                                                        value={detail.selectedPropostaId}
+                                                        value={
+                                                            detail.selectedPropostaId ||
+                                                            NO_PROPOSTA_SELECT_VALUE
+                                                        }
                                                         onValueChange={(value) =>
                                                             handleSelectedPropostaChange(processId, value)
                                                         }
@@ -3908,7 +3923,9 @@ export default function Processos() {
                                                             <SelectValue placeholder="Sem proposta vinculada" />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            <SelectItem value="">Sem proposta</SelectItem>
+                                                            <SelectItem value={NO_PROPOSTA_SELECT_VALUE}>
+                                                                Sem proposta
+                                                            </SelectItem>
                                                             {propostas.map((proposta) => (
                                                                 <SelectItem key={proposta.id} value={proposta.id}>
                                                                     {proposta.label}
