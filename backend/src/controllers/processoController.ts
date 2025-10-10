@@ -2812,6 +2812,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const justicaGratuitaFlag = parseBooleanFlag(req.body?.justica_gratuita);
   const liminarFlag = parseBooleanFlag(req.body?.liminar);
   const permitePeticionarFlag = parseBooleanFlag(req.body?.permite_peticionar);
+  let permitePeticionarValue = permitePeticionarFlag;
   const nivelSigiloValue = parseOptionalInteger(req.body?.nivel_sigilo);
 
   if (nivelSigiloValue !== null && nivelSigiloValue < 0) {
@@ -2949,7 +2950,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
     }
 
     const existingProcess = await pool.query(
-      'SELECT monitorar_processo FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      'SELECT monitorar_processo, permite_peticionar FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
       [parsedId, empresaId]
     );
 
@@ -2960,6 +2961,11 @@ export const updateProcesso = async (req: Request, res: Response) => {
     if (monitorarProcessoValue === null) {
       monitorarProcessoValue =
         existingProcess.rows[0]?.monitorar_processo === true;
+    }
+
+    if (permitePeticionarValue === null) {
+      permitePeticionarValue =
+        existingProcess.rows[0]?.permite_peticionar === true;
     }
 
     const clienteExists = await pool.query(
@@ -3046,7 +3052,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
 
     const advogadoColumnValue = advogadoConcatValue || advogadoValue;
     const finalMonitorarProcesso = monitorarProcessoValue ?? false;
-    const finalPermitePeticionar = permitePeticionarFlag ?? true;
+    const finalPermitePeticionar = permitePeticionarValue ?? true;
 
     const clientDb = await pool.connect();
 
