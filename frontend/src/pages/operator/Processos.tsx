@@ -2494,15 +2494,19 @@ export default function Processos() {
                 throw new Error(message);
             }
 
-            const data: ApiProcesso[] = Array.isArray(json)
-                ? (json as ApiProcesso[])
-                : Array.isArray((json as { rows?: ApiProcesso[] })?.rows)
-                    ? ((json as { rows: ApiProcesso[] }).rows)
-                    : Array.isArray((json as { data?: { rows?: ApiProcesso[] } })?.data?.rows)
-                        ? ((json as { data: { rows: ApiProcesso[] } }).data.rows)
-                        : Array.isArray((json as { data?: ApiProcesso[] })?.data)
-                            ? ((json as { data: ApiProcesso[] }).data)
+            const rawData: unknown[] = Array.isArray(json)
+                ? json
+                : Array.isArray((json as { rows?: unknown[] })?.rows)
+                    ? ((json as { rows: unknown[] }).rows)
+                    : Array.isArray((json as { data?: { rows?: unknown[] } })?.data?.rows)
+                        ? ((json as { data: { rows: unknown[] } }).data.rows)
+                        : Array.isArray((json as { data?: unknown[] })?.data)
+                            ? ((json as { data: unknown[] }).data)
                             : [];
+
+            const data = rawData.filter(
+                (item): item is ApiProcesso => item !== null && typeof item === "object",
+            );
 
             const mapped = data.map(mapApiProcessoToProcesso);
 
