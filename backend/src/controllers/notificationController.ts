@@ -375,4 +375,308 @@ export const triggerProjudiSyncHandler = async (req: Request, res: Response) => 
   }
 };
 
+type DbIntimacaoRow = {
+  id: number;
+  origem: string | null;
+  external_id: string | null;
+  numero_processo: string | null;
+  orgao: string | null;
+  assunto: string | null;
+  status: string | null;
+  prazo: Date | string | null;
+  recebida_em: Date | string | null;
+  fonte_criada_em: Date | string | null;
+  fonte_atualizada_em: Date | string | null;
+  payload: unknown;
+  created_at: Date | string | null;
+  updated_at: Date | string | null;
+};
+
+type AnyRecord = Record<string, unknown>;
+
+type IntimacaoResponse = {
+  id: number;
+  siglaTribunal: string | null;
+  external_id: string | null;
+  numero_processo: string | null;
+  nomeOrgao: string | null;
+  tipoComunicacao: string | null;
+  texto: string | null;
+  prazo: string | null;
+  data_disponibilizacao: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  meio: string | null;
+  link: string | null;
+  tipodocumento: string | null;
+  nomeclasse: string | null;
+  codigoclasse: string | null;
+  numerocomunicacao: string | null;
+  ativo: boolean | null;
+  hash: string | null;
+  status: string | null;
+  motivo_cancelamento: string | null;
+  data_cancelamento: string | null;
+  destinatarios: unknown;
+  destinatarios_advogados: unknown;
+  idusuario: number | null;
+  idempresa: number | null;
+  nao_lida: boolean | null;
+};
+
+function asRecord(value: unknown): AnyRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as AnyRecord;
+}
+
+function pickFromPayload<T>(
+  payload: AnyRecord | null,
+  keys: readonly string[],
+  picker: (value: unknown) => T | null,
+): T | null {
+  if (!payload) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const candidate = picker(payload[key]);
+    if (candidate !== null) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function pickString(payload: AnyRecord | null, keys: readonly string[]): string | null {
+  return pickFromPayload(payload, keys, (value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    }
+    return null;
+  });
+}
+
+function pickNumber(payload: AnyRecord | null, keys: readonly string[]): number | null {
+  return pickFromPayload(payload, keys, (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  });
+}
+
+function pickBoolean(payload: AnyRecord | null, keys: readonly string[]): boolean | null {
+  return pickFromPayload(payload, keys, (value) => {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'y', 'sim'].includes(normalized)) {
+        return true;
+      }
+      if (['false', '0', 'no', 'n', 'nao', 'não'].includes(normalized)) {
+        return false;
+      }
+    }
+
+    return null;
+  });
+}
+
+function pickUnknown(payload: AnyRecord | null, keys: readonly string[]): unknown {
+  if (!payload) {
+    return null;
+  }
+
+  for (const key of keys) {
+    if (key in payload) {
+      return payload[key];
+    }
+  }
+
+  return null;
+}
+
+function normalizeDateValue(value: unknown): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const millis = value > 9_999_999_999 ? value : value * 1000;
+    const fromNumber = new Date(millis);
+    return Number.isNaN(fromNumber.getTime()) ? null : fromNumber.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+
+    return trimmed;
+  }
+
+  return null;
+}
+
+function mapDbIntimacaoRow(row: DbIntimacaoRow): IntimacaoResponse {
+  const payload = asRecord(row.payload);
+
+  const prazo = normalizeDateValue(row.prazo)
+    ?? normalizeDateValue(pickUnknown(payload, ['prazo', 'dataPrazo', 'deadline']));
+
+  const recebidaEm = normalizeDateValue(row.recebida_em)
+    ?? normalizeDateValue(pickUnknown(payload, ['recebida_em', 'recebidaEm', 'dataDisponibilizacao']));
+
+  const fonteCriadaEm = normalizeDateValue(row.fonte_criada_em)
+    ?? normalizeDateValue(pickUnknown(payload, ['fonte_criada_em', 'fonteCriadaEm', 'createdAt']));
+
+  const fonteAtualizadaEm = normalizeDateValue(row.fonte_atualizada_em)
+    ?? normalizeDateValue(pickUnknown(payload, ['fonte_atualizada_em', 'fonteAtualizadaEm', 'updatedAt']));
+
+  return {
+    id: row.id,
+    siglaTribunal: pickString(payload, ['siglaTribunal', 'sigla_tribunal', 'tribunalSigla', 'tribunal']) ?? null,
+    external_id: row.external_id ?? null,
+    numero_processo:
+      row.numero_processo
+      ?? pickString(payload, ['numero_processo', 'numeroProcesso', 'processo'])
+      ?? null,
+    nomeOrgao:
+      row.orgao
+      ?? pickString(payload, ['nomeOrgao', 'orgao', 'orgaoJulgador', 'comarca'])
+      ?? null,
+    tipoComunicacao: pickString(payload, ['tipoComunicacao', 'tipo_comunicacao', 'tipo']) ?? null,
+    texto:
+      pickString(payload, ['texto', 'descricao', 'detalhes'])
+      ?? row.assunto
+      ?? null,
+    prazo,
+    data_disponibilizacao:
+      recebidaEm
+      ?? normalizeDateValue(pickUnknown(payload, ['data_disponibilizacao', 'dataDisponibilizacao']))
+      ?? null,
+    created_at: normalizeDateValue(row.created_at) ?? fonteCriadaEm,
+    updated_at: normalizeDateValue(row.updated_at) ?? fonteAtualizadaEm,
+    meio: pickString(payload, ['meio', 'canal']) ?? null,
+    link: pickString(payload, ['link', 'url', 'urlDocumento']) ?? null,
+    tipodocumento: pickString(payload, ['tipodocumento', 'tipoDocumento']) ?? null,
+    nomeclasse: pickString(payload, ['nomeclasse', 'nomeClasse', 'classe']) ?? null,
+    codigoclasse: pickString(payload, ['codigoclasse', 'codigoClasse']) ?? null,
+    numerocomunicacao: pickString(payload, ['numerocomunicacao', 'numeroComunicacao', 'numero']) ?? null,
+    ativo: pickBoolean(payload, ['ativo', 'ativa']) ?? null,
+    hash: pickString(payload, ['hash', 'hashIntimacao']) ?? null,
+    status:
+      row.status
+      ?? pickString(payload, ['status', 'situacao', 'situacaoIntimacao'])
+      ?? null,
+    motivo_cancelamento: pickString(payload, ['motivo_cancelamento', 'motivoCancelamento']) ?? null,
+    data_cancelamento: normalizeDateValue(pickUnknown(payload, ['data_cancelamento', 'dataCancelamento'])),
+    destinatarios: pickUnknown(payload, ['destinatarios', 'destinatariosList']),
+    destinatarios_advogados: pickUnknown(payload, ['destinatarios_advogados', 'destinatariosAdvogados']),
+    idusuario: pickNumber(payload, ['idusuario', 'usuarioId']),
+    idempresa: pickNumber(payload, ['idempresa', 'empresaId']),
+    nao_lida: pickBoolean(payload, ['nao_lida', 'naoLida', 'naoLido']),
+  };
+}
+
+export const listIntimacoesHandler = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
+    const result = await pool.query<DbIntimacaoRow>(
+      `WITH intimacoes_enriched AS (
+         SELECT id,
+                origem,
+                external_id,
+                numero_processo,
+                orgao,
+                assunto,
+                status,
+                prazo,
+                recebida_em,
+                fonte_criada_em,
+                fonte_atualizada_em,
+                payload,
+                created_at,
+                updated_at,
+                CASE
+                  WHEN (payload ->> 'idempresa') ~ '^-?\\d+$' THEN (payload ->> 'idempresa')::bigint
+                  WHEN (payload ->> 'empresaId') ~ '^-?\\d+$' THEN (payload ->> 'empresaId')::bigint
+                  ELSE NULL
+                END AS payload_empresa_id
+           FROM public.intimacoes
+       )
+       SELECT id,
+              origem,
+              external_id,
+              numero_processo,
+              orgao,
+              assunto,
+              status,
+              prazo,
+              recebida_em,
+              fonte_criada_em,
+              fonte_atualizada_em,
+              payload,
+              created_at,
+              updated_at
+         FROM intimacoes_enriched
+        WHERE payload_empresa_id = $1
+           OR payload_empresa_id IS NULL
+        ORDER BY recebida_em DESC NULLS LAST,
+                 fonte_atualizada_em DESC NULLS LAST,
+                 created_at DESC NULLS LAST,
+                 id DESC`,
+      [empresaId]
+    );
+
+    const intimacoes = result.rows
+      .map(mapDbIntimacaoRow)
+      .filter((intimacao) => intimacao.idempresa === null || intimacao.idempresa === empresaId);
+
+    res.json(intimacoes);
+  } catch (error) {
+    console.error('Failed to list intimações', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+main
 
