@@ -160,11 +160,12 @@ export default function NewPlan() {
 
     const normalized = value
       .normalize("NFD")
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
       .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim()
       .toLowerCase();
 
-    return normalized.includes("consulta publica");
+    return /\bconsultas?\s+publicas?\b/.test(normalized);
   };
 
   const availablePublicConsultationModules = useMemo(
