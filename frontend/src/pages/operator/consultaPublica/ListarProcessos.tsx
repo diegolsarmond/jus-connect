@@ -200,7 +200,20 @@ const ProcessList = () => {
         const response = await fetch(getApiUrl(`consulta-publica/processos?${params.toString()}`), {
           headers: { Accept: "application/json" },
         });
-        const data = (await response.json().catch(() => null)) as unknown;
+        let data: unknown = null;
+
+        if (response.status !== 404) {
+          data = await response.json().catch(() => null);
+        }
+
+        if (response.status === 404) {
+          setProcesses([]);
+          setCurrentPage(1);
+          setTotalResults(0);
+          setTotalPages(1);
+          toast({ title: "Nenhum processo encontrado", description: "A consulta não retornou processos para os parâmetros informados." });
+          return;
+        }
 
         if (!response.ok) {
           const message =
