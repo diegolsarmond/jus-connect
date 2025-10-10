@@ -3115,6 +3115,8 @@ export default function Processos() {
         setHasUnassignedOnCurrentPage(hasUnassigned);
     }, [processos]);
 
+    const hasOabMonitors = oabMonitors.length > 0;
+
     useEffect(() => {
         if (
             !processosLoading &&
@@ -3661,8 +3663,6 @@ export default function Processos() {
         (isInstanciaOutroSelected && processForm.instanciaOutro.trim().length === 0) ||
         creatingProcess ||
         loadingProcessForm;
-
-    const hasOabMonitors = oabMonitors.length > 0;
 
     const filteredProcessos = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
