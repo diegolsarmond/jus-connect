@@ -65,6 +65,8 @@ import {
 } from "@/services/meuPerfil";
 import type { AuditLog, UserSession } from "@/types/user";
 
+const EMPTY_SELECT_VALUE = "__empty_select__";
+
 const formatCurrency = (value: number | null | undefined) => {
   if (value == null) {
     return "Não informado";
@@ -394,15 +396,21 @@ const EditableSelectField = ({
           ) : options.length > 0 || allowEmpty ? (
             <>
               <Select
-                value={editValue}
-                onValueChange={setEditValue}
+                value={
+                  editValue === "" && allowEmpty ? EMPTY_SELECT_VALUE : editValue
+                }
+                onValueChange={(newValue) =>
+                  setEditValue(newValue === EMPTY_SELECT_VALUE ? "" : newValue)
+                }
                 disabled={isSaving || disabled || (options.length === 0 && !allowEmpty)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={resolvedPlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  {allowEmpty && <SelectItem value="">Nenhum</SelectItem>}
+                  {allowEmpty && (
+                    <SelectItem value={EMPTY_SELECT_VALUE}>Nenhum</SelectItem>
+                  )}
                   {options.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
