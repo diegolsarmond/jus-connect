@@ -22,7 +22,12 @@ import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type UserRole = UserFormData["role"];
 
-type EscritorioOption = "principal" | "filial-sp" | "filial-rj";
+type EscritorioOption = string;
+
+interface ApiEscritorio {
+  id: number;
+  nome: string;
+}
 
 interface ApiUsuario {
   id: number;
@@ -82,29 +87,39 @@ const roleToPerfil = (role: UserRole): number => {
   }
 };
 
-const escritorioIdToOption = (id: number | null): EscritorioOption => {
-  switch (id ?? 1) {
-    case 2:
-      return "filial-sp";
-    case 3:
-      return "filial-rj";
-    case 1:
-    default:
-      return "principal";
+const normalizeApiEscritorio = (data: unknown): ApiEscritorio => {
+  if (!data || typeof data !== "object") {
+    throw new Error("Escritório inválido");
   }
+
+  const item = data as Record<string, unknown>;
+  const id = Number(item.id);
+
+  if (!Number.isFinite(id)) {
+    throw new Error("Escritório sem ID válido");
+  }
+
+  return {
+    id,
+    nome: String(item.nome ?? ""),
+  };
 };
 
-const escritorioOptionToId = (option: string): number | null => {
-  switch (option) {
-    case "principal":
-      return 1;
-    case "filial-sp":
-      return 2;
-    case "filial-rj":
-      return 3;
-    default:
-      return null;
+const escritorioIdToOption = (id: number | null): EscritorioOption => {
+  if (id === null || id === undefined) {
+    return "";
   }
+
+  return String(id);
+};
+
+const escritorioOptionToId = (option: EscritorioOption): number | null => {
+  if (!option) {
+    return null;
+  }
+
+  const parsed = Number(option);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const createEmptyFormData = (): UserFormData => ({
@@ -112,7 +127,7 @@ const createEmptyFormData = (): UserFormData => ({
   email: "",
   phone: "",
   role: "advogado",
-  escritorio: "principal",
+  escritorio: "",
   oabNumero: undefined,
   oabUf: undefined,
   especialidades: [],
@@ -245,6 +260,7 @@ export default function EditarPerfil() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiUser, setApiUser] = useState<ApiUsuario | null>(null);
+  const [escritorios, setEscritorios] = useState<ApiEscritorio[]>([]);
 
   const fetchUser = useCallback(async () => {
     if (!id) {
@@ -283,6 +299,39 @@ export default function EditarPerfil() {
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  useEffect(() => {
+    const fetchEscritorios = async () => {
+      try {
+        const url = joinUrl(apiBaseUrl, "/api/escritorios");
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+
+        if (!response.ok) {
+          throw new Error(`Erro ${response.status}`);
+        }
+
+        const json = await response.json();
+        const normalized = Array.isArray(json)
+          ? json
+              .map((item) => {
+                try {
+                  return normalizeApiEscritorio(item);
+                } catch (err) {
+                  console.error("Escritório ignorado:", err);
+                  return null;
+                }
+              })
+              .filter((item): item is ApiEscritorio => item !== null)
+          : [];
+
+        setEscritorios(normalized);
+      } catch (err) {
+        console.error("Erro ao carregar escritórios:", err);
+      }
+    };
+
+    fetchEscritorios();
+  }, [apiBaseUrl]);
 
   const handleInputChange = <K extends keyof UserFormData>(field: K, value: UserFormData[K]) => {
     setFormData((prev) => {
@@ -516,16 +565,18 @@ export default function EditarPerfil() {
               <div className="space-y-2">
                 <Label htmlFor="escritorio">Escritório</Label>
                 <Select
-                  value={formData.escritorio}
+                  value={formData.escritorio || undefined}
                   onValueChange={(value) => handleInputChange("escritorio", value as EscritorioOption)}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Selecione o escritório" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="principal">Escritório Principal</SelectItem>
-                    <SelectItem value="filial-sp">Filial São Paulo</SelectItem>
-                    <SelectItem value="filial-rj">Filial Rio de Janeiro</SelectItem>
+                    {escritorios.map((item) => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.nome}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
