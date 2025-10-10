@@ -10,6 +10,122 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 
+type SearchType = "cpf" | "numero" | "oab";
+
+const formatProcessNumber = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 20);
+  const part1 = digits.slice(0, 7);
+  const part2 = digits.slice(7, 9);
+  const part3 = digits.slice(9, 13);
+  const part4 = digits.slice(13, 14);
+  const part5 = digits.slice(14, 16);
+  const part6 = digits.slice(16, 20);
+
+  let result = part1;
+  if (part2) result += `-${part2}`;
+  if (part3) result += `.${part3}`;
+  if (part4) result += `.${part4}`;
+  if (part5) result += `.${part5}`;
+  if (part6) result += `.${part6}`;
+
+  return result;
+};
+
+const formatCpfCnpj = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+
+  if (digits.length <= 11) {
+    const part1 = digits.slice(0, 3);
+    const part2 = digits.slice(3, 6);
+    const part3 = digits.slice(6, 9);
+    const part4 = digits.slice(9, 11);
+
+    let result = part1;
+    if (part2) result += `.${part2}`;
+    if (part3) result += `.${part3}`;
+    if (part4) result += `-${part4}`;
+
+    return result;
+  }
+
+  const part1 = digits.slice(0, 2);
+  const part2 = digits.slice(2, 5);
+  const part3 = digits.slice(5, 8);
+  const part4 = digits.slice(8, 12);
+  const part5 = digits.slice(12, 14);
+
+  let result = part1;
+  if (part2) result += `.${part2}`;
+  if (part3) result += `.${part3}`;
+  if (part4) result += `/${part4}`;
+  if (part5) result += `-${part5}`;
+
+  return result;
+};
+
+const formatOab = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 6);
+  const letters = value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
+  const hasSlash = value.includes("/");
+
+  if (!digits) {
+    return letters ? `${hasSlash ? "/" : ""}${letters}` : "";
+  }
+
+  let result = digits;
+
+  if (hasSlash || letters) {
+    result += "/";
+  }
+
+  if (letters) {
+    result += letters;
+  }
+
+  return result;
+};
+
+const maskSearchValue = (type: SearchType, value: string) => {
+  if (type === "numero") {
+    return formatProcessNumber(value);
+  }
+
+  if (type === "cpf") {
+    return formatCpfCnpj(value);
+  }
+
+  return formatOab(value);
+};
+
+const sanitizeSearchValue = (type: SearchType, value: string) => {
+  if (type === "numero") {
+    return value.replace(/\D/g, "").slice(0, 20);
+  }
+
+  if (type === "cpf") {
+    return value.replace(/\D/g, "").slice(0, 14);
+  }
+
+  const digits = value.replace(/\D/g, "").slice(0, 6);
+  const letters = value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
+  if (!digits) {
+    return "";
+  }
+  return letters ? `${digits}/${letters}` : digits;
+};
+
+const getPlaceholder = (type: SearchType) => {
+  if (type === "numero") {
+    return "0000000-00.0000.0.00.0000";
+  }
+
+  if (type === "cpf") {
+    return "000.000.000-00 ou 00.000.000/0000-00";
+  }
+
+  return "000000/UF";
+};
+
 interface Process {
   numeroProcesso: string;
   dataAjuizamento?: string;
@@ -21,14 +137,20 @@ interface Process {
   situacao?: string;
 }
 
-type SearchType = "cpf" | "numero";
-
 type ApiErrorPayload = {
   error?: unknown;
 };
 
 const normalizeSearchType = (value: string | null): SearchType => {
-  return value === "numero" ? "numero" : "cpf";
+  if (value === "numero") {
+    return "numero";
+  }
+
+  if (value === "oab") {
+    return "oab";
+  }
+
+  return "cpf";
 };
 
 const ProcessList = () => {
@@ -42,23 +164,30 @@ const ProcessList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  const handleTypeChange = (value: SearchType) => {
+    setSearchType(value);
+    setSearchValue("");
+  };
+
   const performSearch = useCallback(
     async (type: SearchType, value: string) => {
-      const trimmedValue = value.trim();
+      const sanitizedValue = sanitizeSearchValue(type, value);
 
-      if (!trimmedValue) {
+      if (!sanitizedValue) {
         toast({
           title: "Informe um valor para busca",
-          description: "Digite o número do processo ou o CPF/CNPJ da parte antes de continuar.",
+          description: "Digite o número do processo, o CPF/CNPJ da parte ou a OAB do advogado antes de continuar.",
         });
         return;
       }
 
       const params = new URLSearchParams();
       if (type === "cpf") {
-        params.set("cpfCnpjParte", trimmedValue);
+        params.set("cpfCnpjParte", sanitizedValue);
+      } else if (type === "numero") {
+        params.set("numeroProcesso", sanitizedValue);
       } else {
-        params.set("numeroProcesso", trimmedValue);
+        params.set("oab", sanitizedValue);
       }
 
       setIsLoading(true);
@@ -109,28 +238,29 @@ const ProcessList = () => {
   useEffect(() => {
     const typeParam = normalizeSearchType(searchParams.get("type"));
     const valueParam = searchParams.get("value") ?? "";
+    const sanitizedValue = sanitizeSearchValue(typeParam, valueParam);
 
     setSearchType(typeParam);
-    setSearchValue(valueParam);
+    setSearchValue(maskSearchValue(typeParam, sanitizedValue));
 
-    if (valueParam.trim()) {
-      void performSearch(typeParam, valueParam);
+    if (sanitizedValue) {
+      void performSearch(typeParam, sanitizedValue);
     } else {
       setProcesses([]);
     }
   }, [performSearch, searchParams]);
 
   const handleSearch = () => {
-    const trimmedValue = searchValue.trim();
+    const sanitizedValue = sanitizeSearchValue(searchType, searchValue);
 
-    if (!trimmedValue) {
+    if (!sanitizedValue) {
       toast({ title: "Informe um valor para busca" });
       return;
     }
 
     const params = new URLSearchParams();
     params.set("type", searchType);
-    params.set("value", trimmedValue);
+    params.set("value", sanitizedValue);
 
     navigate({ pathname: "/consulta-publica/processos", search: params.toString() });
   };
@@ -183,20 +313,21 @@ const ProcessList = () => {
 
       <Card className="p-6 space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
-          <Select value={searchType} onValueChange={(value) => setSearchType(value as SearchType)}>
+          <Select value={searchType} onValueChange={(value) => handleTypeChange(value as SearchType)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="numero">Número do processo</SelectItem>
               <SelectItem value="cpf">CPF/CNPJ da parte</SelectItem>
+              <SelectItem value="oab">OAB do advogado</SelectItem>
             </SelectContent>
           </Select>
 
           <Input
-            placeholder={searchType === "numero" ? "0000000-00.0000.0.00.0000" : "000.000.000-00"}
+            placeholder={getPlaceholder(searchType)}
             value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
+            onChange={(event) => setSearchValue(maskSearchValue(searchType, event.target.value))}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 handleSearch();
