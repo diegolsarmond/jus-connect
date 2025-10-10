@@ -160,7 +160,7 @@ export function Sidebar() {
         badgeKey: "tasks",
       },
       { name: "Processos", href: "/processos", icon: Gavel, moduleId: "processos" },
-      { name: "Consulta Pública", href: "/consulta-publica", icon: Globe, moduleId: "processos" },
+      { name: "Consulta Pública", href: "/consulta-publica", icon: Globe, moduleId: "consulta-publica" },
       { name: "Intimações", href: "/intimacoes", icon: BellRing, moduleId: "intimacoes" },
       { name: "Documentos Padrões", href: "/documentos", icon: FileText, moduleId: "documentos" },
       { name: "Meus Arquivos", href: "/arquivos", icon: Folder, moduleId: "arquivos" },
