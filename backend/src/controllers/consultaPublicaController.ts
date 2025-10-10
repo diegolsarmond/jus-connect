@@ -16,6 +16,8 @@ ORDER BY datatimerenewal DESC
 
 const TOKEN_USER_ID = 3;
 const PDPJ_BASE_URL = 'https://portaldeservicos.pdpj.jus.br/api/v2/processos';
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 50;
 
 const buildRequestHeaders = (token: string): Record<string, string> => ({
   accept: 'application/json, text/plain, */*',
@@ -111,11 +113,16 @@ export const consultarProcessosPublicos = async (req: Request, res: Response) =>
   const rawCpf = typeof req.query.cpfCnpjParte === 'string' ? req.query.cpfCnpjParte.trim() : '';
   const rawNumero = typeof req.query.numeroProcesso === 'string' ? req.query.numeroProcesso.trim() : '';
   const rawOab = typeof req.query.oab === 'string' ? req.query.oab.trim() : '';
+  const rawPage = typeof req.query.page === 'string' ? Number.parseInt(req.query.page, 10) : Number.NaN;
+  const rawPageSize = typeof req.query.pageSize === 'string' ? Number.parseInt(req.query.pageSize, 10) : Number.NaN;
 
   const normalizedCpf = rawCpf ? rawCpf.replace(/\D/g, '').slice(0, 14) : '';
   const normalizedNumero = rawNumero ? rawNumero.replace(/\D/g, '').slice(0, 20) : '';
   const normalizedOabDigits = rawOab ? rawOab.replace(/\D/g, '').slice(0, 6) : '';
   const normalizedOabUf = rawOab ? rawOab.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() : '';
+  const page = Number.isNaN(rawPage) || rawPage <= 0 ? 1 : rawPage;
+  const parsedPageSize = Number.isNaN(rawPageSize) || rawPageSize <= 0 ? DEFAULT_PAGE_SIZE : rawPageSize;
+  const pageSize = Math.min(parsedPageSize, MAX_PAGE_SIZE);
 
   if (!normalizedCpf && !normalizedNumero && !normalizedOabDigits) {
     res.status(400).json({ error: 'Informe o CPF/CNPJ da parte, o número do processo ou a OAB do advogado.' });
@@ -139,6 +146,50 @@ export const consultarProcessosPublicos = async (req: Request, res: Response) =>
     }
 
     const data = await fetchFromPdpj(requestUrl);
+
+    const applyPagination = (items: unknown[]) => {
+      const total = items.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const safePage = Math.max(1, Math.min(page, totalPages));
+      const start = (safePage - 1) * pageSize;
+      const content = items.slice(start, start + pageSize);
+      return {
+        content,
+        total,
+        page: safePage,
+        pageSize,
+        totalPages,
+      };
+    };
+
+    if (Array.isArray(data)) {
+      res.json(applyPagination(data));
+      return;
+    }
+
+    if (data && typeof data === 'object') {
+      if ('content' in data && Array.isArray((data as { content?: unknown[] }).content)) {
+        const pagination = applyPagination((data as { content: unknown[] }).content);
+        res.json({
+          ...data,
+          ...pagination,
+          content: pagination.content,
+        });
+        return;
+      }
+
+      if ('numeroProcesso' in data) {
+        res.json({
+          content: [data],
+          total: 1,
+          page: 1,
+          pageSize,
+          totalPages: 1,
+        });
+        return;
+      }
+    }
+
     res.json(data);
   } catch (error) {
     console.error('Erro ao consultar processos públicos', error);

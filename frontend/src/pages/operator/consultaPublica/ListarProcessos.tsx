@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -162,6 +162,8 @@ const ProcessList = () => {
   const [searchType, setSearchType] = useState<SearchType>("cpf");
   const [searchValue, setSearchValue] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 10;
 
   const handleTypeChange = (value: SearchType) => {
@@ -170,7 +172,7 @@ const ProcessList = () => {
   };
 
   const performSearch = useCallback(
-    async (type: SearchType, value: string) => {
+    async (type: SearchType, value: string, page = 1) => {
       const sanitizedValue = sanitizeSearchValue(type, value);
 
       if (!sanitizedValue) {
@@ -189,9 +191,10 @@ const ProcessList = () => {
       } else {
         params.set("oab", sanitizedValue);
       }
+      params.set("page", String(page));
+      params.set("pageSize", String(itemsPerPage));
 
       setIsLoading(true);
-      setCurrentPage(1);
 
       try {
         const response = await fetch(getApiUrl(`consulta-publica/processos?${params.toString()}`), {
@@ -208,14 +211,40 @@ const ProcessList = () => {
         }
 
         let rawProcessData: unknown[] = [];
+        let totalCount: number | null = null;
+        let totalPagesFromResponse: number | null = null;
+        let pageFromResponse: number | null = null;
 
         if (data && typeof data === "object" && "content" in data && Array.isArray((data as { content?: unknown }).content)) {
           rawProcessData = (data as { content: unknown[] }).content;
+          if ("total" in data && typeof (data as { total?: unknown }).total === "number") {
+            totalCount = (data as { total: number }).total;
+          } else if ("totalElements" in data && typeof (data as { totalElements?: unknown }).totalElements === "number") {
+            totalCount = (data as { totalElements: number }).totalElements;
+          }
+          if ("totalPages" in data && typeof (data as { totalPages?: unknown }).totalPages === "number") {
+            totalPagesFromResponse = (data as { totalPages: number }).totalPages;
+          }
+          if ("page" in data && typeof (data as { page?: unknown }).page === "number") {
+            pageFromResponse = (data as { page: number }).page;
+          } else if ("number" in data && typeof (data as { number?: unknown }).number === "number") {
+            pageFromResponse = (data as { number: number }).number + 1;
+          }
         } else if (Array.isArray(data)) {
           rawProcessData = data as unknown[];
         } else if (data && typeof data === "object" && "numeroProcesso" in data) {
           rawProcessData = [data];
         }
+
+        const normalizedTotal = typeof totalCount === "number" ? totalCount : rawProcessData.length;
+        const normalizedTotalPages =
+          typeof totalPagesFromResponse === "number" && totalPagesFromResponse > 0
+            ? totalPagesFromResponse
+            : Math.max(1, Math.ceil(Math.max(1, normalizedTotal) / itemsPerPage));
+        const normalizedPage =
+          typeof pageFromResponse === "number" && pageFromResponse > 0
+            ? Math.min(pageFromResponse, normalizedTotalPages)
+            : Math.min(Math.max(1, page), normalizedTotalPages);
 
         const normalizeDate = (value: unknown) => {
           if (!value) return "";
@@ -389,38 +418,50 @@ const ProcessList = () => {
           .filter((item): item is Process => Boolean(item));
 
         setProcesses(normalizedProcesses);
+        setCurrentPage(normalizedPage);
+        setTotalResults(normalizedTotal);
+        setTotalPages(normalizedTotalPages);
 
         if (normalizedProcesses.length === 0) {
           toast({ title: "Nenhum processo encontrado" });
         } else {
           toast({
             title: "Consulta realizada",
-            description: `${normalizedProcesses.length} processo(s) encontrado(s).`,
+            description: `${normalizedTotal} processo(s) encontrado(s).`,
           });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao consultar processos.";
         toast({ title: "Erro na consulta", description: message, variant: "destructive" });
         setProcesses([]);
+        setTotalResults(0);
+        setTotalPages(1);
+        setCurrentPage(1);
       } finally {
         setIsLoading(false);
       }
     },
-    [toast],
+    [itemsPerPage, toast],
   );
 
   useEffect(() => {
     const typeParam = normalizeSearchType(searchParams.get("type"));
     const valueParam = searchParams.get("value") ?? "";
     const sanitizedValue = sanitizeSearchValue(typeParam, valueParam);
+    const pageParam = searchParams.get("page");
+    const parsedPage = pageParam ? Number.parseInt(pageParam, 10) : 1;
+    const normalizedPage = Number.isNaN(parsedPage) || parsedPage <= 0 ? 1 : parsedPage;
 
     setSearchType(typeParam);
     setSearchValue(maskSearchValue(typeParam, sanitizedValue));
 
     if (sanitizedValue) {
-      void performSearch(typeParam, sanitizedValue);
+      void performSearch(typeParam, sanitizedValue, normalizedPage);
     } else {
       setProcesses([]);
+      setTotalResults(0);
+      setTotalPages(1);
+      setCurrentPage(1);
     }
   }, [performSearch, searchParams]);
 
@@ -435,14 +476,23 @@ const ProcessList = () => {
     const params = new URLSearchParams();
     params.set("type", searchType);
     params.set("value", sanitizedValue);
+    params.set("page", "1");
 
     navigate({ pathname: "/consulta-publica/processos", search: params.toString() });
   };
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(processes.length / itemsPerPage)), [processes.length]);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentProcesses = processes.slice(startIndex, endIndex);
+  const changePage = (page: number) => {
+    const nextPage = Math.max(1, Math.min(totalPages, page));
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(nextPage));
+    navigate({ pathname: "/consulta-publica/processos", search: params.toString() });
+  };
+
+  const hasResults = totalResults > 0 && processes.length > 0;
+  const rangeStart = hasResults ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const rangeEnd = hasResults ? Math.min(totalResults, rangeStart + processes.length - 1) : 0;
+  const rangeLabelStart = hasResults ? rangeStart : 0;
+  const rangeLabelEnd = hasResults ? rangeEnd : 0;
 
   const getStatusBadge = (situacao?: string) => {
     if (!situacao) {
@@ -544,7 +594,7 @@ const ProcessList = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentProcesses.map((process) => (
+                {processes.map((process) => (
                   <TableRow key={process.numeroProcesso} className="hover:bg-muted/30">
                     <TableCell className="font-medium text-primary">{process.numeroProcesso}</TableCell>
                     <TableCell>{process.dataAjuizamento || "-"}</TableCell>
@@ -588,13 +638,13 @@ const ProcessList = () => {
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-border p-4 text-sm text-muted-foreground">
               <span>
-                {startIndex + 1} - {Math.min(endIndex, processes.length)} de {processes.length}
+                {rangeLabelStart} - {rangeLabelEnd} de {totalResults}
               </span>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  onClick={() => changePage(currentPage - 1)}
                   disabled={currentPage === 1}
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -605,7 +655,7 @@ const ProcessList = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  onClick={() => changePage(currentPage + 1)}
                   disabled={currentPage === totalPages}
                 >
                   <ChevronRight className="h-4 w-4" />
