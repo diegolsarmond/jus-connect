@@ -2948,13 +2948,10 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const municipioValue = normalizeString(municipio);
   const orgaoValue = normalizeString(orgao_julgador);
   const grauValue = normalizeString(req.body?.grau);
-
-  if (!numeroValue || !ufValue || !municipioValue || !grauValue) {
-    return res.status(400).json({
-      error:
-        'Os campos cliente_id, numero, uf, municipio e grau são obrigatórios',
-    });
-  }
+  let finalNumeroValue = numeroValue;
+  let finalUfValue = ufValue;
+  let finalMunicipioValue = municipioValue;
+  let finalGrauValue = grauValue;
 
   const tipoValue = normalizeString(tipo);
   const statusValue = normalizeString(status);
@@ -3103,7 +3100,10 @@ export const updateProcesso = async (req: Request, res: Response) => {
     }
 
     const existingProcess = await pool.query(
-      'SELECT monitorar_processo FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+      `SELECT monitorar_processo, numero_cnj, numero, uf, municipio, grau
+         FROM public.processos
+        WHERE id = $1
+          AND idempresa IS NOT DISTINCT FROM $2`,
       [parsedId, empresaId]
     );
 
@@ -3114,6 +3114,36 @@ export const updateProcesso = async (req: Request, res: Response) => {
     if (monitorarProcessoValue === null) {
       monitorarProcessoValue =
         existingProcess.rows[0]?.monitorar_processo === true;
+    }
+
+    const existingRow = existingProcess.rows[0] ?? {};
+
+    if (!finalNumeroValue) {
+      const existingNumero =
+        normalizeString((existingRow as { numero_cnj?: unknown }).numero_cnj) ??
+        normalizeString((existingRow as { numero?: unknown }).numero);
+      finalNumeroValue = existingNumero;
+    }
+
+    if (!finalUfValue) {
+      finalUfValue = normalizeUppercase((existingRow as { uf?: unknown }).uf);
+    }
+
+    if (!finalMunicipioValue) {
+      finalMunicipioValue = normalizeString(
+        (existingRow as { municipio?: unknown }).municipio,
+      );
+    }
+
+    if (!finalGrauValue) {
+      finalGrauValue = normalizeString((existingRow as { grau?: unknown }).grau);
+    }
+
+    if (!finalNumeroValue || !finalUfValue || !finalMunicipioValue || !finalGrauValue) {
+      return res.status(400).json({
+        error:
+          'Os campos cliente_id, numero, uf, municipio e grau são obrigatórios',
+      });
     }
 
     const clienteExists = await pool.query(
@@ -3245,9 +3275,9 @@ export const updateProcesso = async (req: Request, res: Response) => {
           RETURNING id`,
         [
           parsedClienteId,
-          numeroValue,
-          ufValue,
-          municipioValue,
+          finalNumeroValue,
+          finalUfValue,
+          finalMunicipioValue,
           orgaoValue,
           situacaoProcessoIdValue,
           classeValue,
@@ -3268,7 +3298,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
           dataRecebimentoValue,
           dataArquivamentoValue,
           dataEncerramentoValue,
-          grauValue,
+          finalGrauValue,
           justicaGratuitaFlag,
           liminarFlag,
           nivelSigiloValue,
