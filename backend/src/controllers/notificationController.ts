@@ -390,6 +390,7 @@ type DbIntimacaoRow = {
   payload: unknown;
   created_at: Date | string | null;
   updated_at: Date | string | null;
+  idempresa: number | null;
 };
 
 type AnyRecord = Record<string, unknown>;
@@ -598,7 +599,7 @@ function mapDbIntimacaoRow(row: DbIntimacaoRow): IntimacaoResponse {
     destinatarios: pickUnknown(payload, ['destinatarios', 'destinatariosList']),
     destinatarios_advogados: pickUnknown(payload, ['destinatarios_advogados', 'destinatariosAdvogados']),
     idusuario: pickNumber(payload, ['idusuario', 'usuarioId']),
-    idempresa: pickNumber(payload, ['idempresa', 'empresaId']),
+    idempresa: row.idempresa ?? pickNumber(payload, ['idempresa', 'empresaId']),
     nao_lida: pickBoolean(payload, ['nao_lida', 'naoLida', 'naoLido']),
   };
 }
@@ -637,6 +638,7 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
                 payload,
                 created_at,
                 updated_at,
+                idempresa,
                 CASE
                   WHEN (payload ->> 'idempresa') ~ '^-?\\d+$' THEN (payload ->> 'idempresa')::bigint
                   WHEN (payload ->> 'empresaId') ~ '^-?\\d+$' THEN (payload ->> 'empresaId')::bigint
@@ -657,10 +659,11 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
               fonte_atualizada_em,
               payload,
               created_at,
-              updated_at
+              updated_at,
+              idempresa
          FROM intimacoes_enriched
-        WHERE payload_empresa_id = $1
-           OR payload_empresa_id IS NULL
+        WHERE idempresa = $1
+           OR (idempresa IS NULL AND payload_empresa_id = $1)
         ORDER BY recebida_em DESC NULLS LAST,
                  fonte_atualizada_em DESC NULLS LAST,
                  created_at DESC NULLS LAST,
