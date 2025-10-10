@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { getApiBaseUrl } from "@/lib/api";
+import { fetchFlows, type Flow } from "@/lib/flows";
 
 
 const apiUrl = getApiBaseUrl();
@@ -197,35 +198,17 @@ interface ApiProcessOpportunity {
   solicitante?: { nome?: string | null } | null;
 }
 
-interface ApiFinancialFlow {
-  id: number;
-  tipo: string;
-  descricao: string;
-  valor: number | string;
-  vencimento: string;
-  pagamento: string | null;
-  status: string;
-  conta_id?: number | null;
-  contaId?: number | null;
-  categoria_id?: number | null;
-  categoriaId?: number | null;
-  cliente_id?: number | null;
-  clienteId?: number | null;
-  client_id?: number | null;
-  clientId?: number | null;
-}
-
 type FinancialRecord = {
-  id: number;
+  id: string;
   type: "receita" | "despesa";
   description: string;
   value: number;
-  dueDate: string;
+  dueDate: string | null;
   paymentDate: string | null;
   status: string;
-  clientId: number | null;
-  accountId: number | null;
-  categoryId: number | null;
+  clientId: string | null;
+  accountId: string | null;
+  categoryId: string | null;
 };
 
 type LocalClient = Client & {
@@ -457,6 +440,91 @@ const formatDateTimeOrFallback = (value?: string | null, fallback = "-") => {
     dateStyle: "short",
     timeStyle: "short",
   });
+};
+
+const mapFlowToFinancialRecord = (flow: Flow): FinancialRecord | null => {
+  if (!flow) {
+    return null;
+  }
+
+  const rawId = flow.id;
+  const id =
+    typeof rawId === "number"
+      ? Number.isFinite(rawId)
+        ? String(rawId)
+        : null
+      : typeof rawId === "string"
+        ? rawId.trim()
+        : null;
+
+  if (!id) {
+    return null;
+  }
+
+  const description =
+    typeof flow.descricao === "string" && flow.descricao.trim().length > 0
+      ? flow.descricao.trim()
+      : `Lançamento #${id}`;
+
+  const valueCandidate = (flow as Record<string, unknown>).valor ?? flow.valor;
+  const parsedValue =
+    typeof valueCandidate === "number" && Number.isFinite(valueCandidate)
+      ? valueCandidate
+      : typeof valueCandidate === "string"
+        ? Number.parseFloat(valueCandidate.replace(/,/g, "."))
+        : 0;
+  const value = Number.isFinite(parsedValue) ? parsedValue : 0;
+
+  const dueDate =
+    typeof flow.vencimento === "string" && flow.vencimento.trim().length > 0
+      ? flow.vencimento.trim()
+      : null;
+
+  const paymentCandidate = (flow as Record<string, unknown>).pagamento ?? flow.pagamento;
+  const paymentDate =
+    typeof paymentCandidate === "string" && paymentCandidate.trim().length > 0
+      ? paymentCandidate.trim()
+      : null;
+
+  const rawStatus =
+    typeof flow.status === "string" && flow.status.length > 0
+      ? flow.status.trim().toLowerCase()
+      : "pendente";
+
+  const status =
+    rawStatus === "pago" || rawStatus === "estornado" ? rawStatus : "pendente";
+
+  const record = flow as Record<string, unknown>;
+
+  const resolveOptionalId = (value: unknown): string | null => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    const text = String(value).trim();
+    return text.length > 0 ? text : null;
+  };
+
+  const clientId = resolveOptionalId(
+    record.cliente_id ?? record.clienteId ?? record.client_id ?? record.clientId,
+  );
+
+  const accountId = resolveOptionalId(record.conta_id ?? record.contaId);
+
+  const categoryId = resolveOptionalId(record.categoria_id ?? record.categoriaId);
+
+  return {
+    id,
+    type: flow.tipo === "despesa" ? "despesa" : "receita",
+    description,
+    value,
+    dueDate,
+    paymentDate,
+    status,
+    clientId,
+    accountId,
+    categoryId,
+  };
 };
 
 export default function VisualizarCliente() {
@@ -691,20 +759,14 @@ export default function VisualizarCliente() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const financialUrl = new URL(joinUrl(apiUrl, `/api/financial/flows`));
-        financialUrl.searchParams.set("page", "1");
-        financialUrl.searchParams.set("limit", "100");
-        if (id) {
-          financialUrl.searchParams.set("clienteId", String(id));
-        }
-
+        const normalizedClientId = id ? String(id) : null;
         const [
           clientRes,
           processesRes,
           typesRes,
           docsRes,
           attributesRes,
-          financialRes,
+          flows,
         ] = await Promise.all([
           fetch(joinUrl(apiUrl, `/api/clientes/${id}`), {
             headers: { Accept: "application/json" },
@@ -713,7 +775,7 @@ export default function VisualizarCliente() {
           fetch(joinUrl(apiUrl, `/api/tipo-documentos`)),
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/documentos`)),
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/atributos`)),
-          fetch(financialUrl.toString()),
+          fetchFlows(),
         ]);
 
         let mappedClient: LocalClient | null = null;
@@ -772,58 +834,24 @@ export default function VisualizarCliente() {
           setContactAttributes([]);
         }
 
-        if (financialRes.ok) {
-          const financialJson = await financialRes.json();
-          const flowsSource: ApiFinancialFlow[] = Array.isArray(
-            financialJson?.items,
-          )
-            ? financialJson.items
-            : Array.isArray(financialJson)
-            ? financialJson
-            : [];
+        const normalizedFlows = Array.isArray(flows)
+          ? flows
+              .map((flow) => mapFlowToFinancialRecord(flow))
+              .filter((record): record is FinancialRecord => Boolean(record))
+              .filter((record) => {
+                if (!normalizedClientId) {
+                  return true;
+                }
 
-          const normalizedFlows = flowsSource
-            .map((flow) => {
-              if (!flow) {
-                return null;
-              }
+                if (record.clientId === null) {
+                  return true;
+                }
 
-              const rawType =
-                typeof flow.tipo === "string" ? flow.tipo.toLowerCase() : "";
-              const clientIdValue =
-                (flow.cliente_id ??
-                  flow.client_id ??
-                  flow.clienteId ??
-                  flow.clientId) ?? null;
+                return record.clientId === normalizedClientId;
+              })
+          : [];
 
-              return {
-                id: Number(flow.id),
-                type: rawType === "receita" ? "receita" : "despesa",
-                description: flow.descricao ?? "",
-                value: Number(flow.valor ?? 0),
-                dueDate: flow.vencimento ?? "",
-                paymentDate: flow.pagamento ?? null,
-                status: flow.status ?? "pendente",
-                clientId:
-                  clientIdValue === null || clientIdValue === undefined
-                    ? null
-                    : Number(clientIdValue),
-                accountId:
-                  (flow.conta_id ?? flow.contaId ?? null) !== null
-                    ? Number(flow.conta_id ?? flow.contaId)
-                    : null,
-                categoryId:
-                  (flow.categoria_id ?? flow.categoriaId ?? null) !== null
-                    ? Number(flow.categoria_id ?? flow.categoriaId)
-                    : null,
-              } as FinancialRecord;
-            })
-            .filter(Boolean) as FinancialRecord[];
-
-          setFinancialRecords(normalizedFlows);
-        } else {
-          setFinancialRecords([]);
-        }
+        setFinancialRecords(normalizedFlows);
       } catch (error) {
         console.error("Erro ao buscar dados do cliente:", error);
         setFinancialRecords([]);
@@ -1024,7 +1052,7 @@ export default function VisualizarCliente() {
       .slice(0, 5),
   [clientFinancialRecords]);
 
-  const formatDate = (iso?: string) => formatDateToPtBr(iso);
+  const formatDate = (iso?: string | null) => formatDateToPtBr(iso);
 
   const formatDisplayDate = (iso?: string | null) => {
     const formatted = formatDateToPtBr(iso);
