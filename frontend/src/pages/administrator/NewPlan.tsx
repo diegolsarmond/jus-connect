@@ -136,6 +136,11 @@ export default function NewPlan() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [publicConsultationModules, setPublicConsultationModules] = useState<string[]>([]);
+  const [intimationSyncEnabled, setIntimationSyncEnabled] = useState(false);
+  const [intimationSyncQuota, setIntimationSyncQuota] = useState("");
+  const [processMonitorLawyerLimit, setProcessMonitorLawyerLimit] = useState("");
+  const [intimationMonitorLawyerLimit, setIntimationMonitorLawyerLimit] = useState("");
 
   const moduleLabelMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -144,6 +149,34 @@ export default function NewPlan() {
     });
     return map;
   }, [availableModules]);
+
+  const matchesPublicConsultation = (value: string | undefined): boolean => {
+    if (!value) {
+      return false;
+    }
+
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    return normalized.includes("consulta publica");
+  };
+
+  const availablePublicConsultationModules = useMemo(
+    () =>
+      availableModules.filter(
+        (module) =>
+          matchesPublicConsultation(module.categoria) || matchesPublicConsultation(module.nome),
+      ),
+    [availableModules],
+  );
+
+  const publicConsultationModuleIdSet = useMemo(
+    () => new Set(availablePublicConsultationModules.map((module) => module.id)),
+    [availablePublicConsultationModules],
+  );
 
   const customAvailableTopics = useMemo(
     () => splitFeatureInput(formState.customAvailableFeatures),
@@ -210,7 +243,13 @@ export default function NewPlan() {
         availableModules
       ),
     }));
-  }, [availableModules]);
+    setPublicConsultationModules((prev) =>
+      orderModules(
+        prev.filter((id) => publicConsultationModuleIdSet.has(id)),
+        availableModules,
+      ),
+    );
+  }, [availableModules, publicConsultationModuleIdSet]);
 
   const handleModuleChange = (next: string[]) => {
     setFormState((prev) => ({
@@ -220,6 +259,12 @@ export default function NewPlan() {
         availableModules
       ),
     }));
+  };
+
+  const handlePublicConsultationModuleChange = (next: string[]) => {
+    setPublicConsultationModules(
+      orderModules(next.filter((id) => publicConsultationModuleIdSet.has(id)), availableModules),
+    );
   };
 
   const handleMonthlyPriceChange = (value: string) => {
@@ -267,6 +312,10 @@ export default function NewPlan() {
     setSubmitSuccess(null);
 
     const orderedModules = orderModules(formState.modules, availableModules);
+    const orderedPublicConsultationModules = orderModules(
+      publicConsultationModules,
+      availableModules,
+    );
     const clientLimit = parseInteger(formState.clientLimit);
     const userLimit = parseInteger(formState.userLimit);
     const processLimit = parseInteger(formState.processLimit);
@@ -274,8 +323,13 @@ export default function NewPlan() {
     const processSyncQuota = formState.processSyncEnabled
       ? parseInteger(formState.processSyncQuota)
       : null;
+    const intimationSyncQuotaValue = intimationSyncEnabled
+      ? parseInteger(intimationSyncQuota)
+      : null;
     const customAvailable = splitFeatureInput(formState.customAvailableFeatures);
     const customUnavailable = splitFeatureInput(formState.customUnavailableFeatures);
+    const processMonitorLawyerLimitValue = parseInteger(processMonitorLawyerLimit);
+    const intimationMonitorLawyerLimitValue = parseInteger(intimationMonitorLawyerLimit);
 
     const payload: Record<string, unknown> = {
       nome: name,
@@ -298,6 +352,24 @@ export default function NewPlan() {
       limite_propostas: proposalLimit,
       sincronizacao_processos_habilitada: formState.processSyncEnabled,
       sincronizacao_processos_cota: formState.processSyncEnabled ? processSyncQuota : null,
+      consulta_publica_modulos: orderedPublicConsultationModules,
+      consultaPublicaModulos: orderedPublicConsultationModules,
+      publicConsultationModules: orderedPublicConsultationModules,
+      recursos_consulta_publica: orderedPublicConsultationModules,
+      sincronizacao_intimacoes_habilitada: intimationSyncEnabled,
+      sincronizacaoIntimacoesHabilitada: intimationSyncEnabled,
+      intimationSyncEnabled: intimationSyncEnabled,
+      sincronizacao_intimacoes_cota: intimationSyncEnabled ? intimationSyncQuotaValue : null,
+      sincronizacaoIntimacoesCota: intimationSyncEnabled ? intimationSyncQuotaValue : null,
+      intimationSyncQuota: intimationSyncEnabled ? intimationSyncQuotaValue : null,
+      limite_advogados_processos: processMonitorLawyerLimitValue,
+      limiteAdvogadosProcessos: processMonitorLawyerLimitValue,
+      limite_advogados_processos_monitorados: processMonitorLawyerLimitValue,
+      processMonitorLawyerLimit: processMonitorLawyerLimitValue,
+      limite_advogados_intimacoes: intimationMonitorLawyerLimitValue,
+      limiteAdvogadosIntimacoes: intimationMonitorLawyerLimitValue,
+      limite_advogados_intimacoes_monitoradas: intimationMonitorLawyerLimitValue,
+      intimationMonitorLawyerLimit: intimationMonitorLawyerLimitValue,
     };
 
     try {
@@ -315,6 +387,11 @@ export default function NewPlan() {
       }
 
       setFormState(initialPlanFormState);
+      setPublicConsultationModules([]);
+      setIntimationSyncEnabled(false);
+      setIntimationSyncQuota("");
+      setProcessMonitorLawyerLimit("");
+      setIntimationMonitorLawyerLimit("");
       setSubmitSuccess(`Plano "${name}" cadastrado com sucesso.`);
     } catch (error) {
       console.error(error);
@@ -422,25 +499,45 @@ export default function NewPlan() {
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Módulos disponíveis</Label>
-                <ModuleMultiSelect
-                  modules={availableModules}
-                  selected={formState.modules}
-                  onChange={handleModuleChange}
-                  disabled={loadingModules || submitting}
-                />
-                {loadingModules ? (
-                  <p className="text-xs text-muted-foreground">Carregando módulos…</p>
-                ) : null}
-                {renderModuleBadges(formState.modules)}
-              </div>
-              {fetchError ? (
-                <Alert variant="destructive">
-                  <AlertTitle>Não foi possível carregar os módulos</AlertTitle>
-                  <AlertDescription>{fetchError}</AlertDescription>
-                </Alert>
+            <div className="space-y-2">
+              <Label>Módulos disponíveis</Label>
+              <ModuleMultiSelect
+                modules={availableModules}
+                selected={formState.modules}
+                onChange={handleModuleChange}
+                disabled={loadingModules || submitting}
+              />
+              {loadingModules ? (
+                <p className="text-xs text-muted-foreground">Carregando módulos…</p>
               ) : null}
+              {renderModuleBadges(formState.modules)}
+            </div>
+            <div className="space-y-2">
+              <Label>Módulos de consulta pública</Label>
+              <ModuleMultiSelect
+                modules={availablePublicConsultationModules}
+                selected={publicConsultationModules}
+                onChange={handlePublicConsultationModuleChange}
+                disabled={
+                  loadingModules ||
+                  submitting ||
+                  availablePublicConsultationModules.length === 0
+                }
+              />
+              {availablePublicConsultationModules.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum módulo de consulta pública disponível no momento.
+                </p>
+              ) : (
+                renderModuleBadges(publicConsultationModules)
+              )}
+            </div>
+            {fetchError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Não foi possível carregar os módulos</AlertTitle>
+                <AlertDescription>{fetchError}</AlertDescription>
+              </Alert>
+            ) : null}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -513,6 +610,24 @@ export default function NewPlan() {
                 </p>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="plan-process-monitor-lawyer-limit">
+                  Advogados com processos monitorados
+                </Label>
+                <Input
+                  id="plan-process-monitor-lawyer-limit"
+                  placeholder="Ilimitado"
+                  inputMode="numeric"
+                  value={processMonitorLawyerLimit}
+                  onChange={(event) =>
+                    setProcessMonitorLawyerLimit(sanitizeLimitInput(event.target.value))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Define quantos advogados podem ter OAB monitorada para processos.
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="plan-user-limit">Limite de usuários</Label>
                 <Input
                   id="plan-user-limit"
@@ -566,6 +681,24 @@ export default function NewPlan() {
                   Use valores inteiros. Campos em branco manterão o limite aberto.
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-intimation-monitor-lawyer-limit">
+                  Advogados com intimações monitoradas
+                </Label>
+                <Input
+                  id="plan-intimation-monitor-lawyer-limit"
+                  placeholder="Ilimitado"
+                  inputMode="numeric"
+                  value={intimationMonitorLawyerLimit}
+                  onChange={(event) =>
+                    setIntimationMonitorLawyerLimit(sanitizeLimitInput(event.target.value))
+                  }
+                  disabled={submitting}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Define quantos advogados podem receber intimações monitoradas.
+                </p>
+              </div>
             </div>
 
             <div className="space-y-4 rounded-lg border p-4">
@@ -610,6 +743,47 @@ export default function NewPlan() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Defina a quantidade máxima de sincronizações automáticas permitidas para o plano.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label htmlFor="plan-intimation-sync" className="text-base">
+                    Sincronização de intimações
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Controle o recebimento automático de intimações e configure a cota mensal permitida.
+                  </p>
+                </div>
+                <Switch
+                  id="plan-intimation-sync"
+                  checked={intimationSyncEnabled}
+                  onCheckedChange={(checked) => {
+                    setIntimationSyncEnabled(checked);
+                    setIntimationSyncQuota((prev) => (checked ? prev : ""));
+                  }}
+                  disabled={submitting}
+                />
+              </div>
+
+              {intimationSyncEnabled ? (
+                <div className="space-y-2 sm:w-64">
+                  <Label htmlFor="plan-intimation-sync-quota">Cota de intimações</Label>
+                  <Input
+                    id="plan-intimation-sync-quota"
+                    placeholder="Ex.: 50"
+                    inputMode="numeric"
+                    value={intimationSyncQuota}
+                    onChange={(event) =>
+                      setIntimationSyncQuota(sanitizeLimitInput(event.target.value))
+                    }
+                    disabled={submitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Defina a quantidade máxima de intimações sincronizadas automaticamente para o plano.
                   </p>
                 </div>
               ) : null}
