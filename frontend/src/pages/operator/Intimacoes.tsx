@@ -1515,13 +1515,8 @@ export default function Intimacoes() {
         return;
       }
 
-      if (option.oabNumber) {
-        setOabNumber(option.oabNumber);
-      }
-
-      if (option.oabUf) {
-        setOabUf(option.oabUf);
-      }
+      setOabNumber(option.oabNumber ?? "");
+      setOabUf(option.oabUf ?? "");
     },
     [companyUsers],
   );
@@ -2979,7 +2974,7 @@ export default function Intimacoes() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="oab-uf">Estado</Label>
-                  <Select value={oabUf} onValueChange={setOabUf}>
+                  <Select value={oabUf} onValueChange={setOabUf} disabled={Boolean(selectedUserId)}>
                     <SelectTrigger id="oab-uf">
                       <SelectValue placeholder="Selecione o estado" />
                     </SelectTrigger>
@@ -2999,6 +2994,7 @@ export default function Intimacoes() {
                     placeholder="000000"
                     value={oabNumber}
                     onChange={(event) => setOabNumber(event.target.value)}
+                    disabled={Boolean(selectedUserId)}
                   />
                 </div>
               </div>

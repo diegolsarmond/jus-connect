@@ -42,6 +42,8 @@ interface ApiUsuario {
   empresa: number;
   escritorio: number;
   oab: string | null;
+  oab_number: string | null;
+  oab_uf: string | null;
   status: boolean;
   telefone: string | null;
   ultimo_login: string | null;
@@ -89,24 +91,41 @@ const perfilToRole = (perfil: number): User["role"] => {
   }
 };
 
-const mapApiUserToUser = (u: ApiUsuario): User => ({
-  id: u.id.toString(),
-  name: u.nome_completo,
-  email: u.email,
-  phone: u.telefone ?? "",
-  perfil: u.perfil,
-  escritorio: u.escritorio?.toString() ?? "",
-  oab: u.oab ? { numero: u.oab, uf: "" } : undefined,
-  especialidades: [],
-  tarifaPorHora: undefined,
-  timezone: "America/Sao_Paulo",
-  idioma: "pt-BR",
-  ativo: u.status,
-  ultimoLogin: u.ultimo_login ? new Date(u.ultimo_login) : undefined,
-  createdAt: new Date(u.datacriacao),
-  updatedAt: new Date(u.datacriacao),
-  avatar: undefined,
-});
+const mapApiUserToUser = (u: ApiUsuario): User => {
+  const trimmedNumber = typeof u.oab_number === "string" ? u.oab_number.trim() : "";
+  const trimmedUf = typeof u.oab_uf === "string" ? u.oab_uf.trim() : "";
+
+  const parseLegacyOab = (value: string | null) => {
+    if (!value) {
+      return { numero: "", uf: "" };
+    }
+    const [numeroPart, ufPart] = value.split("/").map((part) => part?.trim() ?? "");
+    return { numero: numeroPart, uf: ufPart };
+  };
+
+  const legacy = parseLegacyOab(u.oab);
+  const numero = trimmedNumber || legacy.numero;
+  const uf = trimmedUf || legacy.uf;
+
+  return {
+    id: u.id.toString(),
+    name: u.nome_completo,
+    email: u.email,
+    phone: u.telefone ?? "",
+    perfil: u.perfil,
+    escritorio: u.escritorio?.toString() ?? "",
+    oab: numero || uf ? { numero, uf } : undefined,
+    especialidades: [],
+    tarifaPorHora: undefined,
+    timezone: "America/Sao_Paulo",
+    idioma: "pt-BR",
+    ativo: u.status,
+    ultimoLogin: u.ultimo_login ? new Date(u.ultimo_login) : undefined,
+    createdAt: new Date(u.datacriacao),
+    updatedAt: new Date(u.datacriacao),
+    avatar: undefined,
+  };
+};
 
 const roleLabels = {
   admin: "Administrador",
@@ -434,7 +453,9 @@ export default function Usuarios() {
                   </TableCell>
                   <TableCell>{user.escritorio}</TableCell>
                   <TableCell>
-                    {user.oab ? `${user.oab.numero}/${user.oab.uf}` : "-"}
+                    {user.oab
+                      ? [user.oab.numero, user.oab.uf].filter((value) => value).join("/") || "-"
+                      : "-"}
                   </TableCell>
                   <TableCell>
                     <Badge variant={user.status ? "true" : "false"}>
