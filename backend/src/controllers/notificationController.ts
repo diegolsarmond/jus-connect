@@ -624,7 +624,29 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     }
 
     const result = await pool.query<DbIntimacaoRow>(
-      `SELECT id,
+      `WITH intimacoes_enriched AS (
+         SELECT id,
+                origem,
+                external_id,
+                numero_processo,
+                orgao,
+                assunto,
+                status,
+                prazo,
+                recebida_em,
+                fonte_criada_em,
+                fonte_atualizada_em,
+                payload,
+                created_at,
+                updated_at,
+                CASE
+                  WHEN (payload ->> 'idempresa') ~ '^-?\\d+$' THEN (payload ->> 'idempresa')::bigint
+                  WHEN (payload ->> 'empresaId') ~ '^-?\\d+$' THEN (payload ->> 'empresaId')::bigint
+                  ELSE NULL
+                END AS payload_empresa_id
+           FROM public.intimacoes
+       )
+       SELECT id,
               origem,
               external_id,
               numero_processo,
@@ -638,12 +660,14 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
               payload,
               created_at,
               updated_at
-         FROM public.intimacoes
+         FROM intimacoes_enriched
+        WHERE payload_empresa_id = $1
+           OR payload_empresa_id IS NULL
         ORDER BY recebida_em DESC NULLS LAST,
                  fonte_atualizada_em DESC NULLS LAST,
                  created_at DESC NULLS LAST,
                  id DESC`,
-      []
+      [empresaId]
     );
 
     const intimacoes = result.rows
