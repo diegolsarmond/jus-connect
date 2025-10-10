@@ -38,6 +38,7 @@ import {
   fetchIntimacoes,
   markIntimacaoAsRead,
   type Intimacao,
+  type MarkIntimacaoAsReadResponse,
 } from "@/services/intimacoes";
 import { fetchIntegrationApiKeys, generateAiText } from "@/lib/integrationApiKeys";
 import { normalizarTexto } from "./utils/processo-ui";
@@ -852,10 +853,76 @@ export default function Intimacoes() {
     }
   }, []);
 
-  const handleOpenDetails = useCallback((intimacao: Intimacao) => {
-    setDetailsTarget(intimacao);
-    setDetailsDialogOpen(true);
-  }, []);
+  const applyReadUpdates = useCallback(
+    (updates: Map<string, MarkIntimacaoAsReadResponse>) => {
+      if (updates.size === 0) {
+        return;
+      }
+
+      setIntimacoes((prev) =>
+        prev.map((item) => {
+          const update = updates.get(String(item.id));
+          if (!update) {
+            return item;
+          }
+
+          return {
+            ...item,
+            nao_lida: update.nao_lida,
+            updated_at: update.updated_at,
+            idusuario_leitura: update.idusuario_leitura ?? null,
+            lida_em: update.lida_em ?? null,
+          };
+        }),
+      );
+
+      setDetailsTarget((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        const update = updates.get(String(prev.id));
+        if (!update) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          nao_lida: update.nao_lida,
+          updated_at: update.updated_at,
+          idusuario_leitura: update.idusuario_leitura ?? null,
+          lida_em: update.lida_em ?? null,
+        };
+      });
+    },
+    [setIntimacoes, setDetailsTarget],
+  );
+
+  const applyReadUpdate = useCallback(
+    (result: MarkIntimacaoAsReadResponse) => {
+      applyReadUpdates(new Map([[String(result.id), result]]));
+    },
+    [applyReadUpdates],
+  );
+
+  const handleOpenDetails = useCallback(
+    (intimacao: Intimacao) => {
+      setDetailsTarget(intimacao);
+      setDetailsDialogOpen(true);
+
+      if (intimacao.nao_lida) {
+        void (async () => {
+          try {
+            const result = await markIntimacaoAsRead(intimacao.id);
+            applyReadUpdate(result);
+          } catch (error) {
+            console.error('Falha ao marcar intimação como lida ao abrir detalhes', error);
+          }
+        })();
+      }
+    },
+    [applyReadUpdate],
+  );
 
   const handleDetailsDialogChange = useCallback((open: boolean) => {
     setDetailsDialogOpen(open);
@@ -1236,13 +1303,7 @@ export default function Intimacoes() {
 
     try {
       const result = await markIntimacaoAsRead(id);
-      setIntimacoes((prev) =>
-        prev.map((item) =>
-          String(item.id) === String(result.id)
-            ? { ...item, nao_lida: result.nao_lida, updated_at: result.updated_at }
-            : item,
-        ),
-      );
+      applyReadUpdate(result);
       toast({
         title: "Intimação atualizada",
         description: "Ela foi marcada como lida.",
@@ -1273,7 +1334,7 @@ export default function Intimacoes() {
       );
 
       const sucedidos = resultados.filter(
-        (resultado): resultado is PromiseFulfilledResult<{ id: number; nao_lida: boolean; updated_at: string }> =>
+        (resultado): resultado is PromiseFulfilledResult<MarkIntimacaoAsReadResponse> =>
           resultado.status === "fulfilled",
       );
       const falhas = resultados.filter((resultado) => resultado.status === "rejected");
@@ -1283,19 +1344,7 @@ export default function Intimacoes() {
           sucedidos.map((resultado) => [String(resultado.value.id), resultado.value] as const),
         );
 
-        setIntimacoes((previas) =>
-          previas.map((item) => {
-            const atualizacao = atualizacoes.get(String(item.id));
-            if (!atualizacao) {
-              return item;
-            }
-            return {
-              ...item,
-              nao_lida: atualizacao.nao_lida,
-              updated_at: atualizacao.updated_at,
-            };
-          }),
-        );
+        applyReadUpdates(atualizacoes);
 
         toast({
           title: "Intimações atualizadas",
