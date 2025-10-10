@@ -27,6 +27,46 @@ const swaggerOptions = {
             },
           },
         },
+        Intimacao: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            siglaTribunal: { type: 'string', nullable: true },
+            external_id: { type: 'string', nullable: true },
+            numero_processo: { type: 'string', nullable: true },
+            nomeOrgao: { type: 'string', nullable: true },
+            tipoComunicacao: { type: 'string', nullable: true },
+            texto: { type: 'string', nullable: true },
+            prazo: { type: 'string', nullable: true },
+            data_disponibilizacao: { type: 'string', format: 'date-time', nullable: true },
+            created_at: { type: 'string', format: 'date-time', nullable: true },
+            updated_at: { type: 'string', format: 'date-time', nullable: true },
+            meio: { type: 'string', nullable: true },
+            link: { type: 'string', nullable: true },
+            tipodocumento: { type: 'string', nullable: true },
+            nomeclasse: { type: 'string', nullable: true },
+            codigoclasse: { type: 'string', nullable: true },
+            numerocomunicacao: { type: 'string', nullable: true },
+            ativo: { type: 'boolean', nullable: true },
+            hash: { type: 'string', nullable: true },
+            status: { type: 'string', nullable: true },
+            motivo_cancelamento: { type: 'string', nullable: true },
+            data_cancelamento: { type: 'string', format: 'date-time', nullable: true },
+            destinatarios: {
+              type: 'array',
+              items: { type: 'string' },
+              nullable: true,
+            },
+            destinatarios_advogados: {
+              type: 'array',
+              items: { type: 'string' },
+              nullable: true,
+            },
+            idusuario: { type: 'integer', nullable: true },
+            idempresa: { type: 'integer', nullable: true },
+            nao_lida: { type: 'boolean', nullable: true },
+          },
+        },
       },
     },
     security: [
@@ -52,6 +92,33 @@ const swaggerOptions = {
                   },
                 },
               },
+            },
+            500: {
+              description: 'Erro interno do servidor',
+            },
+          },
+        },
+      },
+      '/api/intimacoes': {
+        get: {
+          summary: 'Lista as intimações da empresa do usuário autenticado',
+          tags: ['Intimacoes'],
+          responses: {
+            200: {
+              description: 'Lista de intimações',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'array',
+                    items: {
+                      $ref: '#/components/schemas/Intimacao',
+                    },
+                  },
+                },
+              },
+            },
+            401: {
+              description: 'Token inválido.',
             },
             500: {
               description: 'Erro interno do servidor',

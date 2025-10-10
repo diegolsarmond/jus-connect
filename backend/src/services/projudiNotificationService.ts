@@ -112,20 +112,68 @@ interface NormalizedProjudiIntimacao {
 
 interface IntimacaoRow extends QueryResultRow {
   id: number;
-  origem: string;
-  external_id: string;
-  numero_processo: string | null;
-  orgao: string | null;
-  assunto: string | null;
-  status: string | null;
-  prazo: string | Date | null;
-  recebida_em: string | Date | null;
-  fonte_criada_em: string | Date | null;
-  fonte_atualizada_em: string | Date | null;
-  payload: unknown;
-  created_at: string | Date;
-  updated_at: string | Date;
   inserted_row: boolean;
+  [key: string]: unknown;
+}
+
+function pickRowValue<T>(row: IntimacaoRow, keys: string[]): T | undefined {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      const value = row[key];
+      if (value !== undefined) {
+        return value as T;
+      }
+    }
+  }
+  return undefined;
+}
+
+function pickRowString(row: IntimacaoRow, keys: string[]): string | null {
+  const value = pickRowValue<unknown>(row, keys);
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  return null;
+}
+
+function pickRowDate(row: IntimacaoRow, keys: string[]): string | Date | null | undefined {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      const value = row[key];
+      if (value === undefined) {
+        continue;
+      }
+      if (value === null) {
+        return null;
+      }
+      if (value instanceof Date || typeof value === 'string' || typeof value === 'number') {
+        return value as string | Date;
+      }
+    }
+  }
+  return undefined;
+}
+
+function normalizePayloadValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+  return value ?? null;
 }
 
 function ensureFetchImplementation(): FetchFunction {
@@ -323,21 +371,62 @@ function prepareCookiesForHeader(cookies: string[]): string[] {
 }
 
 function mapRow(row: IntimacaoRow): StoredProjudiIntimacao {
+  const origem =
+    pickRowString(row, ['origem', 'fonte', 'meio']) ??
+    'projudi';
+  const externalId =
+    pickRowString(row, [
+      'external_id',
+      'externalId',
+      'numero_comunicacao',
+      'numeroComunicacao',
+      'sequencial',
+      'processo',
+      'processo_id',
+    ]) ?? String(row.id);
+  const numeroProcesso = pickRowString(row, [
+    'numero_processo',
+    'numeroProcesso',
+    'processo',
+    'processo_id',
+    'nomeProcesso',
+  ]);
+  const orgao = pickRowString(row, ['orgao', 'nome_orgao', 'nomeOrgao', 'orgaoJudiciario']);
+  const assunto = pickRowString(row, ['assunto', 'nome_assunto', 'nomeAssunto', 'codigo_assunto', 'codigoAssunto']);
+  const prazoRaw = pickRowDate(row, ['prazo', 'data_disponibilizado', 'dataDisponibilizado', 'data_disponibilizacao', 'dataDisponibilizacao']);
+  const recebidaRaw = pickRowDate(row, ['recebida_em', 'recebidaEm', 'data_disponibilizado', 'dataDisponibilizado']);
+  const fonteCriadaRaw = pickRowDate(row, ['fonte_criada_em', 'fonteCriadaEm', 'created_at', 'createdAt']);
+  const fonteAtualizadaRaw = pickRowDate(row, [
+    'fonte_atualizada_em',
+    'fonteAtualizadaEm',
+    'updated_at',
+    'updatedAt',
+  ]);
+  const createdRaw = pickRowDate(row, ['created_at', 'createdAt']);
+  const updatedRaw = pickRowDate(row, ['updated_at', 'updatedAt']);
+  const payloadRaw = pickRowValue<unknown>(row, ['payload', 'regras']);
+
   return {
     id: row.id,
-    origem: row.origem,
-    externalId: row.external_id,
-    numeroProcesso: row.numero_processo,
-    orgao: row.orgao,
-    assunto: row.assunto,
-    status: row.status,
-    prazo: formatNullableDate(row.prazo),
-    recebidaEm: formatNullableDate(row.recebida_em),
-    fonteCriadaEm: formatNullableDate(row.fonte_criada_em),
-    fonteAtualizadaEm: formatNullableDate(row.fonte_atualizada_em),
-    payload: row.payload ?? null,
-    createdAt: formatDate(row.created_at),
-    updatedAt: formatDate(row.updated_at),
+    origem,
+    externalId,
+    numeroProcesso,
+    orgao,
+    assunto,
+    status: pickRowString(row, ['status']),
+    prazo: formatNullableDate(prazoRaw === undefined ? null : prazoRaw),
+    recebidaEm: formatNullableDate(recebidaRaw === undefined ? null : recebidaRaw),
+    fonteCriadaEm: formatNullableDate(fonteCriadaRaw === undefined ? null : fonteCriadaRaw),
+    fonteAtualizadaEm: formatNullableDate(
+      fonteAtualizadaRaw === undefined ? null : fonteAtualizadaRaw,
+    ),
+    payload: normalizePayloadValue(payloadRaw),
+    createdAt: formatDate((createdRaw === undefined || createdRaw === null) ? new Date() : createdRaw),
+    updatedAt: formatDate(
+      (updatedRaw === undefined || updatedRaw === null)
+        ? (createdRaw === undefined || createdRaw === null ? new Date() : createdRaw)
+        : updatedRaw,
+    ),
   };
 }
 
