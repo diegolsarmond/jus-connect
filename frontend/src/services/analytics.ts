@@ -712,9 +712,9 @@ export async function loadDashboardAnalytics(signal?: AbortSignal): Promise<Dash
   const areaMap = new Map<string, number>();
   processos.forEach((processo) => {
     const area =
+      normalizeString(processo.assunto) ||
       normalizeString(processo.classe_judicial) ||
-      normalizeString(processo.tipo) ||
-      normalizeString(processo.assunto);
+      normalizeString(processo.tipo);
 
     if (!area) {
       return;
