@@ -53,6 +53,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+} from "@/components/ui/pagination";
+import {
     Archive,
     Check,
     Calendar,
@@ -65,6 +72,8 @@ import {
     Users as UsersIcon,
     ChevronsUpDown,
     RefreshCw,
+    ChevronLeft,
+    ChevronRight,
 } from "lucide-react";
 
 interface ProcessoCliente {
@@ -249,6 +258,8 @@ interface OabMonitor {
     createdAt: string | null;
     updatedAt: string | null;
 }
+
+const UNASSIGNED_PAGE_SIZE = 5;
 
 interface ApiProcessoParticipant {
     id?: number | string | null;
@@ -1145,6 +1156,10 @@ export default function Processos() {
     const [unassignedModalDismissed, setUnassignedModalDismissed] = useState(false);
     const [unassignedLoading, setUnassignedLoading] = useState(false);
     const [unassignedError, setUnassignedError] = useState<string | null>(null);
+    const [hasUnassignedOnCurrentPage, setHasUnassignedOnCurrentPage] = useState(false);
+    const [unassignedProcesses, setUnassignedProcesses] = useState<Processo[]>([]);
+    const [unassignedTotal, setUnassignedTotal] = useState(0);
+    const [unassignedPage, setUnassignedPage] = useState(1);
 
     const applyProcessosData = useCallback((data: ProcessoLoadResult) => {
         setProcessos(data.items);
@@ -1158,13 +1173,30 @@ export default function Processos() {
     }, []);
 
     const loadProcessos = useCallback(
-        async (options?: { signal?: AbortSignal; page?: number; pageSize?: number }): Promise<ProcessoLoadResult> => {
+        async (
+            options?: {
+                signal?: AbortSignal;
+                page?: number;
+                pageSize?: number;
+                searchParams?: Record<string, string | number | boolean | null | undefined>;
+            },
+        ): Promise<ProcessoLoadResult> => {
             const currentPage = options?.page ?? page;
             const currentPageSize = options?.pageSize ?? pageSize;
 
             const url = new URL(getApiUrl("processos"));
             url.searchParams.set("page", String(currentPage));
             url.searchParams.set("pageSize", String(currentPageSize));
+
+            if (options?.searchParams) {
+                Object.entries(options.searchParams).forEach(([key, value]) => {
+                    if (value === undefined || value === null) {
+                        return;
+                    }
+
+                    url.searchParams.set(key, String(value));
+                });
+            }
 
             const res = await fetch(url.toString(), {
                 headers: { Accept: "application/json" },
@@ -2174,7 +2206,9 @@ export default function Processos() {
 
     const handleUnassignedModalChange = useCallback((open: boolean) => {
         setUnassignedModalOpen(open);
-        if (!open) {
+        if (open) {
+            setUnassignedPage(1);
+        } else {
             setUnassignedModalDismissed(true);
         }
     }, []);
@@ -2740,10 +2774,10 @@ export default function Processos() {
     }, [tipoFilter, tipoOptions]);
 
     useEffect(() => {
-        const unassigned = processos
-            .filter((processo) => !processo.cliente?.id || processo.cliente.id <= 0)
-            .map((processo) => processo.id);
-        setUnassignedProcessIds(unassigned);
+        const hasUnassigned = processos.some(
+            (processo) => !processo.cliente?.id || processo.cliente.id <= 0,
+        );
+        setHasUnassignedOnCurrentPage(hasUnassigned);
     }, [processos]);
 
     useEffect(() => {
@@ -2753,14 +2787,66 @@ export default function Processos() {
     }, [processosLoading, totalProcessos, oabModalDismissed]);
 
     useEffect(() => {
-        if (
-            !processosLoading &&
-            unassignedProcessIds.length > 0 &&
-            !unassignedModalDismissed
-        ) {
+        if (!processosLoading && hasUnassignedOnCurrentPage && !unassignedModalDismissed) {
+            setUnassignedPage(1);
             setUnassignedModalOpen(true);
         }
-    }, [processosLoading, unassignedProcessIds, unassignedModalDismissed]);
+    }, [processosLoading, hasUnassignedOnCurrentPage, unassignedModalDismissed]);
+
+    useEffect(() => {
+        if (!unassignedModalOpen) {
+            return;
+        }
+
+        const controller = new AbortController();
+        let cancelled = false;
+
+        setUnassignedLoading(true);
+        setUnassignedError(null);
+        setUnassignedProcesses([]);
+        setUnassignedProcessIds([]);
+
+        loadProcessos({
+            page: unassignedPage,
+            pageSize: UNASSIGNED_PAGE_SIZE,
+            signal: controller.signal,
+            searchParams: { semCliente: true },
+        })
+            .then((data) => {
+                if (cancelled) {
+                    return;
+                }
+
+                setUnassignedProcesses(data.items);
+                setUnassignedProcessIds(data.items.map((item) => item.id));
+                setUnassignedTotal(data.total);
+            })
+            .catch((error) => {
+                console.error(error);
+                if (cancelled) {
+                    return;
+                }
+
+                setUnassignedError(
+                    error instanceof Error
+                        ? error.message
+                        : "Erro ao carregar processos sem cliente",
+                );
+                setUnassignedProcesses([]);
+                setUnassignedProcessIds([]);
+                setUnassignedTotal(0);
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setUnassignedLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [loadProcessos, unassignedModalOpen, unassignedPage]);
 
     useEffect(() => {
         if (!unassignedModalOpen) {
@@ -2829,7 +2915,9 @@ export default function Processos() {
                     setUnassignedDetails((prev) => {
                         const next = { ...prev };
                         for (const entry of entries) {
-                            const baseProcess = processos.find((processo) => processo.id === entry.id);
+                            const baseProcess = unassignedProcesses.find(
+                                (processo) => processo.id === entry.id,
+                            );
                             if (!baseProcess) {
                                 continue;
                             }
@@ -2873,7 +2961,7 @@ export default function Processos() {
         return () => {
             cancelled = true;
         };
-    }, [unassignedModalOpen, unassignedProcessIds, unassignedDetails, processos]);
+    }, [unassignedModalOpen, unassignedProcessIds, unassignedDetails, unassignedProcesses]);
 
     const totalPages = useMemo(() => {
         if (pageSize <= 0) {
@@ -2899,6 +2987,73 @@ export default function Processos() {
 
         return Math.min(totalProcessos, page * pageSize);
     }, [page, pageSize, totalProcessos]);
+
+    const unassignedTotalPages = useMemo(() => {
+        if (UNASSIGNED_PAGE_SIZE <= 0) {
+            return 1;
+        }
+
+        if (unassignedTotal <= 0) {
+            return 1;
+        }
+
+        return Math.max(1, Math.ceil(unassignedTotal / UNASSIGNED_PAGE_SIZE));
+    }, [unassignedTotal]);
+
+    const unassignedPageStart = useMemo(() => {
+        if (unassignedTotal === 0) {
+            return 0;
+        }
+
+        return (unassignedPage - 1) * UNASSIGNED_PAGE_SIZE + 1;
+    }, [unassignedPage, unassignedTotal]);
+
+    const unassignedPageEnd = useMemo(() => {
+        if (unassignedTotal === 0) {
+            return 0;
+        }
+
+        return Math.min(unassignedTotal, unassignedPage * UNASSIGNED_PAGE_SIZE);
+    }, [unassignedPage, unassignedTotal]);
+
+    const unassignedPaginationRange = useMemo(() => {
+        if (unassignedTotalPages <= 1) {
+            return [1];
+        }
+
+        const uniquePages = new Set<number>();
+        uniquePages.add(1);
+        uniquePages.add(unassignedTotalPages);
+
+        for (let index = unassignedPage - 1; index <= unassignedPage + 1; index += 1) {
+            if (index >= 1 && index <= unassignedTotalPages) {
+                uniquePages.add(index);
+            }
+        }
+
+        return Array.from(uniquePages).sort((a, b) => a - b);
+    }, [unassignedPage, unassignedTotalPages]);
+
+    const unassignedPaginationItems = useMemo(() => {
+        const items: (number | "ellipsis")[] = [];
+        let previous = 0;
+
+        unassignedPaginationRange.forEach((current) => {
+            if (previous && current - previous > 1) {
+                items.push("ellipsis");
+            }
+
+            items.push(current);
+            previous = current;
+        });
+
+        return items;
+    }, [unassignedPaginationRange]);
+
+    const showUnassignedSkeleton = useMemo(
+        () => unassignedLoading && unassignedProcessIds.length === 0,
+        [unassignedLoading, unassignedProcessIds],
+    );
 
     useEffect(() => {
         if (page > totalPages) {
@@ -3660,21 +3815,31 @@ export default function Processos() {
                     {unassignedError ? (
                         <p className="text-sm text-destructive">{unassignedError}</p>
                     ) : null}
-                    {unassignedLoading && Object.keys(unassignedDetails).length === 0 ? (
+                    {showUnassignedSkeleton ? (
                         <div className="space-y-2">
                             {[0, 1].map((item) => (
                                 <Skeleton key={item} className="h-24 w-full" />
                             ))}
                         </div>
-                    ) : unassignedProcessIds.length === 0 ? (
+                    ) : unassignedProcessIds.length === 0 && !unassignedError ? (
                         <p className="text-sm text-muted-foreground">
                             Todos os processos já possuem clientes vinculados.
                         </p>
                     ) : (
                         <div className="space-y-6">
+                            {unassignedTotal > 0 ? (
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <p className="text-sm text-muted-foreground">
+                                        Mostrando {unassignedPageStart}–{unassignedPageEnd} de {unassignedTotal}{" "}
+                                        processos sem cliente
+                                    </p>
+                                </div>
+                            ) : null}
                             {unassignedProcessIds.map((processId) => {
                                 const detail = unassignedDetails[processId];
-                                const baseProcess = processos.find((processo) => processo.id === processId);
+                                const baseProcess = unassignedProcesses.find(
+                                    (processo) => processo.id === processId,
+                                );
 
                                 if (!detail || !baseProcess) {
                                     return (
@@ -3877,6 +4042,73 @@ export default function Processos() {
                                     </Card>
                                 );
                             })}
+                            {unassignedTotalPages > 1 ? (
+                                <Pagination className="justify-center">
+                                    <PaginationContent>
+                                        <PaginationItem>
+                                            <PaginationLink
+                                                href="#"
+                                                size="default"
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    setUnassignedPage((current) => Math.max(current - 1, 1));
+                                                }}
+                                                aria-disabled={unassignedPage === 1}
+                                                className={
+                                                    unassignedPage === 1
+                                                        ? "pointer-events-none opacity-50"
+                                                        : undefined
+                                                }
+                                            >
+                                                <ChevronLeft className="mr-1 h-4 w-4" />
+                                                <span>Anterior</span>
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                        {unassignedPaginationItems.map((item, itemIndex) =>
+                                            typeof item === "number" ? (
+                                                <PaginationItem key={item}>
+                                                    <PaginationLink
+                                                        href="#"
+                                                        isActive={item === unassignedPage}
+                                                        size="default"
+                                                        onClick={(event) => {
+                                                            event.preventDefault();
+                                                            setUnassignedPage(item);
+                                                        }}
+                                                    >
+                                                        {item}
+                                                    </PaginationLink>
+                                                </PaginationItem>
+                                            ) : (
+                                                <PaginationItem key={`ellipsis-${itemIndex}`}>
+                                                    <PaginationEllipsis />
+                                                </PaginationItem>
+                                            ),
+                                        )}
+                                        <PaginationItem>
+                                            <PaginationLink
+                                                href="#"
+                                                size="default"
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    setUnassignedPage((current) =>
+                                                        Math.min(current + 1, unassignedTotalPages),
+                                                    );
+                                                }}
+                                                aria-disabled={unassignedPage === unassignedTotalPages}
+                                                className={
+                                                    unassignedPage === unassignedTotalPages
+                                                        ? "pointer-events-none opacity-50"
+                                                        : undefined
+                                                }
+                                            >
+                                                <span>Próxima</span>
+                                                <ChevronRight className="ml-1 h-4 w-4" />
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    </PaginationContent>
+                                </Pagination>
+                            ) : null}
                         </div>
                     )}
                     <DialogFooter>

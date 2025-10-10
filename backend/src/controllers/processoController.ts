@@ -1998,8 +1998,14 @@ export const listProcessos = async (req: Request, res: Response) => {
         : limit !== null && pageParam !== null
           ? (pageParam - 1) * limit
           : null;
+    const onlyWithoutClient = parseBooleanFlag(req.query.semCliente) === true;
 
     const queryParams: unknown[] = [empresaId];
+    const whereConditions = ['p.idempresa = $1'];
+
+    if (onlyWithoutClient) {
+      whereConditions.push('(p.cliente_id IS NULL OR p.cliente_id <= 0)');
+    }
     let paginationClause = '';
 
     if (limit !== null) {
@@ -2014,13 +2020,15 @@ export const listProcessos = async (req: Request, res: Response) => {
 
     const listPromise = pool.query(
       `${listProcessoSelect}
-       WHERE p.idempresa = $1
+       WHERE ${whereConditions.join(' AND ')}
        ORDER BY p.criado_em DESC${paginationClause}`,
       queryParams
     );
 
     const totalPromise = pool.query(
-      'SELECT COUNT(*)::bigint AS total FROM public.processos WHERE idempresa = $1',
+      `SELECT COUNT(*)::bigint AS total FROM public.processos p WHERE p.idempresa = $1${
+        onlyWithoutClient ? ' AND (p.cliente_id IS NULL OR p.cliente_id <= 0)' : ''
+      }`,
       [empresaId]
     );
 
@@ -2038,7 +2046,7 @@ export const listProcessos = async (req: Request, res: Response) => {
        LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
        LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
        LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
-       WHERE p.idempresa = $1`,
+       WHERE ${whereConditions.join(' AND ')}`,
       [empresaId]
     );
 
