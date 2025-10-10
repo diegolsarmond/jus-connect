@@ -5,6 +5,7 @@ import {
   deleteIntimacaoOabMonitor,
   listIntimacaoOabMonitors,
 } from '../services/intimacaoOabMonitorService';
+import { fetchPlanLimitsForCompany } from '../services/planLimitsService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 export const listIntimacoesHandler = async (req: Request, res: Response) => {
@@ -259,6 +260,26 @@ export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
 
     if (parsedUsuarioId === 'invalid') {
       return res.status(400).json({ error: 'Informe um usuário válido.' });
+    }
+
+    const planLimits = await fetchPlanLimitsForCompany(empresaId);
+    const limit = planLimits?.limiteAdvogadosIntimacoesMonitoradas;
+
+    if (limit != null) {
+      const normalizedUf = typeof uf === 'string' ? uf.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() : '';
+      const normalizedNumero = typeof numero === 'string' ? numero.replace(/\D/g, '').slice(0, 12) : '';
+
+      const canEvaluateExisting = normalizedUf.length === 2 && normalizedNumero.length > 0;
+      const monitors = await listIntimacaoOabMonitors(empresaId);
+      const alreadyMonitored =
+        canEvaluateExisting &&
+        monitors.some((monitor) => monitor.uf === normalizedUf && monitor.numero === normalizedNumero);
+
+      if (!alreadyMonitored && monitors.length >= limit) {
+        return res
+          .status(400)
+          .json({ error: 'Limite de advogados monitorados por intimações atingido pelo plano atual.' });
+      }
     }
 
     try {
