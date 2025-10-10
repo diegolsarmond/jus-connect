@@ -1,3 +1,4 @@
+import type { QueryResult } from 'pg';
 import pool from './db';
 import { normalizeModuleId, sortModules } from '../constants/modules';
 
@@ -49,7 +50,7 @@ const normalizePerfilName = (value: unknown): string => {
     .toLowerCase();
 };
 
-type PoolQueryResult = Awaited<ReturnType<typeof pool.query>>;
+type PoolQueryResult = QueryResult<any>;
 
 const runQuery = async (query: string, params: unknown[]): Promise<PoolQueryResult> => {
   try {
