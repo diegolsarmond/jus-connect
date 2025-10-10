@@ -738,7 +738,7 @@ export default function Intimacoes() {
 
         toast({
           title: "Resumo gerado",
-          description: `Resumo criado com ${providerLabel}.`,
+            description: `Resumo gerado com inteligência artificial. Pode conter imprecisões; recomenda-se revisão.`,
         });
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Não foi possível gerar o resumo.";
