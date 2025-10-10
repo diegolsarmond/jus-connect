@@ -38,6 +38,8 @@ interface ApiUsuario {
   empresa: number | null;
   escritorio: number | null;
   oab: string | null;
+  oab_number: string | null;
+  oab_uf: string | null;
   status: boolean | null;
   senha: string | null;
   telefone: string | null;
@@ -143,7 +145,21 @@ const cloneFormData = (data: UserFormData): UserFormData => ({
   especialidades: [...data.especialidades],
 });
 
-const parseOab = (oab: string | null): { numero?: string; uf?: string } => {
+const parseOab = (
+  oab: string | null,
+  oabNumber?: string | null,
+  oabUf?: string | null,
+): { numero?: string; uf?: string } => {
+  const trimmedNumber = typeof oabNumber === "string" ? oabNumber.trim() : "";
+  const trimmedUf = typeof oabUf === "string" ? oabUf.trim() : "";
+
+  if (trimmedNumber || trimmedUf) {
+    return {
+      numero: trimmedNumber || undefined,
+      uf: trimmedUf || undefined,
+    };
+  }
+
   if (!oab) {
     return {};
   }
@@ -217,6 +233,8 @@ const normalizeApiUser = (data: unknown): ApiUsuario => {
     empresa: toNumberOrNull(user.empresa),
     escritorio: toNumberOrNull(user.escritorio),
     oab: toStringOrNull(user.oab),
+    oab_number: toStringOrNull(user.oab_number),
+    oab_uf: toStringOrNull(user.oab_uf),
     status: toBooleanOrNull(user.status),
     senha: toStringOrNull(user.senha),
     telefone: toStringOrNull(user.telefone),
@@ -226,7 +244,7 @@ const normalizeApiUser = (data: unknown): ApiUsuario => {
 };
 
 const mapApiUserToFormData = (user: ApiUsuario): UserFormData => {
-  const { numero, uf } = parseOab(user.oab);
+  const { numero, uf } = parseOab(user.oab, user.oab_number, user.oab_uf);
 
   return {
     name: user.nome_completo,

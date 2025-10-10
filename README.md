@@ -86,6 +86,13 @@ pelas novas tabelas:
 > e `psql -f sql/sync_audit.sql` em bancos legados antes de iniciar o backend
 > para garantir a criação idempotente da estrutura.
 
+### Monitoramento de OABs
+
+Os números de OAB monitorados por empresa são persistidos na tabela
+`processo_oab_monitoradas`. O backend garante a criação automática dessa
+estrutura ao iniciar e a utiliza para listar e cadastrar OABs vinculadas às
+rotinas de intimações. 【F:backend/src/services/oabMonitorService.ts†L21-L102】
+
 Para relacionar processos existentes, é possível criar um histórico inicial
 preenchendo `process_sync` manualmente. Exemplo:
 

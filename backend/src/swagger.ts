@@ -70,6 +70,20 @@ const swaggerOptions = {
             arquivada: { type: 'boolean', nullable: true },
           },
         },
+        IntimacaoOabMonitor: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            uf: { type: 'string' },
+            numero: { type: 'string' },
+            usuarioId: { type: 'integer', nullable: true },
+            usuarioNome: { type: 'string', nullable: true },
+            usuarioOabNumero: { type: 'string', nullable: true },
+            usuarioOabUf: { type: 'string', nullable: true },
+            createdAt: { type: 'string', format: 'date-time', nullable: true },
+            updatedAt: { type: 'string', format: 'date-time', nullable: true },
+          },
+        },
       },
     },
     security: [
@@ -214,6 +228,81 @@ const swaggerOptions = {
             500: {
               description: 'Erro interno do servidor',
             },
+          },
+        },
+      },
+      '/api/intimacoes/oab-monitoradas': {
+        get: {
+          summary: 'Lista as OABs monitoradas para intimações da empresa do usuário autenticado',
+          tags: ['Intimacoes'],
+          responses: {
+            200: {
+              description: 'Lista de OABs monitoradas',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'array',
+                    items: { $ref: '#/components/schemas/IntimacaoOabMonitor' },
+                  },
+                },
+              },
+            },
+            401: { description: 'Token inválido.' },
+            500: { description: 'Erro interno do servidor' },
+          },
+        },
+        post: {
+          summary: 'Cadastra uma OAB monitorada para intimações',
+          tags: ['Intimacoes'],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['uf', 'numero', 'usuarioId'],
+                  properties: {
+                    uf: { type: 'string' },
+                    numero: { type: 'string' },
+                    usuarioId: { type: 'integer' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: 'OAB monitorada cadastrada com sucesso',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/IntimacaoOabMonitor' },
+                },
+              },
+            },
+            400: { description: 'Dados inválidos para cadastro.' },
+            401: { description: 'Token inválido.' },
+            500: { description: 'Erro interno do servidor' },
+          },
+        },
+      },
+      '/api/intimacoes/oab-monitoradas/{id}': {
+        delete: {
+          summary: 'Remove uma OAB monitorada para intimações',
+          tags: ['Intimacoes'],
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer' },
+            },
+          ],
+          responses: {
+            204: { description: 'OAB monitorada removida com sucesso' },
+            400: { description: 'Identificador de monitoramento inválido.' },
+            401: { description: 'Token inválido.' },
+            404: { description: 'Registro de monitoramento não encontrado.' },
+            500: { description: 'Erro interno do servidor' },
           },
         },
       },

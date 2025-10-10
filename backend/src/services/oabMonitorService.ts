@@ -7,6 +7,9 @@ interface OabMonitorRow {
   numero: string;
   created_at: string | null;
   updated_at: string | null;
+  usuario_id: number | null;
+  usuario_nome: string | null;
+  usuario_oab: string | null;
 }
 
 export interface CompanyOabMonitor {
@@ -15,6 +18,9 @@ export interface CompanyOabMonitor {
   numero: string;
   createdAt: string | null;
   updatedAt: string | null;
+  usuarioId: number | null;
+  usuarioNome: string | null;
+  usuarioOab: string | null;
 }
 
 let ensureTablePromise: Promise<void> | null = null;
@@ -29,12 +35,15 @@ const ensureTable = async (): Promise<void> => {
           uf CHAR(2) NOT NULL,
           numero VARCHAR(20) NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          usuario_id INTEGER NULL REFERENCES public.usuarios(id)
         );
         CREATE UNIQUE INDEX IF NOT EXISTS processo_oab_monitoradas_empresa_uf_numero_idx
           ON public.processo_oab_monitoradas (empresa_id, uf, numero);
         ALTER TABLE public.processo_oab_monitoradas
           ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+        ALTER TABLE public.processo_oab_monitoradas
+          ADD COLUMN IF NOT EXISTS usuario_id INTEGER NULL REFERENCES public.usuarios(id);
       `)
       .then(() => undefined)
       .catch((error) => {
@@ -56,6 +65,9 @@ const mapRow = (row: OabMonitorRow): CompanyOabMonitor => ({
   numero: row.numero,
   createdAt: row.created_at ?? null,
   updatedAt: row.updated_at ?? null,
+  usuarioId: row.usuario_id ?? null,
+  usuarioNome: row.usuario_nome ?? null,
+  usuarioOab: row.usuario_oab ?? null,
 });
 
 export const listCompanyOabMonitors = async (
@@ -64,10 +76,19 @@ export const listCompanyOabMonitors = async (
   await ensureTable();
 
   const result = await pool.query<OabMonitorRow>(
-    `SELECT id, empresa_id, uf, numero, created_at, updated_at
-       FROM public.processo_oab_monitoradas
-      WHERE empresa_id = $1
-      ORDER BY created_at DESC, id DESC`,
+    `SELECT m.id,
+            m.empresa_id,
+            m.uf,
+            m.numero,
+            m.created_at,
+            m.updated_at,
+            m.usuario_id,
+            u.nome_completo AS usuario_nome,
+            u.oab AS usuario_oab
+       FROM public.processo_oab_monitoradas m
+       LEFT JOIN public.usuarios u ON u.id = m.usuario_id
+      WHERE m.empresa_id = $1
+      ORDER BY m.created_at DESC, m.id DESC`,
     [empresaId],
   );
 
@@ -78,11 +99,16 @@ export const createCompanyOabMonitor = async (
   empresaId: number,
   uf: string,
   numero: string,
+  usuarioId: number | null,
 ): Promise<CompanyOabMonitor> => {
   await ensureTable();
 
   const sanitizedUf = sanitizeUf(uf);
   const sanitizedNumero = sanitizeNumero(numero);
+  const sanitizedUsuarioId =
+    typeof usuarioId === 'number' && Number.isFinite(usuarioId)
+      ? Math.trunc(usuarioId)
+      : null;
 
   if (!sanitizedUf || sanitizedUf.length !== 2) {
     throw new Error('UF da OAB inválida.');
@@ -93,13 +119,37 @@ export const createCompanyOabMonitor = async (
   }
 
   const result = await pool.query<OabMonitorRow>(
-    `INSERT INTO public.processo_oab_monitoradas (empresa_id, uf, numero)
-     VALUES ($1, $2, $3)
+    `INSERT INTO public.processo_oab_monitoradas (empresa_id, uf, numero, usuario_id)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (empresa_id, uf, numero) DO UPDATE
-       SET updated_at = NOW()
-     RETURNING id, empresa_id, uf, numero, created_at, updated_at`,
-    [empresaId, sanitizedUf, sanitizedNumero],
+       SET updated_at = NOW(),
+           usuario_id = EXCLUDED.usuario_id
+     RETURNING id,
+               empresa_id,
+               uf,
+               numero,
+               created_at,
+               updated_at,
+               usuario_id,
+               (SELECT nome_completo FROM public.usuarios WHERE id = EXCLUDED.usuario_id) AS usuario_nome,
+               (SELECT oab FROM public.usuarios WHERE id = EXCLUDED.usuario_id) AS usuario_oab`,
+    [empresaId, sanitizedUf, sanitizedNumero, sanitizedUsuarioId],
   );
 
   return mapRow(result.rows[0]);
+};
+
+export const deleteCompanyOabMonitor = async (
+  empresaId: number,
+  monitorId: number,
+): Promise<boolean> => {
+  await ensureTable();
+
+  const result = await pool.query(
+    `DELETE FROM public.processo_oab_monitoradas
+      WHERE empresa_id = $1 AND id = $2`,
+    [empresaId, monitorId],
+  );
+
+  return result.rowCount > 0;
 };
