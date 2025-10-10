@@ -391,7 +391,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
     }
   }
 
-  const resumoConciso = frasesParaResumo.slice(0, 10).join(" ") || paragrafoUnico;
+  const resumoConciso = frasesParaResumo.slice(0, 2).join(" ") || paragrafoUnico;
 
   const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
 
@@ -400,7 +400,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
 
 function montarPromptResumoIntimacao(intimacao: Intimacao): string {
   const partes: string[] = [
-    "Resuma de forma objetiva a intimação abaixo destacando prazos, determinações, responsáveis e próximos passos.",
+    "Responda de forma direta qual é a solicitação da autoridade judicial e qual foi o prazo determinado.",
   ];
 
   const numeroProcesso =
@@ -1707,19 +1707,7 @@ export default function Intimacoes() {
                             <CalendarPlus className="mr-2 h-4 w-4" />
                             Incluir na agenda
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenSummary(intimacao)}
-                            disabled={!podeResumir || summaryLoading || isBulkProcessing}
-                          >
-                            {summaryInProgress ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Sparkles className="mr-2 h-4 w-4" />
-                            )}
-                            Resumir com IA
-                          </Button>
+ 
                         </div>
                       </div>
 
@@ -1743,7 +1731,20 @@ export default function Intimacoes() {
                         <InfoItem label="Data do cancelamento">{cancelamentoFormatado}</InfoItem>
                       </div>
 
-                        <InfoItem label="Teor da Comunicação">
+                              <InfoItem label="Teor da Comunicação">
+                                  <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenSummary(intimacao)}
+                                  disabled={!podeResumir || summaryLoading || isBulkProcessing}
+                              >
+                                  {summaryInProgress ? (
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                      <Sparkles className="mr-2 h-4 w-4" />
+                                  )}
+                                  Resumir com IA
+                              </Button>
                         {textoNormalizado ? (
                           textoNormalizado.type === "html" ? (
                             <div
