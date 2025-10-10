@@ -148,6 +148,26 @@ export const createCliente = async (req: Request, res: Response) => {
 
   const documentoLimpo = documento ? documento.replace(/\D/g, '') : null;
   const telefoneLimpo = telefone ? telefone.replace(/\D/g, '') : null;
+  const tipoNormalizado = (() => {
+    if (typeof tipo === 'number') {
+      return tipo;
+    }
+
+    if (typeof tipo === 'string') {
+      if (tipo === 'F') {
+        return 1;
+      }
+
+      if (tipo === 'J') {
+        return 2;
+      }
+
+      const parsed = Number.parseInt(tipo, 10);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    return null;
+  })();
 
   try {
     if (!req.auth) {
@@ -168,6 +188,10 @@ export const createCliente = async (req: Request, res: Response) => {
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
+    if (tipoNormalizado === null) {
+      return res.status(400).json({ error: 'Tipo de cliente inválido.' });
+    }
+
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     if (planLimits?.limiteClientes != null) {
       const clientesCount = await countCompanyResource(empresaId, 'clientes');
@@ -182,7 +206,7 @@ export const createCliente = async (req: Request, res: Response) => {
       'INSERT INTO public.clientes (nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()) RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro',
       [
         nome,
-        tipo,
+        tipoNormalizado,
         documentoLimpo,
         email,
         telefoneLimpo,
@@ -202,7 +226,7 @@ export const createCliente = async (req: Request, res: Response) => {
 
     const syncPayload: ClienteLocalData = {
       nome,
-      tipo,
+      tipo: tipoNormalizado,
       documento: documentoLimpo,
       email,
       telefone: telefoneLimpo,
@@ -257,6 +281,26 @@ export const updateCliente = async (req: Request, res: Response) => {
 
   const documentoLimpo = documento ? documento.replace(/\D/g, '') : null;
   const telefoneLimpo = telefone ? telefone.replace(/\D/g, '') : null;
+  const tipoNormalizado = (() => {
+    if (typeof tipo === 'number') {
+      return tipo;
+    }
+
+    if (typeof tipo === 'string') {
+      if (tipo === 'F') {
+        return 1;
+      }
+
+      if (tipo === 'J') {
+        return 2;
+      }
+
+      const parsed = Number.parseInt(tipo, 10);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    return null;
+  })();
 
   try {
     if (!req.auth) {
@@ -277,11 +321,15 @@ export const updateCliente = async (req: Request, res: Response) => {
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
+    if (tipoNormalizado === null) {
+      return res.status(400).json({ error: 'Tipo de cliente inválido.' });
+    }
+
     const result = await pool.query(
       'UPDATE public.clientes SET nome = $1, tipo = $2, documento = $3, email = $4, telefone = $5, cep = $6, rua = $7, numero = $8, complemento = $9, bairro = $10, cidade = $11, uf = $12, ativo = $13, idempresa = $14 WHERE id = $15 AND idempresa IS NOT DISTINCT FROM $16 RETURNING id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro',
       [
         nome,
-        tipo,
+        tipoNormalizado,
         documentoLimpo,
         email,
         telefoneLimpo,
@@ -306,7 +354,7 @@ export const updateCliente = async (req: Request, res: Response) => {
 
     const syncPayload: ClienteLocalData = {
       nome,
-      tipo,
+      tipo: tipoNormalizado,
       documento: documentoLimpo,
       email,
       telefone: telefoneLimpo,
