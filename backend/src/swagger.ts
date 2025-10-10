@@ -65,6 +65,7 @@ const swaggerOptions = {
             idusuario: { type: 'integer', nullable: true },
             idempresa: { type: 'integer', nullable: true },
             nao_lida: { type: 'boolean', nullable: true },
+            arquivada: { type: 'boolean', nullable: true },
           },
         },
       },
@@ -119,6 +120,49 @@ const swaggerOptions = {
             },
             401: {
               description: 'Token inválido.',
+            },
+            500: {
+              description: 'Erro interno do servidor',
+            },
+          },
+        },
+      },
+      '/api/intimacoes/{id}/archive': {
+        patch: {
+          summary: 'Arquiva uma intimação da empresa do usuário autenticado',
+          tags: ['Intimacoes'],
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer' },
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Intimação arquivada com sucesso',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'integer' },
+                      arquivada: { type: 'boolean' },
+                      updated_at: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+              },
+            },
+            400: {
+              description: 'Identificador de intimação inválido.',
+            },
+            401: {
+              description: 'Token inválido.',
+            },
+            404: {
+              description: 'Intimação não encontrada.',
             },
             500: {
               description: 'Erro interno do servidor',
