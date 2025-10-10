@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -650,6 +650,7 @@ export default function Intimacoes() {
   const [summaryContent, setSummaryContent] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const summaryRequestIdRef = useRef(0);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -688,7 +689,7 @@ export default function Intimacoes() {
   }, [loadIntimacoes]);
 
   const handleGenerateSummary = useCallback(
-    async (intimacao: Intimacao) => {
+    async (intimacao: Intimacao, requestId: number) => {
       setSummaryLoading(true);
       setSummaryError(null);
       setSummaryContent(null);
@@ -696,6 +697,10 @@ export default function Intimacoes() {
       const textoParaResumo = normalizarTexto(intimacao.texto);
 
       if (!textoParaResumo) {
+        if (summaryRequestIdRef.current !== requestId) {
+          return;
+        }
+
         setSummaryLoading(false);
         setSummaryError("Não há conteúdo disponível para resumir.");
         return;
@@ -727,6 +732,10 @@ export default function Intimacoes() {
           throw new Error("Não foi possível gerar um resumo com o conteúdo disponível.");
         }
 
+        if (summaryRequestIdRef.current !== requestId) {
+          return;
+        }
+
         setSummaryContent(resumoFormatado);
 
         const providerLabel =
@@ -742,6 +751,10 @@ export default function Intimacoes() {
         });
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Não foi possível gerar o resumo.";
+        if (summaryRequestIdRef.current !== requestId) {
+          return;
+        }
+
         setSummaryError(mensagem);
         toast({
           title: "Falha ao gerar resumo",
@@ -749,27 +762,37 @@ export default function Intimacoes() {
           variant: "destructive",
         });
       } finally {
-        setSummaryLoading(false);
+        if (summaryRequestIdRef.current === requestId) {
+          setSummaryLoading(false);
+        }
       }
     },
     [toast],
+  );
+
+  const startSummaryGeneration = useCallback(
+    (intimacao: Intimacao) => {
+      const nextRequestId = summaryRequestIdRef.current + 1;
+      summaryRequestIdRef.current = nextRequestId;
+      void handleGenerateSummary(intimacao, nextRequestId);
+    },
+    [handleGenerateSummary],
   );
 
   const handleOpenSummary = useCallback(
     (intimacao: Intimacao) => {
       setSummaryTarget(intimacao);
       setSummaryDialogOpen(true);
-      setSummaryContent(null);
-      setSummaryError(null);
-      void handleGenerateSummary(intimacao);
+      startSummaryGeneration(intimacao);
     },
-    [handleGenerateSummary],
+    [startSummaryGeneration],
   );
 
   const handleSummaryDialogChange = useCallback((open: boolean) => {
     setSummaryDialogOpen(open);
 
     if (!open) {
+      summaryRequestIdRef.current += 1;
       setSummaryTarget(null);
       setSummaryContent(null);
       setSummaryError(null);
@@ -1877,7 +1900,7 @@ export default function Intimacoes() {
                 variant="outline"
                 onClick={() => {
                   if (summaryTarget) {
-                    void handleGenerateSummary(summaryTarget);
+                    startSummaryGeneration(summaryTarget);
                   }
                 }}
                 disabled={summaryLoading}
