@@ -297,8 +297,8 @@ export default function Plans() {
               new Set([
                 ...moduleIds,
                 ...publicConsultationModuleIds,
-              ]).filter((id) => modules.some((module) => module.id === id)),
-            ),
+              ]),
+            ).filter((id) => modules.some((module) => module.id === id)),
             modules
           ),
           publicConsultationModules: orderModules(
