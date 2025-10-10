@@ -41,6 +41,7 @@ import {
   type MarkIntimacaoAsReadResponse,
 } from "@/services/intimacoes";
 import { fetchIntegrationApiKeys, generateAiText } from "@/lib/integrationApiKeys";
+import { getApiUrl } from "@/lib/api";
 import { normalizarTexto } from "./utils/processo-ui";
 import {
   Archive,
@@ -53,6 +54,7 @@ import {
   Loader2,
   RotateCcw,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import {
   Area,
@@ -93,8 +95,405 @@ const ITEMS_PER_PAGE = 15;
 const numberFormatter = new Intl.NumberFormat("pt-BR");
 
 type MonitoredOab = {
+  id: string;
   uf: string;
   number: string;
+  usuarioId: string | null;
+  usuarioNome: string | null;
+  usuarioOabNumero: string | null;
+  usuarioOabUf: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type CompanyUserOption = {
+  id: string;
+  name: string;
+  oabNumber: string | null;
+  oabUf: string | null;
+};
+
+type ApiCompanyUser = {
+  id?: number | string | null;
+  id_usuario?: number | string | null;
+  idUsuario?: number | string | null;
+  idusuario?: number | string | null;
+  usuario_id?: number | string | null;
+  usuarioId?: number | string | null;
+  user_id?: number | string | null;
+  userId?: number | string | null;
+  codigo?: number | string | null;
+  nome_completo?: string | null;
+  nome?: string | null;
+  nome_usuario?: string | null;
+  nomeusuario?: string | null;
+  nomeUsuario?: string | null;
+  nome_usuario_completo?: string | null;
+  email?: string | null;
+  oab?: string | null;
+  oab_number?: string | null;
+  oabNumber?: string | null;
+  oab_numero?: string | null;
+  oabNumero?: string | null;
+  oab_uf?: string | null;
+  oabUf?: string | null;
+};
+
+type ApiMonitoredOab = {
+  id?: number | string | null;
+  uf?: string | null;
+  numero?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  usuario_id?: number | string | null;
+  usuarioId?: number | string | null;
+  usuario_nome?: string | null;
+  usuarioNome?: string | null;
+  usuario_oab_numero?: string | null;
+  usuarioOabNumero?: string | null;
+  usuario_oab_uf?: string | null;
+  usuarioOabUf?: string | null;
+};
+
+const pickFirstNonEmptyString = (
+  ...values: Array<string | null | undefined>
+): string | null => {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  return null;
+};
+
+const getNameFromEmail = (value?: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const [localPart] = value.split("@");
+  if (!localPart) {
+    return null;
+  }
+
+  const cleaned = localPart.replace(/[._-]+/g, " ").trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const extractCompanyUserArray = (payload: unknown): ApiCompanyUser[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter((item): item is ApiCompanyUser => Boolean(item && typeof item === "object"));
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const visited = new Set<object>();
+  const queue: unknown[] = [payload];
+  const candidateKeys = [
+    "usuarios",
+    "usuarios_empresa",
+    "usuariosEmpresa",
+    "usuariosEmpresaRows",
+    "lista",
+    "items",
+    "result",
+    "results",
+    "records",
+    "rows",
+    "data",
+    "values",
+    "payload",
+    "content",
+    "body",
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+
+    if (visited.has(current as object)) {
+      continue;
+    }
+
+    visited.add(current as object);
+
+    for (const key of candidateKeys) {
+      const value = (current as Record<string, unknown>)[key];
+
+      if (Array.isArray(value)) {
+        const objects = value.filter((item): item is ApiCompanyUser => Boolean(item && typeof item === "object"));
+        if (objects.length > 0) {
+          return objects;
+        }
+      }
+    }
+
+    for (const value of Object.values(current as Record<string, unknown>)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item && typeof item === "object") {
+            queue.push(item);
+          }
+        }
+      } else if (value && typeof value === "object") {
+        queue.push(value);
+      }
+    }
+  }
+
+  return [];
+};
+
+const extractCompanyUserId = (user: ApiCompanyUser): string | null => {
+  const candidates: Array<number | string | null | undefined> = [
+    user.id,
+    user.id_usuario,
+    user.idUsuario,
+    user.idusuario,
+    user.usuario_id,
+    user.usuarioId,
+    user.user_id,
+    user.userId,
+    user.codigo,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(Math.trunc(candidate));
+    }
+
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+
+  return null;
+};
+
+const sanitizeUfValue = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
+  return normalized.length === 2 ? normalized : null;
+};
+
+const sanitizeOabNumberValue = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, "").slice(0, 12);
+  return digits ? digits : null;
+};
+
+const extractCombinedOabData = (
+  value: string | null | undefined,
+): { number: string | null; uf: string | null } => {
+  if (typeof value !== "string") {
+    return { number: null, uf: null };
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return { number: null, uf: null };
+  }
+
+  const normalized = trimmed.replace(/^OAB\s*/i, "");
+
+  if (normalized.includes("/")) {
+    const [left, right] = normalized.split("/");
+    const number = sanitizeOabNumberValue(left);
+    const uf = sanitizeUfValue(right);
+    return { number, uf };
+  }
+
+  const match = normalized.match(/([A-Za-z]{2})[^A-Za-z0-9]*([0-9]+)/);
+
+  if (match) {
+    const [, ufRaw, numberRaw] = match;
+    return {
+      number: sanitizeOabNumberValue(numberRaw),
+      uf: sanitizeUfValue(ufRaw),
+    };
+  }
+
+  return { number: sanitizeOabNumberValue(normalized), uf: null };
+};
+
+const extractCompanyUserOab = (
+  user: ApiCompanyUser,
+): { number: string | null; uf: string | null } => {
+  const explicitNumber = sanitizeOabNumberValue(
+    pickFirstNonEmptyString(user.oab_number, user.oabNumber, user.oab_numero, user.oabNumero),
+  );
+  const explicitUf = sanitizeUfValue(pickFirstNonEmptyString(user.oab_uf, user.oabUf));
+
+  let number = explicitNumber;
+  let uf = explicitUf;
+
+  if (!number || !uf) {
+    const combined = extractCombinedOabData(user.oab);
+    if (!number && combined.number) {
+      number = combined.number;
+    }
+    if (!uf && combined.uf) {
+      uf = combined.uf;
+    }
+  }
+
+  return { number, uf };
+};
+
+const parseCompanyUsers = (payload: unknown): CompanyUserOption[] => {
+  const data = extractCompanyUserArray(payload);
+  const options: CompanyUserOption[] = [];
+  const seen = new Set<string>();
+
+  for (const user of data) {
+    const id = extractCompanyUserId(user);
+    if (!id || seen.has(id)) {
+      continue;
+    }
+
+    const name =
+      pickFirstNonEmptyString(
+        user.nome_completo,
+        user.nome,
+        user.nome_usuario,
+        user.nomeusuario,
+        user.nomeUsuario,
+        user.nome_usuario_completo,
+      ) ?? getNameFromEmail(user.email) ?? `Usuário ${id}`;
+
+    const { number, uf } = extractCompanyUserOab(user);
+
+    options.push({
+      id,
+      name,
+      oabNumber: number,
+      oabUf: uf,
+    });
+    seen.add(id);
+  }
+
+  return options;
+};
+
+const mapApiMonitoredOab = (payload: unknown): MonitoredOab | null => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const data = payload as ApiMonitoredOab;
+
+  const rawId = data.id;
+  let id: string | null = null;
+
+  if (typeof rawId === "number" && Number.isFinite(rawId)) {
+    id = String(Math.trunc(rawId));
+  } else if (typeof rawId === "string") {
+    const trimmed = rawId.trim();
+    if (trimmed) {
+      id = trimmed;
+    }
+  }
+
+  if (!id) {
+    return null;
+  }
+
+  const uf = typeof data.uf === "string" ? data.uf.trim().toUpperCase() : null;
+  const numero = typeof data.numero === "string" ? data.numero.trim() : null;
+
+  if (!uf || !numero) {
+    return null;
+  }
+
+  const usuarioIdCandidate = data.usuarioId ?? data.usuario_id ?? null;
+  let usuarioId: string | null = null;
+
+  if (typeof usuarioIdCandidate === "number" && Number.isFinite(usuarioIdCandidate)) {
+    usuarioId = String(Math.trunc(usuarioIdCandidate));
+  } else if (typeof usuarioIdCandidate === "string") {
+    const trimmed = usuarioIdCandidate.trim();
+    if (trimmed) {
+      usuarioId = trimmed;
+    }
+  }
+
+  const usuarioNome = pickFirstNonEmptyString(data.usuarioNome as string, data.usuario_nome as string);
+  const usuarioOabNumero = pickFirstNonEmptyString(
+    data.usuarioOabNumero as string,
+    data.usuario_oab_numero as string,
+  );
+  const usuarioOabUf = sanitizeUfValue(
+    pickFirstNonEmptyString(data.usuarioOabUf as string, data.usuario_oab_uf as string),
+  );
+
+  const createdAt = pickFirstNonEmptyString(data.createdAt as string, data.created_at as string);
+  const updatedAt = pickFirstNonEmptyString(data.updatedAt as string, data.updated_at as string);
+
+  return {
+    id,
+    uf,
+    number: numero,
+    usuarioId,
+    usuarioNome: usuarioNome ?? null,
+    usuarioOabNumero: usuarioOabNumero ?? null,
+    usuarioOabUf: usuarioOabUf ?? null,
+    createdAt: createdAt ?? null,
+    updatedAt: updatedAt ?? null,
+  };
+};
+
+const parseMonitoredOabArray = (payload: unknown): MonitoredOab[] => {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload
+    .map((item) => mapApiMonitoredOab(item))
+    .filter((item): item is MonitoredOab => Boolean(item));
+};
+
+const sortMonitoredOabs = (items: MonitoredOab[]): MonitoredOab[] => {
+  return [...items].sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+
+    const idA = Number.parseInt(a.id, 10);
+    const idB = Number.parseInt(b.id, 10);
+
+    if (Number.isFinite(idA) && Number.isFinite(idB)) {
+      return idB - idA;
+    }
+
+    return b.id.localeCompare(a.id);
+  });
 };
 
 const BRAZILIAN_STATES = [
@@ -683,11 +1082,18 @@ export default function Intimacoes() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [monitoredOabs, setMonitoredOabs] = useState<MonitoredOab[]>([]);
+  const [monitoredOabsLoading, setMonitoredOabsLoading] = useState(false);
   const [oabModalOpen, setOabModalOpen] = useState(false);
   const [oabUf, setOabUf] = useState("");
   const [oabNumber, setOabNumber] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [oabSubmitting, setOabSubmitting] = useState(false);
+  const [removingOabId, setRemovingOabId] = useState<string | null>(null);
+  const [companyUsers, setCompanyUsers] = useState<CompanyUserOption[]>([]);
+  const [companyUsersLoading, setCompanyUsersLoading] = useState(false);
   const summaryRequestIdRef = useRef(0);
   const oabPromptShownRef = useRef(false);
+  const companyUsersLoadedRef = useRef(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [detailsTarget, setDetailsTarget] = useState<Intimacao | null>(null);
   const { toast } = useToast();
@@ -719,6 +1125,141 @@ export default function Intimacoes() {
     }
   }, []);
 
+  const loadMonitoredOabs = useCallback(
+    async (signal?: AbortSignal) => {
+      setMonitoredOabsLoading(true);
+
+      try {
+        const response = await fetch(getApiUrl("intimacoes/oab-monitoradas"), {
+          signal,
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Não foi possível carregar as OABs monitoradas (HTTP ${response.status}).`);
+        }
+
+        const payload = await response.json();
+        if (signal?.aborted) {
+          return;
+        }
+
+        const monitors = sortMonitoredOabs(parseMonitoredOabArray(payload));
+        setMonitoredOabs(monitors);
+      } catch (loadError) {
+        if (signal?.aborted) {
+          return;
+        }
+
+        console.error("Falha ao carregar OABs monitoradas", loadError);
+        const message =
+          loadError instanceof Error
+            ? loadError.message
+            : "Não foi possível carregar as OABs monitoradas.";
+        toast({
+          title: "Erro ao carregar OABs monitoradas",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        if (!signal?.aborted) {
+          setMonitoredOabsLoading(false);
+        }
+      }
+    },
+    [toast],
+  );
+
+  const loadCompanyUsers = useCallback(
+    async (signal?: AbortSignal) => {
+      setCompanyUsersLoading(true);
+
+      try {
+        const endpoints = ["get_api_usuarios_empresa", "usuarios/empresa"] as const;
+        let users: CompanyUserOption[] | null = null;
+        let lastError: Error | null = null;
+
+        for (const endpoint of endpoints) {
+          try {
+            const response = await fetch(getApiUrl(endpoint), {
+              signal,
+              headers: { Accept: "application/json" },
+            });
+
+            if (!response.ok) {
+              lastError = new Error(
+                `Não foi possível carregar os usuários da empresa (HTTP ${response.status}).`,
+              );
+              continue;
+            }
+
+            const payload = await response.json();
+
+            if (signal?.aborted) {
+              return;
+            }
+
+            const parsed = parseCompanyUsers(payload);
+
+            if (parsed.length === 0 && endpoint !== endpoints[endpoints.length - 1]) {
+              lastError = new Error("Nenhum usuário encontrado.");
+              continue;
+            }
+
+            users = parsed;
+            lastError = null;
+            break;
+          } catch (error) {
+            if (signal?.aborted) {
+              return;
+            }
+
+            lastError =
+              error instanceof Error
+                ? error
+                : new Error("Não foi possível carregar os usuários da empresa.");
+          }
+        }
+
+        if (signal?.aborted) {
+          return;
+        }
+
+        if (users) {
+          setCompanyUsers(users);
+          companyUsersLoadedRef.current = true;
+          return;
+        }
+
+        if (lastError) {
+          throw lastError;
+        }
+
+        throw new Error("Não foi possível carregar os usuários da empresa.");
+      } catch (usersError) {
+        if (signal?.aborted) {
+          return;
+        }
+
+        console.error("Falha ao carregar usuários da empresa", usersError);
+        const message =
+          usersError instanceof Error
+            ? usersError.message
+            : "Não foi possível carregar os usuários da empresa.";
+        toast({
+          title: "Erro ao carregar usuários",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        if (!signal?.aborted) {
+          setCompanyUsersLoading(false);
+        }
+      }
+    },
+    [companyUsersLoadedRef, toast],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
     loadIntimacoes(controller.signal);
@@ -729,17 +1270,33 @@ export default function Intimacoes() {
   }, [loadIntimacoes]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    loadMonitoredOabs(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [loadMonitoredOabs]);
+
+  useEffect(() => {
+    if (!oabModalOpen || companyUsersLoadedRef.current) {
+      return;
+    }
+
+    const controller = new AbortController();
+    loadCompanyUsers(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [loadCompanyUsers, oabModalOpen]);
+
+  useEffect(() => {
     if (canManageOabs && !oabPromptShownRef.current) {
       oabPromptShownRef.current = true;
       setOabModalOpen(true);
     }
   }, [canManageOabs]);
-
-  useEffect(() => {
-    if (!canManageOabs && oabModalOpen) {
-      setOabModalOpen(false);
-    }
-  }, [canManageOabs, oabModalOpen]);
 
   const handleGenerateSummary = useCallback(
     async (intimacao: Intimacao, requestId: number) => {
@@ -933,46 +1490,147 @@ export default function Intimacoes() {
   }, []);
 
   const handleOpenOabModal = useCallback(() => {
-    if (canManageOabs) {
-      setOabModalOpen(true);
-    }
-  }, [canManageOabs]);
+    setOabModalOpen(true);
+  }, []);
 
-  const handleOabModalChange = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        setOabModalOpen(false);
-        setOabNumber("");
-        setOabUf("");
+  const handleOabModalChange = useCallback((open: boolean) => {
+    setOabModalOpen(open);
+
+    if (!open) {
+      setOabNumber("");
+      setOabUf("");
+      setSelectedUserId("");
+      setRemovingOabId(null);
+      setOabSubmitting(false);
+    }
+  }, []);
+
+  const handleSelectCompanyUser = useCallback(
+    (value: string) => {
+      setSelectedUserId(value);
+
+      const option = companyUsers.find((item) => item.id === value);
+
+      if (!option) {
         return;
       }
 
-      if (canManageOabs) {
-        setOabModalOpen(true);
+      if (option.oabNumber) {
+        setOabNumber(option.oabNumber);
+      }
+
+      if (option.oabUf) {
+        setOabUf(option.oabUf);
       }
     },
-    [canManageOabs],
+    [companyUsers],
   );
 
-  const handleRegisterOab = useCallback(() => {
-    const sanitizedNumber = oabNumber.trim();
+  const handleRegisterOab = useCallback(async () => {
+    const sanitizedNumber = oabNumber.replace(/\D/g, "");
+    const sanitizedUf = oabUf.trim().toUpperCase();
+    const parsedUserId = Number.parseInt(selectedUserId, 10);
 
-    if (!sanitizedNumber || !oabUf) {
+    if (!sanitizedNumber || !sanitizedUf || !Number.isInteger(parsedUserId) || parsedUserId <= 0) {
       return;
     }
 
-    setMonitoredOabs((previous) => {
-      if (previous.some((item) => item.uf === oabUf && item.number === sanitizedNumber)) {
-        return previous;
+    setOabSubmitting(true);
+
+    try {
+      const response = await fetch(getApiUrl("intimacoes/oab-monitoradas"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uf: sanitizedUf, numero: sanitizedNumber, usuarioId: parsedUserId }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const message =
+          payload && typeof payload === "object" && payload && "error" in payload
+            ? String((payload as { error?: unknown }).error)
+            : `Não foi possível cadastrar a OAB (HTTP ${response.status}).`;
+        throw new Error(message);
       }
 
-      return [...previous, { uf: oabUf, number: sanitizedNumber }];
-    });
+      const payload = await response.json();
+      const monitor = mapApiMonitoredOab(payload);
 
-    setOabModalOpen(false);
-    setOabNumber("");
-    setOabUf("");
-  }, [oabNumber, oabUf]);
+      if (!monitor) {
+        throw new Error("Não foi possível interpretar a resposta ao cadastrar a OAB.");
+      }
+
+      setMonitoredOabs((previous) => {
+        const filtered = previous.filter((item) => item.id !== monitor.id);
+        return sortMonitoredOabs([monitor, ...filtered]);
+      });
+
+      toast({
+        title: "OAB cadastrada",
+        description: `Monitoramento ativado para ${monitor.number}/${monitor.uf}.`,
+      });
+
+      setOabNumber("");
+      setOabUf("");
+      setSelectedUserId("");
+    } catch (registerError) {
+      const message =
+        registerError instanceof Error
+          ? registerError.message
+          : "Não foi possível cadastrar a OAB informada.";
+      toast({
+        title: "Erro ao cadastrar OAB",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setOabSubmitting(false);
+    }
+  }, [oabNumber, oabUf, selectedUserId, toast]);
+
+  const handleRemoveMonitoredOab = useCallback(
+    async (id: string) => {
+      if (!id) {
+        return;
+      }
+
+      setRemovingOabId(id);
+
+      try {
+        const response = await fetch(getApiUrl(`intimacoes/oab-monitoradas/${id}`), {
+          method: "DELETE",
+        });
+
+        if (response.status !== 204) {
+          const payload = await response.json().catch(() => null);
+          const message =
+            payload && typeof payload === "object" && payload && "error" in payload
+              ? String((payload as { error?: unknown }).error)
+              : `Não foi possível remover a OAB (HTTP ${response.status}).`;
+          throw new Error(message);
+        }
+
+        setMonitoredOabs((previous) => previous.filter((item) => item.id !== id));
+        toast({
+          title: "OAB removida",
+          description: "O monitoramento foi encerrado.",
+        });
+      } catch (removeError) {
+        const message =
+          removeError instanceof Error
+            ? removeError.message
+            : "Não foi possível remover a OAB monitorada.";
+        toast({
+          title: "Erro ao remover OAB",
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setRemovingOabId(null);
+      }
+    },
+    [toast],
+  );
 
   const sortedIntimacoes = useMemo(() => {
     return [...intimacoes].sort((a, b) => {
@@ -1538,7 +2196,9 @@ export default function Intimacoes() {
     () => (summaryTarget ? normalizarTexto(summaryTarget.texto) : ""),
     [summaryTarget],
   );
-  const isOabFormValid = oabUf.trim().length > 0 && oabNumber.trim().length > 0;
+  const sanitizedOabInput = oabNumber.replace(/\D/g, "");
+  const isOabFormValid =
+    selectedUserId.trim().length > 0 && sanitizedOabInput.length > 0 && oabUf.trim().length === 2;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -1637,24 +2297,22 @@ export default function Intimacoes() {
               Cadastre os números da OAB que deseja acompanhar e receba intimações em tempo real.
             </CardDescription>
           </div>
-          {canManageOabs ? (
-            <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
-              Cadastrar OAB
-            </Button>
-          ) : null}
         </CardHeader>
         <CardContent className="pt-0">
-          {monitoredOabs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma OAB cadastrada para monitoramento.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {monitoredOabs.map((item) => (
-                <Badge key={`${item.number}-${item.uf}`} variant="secondary">
-                  OAB {item.number}/{item.uf}
-                </Badge>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {monitoredOabsLoading
+                ? "Carregando OABs monitoradas..."
+                : monitoredOabs.length === 0
+                  ? "Nenhuma OAB cadastrada para monitoramento."
+                  : `${monitoredOabs.length} OAB${monitoredOabs.length > 1 ? "s" : ""} monitorada${
+                      monitoredOabs.length > 1 ? "s" : ""
+                    }.`}
+            </p>
+            <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
+              Gerenciar OABs
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -2217,41 +2875,149 @@ export default function Intimacoes() {
         </>
       ) : null}
       <Dialog open={oabModalOpen} onOpenChange={handleOabModalChange}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Cadastrar OAB monitorada</DialogTitle>
+            <DialogTitle>Gerenciar OABs monitoradas</DialogTitle>
             <DialogDescription>
-              Informe o estado e o número da OAB para habilitar o recebimento de intimações em tempo real.
+              Cadastre novas OABs monitoradas ou remova registros que não deseja mais acompanhar.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="oab-uf">Estado</Label>
-              <Select value={oabUf} onValueChange={setOabUf}>
-                <SelectTrigger id="oab-uf">
-                  <SelectValue placeholder="Selecione o estado" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BRAZILIAN_STATES.map((state) => (
-                    <SelectItem key={state.value} value={state.value}>
-                      {state.label} ({state.value})
-                    </SelectItem>
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">OABs cadastradas</p>
+                <p className="text-xs text-muted-foreground">
+                  Visualize e gerencie os números monitorados pela sua empresa.
+                </p>
+              </div>
+              {monitoredOabsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando OABs monitoradas...
+                </div>
+              ) : monitoredOabs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma OAB cadastrada no momento.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {monitoredOabs.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card/60 p-3"
+                    >
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">
+                          OAB {item.number}/{item.uf}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.usuarioNome ?? "Usuário não identificado"}
+                          {item.usuarioOabNumero
+                            ? ` • OAB ${item.usuarioOabNumero}${
+                                item.usuarioOabUf ? `/${item.usuarioOabUf}` : ""
+                              }`
+                            : ""}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          void handleRemoveMonitoredOab(item.id);
+                        }}
+                        disabled={removingOabId === item.id || oabSubmitting}
+                      >
+                        {removingOabId === item.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                        <span className="sr-only">Remover</span>
+                      </Button>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="oab-number">Número da OAB</Label>
-              <Input
-                id="oab-number"
-                placeholder="000000"
-                value={oabNumber}
-                onChange={(event) => setOabNumber(event.target.value)}
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="oab-user">Responsável</Label>
+                <Select
+                  value={selectedUserId}
+                  onValueChange={handleSelectCompanyUser}
+                  disabled={companyUsersLoading || companyUsers.length === 0}
+                >
+                  <SelectTrigger id="oab-user">
+                    <SelectValue
+                      placeholder={
+                        companyUsersLoading
+                          ? "Carregando usuários..."
+                          : "Selecione o responsável"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companyUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.name}
+                        {user.oabNumber
+                          ? ` • OAB ${user.oabNumber}${user.oabUf ? `/${user.oabUf}` : ""}`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {companyUsersLoading ? (
+                  <p className="text-xs text-muted-foreground">Carregando lista de usuários...</p>
+                ) : companyUsers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum usuário disponível para seleção.
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="oab-uf">Estado</Label>
+                  <Select value={oabUf} onValueChange={setOabUf}>
+                    <SelectTrigger id="oab-uf">
+                      <SelectValue placeholder="Selecione o estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BRAZILIAN_STATES.map((state) => (
+                        <SelectItem key={state.value} value={state.value}>
+                          {state.label} ({state.value})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="oab-number">Número da OAB</Label>
+                  <Input
+                    id="oab-number"
+                    placeholder="000000"
+                    value={oabNumber}
+                    onChange={(event) => setOabNumber(event.target.value)}
+                  />
+                </div>
+              </div>
+              {!canManageOabs ? (
+                <p className="text-xs text-muted-foreground">
+                  Cadastros disponíveis quando não houver intimações pendentes para o período atual.
+                </p>
+              ) : null}
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" onClick={handleRegisterOab} disabled={!isOabFormValid}>
+            <Button
+              type="button"
+              onClick={() => {
+                void handleRegisterOab();
+              }}
+              disabled={!isOabFormValid || oabSubmitting || !canManageOabs}
+            >
+              {oabSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Cadastrar
             </Button>
           </DialogFooter>

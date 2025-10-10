@@ -1,5 +1,10 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
+import {
+  createIntimacaoOabMonitor,
+  deleteIntimacaoOabMonitor,
+  listIntimacaoOabMonitors,
+} from '../services/intimacaoOabMonitorService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 export const listIntimacoesHandler = async (req: Request, res: Response) => {
@@ -166,6 +171,145 @@ export const markIntimacaoAsReadHandler = async (req: Request, res: Response) =>
     return res.json(result.rows[0]);
   } catch (error) {
     console.error('Failed to mark intimação as read', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+const parsePositiveInt = (value: unknown): number | 'invalid' => {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value <= 0) {
+      return 'invalid';
+    }
+
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return 'invalid';
+    }
+
+    const parsed = Number(trimmed);
+
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return 'invalid';
+    }
+
+    return parsed;
+  }
+
+  return 'invalid';
+};
+
+export const listIntimacaoOabMonitoradasHandler = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
+    const monitors = await listIntimacaoOabMonitors(empresaId);
+    return res.json(monitors);
+  } catch (error) {
+    console.error('Failed to list monitored OABs for intimações', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Response) => {
+  const { uf, numero, usuarioId } = req.body ?? {};
+
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    if (typeof uf !== 'string' || typeof numero !== 'string') {
+      return res.status(400).json({ error: 'Informe a UF e o número da OAB.' });
+    }
+
+    const parsedUsuarioId = parsePositiveInt(usuarioId);
+
+    if (parsedUsuarioId === 'invalid') {
+      return res.status(400).json({ error: 'Informe um usuário válido.' });
+    }
+
+    try {
+      const monitor = await createIntimacaoOabMonitor(empresaId, parsedUsuarioId, uf, numero);
+      return res.status(201).json(monitor);
+    } catch (serviceError) {
+      const message =
+        serviceError instanceof Error
+          ? serviceError.message
+          : 'Não foi possível cadastrar a OAB informada.';
+      return res.status(400).json({ error: message });
+    }
+  } catch (error) {
+    console.error('Failed to create monitored OAB for intimações', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const deleteIntimacaoOabMonitoradaHandler = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const monitorId = parsePositiveInt(req.params.id);
+
+    if (monitorId === 'invalid') {
+      return res.status(400).json({ error: 'Identificador de monitoramento inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
+    }
+
+    const deleted = await deleteIntimacaoOabMonitor(empresaId, monitorId);
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'Registro de monitoramento não encontrado.' });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error('Failed to delete monitored OAB for intimações', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
