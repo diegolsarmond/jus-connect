@@ -458,7 +458,7 @@ function formatDateTime(value: string | null | undefined): string | null {
     return null;
   }
 
-  return format(date, "dd/MM/yyyy HH:mm", { locale: ptBR });
+  return format(date, "dd/MM/yyyy", { locale: ptBR });
 }
 
 function formatDateOrText(value: string | null | undefined): string | null {
@@ -1233,17 +1233,7 @@ export default function Intimacoes() {
                     <div className="space-y-6 py-2">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                          {intimacao.tipoComunicacao ? <Badge>{intimacao.tipoComunicacao}</Badge> : null}
-                          {intimacao.nao_lida ? (
-                            <Badge variant="outline" className="border-primary/60 bg-primary/10 text-primary">
-                              Não lida
-                            </Badge>
-                          ) : null}
-                          {intimacao.arquivada ? (
-                            <Badge variant="secondary" className="bg-muted text-muted-foreground">
-                              Arquivada
-                            </Badge>
-                          ) : null}
+                          
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {intimacao.nao_lida ? (

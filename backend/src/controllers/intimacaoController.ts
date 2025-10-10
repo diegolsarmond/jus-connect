@@ -50,7 +50,7 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
               nao_lida,
               arquivada
          FROM public.intimacoes
-        WHERE idempresa = $1
+        WHERE idempresa = $1 AND "tipoComunicacao" <> 'Lista de distribuição'
         ORDER BY data_disponibilizacao DESC NULLS LAST,
                  created_at DESC NULLS LAST,
                  id DESC`,
