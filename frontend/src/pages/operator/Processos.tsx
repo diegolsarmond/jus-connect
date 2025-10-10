@@ -260,6 +260,15 @@ interface OabMonitor {
     numero: string;
     createdAt: string | null;
     updatedAt: string | null;
+    usuarioId: number | null;
+    usuarioNome: string | null;
+    usuarioOab: string | null;
+}
+
+interface OabUsuarioOption {
+    id: string;
+    nome: string;
+    oab: string | null;
 }
 
 const UNASSIGNED_PAGE_SIZE = 5;
@@ -390,12 +399,41 @@ const mapApiOabMonitor = (payload: Record<string, unknown>): OabMonitor | null =
             : undefined,
     );
 
+    const usuarioId = parseOptionalInteger(
+        (payload as { usuarioId?: unknown }).usuarioId ??
+            (payload as { usuario_id?: unknown }).usuario_id,
+    );
+
+    const usuarioNome = pickFirstNonEmptyString(
+        typeof (payload as { usuarioNome?: string }).usuarioNome === "string"
+            ? (payload as { usuarioNome: string }).usuarioNome
+            : undefined,
+        typeof (payload as { usuario_nome?: string }).usuario_nome === "string"
+            ? (payload as { usuario_nome: string }).usuario_nome
+            : undefined,
+        typeof (payload as { nome_usuario?: string }).nome_usuario === "string"
+            ? (payload as { nome_usuario: string }).nome_usuario
+            : undefined,
+    );
+
+    const usuarioOab = pickFirstNonEmptyString(
+        typeof (payload as { usuarioOab?: string }).usuarioOab === "string"
+            ? (payload as { usuarioOab: string }).usuarioOab
+            : undefined,
+        typeof (payload as { usuario_oab?: string }).usuario_oab === "string"
+            ? (payload as { usuario_oab: string }).usuario_oab
+            : undefined,
+    );
+
     return {
         id: idValue,
         uf,
         numero,
         createdAt: createdAt ?? null,
         updatedAt: updatedAt ?? null,
+        usuarioId: usuarioId,
+        usuarioNome: usuarioNome ?? null,
+        usuarioOab: usuarioOab ?? null,
     };
 };
 
@@ -1105,6 +1143,12 @@ export default function Processos() {
     const [oabMonitorsError, setOabMonitorsError] = useState<string | null>(null);
     const [oabSubmitLoading, setOabSubmitLoading] = useState(false);
     const [oabSubmitError, setOabSubmitError] = useState<string | null>(null);
+    const [oabUsuarioOptions, setOabUsuarioOptions] = useState<OabUsuarioOption[]>([]);
+    const [oabUsuariosLoading, setOabUsuariosLoading] = useState(false);
+    const [oabUsuariosError, setOabUsuariosError] = useState<string | null>(null);
+    const [oabUsuarioId, setOabUsuarioId] = useState("");
+    const [isOabListModalOpen, setIsOabListModalOpen] = useState(false);
+    const [oabRemovingId, setOabRemovingId] = useState<number | null>(null);
     const [processForm, setProcessForm] = useState<ProcessFormState>(
         createEmptyProcessForm,
     );
@@ -1397,6 +1441,162 @@ export default function Processos() {
         };
 
         fetchMonitors();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchUsuariosOab = async () => {
+            setOabUsuariosLoading(true);
+            setOabUsuariosError(null);
+
+            const endpoints = ["get_api_usuarios_empresa", "usuarios/empresa"];
+            let loaded = false;
+            let lastError: Error | null = null;
+
+            for (const endpoint of endpoints) {
+                try {
+                    const res = await fetch(getApiUrl(endpoint), {
+                        headers: { Accept: "application/json" },
+                    });
+
+                    let json: unknown = null;
+
+                    try {
+                        json = await res.json();
+                    } catch (error) {
+                        console.error("Não foi possível interpretar a resposta de usuários", error);
+                    }
+
+                    if (!res.ok) {
+                        const message =
+                            json && typeof json === "object" && "error" in json &&
+                                typeof (json as { error?: unknown }).error === "string"
+                                ? String((json as { error: string }).error)
+                                : `Não foi possível carregar os usuários (HTTP ${res.status})`;
+                        throw new Error(message);
+                    }
+
+                    const payloadArray: Record<string, unknown>[] = Array.isArray(json)
+                        ? (json as Record<string, unknown>[])
+                        : Array.isArray((json as { data?: unknown[] })?.data)
+                            ? ((json as { data: unknown[] }).data as Record<string, unknown>[])
+                            : Array.isArray((json as { rows?: unknown[] })?.rows)
+                                ? ((json as { rows: unknown[] }).rows as Record<string, unknown>[])
+                                : [];
+
+                    const options: OabUsuarioOption[] = [];
+                    const seen = new Set<string>();
+
+                    for (const item of payloadArray) {
+                        if (!item) {
+                            continue;
+                        }
+
+                        const idValue = parseOptionalInteger(item["id"]);
+
+                        if (!idValue) {
+                            continue;
+                        }
+
+                        const id = String(idValue);
+
+                        if (seen.has(id)) {
+                            continue;
+                        }
+
+                        const nome = pickFirstNonEmptyString(
+                            typeof item["nome_completo"] === "string" ? (item["nome_completo"] as string) : undefined,
+                            typeof item["nome"] === "string" ? (item["nome"] as string) : undefined,
+                            typeof item["nome_usuario"] === "string" ? (item["nome_usuario"] as string) : undefined,
+                            typeof item["nomeusuario"] === "string" ? (item["nomeusuario"] as string) : undefined,
+                            typeof item["email"] === "string" ? getNameFromEmail(item["email"] as string) : undefined,
+                        );
+
+                        if (!nome) {
+                            continue;
+                        }
+
+                        const numeroRaw = pickFirstNonEmptyString(
+                            typeof item["oabNumero"] === "string" ? (item["oabNumero"] as string) : undefined,
+                            typeof item["oab_numero"] === "string" ? (item["oab_numero"] as string) : undefined,
+                            typeof item["oab_number"] === "string" ? (item["oab_number"] as string) : undefined,
+                            typeof item["oab"] === "string" ? (item["oab"] as string) : undefined,
+                        );
+
+                        const ufRaw = pickFirstNonEmptyString(
+                            typeof item["oabUf"] === "string" ? (item["oabUf"] as string) : undefined,
+                            typeof item["oab_uf"] === "string" ? (item["oab_uf"] as string) : undefined,
+                        );
+
+                        let oab: string | null = null;
+
+                        if (numeroRaw) {
+                            const digits = formatOabDigits(numeroRaw);
+                            if (digits) {
+                                if (ufRaw) {
+                                    const normalizedUf = normalizeUf(ufRaw);
+                                    if (normalizedUf.length === 2) {
+                                        oab = formatOabDisplay(digits, normalizedUf);
+                                    } else {
+                                        oab = digits;
+                                    }
+                                } else {
+                                    oab = digits;
+                                }
+                            }
+                        }
+
+                        if (!oab) {
+                            const oabRaw = pickFirstNonEmptyString(
+                                typeof item["oab"] === "string" ? (item["oab"] as string) : undefined,
+                                typeof item["oabNumber"] === "string" ? (item["oabNumber"] as string) : undefined,
+                            );
+
+                            if (oabRaw) {
+                                oab = oabRaw;
+                            } else if (ufRaw) {
+                                const normalizedUf = normalizeUf(ufRaw);
+                                if (normalizedUf.length === 2) {
+                                    oab = normalizedUf;
+                                }
+                            }
+                        }
+
+                        options.push({ id, nome, oab: oab ?? null });
+                        seen.add(id);
+                    }
+
+                    options.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+                    if (!cancelled) {
+                        setOabUsuarioOptions(options);
+                    }
+
+                    loaded = true;
+                    lastError = null;
+                    break;
+                } catch (error) {
+                    console.error(error);
+                    lastError = error instanceof Error ? error : new Error("Erro ao carregar usuários");
+                }
+            }
+
+            if (!loaded && !cancelled) {
+                setOabUsuarioOptions([]);
+                setOabUsuariosError(lastError ? lastError.message : "Erro ao carregar usuários");
+            }
+
+            if (!cancelled) {
+                setOabUsuariosLoading(false);
+            }
+        };
+
+        fetchUsuariosOab();
 
         return () => {
             cancelled = true;
@@ -2092,8 +2292,59 @@ export default function Processos() {
         if (!open) {
             setOabModalDismissed(true);
             setOabSubmitError(null);
+            setOabUsuarioId("");
         }
     }, []);
+
+    const handleOabListModalChange = useCallback((open: boolean) => {
+        setIsOabListModalOpen(open);
+    }, []);
+
+    const handleRemoveOabMonitor = useCallback(
+        async (monitorId: number) => {
+            setOabRemovingId(monitorId);
+
+            try {
+                const res = await fetch(getApiUrl(`processos/oab-monitoradas/${monitorId}`), {
+                    method: "DELETE",
+                    headers: { Accept: "application/json" },
+                });
+
+                if (res.status !== 204) {
+                    let json: unknown = null;
+
+                    try {
+                        json = await res.json();
+                    } catch (error) {
+                        console.error("Não foi possível interpretar a resposta de exclusão de OAB", error);
+                    }
+
+                    const message =
+                        json && typeof json === "object" && "error" in json &&
+                            typeof (json as { error?: unknown }).error === "string"
+                            ? String((json as { error: string }).error)
+                            : `Não foi possível remover a OAB (HTTP ${res.status})`;
+                    throw new Error(message);
+                }
+
+                setOabMonitors((prev) => prev.filter((item) => item.id !== monitorId));
+                toast({
+                    title: "OAB removida",
+                    description: "Monitoramento desativado com sucesso.",
+                });
+            } catch (error) {
+                console.error(error);
+                toast({
+                    title: "Erro ao remover OAB",
+                    description: error instanceof Error ? error.message : "Não foi possível remover a OAB.",
+                    variant: "destructive",
+                });
+            } finally {
+                setOabRemovingId(null);
+            }
+        },
+        [toast],
+    );
 
     const handleParticipantToggle = useCallback((processId: number, participantId: string) => {
         setUnassignedDetails((prev) => {
@@ -2226,6 +2477,11 @@ export default function Processos() {
             return;
         }
 
+        if (!oabUsuarioId) {
+            setOabSubmitError("Selecione o usuário responsável pela OAB.");
+            return;
+        }
+
         setOabSubmitError(null);
         setOabSubmitLoading(true);
 
@@ -2239,6 +2495,7 @@ export default function Processos() {
                 body: JSON.stringify({
                     uf: oabUf,
                     numero: formatOabDigits(oabNumero),
+                    usuarioId: Number.parseInt(oabUsuarioId, 10),
                 }),
             });
 
@@ -2272,6 +2529,7 @@ export default function Processos() {
                 return [monitor, ...filtered];
             });
             setOabNumero("");
+            setOabUsuarioId("");
             toast({
                 title: "OAB cadastrada com sucesso",
                 description: `Monitoramento ativado para ${formatOabDisplay(monitor.numero, monitor.uf)}.`,
@@ -2289,7 +2547,7 @@ export default function Processos() {
         } finally {
             setOabSubmitLoading(false);
         }
-    }, [oabNumero, oabUf, toast]);
+    }, [oabNumero, oabUf, oabUsuarioId, toast]);
 
     const ensureClientForParticipant = useCallback(
         async (participant: ProcessoParticipantOption): Promise<number> => {
@@ -3554,36 +3812,30 @@ export default function Processos() {
                         Adicionar OAB
                     </Button>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                    {oabMonitorsLoading ? (
-                        <div className="space-y-2">
-                            {[0, 1, 2].map((item) => (
-                                <Skeleton key={item} className="h-4 w-full" />
-                            ))}
-                        </div>
-                    ) : oabMonitorsError ? (
-                        <p className="text-sm text-destructive">{oabMonitorsError}</p>
-                    ) : oabMonitors.length === 0 ? (
+                <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
                         <p className="text-sm text-muted-foreground">
-                            Nenhuma OAB monitorada no momento. Cadastre uma OAB para iniciar o monitoramento automático.
+                            Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
                         </p>
-                    ) : (
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {oabMonitors.map((monitor) => (
-                                <div
-                                    key={monitor.id}
-                                    className="flex flex-col gap-1 rounded-md border border-border/60 bg-muted/30 p-3"
-                                >
-                                    <span className="text-sm font-medium text-foreground">
-                                        {formatOabDisplay(monitor.numero, monitor.uf)}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                        Monitorando desde {formatDateTimeToPtBR(monitor.createdAt)}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                        {oabMonitorsError ? (
+                            <p className="text-sm text-destructive">{oabMonitorsError}</p>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                {oabMonitorsLoading && oabMonitors.length === 0
+                                    ? "Carregando OABs monitoradas..."
+                                    : `Total de OABs monitoradas: ${oabMonitors.length}`}
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOabListModalChange(true)}
+                        >
+                            Ver OABs monitoradas
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -3792,6 +4044,34 @@ export default function Processos() {
                                 placeholder="000000"
                             />
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="oab-usuario">Responsável</Label>
+                            <Select
+                                value={oabUsuarioId}
+                                onValueChange={setOabUsuarioId}
+                                disabled={oabUsuariosLoading || oabUsuarioOptions.length === 0}
+                            >
+                                <SelectTrigger id="oab-usuario">
+                                    <SelectValue
+                                        placeholder={
+                                            oabUsuariosLoading
+                                                ? "Carregando usuários..."
+                                                : oabUsuariosError ?? "Selecione o responsável"
+                                        }
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {oabUsuarioOptions.map((option) => (
+                                        <SelectItem key={option.id} value={option.id}>
+                                            {option.oab ? `${option.nome} (${option.oab})` : option.nome}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {oabUsuariosError ? (
+                                <p className="text-sm text-destructive">{oabUsuariosError}</p>
+                            ) : null}
+                        </div>
                         {oabSubmitError ? (
                             <p className="text-sm text-destructive">{oabSubmitError}</p>
                         ) : null}
@@ -3803,11 +4083,73 @@ export default function Processos() {
                         <Button
                             type="button"
                             onClick={handleOabSubmit}
-                            disabled={oabSubmitLoading || !oabUf || !oabNumero}
+                            disabled={
+                                oabSubmitLoading ||
+                                !oabUf ||
+                                !oabNumero ||
+                                !oabUsuarioId ||
+                                oabUsuariosLoading
+                            }
                         >
                             {oabSubmitLoading ? "Cadastrando..." : "Cadastrar"}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isOabListModalOpen} onOpenChange={handleOabListModalChange}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>OABs monitoradas</DialogTitle>
+                        <DialogDescription>
+                            Consulte ou remova as OABs cadastradas para monitoramento automático de processos.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {oabMonitorsLoading && oabMonitors.length === 0 ? (
+                        <div className="space-y-2">
+                            {[0, 1, 2].map((item) => (
+                                <Skeleton key={item} className="h-16 w-full" />
+                            ))}
+                        </div>
+                    ) : oabMonitorsError ? (
+                        <p className="text-sm text-destructive">{oabMonitorsError}</p>
+                    ) : oabMonitors.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            Nenhuma OAB monitorada no momento.
+                        </p>
+                    ) : (
+                        <div className="space-y-3">
+                            {oabMonitors.map((monitor) => (
+                                <div
+                                    key={monitor.id}
+                                    className="flex items-start justify-between gap-3 rounded-md border border-border/60 bg-muted/30 p-3"
+                                >
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-medium text-foreground">
+                                            {formatOabDisplay(monitor.numero, monitor.uf)}
+                                        </p>
+                                        {monitor.usuarioNome ? (
+                                            <p className="text-xs text-muted-foreground">
+                                                {monitor.usuarioNome}
+                                                {monitor.usuarioOab ? ` · ${monitor.usuarioOab}` : ""}
+                                            </p>
+                                        ) : null}
+                                        <p className="text-xs text-muted-foreground">
+                                            Monitorando desde {formatDateTimeToPtBR(monitor.createdAt)}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => handleRemoveOabMonitor(monitor.id)}
+                                        disabled={oabRemovingId === monitor.id}
+                                    >
+                                        {oabRemovingId === monitor.id ? "Removendo..." : "Remover"}
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </DialogContent>
             </Dialog>
 

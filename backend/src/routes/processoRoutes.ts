@@ -9,6 +9,7 @@ import {
   deleteProcesso,
   listOabMonitoradas,
   createOabMonitorada,
+  deleteOabMonitorada,
 } from '../controllers/processoController';
 const router = Router();
 
@@ -105,6 +106,7 @@ router.get('/processos', listProcessos);
 
 router.get('/processos/oab-monitoradas', listOabMonitoradas);
 router.post('/processos/oab-monitoradas', createOabMonitorada);
+router.delete('/processos/oab-monitoradas/:id', deleteOabMonitorada);
 
 /**
  * @swagger

@@ -10,6 +10,7 @@ import { createNotification } from '../services/notificationService';
 import { Processo, ProcessoAttachment, ProcessoParticipant } from '../models/processo';
 import {
   createCompanyOabMonitor,
+  deleteCompanyOabMonitor,
   listCompanyOabMonitors,
 } from '../services/oabMonitorService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
@@ -3444,6 +3445,9 @@ export const listOabMonitoradas = async (req: Request, res: Response) => {
 
 export const createOabMonitorada = async (req: Request, res: Response) => {
   const { uf, numero } = req.body ?? {};
+  const usuarioIdRaw =
+    (req.body as { usuarioId?: unknown })?.usuarioId ??
+    (req.body as { usuario_id?: unknown })?.usuario_id;
 
   try {
     if (!req.auth) {
@@ -3468,8 +3472,16 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Informe a UF e o número da OAB.' });
     }
 
+    const usuarioId = parseOptionalInteger(usuarioIdRaw);
+
+    if (!usuarioId || usuarioId <= 0) {
+      return res
+        .status(400)
+        .json({ error: 'Informe o usuário responsável pela OAB.' });
+    }
+
     try {
-      const monitor = await createCompanyOabMonitor(empresaId, uf, numero);
+      const monitor = await createCompanyOabMonitor(empresaId, uf, numero, usuarioId);
       return res.status(201).json(monitor);
     } catch (serviceError) {
       const message =
@@ -3478,6 +3490,47 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
           : 'Não foi possível cadastrar a OAB informada.';
       return res.status(400).json({ error: message });
     }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const deleteOabMonitorada = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    const monitorId = parseOptionalInteger(id);
+
+    if (!monitorId || monitorId <= 0) {
+      return res.status(400).json({ error: 'Identificador de OAB inválido.' });
+    }
+
+    const deleted = await deleteCompanyOabMonitor(empresaId, monitorId);
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'OAB monitorada não encontrada.' });
+    }
+
+    res.status(204).send();
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
