@@ -2424,24 +2424,41 @@ export default function Processos() {
         [],
     );
 
-    const handleExistingClientSelection = useCallback((processId: number, clientId: string) => {
-        const normalizedClientId =
-            clientId === NO_EXISTING_CLIENT_SELECT_VALUE ? "" : clientId;
-        setUnassignedDetails((prev) => {
-            const current = prev[processId];
-            if (!current) {
-                return prev;
-            }
+    const handleExistingClientSelection = useCallback(
+        (processId: number, clientId: string) => {
+            const normalizedClientId =
+                clientId === NO_EXISTING_CLIENT_SELECT_VALUE ? "" : clientId;
 
-            return {
-                ...prev,
-                [processId]: {
-                    ...current,
-                    selectedExistingClientId: normalizedClientId,
-                },
-            };
-        });
-    }, []);
+            setUnassignedDetails((prev) => {
+                const current = prev[processId];
+                if (!current) {
+                    return prev;
+                }
+
+                const shouldKeepSelectedProposta =
+                    Boolean(normalizedClientId) &&
+                    Boolean(current.selectedPropostaId) &&
+                    propostas.some(
+                        (proposta) =>
+                            proposta.id === current.selectedPropostaId &&
+                            proposta.solicitanteId === normalizedClientId,
+                    );
+
+                return {
+                    ...prev,
+                    [processId]: {
+                        ...current,
+                        selectedExistingClientId: normalizedClientId,
+                        selectedPropostaId:
+                            normalizedClientId && shouldKeepSelectedProposta
+                                ? current.selectedPropostaId
+                                : "",
+                    },
+                };
+            });
+        },
+        [propostas],
+    );
 
     const handleSelectedPropostaChange = useCallback((processId: number, propostaId: string) => {
         const normalizedPropostaId =
@@ -3115,11 +3132,25 @@ export default function Processos() {
         setHasUnassignedOnCurrentPage(hasUnassigned);
     }, [processos]);
 
+    const hasOabMonitors = oabMonitors.length > 0;
+
     useEffect(() => {
-        if (!processosLoading && totalProcessos === 0 && !oabModalDismissed) {
+        if (
+            !processosLoading &&
+            totalProcessos === 0 &&
+            !oabModalDismissed &&
+            !oabMonitorsLoading &&
+            !hasOabMonitors
+        ) {
             setIsOabModalOpen(true);
         }
-    }, [processosLoading, totalProcessos, oabModalDismissed]);
+    }, [
+        processosLoading,
+        totalProcessos,
+        oabModalDismissed,
+        oabMonitorsLoading,
+        hasOabMonitors,
+    ]);
 
     useEffect(() => {
         if (!processosLoading && hasUnassignedOnCurrentPage && !unassignedModalDismissed) {
@@ -3813,6 +3844,9 @@ export default function Processos() {
                     <Button
                         variant="outline"
                         onClick={() => {
+                            if (oabMonitorsLoading || hasOabMonitors) {
+                                return;
+                            }
                             setOabModalDismissed(false);
                             setIsOabModalOpen(true);
                         }}
@@ -3834,6 +3868,9 @@ export default function Processos() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
+                            if (oabMonitorsLoading || hasOabMonitors) {
+                                return;
+                            }
                             setOabModalDismissed(false);
                             setIsOabModalOpen(true);
                         }}
@@ -4040,7 +4077,7 @@ export default function Processos() {
                 </div>
             )}
 
-            <Dialog open={isOabModalOpen} onOpenChange={handleOabModalChange}>
+            <Dialog open={isOabModalOpen && !hasOabMonitors} onOpenChange={handleOabModalChange}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>Adicionar OAB para monitoramento</DialogTitle>
@@ -4233,8 +4270,14 @@ export default function Processos() {
                                     );
                                 }
 
+                                const hasExistingClient = Boolean(detail.selectedExistingClientId);
+                                const availablePropostas = hasExistingClient
+                                    ? propostas.filter(
+                                          (proposta) => proposta.solicitanteId === detail.selectedExistingClientId,
+                                      )
+                                    : [];
                                 const canSave =
-                                    Boolean(detail.selectedExistingClientId) || Boolean(detail.primaryParticipantId);
+                                    hasExistingClient || Boolean(detail.primaryParticipantId);
 
                                 return (
                                     <Card key={processId} className="border-border/60 bg-card/60 shadow-sm">
@@ -4274,143 +4317,149 @@ export default function Processos() {
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Se preferir, marque um envolvido abaixo para criar o pré-cadastro
-                                                        automaticamente.
-                                                    </p>
+                                                    {!hasExistingClient ? (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Se preferir, marque um envolvido abaixo para criar o
+                                                            pré-cadastro automaticamente.
+                                                        </p>
+                                                    ) : null}
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <Label>Proposta relacionada</Label>
-                                                    <Select
-                                                        value={
-                                                            detail.selectedPropostaId ||
-                                                            NO_PROPOSTA_SELECT_VALUE
-                                                        }
-                                                        onValueChange={(value) =>
-                                                            handleSelectedPropostaChange(processId, value)
-                                                        }
-                                                    >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Sem proposta vinculada" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value={NO_PROPOSTA_SELECT_VALUE}>
-                                                                Sem proposta
-                                                            </SelectItem>
-                                                            {propostas.map((proposta) => (
-                                                                <SelectItem key={proposta.id} value={proposta.id}>
-                                                                    {proposta.label}
+                                                {hasExistingClient ? (
+                                                    <div className="space-y-2">
+                                                        <Label>Proposta relacionada</Label>
+                                                        <Select
+                                                            value={
+                                                                detail.selectedPropostaId ||
+                                                                NO_PROPOSTA_SELECT_VALUE
+                                                            }
+                                                            onValueChange={(value) =>
+                                                                handleSelectedPropostaChange(processId, value)
+                                                            }
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Sem proposta vinculada" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value={NO_PROPOSTA_SELECT_VALUE}>
+                                                                    Sem proposta
                                                                 </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
+                                                                {availablePropostas.map((proposta) => (
+                                                                    <SelectItem key={proposta.id} value={proposta.id}>
+                                                                        {proposta.label}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                ) : null}
                                             </div>
-                                            <div className="space-y-3">
-                                                <Label className="text-sm font-medium">Envolvidos do processo</Label>
-                                                {detail.participants.length === 0 ? (
-                                                    <p className="text-sm text-muted-foreground">
-                                                        Nenhum envolvido identificado para este processo.
-                                                    </p>
-                                                ) : (
-                                                    <RadioGroup
-                                                        value={detail.primaryParticipantId ?? ""}
-                                                        onValueChange={(value) =>
-                                                            handlePrimaryParticipantChange(processId, value)
-                                                        }
-                                                        className="space-y-3"
-                                                    >
-                                                        {detail.participants.map((participant) => {
-                                                            const checked = detail.selectedParticipantIds.includes(
-                                                                participant.id,
-                                                            );
-                                                            return (
-                                                                <div
-                                                                    key={participant.id}
-                                                                    className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3"
-                                                                >
-                                                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                                        <div className="space-y-1">
-                                                                            <p className="text-sm font-medium text-foreground">
-                                                                                {participant.name}
-                                                                            </p>
-                                                                            <p className="text-xs text-muted-foreground">
-                                                                                {participant.document
-                                                                                    ? `Documento: ${participant.document}`
-                                                                                    : "Documento não informado"}
-                                                                            </p>
-                                                                            <div className="flex flex-wrap gap-2">
-                                                                                {participant.role ? (
-                                                                                    <Badge variant="secondary">
-                                                                                        {participant.role}
-                                                                                    </Badge>
-                                                                                ) : null}
-                                                                                {participant.side ? (
-                                                                                    <Badge variant="outline">
-                                                                                        {participant.side}
-                                                                                    </Badge>
-                                                                                ) : null}
-                                                                                {participant.type ? (
-                                                                                    <Badge variant="outline">
-                                                                                        {participant.type}
-                                                                                    </Badge>
-                                                                                ) : null}
+                                            {!hasExistingClient ? (
+                                                <div className="space-y-3">
+                                                    <Label className="text-sm font-medium">Envolvidos do processo</Label>
+                                                    {detail.participants.length === 0 ? (
+                                                        <p className="text-sm text-muted-foreground">
+                                                            Nenhum envolvido identificado para este processo.
+                                                        </p>
+                                                    ) : (
+                                                        <RadioGroup
+                                                            value={detail.primaryParticipantId ?? ""}
+                                                            onValueChange={(value) =>
+                                                                handlePrimaryParticipantChange(processId, value)
+                                                            }
+                                                            className="space-y-3"
+                                                        >
+                                                            {detail.participants.map((participant) => {
+                                                                const checked = detail.selectedParticipantIds.includes(
+                                                                    participant.id,
+                                                                );
+                                                                return (
+                                                                    <div
+                                                                        key={participant.id}
+                                                                        className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3"
+                                                                    >
+                                                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                                            <div className="space-y-1">
+                                                                                <p className="text-sm font-medium text-foreground">
+                                                                                    {participant.name}
+                                                                                </p>
+                                                                                <p className="text-xs text-muted-foreground">
+                                                                                    {participant.document
+                                                                                        ? `Documento: ${participant.document}`
+                                                                                        : "Documento não informado"}
+                                                                                </p>
+                                                                                <div className="flex flex-wrap gap-2">
+                                                                                    {participant.role ? (
+                                                                                        <Badge variant="secondary">
+                                                                                            {participant.role}
+                                                                                        </Badge>
+                                                                                    ) : null}
+                                                                                    {participant.side ? (
+                                                                                        <Badge variant="outline">
+                                                                                            {participant.side}
+                                                                                        </Badge>
+                                                                                    ) : null}
+                                                                                    {participant.type ? (
+                                                                                        <Badge variant="outline">
+                                                                                            {participant.type}
+                                                                                        </Badge>
+                                                                                    ) : null}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex flex-col items-end gap-2">
+                                                                                <Checkbox
+                                                                                    checked={checked}
+                                                                                    onCheckedChange={() =>
+                                                                                        handleParticipantToggle(
+                                                                                            processId,
+                                                                                            participant.id,
+                                                                                        )
+                                                                                    }
+                                                                                />
+                                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                                    <RadioGroupItem
+                                                                                        value={participant.id}
+                                                                                        id={`primary-${processId}-${participant.id}`}
+                                                                                    />
+                                                                                    <Label
+                                                                                        htmlFor={`primary-${processId}-${participant.id}`}
+                                                                                        className="text-xs font-normal"
+                                                                                    >
+                                                                                        Cliente principal
+                                                                                    </Label>
+                                                                                </div>
                                                                             </div>
                                                                         </div>
-                                                                        <div className="flex flex-col items-end gap-2">
-                                                                            <Checkbox
-                                                                                checked={checked}
-                                                                                onCheckedChange={() =>
-                                                                                    handleParticipantToggle(
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-xs font-medium">
+                                                                                Relação com o processo
+                                                                            </Label>
+                                                                            <Input
+                                                                                value={
+                                                                                    detail.relationshipByParticipantId[
+                                                                                        participant.id
+                                                                                    ] ?? ""
+                                                                                }
+                                                                                onChange={(event) =>
+                                                                                    handleParticipantRelationshipChange(
                                                                                         processId,
                                                                                         participant.id,
+                                                                                        event.target.value,
                                                                                     )
                                                                                 }
+                                                                                placeholder={
+                                                                                    getParticipantDefaultRelationship(
+                                                                                        participant,
+                                                                                    ) || "Descreva a relação"
+                                                                                }
                                                                             />
-                                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                                                <RadioGroupItem
-                                                                                    value={participant.id}
-                                                                                    id={`primary-${processId}-${participant.id}`}
-                                                                                />
-                                                                                <Label
-                                                                                    htmlFor={`primary-${processId}-${participant.id}`}
-                                                                                    className="text-xs font-normal"
-                                                                                >
-                                                                                    Cliente principal
-                                                                                </Label>
-                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                    <div className="space-y-2">
-                                                                        <Label className="text-xs font-medium">
-                                                                            Relação com o processo
-                                                                        </Label>
-                                                                        <Input
-                                                                            value={
-                                                                                detail.relationshipByParticipantId[
-                                                                                    participant.id
-                                                                                ] ?? ""
-                                                                            }
-                                                                            onChange={(event) =>
-                                                                                handleParticipantRelationshipChange(
-                                                                                    processId,
-                                                                                    participant.id,
-                                                                                    event.target.value,
-                                                                                )
-                                                                            }
-                                                                            placeholder={
-                                                                                getParticipantDefaultRelationship(
-                                                                                    participant,
-                                                                                ) || "Descreva a relação"
-                                                                            }
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </RadioGroup>
-                                                )}
-                                            </div>
+                                                                );
+                                                            })}
+                                                        </RadioGroup>
+                                                    )}
+                                                </div>
+                                            ) : null}
                                             {detail.error ? (
                                                 <p className="text-sm text-destructive">{detail.error}</p>
                                             ) : null}

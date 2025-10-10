@@ -293,6 +293,7 @@ export default function Plans() {
     );
   }, [availableModules, publicConsultationModuleIdSet, editFormState.modules]);
 
+
   const normalizePlans = (rawPlans: Plan[], modules: ModuleInfo[]) =>
     rawPlans
       .map((plan) => ({
@@ -473,6 +474,15 @@ export default function Plans() {
 
       return areArraysEqual(previous, nextPublicModules) ? previous : nextPublicModules;
     });
+  };
+
+  const handleEditPublicConsultationModuleChange = (modules: string[]) => {
+    setEditPublicConsultationModules(
+      orderModules(
+        modules.filter((id) => publicConsultationModuleIdSet.has(id)),
+        availableModules
+      )
+    );
   };
 
   const editCustomAvailableTopics = useMemo(
@@ -812,6 +822,19 @@ export default function Plans() {
                 disabled={isSavingEdit}
               />
               {renderModuleBadges(editFormState.modules)}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Módulos de consulta pública disponíveis</Label>
+              <ModuleMultiSelect
+                modules={availablePublicConsultationModules}
+                selected={editPublicConsultationModules}
+                onChange={handleEditPublicConsultationModuleChange}
+                disabled={
+                  isSavingEdit || availablePublicConsultationModules.length === 0
+                }
+              />
+              {renderModuleBadges(editPublicConsultationModules)}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

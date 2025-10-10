@@ -267,6 +267,7 @@ export default function NewPlan() {
         modules: normalizedModules,
       };
     });
+
   }, [availableModules, publicConsultationModuleIdSet]);
 
   const handleModuleChange = (next: string[]) => {
@@ -292,6 +293,12 @@ export default function NewPlan() {
 
       return nextPublicModules;
     });
+  };
+
+  const handlePublicConsultationModuleChange = (next: string[]) => {
+    setPublicConsultationModules(
+      orderModules(next.filter((id) => publicConsultationModuleIdSet.has(id)), availableModules),
+    );
   };
 
   const handleMonthlyPriceChange = (value: string) => {
@@ -526,25 +533,45 @@ export default function NewPlan() {
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Módulos disponíveis</Label>
-                <ModuleMultiSelect
-                  modules={availableModules}
-                  selected={formState.modules}
-                  onChange={handleModuleChange}
-                  disabled={loadingModules || submitting}
-                />
-                {loadingModules ? (
-                  <p className="text-xs text-muted-foreground">Carregando módulos…</p>
-                ) : null}
-                {renderModuleBadges(formState.modules)}
-              </div>
-              {fetchError ? (
-                <Alert variant="destructive">
-                  <AlertTitle>Não foi possível carregar os módulos</AlertTitle>
-                  <AlertDescription>{fetchError}</AlertDescription>
-                </Alert>
+            <div className="space-y-2">
+              <Label>Módulos disponíveis</Label>
+              <ModuleMultiSelect
+                modules={availableModules}
+                selected={formState.modules}
+                onChange={handleModuleChange}
+                disabled={loadingModules || submitting}
+              />
+              {loadingModules ? (
+                <p className="text-xs text-muted-foreground">Carregando módulos…</p>
               ) : null}
+              {renderModuleBadges(formState.modules)}
+            </div>
+            <div className="space-y-2">
+              <Label>Módulos de consulta pública</Label>
+              <ModuleMultiSelect
+                modules={availablePublicConsultationModules}
+                selected={publicConsultationModules}
+                onChange={handlePublicConsultationModuleChange}
+                disabled={
+                  loadingModules ||
+                  submitting ||
+                  availablePublicConsultationModules.length === 0
+                }
+              />
+              {availablePublicConsultationModules.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum módulo de consulta pública disponível no momento.
+                </p>
+              ) : (
+                renderModuleBadges(publicConsultationModules)
+              )}
+            </div>
+            {fetchError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Não foi possível carregar os módulos</AlertTitle>
+                <AlertDescription>{fetchError}</AlertDescription>
+              </Alert>
+            ) : null}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
