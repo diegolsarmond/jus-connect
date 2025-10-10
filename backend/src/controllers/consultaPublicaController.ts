@@ -14,8 +14,15 @@ ORDER BY datatimerenewal DESC
    LIMIT 1
 `;
 
-const TOKEN_USER_ID = 3;
 const PDPJ_BASE_URL = 'https://portaldeservicos.pdpj.jus.br/api/v2/processos';
+
+const ensureAuthenticatedUserId = (req: Request): number | null => {
+  if (!req.auth || !Number.isInteger(req.auth.userId)) {
+    return null;
+  }
+
+  return req.auth.userId;
+};
 
 const buildRequestHeaders = (token: string): Record<string, string> => ({
   accept: 'application/json, text/plain, */*',
@@ -34,8 +41,8 @@ const buildRequestHeaders = (token: string): Record<string, string> => ({
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
 });
 
-const fetchActiveToken = async (): Promise<string> => {
-  const result = await pool.query<TokenRow>(TOKEN_QUERY, [TOKEN_USER_ID]);
+const fetchActiveToken = async (userId: number): Promise<string> => {
+  const result = await pool.query<TokenRow>(TOKEN_QUERY, [userId]);
 
   if (!result.rows.length) {
     throw new Error('Token ativo não encontrado para consulta pública.');
@@ -63,8 +70,8 @@ const parseJsonSafely = (payload: string): unknown => {
   }
 };
 
-const fetchFromPdpj = async (url: URL): Promise<unknown> => {
-  const token = await fetchActiveToken();
+const fetchFromPdpj = async (url: URL, userId: number): Promise<unknown> => {
+  const token = await fetchActiveToken(userId);
   const response = await fetch(url, { headers: buildRequestHeaders(token) });
   const rawBody = await response.text();
   const data = parseJsonSafely(rawBody);
@@ -84,6 +91,13 @@ const fetchFromPdpj = async (url: URL): Promise<unknown> => {
 };
 
 export const consultarProcessosPublicos = async (req: Request, res: Response) => {
+  const userId = ensureAuthenticatedUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
   const rawCpf = typeof req.query.cpfCnpjParte === 'string' ? req.query.cpfCnpjParte.trim() : '';
   const rawNumero = typeof req.query.numeroProcesso === 'string' ? req.query.numeroProcesso.trim() : '';
 
@@ -101,7 +115,7 @@ export const consultarProcessosPublicos = async (req: Request, res: Response) =>
       requestUrl.searchParams.set('cpfCnpjParte', rawCpf);
     }
 
-    const data = await fetchFromPdpj(requestUrl);
+    const data = await fetchFromPdpj(requestUrl, userId);
     res.json(data);
   } catch (error) {
     console.error('Erro ao consultar processos públicos', error);
@@ -116,6 +130,13 @@ export const consultarProcessosPublicos = async (req: Request, res: Response) =>
 };
 
 export const consultarProcessoPublicoPorNumero = async (req: Request, res: Response) => {
+  const userId = ensureAuthenticatedUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
   const numero = typeof req.params.numeroProcesso === 'string' ? req.params.numeroProcesso.trim() : '';
 
   if (!numero) {
@@ -125,7 +146,7 @@ export const consultarProcessoPublicoPorNumero = async (req: Request, res: Respo
 
   try {
     const requestUrl = new URL(`${PDPJ_BASE_URL}/${encodeURIComponent(numero)}`);
-    const data = await fetchFromPdpj(requestUrl);
+    const data = await fetchFromPdpj(requestUrl, userId);
     res.json(data);
   } catch (error) {
     console.error('Erro ao consultar detalhes de processo público', error);
