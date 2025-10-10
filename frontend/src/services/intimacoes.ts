@@ -196,6 +196,7 @@ export interface Intimacao {
   idusuario: number | null;
   idempresa: number | null;
   nao_lida: boolean | null;
+  arquivada: boolean | null;
 }
 
 function isRecord(value: unknown): value is AnyRecord {
@@ -652,6 +653,22 @@ export async function fetchIntimacoes(signal?: AbortSignal): Promise<Intimacao[]
   }
 
   return payload as Intimacao[];
+}
+
+export async function archiveIntimacao(
+  id: number | string,
+): Promise<{ id: number; arquivada: boolean; updated_at: string }>
+{
+  const response = await fetch(getApiUrl(`intimacoes/${id}/archive`), {
+    method: "PATCH",
+    headers: JSON_HEADERS,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha ao arquivar intimação (${response.status}).`);
+  }
+
+  return (await response.json()) as { id: number; arquivada: boolean; updated_at: string };
 }
 
 export async function fetchIntimacoesOverview(signal?: AbortSignal): Promise<IntimacoesOverview> {

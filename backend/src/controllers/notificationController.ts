@@ -422,7 +422,8 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
               destinatarios_advogados,
               idusuario,
               idempresa,
-              nao_lida
+              nao_lida,
+              arquivada
          FROM public.intimacoes
         WHERE idempresa = $1
         ORDER BY data_disponibilizacao DESC NULLS LAST,
@@ -434,6 +435,53 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Failed to list intimações', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const archiveIntimacaoHandler = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const intimacaoId = Number(req.params.id);
+
+    if (!Number.isInteger(intimacaoId) || intimacaoId <= 0) {
+      return res.status(400).json({ error: 'Identificador de intimação inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
+    }
+
+    const result = await pool.query(
+      `UPDATE public.intimacoes
+          SET arquivada = TRUE,
+              updated_at = NOW()
+        WHERE id = $1
+          AND idempresa = $2
+        RETURNING id,
+                  arquivada,
+                  updated_at`,
+      [intimacaoId, empresaId],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Intimação não encontrada.' });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Failed to archive intimação', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
