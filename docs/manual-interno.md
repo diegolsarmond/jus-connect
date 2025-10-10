@@ -43,3 +43,8 @@
 - Nunca compartilhe tokens em canais públicos; utilize o cofre de senhas da empresa.
 - Agende revisão trimestral dos planos e taxas no Asaas para garantir que o CRM reflita as condições atuais.
 
+## Consultas frequentes
+
+### Processos sem cliente vinculado
+- **Consulta utilizada**: o backend reutiliza o `listProcessoSelect` e adiciona `WHERE p.idempresa = $1 AND (p.cliente_id IS NULL OR p.cliente_id <= 0)` quando o parâmetro `semCliente=true` é informado. Isso garante que apenas processos sem cliente associado sejam retornados. 【F:backend/src/controllers/processoController.ts†L1971-L2052】
+
