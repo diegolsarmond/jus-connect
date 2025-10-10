@@ -114,7 +114,7 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
 };
 
 const baseUsuarioSelect =
-  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, u.status, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u';
+  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, COALESCE(p.oab_uf, u.oab) AS oab, u.status, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u LEFT JOIN public.user_profiles p ON p.user_id = u.id';
 
 type UsuarioRow = {
   id: number;
