@@ -168,6 +168,36 @@ type MonthlyAccumulator = {
   responseCount: number;
 };
 
+export interface Intimacao {
+  id: number | string;
+  siglaTribunal: string | null;
+  external_id: string | null;
+  numero_processo: string | null;
+  nomeOrgao: string | null;
+  tipoComunicacao: string | null;
+  texto: string | null;
+  prazo: string | null;
+  data_disponibilizacao: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  meio: string | null;
+  link: string | null;
+  tipodocumento: string | null;
+  nomeclasse: string | null;
+  codigoclasse: string | null;
+  numerocomunicacao: string | null;
+  ativo: boolean | null;
+  hash: string | null;
+  status: string | null;
+  motivo_cancelamento: string | null;
+  data_cancelamento: string | null;
+  destinatarios: unknown;
+  destinatarios_advogados: unknown;
+  idusuario: number | null;
+  idempresa: number | null;
+  nao_lida: boolean | null;
+}
+
 function isRecord(value: unknown): value is AnyRecord {
   return typeof value === "object" && value !== null;
 }
@@ -612,6 +642,16 @@ async function fetchJson<T>(url: string, { signal }: FetchOptions = {}): Promise
   }
 
   return (await response.json()) as T;
+}
+
+export async function fetchIntimacoes(signal?: AbortSignal): Promise<Intimacao[]> {
+  const payload = await fetchJson<unknown>(getApiUrl("intimacoes"), { signal });
+
+  if (!Array.isArray(payload)) {
+    throw new Error("Resposta inválida ao carregar intimações.");
+  }
+
+  return payload as Intimacao[];
 }
 
 export async function fetchIntimacoesOverview(signal?: AbortSignal): Promise<IntimacoesOverview> {
