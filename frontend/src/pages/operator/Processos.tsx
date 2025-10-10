@@ -3132,11 +3132,25 @@ export default function Processos() {
         setHasUnassignedOnCurrentPage(hasUnassigned);
     }, [processos]);
 
+    const hasOabMonitors = oabMonitors.length > 0;
+
     useEffect(() => {
-        if (!processosLoading && totalProcessos === 0 && !oabModalDismissed) {
+        if (
+            !processosLoading &&
+            totalProcessos === 0 &&
+            !oabModalDismissed &&
+            !oabMonitorsLoading &&
+            !hasOabMonitors
+        ) {
             setIsOabModalOpen(true);
         }
-    }, [processosLoading, totalProcessos, oabModalDismissed]);
+    }, [
+        processosLoading,
+        totalProcessos,
+        oabModalDismissed,
+        oabMonitorsLoading,
+        hasOabMonitors,
+    ]);
 
     useEffect(() => {
         if (!processosLoading && hasUnassignedOnCurrentPage && !unassignedModalDismissed) {
@@ -3830,6 +3844,9 @@ export default function Processos() {
                     <Button
                         variant="outline"
                         onClick={() => {
+                            if (oabMonitorsLoading || hasOabMonitors) {
+                                return;
+                            }
                             setOabModalDismissed(false);
                             setIsOabModalOpen(true);
                         }}
@@ -3851,6 +3868,9 @@ export default function Processos() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
+                            if (oabMonitorsLoading || hasOabMonitors) {
+                                return;
+                            }
                             setOabModalDismissed(false);
                             setIsOabModalOpen(true);
                         }}
@@ -4057,7 +4077,7 @@ export default function Processos() {
                 </div>
             )}
 
-            <Dialog open={isOabModalOpen} onOpenChange={handleOabModalChange}>
+            <Dialog open={isOabModalOpen && !hasOabMonitors} onOpenChange={handleOabModalChange}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>Adicionar OAB para monitoramento</DialogTitle>

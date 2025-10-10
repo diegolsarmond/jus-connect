@@ -43,6 +43,11 @@ export interface Plan {
   proposalLimit: number | null;
   processSyncEnabled: boolean;
   processSyncQuota: number | null;
+  publicConsultationModules: string[];
+  intimationSyncEnabled: boolean;
+  intimationSyncQuota: number | null;
+  processMonitorLawyerLimit: number | null;
+  intimationMonitorLawyerLimit: number | null;
 }
 
 export type PlanFormState = {
@@ -417,6 +422,48 @@ export const parsePlan = (raw: unknown): Plan | null => {
         data.processSyncLimit
     ) ?? null;
 
+  const publicConsultationModules = normalizeModuleIds(
+    data.consulta_publica_modulos ??
+      data.consultaPublicaModulos ??
+      data.publicConsultationModules ??
+      data.recursos_consulta_publica ??
+      []
+  );
+
+  const intimationSyncEnabled = parseBoolean(
+    data.sincronizacao_intimacoes_habilitada ??
+      data.sincronizacaoIntimacoesHabilitada ??
+      data.intimationSyncEnabled ??
+      data.syncIntimacoes ??
+      data.intimacaoSincronizacaoAtiva
+  );
+
+  const intimationSyncQuota =
+    parseInteger(
+      data.sincronizacao_intimacoes_cota ??
+        data.sincronizacaoIntimacoesCota ??
+        data.intimationSyncQuota ??
+        data.quotaSincronizacaoIntimacoes
+    ) ?? null;
+
+  const processMonitorLawyerLimit =
+    parseInteger(
+      data.limite_advogados_processos ??
+        data.limiteAdvogadosProcessos ??
+        data.limite_advogados_processos_monitorados ??
+        data.processMonitorLawyerLimit ??
+        data.processosAdvogadosLimite
+    ) ?? null;
+
+  const intimationMonitorLawyerLimit =
+    parseInteger(
+      data.limite_advogados_intimacoes ??
+        data.limiteAdvogadosIntimacoes ??
+        data.limite_advogados_intimacoes_monitoradas ??
+        data.intimationMonitorLawyerLimit ??
+        data.intimacoesAdvogadosLimite
+    ) ?? null;
+
   return {
     id,
     name,
@@ -447,6 +494,11 @@ export const parsePlan = (raw: unknown): Plan | null => {
     proposalLimit,
     processSyncEnabled,
     processSyncQuota,
+    publicConsultationModules,
+    intimationSyncEnabled,
+    intimationSyncQuota,
+    processMonitorLawyerLimit,
+    intimationMonitorLawyerLimit,
   } satisfies Plan;
 };
 
