@@ -114,7 +114,7 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
 };
 
 const baseUsuarioSelect =
-  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, COALESCE(p.oab_uf, u.oab) AS oab, u.status, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u LEFT JOIN public.user_profiles p ON p.user_id = u.id';
+  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, p.oab_number, p.oab_uf, u.status, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u LEFT JOIN public.user_profiles p ON p.user_id = u.id';
 
 type UsuarioRow = {
   id: number;
@@ -125,6 +125,8 @@ type UsuarioRow = {
   empresa: number | null;
   setor: number | null;
   oab: string | null;
+  oab_number: string | null;
+  oab_uf: string | null;
   status: boolean;
   telefone: string | null;
   ultimo_login: Date | string | null;
@@ -143,6 +145,8 @@ const mapUsuarioRowToResponse = (row: UsuarioRow): UsuarioResponse => {
     empresa,
     setor,
     oab,
+    oab_number,
+    oab_uf,
     status,
     telefone,
     ultimo_login,
@@ -158,6 +162,8 @@ const mapUsuarioRowToResponse = (row: UsuarioRow): UsuarioResponse => {
     empresa,
     setor,
     oab,
+    oab_number,
+    oab_uf,
     status,
     telefone,
     ultimo_login,
