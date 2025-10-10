@@ -5,9 +5,13 @@ import {
   Briefcase,
   Building,
   Calendar,
+  Check,
+  ChevronsUpDown,
+  Edit2,
   Clock,
   FileText,
   Link,
+  Loader2,
   MapPin,
   Scale,
   Shield,
@@ -22,6 +26,33 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { getApiUrl } from "@/lib/api";
+import {
+  extractCurrencyDigits,
+  formatCurrencyInputValue,
+  parseCurrencyDigits,
+} from "@/pages/administrator/plans-utils";
 import {
   fetchMeuPerfil,
   fetchMeuPerfilAuditLogs,
@@ -92,9 +123,11 @@ const validateUrl = (value: string) => {
 
 const validateHourlyRate = (value: string) => {
   if (!value) return null;
-  const normalized = value.replace(/\./g, "").replace(",", ".");
-  const parsed = Number(normalized);
-  return Number.isNaN(parsed) ? "Informe um valor numérico" : null;
+  const digits = extractCurrencyDigits(value);
+  if (!digits) {
+    return "Informe um valor numérico";
+  }
+  return parseCurrencyDigits(digits) == null ? "Informe um valor numérico" : null;
 };
 
 const specialtiesToString = (specialties: string[]) => specialties.join(", ");
@@ -108,6 +141,521 @@ const isAbortError = (error: unknown): error is DOMException =>
   error instanceof DOMException && error.name === "AbortError";
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : "Não foi possível completar a ação.");
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+const DEFAULT_TIMEZONE = "America/Sao_Paulo";
+
+const BRAZIL_STATES: SelectOption[] = [
+  { value: "AC", label: "Acre" },
+  { value: "AL", label: "Alagoas" },
+  { value: "AP", label: "Amapá" },
+  { value: "AM", label: "Amazonas" },
+  { value: "BA", label: "Bahia" },
+  { value: "CE", label: "Ceará" },
+  { value: "DF", label: "Distrito Federal" },
+  { value: "ES", label: "Espírito Santo" },
+  { value: "GO", label: "Goiás" },
+  { value: "MA", label: "Maranhão" },
+  { value: "MT", label: "Mato Grosso" },
+  { value: "MS", label: "Mato Grosso do Sul" },
+  { value: "MG", label: "Minas Gerais" },
+  { value: "PA", label: "Pará" },
+  { value: "PB", label: "Paraíba" },
+  { value: "PR", label: "Paraná" },
+  { value: "PE", label: "Pernambuco" },
+  { value: "PI", label: "Piauí" },
+  { value: "RJ", label: "Rio de Janeiro" },
+  { value: "RN", label: "Rio Grande do Norte" },
+  { value: "RS", label: "Rio Grande do Sul" },
+  { value: "RO", label: "Rondônia" },
+  { value: "RR", label: "Roraima" },
+  { value: "SC", label: "Santa Catarina" },
+  { value: "SP", label: "São Paulo" },
+  { value: "SE", label: "Sergipe" },
+  { value: "TO", label: "Tocantins" },
+];
+
+const TIMEZONE_OPTIONS: SelectOption[] = [
+  { value: "America/Sao_Paulo", label: "America/Sao_Paulo (Brasília)" },
+  { value: "America/Bahia", label: "America/Bahia" },
+  { value: "America/Belem", label: "America/Belem" },
+  { value: "America/Fortaleza", label: "America/Fortaleza" },
+  { value: "America/Maceio", label: "America/Maceio" },
+  { value: "America/Recife", label: "America/Recife" },
+  { value: "America/Manaus", label: "America/Manaus" },
+  { value: "America/Porto_Velho", label: "America/Porto_Velho" },
+  { value: "America/Rio_Branco", label: "America/Rio_Branco" },
+  { value: "America/Boa_Vista", label: "America/Boa_Vista" },
+  { value: "America/Cuiaba", label: "America/Cuiaba" },
+  { value: "America/Campo_Grande", label: "America/Campo_Grande" },
+  { value: "America/Santarem", label: "America/Santarem" },
+  { value: "America/Noronha", label: "America/Noronha" },
+];
+
+const LANGUAGE_OPTIONS: SelectOption[] = [
+  { value: "Português (Brasil)", label: "Português (Brasil)" },
+  { value: "Inglês", label: "Inglês" },
+  { value: "Espanhol", label: "Espanhol" },
+  { value: "Francês", label: "Francês" },
+  { value: "Alemão", label: "Alemão" },
+  { value: "Italiano", label: "Italiano" },
+  { value: "Mandarim", label: "Mandarim" },
+  { value: "Japonês", label: "Japonês" },
+  { value: "Árabe", label: "Árabe" },
+  { value: "Russo", label: "Russo" },
+  { value: "Hindi", label: "Hindi" },
+  { value: "Outro", label: "Outro" },
+];
+
+const extractOptionItems = (payload: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object");
+  }
+
+  if (payload && typeof payload === "object") {
+    const directData = (payload as { data?: unknown }).data;
+    if (Array.isArray(directData)) {
+      return directData.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object");
+    }
+
+    const directRows = (payload as { rows?: unknown }).rows;
+    if (Array.isArray(directRows)) {
+      return directRows.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object");
+    }
+
+    const nestedRows = (payload as { data?: { rows?: unknown } }).data?.rows;
+    if (Array.isArray(nestedRows)) {
+      return nestedRows.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object");
+    }
+  }
+
+  return [];
+};
+
+const pickStringField = (item: Record<string, unknown>, fields: string[]): string => {
+  for (const field of fields) {
+    const value = item[field];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  return "";
+};
+
+const ensureOptionPresence = (
+  options: SelectOption[],
+  value: string | null | undefined,
+): SelectOption[] => {
+  if (!value) {
+    return options;
+  }
+  if (options.some((option) => option.value === value)) {
+    return options;
+  }
+  return [...options, { value, label: value }];
+};
+
+const ensureOptionsPresence = (options: SelectOption[], values: string[]): SelectOption[] => {
+  if (values.length === 0) {
+    return options;
+  }
+  const existing = new Set(options.map((option) => option.value));
+  const additions = values
+    .filter((value) => value && !existing.has(value))
+    .map((value) => ({ value, label: value }));
+  if (additions.length === 0) {
+    return options;
+  }
+  return [...options, ...additions];
+};
+
+const splitCommaSeparatedValues = (value: string | null | undefined): string[] => {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+};
+
+const hourlyRateToInputValue = (value: number | null | undefined): string => {
+  if (value == null) {
+    return "";
+  }
+  const cents = Math.round(value * 100);
+  if (!Number.isFinite(cents)) {
+    return "";
+  }
+  return formatCurrencyInputValue(String(Math.max(cents, 0)));
+};
+
+interface EditableSelectFieldProps {
+  label: string;
+  value: string | null;
+  options: SelectOption[];
+  onSave: (value: string | null) => Promise<void> | void;
+  placeholder?: string;
+  disabled?: boolean;
+  isLoading?: boolean;
+  emptyMessage?: string;
+  emptyMessageTone?: "muted" | "error";
+  allowEmpty?: boolean;
+  defaultValue?: string | null;
+}
+
+const EditableSelectField = ({
+  label,
+  value,
+  options,
+  onSave,
+  placeholder,
+  disabled,
+  isLoading,
+  emptyMessage,
+  emptyMessageTone = "muted",
+  allowEmpty = true,
+  defaultValue = null,
+}: EditableSelectFieldProps) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState<string>(value ?? defaultValue ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setEditValue(value ?? defaultValue ?? "");
+    }
+  }, [value, defaultValue, isEditing]);
+
+  const selectedLabel = value
+    ? options.find((option) => option.value === value)?.label ?? value
+    : "";
+
+  const resolvedPlaceholder = placeholder ?? "Selecione uma opção";
+  const resolvedEmptyMessage = emptyMessage ?? "Nenhuma opção disponível.";
+  const messageClass = emptyMessageTone === "error" ? "text-destructive" : "text-muted-foreground";
+
+  const startEditing = () => {
+    setEditValue(value ?? defaultValue ?? "");
+    setError(null);
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setEditValue(value ?? defaultValue ?? "");
+    setError(null);
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      const resolvedValue = editValue || (allowEmpty ? "" : defaultValue ?? "");
+      await onSave(resolvedValue === "" ? null : resolvedValue);
+      setIsEditing(false);
+      setError(null);
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error ? saveError.message : "Não foi possível salvar as alterações.";
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-muted-foreground">{label}</label>
+        {!isEditing && !disabled && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={startEditing}
+            className="h-6 w-6 p-0 hover:bg-accent"
+          >
+            <Edit2 className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="space-y-2">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Carregando opções...</p>
+          ) : options.length > 0 || allowEmpty ? (
+            <>
+              <Select
+                value={editValue}
+                onValueChange={setEditValue}
+                disabled={isSaving || disabled || (options.length === 0 && !allowEmpty)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={resolvedPlaceholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  {allowEmpty && <SelectItem value="">Nenhum</SelectItem>}
+                  {options.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {options.length === 0 && emptyMessage && (
+                <p className={cn("text-xs", messageClass)}>{emptyMessage}</p>
+              )}
+            </>
+          ) : (
+            <p className={cn("text-sm", messageClass)}>{resolvedEmptyMessage}</p>
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              className="h-7"
+              disabled={isSaving || (options.length === 0 && !allowEmpty)}
+            >
+              {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
+              {isSaving ? "Salvando" : "Salvar"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCancel} className="h-7" disabled={isSaving}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm bg-muted/50 p-3 rounded-md min-h-[2.5rem] flex items-center">
+          {selectedLabel || <span className="text-muted-foreground italic">Não informado</span>}
+        </p>
+      )}
+    </div>
+  );
+};
+
+interface EditableMultiSelectFieldProps {
+  label: string;
+  values: string[];
+  options: SelectOption[];
+  onSave: (values: string[]) => Promise<void> | void;
+  placeholder?: string;
+  disabled?: boolean;
+  isLoading?: boolean;
+  emptyMessage?: string;
+  emptyMessageTone?: "muted" | "error";
+}
+
+const EditableMultiSelectField = ({
+  label,
+  values,
+  options,
+  onSave,
+  placeholder,
+  disabled,
+  isLoading,
+  emptyMessage,
+  emptyMessageTone = "muted",
+}: EditableMultiSelectFieldProps) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>(values);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setSelected(values);
+    }
+  }, [values, isEditing]);
+
+  const optionMap = useMemo(() => {
+    const map = new Map<string, string>();
+    options.forEach((option) => {
+      map.set(option.value, option.label);
+    });
+    return map;
+  }, [options]);
+
+  const selectedLabels = values.map((item) => optionMap.get(item) ?? item);
+  const displayValue = selectedLabels.join(", ");
+  const resolvedPlaceholder = placeholder ?? "Selecione uma ou mais opções";
+  const resolvedEmptyMessage = emptyMessage ?? "Nenhuma opção disponível.";
+  const messageClass = emptyMessageTone === "error" ? "text-destructive" : "text-muted-foreground";
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  const triggerLabel = selected.length
+    ? `${selected.length} opção${selected.length > 1 ? "s" : ""} selecionada${
+        selected.length > 1 ? "s" : ""
+      }`
+    : resolvedPlaceholder;
+
+  const startEditing = () => {
+    setSelected(values);
+    setError(null);
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setSelected(values);
+    setError(null);
+    setOpen(false);
+    setIsEditing(false);
+  };
+
+  const toggleSelection = (optionValue: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(optionValue)) {
+        next.delete(optionValue);
+      } else {
+        next.add(optionValue);
+      }
+      return Array.from(next);
+    });
+  };
+
+  const clearSelection = () => {
+    setSelected([]);
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      await onSave(selected);
+      setIsEditing(false);
+      setOpen(false);
+      setError(null);
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error ? saveError.message : "Não foi possível salvar as alterações.";
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-muted-foreground">{label}</label>
+        {!isEditing && !disabled && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={startEditing}
+            className="h-6 w-6 p-0 hover:bg-accent"
+          >
+            <Edit2 className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="space-y-2">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Carregando opções...</p>
+          ) : options.length > 0 ? (
+            <>
+              <Popover open={open} onOpenChange={(next) => !isSaving && setOpen(next)}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between"
+                    disabled={disabled || isSaving}
+                  >
+                    <span className="truncate text-left">{triggerLabel}</span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[min(420px,90vw)] p-0">
+                  <Command>
+                    <CommandInput placeholder="Buscar..." />
+                    <CommandList>
+                      <CommandEmpty>Nenhuma opção encontrada.</CommandEmpty>
+                      <CommandGroup>
+                        {options.map((option) => {
+                          const isSelected = selectedSet.has(option.value);
+                          return (
+                            <CommandItem
+                              key={option.value}
+                              value={option.label}
+                              onSelect={() => toggleSelection(option.value)}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  isSelected ? "opacity-100" : "opacity-0",
+                                )}
+                              />
+                              <span className="flex-1 truncate">{option.label}</span>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selected.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {selected.map((item) => (
+                    <Badge key={item} variant="secondary">
+                      {optionMap.get(item) ?? item}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Nenhuma opção selecionada.</p>
+              )}
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={clearSelection} disabled={isSaving}>
+                  Limpar seleção
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className={cn("text-sm", messageClass)}>{resolvedEmptyMessage}</p>
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleSave} className="h-7" disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
+              {isSaving ? "Salvando" : "Salvar"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCancel} className="h-7" disabled={isSaving}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm bg-muted/50 p-3 rounded-md min-h-[2.5rem] flex items-center">
+          {displayValue ? (
+            <span className="truncate">{displayValue}</span>
+          ) : (
+            <span className="text-muted-foreground italic">Não informado</span>
+          )}
+        </p>
+      )}
+    </div>
+  );
+};
 
 const readFileAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -141,6 +689,14 @@ export default function MeuPerfil() {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const [officeOptions, setOfficeOptions] = useState<SelectOption[]>([]);
+  const [isOfficeLoading, setIsOfficeLoading] = useState(false);
+  const [officeError, setOfficeError] = useState<string | null>(null);
+
+  const [specialtyOptions, setSpecialtyOptions] = useState<SelectOption[]>([]);
+  const [isSpecialtyLoading, setIsSpecialtyLoading] = useState(false);
+  const [specialtyError, setSpecialtyError] = useState<string | null>(null);
 
   const loadProfile = useCallback(async (signal?: AbortSignal) => {
     setIsProfileLoading(true);
@@ -206,6 +762,159 @@ export default function MeuPerfil() {
     };
   }, [loadProfile, loadAuditLogs, loadSessions]);
 
+  const officeOptionsWithCurrent = useMemo(
+    () => ensureOptionPresence(officeOptions, profile?.office ?? null),
+    [officeOptions, profile?.office],
+  );
+
+  const specialtyOptionsWithCurrent = useMemo(
+    () => ensureOptionsPresence(specialtyOptions, profile?.specialties ?? []),
+    [specialtyOptions, profile?.specialties],
+  );
+
+  const languageValues = useMemo(
+    () => splitCommaSeparatedValues(profile?.language ?? null),
+    [profile?.language],
+  );
+
+  const languageOptionsWithCurrent = useMemo(
+    () => ensureOptionsPresence(LANGUAGE_OPTIONS, languageValues),
+    [languageValues],
+  );
+
+  const timezoneOptionsWithCurrent = useMemo(
+    () => ensureOptionPresence(TIMEZONE_OPTIONS, profile?.timezone ?? null),
+    [profile?.timezone],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadOffices = async () => {
+      setIsOfficeLoading(true);
+      setOfficeError(null);
+      try {
+        const response = await fetch(getApiUrl("escritorios"), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        let json: unknown = null;
+        try {
+          json = await response.json();
+        } catch (parseError) {
+          console.error("Não foi possível interpretar a resposta de escritórios", parseError);
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            json && typeof json === "object" && "error" in json && typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível carregar os escritórios (HTTP ${response.status})`,
+          );
+        }
+
+        const items = extractOptionItems(json);
+        const options = items
+          .map((item) => {
+            const name = pickStringField(item, ["nome", "nome_fantasia", "razao_social", "descricao"]);
+            return name ? ({ value: name, label: name } as SelectOption) : null;
+          })
+          .filter((option): option is SelectOption => option !== null)
+          .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+        if (!cancelled) {
+          setOfficeOptions(options);
+        }
+      } catch (error) {
+        if (isAbortError(error)) {
+          return;
+        }
+        console.error(error);
+        if (!cancelled) {
+          setOfficeOptions([]);
+          setOfficeError(error instanceof Error ? error.message : "Erro ao carregar escritórios.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsOfficeLoading(false);
+        }
+      }
+    };
+
+    void loadOffices();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadSpecialties = async () => {
+      setIsSpecialtyLoading(true);
+      setSpecialtyError(null);
+      try {
+        const response = await fetch(getApiUrl("areas"), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        let json: unknown = null;
+        try {
+          json = await response.json();
+        } catch (parseError) {
+          console.error("Não foi possível interpretar a resposta de áreas", parseError);
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            json && typeof json === "object" && "error" in json && typeof (json as { error?: unknown }).error === "string"
+              ? String((json as { error: string }).error)
+              : `Não foi possível carregar as áreas de atuação (HTTP ${response.status})`,
+          );
+        }
+
+        const items = extractOptionItems(json);
+        const options = items
+          .map((item) => {
+            const name = pickStringField(item, ["nome", "descricao", "label", "name"]);
+            return name ? ({ value: name, label: name } as SelectOption) : null;
+          })
+          .filter((option): option is SelectOption => option !== null)
+          .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+        if (!cancelled) {
+          setSpecialtyOptions(options);
+        }
+      } catch (error) {
+        if (isAbortError(error)) {
+          return;
+        }
+        console.error(error);
+        if (!cancelled) {
+          setSpecialtyOptions([]);
+          setSpecialtyError(error instanceof Error ? error.message : "Erro ao carregar especialidades.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSpecialtyLoading(false);
+        }
+      }
+    };
+
+    void loadSpecialties();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
   const mutateProfile = useCallback(
     async (payload: UpdateMeuPerfilPayload) => {
       setMutationError(null);
@@ -230,7 +939,7 @@ export default function MeuPerfil() {
   );
 
   const buildFieldSaveHandler = useCallback(
-    (field: "name" | "title" | "email" | "phone" | "bio" | "office" | "oabNumber" | "oabUf" | "timezone" | "language" | "linkedin" | "website") =>
+    (field: "name" | "title" | "email" | "phone" | "bio" | "oabNumber" | "linkedin" | "website") =>
       async (rawValue: string) => {
         await mutateProfile({ [field]: toNullableString(rawValue) } as UpdateMeuPerfilPayload);
       },
@@ -246,26 +955,59 @@ export default function MeuPerfil() {
   );
 
   const handleSpecialtiesSave = useCallback(
-    async (value: string) => {
-      const specialties = value
-        .split(",")
+    async (values: string[]) => {
+      const normalized = values
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
-      await mutateProfile({ specialties });
+      await mutateProfile({ specialties: normalized });
+    },
+    [mutateProfile],
+  );
+
+  const handleOfficeSave = useCallback(
+    async (selected: string | null) => {
+      const normalized = selected == null ? null : toNullableString(selected);
+      await mutateProfile({ office: normalized });
+    },
+    [mutateProfile],
+  );
+
+  const handleOabUfSave = useCallback(
+    async (selected: string | null) => {
+      const normalized = selected == null ? null : toNullableString(selected);
+      await mutateProfile({ oabUf: normalized });
+    },
+    [mutateProfile],
+  );
+
+  const handleTimezoneSave = useCallback(
+    async (selected: string | null) => {
+      const value = selected ?? DEFAULT_TIMEZONE;
+      await mutateProfile({ timezone: value });
+    },
+    [mutateProfile],
+  );
+
+  const handleLanguageSave = useCallback(
+    async (values: string[]) => {
+      const normalized = values
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+      await mutateProfile({ language: normalized.length ? normalized.join(", ") : null });
     },
     [mutateProfile],
   );
 
   const handleHourlyRateSave = useCallback(
     async (value: string) => {
-      if (value.trim().length === 0) {
+      const digits = extractCurrencyDigits(value);
+      if (!digits) {
         await mutateProfile({ hourlyRate: null });
         return;
       }
 
-      const normalized = value.replace(/\./g, "").replace(",", ".");
-      const parsed = Number(normalized);
-      if (Number.isNaN(parsed)) {
+      const parsed = parseCurrencyDigits(digits);
+      if (parsed == null) {
         throw new Error("Informe um valor numérico");
       }
       await mutateProfile({ hourlyRate: parsed });
@@ -526,19 +1268,27 @@ export default function MeuPerfil() {
                   />
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <EditableField
+                    <EditableSelectField
                       label="Escritório"
-                      value={profile.office ?? ""}
-                      onSave={buildFieldSaveHandler("office")}
-                      placeholder="Ex: JusConnect - Matriz"
+                      value={profile.office ?? null}
+                      options={officeOptionsWithCurrent}
+                      onSave={handleOfficeSave}
+                      placeholder="Selecione o escritório"
                       disabled={isUpdatingProfile}
+                      isLoading={isOfficeLoading}
+                      emptyMessage={officeError ?? "Nenhum escritório disponível."}
+                      emptyMessageTone={officeError ? "error" : "muted"}
                     />
-                    <EditableField
+                    <EditableMultiSelectField
                       label="Especialidades"
-                      value={specialtiesToString(profile.specialties)}
+                      values={profile.specialties}
+                      options={specialtyOptionsWithCurrent}
                       onSave={handleSpecialtiesSave}
-                      placeholder="Separe as especialidades por vírgula"
+                      placeholder="Selecione as especialidades"
                       disabled={isUpdatingProfile}
+                      isLoading={isSpecialtyLoading}
+                      emptyMessage={specialtyError ?? "Nenhuma especialidade disponível."}
+                      emptyMessageTone={specialtyError ? "error" : "muted"}
                     />
                     <EditableField
                       label="OAB"
@@ -547,11 +1297,12 @@ export default function MeuPerfil() {
                       placeholder="Número da OAB"
                       disabled={isUpdatingProfile}
                     />
-                    <EditableField
+                    <EditableSelectField
                       label="UF"
-                      value={profile.oabUf ?? ""}
-                      onSave={buildFieldSaveHandler("oabUf")}
-                      placeholder="Estado"
+                      value={profile.oabUf ?? null}
+                      options={ensureOptionPresence(BRAZIL_STATES, profile.oabUf ?? null)}
+                      onSave={handleOabUfSave}
+                      placeholder="Selecione a UF"
                       disabled={isUpdatingProfile}
                     />
                   </div>
@@ -559,24 +1310,29 @@ export default function MeuPerfil() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <EditableField
                       label="Tarifa por hora"
-                      value={profile.hourlyRate != null ? profile.hourlyRate.toString().replace(".", ",") : ""}
+                      value={hourlyRateToInputValue(profile.hourlyRate)}
                       onSave={handleHourlyRateSave}
                       validation={validateHourlyRate}
-                      placeholder="Ex: 450,00"
+                      placeholder="Ex: R$ 450,00"
                       disabled={isUpdatingProfile}
+                      onEditChange={(input) => formatCurrencyInputValue(extractCurrencyDigits(input))}
                     />
-                    <EditableField
+                    <EditableSelectField
                       label="Fuso horário"
-                      value={profile.timezone ?? ""}
-                      onSave={buildFieldSaveHandler("timezone")}
-                      placeholder="Ex: America/Sao_Paulo"
+                      value={profile.timezone ?? null}
+                      options={timezoneOptionsWithCurrent}
+                      onSave={handleTimezoneSave}
+                      placeholder="Selecione o fuso horário"
                       disabled={isUpdatingProfile}
+                      allowEmpty={false}
+                      defaultValue={DEFAULT_TIMEZONE}
                     />
-                    <EditableField
+                    <EditableMultiSelectField
                       label="Idioma"
-                      value={profile.language ?? ""}
-                      onSave={buildFieldSaveHandler("language")}
-                      placeholder="Ex: Português (Brasil)"
+                      values={languageValues}
+                      options={languageOptionsWithCurrent}
+                      onSave={handleLanguageSave}
+                      placeholder="Selecione os idiomas"
                       disabled={isUpdatingProfile}
                     />
                     <EditableField
