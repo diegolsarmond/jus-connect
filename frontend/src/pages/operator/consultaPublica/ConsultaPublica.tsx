@@ -158,7 +158,7 @@ const ConsultaPublica = () => {
       <div className="space-y-1">
         <h1 className="text-3xl font-bold text-foreground">Consulta Pública</h1>
         <p className="text-muted-foreground">
-          Consulte rapidamente processos disponíveis no Portal de Serviços do PJe.
+          Consulte rapidamente processos disponíveis no CNJ.
         </p>
       </div>
 
@@ -175,7 +175,7 @@ const ConsultaPublica = () => {
           <div className="space-y-2">
             <h2 className="text-xl font-semibold text-foreground">Informe os dados para consulta</h2>
             <p className="text-sm text-muted-foreground">
-              Escolha se deseja pesquisar por número do processo ou CPF/CNPJ da parte envolvida.
+              Escolha se deseja pesquisar por número do processo, número da OAB ou CPF/CNPJ da parte envolvida.
             </p>
           </div>
 
