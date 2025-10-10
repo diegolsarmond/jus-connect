@@ -149,7 +149,7 @@ function buildNotificationFromIntimacao(intimacao: Intimacao): Notification {
     type: prazo ? "warning" : "info",
     read: intimacao.nao_lida === true ? false : true,
     createdAt,
-    readAt: intimacao.nao_lida === true ? null : pickFirstNonEmpty(intimacao.updated_at),
+    readAt: intimacao.nao_lida === true ? null : pickFirstNonEmpty(intimacao.lida_em, intimacao.updated_at),
     actionUrl: pickFirstNonEmpty(intimacao.link),
     metadata,
   };
@@ -334,7 +334,7 @@ export function IntimacaoMenu() {
   const toggleNotificationMutation = useMutation({
     mutationFn: async ({ id }: ToggleNotificationVariables) => {
       const result = await markIntimacaoAsRead(id);
-      return { id: String(result.id) };
+      return result;
     },
     onMutate: ({ id }) => {
       setActiveNotificationId(id);
@@ -348,12 +348,21 @@ export function IntimacaoMenu() {
         variant: "destructive",
       });
     },
-    onSuccess: ({ id }) => {
+    onSuccess: (result) => {
+      const id = String(result.id);
       queryClient.setQueryData<Notification[] | undefined>(notificationsQueryKey, (previous) => {
         if (!previous) {
           return previous;
         }
-        return previous.map((item) => (item.id === id ? { ...item, read: true, readAt: new Date().toISOString() } : item));
+        return previous.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                read: result.nao_lida === true ? false : true,
+                readAt: result.lida_em ?? result.updated_at,
+              }
+            : item,
+        );
       });
     },
     onSettled: () => {

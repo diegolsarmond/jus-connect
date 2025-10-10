@@ -25,6 +25,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -36,6 +38,7 @@ import {
   fetchIntimacoes,
   markIntimacaoAsRead,
   type Intimacao,
+  type MarkIntimacaoAsReadResponse,
 } from "@/services/intimacoes";
 import { fetchIntegrationApiKeys, generateAiText } from "@/lib/integrationApiKeys";
 import { normalizarTexto } from "./utils/processo-ui";
@@ -88,6 +91,41 @@ type FiltersState = {
 
 const ITEMS_PER_PAGE = 15;
 const numberFormatter = new Intl.NumberFormat("pt-BR");
+
+type MonitoredOab = {
+  uf: string;
+  number: string;
+};
+
+const BRAZILIAN_STATES = [
+  { value: "AC", label: "Acre" },
+  { value: "AL", label: "Alagoas" },
+  { value: "AP", label: "Amapá" },
+  { value: "AM", label: "Amazonas" },
+  { value: "BA", label: "Bahia" },
+  { value: "CE", label: "Ceará" },
+  { value: "DF", label: "Distrito Federal" },
+  { value: "ES", label: "Espírito Santo" },
+  { value: "GO", label: "Goiás" },
+  { value: "MA", label: "Maranhão" },
+  { value: "MT", label: "Mato Grosso" },
+  { value: "MS", label: "Mato Grosso do Sul" },
+  { value: "MG", label: "Minas Gerais" },
+  { value: "PA", label: "Pará" },
+  { value: "PB", label: "Paraíba" },
+  { value: "PR", label: "Paraná" },
+  { value: "PE", label: "Pernambuco" },
+  { value: "PI", label: "Piauí" },
+  { value: "RJ", label: "Rio de Janeiro" },
+  { value: "RN", label: "Rio Grande do Norte" },
+  { value: "RS", label: "Rio Grande do Sul" },
+  { value: "RO", label: "Rondônia" },
+  { value: "RR", label: "Roraima" },
+  { value: "SC", label: "Santa Catarina" },
+  { value: "SP", label: "São Paulo" },
+  { value: "SE", label: "Sergipe" },
+  { value: "TO", label: "Tocantins" },
+] as const;
 
 const allowedRichTextTags = new Set([
   "p",
@@ -644,11 +682,17 @@ export default function Intimacoes() {
   const [summaryContent, setSummaryContent] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [monitoredOabs, setMonitoredOabs] = useState<MonitoredOab[]>([]);
+  const [oabModalOpen, setOabModalOpen] = useState(false);
+  const [oabUf, setOabUf] = useState("");
+  const [oabNumber, setOabNumber] = useState("");
   const summaryRequestIdRef = useRef(0);
+  const oabPromptShownRef = useRef(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [detailsTarget, setDetailsTarget] = useState<Intimacao | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const canManageOabs = !loading && intimacoes.length === 0;
 
   const loadIntimacoes = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -683,6 +727,19 @@ export default function Intimacoes() {
       controller.abort();
     };
   }, [loadIntimacoes]);
+
+  useEffect(() => {
+    if (canManageOabs && !oabPromptShownRef.current) {
+      oabPromptShownRef.current = true;
+      setOabModalOpen(true);
+    }
+  }, [canManageOabs]);
+
+  useEffect(() => {
+    if (!canManageOabs && oabModalOpen) {
+      setOabModalOpen(false);
+    }
+  }, [canManageOabs, oabModalOpen]);
 
   const handleGenerateSummary = useCallback(
     async (intimacao: Intimacao, requestId: number) => {
@@ -796,10 +853,76 @@ export default function Intimacoes() {
     }
   }, []);
 
-  const handleOpenDetails = useCallback((intimacao: Intimacao) => {
-    setDetailsTarget(intimacao);
-    setDetailsDialogOpen(true);
-  }, []);
+  const applyReadUpdates = useCallback(
+    (updates: Map<string, MarkIntimacaoAsReadResponse>) => {
+      if (updates.size === 0) {
+        return;
+      }
+
+      setIntimacoes((prev) =>
+        prev.map((item) => {
+          const update = updates.get(String(item.id));
+          if (!update) {
+            return item;
+          }
+
+          return {
+            ...item,
+            nao_lida: update.nao_lida,
+            updated_at: update.updated_at,
+            idusuario_leitura: update.idusuario_leitura ?? null,
+            lida_em: update.lida_em ?? null,
+          };
+        }),
+      );
+
+      setDetailsTarget((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        const update = updates.get(String(prev.id));
+        if (!update) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          nao_lida: update.nao_lida,
+          updated_at: update.updated_at,
+          idusuario_leitura: update.idusuario_leitura ?? null,
+          lida_em: update.lida_em ?? null,
+        };
+      });
+    },
+    [setIntimacoes, setDetailsTarget],
+  );
+
+  const applyReadUpdate = useCallback(
+    (result: MarkIntimacaoAsReadResponse) => {
+      applyReadUpdates(new Map([[String(result.id), result]]));
+    },
+    [applyReadUpdates],
+  );
+
+  const handleOpenDetails = useCallback(
+    (intimacao: Intimacao) => {
+      setDetailsTarget(intimacao);
+      setDetailsDialogOpen(true);
+
+      if (intimacao.nao_lida) {
+        void (async () => {
+          try {
+            const result = await markIntimacaoAsRead(intimacao.id);
+            applyReadUpdate(result);
+          } catch (error) {
+            console.error('Falha ao marcar intimação como lida ao abrir detalhes', error);
+          }
+        })();
+      }
+    },
+    [applyReadUpdate],
+  );
 
   const handleDetailsDialogChange = useCallback((open: boolean) => {
     setDetailsDialogOpen(open);
@@ -808,6 +931,48 @@ export default function Intimacoes() {
       setDetailsTarget(null);
     }
   }, []);
+
+  const handleOpenOabModal = useCallback(() => {
+    if (canManageOabs) {
+      setOabModalOpen(true);
+    }
+  }, [canManageOabs]);
+
+  const handleOabModalChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setOabModalOpen(false);
+        setOabNumber("");
+        setOabUf("");
+        return;
+      }
+
+      if (canManageOabs) {
+        setOabModalOpen(true);
+      }
+    },
+    [canManageOabs],
+  );
+
+  const handleRegisterOab = useCallback(() => {
+    const sanitizedNumber = oabNumber.trim();
+
+    if (!sanitizedNumber || !oabUf) {
+      return;
+    }
+
+    setMonitoredOabs((previous) => {
+      if (previous.some((item) => item.uf === oabUf && item.number === sanitizedNumber)) {
+        return previous;
+      }
+
+      return [...previous, { uf: oabUf, number: sanitizedNumber }];
+    });
+
+    setOabModalOpen(false);
+    setOabNumber("");
+    setOabUf("");
+  }, [oabNumber, oabUf]);
 
   const sortedIntimacoes = useMemo(() => {
     return [...intimacoes].sort((a, b) => {
@@ -1138,13 +1303,7 @@ export default function Intimacoes() {
 
     try {
       const result = await markIntimacaoAsRead(id);
-      setIntimacoes((prev) =>
-        prev.map((item) =>
-          String(item.id) === String(result.id)
-            ? { ...item, nao_lida: result.nao_lida, updated_at: result.updated_at }
-            : item,
-        ),
-      );
+      applyReadUpdate(result);
       toast({
         title: "Intimação atualizada",
         description: "Ela foi marcada como lida.",
@@ -1175,7 +1334,7 @@ export default function Intimacoes() {
       );
 
       const sucedidos = resultados.filter(
-        (resultado): resultado is PromiseFulfilledResult<{ id: number; nao_lida: boolean; updated_at: string }> =>
+        (resultado): resultado is PromiseFulfilledResult<MarkIntimacaoAsReadResponse> =>
           resultado.status === "fulfilled",
       );
       const falhas = resultados.filter((resultado) => resultado.status === "rejected");
@@ -1185,19 +1344,7 @@ export default function Intimacoes() {
           sucedidos.map((resultado) => [String(resultado.value.id), resultado.value] as const),
         );
 
-        setIntimacoes((previas) =>
-          previas.map((item) => {
-            const atualizacao = atualizacoes.get(String(item.id));
-            if (!atualizacao) {
-              return item;
-            }
-            return {
-              ...item,
-              nao_lida: atualizacao.nao_lida,
-              updated_at: atualizacao.updated_at,
-            };
-          }),
-        );
+        applyReadUpdates(atualizacoes);
 
         toast({
           title: "Intimações atualizadas",
@@ -1391,6 +1538,7 @@ export default function Intimacoes() {
     () => (summaryTarget ? normalizarTexto(summaryTarget.texto) : ""),
     [summaryTarget],
   );
+  const isOabFormValid = oabUf.trim().length > 0 && oabNumber.trim().length > 0;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -1480,6 +1628,35 @@ export default function Intimacoes() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-border/60 bg-card/60 backdrop-blur">
+        <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+          <div className="space-y-1">
+            <CardTitle className="text-lg">OABs monitoradas</CardTitle>
+            <CardDescription>
+              Cadastre os números da OAB que deseja acompanhar e receba intimações em tempo real.
+            </CardDescription>
+          </div>
+          {canManageOabs ? (
+            <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
+              Cadastrar OAB
+            </Button>
+          ) : null}
+        </CardHeader>
+        <CardContent className="pt-0">
+          {monitoredOabs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma OAB cadastrada para monitoramento.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {monitoredOabs.map((item) => (
+                <Badge key={`${item.number}-${item.uf}`} variant="secondary">
+                  OAB {item.number}/{item.uf}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-border/60 bg-card/60">
         <CardHeader className="pb-0">
@@ -1668,7 +1845,19 @@ export default function Intimacoes() {
 
       {!loading && filteredIntimacoes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-muted-foreground/40 bg-card/50 p-10 text-center text-sm text-muted-foreground">
-          Nenhuma intimação encontrada.
+          <div className="space-y-4">
+            <p>Nenhuma intimação encontrada.</p>
+            {canManageOabs ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Cadastre uma OAB monitorada para começar a receber avisos assim que novas intimações forem disponibilizadas.
+                </p>
+                <div className="flex justify-center">
+                  <Button onClick={handleOpenOabModal}>Cadastrar OAB</Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -2027,6 +2216,47 @@ export default function Intimacoes() {
           ) : null}
         </>
       ) : null}
+      <Dialog open={oabModalOpen} onOpenChange={handleOabModalChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cadastrar OAB monitorada</DialogTitle>
+            <DialogDescription>
+              Informe o estado e o número da OAB para habilitar o recebimento de intimações em tempo real.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="oab-uf">Estado</Label>
+              <Select value={oabUf} onValueChange={setOabUf}>
+                <SelectTrigger id="oab-uf">
+                  <SelectValue placeholder="Selecione o estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BRAZILIAN_STATES.map((state) => (
+                    <SelectItem key={state.value} value={state.value}>
+                      {state.label} ({state.value})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="oab-number">Número da OAB</Label>
+              <Input
+                id="oab-number"
+                placeholder="000000"
+                value={oabNumber}
+                onChange={(event) => setOabNumber(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={handleRegisterOab} disabled={!isOabFormValid}>
+              Cadastrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={summaryDialogOpen} onOpenChange={handleSummaryDialogChange}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">

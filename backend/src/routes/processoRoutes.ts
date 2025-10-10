@@ -7,6 +7,8 @@ import {
   createProcesso,
   updateProcesso,
   deleteProcesso,
+  listOabMonitoradas,
+  createOabMonitorada,
 } from '../controllers/processoController';
 const router = Router();
 
@@ -100,6 +102,9 @@ const router = Router();
  *                 $ref: '#/components/schemas/Processo'
  */
 router.get('/processos', listProcessos);
+
+router.get('/processos/oab-monitoradas', listOabMonitoradas);
+router.post('/processos/oab-monitoradas', createOabMonitorada);
 
 /**
  * @swagger
