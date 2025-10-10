@@ -420,7 +420,18 @@ export default function Plans() {
 
   const openEditDialog = (plan: Plan) => {
     setEditingPlan(plan);
-    setEditFormState(createFormStateFromPlan(plan));
+
+    const normalizedModules = orderModules(
+      Array.from(new Set([...plan.modules, ...plan.publicConsultationModules])).filter((id) =>
+        availableModules.some((module) => module.id === id)
+      ),
+      availableModules,
+    );
+
+    setEditFormState({
+      ...createFormStateFromPlan(plan),
+      modules: normalizedModules,
+    });
     setEditPublicConsultationModules(
       orderModules(
         plan.publicConsultationModules.filter((id) =>
