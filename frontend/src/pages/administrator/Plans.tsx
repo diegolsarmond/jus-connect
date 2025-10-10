@@ -75,6 +75,9 @@ interface ModuleMultiSelectProps {
   disabled?: boolean;
 }
 
+const areArraysEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 function ModuleMultiSelect({ modules, selected, onChange, disabled }: ModuleMultiSelectProps) {
   const [open, setOpen] = useState(false);
 
@@ -280,13 +283,16 @@ export default function Plans() {
   );
 
   useEffect(() => {
-    setEditPublicConsultationModules((previous) =>
-      orderModules(
-        previous.filter((id) => publicConsultationModuleIdSet.has(id)),
-        availableModules,
-      ),
+    const nextPublicModules = orderModules(
+      editFormState.modules.filter((id) => publicConsultationModuleIdSet.has(id)),
+      availableModules,
     );
-  }, [availableModules, publicConsultationModuleIdSet]);
+
+    setEditPublicConsultationModules((previous) =>
+      areArraysEqual(previous, nextPublicModules) ? previous : nextPublicModules,
+    );
+  }, [availableModules, publicConsultationModuleIdSet, editFormState.modules]);
+
 
   const normalizePlans = (rawPlans: Plan[], modules: ModuleInfo[]) =>
     rawPlans
@@ -450,13 +456,24 @@ export default function Plans() {
   };
 
   const handleEditModuleChange = (modules: string[]) => {
+    const normalizedModules = orderModules(
+      modules.filter((id) => availableModules.some((module) => module.id === id)),
+      availableModules
+    );
+
     setEditFormState((previous) => ({
       ...previous,
-      modules: orderModules(
-        modules.filter((id) => availableModules.some((module) => module.id === id)),
-        availableModules
-      ),
+      modules: normalizedModules,
     }));
+
+    setEditPublicConsultationModules((previous) => {
+      const nextPublicModules = orderModules(
+        normalizedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
+        availableModules
+      );
+
+      return areArraysEqual(previous, nextPublicModules) ? previous : nextPublicModules;
+    });
   };
 
   const handleEditPublicConsultationModuleChange = (modules: string[]) => {
