@@ -1634,14 +1634,14 @@ export default function Intimacoes() {
                               <Badge variant="secondary" className="bg-muted text-muted-foreground">
                                 Arquivada
                               </Badge>
-                            ) : null}
-                          </div>
+                                          ) : null}
+                                          <Badge variant="outline" className="border-primary/60 text-primary">
+                                              {disponibilizadaEm.split(' ')[0]}
+                                          </Badge>                          </div>
                         </div>
                            {disponibilizadaEm ? (
                           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                          <Badge variant="outline" className="border-primary/60 text-primary">
-                                              {disponibilizadaEm.split(' ')[0]}
-                                          </Badge>
+
                           </span>
                         ) : null}
                       </div>
