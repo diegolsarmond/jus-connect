@@ -14,6 +14,7 @@ interface EditableFieldProps {
   validation?: (value: string) => string | null;
   className?: string;
   disabled?: boolean;
+  onEditChange?: (value: string) => string;
 }
 
 export function EditableField({
@@ -25,6 +26,7 @@ export function EditableField({
   validation,
   className,
   disabled,
+  onEditChange,
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
@@ -89,7 +91,10 @@ export function EditableField({
           <InputComponent
             type={type === "textarea" ? undefined : type}
             value={editValue}
-            onChange={(event) => setEditValue(event.target.value)}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setEditValue(onEditChange ? onEditChange(nextValue) : nextValue);
+            }}
             placeholder={placeholder}
             className={cn("text-sm", error && "border-destructive")}
             disabled={isSaving}
