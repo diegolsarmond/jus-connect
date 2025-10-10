@@ -1,6 +1,4 @@
 import { Request, Response } from 'express';
-import pool from '../services/db';
-import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import {
   listNotifications,
   getNotification,
@@ -374,67 +372,6 @@ export const triggerProjudiSyncHandler = async (req: Request, res: Response) => 
 
     console.error('Failed to trigger Projudi sync job', error);
     res.status(500).json({ error: 'Falha ao sincronizar intimações do Projudi' });
-  }
-};
-
-export const listIntimacoesHandler = async (req: Request, res: Response) => {
-  try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res.json([]);
-    }
-
-    const result = await pool.query(
-      `SELECT id,
-              "siglaTribunal",
-              external_id,
-              numero_processo,
-              "nomeOrgao",
-              "tipoComunicacao",
-              texto,
-              prazo,
-              data_disponibilizacao,
-              created_at,
-              updated_at,
-              meio,
-              link,
-              tipodocumento,
-              nomeclasse,
-              codigoclasse,
-              numerocomunicacao,
-              ativo,
-              hash,
-              status,
-              motivo_cancelamento,
-              data_cancelamento,
-              destinatarios,
-              destinatarios_advogados,
-              idusuario,
-              idempresa,
-              nao_lida
-         FROM public.intimacoes
-        WHERE idempresa = $1
-        ORDER BY data_disponibilizacao DESC NULLS LAST,
-                 created_at DESC NULLS LAST,
-                 id DESC`,
-      [empresaId]
-    );
-
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Failed to list intimações', error);
-    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
