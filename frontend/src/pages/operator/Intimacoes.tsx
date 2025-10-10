@@ -12,6 +12,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Pagination,
   PaginationContent,
@@ -22,8 +31,13 @@ import {
 } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
-import { archiveIntimacao, fetchIntimacoes, type Intimacao } from "@/services/intimacoes";
-import { Archive, ExternalLink, Loader2, RotateCcw } from "lucide-react";
+import {
+  archiveIntimacao,
+  fetchIntimacoes,
+  markIntimacaoAsRead,
+  type Intimacao,
+} from "@/services/intimacoes";
+import { Archive, CheckCheck, ExternalLink, Loader2, RotateCcw } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -45,6 +59,18 @@ type NormalizedAdvogado = {
   nome: string;
   numeroOab?: string;
   ufOab?: string;
+};
+
+type PeriodFilter = "all" | "7d" | "30d" | "90d" | "month";
+type SituationFilter = "ativas" | "todas" | "arquivadas" | "nao-lidas";
+
+type FiltersState = {
+  search: string;
+  advogado: string;
+  periodo: PeriodFilter;
+  situacao: SituationFilter;
+  tribunal: string;
+  tipo: string;
 };
 
 const ITEMS_PER_PAGE = 15;
@@ -406,6 +432,21 @@ function normalizeDestinatariosAdvogados(raw: unknown): NormalizedAdvogado[] {
     .filter((value): value is NormalizedAdvogado => value !== null);
 }
 
+function formatAdvogadoLabel(advogado: NormalizedAdvogado): string {
+  const parts = [advogado.nome];
+  const oab = [advogado.ufOab ?? "", advogado.numeroOab ?? ""].filter((value) => value).join("-");
+
+  if (oab) {
+    parts.push(`OAB ${oab}`);
+  }
+
+  return parts.join(" • ");
+}
+
+function createAdvogadoKey(advogado: NormalizedAdvogado): string {
+  return [advogado.nome, advogado.ufOab ?? "", advogado.numeroOab ?? ""].join("|");
+}
+
 function formatDateTime(value: string | null | undefined): string | null {
   if (!value) {
     return null;
@@ -491,6 +532,15 @@ export default function Intimacoes() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FiltersState>({
+    search: "",
+    advogado: "all",
+    periodo: "all",
+    situacao: "ativas",
+    tribunal: "all",
+    tipo: "all",
+  });
   const { toast } = useToast();
 
   const loadIntimacoes = useCallback(async (signal?: AbortSignal) => {
@@ -556,7 +606,156 @@ export default function Intimacoes() {
     });
   }, [intimacoes]);
 
-  const totalPages = Math.max(Math.ceil(sortedIntimacoes.length / ITEMS_PER_PAGE), 1);
+  const advogadoOptions = useMemo(() => {
+    const map = new Map<string, string>();
+
+    intimacoes.forEach((item) => {
+      normalizeDestinatariosAdvogados(item.destinatarios_advogados).forEach((advogado) => {
+        const key = createAdvogadoKey(advogado);
+
+        if (!map.has(key)) {
+          map.set(key, formatAdvogadoLabel(advogado));
+        }
+      });
+    });
+
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [intimacoes]);
+
+  const tribunalOptions = useMemo(() => {
+    const map = new Map<string, string>();
+
+    intimacoes.forEach((item) => {
+      const label = item.siglaTribunal?.trim();
+
+      if (label) {
+        const value = label.toLowerCase();
+        if (!map.has(value)) {
+          map.set(value, label);
+        }
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [intimacoes]);
+
+  const tipoOptions = useMemo(() => {
+    const map = new Map<string, string>();
+
+    intimacoes.forEach((item) => {
+      const label = item.tipoComunicacao?.trim();
+
+      if (label) {
+        const value = label.toLowerCase();
+        if (!map.has(value)) {
+          map.set(value, label);
+        }
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [intimacoes]);
+
+  const filteredIntimacoes = useMemo(() => {
+    const now = new Date();
+    const nowTime = now.getTime();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const normalizedSearch = filters.search.trim().toLowerCase();
+    const normalizedSearchDigits = normalizedSearch.replace(/\D+/g, "");
+
+    return sortedIntimacoes.filter((item) => {
+      if (filters.situacao === "ativas" && item.arquivada) {
+        return false;
+      }
+
+      if (filters.situacao === "arquivadas" && !item.arquivada) {
+        return false;
+      }
+
+      if (filters.situacao === "nao-lidas" && !item.nao_lida) {
+        return false;
+      }
+
+      if (filters.tribunal !== "all") {
+        const tribunal = item.siglaTribunal?.trim().toLowerCase() ?? "";
+        if (tribunal !== filters.tribunal) {
+          return false;
+        }
+      }
+
+      if (filters.tipo !== "all") {
+        const tipo = item.tipoComunicacao?.trim().toLowerCase() ?? "";
+        if (tipo !== filters.tipo) {
+          return false;
+        }
+      }
+
+      if (normalizedSearch) {
+        const processValue = item.numero_processo ?? "";
+        const normalizedProcess = processValue.toLowerCase();
+
+        if (!normalizedProcess.includes(normalizedSearch)) {
+          const digits = processValue.replace(/\D+/g, "");
+
+          if (!normalizedSearchDigits || !digits.includes(normalizedSearchDigits)) {
+            return false;
+          }
+        }
+      }
+
+      if (filters.advogado !== "all") {
+        const advogados = normalizeDestinatariosAdvogados(item.destinatarios_advogados);
+        const matches = advogados.some((advogado) => createAdvogadoKey(advogado) === filters.advogado);
+
+        if (!matches) {
+          return false;
+        }
+      }
+
+      if (filters.periodo !== "all") {
+        const date =
+          parseDateValue(item.data_disponibilizacao) ??
+          parseDateValue(item.created_at) ??
+          parseDateValue(item.updated_at);
+
+        if (!date) {
+          return false;
+        }
+
+        const time = date.getTime();
+
+        if (filters.periodo === "7d" && time < nowTime - 7 * 24 * 60 * 60 * 1000) {
+          return false;
+        }
+
+        if (filters.periodo === "30d" && time < nowTime - 30 * 24 * 60 * 60 * 1000) {
+          return false;
+        }
+
+        if (filters.periodo === "90d" && time < nowTime - 90 * 24 * 60 * 60 * 1000) {
+          return false;
+        }
+
+        if (
+          filters.periodo === "month"
+          && (date.getMonth() !== currentMonth || date.getFullYear() !== currentYear)
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [sortedIntimacoes, filters]);
+
+  const totalPages = Math.max(Math.ceil(filteredIntimacoes.length / ITEMS_PER_PAGE), 1);
 
   useEffect(() => {
     setPage((prev) => Math.min(prev, totalPages));
@@ -564,16 +763,19 @@ export default function Intimacoes() {
 
   const paginatedIntimacoes = useMemo(() => {
     const start = (page - 1) * ITEMS_PER_PAGE;
-    return sortedIntimacoes.slice(start, start + ITEMS_PER_PAGE);
-  }, [sortedIntimacoes, page]);
+    return filteredIntimacoes.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredIntimacoes, page]);
 
   const summary = useMemo(() => {
     const total = sortedIntimacoes.length;
     let unread = 0;
     let archived = 0;
-    let withDeadline = 0;
+    let currentMonth = 0;
     const statusMap = new Map<string, number>();
     const monthlyMap = new Map<string, { year: number; month: number; total: number }>();
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
 
     sortedIntimacoes.forEach((item) => {
       if (item.nao_lida) {
@@ -582,10 +784,6 @@ export default function Intimacoes() {
 
       if (item.arquivada) {
         archived += 1;
-      }
-
-      if (typeof item.prazo === "string" && item.prazo.trim().length > 0) {
-        withDeadline += 1;
       }
 
       const statusLabel = item.status?.trim() ?? "Sem status";
@@ -602,6 +800,10 @@ export default function Intimacoes() {
           monthlyMap.get(key) ?? { year: date.getFullYear(), month: date.getMonth(), total: 0 };
         entry.total += 1;
         monthlyMap.set(key, entry);
+
+        if (date.getMonth() === month && date.getFullYear() === year) {
+          currentMonth += 1;
+        }
       }
     });
 
@@ -621,7 +823,7 @@ export default function Intimacoes() {
       total,
       unread,
       archived,
-      withDeadline,
+      currentMonth,
       active: Math.max(total - archived, 0),
       statusDistribution,
       monthlyDistribution,
@@ -665,7 +867,43 @@ export default function Intimacoes() {
     }
   };
 
-  const { total, active, unread, withDeadline, archived, statusDistribution, monthlyDistribution } =
+  const handleMarkAsRead = async (id: number | string) => {
+    const stringId = String(id);
+    setMarkingId(stringId);
+
+    try {
+      const result = await markIntimacaoAsRead(id);
+      setIntimacoes((prev) =>
+        prev.map((item) =>
+          String(item.id) === String(result.id)
+            ? { ...item, nao_lida: result.nao_lida, updated_at: result.updated_at }
+            : item,
+        ),
+      );
+      toast({
+        title: "Intimação atualizada",
+        description: "Ela foi marcada como lida.",
+      });
+    } catch (err) {
+      toast({
+        title: "Não foi possível marcar como lida",
+        description: err instanceof Error ? err.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  const handleFiltersChange = <Key extends keyof FiltersState>(key: Key, value: FiltersState[Key]) => {
+    setFilters((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
+    setPage(1);
+  };
+
+  const { total, active, unread, currentMonth, archived, statusDistribution, monthlyDistribution } =
     summary;
 
   return (
@@ -720,16 +958,127 @@ export default function Intimacoes() {
         </Card>
         <Card className="border-border/60 bg-card/60 backdrop-blur">
           <CardHeader className="space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Com prazo definido</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Disponíveis neste mês</CardTitle>
             <div className="text-3xl font-semibold text-foreground">
-              {numberFormatter.format(withDeadline)}
+              {numberFormatter.format(currentMonth)}
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <CardDescription>Acompanhe as publicações com prazo ativo.</CardDescription>
+            <CardDescription>Intimações com disponibilização registrada no mês atual.</CardDescription>
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-border/60 bg-card/60">
+        <CardHeader className="pb-0">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Filtros</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="filtro-processo">Buscar por processo</Label>
+              <Input
+                id="filtro-processo"
+                placeholder="Número do processo"
+                value={filters.search}
+                onChange={(event) => handleFiltersChange("search", event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filtro-periodo">Período</Label>
+              <Select
+                value={filters.periodo}
+                onValueChange={(value) => handleFiltersChange("periodo", value as PeriodFilter)}
+              >
+                <SelectTrigger id="filtro-periodo">
+                  <SelectValue placeholder="Selecione o período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os períodos</SelectItem>
+                  <SelectItem value="month">Mês atual</SelectItem>
+                  <SelectItem value="7d">Últimos 7 dias</SelectItem>
+                  <SelectItem value="30d">Últimos 30 dias</SelectItem>
+                  <SelectItem value="90d">Últimos 90 dias</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filtro-situacao">Situação</Label>
+              <Select
+                value={filters.situacao}
+                onValueChange={(value) => handleFiltersChange("situacao", value as SituationFilter)}
+              >
+                <SelectTrigger id="filtro-situacao">
+                  <SelectValue placeholder="Selecione a situação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ativas">Ativas</SelectItem>
+                  <SelectItem value="nao-lidas">Não lidas</SelectItem>
+                  <SelectItem value="todas">Todas</SelectItem>
+                  <SelectItem value="arquivadas">Arquivadas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filtro-advogado">Advogado responsável</Label>
+              <Select
+                value={filters.advogado}
+                onValueChange={(value) => handleFiltersChange("advogado", value)}
+              >
+                <SelectTrigger id="filtro-advogado">
+                  <SelectValue placeholder="Selecione o advogado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os advogados</SelectItem>
+                  {advogadoOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filtro-tribunal">Tribunal</Label>
+              <Select
+                value={filters.tribunal}
+                onValueChange={(value) => handleFiltersChange("tribunal", value)}
+              >
+                <SelectTrigger id="filtro-tribunal">
+                  <SelectValue placeholder="Selecione o tribunal" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {tribunalOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filtro-tipo">Tipo de comunicação</Label>
+              <Select
+                value={filters.tipo}
+                onValueChange={(value) => handleFiltersChange("tipo", value)}
+              >
+                <SelectTrigger id="filtro-tipo">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {tipoOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr),minmax(0,2fr)]">
         <Card className="border-border/60">
@@ -805,7 +1154,7 @@ export default function Intimacoes() {
         </div>
       ) : null}
 
-      {!loading && sortedIntimacoes.length === 0 ? (
+      {!loading && filteredIntimacoes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-muted-foreground/40 bg-card/50 p-10 text-center text-sm text-muted-foreground">
           Nenhuma intimação encontrada.
         </div>
@@ -827,6 +1176,7 @@ export default function Intimacoes() {
               const textoNormalizado = normalizeRichText(intimacao.texto);
               const itemId = String(intimacao.id ?? index);
               const isArchiving = archivingId === String(intimacao.id);
+              const isMarking = markingId === String(intimacao.id);
 
               return (
                 <AccordionItem
@@ -851,11 +1201,17 @@ export default function Intimacoes() {
                             </span>
                           )}
                           <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                                          
-                              <Badge>
-                               {intimacao.tipoComunicacao}
+                            {intimacao.tipoComunicacao ? <Badge>{intimacao.tipoComunicacao}</Badge> : null}
+                            {intimacao.nao_lida ? (
+                              <Badge variant="outline" className="border-primary/60 bg-primary/10 text-primary">
+                                Não lida
                               </Badge>
-
+                            ) : null}
+                            {intimacao.arquivada ? (
+                              <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                                Arquivada
+                              </Badge>
+                            ) : null}
                           </div>
                         </div>
                            {disponibilizadaEm ? (
@@ -877,28 +1233,50 @@ export default function Intimacoes() {
                     <div className="space-y-6 py-2">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                          
+                          {intimacao.tipoComunicacao ? <Badge>{intimacao.tipoComunicacao}</Badge> : null}
+                          {intimacao.nao_lida ? (
+                            <Badge variant="outline" className="border-primary/60 bg-primary/10 text-primary">
+                              Não lida
+                            </Badge>
+                          ) : null}
                           {intimacao.arquivada ? (
-                            <Badge variant="secondary" className="bg-primary/10 text-primary">
-                              
+                            <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                              Arquivada
                             </Badge>
                           ) : null}
                         </div>
-                        {!intimacao.arquivada ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleArchive(intimacao.id)}
-                            disabled={isArchiving}
-                          >
-                            {isArchiving ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Archive className="mr-2 h-4 w-4" />
-                            )}
-                            Arquivar intimação
-                          </Button>
-                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          {intimacao.nao_lida ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleMarkAsRead(intimacao.id)}
+                              disabled={isMarking || isArchiving}
+                            >
+                              {isMarking ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <CheckCheck className="mr-2 h-4 w-4" />
+                              )}
+                              Marcar como lida
+                            </Button>
+                          ) : null}
+                          {!intimacao.arquivada ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleArchive(intimacao.id)}
+                              disabled={isArchiving || isMarking}
+                            >
+                              {isArchiving ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Archive className="mr-2 h-4 w-4" />
+                              )}
+                              Arquivar intimação
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-2">

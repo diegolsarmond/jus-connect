@@ -671,6 +671,22 @@ export async function archiveIntimacao(
   return (await response.json()) as { id: number; arquivada: boolean; updated_at: string };
 }
 
+export async function markIntimacaoAsRead(
+  id: number | string,
+): Promise<{ id: number; nao_lida: boolean; updated_at: string }>
+{
+  const response = await fetch(getApiUrl(`intimacoes/${id}/read`), {
+    method: "PATCH",
+    headers: JSON_HEADERS,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha ao marcar intimação como lida (${response.status}).`);
+  }
+
+  return (await response.json()) as { id: number; nao_lida: boolean; updated_at: string };
+}
+
 export async function fetchIntimacoesOverview(signal?: AbortSignal): Promise<IntimacoesOverview> {
   const notificationsUrl = new URL(getApiUrl("notifications"));
   notificationsUrl.searchParams.set("category", "projudi");
