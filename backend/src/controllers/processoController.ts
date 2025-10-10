@@ -16,11 +16,18 @@ import {
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const normalizeString = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
+  const asString =
+    typeof value === 'number' && Number.isFinite(value)
+      ? String(value)
+      : typeof value === 'string'
+        ? value
+        : null;
+
+  if (asString === null) {
     return null;
   }
 
-  const trimmed = value.trim();
+  const trimmed = asString.trim();
   return trimmed === '' ? null : trimmed;
 };
 
