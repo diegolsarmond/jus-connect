@@ -2948,10 +2948,10 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const municipioValue = normalizeString(municipio);
   const orgaoValue = normalizeString(orgao_julgador);
   const grauValue = normalizeString(req.body?.grau);
-  let finalNumeroValue = numeroValue;
-  let finalUfValue = ufValue;
-  let finalMunicipioValue = municipioValue;
-  let finalGrauValue = grauValue;
+  const finalNumeroValue = numeroValue;
+  const finalUfValue = ufValue;
+  const finalMunicipioValue = municipioValue;
+  const finalGrauValue = grauValue;
 
   const tipoValue = normalizeString(tipo);
   const statusValue = normalizeString(status);
@@ -3114,29 +3114,6 @@ export const updateProcesso = async (req: Request, res: Response) => {
     if (monitorarProcessoValue === null) {
       monitorarProcessoValue =
         existingProcess.rows[0]?.monitorar_processo === true;
-    }
-
-    const existingRow = existingProcess.rows[0] ?? {};
-
-    if (!finalNumeroValue) {
-      const existingNumero = normalizeString(
-        (existingRow as { numero_cnj?: unknown }).numero_cnj,
-      );
-      finalNumeroValue = existingNumero;
-    }
-
-    if (!finalUfValue) {
-      finalUfValue = normalizeUppercase((existingRow as { uf?: unknown }).uf);
-    }
-
-    if (!finalMunicipioValue) {
-      finalMunicipioValue = normalizeString(
-        (existingRow as { municipio?: unknown }).municipio,
-      );
-    }
-
-    if (!finalGrauValue) {
-      finalGrauValue = normalizeString((existingRow as { grau?: unknown }).grau);
     }
 
     if (!finalNumeroValue || !finalUfValue || !finalMunicipioValue || !finalGrauValue) {
