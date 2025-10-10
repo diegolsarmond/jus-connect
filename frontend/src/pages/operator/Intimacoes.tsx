@@ -823,8 +823,6 @@ export default function Intimacoes() {
               const destinatariosAdv = normalizeDestinatariosAdvogados(intimacao.destinatarios_advogados);
               const prazoFormatado = formatDateOrText(intimacao.prazo);
               const cancelamentoFormatado = formatDateTime(intimacao.data_cancelamento);
-              const criadaEm = formatDateTime(intimacao.created_at);
-              const atualizadaEm = formatDateTime(intimacao.updated_at);
               const disponibilizadaEm = formatDateTime(intimacao.data_disponibilizacao);
               const textoNormalizado = normalizeRichText(intimacao.texto);
               const itemId = String(intimacao.id ?? index);
@@ -853,36 +851,25 @@ export default function Intimacoes() {
                             </span>
                           )}
                           <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                            {typeof intimacao.nao_lida === "boolean" ? (
-                              <Badge
-                                variant="outline"
-                                className={
-                                  intimacao.nao_lida
-                                    ? "border-amber-400 text-amber-500 dark:border-amber-500/70 dark:text-amber-300"
-                                    : "border-emerald-400 text-emerald-600 dark:border-emerald-500/70 dark:text-emerald-300"
-                                }
-                              >
-                                {intimacao.nao_lida ? "Não lida" : "Lida"}
+                                          
+                              <Badge>
+                               {intimacao.tipoComunicacao}
                               </Badge>
-                            ) : null}
-                            {intimacao.arquivada ? (
-                              <Badge variant="outline" className="border-primary/60 text-primary">
-                                Arquivada
-                              </Badge>
-                            ) : null}
+
                           </div>
                         </div>
-                        {headerDate ? (
+                           {disponibilizadaEm ? (
                           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            Disponibilizada em {headerDate}
+                                          <Badge variant="outline" className="border-primary/60 text-primary">
+                                              {disponibilizadaEm.split(' ')[0]}
+                                          </Badge>
                           </span>
                         ) : null}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                        {intimacao.siglaTribunal ? <span>{intimacao.siglaTribunal}</span> : null}
-                        {intimacao.tipoComunicacao ? <span>{intimacao.tipoComunicacao}</span> : null}
-                        {intimacao.tipodocumento ? <span>{intimacao.tipodocumento}</span> : null}
-                        {intimacao.status ? <span>Status: {intimacao.status}</span> : null}
+                        {intimacao.siglaTribunal ? <span>{intimacao.siglaTribunal} -</span> : null}
+                                  {intimacao.nomeOrgao ? <span>{intimacao.nomeOrgao}</span> : null}
+                        
                       </div>
                     </div>
                   </AccordionTrigger>
@@ -890,14 +877,10 @@ export default function Intimacoes() {
                     <div className="space-y-6 py-2">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                          {intimacao.status ? (
-                            <Badge variant="outline" className="border-muted-foreground/40 text-muted-foreground">
-                              {intimacao.status}
-                            </Badge>
-                          ) : null}
+                          
                           {intimacao.arquivada ? (
                             <Badge variant="secondary" className="bg-primary/10 text-primary">
-                              Arquivada
+                              
                             </Badge>
                           ) : null}
                         </div>
@@ -930,28 +913,15 @@ export default function Intimacoes() {
                             intimacao.codigoclasse
                           ) : null}
                         </InfoItem>
-                        <InfoItem label="Meio">{intimacao.meio}</InfoItem>
-                        <InfoItem label="Número da comunicação">{intimacao.numerocomunicacao}</InfoItem>
+                        <InfoItem label="Meio">{intimacao.meio === "D" ? "Diário de Justiça Eletrônico" : "Plataforma de Editais"}</InfoItem>
                         <InfoItem label="Prazo">{prazoFormatado}</InfoItem>
-                        <InfoItem label="Disponibilizada em">{disponibilizadaEm}</InfoItem>
-                        <InfoItem label="Criada em">{criadaEm}</InfoItem>
-                        <InfoItem label="Atualizada em">{atualizadaEm}</InfoItem>
-                        <InfoItem label="Status">{intimacao.status}</InfoItem>
-                        <InfoItem label="Ativa">
-                          {typeof intimacao.ativo === "boolean" ? (intimacao.ativo ? "Sim" : "Não") : null}
-                        </InfoItem>
-                        <InfoItem label="Arquivada">
-                          {typeof intimacao.arquivada === "boolean" ? (intimacao.arquivada ? "Sim" : "Não") : null}
-                        </InfoItem>
+                        <InfoItem label="Tipo de Documento">{intimacao.tipodocumento ? <span>{intimacao.tipodocumento}</span> : null}</InfoItem>
+                        <InfoItem label="Data de disponibilização">{disponibilizadaEm}</InfoItem>
                         <InfoItem label="Motivo do cancelamento">{intimacao.motivo_cancelamento}</InfoItem>
                         <InfoItem label="Data do cancelamento">{cancelamentoFormatado}</InfoItem>
-                        <InfoItem label="Hash">{intimacao.hash}</InfoItem>
-                        <InfoItem label="ID externo">{intimacao.external_id}</InfoItem>
-                        <InfoItem label="ID do usuário">{intimacao.idusuario}</InfoItem>
-                        <InfoItem label="ID da empresa">{intimacao.idempresa}</InfoItem>
                       </div>
 
-                      <InfoItem label="Texto">
+                        <InfoItem label="Teor da Comunicação">
                         {textoNormalizado ? (
                           textoNormalizado.type === "html" ? (
                             <div
@@ -966,20 +936,20 @@ export default function Intimacoes() {
                         ) : null}
                       </InfoItem>
 
-                      <InfoItem label="Destinatários">
+                        <InfoItem label="Parte(s)">
                         {destinatarios.length > 0 ? (
                           <ul className="list-disc space-y-1 pl-5">
                             {destinatarios.map((destinatario, destinatarioIndex) => (
                               <li key={`${destinatario.nome}-${destinatario.polo ?? "p"}-${destinatarioIndex}`}>
                                 {destinatario.nome}
-                                {destinatario.polo ? ` (${destinatario.polo})` : null}
+                                {destinatario.polo ? ` - ${destinatario.polo === "P" ? "Polo Passivo" : "Polo Ativo"}` : null}
                               </li>
                             ))}
                           </ul>
                         ) : null}
                       </InfoItem>
 
-                      <InfoItem label="Advogados">
+                        <InfoItem label="Advogado(s)">
                         {destinatariosAdv.length > 0 ? (
                           <ul className="list-disc space-y-1 pl-5">
                             {destinatariosAdv.map((advogado, advogadoIndex) => (
@@ -987,7 +957,7 @@ export default function Intimacoes() {
                                 {advogado.nome}
                                 {advogado.ufOab || advogado.numeroOab
                                   ? ` (OAB ${advogado.ufOab ?? ""}${
-                                      advogado.ufOab && advogado.numeroOab ? " " : ""
+                                      advogado.ufOab && advogado.numeroOab ? "-" : ""
                                     }${advogado.numeroOab ?? ""})`
                                   : null}
                               </li>
@@ -996,7 +966,7 @@ export default function Intimacoes() {
                         ) : null}
                       </InfoItem>
 
-                      <InfoItem label="Link">
+                        <InfoItem label="Inteiro teor">
                         {intimacao.link ? (
                           <a
                             href={intimacao.link}
