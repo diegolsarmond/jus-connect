@@ -2380,6 +2380,59 @@ export default function Processos() {
         [clientes],
     );
 
+    const fetchUnassignedPage = useCallback(
+        async (
+            page: number,
+            { signal }: { signal?: AbortSignal } = {},
+        ): Promise<void> => {
+            if (signal?.aborted) {
+                return;
+            }
+
+            setUnassignedLoading(true);
+            setUnassignedError(null);
+            setUnassignedProcesses([]);
+            setUnassignedProcessIds([]);
+
+            try {
+                const data = await loadProcessos({
+                    page,
+                    pageSize: UNASSIGNED_PAGE_SIZE,
+                    signal,
+                    searchParams: { semCliente: true },
+                });
+
+                if (signal?.aborted) {
+                    return;
+                }
+
+                setUnassignedProcesses(data.items);
+                setUnassignedProcessIds(data.items.map((item) => item.id));
+                setUnassignedTotal(data.total);
+            } catch (error) {
+                if (signal?.aborted) {
+                    return;
+                }
+
+                console.error(error);
+
+                setUnassignedError(
+                    error instanceof Error
+                        ? error.message
+                        : "Erro ao carregar processos sem cliente",
+                );
+                setUnassignedProcesses([]);
+                setUnassignedProcessIds([]);
+                setUnassignedTotal(0);
+            } finally {
+                if (!signal?.aborted) {
+                    setUnassignedLoading(false);
+                }
+            }
+        },
+        [loadProcessos],
+    );
+
     const handleLinkProcess = useCallback(
         async (processId: number) => {
             const detail = unassignedDetails[processId];
@@ -2548,22 +2601,36 @@ export default function Processos() {
                 }
 
                 const remaining = unassignedProcessIds.filter((id) => id !== processId);
+                const nextTotal = Math.max(0, unassignedTotal - 1);
+                const nextTotalPages =
+                    nextTotal <= 0 ? 1 : Math.max(1, Math.ceil(nextTotal / UNASSIGNED_PAGE_SIZE));
 
                 setUnassignedDetails((prev) => {
                     const next = { ...prev };
                     delete next[processId];
                     return next;
                 });
+                setUnassignedProcesses((prev) =>
+                    prev.filter((processo) => processo.id !== processId),
+                );
                 setUnassignedProcessIds(remaining);
+                setUnassignedTotal(nextTotal);
 
                 toast({
                     title: "Processo atualizado",
                     description: "Cliente vinculado com sucesso.",
                 });
 
-                if (remaining.length === 0) {
+                if (nextTotal === 0) {
                     setUnassignedModalOpen(false);
                     setUnassignedModalDismissed(true);
+                } else if (remaining.length === 0) {
+                    const targetPage = Math.min(unassignedPage, nextTotalPages);
+                    if (targetPage !== unassignedPage) {
+                        setUnassignedPage(targetPage);
+                    } else {
+                        void fetchUnassignedPage(targetPage);
+                    }
                 }
 
                 try {
@@ -2618,6 +2685,9 @@ export default function Processos() {
             loadProcessos,
             applyProcessosData,
             unassignedProcessIds,
+            unassignedTotal,
+            unassignedPage,
+            fetchUnassignedPage,
         ],
     );
 
@@ -2799,54 +2869,13 @@ export default function Processos() {
         }
 
         const controller = new AbortController();
-        let cancelled = false;
 
-        setUnassignedLoading(true);
-        setUnassignedError(null);
-        setUnassignedProcesses([]);
-        setUnassignedProcessIds([]);
-
-        loadProcessos({
-            page: unassignedPage,
-            pageSize: UNASSIGNED_PAGE_SIZE,
-            signal: controller.signal,
-            searchParams: { semCliente: true },
-        })
-            .then((data) => {
-                if (cancelled) {
-                    return;
-                }
-
-                setUnassignedProcesses(data.items);
-                setUnassignedProcessIds(data.items.map((item) => item.id));
-                setUnassignedTotal(data.total);
-            })
-            .catch((error) => {
-                console.error(error);
-                if (cancelled) {
-                    return;
-                }
-
-                setUnassignedError(
-                    error instanceof Error
-                        ? error.message
-                        : "Erro ao carregar processos sem cliente",
-                );
-                setUnassignedProcesses([]);
-                setUnassignedProcessIds([]);
-                setUnassignedTotal(0);
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setUnassignedLoading(false);
-                }
-            });
+        void fetchUnassignedPage(unassignedPage, { signal: controller.signal });
 
         return () => {
-            cancelled = true;
             controller.abort();
         };
-    }, [loadProcessos, unassignedModalOpen, unassignedPage]);
+    }, [fetchUnassignedPage, unassignedModalOpen, unassignedPage]);
 
     useEffect(() => {
         if (!unassignedModalOpen) {
