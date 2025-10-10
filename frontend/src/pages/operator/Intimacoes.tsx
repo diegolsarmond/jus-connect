@@ -1505,9 +1505,24 @@ export default function Intimacoes() {
     }
   }, []);
 
+  const selectedCompanyUser = useMemo(
+    () => companyUsers.find((item) => item.id === selectedUserId) ?? null,
+    [companyUsers, selectedUserId],
+  );
+
+  const shouldDisableOabFields = Boolean(
+    selectedCompanyUser?.oabNumber && selectedCompanyUser?.oabUf,
+  );
+
   const handleSelectCompanyUser = useCallback(
     (value: string) => {
       setSelectedUserId(value);
+
+      if (!value) {
+        setOabNumber("");
+        setOabUf("");
+        return;
+      }
 
       const option = companyUsers.find((item) => item.id === value);
 
@@ -2974,7 +2989,7 @@ export default function Intimacoes() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="oab-uf">Estado</Label>
-                  <Select value={oabUf} onValueChange={setOabUf} disabled={Boolean(selectedUserId)}>
+                  <Select value={oabUf} onValueChange={setOabUf} disabled={shouldDisableOabFields}>
                     <SelectTrigger id="oab-uf">
                       <SelectValue placeholder="Selecione o estado" />
                     </SelectTrigger>
@@ -2994,7 +3009,7 @@ export default function Intimacoes() {
                     placeholder="000000"
                     value={oabNumber}
                     onChange={(event) => setOabNumber(event.target.value)}
-                    disabled={Boolean(selectedUserId)}
+                    disabled={shouldDisableOabFields}
                   />
                 </div>
               </div>
