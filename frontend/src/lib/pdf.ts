@@ -6,6 +6,9 @@ const PDF_MARGIN_BOTTOM = 60;
 const PDF_FONT_SIZE = 12;
 const PDF_LINE_HEIGHT = 16;
 
+const TRANSPARENT_PIXEL_DATA_URI =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
 const encoder = new TextEncoder();
 
 const WIN_ANSI_EXTRA = new Map<number, number>([
@@ -529,7 +532,7 @@ async function replaceCssUrls(
     if (dataUri) {
       result += `url("${dataUri}")`;
     } else {
-      result += match[0];
+      result += `url("${TRANSPARENT_PIXEL_DATA_URI}")`;
     }
   }
 
@@ -550,11 +553,10 @@ async function inlineImageSources(
       const resolved = resolveAssetUrl(src, baseUrl);
       if (!resolved || !shouldInlineUrl(resolved)) return;
       const dataUri = await fetchAssetAsDataUri(resolved, cache);
-      if (dataUri) {
-        image.setAttribute("src", dataUri);
-        if (image.hasAttribute("srcset")) {
-          image.removeAttribute("srcset");
-        }
+      const nextSource = dataUri ?? TRANSPARENT_PIXEL_DATA_URI;
+      image.setAttribute("src", nextSource);
+      if (image.hasAttribute("srcset")) {
+        image.removeAttribute("srcset");
       }
     }),
   );
