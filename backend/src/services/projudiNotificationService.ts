@@ -116,16 +116,23 @@ interface IntimacaoRow extends QueryResultRow {
   [key: string]: unknown;
 }
 
-function pickRowValue<T>(row: IntimacaoRow, keys: string[]): T | undefined {
+function pickRowValue<T>(row: IntimacaoRow, keys: string[]): T | null | undefined {
+  let foundNull = false;
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(row, key)) {
       const value = row[key];
-      if (value !== undefined) {
+      if (value === undefined) {
+        continue;
+      }
+      if (value === null) {
+        foundNull = true;
+        continue;
+      }
         return value as T;
       }
     }
   }
-  return undefined;
+  return foundNull ? null : undefined;
 }
 
 function pickRowString(row: IntimacaoRow, keys: string[]): string | null {
@@ -144,6 +151,7 @@ function pickRowString(row: IntimacaoRow, keys: string[]): string | null {
 }
 
 function pickRowDate(row: IntimacaoRow, keys: string[]): string | Date | null | undefined {
+  let foundNull = false;
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(row, key)) {
       const value = row[key];
@@ -151,14 +159,15 @@ function pickRowDate(row: IntimacaoRow, keys: string[]): string | Date | null | 
         continue;
       }
       if (value === null) {
-        return null;
+        foundNull = true;
+        continue;
       }
       if (value instanceof Date || typeof value === 'string' || typeof value === 'number') {
         return value as string | Date;
       }
     }
   }
-  return undefined;
+  return foundNull ? null : undefined;
 }
 
 function normalizePayloadValue(value: unknown): unknown {
