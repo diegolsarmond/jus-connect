@@ -3,12 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -391,7 +385,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
     }
   }
 
-  const resumoConciso = frasesParaResumo.slice(0, 10).join(" ") || paragrafoUnico;
+  const resumoConciso = frasesParaResumo.slice(0, 2).join(" ") || paragrafoUnico;
 
   const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
 
@@ -400,7 +394,7 @@ function prepararResumoIa(conteudo?: string | null): string | null {
 
 function montarPromptResumoIntimacao(intimacao: Intimacao): string {
   const partes: string[] = [
-    "Resuma de forma objetiva a intimação abaixo destacando prazos, determinações, responsáveis e próximos passos.",
+    "Responda de forma direta qual é a solicitação da autoridade judicial e qual foi o prazo determinado.",
   ];
 
   const numeroProcesso =
@@ -651,6 +645,8 @@ export default function Intimacoes() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const summaryRequestIdRef = useRef(0);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [detailsTarget, setDetailsTarget] = useState<Intimacao | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -747,7 +743,7 @@ export default function Intimacoes() {
 
         toast({
           title: "Resumo gerado",
-          description: `Resumo criado com ${providerLabel}.`,
+            description: `Resumo gerado com inteligência artificial. Pode conter imprecisões; recomenda-se revisão.`,
         });
       } catch (error) {
         const mensagem = error instanceof Error ? error.message : "Não foi possível gerar o resumo.";
@@ -797,6 +793,19 @@ export default function Intimacoes() {
       setSummaryContent(null);
       setSummaryError(null);
       setSummaryLoading(false);
+    }
+  }, []);
+
+  const handleOpenDetails = useCallback((intimacao: Intimacao) => {
+    setDetailsTarget(intimacao);
+    setDetailsDialogOpen(true);
+  }, []);
+
+  const handleDetailsDialogChange = useCallback((open: boolean) => {
+    setDetailsDialogOpen(open);
+
+    if (!open) {
+      setDetailsTarget(null);
     }
   }, []);
 
@@ -1104,6 +1113,10 @@ export default function Intimacoes() {
             : item,
         ),
       );
+      if (detailsTarget && String(detailsTarget.id) === stringId) {
+        setDetailsTarget(null);
+        setDetailsDialogOpen(false);
+      }
       toast({
         title: "Intimação arquivada",
         description: "Ela foi movida para a lista de intimações arquivadas.",
@@ -1275,6 +1288,34 @@ export default function Intimacoes() {
     (intimacao: Intimacao) => {
       const params = new URLSearchParams();
       const numero = typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+      const prazoDate = intimacao.prazo ? new Date(intimacao.prazo) : null;
+      const hasValidPrazo = prazoDate && !Number.isNaN(prazoDate.getTime());
+      const descricaoPartes: string[] = [];
+
+      if (intimacao.nomeOrgao) {
+        descricaoPartes.push(`Órgão: ${intimacao.nomeOrgao}`);
+      }
+
+      if (intimacao.tipoComunicacao) {
+        descricaoPartes.push(`Tipo: ${intimacao.tipoComunicacao}`);
+      }
+
+      if (hasValidPrazo) {
+        descricaoPartes.push(`Prazo: ${format(prazoDate!, "dd/MM/yyyy", { locale: ptBR })}`);
+        params.set("data", prazoDate!.toISOString());
+      }
+
+      const tituloReferencia = numero || String(intimacao.id);
+      params.set("origem", "intimacao");
+      params.set("titulo", `Tratar intimação ${tituloReferencia}`);
+
+      if (descricaoPartes.length > 0) {
+        params.set("descricao", descricaoPartes.join(" • "));
+      }
+
+      if (intimacao.tipoComunicacao) {
+        params.set("tipo", intimacao.tipoComunicacao);
+      }
 
       if (numero) {
         params.set("processo", numero);
@@ -1292,6 +1333,34 @@ export default function Intimacoes() {
     (intimacao: Intimacao) => {
       const params = new URLSearchParams();
       const numero = typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+      const prazoDate = intimacao.prazo ? new Date(intimacao.prazo) : null;
+      const hasValidPrazo = prazoDate && !Number.isNaN(prazoDate.getTime());
+      const descricaoPartes: string[] = [];
+
+      if (intimacao.nomeOrgao) {
+        descricaoPartes.push(`Órgão: ${intimacao.nomeOrgao}`);
+      }
+
+      if (intimacao.tipoComunicacao) {
+        descricaoPartes.push(`Tipo: ${intimacao.tipoComunicacao}`);
+      }
+
+      if (hasValidPrazo) {
+        descricaoPartes.push(`Prazo: ${format(prazoDate!, "dd/MM/yyyy", { locale: ptBR })}`);
+        params.set("data", prazoDate!.toISOString());
+      }
+
+      const tituloReferencia = numero || String(intimacao.id);
+      params.set("origem", "intimacao");
+      params.set("titulo", `Compromisso da intimação ${tituloReferencia}`);
+
+      if (descricaoPartes.length > 0) {
+        params.set("descricao", descricaoPartes.join(" • "));
+      }
+
+      if (intimacao.tipoComunicacao) {
+        params.set("tipo", intimacao.tipoComunicacao);
+      }
 
       if (numero) {
         params.set("processo", numero);
@@ -1605,231 +1674,299 @@ export default function Intimacoes() {
 
       {paginatedIntimacoes.length > 0 ? (
         <>
-          <Accordion type="single" collapsible className="space-y-3">
+          <div className="space-y-3">
             {paginatedIntimacoes.map((intimacao, index) => {
-              const headerDate =
-                formatDateTime(intimacao.data_disponibilizacao) ??
-                formatDateTime(intimacao.created_at) ??
-                formatDateTime(intimacao.updated_at);
-              const destinatarios = normalizeDestinatarios(intimacao.destinatarios);
-              const destinatariosAdv = normalizeDestinatariosAdvogados(intimacao.destinatarios_advogados);
-              const prazoFormatado = formatDateOrText(intimacao.prazo);
-              const cancelamentoFormatado = formatDateTime(intimacao.data_cancelamento);
-              const disponibilizadaEm = formatDateTime(intimacao.data_disponibilizacao);
-              const textoNormalizado = normalizeRichText(intimacao.texto);
               const itemId = String(intimacao.id ?? index);
-              const isArchiving = archivingId === String(intimacao.id);
-              const isMarking = markingId === String(intimacao.id);
               const numeroProcesso =
                 typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
-              const podeResumir = Boolean(normalizarTexto(intimacao.texto));
-              const summaryInProgress =
-                summaryLoading && summaryTarget && String(summaryTarget.id) === String(intimacao.id);
+              const disponibilizadaEm = formatDateTime(intimacao.data_disponibilizacao);
+              const disponibilizadaLabel = disponibilizadaEm ? disponibilizadaEm.split(" ")[0] : null;
 
               return (
-                <AccordionItem
+                <div
                   key={itemId}
-                  value={itemId}
                   className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm transition-shadow hover:shadow-md"
                 >
-                  <AccordionTrigger className="px-4 py-3">
-                    <div className="flex w-full flex-col gap-3 text-left">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="space-y-1">
-                          {numeroProcesso ? (
-                            <Link
-                              to={`/processos/${encodeURIComponent(numeroProcesso)}`}
-                              className="text-base font-semibold text-primary underline-offset-2 hover:underline"
-                            >
-                              {numeroProcesso}
-                            </Link>
-                          ) : (
-                            <span className="text-base font-semibold text-muted-foreground">
-                              Número do processo não informado
-                            </span>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                            {intimacao.tipoComunicacao ? <Badge>{intimacao.tipoComunicacao}</Badge> : null}
-                            {intimacao.nao_lida ? (
-                              <Badge variant="destructive">Não lida</Badge>
-                            ) : null}
-                            {intimacao.arquivada ? (
-                              <Badge variant="secondary" className="bg-muted text-muted-foreground">
-                                Arquivada
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </div>
-                           {disponibilizadaEm ? (
-                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                          <Badge variant="outline" className="border-primary/60 text-primary">
-                                              {disponibilizadaEm.split(' ')[0]}
-                                          </Badge>
+                  <div className="flex flex-col gap-3 px-4 py-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-1">
+                        {numeroProcesso ? (
+                          <Link
+                            to={`/processos/${encodeURIComponent(numeroProcesso)}`}
+                            className="text-base font-semibold text-primary underline-offset-2 hover:underline"
+                          >
+                            {numeroProcesso}
+                          </Link>
+                        ) : (
+                          <span className="text-base font-semibold text-muted-foreground">
+                            Número do processo não informado
                           </span>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                        {intimacao.siglaTribunal ? <span>{intimacao.siglaTribunal} -</span> : null}
-                                  {intimacao.nomeOrgao ? <span>{intimacao.nomeOrgao}</span> : null}
-                        
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-4">
-                    <div className="space-y-6 py-2">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        )}
                         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {intimacao.nao_lida ? (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => handleMarkAsRead(intimacao.id)}
-                              disabled={isMarking || isArchiving || isBulkProcessing}
-                            >
-                              {isMarking ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <CheckCheck className="mr-2 h-4 w-4" />
-                              )}
-                              Marcar como lida
-                            </Button>
+                          {intimacao.tipoComunicacao ? <Badge>{intimacao.tipoComunicacao}</Badge> : null}
+                          {intimacao.nao_lida ? <Badge variant="destructive">Não lida</Badge> : null}
+                          {intimacao.arquivada ? (
+                            <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                              Arquivada
+                            </Badge>
                           ) : null}
-                          {!intimacao.arquivada ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleArchive(intimacao.id)}
-                              disabled={isArchiving || isMarking || isBulkProcessing}
-                            >
-                              {isArchiving ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <Archive className="mr-2 h-4 w-4" />
-                              )}
-                              Arquivar intimação
-                            </Button>
+                          {disponibilizadaLabel ? (
+                            <Badge variant="outline" className="border-primary/60 text-primary">
+                              {disponibilizadaLabel}
+                            </Badge>
                           ) : null}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenTask(intimacao)}
-                            disabled={isBulkProcessing}
-                          >
-                            <ListChecks className="mr-2 h-4 w-4" />
-                            Abrir tarefa
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleAddToAgenda(intimacao)}
-                            disabled={isBulkProcessing}
-                          >
-                            <CalendarPlus className="mr-2 h-4 w-4" />
-                            Incluir na agenda
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenSummary(intimacao)}
-                            disabled={!podeResumir || summaryLoading || isBulkProcessing}
-                          >
-                            {summaryInProgress ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Sparkles className="mr-2 h-4 w-4" />
-                            )}
-                            Resumir com IA
-                          </Button>
                         </div>
                       </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <InfoItem label="Órgão">{intimacao.nomeOrgao}</InfoItem>
-                        <InfoItem label="Classe">
-                          {intimacao.nomeclasse ? (
-                            <>
-                              {intimacao.nomeclasse}
-                              {intimacao.codigoclasse ? ` (${intimacao.codigoclasse})` : null}
-                            </>
-                          ) : intimacao.codigoclasse ? (
-                            intimacao.codigoclasse
-                          ) : null}
-                        </InfoItem>
-                        <InfoItem label="Meio">{intimacao.meio === "D" ? "Diário de Justiça Eletrônico" : "Plataforma de Editais"}</InfoItem>
-                        <InfoItem label="Prazo">{prazoFormatado}</InfoItem>
-                        <InfoItem label="Tipo de Documento">{intimacao.tipodocumento ? <span>{intimacao.tipodocumento}</span> : null}</InfoItem>
-                        <InfoItem label="Data de disponibilização">{disponibilizadaEm}</InfoItem>
-                        <InfoItem label="Motivo do cancelamento">{intimacao.motivo_cancelamento}</InfoItem>
-                        <InfoItem label="Data do cancelamento">{cancelamentoFormatado}</InfoItem>
-                      </div>
-
-                        <InfoItem label="Teor da Comunicação">
-                        {textoNormalizado ? (
-                          textoNormalizado.type === "html" ? (
-                            <div
-                              className="prose prose-sm max-w-none rounded-md bg-muted/40 p-3 text-muted-foreground prose-headings:text-foreground prose-strong:text-foreground prose-em:text-foreground/90 prose-a:text-primary prose-a:no-underline hover:prose-a:underline dark:prose-invert"
-                              dangerouslySetInnerHTML={{ __html: textoNormalizado.value }}
-                            />
-                          ) : (
-                            <div className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm leading-relaxed">
-                              {textoNormalizado.value}
-                            </div>
-                          )
-                        ) : null}
-                      </InfoItem>
-
-                        <InfoItem label="Parte(s)">
-                        {destinatarios.length > 0 ? (
-                          <ul className="list-disc space-y-1 pl-5">
-                            {destinatarios.map((destinatario, destinatarioIndex) => (
-                              <li key={`${destinatario.nome}-${destinatario.polo ?? "p"}-${destinatarioIndex}`}>
-                                {destinatario.nome}
-                                {destinatario.polo ? ` - ${destinatario.polo === "P" ? "Polo Passivo" : "Polo Ativo"}` : null}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </InfoItem>
-
-                        <InfoItem label="Advogado(s)">
-                        {destinatariosAdv.length > 0 ? (
-                          <ul className="list-disc space-y-1 pl-5">
-                            {destinatariosAdv.map((advogado, advogadoIndex) => (
-                              <li key={`${advogado.nome}-${advogado.numeroOab ?? "adv"}-${advogadoIndex}`}>
-                                {advogado.nome}
-                                {advogado.ufOab || advogado.numeroOab
-                                  ? ` (OAB ${advogado.ufOab ?? ""}${
-                                      advogado.ufOab && advogado.numeroOab ? "-" : ""
-                                    }${advogado.numeroOab ?? ""})`
-                                  : null}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </InfoItem>
-
-                        <InfoItem label="Inteiro teor">
-                        {intimacao.link ? (
-                          <a
-                            href={intimacao.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
-                          >
-                            Acessar publicação
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        ) : null}
-                      </InfoItem>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="ml-auto inline-flex items-center gap-1 text-xs font-semibold shadow-sm"
+                        onClick={() => handleOpenDetails(intimacao)}
+                      >
+                        Ver detalhes
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </AccordionContent>
-                </AccordionItem>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      {intimacao.siglaTribunal ? <span>{intimacao.siglaTribunal} -</span> : null}
+                      {intimacao.nomeOrgao ? <span>{intimacao.nomeOrgao}</span> : null}
+                    </div>
+                  </div>
+                </div>
               );
             })}
-          </Accordion>
+          </div>
+
+          <Dialog open={detailsDialogOpen} onOpenChange={handleDetailsDialogChange}>
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+              {detailsTarget
+                ? (() => {
+                    const current = detailsTarget!;
+                    const destinatarios = normalizeDestinatarios(current.destinatarios);
+                    const destinatariosAdv = normalizeDestinatariosAdvogados(current.destinatarios_advogados);
+                    const prazoFormatado = formatDateOrText(current.prazo);
+                    const cancelamentoFormatado = formatDateTime(current.data_cancelamento);
+                    const disponibilizadaEm = formatDateTime(current.data_disponibilizacao);
+                    const headerDate =
+                      formatDateTime(current.data_disponibilizacao) ??
+                      formatDateTime(current.created_at) ??
+                      formatDateTime(current.updated_at);
+                    const textoNormalizado = normalizeRichText(current.texto);
+                    const numeroProcesso =
+                      typeof current.numero_processo === "string"
+                        ? current.numero_processo.trim()
+                        : "";
+                    const isArchiving = archivingId === String(current.id);
+                    const isMarking = markingId === String(current.id);
+                    const podeResumir = Boolean(normalizarTexto(current.texto));
+                    const summaryInProgress =
+                      summaryLoading &&
+                      summaryTarget &&
+                      String(summaryTarget.id) === String(current.id);
+
+                    return (
+                      <>
+                        <DialogHeader className="gap-3 text-left sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+                          <div className="space-y-2">
+                            {numeroProcesso ? (
+                              <DialogTitle className="text-base font-semibold leading-tight text-foreground">
+                                <Link
+                                  to={`/processos/${encodeURIComponent(numeroProcesso)}`}
+                                  className="text-primary underline-offset-2 hover:underline"
+                                >
+                                  {numeroProcesso}
+                                </Link>
+                              </DialogTitle>
+                            ) : (
+                              <DialogTitle className="text-base font-semibold leading-tight text-muted-foreground">
+                                Número do processo não informado
+                              </DialogTitle>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+                              {current.tipoComunicacao ? <Badge>{current.tipoComunicacao}</Badge> : null}
+                              {current.nao_lida ? <Badge variant="destructive">Não lida</Badge> : null}
+                              {current.arquivada ? (
+                                <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                                  Arquivada
+                                </Badge>
+                              ) : null}
+                              {disponibilizadaEm ? (
+                                <Badge variant="outline" className="border-primary/60 text-primary">
+                                  {disponibilizadaEm.split(" ")[0]}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                        </DialogHeader>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm text-muted-foreground">
+                          {current.siglaTribunal ? <span>{current.siglaTribunal} -</span> : null}
+                          {current.nomeOrgao ? <span>{current.nomeOrgao}</span> : null}
+                        </div>
+                        <div className="space-y-6 py-2">
+                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+                              {disponibilizadaEm ? <span>Disponibilizada {disponibilizadaEm}</span> : null}
+                              {headerDate ? <span>Atualizada {headerDate}</span> : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {current.nao_lida ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => handleMarkAsRead(current.id)}
+                                  disabled={isMarking || isArchiving || isBulkProcessing}
+                                >
+                                  {isMarking ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <CheckCheck className="mr-2 h-4 w-4" />
+                                  )}
+                                  Marcar como lida
+                                </Button>
+                              ) : null}
+                              {!current.arquivada ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleArchive(current.id)}
+                                  disabled={isArchiving || isMarking || isBulkProcessing}
+                                >
+                                  {isArchiving ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Archive className="mr-2 h-4 w-4" />
+                                  )}
+                                  Arquivar intimação
+                                </Button>
+                              ) : null}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenTask(current)}
+                                disabled={isBulkProcessing}
+                              >
+                                <ListChecks className="mr-2 h-4 w-4" />
+                                Abrir tarefa
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAddToAgenda(current)}
+                                disabled={isBulkProcessing}
+                              >
+                                <CalendarPlus className="mr-2 h-4 w-4" />
+                                Incluir na agenda
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <InfoItem label="Órgão">{current.nomeOrgao}</InfoItem>
+                            <InfoItem label="Classe">
+                              {current.nomeclasse ? (
+                                <>
+                                  {current.nomeclasse}
+                                  {current.codigoclasse ? ` (${current.codigoclasse})` : null}
+                                </>
+                              ) : current.codigoclasse ? (
+                                current.codigoclasse
+                              ) : null}
+                            </InfoItem>
+                            <InfoItem label="Meio">
+                              {current.meio === "D" ? "Diário de Justiça Eletrônico" : "Plataforma de Editais"}
+                            </InfoItem>
+                            <InfoItem label="Prazo">{prazoFormatado}</InfoItem>
+                            <InfoItem label="Tipo de Documento">
+                              {current.tipodocumento ? <span>{current.tipodocumento}</span> : null}
+                            </InfoItem>
+                            <InfoItem label="Data de disponibilização">{disponibilizadaEm}</InfoItem>
+                            <InfoItem label="Motivo do cancelamento">{current.motivo_cancelamento}</InfoItem>
+                            <InfoItem label="Data do cancelamento">{cancelamentoFormatado}</InfoItem>
+                          </div>
+
+                          <InfoItem label="Teor da Comunicação">
+                            <div className="mb-3 flex w-full justify-end">
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="ml-auto bg-primary text-primary-foreground hover:bg-primary/90"
+                                onClick={() => handleOpenSummary(current)}
+                                disabled={!podeResumir || summaryLoading || isBulkProcessing}
+                              >
+                                {summaryInProgress ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="mr-2 h-4 w-4" />
+                                )}
+                                Resumir com IA
+                              </Button>
+                            </div>
+                            {textoNormalizado ? (
+                              textoNormalizado.type === "html" ? (
+                                <div
+                                  className="prose prose-sm max-w-none rounded-md bg-muted/40 p-3 text-muted-foreground prose-headings:text-foreground prose-strong:text-foreground prose-em:text-foreground/90 prose-a:text-primary prose-a:no-underline hover:prose-a:underline dark:prose-invert"
+                                  dangerouslySetInnerHTML={{ __html: textoNormalizado.value }}
+                                />
+                              ) : (
+                                <div className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm leading-relaxed">
+                                  {textoNormalizado.value}
+                                </div>
+                              )
+                            ) : null}
+                          </InfoItem>
+
+                          <InfoItem label="Parte(s)">
+                            {destinatarios.length > 0 ? (
+                              <ul className="list-disc space-y-1 pl-5">
+                                {destinatarios.map((destinatario, destinatarioIndex) => (
+                                  <li key={`${destinatario.nome}-${destinatario.polo ?? "p"}-${destinatarioIndex}`}>
+                                    {destinatario.nome}
+                                    {destinatario.polo
+                                      ? ` - ${destinatario.polo === "P" ? "Polo Passivo" : "Polo Ativo"}`
+                                      : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </InfoItem>
+
+                          <InfoItem label="Advogado(s)">
+                            {destinatariosAdv.length > 0 ? (
+                              <ul className="list-disc space-y-1 pl-5">
+                                {destinatariosAdv.map((advogado, advogadoIndex) => (
+                                  <li key={`${advogado.nome}-${advogado.numeroOab ?? "adv"}-${advogadoIndex}`}>
+                                    {advogado.nome}
+                                    {advogado.ufOab || advogado.numeroOab
+                                      ? ` (OAB ${advogado.ufOab ?? ""}${
+                                          advogado.ufOab && advogado.numeroOab ? "-" : ""
+                                        }${advogado.numeroOab ?? ""})`
+                                      : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </InfoItem>
+
+                          <InfoItem label="Inteiro teor">
+                            {current.link ? (
+                              <a
+                                href={current.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
+                              >
+                                Acessar publicação
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            ) : null}
+                          </InfoItem>
+                        </div>
+                      </>
+                    );
+                  })()
+                : null}
+            </DialogContent>
+          </Dialog>
 
           {totalPages > 1 ? (
             <Pagination className="justify-center">

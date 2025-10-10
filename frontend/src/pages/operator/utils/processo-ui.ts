@@ -34,6 +34,20 @@ const ENTITY_MAP: Record<string, string> = {
   "&#x2F;": "/",
 };
 
+let cachedDomDecoder: HTMLTextAreaElement | null = null;
+
+function decodeWithDom(valor: string): string | null {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return null;
+  }
+
+  cachedDomDecoder = cachedDomDecoder ?? document.createElement("textarea");
+  cachedDomDecoder.innerHTML = valor;
+  const decoded = cachedDomDecoder.value;
+  cachedDomDecoder.value = "";
+  return decoded;
+}
+
 const NORMALIZE_TAG_REGEX = /<[^>]+>/gi;
 const MULTIPLE_SPACES_REGEX = /[ \t]{2,}/g;
 const HTML_ENTITY_DEC_REGEX = /&#(\d+);/g;
@@ -59,6 +73,11 @@ export function decodificarHtml(valor: string): string {
       const numero = Number.parseInt(codigo, 16);
       return Number.isFinite(numero) ? String.fromCharCode(numero) : "";
     });
+
+  const domDecoded = decodeWithDom(resultado);
+  if (typeof domDecoded === "string" && domDecoded) {
+    resultado = domDecoded;
+  }
 
   return resultado;
 }

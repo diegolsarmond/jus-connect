@@ -1298,7 +1298,7 @@ export function mapApiProcessoToViewModel(processo: ApiProcessoResponse): Proces
 
       const conteudoBruto =
         typeof original?.content === "string" && original.content.trim().length > 0
-          ? original.content.trim()
+          ? normalizarTexto(original.content)
           : typeof original?.description === "string" && original.description.trim().length > 0
             ? normalizarTexto(original.description)
             : typeof item.conteudo === "string" && item.conteudo.trim().length > 0
@@ -2496,7 +2496,7 @@ export default function VisualizarProcesso() {
 
       toast({
         title: "Resumo gerado",
-        description: `Resumo criado com ${providerLabel}.`,
+          description: `Resumo gerado com inteligência artificial. Pode conter imprecisões; recomenda-se revisão.`,
       });
     } catch (error) {
       const mensagem =

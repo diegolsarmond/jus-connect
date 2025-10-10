@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format as formatDateFn } from 'date-fns';
 import { Calendar, Plus } from 'lucide-react';
 import { getApiBaseUrl } from '@/lib/api';
@@ -349,6 +350,10 @@ export default function Agenda() {
   }));
   const [isSavingAppointment, setIsSavingAppointment] = useState(false);
   const [isCancellingAppointment, setIsCancellingAppointment] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [prefillKey, setPrefillKey] = useState<string | null>(null);
+  const [prefillAppointment, setPrefillAppointment] =
+    useState<Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'> | null>(null);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -428,6 +433,98 @@ export default function Agenda() {
 
     void fetchAppointments();
   }, [toast]);
+
+  useEffect(() => {
+    const currentKey = searchParams.toString();
+    if (prefillKey === currentKey) {
+      return;
+    }
+
+    const hasIntimacaoSource =
+      searchParams.get('origem') === 'intimacao' ||
+      searchParams.get('intimacao') !== null ||
+      searchParams.get('processo') !== null;
+
+    if (!hasIntimacaoSource) {
+      return;
+    }
+
+    const parseDateParam = (value: string | null): Date | undefined => {
+      if (!value) {
+        return undefined;
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+
+      const direct = new Date(trimmed);
+      if (!Number.isNaN(direct.getTime())) {
+        return direct;
+      }
+
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        const [day, month, year] = parts.map((part) => Number(part));
+        if (
+          Number.isFinite(day) &&
+          Number.isFinite(month) &&
+          Number.isFinite(year) &&
+          day > 0 &&
+          month > 0 &&
+          month <= 12
+        ) {
+          const parsed = new Date(year, month - 1, day);
+          if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+          }
+        }
+      }
+
+      return undefined;
+    };
+
+    const dateParam = searchParams.get('data') ?? searchParams.get('prazo');
+    const resolvedDate = parseDateParam(dateParam) ?? new Date();
+    const timeParam = searchParams.get('hora');
+    const normalizedTime = normalizeTimeString(timeParam) ?? '09:00';
+    const titleParam = searchParams.get('titulo');
+    const descriptionParam = searchParams.get('descricao');
+    const typeParam = normalizeAppointmentType(searchParams.get('tipo')) ?? 'prazo';
+
+    const fallbackRef =
+      searchParams.get('processo')?.trim() || searchParams.get('intimacao')?.trim() || '';
+    const title = titleParam && titleParam.trim()
+      ? titleParam.trim()
+      : fallbackRef
+        ? `Compromisso da intimação ${fallbackRef}`
+        : 'Compromisso da intimação';
+
+    const appointmentData: Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'> = {
+      title,
+      description: descriptionParam?.trim() ?? '',
+      type: typeParam,
+      typeName: undefined,
+      date: resolvedDate,
+      startTime: normalizedTime,
+      endTime: undefined,
+      clientId: undefined,
+      clientName: undefined,
+      clientPhone: undefined,
+      clientEmail: undefined,
+      location: undefined,
+      meetingFormat: 'online',
+      reminders: true,
+      notifyClient: false,
+    };
+
+    setPrefillAppointment(appointmentData);
+    setFormInitialDate(resolvedDate);
+    setSelectedDate(resolvedDate);
+    setIsFormOpen(true);
+    setPrefillKey(currentKey);
+  }, [prefillKey, searchParams]);
 
   const handleCreateAppointment = (date?: Date) => {
     setEditingAppointment(null);
@@ -928,6 +1025,7 @@ export default function Agenda() {
           if (!open) {
             setEditingAppointment(null);
             setFormInitialDate(undefined);
+            setPrefillAppointment(null);
           }
         }}
       >
@@ -943,9 +1041,11 @@ export default function Agenda() {
               setIsFormOpen(false);
               setEditingAppointment(null);
               setFormInitialDate(undefined);
+              setPrefillAppointment(null);
             }}
             initialDate={editingAppointment ? undefined : formInitialDate}
             initialValues={editingAppointment ?? undefined}
+            prefillValues={editingAppointment ? undefined : prefillAppointment ?? undefined}
             submitLabel={editingAppointment ? 'Salvar alterações' : 'Criar Agendamento'}
             isSubmitting={isSavingAppointment}
           />
