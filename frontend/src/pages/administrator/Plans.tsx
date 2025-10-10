@@ -487,9 +487,16 @@ export default function Plans() {
     setEditError(null);
 
     const orderedModules = orderModules(editFormState.modules, availableModules);
+    const existingPublicConsultationModuleIds = new Set(
+      editingPlan.publicConsultationModules,
+    );
     const orderedPublicConsultationModules = orderModules(
-      orderedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
-      availableModules
+      orderedModules.filter(
+        (id) =>
+          publicConsultationModuleIdSet.has(id) ||
+          existingPublicConsultationModuleIds.has(id),
+      ),
+      availableModules,
     );
     const clientLimit = parseInteger(editFormState.clientLimit);
     const userLimit = parseInteger(editFormState.userLimit);
