@@ -1156,6 +1156,130 @@ export default function Processos() {
         setStatusOptions(data.summary.statusOptions);
         setTipoOptions(data.summary.tipoOptions);
     }, []);
+
+    const loadProcessos = useCallback(
+        async (options?: { signal?: AbortSignal; page?: number; pageSize?: number }): Promise<ProcessoLoadResult> => {
+            const currentPage = options?.page ?? page;
+            const currentPageSize = options?.pageSize ?? pageSize;
+
+            const url = new URL(getApiUrl("processos"));
+            url.searchParams.set("page", String(currentPage));
+            url.searchParams.set("pageSize", String(currentPageSize));
+
+            const res = await fetch(url.toString(), {
+                headers: { Accept: "application/json" },
+                signal: options?.signal,
+            });
+
+            let json: unknown = null;
+            try {
+                json = await res.json();
+            } catch (error) {
+                console.error("Não foi possível interpretar a resposta de processos", error);
+            }
+
+            if (!res.ok) {
+                const message =
+                    json && typeof json === "object" &&
+                    "error" in json &&
+                    typeof (json as { error: unknown }).error === "string"
+                        ? (json as { error: string }).error
+                        : `Não foi possível carregar os processos (HTTP ${res.status})`;
+                throw new Error(message);
+            }
+
+            const rawData: unknown[] = Array.isArray(json)
+                ? json
+                : Array.isArray((json as { rows?: unknown[] })?.rows)
+                    ? ((json as { rows: unknown[] }).rows)
+                    : Array.isArray((json as { data?: { rows?: unknown[] } })?.data?.rows)
+                        ? ((json as { data: { rows: unknown[] } }).data.rows)
+                        : Array.isArray((json as { data?: unknown[] })?.data)
+                            ? ((json as { data: unknown[] }).data)
+                            : [];
+
+            const data = rawData.filter(
+                (item): item is ApiProcesso => item !== null && typeof item === "object",
+            );
+
+            const mapped = data.map(mapApiProcessoToProcesso);
+
+            const headerTotal = Number.parseInt(res.headers.get("x-total-count") ?? "", 10);
+            const payload = json as { total?: unknown; summary?: unknown };
+
+            const payloadTotal = (() => {
+                if (typeof payload?.total === "number" && Number.isFinite(payload.total)) {
+                    return payload.total;
+                }
+
+                if (typeof payload?.total === "string") {
+                    const parsed = Number.parseInt(payload.total, 10);
+                    return Number.isFinite(parsed) ? parsed : undefined;
+                }
+
+                return undefined;
+            })();
+
+            const total =
+                typeof payloadTotal === "number"
+                    ? payloadTotal
+                    : Number.isFinite(headerTotal)
+                        ? headerTotal
+                        : mapped.length;
+
+            const summaryPayload =
+                payload?.summary && typeof payload.summary === "object"
+                    ? (payload.summary as Partial<ProcessoSummary>)
+                    : undefined;
+
+            const fallbackSummary = computeProcessosSummary(mapped);
+
+            const ensureStringArray = (value: unknown): string[] | undefined => {
+                if (!Array.isArray(value)) {
+                    return undefined;
+                }
+
+                const filtered = value.filter((item): item is string => typeof item === "string");
+                if (filtered.length !== value.length) {
+                    return undefined;
+                }
+
+                return filtered.slice().sort((a, b) => a.localeCompare(b));
+            };
+
+            const summary: ProcessoSummary = {
+                andamento:
+                    typeof summaryPayload?.andamento === "number"
+                        ? summaryPayload.andamento
+                        : fallbackSummary.andamento,
+                arquivados:
+                    typeof summaryPayload?.arquivados === "number"
+                        ? summaryPayload.arquivados
+                        : fallbackSummary.arquivados,
+                clientes:
+                    typeof summaryPayload?.clientes === "number"
+                        ? summaryPayload.clientes
+                        : fallbackSummary.clientes,
+                totalSincronizacoes:
+                    typeof summaryPayload?.totalSincronizacoes === "number"
+                        ? summaryPayload.totalSincronizacoes
+                        : fallbackSummary.totalSincronizacoes,
+                statusOptions:
+                    ensureStringArray(summaryPayload?.statusOptions) ?? fallbackSummary.statusOptions,
+                tipoOptions:
+                    ensureStringArray(summaryPayload?.tipoOptions) ?? fallbackSummary.tipoOptions,
+            };
+
+            return {
+                items: mapped,
+                total,
+                page: currentPage,
+                pageSize: currentPageSize,
+                summary,
+            };
+        },
+        [page, pageSize],
+    );
     useEffect(() => {
         let cancelled = false;
 
@@ -2461,130 +2585,6 @@ export default function Processos() {
             applyProcessosData,
             unassignedProcessIds,
         ],
-    );
-
-    const loadProcessos = useCallback(
-        async (options?: { signal?: AbortSignal; page?: number; pageSize?: number }): Promise<ProcessoLoadResult> => {
-            const currentPage = options?.page ?? page;
-            const currentPageSize = options?.pageSize ?? pageSize;
-
-            const url = new URL(getApiUrl("processos"));
-            url.searchParams.set("page", String(currentPage));
-            url.searchParams.set("pageSize", String(currentPageSize));
-
-            const res = await fetch(url.toString(), {
-                headers: { Accept: "application/json" },
-                signal: options?.signal,
-            });
-
-            let json: unknown = null;
-            try {
-                json = await res.json();
-            } catch (error) {
-                console.error("Não foi possível interpretar a resposta de processos", error);
-            }
-
-            if (!res.ok) {
-                const message =
-                    json && typeof json === "object" &&
-                    "error" in json &&
-                    typeof (json as { error: unknown }).error === "string"
-                        ? (json as { error: string }).error
-                        : `Não foi possível carregar os processos (HTTP ${res.status})`;
-                throw new Error(message);
-            }
-
-            const rawData: unknown[] = Array.isArray(json)
-                ? json
-                : Array.isArray((json as { rows?: unknown[] })?.rows)
-                    ? ((json as { rows: unknown[] }).rows)
-                    : Array.isArray((json as { data?: { rows?: unknown[] } })?.data?.rows)
-                        ? ((json as { data: { rows: unknown[] } }).data.rows)
-                        : Array.isArray((json as { data?: unknown[] })?.data)
-                            ? ((json as { data: unknown[] }).data)
-                            : [];
-
-            const data = rawData.filter(
-                (item): item is ApiProcesso => item !== null && typeof item === "object",
-            );
-
-            const mapped = data.map(mapApiProcessoToProcesso);
-
-            const headerTotal = Number.parseInt(res.headers.get("x-total-count") ?? "", 10);
-            const payload = json as { total?: unknown; summary?: unknown };
-
-            const payloadTotal = (() => {
-                if (typeof payload?.total === "number" && Number.isFinite(payload.total)) {
-                    return payload.total;
-                }
-
-                if (typeof payload?.total === "string") {
-                    const parsed = Number.parseInt(payload.total, 10);
-                    return Number.isFinite(parsed) ? parsed : undefined;
-                }
-
-                return undefined;
-            })();
-
-            const total =
-                typeof payloadTotal === "number"
-                    ? payloadTotal
-                    : Number.isFinite(headerTotal)
-                        ? headerTotal
-                        : mapped.length;
-
-            const summaryPayload =
-                payload?.summary && typeof payload.summary === "object"
-                    ? (payload.summary as Partial<ProcessoSummary>)
-                    : undefined;
-
-            const fallbackSummary = computeProcessosSummary(mapped);
-
-            const ensureStringArray = (value: unknown): string[] | undefined => {
-                if (!Array.isArray(value)) {
-                    return undefined;
-                }
-
-                const filtered = value.filter((item): item is string => typeof item === "string");
-                if (filtered.length !== value.length) {
-                    return undefined;
-                }
-
-                return filtered.slice().sort((a, b) => a.localeCompare(b));
-            };
-
-            const summary: ProcessoSummary = {
-                andamento:
-                    typeof summaryPayload?.andamento === "number"
-                        ? summaryPayload.andamento
-                        : fallbackSummary.andamento,
-                arquivados:
-                    typeof summaryPayload?.arquivados === "number"
-                        ? summaryPayload.arquivados
-                        : fallbackSummary.arquivados,
-                clientes:
-                    typeof summaryPayload?.clientes === "number"
-                        ? summaryPayload.clientes
-                        : fallbackSummary.clientes,
-                totalSincronizacoes:
-                    typeof summaryPayload?.totalSincronizacoes === "number"
-                        ? summaryPayload.totalSincronizacoes
-                        : fallbackSummary.totalSincronizacoes,
-                statusOptions:
-                    ensureStringArray(summaryPayload?.statusOptions) ?? fallbackSummary.statusOptions,
-                tipoOptions:
-                    ensureStringArray(summaryPayload?.tipoOptions) ?? fallbackSummary.tipoOptions,
-            };
-
-            return {
-                items: mapped,
-                total,
-                page: currentPage,
-                pageSize: currentPageSize,
-                summary,
-            };
-        },
-        [page, pageSize],
     );
 
     useEffect(() => {
