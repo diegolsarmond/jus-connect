@@ -49,8 +49,26 @@ const normalizePerfilName = (value: unknown): string => {
     .toLowerCase();
 };
 
+type PoolQueryResult = Awaited<ReturnType<typeof pool.query>>;
+
+const runQuery = async (query: string, params: unknown[]): Promise<PoolQueryResult> => {
+  try {
+    return await pool.query(query, params);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      typeof error.message === 'string' &&
+      error.message.toLowerCase().includes('connection terminated unexpectedly')
+    ) {
+      return pool.query(query, params);
+    }
+
+    throw error;
+  }
+};
+
 const findPerfilIdByName = async (name: string): Promise<number | null> => {
-  const directResult = await pool.query(
+  const directResult = await runQuery(
     'SELECT id FROM public.perfis WHERE LOWER(nome) = LOWER($1) LIMIT 1',
     [name]
   );
@@ -68,7 +86,7 @@ const findPerfilIdByName = async (name: string): Promise<number | null> => {
     return null;
   }
 
-  const fallbackResult = await pool.query('SELECT id, nome FROM public.perfis');
+  const fallbackResult = await runQuery('SELECT id, nome FROM public.perfis', []);
 
   for (const row of fallbackResult.rows as Array<{ id?: unknown; nome?: unknown }>) {
     const normalizedRowName = normalizePerfilName(row.nome);
@@ -110,7 +128,7 @@ export const fetchPerfilModules = async (perfil: unknown): Promise<string[]> => 
     return [];
   }
 
-  const result = await pool.query(
+  const result = await runQuery(
     'SELECT pm.modulo FROM public.perfil_modulos pm WHERE pm.perfil_id = $1',
     [perfilId]
   );
@@ -140,7 +158,7 @@ export const fetchPerfilModules = async (perfil: unknown): Promise<string[]> => 
 };
 
 export const fetchUserModules = async (userId: number): Promise<string[]> => {
-  const result = await pool.query(
+  const result = await runQuery(
     'SELECT perfil FROM public.usuarios WHERE id = $1 LIMIT 1',
     [userId]
   );
