@@ -65,7 +65,7 @@ interface NavItem {
   href?: string;
   icon?: LucideIcon;
   children?: NavItem[];
-  moduleId?: string;
+  moduleId?: string | string[];
   badgeKey?: SidebarCounterKey;
   locked?: boolean;
 }
@@ -160,7 +160,12 @@ export function Sidebar() {
         badgeKey: "tasks",
       },
       { name: "Processos", href: "/processos", icon: Gavel, moduleId: "processos" },
-      { name: "Consulta Pública", href: "/consulta-publica", icon: Globe, moduleId: "consulta-publica" },
+      {
+        name: "Consulta Pública",
+        href: "/consulta-publica",
+        icon: Globe,
+        moduleId: ["consulta-publica", "processos"],
+      },
       { name: "Intimações", href: "/intimacoes", icon: BellRing, moduleId: "intimacoes" },
       { name: "Documentos Padrões", href: "/documentos", icon: FileText, moduleId: "documentos" },
       { name: "Meus Arquivos", href: "/arquivos", icon: Folder, moduleId: "arquivos" },
@@ -257,21 +262,30 @@ export function Sidebar() {
       for (const item of items) {
         const annotatedChildren = item.children ? annotate(item.children) : undefined;
         const hasVisibleChild = Boolean(annotatedChildren && annotatedChildren.length > 0);
-        const normalizedModuleId = normalizeModuleId(item.moduleId);
-        const isModuleAllowed = normalizedModuleId ? allowedModules.has(normalizedModuleId) : true;
+        const moduleIds = Array.isArray(item.moduleId)
+          ? item.moduleId
+          : item.moduleId
+            ? [item.moduleId]
+            : [];
+        const normalizedModuleIds = moduleIds
+          .map((moduleId) => normalizeModuleId(moduleId))
+          .filter((moduleId): moduleId is string => Boolean(moduleId));
+        const hasModuleRequirements = normalizedModuleIds.length > 0;
+        const isModuleAllowed = hasModuleRequirements
+          ? normalizedModuleIds.some((moduleId) => allowedModules.has(moduleId))
+          : true;
 
         if (!isModuleAllowed && !hasVisibleChild) {
           continue;
         }
 
         const baseLocked = item.locked ?? false;
-        const isModuleIncludedInPlan =
-          !hasPlanRestrictions || normalizedModuleId === null
-            ? true
-            : normalizedPlanModules.has(normalizedModuleId);
+        const isModuleIncludedInPlan = !hasPlanRestrictions || !hasModuleRequirements
+          ? true
+          : normalizedModuleIds.some((moduleId) => normalizedPlanModules.has(moduleId));
         const locked =
           baseLocked ||
-          (isModuleAllowed && hasPlanRestrictions && normalizedModuleId !== null && !isModuleIncludedInPlan);
+          (isModuleAllowed && hasPlanRestrictions && hasModuleRequirements && !isModuleIncludedInPlan);
 
         result.push({
           ...item,

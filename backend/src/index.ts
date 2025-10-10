@@ -310,7 +310,7 @@ registerModuleRoutes('documentos', documentRoutes);
 registerModuleRoutes(['configuracoes', 'configuracoes-conteudo-blog'], blogPostRoutes);
 registerModuleRoutes(['financeiro', 'dashboard'], financialRoutes);
 registerModuleRoutes(['processos', 'dashboard'], processoRoutes);
-registerModuleRoutes('consulta-publica', consultaPublicaRoutes);
+registerModuleRoutes(['consulta-publica', 'processos'], consultaPublicaRoutes);
 registerModuleRoutes('pipeline', fluxoTrabalhoRoutes);
 registerModuleRoutes('documentos', uploadRoutes);
 registerModuleRoutes('pipeline', oportunidadeRoutes);
