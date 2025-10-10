@@ -12,9 +12,6 @@ import {
   updateNotificationPreferencesHandler,
   receivePjeNotificationHandler,
   triggerProjudiSyncHandler,
-
-  listIntimacoesHandler,
-  archiveIntimacaoHandler,
 } from '../controllers/notificationController';
 import { getNotificationProvider } from '../services/notificationProviders/registry';
 import { NotificationProviderError } from '../services/notificationProviders/types';
@@ -23,8 +20,6 @@ const router = Router();
 
 router.get('/notifications', listNotificationsHandler);
 
-router.get('/intimacoes', listIntimacoesHandler);
-router.patch('/intimacoes/:id/archive', archiveIntimacaoHandler);
 router.get('/notifications/unread-count', getUnreadCountHandler);
 router.get('/notifications/preferences', getNotificationPreferencesHandler);
 router.get('/notifications/:id', getNotificationHandler);
