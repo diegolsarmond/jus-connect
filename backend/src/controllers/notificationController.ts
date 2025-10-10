@@ -22,6 +22,8 @@ import pjeNotificationService, {
 import cronJobs from '../services/cronJobs';
 import { ProjudiConfigurationError } from '../services/projudiNotificationService';
 import { buildErrorResponse } from '../utils/errorResponse';
+import pool from '../services/db';
+import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 function resolveUserId(req: Request): string {
   const queryUserId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
@@ -670,7 +672,10 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
 
     const intimacoes = result.rows
       .map(mapDbIntimacaoRow)
-      .filter((intimacao) => intimacao.idempresa === null || intimacao.idempresa === empresaId);
+      .filter(
+        (intimacao: IntimacaoResponse) =>
+          intimacao.idempresa === null || intimacao.idempresa === empresaId,
+      );
 
     res.json(intimacoes);
   } catch (error) {
@@ -678,5 +683,4 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-main
 
