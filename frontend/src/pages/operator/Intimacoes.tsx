@@ -1090,6 +1090,10 @@ export default function Intimacoes() {
             : item,
         ),
       );
+      if (detailsTarget && String(detailsTarget.id) === stringId) {
+        setDetailsTarget(null);
+        setDetailsDialogOpen(false);
+      }
       toast({
         title: "Intimação arquivada",
         description: "Ela foi movida para a lista de intimações arquivadas.",
@@ -1261,6 +1265,34 @@ export default function Intimacoes() {
     (intimacao: Intimacao) => {
       const params = new URLSearchParams();
       const numero = typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+      const prazoDate = intimacao.prazo ? new Date(intimacao.prazo) : null;
+      const hasValidPrazo = prazoDate && !Number.isNaN(prazoDate.getTime());
+      const descricaoPartes: string[] = [];
+
+      if (intimacao.nomeOrgao) {
+        descricaoPartes.push(`Órgão: ${intimacao.nomeOrgao}`);
+      }
+
+      if (intimacao.tipoComunicacao) {
+        descricaoPartes.push(`Tipo: ${intimacao.tipoComunicacao}`);
+      }
+
+      if (hasValidPrazo) {
+        descricaoPartes.push(`Prazo: ${format(prazoDate!, "dd/MM/yyyy", { locale: ptBR })}`);
+        params.set("data", prazoDate!.toISOString());
+      }
+
+      const tituloReferencia = numero || String(intimacao.id);
+      params.set("origem", "intimacao");
+      params.set("titulo", `Tratar intimação ${tituloReferencia}`);
+
+      if (descricaoPartes.length > 0) {
+        params.set("descricao", descricaoPartes.join(" • "));
+      }
+
+      if (intimacao.tipoComunicacao) {
+        params.set("tipo", intimacao.tipoComunicacao);
+      }
 
       if (numero) {
         params.set("processo", numero);
@@ -1278,6 +1310,34 @@ export default function Intimacoes() {
     (intimacao: Intimacao) => {
       const params = new URLSearchParams();
       const numero = typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+      const prazoDate = intimacao.prazo ? new Date(intimacao.prazo) : null;
+      const hasValidPrazo = prazoDate && !Number.isNaN(prazoDate.getTime());
+      const descricaoPartes: string[] = [];
+
+      if (intimacao.nomeOrgao) {
+        descricaoPartes.push(`Órgão: ${intimacao.nomeOrgao}`);
+      }
+
+      if (intimacao.tipoComunicacao) {
+        descricaoPartes.push(`Tipo: ${intimacao.tipoComunicacao}`);
+      }
+
+      if (hasValidPrazo) {
+        descricaoPartes.push(`Prazo: ${format(prazoDate!, "dd/MM/yyyy", { locale: ptBR })}`);
+        params.set("data", prazoDate!.toISOString());
+      }
+
+      const tituloReferencia = numero || String(intimacao.id);
+      params.set("origem", "intimacao");
+      params.set("titulo", `Compromisso da intimação ${tituloReferencia}`);
+
+      if (descricaoPartes.length > 0) {
+        params.set("descricao", descricaoPartes.join(" • "));
+      }
+
+      if (intimacao.tipoComunicacao) {
+        params.set("tipo", intimacao.tipoComunicacao);
+      }
 
       if (numero) {
         params.set("processo", numero);
@@ -1635,9 +1695,9 @@ export default function Intimacoes() {
                         </div>
                       </div>
                       <Button
-                        variant="ghost"
+                        variant="secondary"
                         size="sm"
-                        className="ml-auto inline-flex items-center gap-1 text-xs font-semibold"
+                        className="ml-auto inline-flex items-center gap-1 text-xs font-semibold shadow-sm"
                         onClick={() => handleOpenDetails(intimacao)}
                       >
                         Ver detalhes
@@ -1802,19 +1862,22 @@ export default function Intimacoes() {
                           </div>
 
                           <InfoItem label="Teor da Comunicação">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenSummary(current)}
-                              disabled={!podeResumir || summaryLoading || isBulkProcessing}
-                            >
-                              {summaryInProgress ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <Sparkles className="mr-2 h-4 w-4" />
-                              )}
-                              Resumir com IA
-                            </Button>
+                            <div className="mb-3 flex w-full justify-end">
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="ml-auto bg-primary text-primary-foreground hover:bg-primary/90"
+                                onClick={() => handleOpenSummary(current)}
+                                disabled={!podeResumir || summaryLoading || isBulkProcessing}
+                              >
+                                {summaryInProgress ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="mr-2 h-4 w-4" />
+                                )}
+                                Resumir com IA
+                              </Button>
+                            </div>
                             {textoNormalizado ? (
                               textoNormalizado.type === "html" ? (
                                 <div
