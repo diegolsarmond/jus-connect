@@ -58,14 +58,11 @@ import {
     FileText,
     Gavel as GavelIcon,
     Landmark,
-    Loader2,
     MapPin,
     Search,
     Users as UsersIcon,
-    Eye,
     ChevronsUpDown,
     RefreshCw,
-    Pencil,
 } from "lucide-react";
 
 interface ProcessoCliente {
@@ -484,6 +481,153 @@ const createEmptyProcessForm = (): ProcessFormState => ({
     monitorarProcesso: false,
 });
 
+const normalizeDateInputValue = (value: unknown): string => {
+    if (typeof value !== "string") {
+        return "";
+    }
+
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+        return "";
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return trimmed;
+    }
+
+    const parsed = new Date(trimmed);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return "";
+    }
+
+    return parsed.toISOString().slice(0, 10);
+};
+
+const parseBooleanInput = (value: unknown): boolean => {
+    if (typeof value === "boolean") {
+        return value;
+    }
+
+    if (typeof value === "number") {
+        return value !== 0;
+    }
+
+    if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (!normalized) {
+            return false;
+        }
+
+        if (normalized === "true" || normalized === "1" || normalized === "sim") {
+            return true;
+        }
+
+        if (normalized === "false" || normalized === "0" || normalized === "nao" || normalized === "não") {
+            return false;
+        }
+    }
+
+    return false;
+};
+
+const mapProcessoDetailToFormState = (
+    processo: Record<string, unknown>,
+): { form: ProcessFormState; grau: string } => {
+    const numeroValue =
+        typeof processo.numero === "string" ? formatProcessNumber(processo.numero) : "";
+
+    const ufValue =
+        typeof processo.uf === "string" ? processo.uf.trim().toUpperCase() : "";
+
+    const municipioValue =
+        typeof processo.municipio === "string" ? processo.municipio.trim() : "";
+
+    const clienteIdValue = parseOptionalInteger(processo.cliente_id);
+    const propostaIdValue = parseOptionalInteger(processo.oportunidade_id);
+    const areaAtuacaoIdValue = parseOptionalInteger(processo.area_atuacao_id);
+    const tipoProcessoIdValue = parseOptionalInteger(processo.tipo_processo_id);
+    const sistemaCnjIdValue = parseOptionalInteger(processo.sistema_cnj_id);
+
+    const advogadosValue = Array.isArray(processo.advogados)
+        ? processo.advogados
+              .map((item) => {
+                  if (!item || typeof item !== "object") {
+                      return null;
+                  }
+
+                  const candidate =
+                      (item as { id?: unknown }).id ??
+                      (item as { usuario_id?: unknown }).usuario_id ??
+                      null;
+                  const parsed = parseOptionalInteger(candidate);
+                  return parsed && parsed > 0 ? String(parsed) : null;
+              })
+              .filter((value): value is string => Boolean(value))
+        : [];
+
+    const advogadosIds = Array.from(new Set(advogadosValue));
+
+    let instanciaOutro = "";
+    let instanciaSelecionada = "";
+
+    const instanciaRaw =
+        typeof processo.instancia === "string"
+            ? processo.instancia.trim()
+            : typeof processo.instancia === "number" && Number.isFinite(processo.instancia)
+                ? String(Math.trunc(processo.instancia))
+                : "";
+
+    if (instanciaRaw) {
+        const matchedOption = INSTANCIA_OPTIONS.find(
+            (option) => option.toLowerCase() === instanciaRaw.toLowerCase(),
+        );
+
+        if (matchedOption) {
+            instanciaSelecionada = matchedOption;
+        } else {
+            instanciaSelecionada = INSTANCIA_OUTRO_VALUE;
+            instanciaOutro = instanciaRaw;
+        }
+    }
+
+    const dataDistribuicaoValue = normalizeDateInputValue(processo.data_distribuicao);
+
+    const monitorarProcessoValue = parseBooleanInput(processo.monitorar_processo);
+
+    const resolvedGrau = (() => {
+        if (typeof processo.grau === "string") {
+            const trimmed = processo.grau.trim();
+            return trimmed || "1º Grau";
+        }
+
+        if (typeof processo.grau === "number" && Number.isFinite(processo.grau)) {
+            return String(Math.trunc(processo.grau));
+        }
+
+        return "1º Grau";
+    })();
+
+    const form: ProcessFormState = {
+        numero: numeroValue,
+        uf: ufValue,
+        municipio: municipioValue,
+        clienteId: clienteIdValue ? String(clienteIdValue) : "",
+        advogados: advogadosIds,
+        propostaId: propostaIdValue ? String(propostaIdValue) : "",
+        dataDistribuicao: dataDistribuicaoValue,
+        instancia: instanciaSelecionada,
+        instanciaOutro,
+        areaAtuacaoId: areaAtuacaoIdValue ? String(areaAtuacaoIdValue) : "",
+        tipoProcessoId: tipoProcessoIdValue ? String(tipoProcessoIdValue) : "",
+        sistemaCnjId: sistemaCnjIdValue ? String(sistemaCnjIdValue) : "",
+        monitorarProcesso: monitorarProcessoValue,
+    };
+
+    return { form, grau: resolvedGrau };
+};
+
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     const clienteResumo = processo.cliente ?? null;
     const clienteId =
@@ -683,6 +827,9 @@ export default function Processos() {
     const [processosError, setProcessosError] = useState<string | null>(null);
     const [createError, setCreateError] = useState<string | null>(null);
     const [creatingProcess, setCreatingProcess] = useState(false);
+    const [editingProcessId, setEditingProcessId] = useState<number | null>(null);
+    const [editingProcessGrau, setEditingProcessGrau] = useState<string | null>(null);
+    const [loadingProcessForm, setLoadingProcessForm] = useState(false);
     useEffect(() => {
         let cancelled = false;
 
@@ -1630,13 +1777,18 @@ export default function Processos() {
             setSistemaPopoverOpen(false);
             setProcessForm(createEmptyProcessForm());
             setCreateError(null);
+            setEditingProcessId(null);
+            setEditingProcessGrau(null);
+            setLoadingProcessForm(false);
         }
     }, []);
 
     const handleProcessCreate = async () => {
-        if (creatingProcess) {
+        if (creatingProcess || loadingProcessForm) {
             return;
         }
+
+        const isEditingProcess = editingProcessId !== null;
 
         if (!processForm.clienteId) {
             setCreateError("Selecione o cliente responsável pelo processo.");
@@ -1673,6 +1825,13 @@ export default function Processos() {
                 advogados: advogadosPayload,
             };
 
+            if (isEditingProcess) {
+                payload.grau =
+                    editingProcessGrau && editingProcessGrau.trim().length > 0
+                        ? editingProcessGrau
+                        : "1º Grau";
+            }
+
             const instanciaPayload =
                 processForm.instancia === INSTANCIA_OUTRO_VALUE
                     ? processForm.instanciaOutro.trim()
@@ -1708,8 +1867,12 @@ export default function Processos() {
 
             payload.monitorar_processo = processForm.monitorarProcesso;
 
-            const res = await fetch(getApiUrl("processos"), {
-                method: "POST",
+            const endpoint = isEditingProcess
+                ? `processos/${editingProcessId}`
+                : "processos";
+
+            const res = await fetch(getApiUrl(endpoint), {
+                method: isEditingProcess ? "PUT" : "POST",
                 headers: {
                     "Content-Type": "application/json",
                     Accept: "application/json",
@@ -1730,27 +1893,44 @@ export default function Processos() {
                         "error" in json &&
                         typeof (json as { error: unknown }).error === "string"
                         ? (json as { error: string }).error
-                        : `Não foi possível cadastrar o processo (HTTP ${res.status})`;
+                        : `Não foi possível ${isEditingProcess ? "atualizar" : "cadastrar"} o processo (HTTP ${res.status})`;
                 throw new Error(message);
             }
 
             if (!json || typeof json !== "object") {
-                throw new Error("Resposta inválida do servidor ao cadastrar o processo");
+                throw new Error(
+                    `Resposta inválida do servidor ao ${isEditingProcess ? "atualizar" : "cadastrar"} o processo`,
+                );
             }
 
             const mapped = mapApiProcessoToProcesso(json as ApiProcesso);
-            setProcessos((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
-            toast({ title: "Processo cadastrado com sucesso" });
+            setProcessos((prev) => {
+                const index = prev.findIndex((p) => p.id === mapped.id);
+                if (index === -1) {
+                    return [mapped, ...prev];
+                }
+
+                const updated = [...prev];
+                updated[index] = mapped;
+                return updated;
+            });
+            toast({
+                title: isEditingProcess
+                    ? "Processo atualizado com sucesso"
+                    : "Processo cadastrado com sucesso",
+            });
             handleDialogOpenChange(false);
         } catch (error) {
             console.error(error);
             const message =
                 error instanceof Error
                     ? error.message
-                    : "Erro ao cadastrar processo";
+                    : `Erro ao ${isEditingProcess ? "atualizar" : "cadastrar"} processo`;
             setCreateError(message);
             toast({
-                title: "Erro ao cadastrar processo",
+                title: isEditingProcess
+                    ? "Erro ao atualizar processo"
+                    : "Erro ao cadastrar processo",
                 description: message,
                 variant: "destructive",
             });
@@ -1790,6 +1970,88 @@ export default function Processos() {
         [navigateToProcess],
     );
 
+    const handleEditProcess = useCallback(
+        async (processoToEdit: Processo) => {
+            setCreateError(null);
+            setLoadingProcessForm(true);
+
+            try {
+                const res = await fetch(getApiUrl(`processos/${processoToEdit.id}`), {
+                    headers: { Accept: "application/json" },
+                });
+
+                let json: unknown = null;
+
+                try {
+                    json = await res.json();
+                } catch (error) {
+                    console.error("Não foi possível interpretar a resposta do processo", error);
+                }
+
+                if (!res.ok) {
+                    const message =
+                        json &&
+                        typeof json === "object" &&
+                        "error" in json &&
+                        typeof (json as { error?: unknown }).error === "string"
+                            ? String((json as { error: string }).error)
+                            : `Não foi possível carregar o processo (HTTP ${res.status})`;
+                    throw new Error(message);
+                }
+
+                if (!json || typeof json !== "object") {
+                    throw new Error("Resposta inválida do servidor ao carregar o processo");
+                }
+
+                const parsed = mapProcessoDetailToFormState(json as Record<string, unknown>);
+
+                setProcessForm(parsed.form);
+                setEditingProcessId(processoToEdit.id);
+                setEditingProcessGrau(parsed.grau);
+                setAdvogadosPopoverOpen(false);
+                setPropostasPopoverOpen(false);
+                setAreaPopoverOpen(false);
+                setTipoProcessoPopoverOpen(false);
+                setSistemaPopoverOpen(false);
+                setMunicipioPopoverOpen(false);
+                setClientePopoverOpen(false);
+                setIsDialogOpen(true);
+            } catch (error) {
+                console.error(error);
+                const message =
+                    error instanceof Error
+                        ? error.message
+                        : "Erro ao carregar dados do processo";
+                toast({
+                    title: "Erro ao carregar processo",
+                    description: message,
+                    variant: "destructive",
+                });
+                setEditingProcessId(null);
+                setEditingProcessGrau(null);
+            } finally {
+                setLoadingProcessForm(false);
+            }
+        },
+        [toast],
+    );
+
+    const handleCreateButtonClick = useCallback(() => {
+        setEditingProcessId(null);
+        setEditingProcessGrau(null);
+        setLoadingProcessForm(false);
+        setProcessForm(createEmptyProcessForm());
+        setCreateError(null);
+        setAdvogadosPopoverOpen(false);
+        setPropostasPopoverOpen(false);
+        setAreaPopoverOpen(false);
+        setTipoProcessoPopoverOpen(false);
+        setSistemaPopoverOpen(false);
+        setMunicipioPopoverOpen(false);
+        setClientePopoverOpen(false);
+        setIsDialogOpen(true);
+    }, []);
+
     const isInstanciaOutroSelected = processForm.instancia === INSTANCIA_OUTRO_VALUE;
 
     const isCreateDisabled =
@@ -1798,7 +2060,8 @@ export default function Processos() {
         !processForm.municipio ||
         !processForm.clienteId ||
         (isInstanciaOutroSelected && processForm.instanciaOutro.trim().length === 0) ||
-        creatingProcess;
+        creatingProcess ||
+        loadingProcessForm;
 
     const filteredProcessos = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -1849,6 +2112,24 @@ export default function Processos() {
         });
     }, [processos, searchTerm, statusFilter, tipoFilter]);
 
+    const isEditing = editingProcessId !== null;
+
+    const dialogTitle = isEditing ? "Editar processo" : "Cadastrar processo";
+
+    const dialogDescription = loadingProcessForm
+        ? "Carregando dados do processo selecionado..."
+        : isEditing
+            ? "Atualize os dados do processo selecionado."
+            : "Informe os dados básicos para registrar um novo processo.";
+
+    const submitButtonLabel = creatingProcess
+        ? isEditing
+            ? "Salvando..."
+            : "Cadastrando..."
+        : isEditing
+            ? "Salvar alterações"
+            : "Cadastrar";
+
     return (
         <div className="p-4 sm:p-6 space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1858,7 +2139,7 @@ export default function Processos() {
                         Monitore os processos em andamento, acompanhe movimentações internas e identifique prioridades com mais clareza.
                     </p>
                 </div>
-                <Button onClick={() => setIsDialogOpen(true)} className="self-start">
+                <Button onClick={handleCreateButtonClick} className="self-start">
                     Cadastrar processo
                 </Button>
             </div>
@@ -2043,6 +2324,7 @@ export default function Processos() {
                             jurisdicao={processo.jurisdicao}
                             orgaoJulgador={processo.orgaoJulgador}
                             onView={() => handleViewProcessDetails(processo)}
+                            onEdit={() => handleEditProcess(processo)}
                         />
                     ))}
                 </div>
@@ -2052,10 +2334,8 @@ export default function Processos() {
                 <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
 
                     <DialogHeader>
-                        <DialogTitle>Cadastrar processo</DialogTitle>
-                        <DialogDescription>
-                            Informe os dados básicos para registrar um novo processo.
-                        </DialogDescription>
+                        <DialogTitle>{dialogTitle}</DialogTitle>
+                        <DialogDescription>{dialogDescription}</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2 sm:col-span-1">
@@ -2689,7 +2969,7 @@ export default function Processos() {
                             onClick={handleProcessCreate}
                             disabled={isCreateDisabled}
                         >
-                            {creatingProcess ? "Cadastrando..." : "Cadastrar"}
+                            {submitButtonLabel}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
