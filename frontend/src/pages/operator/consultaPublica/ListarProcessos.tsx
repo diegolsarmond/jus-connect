@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -207,22 +207,196 @@ const ProcessList = () => {
           throw new Error(message);
         }
 
-        let processData: Process[] = [];
+        let rawProcessData: unknown[] = [];
 
         if (data && typeof data === "object" && "content" in data && Array.isArray((data as { content?: unknown }).content)) {
-          processData = (data as { content: Process[] }).content;
+          rawProcessData = (data as { content: unknown[] }).content;
         } else if (Array.isArray(data)) {
-          processData = data as Process[];
+          rawProcessData = data as unknown[];
         } else if (data && typeof data === "object" && "numeroProcesso" in data) {
-          processData = [data as Process];
+          rawProcessData = [data];
         }
 
-        setProcesses(processData);
+        const normalizeDate = (value: unknown) => {
+          if (!value) return "";
 
-        if (processData.length === 0) {
+          const dateString = typeof value === "string" || value instanceof Date ? value : String(value);
+          const parsed = new Date(dateString);
+
+          if (Number.isNaN(parsed.getTime())) {
+            return "";
+          }
+
+          return parsed.toLocaleDateString("pt-BR");
+        };
+
+        const normalizedProcesses = rawProcessData
+          .map((entry) => {
+            if (!entry || typeof entry !== "object") {
+              return null;
+            }
+
+            const record = entry as Record<string, unknown>;
+            const numeroProcesso = typeof record.numeroProcesso === "string" ? record.numeroProcesso : "";
+
+            if (!numeroProcesso) {
+              return null;
+            }
+
+            const tramitacoes = Array.isArray(record.tramitacoes)
+              ? (record.tramitacoes as Array<Record<string, unknown>>)
+              : [];
+            const tramitacaoAtual =
+              record.tramitacaoAtual && typeof record.tramitacaoAtual === "object"
+                ? (record.tramitacaoAtual as Record<string, unknown>)
+                : undefined;
+            const tramitacao =
+              tramitacaoAtual && Object.keys(tramitacaoAtual).length > 0
+                ? tramitacaoAtual
+                : tramitacoes[0] ?? {};
+
+            const ultimoMovimento =
+              tramitacao && typeof tramitacao.ultimoMovimento === "object" && tramitacao.ultimoMovimento
+                ? (tramitacao.ultimoMovimento as Record<string, unknown>)
+                : undefined;
+
+            const classes = Array.isArray(tramitacao?.classe)
+              ? (tramitacao.classe as Array<Record<string, unknown>>)
+              : [];
+            const assuntos = Array.isArray(tramitacao?.assunto)
+              ? (tramitacao.assunto as Array<Record<string, unknown>>)
+              : [];
+            const partes = Array.isArray(tramitacao?.partes)
+              ? (tramitacao.partes as Array<Record<string, unknown>>)
+              : [];
+
+            const classeRegistro = classes[0] ?? {};
+            const classeDescricao =
+              typeof classeRegistro.descricao === "string" && classeRegistro.descricao
+                ? `${classeRegistro.descricao}${classeRegistro.codigo ? ` (${classeRegistro.codigo})` : ""}`
+                : typeof classeRegistro.nome === "string" && classeRegistro.nome
+                ? `${classeRegistro.nome}${classeRegistro.codigo ? ` (${classeRegistro.codigo})` : ""}`
+                : "";
+
+            const normalizedAssuntos = assuntos
+              .map((item) => {
+                if (!item || typeof item !== "object") {
+                  return null;
+                }
+
+                const nome =
+                  typeof item.nome === "string" && item.nome
+                    ? item.nome
+                    : typeof item.descricao === "string" && item.descricao
+                    ? item.descricao
+                    : null;
+
+                if (!nome) {
+                  return null;
+                }
+
+                return { nome };
+              })
+              .filter((item): item is { nome: string } => Boolean(item));
+
+            const normalizedPartes = partes
+              .map((item) => {
+                if (!item || typeof item !== "object") {
+                  return null;
+                }
+
+                const nome = typeof item.nome === "string" && item.nome ? item.nome : null;
+
+                if (!nome) {
+                  return null;
+                }
+
+                return {
+                  nome,
+                  polo: typeof item.polo === "string" ? item.polo : "",
+                };
+              })
+              .filter((item): item is { nome: string; polo: string } => Boolean(item));
+
+            const orgaoDireto = Array.isArray(tramitacao?.orgaoJulgador)
+              ? (tramitacao.orgaoJulgador as Array<Record<string, unknown>>)[0]
+              : typeof tramitacao?.orgaoJulgador === "object" && tramitacao.orgaoJulgador
+              ? (tramitacao.orgaoJulgador as Record<string, unknown>)
+              : undefined;
+
+            let orgaoJulgador =
+              orgaoDireto && typeof orgaoDireto.nome === "string" && orgaoDireto.nome ? orgaoDireto.nome : "";
+
+            if (!orgaoJulgador) {
+              const distribuicoes = Array.isArray(tramitacao?.distribuicao)
+                ? (tramitacao.distribuicao as Array<Record<string, unknown>>)
+                : [];
+
+              for (const distribuicao of distribuicoes) {
+                if (!distribuicao || typeof distribuicao !== "object") {
+                  continue;
+                }
+
+                const orgaoDistribuicao = Array.isArray(distribuicao.orgaoJulgador)
+                  ? (distribuicao.orgaoJulgador as Array<Record<string, unknown>>)[0]
+                  : typeof distribuicao.orgaoJulgador === "object" && distribuicao.orgaoJulgador
+                  ? (distribuicao.orgaoJulgador as Record<string, unknown>)
+                  : undefined;
+
+                if (orgaoDistribuicao && typeof orgaoDistribuicao.nome === "string" && orgaoDistribuicao.nome) {
+                  orgaoJulgador = orgaoDistribuicao.nome;
+                  break;
+                }
+              }
+
+              if (!orgaoJulgador && tramitacao && typeof tramitacao.orgaoJulgadorLocal === "object" && tramitacao.orgaoJulgadorLocal) {
+                const local = tramitacao.orgaoJulgadorLocal as Record<string, unknown>;
+
+                if (typeof local.nome === "string" && local.nome) {
+                  orgaoJulgador = local.nome;
+                }
+              }
+            }
+
+            const situacao =
+              typeof record.situacao === "string" && record.situacao.trim()
+                ? record.situacao
+                : tramitacao && "ativo" in tramitacao && tramitacao.ativo === false
+                ? "Inativo"
+                : tramitacao && "ativo" in tramitacao
+                ? "Ativo"
+                : "";
+
+            return {
+              numeroProcesso,
+              dataAjuizamento: normalizeDate(
+                tramitacao?.dataHoraUltimaDistribuicao ??
+                  tramitacao?.dataHoraAjuizamento ??
+                  tramitacao?.dataDistribuicao ??
+                  tramitacao?.dataDistribuicaoInicial ??
+                  (Array.isArray(tramitacao?.distribuicao) && tramitacao.distribuicao.length > 0
+                    ? (tramitacao.distribuicao[0] as Record<string, unknown>).dataHora
+                    : undefined),
+              ),
+              dataUltimaMovimentacao: normalizeDate(ultimoMovimento?.dataHora ?? tramitacao?.dataHoraUltimoMovimento),
+              classe: classeDescricao,
+              assuntos: normalizedAssuntos,
+              partes: normalizedPartes,
+              orgaoJulgador,
+              situacao,
+            } satisfies Process;
+          })
+          .filter((item): item is Process => Boolean(item));
+
+        setProcesses(normalizedProcesses);
+
+        if (normalizedProcesses.length === 0) {
           toast({ title: "Nenhum processo encontrado" });
         } else {
-          toast({ title: "Consulta realizada", description: `${processData.length} processo(s) encontrado(s).` });
+          toast({
+            title: "Consulta realizada",
+            description: `${normalizedProcesses.length} processo(s) encontrado(s).`,
+          });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao consultar processos.";
@@ -304,6 +478,11 @@ const ProcessList = () => {
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
+      <Button variant="ghost" onClick={() => navigate("/consulta-publica")} className="w-fit">
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Voltar
+      </Button>
+
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-foreground">Resultados da consulta</h1>
         <p className="text-muted-foreground">

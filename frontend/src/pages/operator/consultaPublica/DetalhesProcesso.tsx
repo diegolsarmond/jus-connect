@@ -149,9 +149,16 @@ const DetalhesProcesso = () => {
           throw new Error("Processo não encontrado.");
         }
 
-        const tramitacaoRaw = Array.isArray(apiProcess.tramitacoes) && apiProcess.tramitacoes.length > 0
-          ? (apiProcess.tramitacoes[0] as Record<string, unknown>)
-          : (apiProcess.tramitacaoAtual as Record<string, unknown>) ?? {};
+        const tramitacoes = Array.isArray(apiProcess.tramitacoes)
+          ? (apiProcess.tramitacoes as Array<Record<string, unknown>>)
+          : [];
+        const tramitacaoAtual =
+          apiProcess.tramitacaoAtual && typeof apiProcess.tramitacaoAtual === "object"
+            ? (apiProcess.tramitacaoAtual as Record<string, unknown>)
+            : undefined;
+
+        const tramitacaoRaw =
+          tramitacaoAtual && Object.keys(tramitacaoAtual).length > 0 ? tramitacaoAtual : tramitacoes[0] ?? {};
 
         const partes = Array.isArray(tramitacaoRaw?.partes)
           ? (tramitacaoRaw.partes as Array<Record<string, unknown>>)
@@ -174,7 +181,9 @@ const DetalhesProcesso = () => {
             id: String(movement.id ?? `mov-${index}`),
             date: formatDate(movement.dataHora),
             description:
-              typeof movement.tipoMovimento === "object" && movement.tipoMovimento && "descricao" in movement.tipoMovimento
+              typeof movement.descricao === "string" && movement.descricao.length > 0
+                ? movement.descricao
+                : typeof movement.tipoMovimento === "object" && movement.tipoMovimento && "descricao" in movement.tipoMovimento
                 ? String((movement.tipoMovimento as Record<string, unknown>).descricao ?? "Movimentação")
                 : "Movimentação",
             details:
@@ -182,9 +191,60 @@ const DetalhesProcesso = () => {
                 ? movement.complemento
                 : typeof movement.observacao === "string" && movement.observacao.length > 0
                 ? movement.observacao
+                : typeof movement.detalhes === "string" && movement.detalhes.length > 0
+                ? movement.detalhes
                 : undefined,
           }))
           .reverse();
+
+        const orgaoDireto = Array.isArray(tramitacaoRaw?.orgaoJulgador)
+          ? (tramitacaoRaw.orgaoJulgador as Array<Record<string, unknown>>)[0]
+          : typeof tramitacaoRaw?.orgaoJulgador === "object" && tramitacaoRaw.orgaoJulgador
+          ? (tramitacaoRaw.orgaoJulgador as Record<string, unknown>)
+          : undefined;
+
+        let courtName =
+          orgaoDireto && typeof orgaoDireto.nome === "string" && orgaoDireto.nome ? orgaoDireto.nome : "";
+
+        if (!courtName) {
+          const distribuicoes = Array.isArray(tramitacaoRaw?.distribuicao)
+            ? (tramitacaoRaw.distribuicao as Array<Record<string, unknown>>)
+            : [];
+
+          for (const distribuicao of distribuicoes) {
+            if (!distribuicao || typeof distribuicao !== "object") {
+              continue;
+            }
+
+            const orgaoDistribuicao = Array.isArray(distribuicao.orgaoJulgador)
+              ? (distribuicao.orgaoJulgador as Array<Record<string, unknown>>)[0]
+              : typeof distribuicao.orgaoJulgador === "object" && distribuicao.orgaoJulgador
+              ? (distribuicao.orgaoJulgador as Record<string, unknown>)
+              : undefined;
+
+            if (orgaoDistribuicao && typeof orgaoDistribuicao.nome === "string" && orgaoDistribuicao.nome) {
+              courtName = orgaoDistribuicao.nome;
+              break;
+            }
+          }
+
+          if (!courtName && tramitacaoRaw && typeof tramitacaoRaw.orgaoJulgadorLocal === "object" && tramitacaoRaw.orgaoJulgadorLocal) {
+            const local = tramitacaoRaw.orgaoJulgadorLocal as Record<string, unknown>;
+
+            if (typeof local.nome === "string" && local.nome) {
+              courtName = local.nome;
+            }
+          }
+        }
+
+        const distributionDateRaw =
+          tramitacaoRaw?.dataHoraUltimaDistribuicao ??
+          tramitacaoRaw?.dataHoraAjuizamento ??
+          tramitacaoRaw?.dataDistribuicao ??
+          tramitacaoRaw?.dataDistribuicaoInicial ??
+          (Array.isArray(tramitacaoRaw?.distribuicao) && tramitacaoRaw.distribuicao.length > 0
+            ? (tramitacaoRaw.distribuicao[0] as Record<string, unknown>).dataHora
+            : undefined);
 
         const classe = Array.isArray(tramitacaoRaw?.classe) ? (tramitacaoRaw.classe as Array<Record<string, unknown>>) : [];
         const assunto = Array.isArray(tramitacaoRaw?.assunto)
@@ -201,15 +261,9 @@ const DetalhesProcesso = () => {
         const detail: ProcessDetail = {
           id: typeof apiProcess.id === "string" ? apiProcess.id : trimmedNumber,
           number: typeof apiProcess.numeroProcesso === "string" ? apiProcess.numeroProcesso : trimmedNumber,
-          court:
-            typeof tramitacaoRaw?.orgaoJulgador === "object" && tramitacaoRaw.orgaoJulgador && "nome" in tramitacaoRaw.orgaoJulgador
-              ? String((tramitacaoRaw.orgaoJulgador as Record<string, unknown>).nome ?? "Não informado")
-              : "Não informado",
+          court: courtName || "Não informado",
           status,
-          distributionDate:
-            formatDate(
-              tramitacaoRaw?.dataHoraUltimaDistribuicao ?? tramitacaoRaw?.dataDistribuicao ?? tramitacaoRaw?.dataDistribuicaoInicial,
-            ),
+          distributionDate: formatDate(distributionDateRaw),
           lastUpdate: formatDate(tramitacaoRaw?.ultimoMovimento && (tramitacaoRaw.ultimoMovimento as Record<string, unknown>).dataHora),
           processClass:
             classe.length > 0
