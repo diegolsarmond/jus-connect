@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,20 +24,39 @@ import {
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
+import { SafeMarkdown } from "@/components/ui/safe-markdown";
 import {
   archiveIntimacao,
   fetchIntimacoes,
   markIntimacaoAsRead,
   type Intimacao,
 } from "@/services/intimacoes";
-import { Archive, CheckCheck, ExternalLink, Loader2, RotateCcw } from "lucide-react";
+import { fetchIntegrationApiKeys, generateAiText } from "@/lib/integrationApiKeys";
+import { normalizarTexto } from "./utils/processo-ui";
+import {
+  Archive,
+  CalendarPlus,
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  ListChecks,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -334,6 +353,90 @@ function normalizeRichText(value: string | null | undefined): NormalizedRichText
   return { type: "text", value: decoded };
 }
 
+function prepararResumoIa(conteudo?: string | null): string | null {
+  if (!conteudo) {
+    return null;
+  }
+
+  const textoNormalizado = normalizarTexto(conteudo);
+
+  if (!textoNormalizado) {
+    return null;
+  }
+
+  const paragrafoUnico = textoNormalizado
+    .split("\n")
+    .map((linha) => linha.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!paragrafoUnico) {
+    return null;
+  }
+
+  const frases = paragrafoUnico
+    .split(/(?<=[.!?])\s+/)
+    .filter((frase) => frase.trim().length > 0);
+  let frasesParaResumo = frases;
+
+  if (frases.length > 0) {
+    const primeiraFraseNormalizada = frases[0].trim().toLowerCase();
+    const prefixosRemoviveis = ["resumo", "síntese", "este documento"];
+
+    if (prefixosRemoviveis.some((prefixo) => primeiraFraseNormalizada.startsWith(prefixo))) {
+      const restantes = frases.slice(1);
+      frasesParaResumo = restantes.length > 0 ? restantes : frases;
+    }
+  }
+
+  const resumoConciso = frasesParaResumo.slice(0, 10).join(" ") || paragrafoUnico;
+
+  const resumoLimpo = resumoConciso.replace(/\*\*/g, "");
+
+  return resumoLimpo || resumoConciso;
+}
+
+function montarPromptResumoIntimacao(intimacao: Intimacao): string {
+  const partes: string[] = [
+    "Resuma de forma objetiva a intimação abaixo destacando prazos, determinações, responsáveis e próximos passos.",
+  ];
+
+  const numeroProcesso =
+    typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+  const tipoComunicacao =
+    typeof intimacao.tipoComunicacao === "string" ? intimacao.tipoComunicacao.trim() : "";
+  const tribunal = typeof intimacao.siglaTribunal === "string" ? intimacao.siglaTribunal.trim() : "";
+  const orgao = typeof intimacao.nomeOrgao === "string" ? intimacao.nomeOrgao.trim() : "";
+  const prazo = typeof intimacao.prazo === "string" ? intimacao.prazo.trim() : "";
+
+  if (numeroProcesso) {
+    partes.push(`Processo: ${numeroProcesso}`);
+  }
+
+  if (tipoComunicacao) {
+    partes.push(`Tipo de comunicação: ${tipoComunicacao}`);
+  }
+
+  if (tribunal) {
+    partes.push(`Tribunal: ${tribunal}`);
+  }
+
+  if (orgao) {
+    partes.push(`Órgão: ${orgao}`);
+  }
+
+  if (prazo) {
+    partes.push(`Prazo informado: ${prazo}`);
+  }
+
+  const conteudoNormalizado = normalizarTexto(intimacao.texto);
+  partes.push(`Conteúdo:\n${conteudoNormalizado || "Sem texto disponível."}`);
+
+  return partes.filter(Boolean).join("\n\n");
+}
+
 function parseMaybeJson(value: unknown): unknown {
   if (typeof value !== "string") {
     return value;
@@ -533,6 +636,7 @@ export default function Intimacoes() {
   const [page, setPage] = useState(1);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState<"read" | "archive" | null>(null);
   const [filters, setFilters] = useState<FiltersState>({
     search: "",
     advogado: "all",
@@ -541,7 +645,13 @@ export default function Intimacoes() {
     tribunal: "all",
     tipo: "all",
   });
+  const [summaryDialogOpen, setSummaryDialogOpen] = useState(false);
+  const [summaryTarget, setSummaryTarget] = useState<Intimacao | null>(null);
+  const [summaryContent, setSummaryContent] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const loadIntimacoes = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -576,6 +686,96 @@ export default function Intimacoes() {
       controller.abort();
     };
   }, [loadIntimacoes]);
+
+  const handleGenerateSummary = useCallback(
+    async (intimacao: Intimacao) => {
+      setSummaryLoading(true);
+      setSummaryError(null);
+      setSummaryContent(null);
+
+      const textoParaResumo = normalizarTexto(intimacao.texto);
+
+      if (!textoParaResumo) {
+        setSummaryLoading(false);
+        setSummaryError("Não há conteúdo disponível para resumir.");
+        return;
+      }
+
+      try {
+        const integracoes = await fetchIntegrationApiKeys();
+        const integracaoAtiva = integracoes.find(
+          (integracao) =>
+            integracao.active && ["gemini", "openai"].includes(integracao.provider.trim().toLowerCase()),
+        );
+
+        if (!integracaoAtiva) {
+          throw new Error("Nenhuma integração de IA ativa disponível.");
+        }
+
+        const promptResumo = montarPromptResumoIntimacao(intimacao);
+        const resposta = await generateAiText({
+          integrationId: integracaoAtiva.id,
+          documentType: "Resumo:",
+          prompt: promptResumo,
+          mode: "summary",
+        });
+
+        const conteudoResumo = resposta.content?.trim();
+        const resumoFormatado = prepararResumoIa(conteudoResumo);
+
+        if (!resumoFormatado) {
+          throw new Error("Não foi possível gerar um resumo com o conteúdo disponível.");
+        }
+
+        setSummaryContent(resumoFormatado);
+
+        const providerLabel =
+          integracaoAtiva.provider.trim().toLowerCase() === "gemini"
+            ? "Gemini"
+            : integracaoAtiva.provider.trim().toLowerCase() === "openai"
+              ? "OpenAI"
+              : integracaoAtiva.provider;
+
+        toast({
+          title: "Resumo gerado",
+          description: `Resumo criado com ${providerLabel}.`,
+        });
+      } catch (error) {
+        const mensagem = error instanceof Error ? error.message : "Não foi possível gerar o resumo.";
+        setSummaryError(mensagem);
+        toast({
+          title: "Falha ao gerar resumo",
+          description: mensagem,
+          variant: "destructive",
+        });
+      } finally {
+        setSummaryLoading(false);
+      }
+    },
+    [toast],
+  );
+
+  const handleOpenSummary = useCallback(
+    (intimacao: Intimacao) => {
+      setSummaryTarget(intimacao);
+      setSummaryDialogOpen(true);
+      setSummaryContent(null);
+      setSummaryError(null);
+      void handleGenerateSummary(intimacao);
+    },
+    [handleGenerateSummary],
+  );
+
+  const handleSummaryDialogChange = useCallback((open: boolean) => {
+    setSummaryDialogOpen(open);
+
+    if (!open) {
+      setSummaryTarget(null);
+      setSummaryContent(null);
+      setSummaryError(null);
+      setSummaryLoading(false);
+    }
+  }, []);
 
   const sortedIntimacoes = useMemo(() => {
     return [...intimacoes].sort((a, b) => {
@@ -830,10 +1030,39 @@ export default function Intimacoes() {
     };
   }, [sortedIntimacoes]);
 
-  const pageNumbers = useMemo(
-    () => Array.from({ length: totalPages }, (_, index) => index + 1),
-    [totalPages],
-  );
+  const paginationRange = useMemo(() => {
+    if (totalPages <= 1) {
+      return [1];
+    }
+
+    const uniquePages = new Set<number>();
+    uniquePages.add(1);
+    uniquePages.add(totalPages);
+
+    for (let index = page - 1; index <= page + 1; index += 1) {
+      if (index >= 1 && index <= totalPages) {
+        uniquePages.add(index);
+      }
+    }
+
+    return Array.from(uniquePages).sort((a, b) => a - b);
+  }, [page, totalPages]);
+
+  const paginationItems = useMemo(() => {
+    const items: (number | "ellipsis")[] = [];
+    let previous = 0;
+
+    paginationRange.forEach((current) => {
+      if (previous && current - previous > 1) {
+        items.push("ellipsis");
+      }
+
+      items.push(current);
+      previous = current;
+    });
+
+    return items;
+  }, [paginationRange]);
 
   const handleRefresh = () => {
     loadIntimacoes();
@@ -895,6 +1124,164 @@ export default function Intimacoes() {
     }
   };
 
+  const handleMarkAllAsRead = useCallback(async () => {
+    const pendentes = filteredIntimacoes.filter((item) => item.nao_lida);
+
+    if (pendentes.length === 0) {
+      return;
+    }
+
+    setBulkAction("read");
+
+    try {
+      const resultados = await Promise.allSettled(
+        pendentes.map((item) => markIntimacaoAsRead(item.id)),
+      );
+
+      const sucedidos = resultados.filter(
+        (resultado): resultado is PromiseFulfilledResult<{ id: number; nao_lida: boolean; updated_at: string }> =>
+          resultado.status === "fulfilled",
+      );
+      const falhas = resultados.filter((resultado) => resultado.status === "rejected");
+
+      if (sucedidos.length > 0) {
+        const atualizacoes = new Map(
+          sucedidos.map((resultado) => [String(resultado.value.id), resultado.value] as const),
+        );
+
+        setIntimacoes((previas) =>
+          previas.map((item) => {
+            const atualizacao = atualizacoes.get(String(item.id));
+            if (!atualizacao) {
+              return item;
+            }
+            return {
+              ...item,
+              nao_lida: atualizacao.nao_lida,
+              updated_at: atualizacao.updated_at,
+            };
+          }),
+        );
+
+        toast({
+          title: "Intimações atualizadas",
+          description: `${sucedidos.length} intimações foram marcadas como lidas.`,
+        });
+      }
+
+      if (falhas.length > 0) {
+        toast({
+          title: "Algumas intimações não foram atualizadas",
+          description: "Tente novamente para concluir a operação.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Não foi possível marcar como lidas",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkAction(null);
+    }
+  }, [filteredIntimacoes, toast]);
+
+  const handleArchiveAll = useCallback(async () => {
+    const ativos = filteredIntimacoes.filter((item) => !item.arquivada);
+
+    if (ativos.length === 0) {
+      return;
+    }
+
+    setBulkAction("archive");
+
+    try {
+      const resultados = await Promise.allSettled(ativos.map((item) => archiveIntimacao(item.id)));
+
+      const sucedidos = resultados.filter(
+        (resultado): resultado is PromiseFulfilledResult<{ id: number; arquivada: boolean; updated_at: string }> =>
+          resultado.status === "fulfilled",
+      );
+      const falhas = resultados.filter((resultado) => resultado.status === "rejected");
+
+      if (sucedidos.length > 0) {
+        const atualizacoes = new Map(
+          sucedidos.map((resultado) => [String(resultado.value.id), resultado.value] as const),
+        );
+
+        setIntimacoes((anteriores) =>
+          anteriores.map((item) => {
+            const atualizacao = atualizacoes.get(String(item.id));
+            if (!atualizacao) {
+              return item;
+            }
+            return {
+              ...item,
+              arquivada: atualizacao.arquivada,
+              updated_at: atualizacao.updated_at,
+            };
+          }),
+        );
+
+        toast({
+          title: "Intimações arquivadas",
+          description: `${sucedidos.length} intimações foram arquivadas.`,
+        });
+      }
+
+      if (falhas.length > 0) {
+        toast({
+          title: "Algumas intimações não foram arquivadas",
+          description: "Tente novamente para concluir a operação.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Não foi possível arquivar as intimações",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkAction(null);
+    }
+  }, [filteredIntimacoes, toast]);
+
+  const handleOpenTask = useCallback(
+    (intimacao: Intimacao) => {
+      const params = new URLSearchParams();
+      const numero = typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+
+      if (numero) {
+        params.set("processo", numero);
+      } else {
+        params.set("intimacao", String(intimacao.id));
+      }
+
+      const query = params.toString();
+      navigate(query ? `/tarefas?${query}` : "/tarefas");
+    },
+    [navigate],
+  );
+
+  const handleAddToAgenda = useCallback(
+    (intimacao: Intimacao) => {
+      const params = new URLSearchParams();
+      const numero = typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+
+      if (numero) {
+        params.set("processo", numero);
+      } else {
+        params.set("intimacao", String(intimacao.id));
+      }
+
+      const query = params.toString();
+      navigate(query ? `/agenda?${query}` : "/agenda");
+    },
+    [navigate],
+  );
+
   const handleFiltersChange = <Key extends keyof FiltersState>(key: Key, value: FiltersState[Key]) => {
     setFilters((previous) => ({
       ...previous,
@@ -905,6 +1292,13 @@ export default function Intimacoes() {
 
   const { total, active, unread, currentMonth, archived, statusDistribution, monthlyDistribution } =
     summary;
+  const isBulkProcessing = bulkAction !== null;
+  const canMarkAllAsRead = filteredIntimacoes.some((item) => item.nao_lida);
+  const canArchiveAll = filteredIntimacoes.some((item) => !item.arquivada);
+  const summarySourceText = useMemo(
+    () => (summaryTarget ? normalizarTexto(summaryTarget.texto) : ""),
+    [summaryTarget],
+  );
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -915,10 +1309,36 @@ export default function Intimacoes() {
             Consulte as intimações mais recentes da sua empresa e expanda para visualizar os detalhes completos de cada caso.
           </p>
         </div>
-        <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
-          Atualizar
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleMarkAllAsRead}
+            disabled={isBulkProcessing || loading || !canMarkAllAsRead}
+          >
+            {bulkAction === "read" ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCheck className="mr-2 h-4 w-4" />
+            )}
+            Marcar todas como lidas
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleArchiveAll}
+            disabled={isBulkProcessing || loading || !canArchiveAll}
+          >
+            {bulkAction === "archive" ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Archive className="mr-2 h-4 w-4" />
+            )}
+            Arquivar todas
+          </Button>
+          <Button variant="outline" onClick={handleRefresh} disabled={loading || isBulkProcessing}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {error ? (
@@ -1177,6 +1597,11 @@ export default function Intimacoes() {
               const itemId = String(intimacao.id ?? index);
               const isArchiving = archivingId === String(intimacao.id);
               const isMarking = markingId === String(intimacao.id);
+              const numeroProcesso =
+                typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
+              const podeResumir = Boolean(normalizarTexto(intimacao.texto));
+              const summaryInProgress =
+                summaryLoading && summaryTarget && String(summaryTarget.id) === String(intimacao.id);
 
               return (
                 <AccordionItem
@@ -1188,24 +1613,22 @@ export default function Intimacoes() {
                     <div className="flex w-full flex-col gap-3 text-left">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
-                          {intimacao.numero_processo ? (
+                          {numeroProcesso ? (
                             <Link
-                              to="/processos"
-                              className="text-sm font-semibold text-primary underline-offset-2 hover:underline"
+                              to={`/processos/${encodeURIComponent(numeroProcesso)}`}
+                              className="text-base font-semibold text-primary underline-offset-2 hover:underline"
                             >
-                              {intimacao.numero_processo}
+                              {numeroProcesso}
                             </Link>
                           ) : (
-                            <span className="text-sm font-semibold text-muted-foreground">
+                            <span className="text-base font-semibold text-muted-foreground">
                               Número do processo não informado
                             </span>
                           )}
                           <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
                             {intimacao.tipoComunicacao ? <Badge>{intimacao.tipoComunicacao}</Badge> : null}
                             {intimacao.nao_lida ? (
-                              <Badge variant="outline" className="border-primary/60 bg-primary/10 text-primary">
-                                Não lida
-                              </Badge>
+                              <Badge variant="destructive">Não lida</Badge>
                             ) : null}
                             {intimacao.arquivada ? (
                               <Badge variant="secondary" className="bg-muted text-muted-foreground">
@@ -1233,7 +1656,7 @@ export default function Intimacoes() {
                     <div className="space-y-6 py-2">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
-                          
+
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {intimacao.nao_lida ? (
@@ -1241,7 +1664,7 @@ export default function Intimacoes() {
                               variant="secondary"
                               size="sm"
                               onClick={() => handleMarkAsRead(intimacao.id)}
-                              disabled={isMarking || isArchiving}
+                              disabled={isMarking || isArchiving || isBulkProcessing}
                             >
                               {isMarking ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1256,7 +1679,7 @@ export default function Intimacoes() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleArchive(intimacao.id)}
-                              disabled={isArchiving || isMarking}
+                              disabled={isArchiving || isMarking || isBulkProcessing}
                             >
                               {isArchiving ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1266,6 +1689,37 @@ export default function Intimacoes() {
                               Arquivar intimação
                             </Button>
                           ) : null}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenTask(intimacao)}
+                            disabled={isBulkProcessing}
+                          >
+                            <ListChecks className="mr-2 h-4 w-4" />
+                            Abrir tarefa
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddToAgenda(intimacao)}
+                            disabled={isBulkProcessing}
+                          >
+                            <CalendarPlus className="mr-2 h-4 w-4" />
+                            Incluir na agenda
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenSummary(intimacao)}
+                            disabled={!podeResumir || summaryLoading || isBulkProcessing}
+                          >
+                            {summaryInProgress ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="mr-2 h-4 w-4" />
+                            )}
+                            Resumir com IA
+                          </Button>
                         </div>
                       </div>
 
@@ -1358,47 +1812,135 @@ export default function Intimacoes() {
             <Pagination className="justify-center">
               <PaginationContent>
                 <PaginationItem>
-                  <PaginationPrevious
+                  <PaginationLink
                     href="#"
+                    size="default"
                     onClick={(event) => {
                       event.preventDefault();
                       setPage((current) => Math.max(current - 1, 1));
                     }}
                     aria-disabled={page === 1}
                     className={page === 1 ? "pointer-events-none opacity-50" : undefined}
-                  />
+                  >
+                    <ChevronLeft className="mr-1 h-4 w-4" />
+                    <span>Anterior</span>
+                  </PaginationLink>
                 </PaginationItem>
-                {pageNumbers.map((pageNumber) => (
-                  <PaginationItem key={pageNumber}>
-                    <PaginationLink
-                      href="#"
-                      isActive={pageNumber === page}
-                      size="default"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        setPage(pageNumber);
-                      }}
-                    >
-                      {pageNumber}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
+                {paginationItems.map((item, itemIndex) =>
+                  typeof item === "number" ? (
+                    <PaginationItem key={item}>
+                      <PaginationLink
+                        href="#"
+                        isActive={item === page}
+                        size="default"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setPage(item);
+                        }}
+                      >
+                        {item}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ) : (
+                    <PaginationItem key={`ellipsis-${itemIndex}`}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  ),
+                )}
                 <PaginationItem>
-                  <PaginationNext
+                  <PaginationLink
                     href="#"
+                    size="default"
                     onClick={(event) => {
                       event.preventDefault();
                       setPage((current) => Math.min(current + 1, totalPages));
                     }}
                     aria-disabled={page === totalPages}
                     className={page === totalPages ? "pointer-events-none opacity-50" : undefined}
-                  />
+                  >
+                    <span>Próxima</span>
+                    <ChevronRight className="ml-1 h-4 w-4" />
+                  </PaginationLink>
                 </PaginationItem>
               </PaginationContent>
             </Pagination>
           ) : null}
         </>
       ) : null}
+      <Dialog open={summaryDialogOpen} onOpenChange={handleSummaryDialogChange}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+            <DialogTitle>Resumo da intimação</DialogTitle>
+            {summaryTarget ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (summaryTarget) {
+                    void handleGenerateSummary(summaryTarget);
+                  }
+                }}
+                disabled={summaryLoading}
+                className="inline-flex items-center gap-2"
+              >
+                {summaryLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Resumindo...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Gerar novamente
+                  </>
+                )}
+              </Button>
+            ) : null}
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <div>
+                Processo: {summaryTarget?.numero_processo ? summaryTarget.numero_processo : "Não informado"}
+              </div>
+              {summaryTarget?.siglaTribunal || summaryTarget?.nomeOrgao ? (
+                <div>
+                  {[summaryTarget?.siglaTribunal, summaryTarget?.nomeOrgao].filter(Boolean).join(" • ")}
+                </div>
+              ) : null}
+              {summaryTarget ? (
+                <div>
+                  Disponibilizada em: {formatDateTime(summaryTarget.data_disponibilizacao) ?? "Data não informada"}
+                </div>
+              ) : null}
+            </div>
+            {summaryLoading ? (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-primary">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Gerando resumo com IA...
+              </div>
+            ) : null}
+            {summaryError ? <p className="text-sm text-destructive">{summaryError}</p> : null}
+            {summaryContent ? (
+              <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                <h3 className="text-sm font-semibold text-primary">Resumo com IA</h3>
+                <SafeMarkdown content={summaryContent} className="text-primary" />
+              </div>
+            ) : null}
+            {summarySourceText ? (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Conteúdo utilizado
+                </h3>
+                <div className="rounded-lg border border-muted-foreground/10 bg-muted/40 p-4">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                    {summarySourceText}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
