@@ -2284,28 +2284,32 @@ export default function Intimacoes() {
         </Card>
       </div>
 
-      <Card className="border-border/60 bg-card/60 backdrop-blur">
-        <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+      <Card className="border-border/60 bg-card/60 shadow-sm">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <CardTitle className="text-lg">OABs monitoradas</CardTitle>
             <CardDescription>
-              Cadastre os números da OAB que deseja acompanhar e receba intimações em tempo real.
+              Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
             </CardDescription>
           </div>
+          <Button variant="outline" onClick={handleOpenOabModal}>
+            Adicionar OAB
+          </Button>
         </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
             <p className="text-sm text-muted-foreground">
-              {monitoredOabsLoading
-                ? "Carregando OABs monitoradas..."
-                : monitoredOabs.length === 0
-                  ? "Nenhuma OAB cadastrada para monitoramento."
-                  : `${monitoredOabs.length} OAB${monitoredOabs.length > 1 ? "s" : ""} monitorada${
-                      monitoredOabs.length > 1 ? "s" : ""
-                    }.`}
+              Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
             </p>
+            <p className="text-sm text-muted-foreground">
+              {monitoredOabsLoading && monitoredOabs.length === 0
+                ? "Carregando OABs monitoradas..."
+                : `Total de OABs monitoradas: ${monitoredOabs.length}`}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
-              Gerenciar OABs
+              Ver OABs monitoradas
             </Button>
           </div>
         </CardContent>

@@ -54,6 +54,9 @@ interface ModuleMultiSelectProps {
   disabled?: boolean;
 }
 
+const areArraysEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 function ModuleMultiSelect({ modules, selected, onChange, disabled }: ModuleMultiSelectProps) {
   const [open, setOpen] = useState(false);
 
@@ -237,29 +240,60 @@ export default function NewPlan() {
   }, [apiUrl]);
 
   useEffect(() => {
-    setFormState((prev) => ({
-      ...prev,
-      modules: orderModules(
+    setFormState((prev) => {
+      const normalizedModules = orderModules(
         prev.modules.filter((id) => availableModules.some((module) => module.id === id)),
         availableModules
-      ),
-    }));
-    setPublicConsultationModules((prev) =>
-      orderModules(
-        prev.filter((id) => publicConsultationModuleIdSet.has(id)),
-        availableModules,
-      ),
-    );
+      );
+
+      setPublicConsultationModules((current) => {
+        const nextPublicModules = orderModules(
+          normalizedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
+          availableModules,
+        );
+
+        if (areArraysEqual(current, nextPublicModules)) {
+          return current;
+        }
+
+        return nextPublicModules;
+      });
+
+      if (areArraysEqual(prev.modules, normalizedModules)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        modules: normalizedModules,
+      };
+    });
+
   }, [availableModules, publicConsultationModuleIdSet]);
 
   const handleModuleChange = (next: string[]) => {
+    const normalizedModules = orderModules(
+      next.filter((id) => availableModules.some((module) => module.id === id)),
+      availableModules
+    );
+
     setFormState((prev) => ({
       ...prev,
-      modules: orderModules(
-        next.filter((id) => availableModules.some((module) => module.id === id)),
-        availableModules
-      ),
+      modules: normalizedModules,
     }));
+
+    setPublicConsultationModules((prev) => {
+      const nextPublicModules = orderModules(
+        normalizedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
+        availableModules,
+      );
+
+      if (areArraysEqual(prev, nextPublicModules)) {
+        return prev;
+      }
+
+      return nextPublicModules;
+    });
   };
 
   const handlePublicConsultationModuleChange = (next: string[]) => {
