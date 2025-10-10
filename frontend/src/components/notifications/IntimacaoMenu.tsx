@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -142,10 +143,7 @@ function buildNotificationFromIntimacao(intimacao: Intimacao): Notification {
 
   return {
     id: String(intimacao.id),
-    title:
-      processNumber && tipo
-        ? `${tipo} — Processo ${processNumber}`
-        : tipo ?? processNumber ?? "Intimação",
+    title: processNumber ?? tipo ?? "Intimação",
     message: pickFirstNonEmpty(intimacao.texto) ?? "",
     category: "projudi",
     type: prazo ? "warning" : "info",
@@ -310,6 +308,7 @@ export function IntimacaoMenu() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeNotificationId, setActiveNotificationId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const notificationsQuery = useQuery({
     queryKey: notificationsQueryKey,
@@ -317,7 +316,7 @@ export function IntimacaoMenu() {
       const intimacoes = await fetchIntimacoes(signal);
       return intimacoes
         .filter((item) => item.arquivada !== true)
-        .slice(0, 10)
+        .filter((item) => item.nao_lida !== false)
         .map((intimacao) => buildNotificationFromIntimacao(intimacao));
     },
     staleTime: 30_000,
@@ -514,7 +513,11 @@ export function IntimacaoMenu() {
                   (toggleNotificationMutation.isPending && activeNotificationId === notification.id);
 
                 return (
-                  <li key={notification.id} className="px-4 py-3">
+                  <li
+                    key={notification.id}
+                    className="px-4 py-3"
+                    onClick={() => navigate("/intimacoes")}
+                  >
                     <div className="flex gap-3">
                       <span
                         className={cn(
@@ -548,14 +551,17 @@ export function IntimacaoMenu() {
                           </Badge>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                          {processNumber ? <span>Processo {processNumber}</span> : null}
+                          {processNumber ? <span>{processNumber}</span> : null}
                           {dueDate ? <span>Prazo {dueDate}</span> : null}
                           {receivedAt ? <span>Recebida {receivedAt}</span> : null}
                         </div>
                         <div className="flex items-center justify-end">
                           <button
                             type="button"
-                            onClick={() => handleToggleNotification(notification)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleToggleNotification(notification);
+                            }}
                             disabled={isUpdating || notification.read}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:text-muted-foreground"
                             data-testid={`notification-${notification.id}-toggle-read`}
@@ -595,7 +601,11 @@ export function IntimacaoMenu() {
               ) : null}
               Marcar todas como lidas
             </Button>
-            <Button variant="ghost" className="w-full justify-between text-sm font-medium sm:w-auto">
+            <Button
+              variant="ghost"
+              className="w-full justify-between text-sm font-medium sm:w-auto"
+              onClick={() => navigate("/intimacoes")}
+            >
               Ver todas as intimações
               <ChevronRight className="h-4 w-4" />
             </Button>
