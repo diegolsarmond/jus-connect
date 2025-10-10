@@ -317,6 +317,7 @@ registerModuleRoutes('tarefas', tarefaRoutes);
 registerModuleRoutes('tarefas', tarefaResponsavelRoutes);
 registerModuleRoutes(['clientes', 'documentos'], clienteDocumentoRoutes);
 registerModuleRoutes('suporte', supportRoutes);
+registerModuleRoutes('intimacoes', notificationRoutes);
 registerModuleRoutes('intimacoes', intimacaoRoutes);
 registerModuleRoutes('configuracoes-integracoes', integrationApiKeyRoutes);
 registerModuleRoutes('conversas', chatRoutes);
