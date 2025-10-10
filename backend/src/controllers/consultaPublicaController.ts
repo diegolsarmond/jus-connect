@@ -65,9 +65,33 @@ const parseJsonSafely = (payload: string): unknown => {
 
 const fetchFromPdpj = async (url: URL): Promise<unknown> => {
   const token = await fetchActiveToken();
-  const response = await fetch(url, { headers: buildRequestHeaders(token) });
-  const rawBody = await response.text();
-  const data = parseJsonSafely(rawBody);
+  const headers = buildRequestHeaders(token);
+  const performRequest = async (target: URL | string) => {
+    const response = await fetch(target, { headers });
+    const rawBody = await response.text();
+    const data = parseJsonSafely(rawBody);
+    return { response, data } as const;
+  };
+
+  let { response, data } = await performRequest(url);
+
+  if (
+    !response.ok &&
+    response.status === 502 &&
+    data &&
+    typeof data === 'object' &&
+    'externalUrlService' in data &&
+    typeof (data as { externalUrlService?: unknown }).externalUrlService === 'string'
+  ) {
+    try {
+      const fallbackBase = String((data as { externalUrlService: string }).externalUrlService).replace(/\/+$/, '');
+      const suffix = url.pathname.replace(/^\/?api\/v2\/processos\/?/, '');
+      const fallbackUrl = new URL(`${fallbackBase}${suffix ? `/${suffix}` : ''}${url.search ?? ''}`);
+      ({ response, data } = await performRequest(fallbackUrl));
+    } catch (fallbackError) {
+      console.error('Falha ao tentar URL alternativa do serviço externo', fallbackError);
+    }
+  }
 
   if (!response.ok) {
     const message = typeof data === 'object' && data && 'error' in data ? String((data as { error: unknown }).error) : null;
