@@ -12,10 +12,13 @@ import { appConfig } from "@/config/app-config";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { ApiError } from "@/features/auth/api";
 
+const REMEMBER_ME_STORAGE_KEY = "auth.rememberMe";
+
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -26,6 +29,24 @@ const Login = () => {
       ((location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname) ?? routes.dashboard,
     [location],
   );
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem(REMEMBER_ME_STORAGE_KEY);
+        if (raw) {
+          const stored = JSON.parse(raw) as { email?: string; password?: string };
+          if (stored?.email && stored?.password) {
+            setEmail(stored.email);
+            setPassword(stored.password);
+            setRememberMe(true);
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to read remember me data", error);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -44,6 +65,17 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
+      if (typeof window !== "undefined") {
+        if (rememberMe) {
+          window.localStorage.setItem(
+            REMEMBER_ME_STORAGE_KEY,
+            JSON.stringify({ email, password }),
+          );
+        } else {
+          window.localStorage.removeItem(REMEMBER_ME_STORAGE_KEY);
+        }
+      }
+
       const response = await login({ email, senha: password });
       if (response.user.mustChangePassword) {
         navigate("/alterar-senha", { replace: true, state: { from: resolveRedirectPath() } });
@@ -145,7 +177,18 @@ const Login = () => {
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center space-x-2 text-sm">
-                  <input type="checkbox" className="rounded border-gray-300" />
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
+                    checked={rememberMe}
+                    onChange={(event) => {
+                      const { checked } = event.target;
+                      setRememberMe(checked);
+                      if (!checked && typeof window !== "undefined") {
+                        window.localStorage.removeItem(REMEMBER_ME_STORAGE_KEY);
+                      }
+                    }}
+                  />
                   <span>Lembrar de mim</span>
                 </label>
                 <Link to={routes.forgotPassword} className="text-sm text-primary hover:underline">
