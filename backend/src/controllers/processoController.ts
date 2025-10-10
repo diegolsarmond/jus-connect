@@ -1317,7 +1317,23 @@ const fetchProcessParticipants = async (
     registerParticipant(buildOpportunityParticipant(row));
   });
 
-  return participants.map((participant) => {
+  const filteredParticipants = participants.filter((participant) => {
+    const resolvedSide =
+      participant.side ??
+      normalizeParticipantSide(participant.type) ??
+      normalizeParticipantSide(participant.role) ??
+      normalizeParticipantSide(participant.party_role);
+
+    if (resolvedSide !== 'ativo' && resolvedSide !== 'passivo') {
+      return false;
+    }
+
+    const normalizedPersonType = normalizeUppercase(participant.person_type);
+
+    return normalizedPersonType !== 'AUTORIDADE';
+  });
+
+  return filteredParticipants.map((participant) => {
     const normalizedName = normalizeString(participant.name);
     const normalizedDocument = normalizeString(participant.document);
     const normalizedType = normalizeString(participant.type);
