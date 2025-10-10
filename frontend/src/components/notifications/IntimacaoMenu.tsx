@@ -23,18 +23,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import {
-  fetchNotifications,
-  fetchUnreadNotificationCount,
-  markAllNotificationsAsRead,
-  markNotificationAsRead,
-  markNotificationAsUnread,
-  type Notification,
-  NotificationsApiError,
-} from "@/services/notifications";
+import type { Notification } from "@/services/notifications";
+import { fetchIntimacoes, markIntimacaoAsRead, type Intimacao } from "@/services/intimacoes";
 
 const notificationsQueryKey = ["notifications", "projudi", "list"] as const;
-const unreadQueryKey = ["notifications", "unread-count"] as const;
 
 type NotificationKind = "deadline" | "document" | "task" | "hearing" | "movement" | "general";
 type NotificationStatus = "completed" | "in_progress" | "pending";
@@ -97,7 +89,72 @@ const IN_PROGRESS_KEYWORDS = ["andament", "analise", "aguard", "process"];
 
 interface ToggleNotificationVariables {
   id: string;
-  read: boolean;
+}
+
+function pickFirstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return null;
+}
+
+function buildNotificationFromIntimacao(intimacao: Intimacao): Notification {
+  const processNumber =
+    pickFirstNonEmpty(intimacao.numero_processo, intimacao.numerocomunicacao) ?? null;
+  const tipo = pickFirstNonEmpty(intimacao.tipoComunicacao, intimacao.tipodocumento);
+  const status = pickFirstNonEmpty(intimacao.status);
+  const prazo = pickFirstNonEmpty(intimacao.prazo);
+  const createdAt =
+    pickFirstNonEmpty(intimacao.data_disponibilizacao, intimacao.created_at, intimacao.updated_at)
+      ?? new Date().toISOString();
+
+  const metadata: Record<string, unknown> = {};
+
+  if (tipo) {
+    metadata.alertType = tipo;
+  }
+
+  if (processNumber) {
+    metadata.processNumber = processNumber;
+  }
+
+  if (prazo) {
+    metadata.dueDate = prazo;
+  }
+
+  if (status) {
+    metadata.status = status;
+    metadata.state = status;
+  }
+
+  if (intimacao.nomeclasse) {
+    metadata.categoryName = intimacao.nomeclasse;
+  }
+
+  if (intimacao.nomeOrgao) {
+    metadata.origin = intimacao.nomeOrgao;
+  }
+
+  return {
+    id: String(intimacao.id),
+    title:
+      processNumber && tipo
+        ? `${tipo} — Processo ${processNumber}`
+        : tipo ?? processNumber ?? "Intimação",
+    message: pickFirstNonEmpty(intimacao.texto) ?? "",
+    category: "projudi",
+    type: prazo ? "warning" : "info",
+    read: intimacao.nao_lida === true ? false : true,
+    createdAt,
+    readAt: intimacao.nao_lida === true ? null : pickFirstNonEmpty(intimacao.updated_at),
+    actionUrl: pickFirstNonEmpty(intimacao.link),
+    metadata,
+  };
 }
 
 function parseDate(value: string | null | undefined): Date | null {
@@ -256,58 +313,48 @@ export function IntimacaoMenu() {
 
   const notificationsQuery = useQuery({
     queryKey: notificationsQueryKey,
-    queryFn: ({ signal }) => fetchNotifications({ category: "projudi", limit: 10, signal }),
+    queryFn: async ({ signal }) => {
+      const intimacoes = await fetchIntimacoes(signal);
+      return intimacoes
+        .filter((item) => item.arquivada !== true)
+        .slice(0, 10)
+        .map((intimacao) => buildNotificationFromIntimacao(intimacao));
+    },
     staleTime: 30_000,
-  });
-
-  const unreadQuery = useQuery({
-    queryKey: unreadQueryKey,
-    queryFn: ({ signal }) => fetchUnreadNotificationCount({ signal }),
-    staleTime: 15_000,
   });
 
   const notifications = notificationsQuery.data ?? [];
 
-  const unreadCount = useMemo(() => {
-    if (typeof unreadQuery.data === "number") {
-      return unreadQuery.data;
-    }
-
-    return notifications.reduce((total, notification) => total + (notification.read ? 0 : 1), 0);
-  }, [notifications, unreadQuery.data]);
+  const unreadCount = useMemo(
+    () => notifications.reduce((total, notification) => total + (notification.read ? 0 : 1), 0),
+    [notifications],
+  );
 
   const categorySummaries = useMemo(() => buildCategorySummary(notifications), [notifications]);
 
   const toggleNotificationMutation = useMutation({
-    mutationFn: ({ id, read }: ToggleNotificationVariables) =>
-      read ? markNotificationAsRead(id) : markNotificationAsUnread(id),
+    mutationFn: async ({ id }: ToggleNotificationVariables) => {
+      const result = await markIntimacaoAsRead(id);
+      return { id: String(result.id) };
+    },
     onMutate: ({ id }) => {
       setActiveNotificationId(id);
     },
     onError: (error: unknown) => {
       const message =
-        error instanceof NotificationsApiError
-          ? error.message
-          : "Não foi possível atualizar a notificação. Tente novamente.";
+        error instanceof Error ? error.message : "Não foi possível atualizar a intimação. Tente novamente.";
       toast({
-        title: "Erro ao atualizar notificação",
+        title: "Erro ao atualizar intimação",
         description: message,
         variant: "destructive",
       });
     },
-    onSuccess: (updated) => {
+    onSuccess: ({ id }) => {
       queryClient.setQueryData<Notification[] | undefined>(notificationsQueryKey, (previous) => {
         if (!previous) {
           return previous;
         }
-        return previous.map((item) => (item.id === updated.id ? updated : item));
-      });
-
-      queryClient.setQueryData<number | undefined>(unreadQueryKey, (previous) => {
-        if (typeof previous !== "number") {
-          return updated.read ? 0 : 1;
-        }
-        return updated.read ? Math.max(previous - 1, 0) : previous + 1;
+        return previous.map((item) => (item.id === id ? { ...item, read: true, readAt: new Date().toISOString() } : item));
       });
     },
     onSettled: () => {
@@ -316,29 +363,38 @@ export function IntimacaoMenu() {
   });
 
   const markAllMutation = useMutation({
-    mutationFn: () => markAllNotificationsAsRead(),
+    mutationFn: async () => {
+      const current = queryClient.getQueryData<Notification[] | undefined>(notificationsQueryKey) ?? [];
+      const unread = current.filter((notification) => !notification.read);
+      await Promise.all(unread.map((notification) => markIntimacaoAsRead(notification.id)));
+      return unread.map((notification) => notification.id);
+    },
     onError: (error: unknown) => {
       const message =
-        error instanceof NotificationsApiError
-          ? error.message
-          : "Não foi possível marcar as notificações como lidas.";
+        error instanceof Error ? error.message : "Não foi possível marcar as intimações como lidas.";
       toast({
-        title: "Erro ao atualizar notificações",
+        title: "Erro ao atualizar intimações",
         description: message,
         variant: "destructive",
       });
     },
-    onSuccess: (result) => {
-      queryClient.setQueryData<Notification[]>(notificationsQueryKey, result.notifications);
-      queryClient.setQueryData(unreadQueryKey, 0);
-
+    onSuccess: (updatedIds) => {
+      queryClient.setQueryData<Notification[] | undefined>(notificationsQueryKey, (previous) => {
+        if (!previous) {
+          return previous;
+        }
+        const timestamp = new Date().toISOString();
+        return previous.map((item) =>
+          updatedIds.includes(item.id) ? { ...item, read: true, readAt: timestamp } : item,
+        );
+      });
       toast({
         title: "Intimações atualizadas",
         description:
-          result.updated > 0
-            ? `${result.updated} notificação${result.updated > 1 ? "s" : ""} marcada${
-                result.updated > 1 ? "s" : ""
-              } como lida${result.updated > 1 ? "s" : ""}.`
+          updatedIds.length > 0
+            ? `${updatedIds.length} ${updatedIds.length > 1 ? "intimações" : "intimação"} marcada${
+                updatedIds.length > 1 ? "s" : ""
+              } como lida${updatedIds.length > 1 ? "s" : ""}.`
             : "Nenhuma intimação pendente.",
       });
     },
@@ -347,7 +403,7 @@ export function IntimacaoMenu() {
   const isLoading = notificationsQuery.isLoading && notifications.length === 0;
   const isError = notificationsQuery.isError && notifications.length === 0;
   const errorMessage =
-    notificationsQuery.error instanceof NotificationsApiError
+    notificationsQuery.error instanceof Error
       ? notificationsQuery.error.message
       : "Não foi possível carregar as intimações.";
 
@@ -355,11 +411,11 @@ export function IntimacaoMenu() {
   const disableMarkAll = unreadCount === 0 || markAllMutation.isPending;
 
   const handleToggleNotification = (notification: Notification) => {
-    if (toggleNotificationMutation.isPending || markAllMutation.isPending) {
+    if (notification.read || toggleNotificationMutation.isPending || markAllMutation.isPending) {
       return;
     }
 
-    toggleNotificationMutation.mutate({ id: notification.id, read: !notification.read });
+    toggleNotificationMutation.mutate({ id: notification.id });
   };
 
   const handleMarkAll = () => {
@@ -500,14 +556,14 @@ export function IntimacaoMenu() {
                           <button
                             type="button"
                             onClick={() => handleToggleNotification(notification)}
-                            disabled={isUpdating}
+                            disabled={isUpdating || notification.read}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:text-muted-foreground"
                             data-testid={`notification-${notification.id}-toggle-read`}
                           >
-                            {isUpdating ? (
+                            {isUpdating && !notification.read ? (
                               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                             ) : null}
-                            {notification.read ? "Marcar como não lida" : "Marcar como lida"}
+                            {notification.read ? "Lida" : "Marcar como lida"}
                           </button>
                         </div>
                       </div>
