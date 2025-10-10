@@ -70,6 +70,26 @@ const mapRow = (row: OabMonitorRow): CompanyOabMonitor => ({
   usuarioOab: row.usuario_oab ?? null,
 });
 
+const assertCompanyUser = async (
+  empresaId: number,
+  usuarioId: number,
+): Promise<void> => {
+  const result = await pool.query<{ empresa: number | null }>(
+    `SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1`,
+    [usuarioId],
+  );
+
+  if (result.rowCount === 0) {
+    throw new Error('Usuário não encontrado.');
+  }
+
+  const { empresa } = result.rows[0];
+
+  if (empresa === null || empresa !== empresaId) {
+    throw new Error('Usuário não pertence à empresa informada.');
+  }
+};
+
 export const listCompanyOabMonitors = async (
   empresaId: number,
 ): Promise<CompanyOabMonitor[]> => {
@@ -116,6 +136,10 @@ export const createCompanyOabMonitor = async (
 
   if (!sanitizedNumero) {
     throw new Error('Número da OAB inválido.');
+  }
+
+  if (sanitizedUsuarioId !== null) {
+    await assertCompanyUser(empresaId, sanitizedUsuarioId);
   }
 
   const result = await pool.query<OabMonitorRow>(
