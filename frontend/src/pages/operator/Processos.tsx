@@ -628,6 +628,63 @@ const mapProcessoDetailToFormState = (
     return { form, grau: resolvedGrau };
 };
 
+const extractClienteResumoFromProcessDetail = (
+    processo: Record<string, unknown>,
+): ClienteResumo | null => {
+    const clienteRaw =
+        processo && typeof processo === "object" && "cliente" in processo
+            ? (processo as { cliente?: unknown }).cliente
+            : null;
+    const clienteObject =
+        clienteRaw && typeof clienteRaw === "object"
+            ? (clienteRaw as Record<string, unknown>)
+            : null;
+
+    const clienteIdValue = parseOptionalInteger(
+        (clienteObject?.id ?? null) ??
+            ((processo as { cliente_id?: unknown }).cliente_id ?? null) ??
+            ((processo as { clienteId?: unknown }).clienteId ?? null),
+    );
+
+    if (!clienteIdValue || clienteIdValue <= 0) {
+        return null;
+    }
+
+    const resolveString = (value: unknown): string => {
+        if (typeof value === "string") {
+            return value;
+        }
+
+        if (typeof value === "number" && Number.isFinite(value)) {
+            return String(value);
+        }
+
+        return "";
+    };
+
+    const nome = (() => {
+        const candidate =
+            resolveString(clienteObject?.nome) ||
+            resolveString((processo as { cliente_nome?: unknown }).cliente_nome);
+        return candidate.trim() || "Sem nome";
+    })();
+
+    const documento =
+        resolveString(clienteObject?.documento) ||
+        resolveString((processo as { cliente_documento?: unknown }).cliente_documento);
+
+    const tipo = resolveString(
+        clienteObject?.tipo ?? (processo as { cliente_tipo?: unknown }).cliente_tipo,
+    );
+
+    return {
+        id: clienteIdValue,
+        nome,
+        documento,
+        tipo,
+    };
+};
+
 const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     const clienteResumo = processo.cliente ?? null;
     const clienteId =
@@ -2004,8 +2061,22 @@ export default function Processos() {
                 }
 
                 const parsed = mapProcessoDetailToFormState(json as Record<string, unknown>);
+                const clienteResumo = extractClienteResumoFromProcessDetail(
+                    json as Record<string, unknown>,
+                );
 
                 setProcessForm(parsed.form);
+                if (clienteResumo) {
+                    setClientes((prev) => {
+                        if (prev.some((cliente) => cliente.id === clienteResumo.id)) {
+                            return prev;
+                        }
+
+                        const next = [...prev, clienteResumo];
+                        next.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+                        return next;
+                    });
+                }
                 setEditingProcessId(processoToEdit.id);
                 setEditingProcessGrau(parsed.grau);
                 setAdvogadosPopoverOpen(false);
