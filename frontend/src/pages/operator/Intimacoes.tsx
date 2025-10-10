@@ -2191,6 +2191,11 @@ export default function Intimacoes() {
     () => (summaryTarget ? normalizarTexto(summaryTarget.texto) : ""),
     [summaryTarget],
   );
+  const selectedUser = useMemo(
+    () => companyUsers.find((item) => item.id === selectedUserId) ?? null,
+    [companyUsers, selectedUserId],
+  );
+  const selectedUserHasStoredOab = Boolean(selectedUser?.oabNumber && selectedUser?.oabUf);
   const sanitizedOabInput = oabNumber.replace(/\D/g, "");
   const isOabFormValid =
     selectedUserId.trim().length > 0 && sanitizedOabInput.length > 0 && oabUf.trim().length === 2;
@@ -2974,7 +2979,7 @@ export default function Intimacoes() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="oab-uf">Estado</Label>
-                  <Select value={oabUf} onValueChange={setOabUf} disabled={Boolean(selectedUserId)}>
+                  <Select value={oabUf} onValueChange={setOabUf} disabled={selectedUserHasStoredOab}>
                     <SelectTrigger id="oab-uf">
                       <SelectValue placeholder="Selecione o estado" />
                     </SelectTrigger>
@@ -2994,7 +2999,7 @@ export default function Intimacoes() {
                     placeholder="000000"
                     value={oabNumber}
                     onChange={(event) => setOabNumber(event.target.value)}
-                    disabled={Boolean(selectedUserId)}
+                    disabled={selectedUserHasStoredOab}
                   />
                 </div>
               </div>
