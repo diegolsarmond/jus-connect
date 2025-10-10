@@ -239,6 +239,46 @@ const parseBooleanFlag = (value: unknown): boolean | null => {
   return null;
 };
 
+const parsePositiveIntegerQuery = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseNonNegativeIntegerQuery = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
 const normalizeDate = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -1923,18 +1963,202 @@ export const listProcessos = async (req: Request, res: Response) => {
 
     const { empresaId } = empresaLookup;
 
+    const limitParam =
+      parsePositiveIntegerQuery(req.query.pageSize) ?? parsePositiveIntegerQuery(req.query.limit);
+    const pageParam = parsePositiveIntegerQuery(req.query.page);
+    const offsetParam = parseNonNegativeIntegerQuery(req.query.offset);
+
     if (empresaId === null) {
-      return res.json([]);
+      const resolvedLimit = limitParam ?? 0;
+      res.setHeader('X-Total-Count', '0');
+      return res.json({
+        rows: [],
+        total: 0,
+        page: 1,
+        pageSize: resolvedLimit,
+        summary: {
+          andamento: 0,
+          arquivados: 0,
+          clientes: 0,
+          totalSincronizacoes: 0,
+          statusOptions: [],
+          tipoOptions: [],
+        },
+      });
     }
 
-    const result = await pool.query(
+    const limit = limitParam ?? null;
+    const offset =
+      offsetParam !== null
+        ? offsetParam
+        : limit !== null && pageParam !== null
+          ? (pageParam - 1) * limit
+          : null;
+
+    const queryParams: unknown[] = [empresaId];
+    let paginationClause = '';
+
+    if (limit !== null) {
+      queryParams.push(limit);
+      paginationClause += ` LIMIT $${queryParams.length}`;
+    }
+
+    if (offset !== null) {
+      queryParams.push(offset);
+      paginationClause += ` OFFSET $${queryParams.length}`;
+    }
+
+    const listPromise = pool.query(
       `${listProcessoSelect}
        WHERE p.idempresa = $1
-       ORDER BY p.criado_em DESC`,
+       ORDER BY p.criado_em DESC${paginationClause}`,
+      queryParams
+    );
+
+    const totalPromise = pool.query(
+      'SELECT COUNT(*)::bigint AS total FROM public.processos WHERE idempresa = $1',
       [empresaId]
     );
 
-    return res.json(result.rows.map(mapProcessoListRow));
+    const summaryPromise = pool.query(
+      `SELECT
+         COALESCE(dp.situacao, sp.nome) AS status,
+         COALESCE(dp.area, tp.nome) AS tipo,
+         p.cliente_id,
+         (
+           SELECT COUNT(*)::int
+           FROM public.processo_consultas_api pc
+           WHERE pc.processo_id = p.id
+         ) AS consultas_api_count
+       FROM public.processos p
+       LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
+       LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
+       LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+       WHERE p.idempresa = $1`,
+      [empresaId]
+    );
+
+    const [result, totalResult, summaryResult] = await Promise.all([
+      listPromise,
+      totalPromise,
+      summaryPromise,
+    ]);
+
+    const rows = result.rows.map(mapProcessoListRow);
+
+    const totalRow = totalResult.rows[0] as { total?: unknown } | undefined;
+    const totalValue = (() => {
+      if (!totalRow) {
+        return 0;
+      }
+
+      if (typeof totalRow.total === 'number') {
+        return totalRow.total;
+      }
+
+      if (typeof totalRow.total === 'bigint') {
+        return Number(totalRow.total);
+      }
+
+      if (typeof totalRow.total === 'string') {
+        const parsed = Number.parseInt(totalRow.total, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      return 0;
+    })();
+
+    const summaryRows = summaryResult.rows as Array<{
+      status: unknown;
+      tipo: unknown;
+      cliente_id: unknown;
+      consultas_api_count: unknown;
+    }>;
+
+    const statusSet = new Set<string>();
+    const tipoSet = new Set<string>();
+    const clienteSet = new Set<number>();
+    let andamentoCount = 0;
+    let arquivadoCount = 0;
+    let totalConsultas = 0;
+
+    const arquivadoKeywords = ['arquiv', 'baix', 'encerr', 'finaliz', 'transit', 'extint'];
+
+    summaryRows.forEach((row) => {
+      const statusRaw = typeof row.status === 'string' ? row.status.trim() : '';
+
+      if (statusRaw && statusRaw.toLowerCase() !== 'não informado') {
+        statusSet.add(statusRaw);
+      }
+
+      const normalizedStatus = statusRaw ? stripDiacritics(statusRaw).toLowerCase() : '';
+      if (arquivadoKeywords.some((keyword) => normalizedStatus.includes(keyword))) {
+        arquivadoCount += 1;
+      } else {
+        andamentoCount += 1;
+      }
+
+      const tipoRaw = typeof row.tipo === 'string' ? row.tipo.trim() : '';
+      if (tipoRaw && tipoRaw.toLowerCase() !== 'não informado') {
+        tipoSet.add(tipoRaw);
+      }
+
+      const clienteId = (() => {
+        if (typeof row.cliente_id === 'number' && Number.isInteger(row.cliente_id)) {
+          return row.cliente_id;
+        }
+
+        if (typeof row.cliente_id === 'string') {
+          const parsed = Number.parseInt(row.cliente_id, 10);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        return null;
+      })();
+
+      if (clienteId !== null) {
+        clienteSet.add(clienteId);
+      }
+
+      const consultasValue = (() => {
+        if (typeof row.consultas_api_count === 'number') {
+          return row.consultas_api_count;
+        }
+
+        if (typeof row.consultas_api_count === 'string') {
+          const parsed = Number.parseInt(row.consultas_api_count, 10);
+          return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        return 0;
+      })();
+
+      if (Number.isFinite(consultasValue)) {
+        totalConsultas += consultasValue;
+      }
+    });
+
+    const resolvedLimit = limit ?? (totalValue > 0 ? totalValue : rows.length);
+    const resolvedOffset = offset ?? 0;
+    const resolvedPage = resolvedLimit > 0 ? Math.floor(resolvedOffset / resolvedLimit) + 1 : 1;
+    const resolvedPageSize = resolvedLimit > 0 ? resolvedLimit : totalValue;
+
+    res.setHeader('X-Total-Count', String(totalValue));
+
+    return res.json({
+      rows,
+      total: totalValue,
+      page: resolvedPage,
+      pageSize: resolvedPageSize,
+      summary: {
+        andamento: andamentoCount,
+        arquivados: arquivadoCount,
+        clientes: clienteSet.size,
+        totalSincronizacoes: totalConsultas,
+        statusOptions: Array.from(statusSet).sort((a, b) => a.localeCompare(b)),
+        tipoOptions: Array.from(tipoSet).sort((a, b) => a.localeCompare(b)),
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
