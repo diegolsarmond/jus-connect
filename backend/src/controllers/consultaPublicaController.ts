@@ -65,6 +65,22 @@ const parseJsonSafely = (payload: string): unknown => {
   }
 };
 
+const markTokenAsExpired = async (token: string) => {
+  try {
+    await pool.query(
+      `
+        UPDATE public.token_jusbr
+           SET expired = TRUE
+         WHERE idusuario = $1
+           AND access_token = $2
+      `,
+      [TOKEN_USER_ID, token]
+    );
+  } catch (error) {
+    console.error('Falha ao marcar token de consulta pública como expirado', error);
+  }
+};
+
 const fetchFromPdpj = async (url: URL): Promise<unknown> => {
   const token = await fetchActiveToken();
   const headers = buildRequestHeaders(token);
@@ -96,6 +112,10 @@ const fetchFromPdpj = async (url: URL): Promise<unknown> => {
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      await markTokenAsExpired(token);
+    }
+
     const message = typeof data === 'object' && data && 'error' in data ? String((data as { error: unknown }).error) : null;
     const errorMessage =
       message && message.length > 0 ? message : `Falha ao consultar o serviço externo (${response.status}).`;
