@@ -8,6 +8,10 @@ import {
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
 import { Processo, ProcessoAttachment, ProcessoParticipant } from '../models/processo';
+import {
+  createCompanyOabMonitor,
+  listCompanyOabMonitors,
+} from '../services/oabMonitorService';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const normalizeString = (value: unknown): string | null => {
@@ -3398,6 +3402,74 @@ export const deleteProcesso = async (req: Request, res: Response) => {
     }
 
     res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const listOabMonitoradas = async (req: Request, res: Response) => {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res.json([]);
+    }
+
+    const monitors = await listCompanyOabMonitors(empresaId);
+    return res.json(monitors);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const createOabMonitorada = async (req: Request, res: Response) => {
+  const { uf, numero } = req.body ?? {};
+
+  try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    if (empresaId === null) {
+      return res
+        .status(400)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
+
+    if (typeof uf !== 'string' || typeof numero !== 'string') {
+      return res.status(400).json({ error: 'Informe a UF e o número da OAB.' });
+    }
+
+    try {
+      const monitor = await createCompanyOabMonitor(empresaId, uf, numero);
+      return res.status(201).json(monitor);
+    } catch (serviceError) {
+      const message =
+        serviceError instanceof Error
+          ? serviceError.message
+          : 'Não foi possível cadastrar a OAB informada.';
+      return res.status(400).json({ error: message });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

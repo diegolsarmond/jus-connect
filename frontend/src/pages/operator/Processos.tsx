@@ -49,7 +49,9 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
     Archive,
     Check,
@@ -240,6 +242,48 @@ interface ProcessFormState {
     monitorarProcesso: boolean;
 }
 
+interface OabMonitor {
+    id: number;
+    uf: string;
+    numero: string;
+    createdAt: string | null;
+    updatedAt: string | null;
+}
+
+interface ApiProcessoParticipant {
+    id?: number | string | null;
+    name?: string | null;
+    document?: string | null;
+    role?: string | null;
+    side?: string | null;
+    type?: string | null;
+    person_type?: string | null;
+    party_role?: string | null;
+}
+
+interface ProcessoParticipantOption {
+    id: string;
+    name: string;
+    document: string;
+    side: string | null;
+    role: string | null;
+    type: string | null;
+}
+
+interface UnassignedProcessDetail {
+    process: Processo;
+    form: ProcessFormState;
+    grau: string;
+    participants: ProcessoParticipantOption[];
+    selectedExistingClientId: string;
+    selectedParticipantIds: string[];
+    primaryParticipantId: string | null;
+    relationshipByParticipantId: Record<string, string>;
+    selectedPropostaId: string;
+    saving: boolean;
+    error: string | null;
+}
+
 const formatProcessNumber = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 20);
     const match = digits.match(/^(\d{0,7})(\d{0,2})(\d{0,4})(\d{0,1})(\d{0,2})(\d{0,4})$/);
@@ -283,6 +327,183 @@ const formatDateTimeToPtBR = (value: string | null | undefined): string => {
         timeStyle: "short",
     });
 };
+
+const formatOabDigits = (value: string): string => value.replace(/\D/g, "").slice(0, 12);
+const normalizeUf = (value: string): string => value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
+
+const mapApiOabMonitor = (payload: Record<string, unknown>): OabMonitor | null => {
+    const idValue = parseOptionalInteger(payload.id);
+    const ufRaw = pickFirstNonEmptyString(
+        typeof payload.uf === "string" ? payload.uf : undefined,
+        typeof (payload as { UF?: string }).UF === "string" ? (payload as { UF: string }).UF : undefined,
+    );
+    const numeroRaw = pickFirstNonEmptyString(
+        typeof payload.numero === "string" ? payload.numero : undefined,
+        typeof (payload as { number?: string }).number === "string"
+            ? (payload as { number: string }).number
+            : undefined,
+    );
+
+    if (!idValue || !ufRaw || !numeroRaw) {
+        return null;
+    }
+
+    const numero = formatOabDigits(numeroRaw);
+    if (!numero) {
+        return null;
+    }
+
+    const uf = normalizeUf(ufRaw);
+    if (uf.length !== 2) {
+        return null;
+    }
+
+    const createdAt = pickFirstNonEmptyString(
+        typeof (payload as { createdAt?: string }).createdAt === "string"
+            ? (payload as { createdAt: string }).createdAt
+            : undefined,
+        typeof (payload as { created_at?: string }).created_at === "string"
+            ? (payload as { created_at: string }).created_at
+            : undefined,
+    );
+
+    const updatedAt = pickFirstNonEmptyString(
+        typeof (payload as { updatedAt?: string }).updatedAt === "string"
+            ? (payload as { updatedAt: string }).updatedAt
+            : undefined,
+        typeof (payload as { updated_at?: string }).updated_at === "string"
+            ? (payload as { updated_at: string }).updated_at
+            : undefined,
+    );
+
+    return {
+        id: idValue,
+        uf,
+        numero,
+        createdAt: createdAt ?? null,
+        updatedAt: updatedAt ?? null,
+    };
+};
+
+const formatOabDisplay = (numero: string, uf: string): string => {
+    const digits = formatOabDigits(numero);
+    const padded = digits.padStart(6, "0");
+    const ufDisplay = normalizeUf(uf);
+    return `${padded}/${ufDisplay}`;
+};
+
+const mapApiParticipantOption = (
+    participant: ApiProcessoParticipant,
+    index: number,
+): ProcessoParticipantOption | null => {
+    const name =
+        pickFirstNonEmptyString(
+            typeof participant.name === "string" ? participant.name : undefined,
+            typeof participant.role === "string" ? participant.role : undefined,
+            typeof participant.party_role === "string" ? participant.party_role : undefined,
+        ) ?? `Envolvido ${index + 1}`;
+
+    const document = typeof participant.document === "string" ? participant.document.trim() : "";
+
+    const type = pickFirstNonEmptyString(
+        typeof participant.type === "string" ? participant.type : undefined,
+        typeof participant.person_type === "string" ? participant.person_type : undefined,
+    );
+
+    const role = pickFirstNonEmptyString(
+        typeof participant.role === "string" ? participant.role : undefined,
+        typeof participant.party_role === "string" ? participant.party_role : undefined,
+    );
+
+    const side = typeof participant.side === "string" ? participant.side : null;
+
+    const idCandidates: string[] = [];
+
+    if (typeof participant.id === "string" && participant.id.trim().length > 0) {
+        idCandidates.push(participant.id.trim());
+    } else if (typeof participant.id === "number" && Number.isFinite(participant.id)) {
+        idCandidates.push(String(Math.trunc(participant.id)));
+    }
+
+    if (document) {
+        const digitsForId = document.replace(/\D/g, "");
+        if (digitsForId) {
+            idCandidates.push(`doc-${digitsForId}`);
+        }
+    }
+
+    idCandidates.push(`participant-${index}`);
+
+    const uniqueId = idCandidates.find((candidate) => candidate.length > 0) ?? `participant-${index}`;
+
+    return {
+        id: uniqueId,
+        name,
+        document,
+        side,
+        role: role ?? null,
+        type: type ?? null,
+    };
+};
+
+const extractParticipantOptions = (payload: Record<string, unknown>): ProcessoParticipantOption[] => {
+    const participantsPayload = Array.isArray((payload as { participants?: unknown }).participants)
+        ? ((payload as { participants: ApiProcessoParticipant[] }).participants)
+        : [];
+    const partiesPayload = Array.isArray((payload as { parties?: unknown }).parties)
+        ? ((payload as { parties: ApiProcessoParticipant[] }).parties)
+        : [];
+
+    const combined = [...participantsPayload, ...partiesPayload];
+
+    const options: ProcessoParticipantOption[] = [];
+    const usedIds = new Set<string>();
+    const usedDocuments = new Set<string>();
+
+    combined.forEach((participant, index) => {
+        if (!participant || typeof participant !== "object") {
+            return;
+        }
+
+        const option = mapApiParticipantOption(participant as ApiProcessoParticipant, index);
+        if (!option) {
+            return;
+        }
+
+        const digits = option.document.replace(/\D/g, "");
+        if (digits) {
+            if (usedDocuments.has(digits)) {
+                return;
+            }
+            usedDocuments.add(digits);
+        }
+
+        let candidateId = option.id;
+        while (usedIds.has(candidateId)) {
+            candidateId = `${candidateId}-${index}`;
+        }
+        usedIds.add(candidateId);
+
+        options.push({ ...option, id: candidateId });
+    });
+
+    return options;
+};
+
+const getParticipantDefaultRelationship = (participant: ProcessoParticipantOption): string => {
+    if (participant.role) {
+        return participant.role;
+    }
+
+    if (participant.side) {
+        return participant.side.charAt(0).toUpperCase() + participant.side.slice(1);
+    }
+
+    return "";
+};
+
+const getParticipantDocumentDigits = (participant: ProcessoParticipantOption): string =>
+    participant.document.replace(/\D/g, "");
 
 const pickFirstNonEmptyString = (
     ...values: Array<string | null | undefined>
@@ -861,6 +1082,15 @@ export default function Processos() {
     const [statusFilter, setStatusFilter] = useState("todos");
     const [tipoFilter, setTipoFilter] = useState("todos");
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isOabModalOpen, setIsOabModalOpen] = useState(false);
+    const [oabModalDismissed, setOabModalDismissed] = useState(false);
+    const [oabUf, setOabUf] = useState("");
+    const [oabNumero, setOabNumero] = useState("");
+    const [oabMonitors, setOabMonitors] = useState<OabMonitor[]>([]);
+    const [oabMonitorsLoading, setOabMonitorsLoading] = useState(false);
+    const [oabMonitorsError, setOabMonitorsError] = useState<string | null>(null);
+    const [oabSubmitLoading, setOabSubmitLoading] = useState(false);
+    const [oabSubmitError, setOabSubmitError] = useState<string | null>(null);
     const [processForm, setProcessForm] = useState<ProcessFormState>(
         createEmptyProcessForm,
     );
@@ -907,6 +1137,14 @@ export default function Processos() {
     const [editingProcessId, setEditingProcessId] = useState<number | null>(null);
     const [editingProcessGrau, setEditingProcessGrau] = useState<string | null>(null);
     const [loadingProcessForm, setLoadingProcessForm] = useState(false);
+    const [unassignedProcessIds, setUnassignedProcessIds] = useState<number[]>([]);
+    const [unassignedDetails, setUnassignedDetails] = useState<
+        Record<number, UnassignedProcessDetail>
+    >({});
+    const [unassignedModalOpen, setUnassignedModalOpen] = useState(false);
+    const [unassignedModalDismissed, setUnassignedModalDismissed] = useState(false);
+    const [unassignedLoading, setUnassignedLoading] = useState(false);
+    const [unassignedError, setUnassignedError] = useState<string | null>(null);
 
     const applyProcessosData = useCallback((data: ProcessoLoadResult) => {
         setProcessos(data.items);
@@ -936,6 +1174,70 @@ export default function Processos() {
         };
 
         fetchUfs();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchMonitors = async () => {
+            setOabMonitorsLoading(true);
+            setOabMonitorsError(null);
+
+            try {
+                const res = await fetch(getApiUrl("processos/oab-monitoradas"), {
+                    headers: { Accept: "application/json" },
+                });
+
+                let json: unknown = null;
+
+                try {
+                    json = await res.json();
+                } catch (error) {
+                    console.error("Não foi possível interpretar a resposta de OABs monitoradas", error);
+                }
+
+                if (!res.ok) {
+                    const message =
+                        json && typeof json === "object" && "error" in json &&
+                            typeof (json as { error?: unknown }).error === "string"
+                            ? String((json as { error: string }).error)
+                            : `Não foi possível carregar as OABs monitoradas (HTTP ${res.status})`;
+                    throw new Error(message);
+                }
+
+                const payloadArray: Record<string, unknown>[] = Array.isArray(json)
+                    ? (json as Record<string, unknown>[])
+                    : Array.isArray((json as { data?: unknown[] })?.data)
+                        ? ((json as { data: unknown[] }).data as Record<string, unknown>[])
+                        : [];
+
+                const monitors = payloadArray
+                    .map((item) => mapApiOabMonitor(item))
+                    .filter((item): item is OabMonitor => item !== null);
+
+                if (!cancelled) {
+                    setOabMonitors(monitors);
+                }
+            } catch (error) {
+                console.error(error);
+                if (!cancelled) {
+                    setOabMonitors([]);
+                    setOabMonitorsError(
+                        error instanceof Error ? error.message : "Erro ao carregar OABs monitoradas",
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setOabMonitorsLoading(false);
+                }
+            }
+        };
+
+        fetchMonitors();
 
         return () => {
             cancelled = true;
@@ -1626,6 +1928,541 @@ export default function Processos() {
         });
     }, []);
 
+    const handleOabModalChange = useCallback((open: boolean) => {
+        setIsOabModalOpen(open);
+        if (!open) {
+            setOabModalDismissed(true);
+            setOabSubmitError(null);
+        }
+    }, []);
+
+    const handleParticipantToggle = useCallback((processId: number, participantId: string) => {
+        setUnassignedDetails((prev) => {
+            const current = prev[processId];
+            if (!current) {
+                return prev;
+            }
+
+            const alreadySelected = current.selectedParticipantIds.includes(participantId);
+            const nextSelected = alreadySelected
+                ? current.selectedParticipantIds.filter((id) => id !== participantId)
+                : [...current.selectedParticipantIds, participantId];
+
+            let nextPrimary = current.primaryParticipantId;
+            if (alreadySelected) {
+                if (current.primaryParticipantId === participantId) {
+                    nextPrimary = nextSelected[0] ?? null;
+                }
+            } else if (!current.primaryParticipantId) {
+                nextPrimary = participantId;
+            }
+
+            return {
+                ...prev,
+                [processId]: {
+                    ...current,
+                    selectedParticipantIds: nextSelected,
+                    primaryParticipantId: nextPrimary,
+                },
+            };
+        });
+    }, []);
+
+    const handlePrimaryParticipantChange = useCallback((processId: number, participantId: string) => {
+        setUnassignedDetails((prev) => {
+            const current = prev[processId];
+            if (!current) {
+                return prev;
+            }
+
+            const alreadySelected = current.selectedParticipantIds.includes(participantId);
+            const nextSelected = alreadySelected
+                ? current.selectedParticipantIds
+                : [...current.selectedParticipantIds, participantId];
+
+            return {
+                ...prev,
+                [processId]: {
+                    ...current,
+                    selectedParticipantIds: nextSelected,
+                    primaryParticipantId: participantId,
+                },
+            };
+        });
+    }, []);
+
+    const handleParticipantRelationshipChange = useCallback(
+        (processId: number, participantId: string, value: string) => {
+            setUnassignedDetails((prev) => {
+                const current = prev[processId];
+                if (!current) {
+                    return prev;
+                }
+
+                return {
+                    ...prev,
+                    [processId]: {
+                        ...current,
+                        relationshipByParticipantId: {
+                            ...current.relationshipByParticipantId,
+                            [participantId]: value,
+                        },
+                    },
+                };
+            });
+        },
+        [],
+    );
+
+    const handleExistingClientSelection = useCallback((processId: number, clientId: string) => {
+        setUnassignedDetails((prev) => {
+            const current = prev[processId];
+            if (!current) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                [processId]: {
+                    ...current,
+                    selectedExistingClientId: clientId,
+                },
+            };
+        });
+    }, []);
+
+    const handleSelectedPropostaChange = useCallback((processId: number, propostaId: string) => {
+        setUnassignedDetails((prev) => {
+            const current = prev[processId];
+            if (!current) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                [processId]: {
+                    ...current,
+                    selectedPropostaId: propostaId,
+                },
+            };
+        });
+    }, []);
+
+    const handleUnassignedModalChange = useCallback((open: boolean) => {
+        setUnassignedModalOpen(open);
+        if (!open) {
+            setUnassignedModalDismissed(true);
+        }
+    }, []);
+
+    const handleOabSubmit = useCallback(async () => {
+        if (!oabUf || !oabNumero) {
+            setOabSubmitError("Informe a UF e o número da OAB.");
+            return;
+        }
+
+        setOabSubmitError(null);
+        setOabSubmitLoading(true);
+
+        try {
+            const res = await fetch(getApiUrl("processos/oab-monitoradas"), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify({
+                    uf: oabUf,
+                    numero: formatOabDigits(oabNumero),
+                }),
+            });
+
+            let json: unknown = null;
+            try {
+                json = await res.json();
+            } catch (error) {
+                console.error("Não foi possível interpretar a resposta de cadastro de OAB", error);
+            }
+
+            if (!res.ok) {
+                const message =
+                    json && typeof json === "object" && "error" in json &&
+                        typeof (json as { error?: unknown }).error === "string"
+                        ? String((json as { error: string }).error)
+                        : `Não foi possível cadastrar a OAB (HTTP ${res.status})`;
+                throw new Error(message);
+            }
+
+            if (!json || typeof json !== "object") {
+                throw new Error("Resposta inválida do servidor ao cadastrar a OAB.");
+            }
+
+            const monitor = mapApiOabMonitor(json as Record<string, unknown>);
+            if (!monitor) {
+                throw new Error("Dados retornados para a OAB são inválidos.");
+            }
+
+            setOabMonitors((prev) => {
+                const filtered = prev.filter((item) => item.id !== monitor.id);
+                return [monitor, ...filtered];
+            });
+            setOabNumero("");
+            toast({
+                title: "OAB cadastrada com sucesso",
+                description: `Monitoramento ativado para ${formatOabDisplay(monitor.numero, monitor.uf)}.`,
+            });
+        } catch (error) {
+            console.error(error);
+            const message =
+                error instanceof Error ? error.message : "Erro ao cadastrar OAB";
+            setOabSubmitError(message);
+            toast({
+                title: "Erro ao cadastrar OAB",
+                description: message,
+                variant: "destructive",
+            });
+        } finally {
+            setOabSubmitLoading(false);
+        }
+    }, [oabNumero, oabUf, toast]);
+
+    const ensureClientForParticipant = useCallback(
+        async (participant: ProcessoParticipantOption): Promise<number> => {
+            const documentDigits = getParticipantDocumentDigits(participant);
+
+            if (documentDigits) {
+                const existing = clientes.find((cliente) => {
+                    if (!cliente.documento) {
+                        return false;
+                    }
+                    return cliente.documento.replace(/\D/g, "") === documentDigits;
+                });
+
+                if (existing) {
+                    return existing.id;
+                }
+            }
+
+            const nome = participant.name || "Cliente sem identificação";
+            const tipo = documentDigits.length === 14 ? "J" : "F";
+
+            const payload = {
+                nome,
+                tipo,
+                documento: documentDigits || null,
+                email: null,
+                telefone: null,
+                cep: null,
+                rua: null,
+                numero: null,
+                complemento: null,
+                bairro: null,
+                cidade: null,
+                uf: null,
+                ativo: true,
+            };
+
+            const res = await fetch(getApiUrl("clientes"), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify(payload),
+            });
+
+            let json: unknown = null;
+            try {
+                json = await res.json();
+            } catch (error) {
+                console.error("Não foi possível interpretar a resposta de criação de cliente", error);
+            }
+
+            if (!res.ok) {
+                const message =
+                    json && typeof json === "object" && "error" in json &&
+                        typeof (json as { error?: unknown }).error === "string"
+                        ? String((json as { error: string }).error)
+                        : `Não foi possível cadastrar o cliente ${nome} (HTTP ${res.status})`;
+                throw new Error(message);
+            }
+
+            if (!json || typeof json !== "object") {
+                throw new Error("Resposta inválida do servidor ao cadastrar cliente");
+            }
+
+            const idValue = parseOptionalInteger((json as { id?: unknown }).id);
+            if (!idValue) {
+                throw new Error("Cliente criado sem identificador válido");
+            }
+
+            const documentoRetornado =
+                typeof (json as { documento?: string }).documento === "string"
+                    ? (json as { documento: string }).documento
+                    : documentDigits;
+            const tipoRetornado =
+                typeof (json as { tipo?: string }).tipo === "string"
+                    ? (json as { tipo: string }).tipo
+                    : tipo;
+
+            const resumo: ClienteResumo = {
+                id: idValue,
+                nome:
+                    typeof (json as { nome?: string }).nome === "string"
+                        ? (json as { nome: string }).nome
+                        : nome,
+                documento: documentoRetornado ?? "",
+                tipo: tipoRetornado ?? tipo,
+            };
+
+            setClientes((prev) => [...prev, resumo]);
+
+            return idValue;
+        },
+        [clientes],
+    );
+
+    const handleLinkProcess = useCallback(
+        async (processId: number) => {
+            const detail = unassignedDetails[processId];
+            if (!detail || detail.saving) {
+                return;
+            }
+
+            setUnassignedDetails((prev) => {
+                const current = prev[processId];
+                if (!current) {
+                    return prev;
+                }
+
+                return {
+                    ...prev,
+                    [processId]: {
+                        ...current,
+                        saving: true,
+                        error: null,
+                    },
+                };
+            });
+
+            try {
+                let clienteId: number | null = null;
+                const selectedExisting = parseOptionalInteger(detail.selectedExistingClientId);
+
+                if (selectedExisting && selectedExisting > 0) {
+                    clienteId = selectedExisting;
+                } else if (detail.primaryParticipantId) {
+                    const primaryParticipant = detail.participants.find(
+                        (participant) => participant.id === detail.primaryParticipantId,
+                    );
+
+                    if (!primaryParticipant) {
+                        throw new Error("Selecione um cliente principal para vincular ao processo.");
+                    }
+
+                    clienteId = await ensureClientForParticipant(primaryParticipant);
+                } else {
+                    throw new Error(
+                        "Selecione um cliente existente ou marque um envolvido como cliente principal.",
+                    );
+                }
+
+                const participantsToRegister = detail.selectedParticipantIds
+                    .map((participantId) =>
+                        detail.participants.find((participant) => participant.id === participantId),
+                    )
+                    .filter(
+                        (participant): participant is ProcessoParticipantOption =>
+                            Boolean(participant),
+                    );
+
+                for (const participant of participantsToRegister) {
+                    if (detail.primaryParticipantId && participant.id === detail.primaryParticipantId) {
+                        continue;
+                    }
+                    await ensureClientForParticipant(participant);
+                }
+
+                const relationshipEntries = participantsToRegister.map((participant) => {
+                    const relation =
+                        detail.relationshipByParticipantId[participant.id]?.trim() ||
+                        getParticipantDefaultRelationship(participant);
+                    return relation ? `${participant.name} (${relation})` : participant.name;
+                });
+
+                const descricaoPayload =
+                    relationshipEntries.length > 0
+                        ? `Clientes vinculados: ${relationshipEntries.join(", ")}`
+                        : undefined;
+
+                const advogadosPayload = detail.form.advogados
+                    .map((id) => Number.parseInt(id, 10))
+                    .filter((value) => Number.isFinite(value) && value > 0);
+
+                const municipioPayload = detail.form.municipio.trim()
+                    ? detail.form.municipio
+                    : (() => {
+                          const [municipio] = detail.process.jurisdicao.split("-");
+                          return municipio ? municipio.trim() : "";
+                      })();
+
+                const ufPayload = detail.form.uf.trim()
+                    ? detail.form.uf
+                    : (() => {
+                          const parts = detail.process.jurisdicao.split("-");
+                          const ufCandidate = parts.length > 1 ? parts[parts.length - 1].trim() : "";
+                          return ufCandidate.length === 2 ? ufCandidate : "";
+                      })();
+
+                const payload: Record<string, unknown> = {
+                    cliente_id: clienteId,
+                    numero: detail.form.numero || detail.process.numero,
+                    uf: ufPayload || detail.form.uf || null,
+                    municipio: municipioPayload || detail.form.municipio || null,
+                    advogados: advogadosPayload,
+                };
+
+                const instanciaPayload =
+                    detail.form.instancia === INSTANCIA_OUTRO_VALUE
+                        ? detail.form.instanciaOutro.trim()
+                        : detail.form.instancia.trim();
+                if (instanciaPayload) {
+                    payload.instancia = instanciaPayload;
+                }
+
+                if (detail.form.dataDistribuicao.trim()) {
+                    payload.data_distribuicao = detail.form.dataDistribuicao.trim();
+                }
+
+                const propostaId = parseOptionalInteger(detail.selectedPropostaId);
+                if (propostaId && propostaId > 0) {
+                    payload.oportunidade_id = propostaId;
+                }
+
+                const tipoProcessoId = parseOptionalInteger(detail.form.tipoProcessoId);
+                if (tipoProcessoId && tipoProcessoId > 0) {
+                    payload.tipo_processo_id = tipoProcessoId;
+                }
+
+                const areaAtuacaoId = parseOptionalInteger(detail.form.areaAtuacaoId);
+                if (areaAtuacaoId && areaAtuacaoId > 0) {
+                    payload.area_atuacao_id = areaAtuacaoId;
+                }
+
+                const sistemaId = parseOptionalInteger(detail.form.sistemaCnjId);
+                if (sistemaId && sistemaId > 0) {
+                    payload.sistema_cnj_id = sistemaId;
+                }
+
+                payload.monitorar_processo = detail.form.monitorarProcesso;
+                payload.grau = detail.grau || "1º Grau";
+
+                if (descricaoPayload) {
+                    payload.descricao = descricaoPayload;
+                }
+
+                const res = await fetch(getApiUrl(`processos/${processId}`), {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                let json: unknown = null;
+                try {
+                    json = await res.json();
+                } catch (error) {
+                    console.error(
+                        "Não foi possível interpretar a resposta de atualização do processo",
+                        error,
+                    );
+                }
+
+                if (!res.ok) {
+                    const message =
+                        json && typeof json === "object" && "error" in json &&
+                            typeof (json as { error?: unknown }).error === "string"
+                            ? String((json as { error: string }).error)
+                            : `Não foi possível atualizar o processo (HTTP ${res.status})`;
+                    throw new Error(message);
+                }
+
+                const remaining = unassignedProcessIds.filter((id) => id !== processId);
+
+                setUnassignedDetails((prev) => {
+                    const next = { ...prev };
+                    delete next[processId];
+                    return next;
+                });
+                setUnassignedProcessIds(remaining);
+
+                toast({
+                    title: "Processo atualizado",
+                    description: "Cliente vinculado com sucesso.",
+                });
+
+                if (remaining.length === 0) {
+                    setUnassignedModalOpen(false);
+                    setUnassignedModalDismissed(true);
+                }
+
+                try {
+                    const data = await loadProcessos();
+                    applyProcessosData(data);
+                } catch (refreshError) {
+                    console.error("Erro ao atualizar lista de processos", refreshError);
+                }
+            } catch (error) {
+                console.error(error);
+                const message =
+                    error instanceof Error ? error.message : "Erro ao vincular processo";
+                setUnassignedDetails((prev) => {
+                    const current = prev[processId];
+                    if (!current) {
+                        return prev;
+                    }
+                    return {
+                        ...prev,
+                        [processId]: {
+                            ...current,
+                            error: message,
+                        },
+                    };
+                });
+                toast({
+                    title: "Erro ao vincular processo",
+                    description: message,
+                    variant: "destructive",
+                });
+            } finally {
+                setUnassignedDetails((prev) => {
+                    const current = prev[processId];
+                    if (!current) {
+                        return prev;
+                    }
+
+                    return {
+                        ...prev,
+                        [processId]: {
+                            ...current,
+                            saving: false,
+                        },
+                    };
+                });
+            }
+        },
+        [
+            unassignedDetails,
+            ensureClientForParticipant,
+            toast,
+            loadProcessos,
+            applyProcessosData,
+            unassignedProcessIds,
+        ],
+    );
+
     const loadProcessos = useCallback(
         async (options?: { signal?: AbortSignal; page?: number; pageSize?: number }): Promise<ProcessoLoadResult> => {
             const currentPage = options?.page ?? page;
@@ -1897,6 +2734,142 @@ export default function Processos() {
             setTipoFilter("todos");
         }
     }, [tipoFilter, tipoOptions]);
+
+    useEffect(() => {
+        const unassigned = processos
+            .filter((processo) => !processo.cliente?.id || processo.cliente.id <= 0)
+            .map((processo) => processo.id);
+        setUnassignedProcessIds(unassigned);
+    }, [processos]);
+
+    useEffect(() => {
+        if (!processosLoading && totalProcessos === 0 && !oabModalDismissed) {
+            setIsOabModalOpen(true);
+        }
+    }, [processosLoading, totalProcessos, oabModalDismissed]);
+
+    useEffect(() => {
+        if (
+            !processosLoading &&
+            unassignedProcessIds.length > 0 &&
+            !unassignedModalDismissed
+        ) {
+            setUnassignedModalOpen(true);
+        }
+    }, [processosLoading, unassignedProcessIds, unassignedModalDismissed]);
+
+    useEffect(() => {
+        if (!unassignedModalOpen) {
+            return;
+        }
+
+        const idsToFetch = unassignedProcessIds.filter((id) => !unassignedDetails[id]);
+        if (idsToFetch.length === 0) {
+            return;
+        }
+
+        let cancelled = false;
+        setUnassignedLoading(true);
+        setUnassignedError(null);
+
+        const fetchDetails = async () => {
+            try {
+                const entries = await Promise.all(
+                    idsToFetch.map(async (id) => {
+                        const res = await fetch(getApiUrl(`processos/${id}`), {
+                            headers: { Accept: "application/json" },
+                        });
+
+                        let json: unknown = null;
+                        try {
+                            json = await res.json();
+                        } catch (error) {
+                            console.error("Não foi possível interpretar a resposta de detalhes do processo", error);
+                        }
+
+                        if (!res.ok) {
+                            const message =
+                                json && typeof json === "object" && "error" in json &&
+                                    typeof (json as { error?: unknown }).error === "string"
+                                    ? String((json as { error: string }).error)
+                                    : `Não foi possível carregar os detalhes do processo (HTTP ${res.status})`;
+                            throw new Error(message);
+                        }
+
+                        if (!json || typeof json !== "object") {
+                            throw new Error("Resposta inválida do servidor ao carregar detalhes do processo");
+                        }
+
+                        const detail = mapProcessoDetailToFormState(json as Record<string, unknown>);
+                        const participants = extractParticipantOptions(json as Record<string, unknown>);
+
+                        const relationshipByParticipantId: Record<string, string> = {};
+                        participants.forEach((participant) => {
+                            const defaultRelation = getParticipantDefaultRelationship(participant);
+                            if (defaultRelation) {
+                                relationshipByParticipantId[participant.id] = defaultRelation;
+                            }
+                        });
+
+                        return {
+                            id,
+                            form: detail.form,
+                            grau: detail.grau,
+                            participants,
+                            relationshipByParticipantId,
+                        };
+                    }),
+                );
+
+                if (!cancelled) {
+                    setUnassignedDetails((prev) => {
+                        const next = { ...prev };
+                        for (const entry of entries) {
+                            const baseProcess = processos.find((processo) => processo.id === entry.id);
+                            if (!baseProcess) {
+                                continue;
+                            }
+
+                            next[entry.id] = {
+                                process: baseProcess,
+                                form: entry.form,
+                                grau: entry.grau,
+                                participants: entry.participants,
+                                selectedExistingClientId: "",
+                                selectedParticipantIds: [],
+                                primaryParticipantId: null,
+                                relationshipByParticipantId: entry.relationshipByParticipantId,
+                                selectedPropostaId: entry.form.propostaId,
+                                saving: false,
+                                error: null,
+                            };
+                        }
+
+                        return next;
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+                if (!cancelled) {
+                    setUnassignedError(
+                        error instanceof Error
+                            ? error.message
+                            : "Erro ao carregar detalhes dos processos sem cliente",
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setUnassignedLoading(false);
+                }
+            }
+        };
+
+        void fetchDetails();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [unassignedModalOpen, unassignedProcessIds, unassignedDetails, processos]);
 
     const totalPages = useMemo(() => {
         if (pageSize <= 0) {
@@ -2374,6 +3347,80 @@ export default function Processos() {
                 </Card>
             </div>
 
+            {totalProcessos === 0 ? (
+                <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-6 space-y-3">
+                    <div className="space-y-1">
+                        <h2 className="text-lg font-semibold text-primary">
+                            Automatize a captura de novos processos
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                            Cadastre a OAB responsável para receber automaticamente processos em tempo real.
+                        </p>
+                    </div>
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            setOabModalDismissed(false);
+                            setIsOabModalOpen(true);
+                        }}
+                    >
+                        Cadastrar OAB
+                    </Button>
+                </div>
+            ) : null}
+
+            <Card className="border-border/60 bg-card/60 shadow-sm">
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                        <CardTitle className="text-lg">OABs monitoradas</CardTitle>
+                        <CardDescription>
+                            Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
+                        </CardDescription>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            setOabModalDismissed(false);
+                            setIsOabModalOpen(true);
+                        }}
+                    >
+                        Adicionar OAB
+                    </Button>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    {oabMonitorsLoading ? (
+                        <div className="space-y-2">
+                            {[0, 1, 2].map((item) => (
+                                <Skeleton key={item} className="h-4 w-full" />
+                            ))}
+                        </div>
+                    ) : oabMonitorsError ? (
+                        <p className="text-sm text-destructive">{oabMonitorsError}</p>
+                    ) : oabMonitors.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            Nenhuma OAB monitorada no momento. Cadastre uma OAB para iniciar o monitoramento automático.
+                        </p>
+                    ) : (
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {oabMonitors.map((monitor) => (
+                                <div
+                                    key={monitor.id}
+                                    className="flex flex-col gap-1 rounded-md border border-border/60 bg-muted/30 p-3"
+                                >
+                                    <span className="text-sm font-medium text-foreground">
+                                        {formatOabDisplay(monitor.numero, monitor.uf)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                        Monitorando desde {formatDateTimeToPtBR(monitor.createdAt)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
             <Card className="border-border/60 bg-card/60 shadow-sm">
                 <CardHeader className="flex flex-col gap-2 pb-0 sm:flex-row sm:items-end sm:justify-between">
                     <div className="space-y-1">
@@ -2545,6 +3592,296 @@ export default function Processos() {
                     </div>
                 </div>
             )}
+
+            <Dialog open={isOabModalOpen} onOpenChange={handleOabModalChange}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Adicionar OAB para monitoramento</DialogTitle>
+                        <DialogDescription>
+                            Informe a OAB responsável para que possamos baixar automaticamente novos processos.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="oab-uf">Estado</Label>
+                            <Select value={oabUf} onValueChange={setOabUf}>
+                                <SelectTrigger id="oab-uf">
+                                    <SelectValue placeholder="Selecione o estado" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {ufs.map((uf) => (
+                                        <SelectItem key={uf.sigla} value={uf.sigla}>
+                                            {uf.nome} ({uf.sigla})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="oab-numero">Número da OAB</Label>
+                            <Input
+                                id="oab-numero"
+                                value={oabNumero}
+                                onChange={(event) => setOabNumero(formatOabDigits(event.target.value))}
+                                placeholder="000000"
+                            />
+                        </div>
+                        {oabSubmitError ? (
+                            <p className="text-sm text-destructive">{oabSubmitError}</p>
+                        ) : null}
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => handleOabModalChange(false)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={handleOabSubmit}
+                            disabled={oabSubmitLoading || !oabUf || !oabNumero}
+                        >
+                            {oabSubmitLoading ? "Cadastrando..." : "Cadastrar"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={unassignedModalOpen} onOpenChange={handleUnassignedModalChange}>
+                <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Processos sem cliente vinculado</DialogTitle>
+                        <DialogDescription>
+                            Vincule clientes, propostas e relações com os envolvidos para completar o cadastro.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {unassignedError ? (
+                        <p className="text-sm text-destructive">{unassignedError}</p>
+                    ) : null}
+                    {unassignedLoading && Object.keys(unassignedDetails).length === 0 ? (
+                        <div className="space-y-2">
+                            {[0, 1].map((item) => (
+                                <Skeleton key={item} className="h-24 w-full" />
+                            ))}
+                        </div>
+                    ) : unassignedProcessIds.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            Todos os processos já possuem clientes vinculados.
+                        </p>
+                    ) : (
+                        <div className="space-y-6">
+                            {unassignedProcessIds.map((processId) => {
+                                const detail = unassignedDetails[processId];
+                                const baseProcess = processos.find((processo) => processo.id === processId);
+
+                                if (!detail || !baseProcess) {
+                                    return (
+                                        <Card key={processId} className="border-border/60 bg-muted/30">
+                                            <CardHeader>
+                                                <CardTitle>Carregando processo...</CardTitle>
+                                                <CardDescription>Aguarde enquanto buscamos os detalhes.</CardDescription>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <Skeleton className="h-20 w-full" />
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                }
+
+                                const canSave =
+                                    Boolean(detail.selectedExistingClientId) || Boolean(detail.primaryParticipantId);
+
+                                return (
+                                    <Card key={processId} className="border-border/60 bg-card/60 shadow-sm">
+                                        <CardHeader>
+                                            <CardTitle>Processo {baseProcess.numero}</CardTitle>
+                                            <CardDescription>
+                                                Indique quem é o cliente do escritório e vincule propostas relacionadas.
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div className="grid gap-4 md:grid-cols-2">
+                                                <div className="space-y-2">
+                                                    <Label>Cliente existente</Label>
+                                                    <Select
+                                                        value={detail.selectedExistingClientId}
+                                                        onValueChange={(value) =>
+                                                            handleExistingClientSelection(processId, value)
+                                                        }
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Selecione um cliente" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="">Sem cliente</SelectItem>
+                                                            {clientes.map((cliente) => (
+                                                                <SelectItem key={cliente.id} value={String(cliente.id)}>
+                                                                    {cliente.nome}
+                                                                    {cliente.documento
+                                                                        ? ` — ${cliente.documento}`
+                                                                        : ""}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Se preferir, marque um envolvido abaixo para criar o pré-cadastro
+                                                        automaticamente.
+                                                    </p>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Proposta relacionada</Label>
+                                                    <Select
+                                                        value={detail.selectedPropostaId}
+                                                        onValueChange={(value) =>
+                                                            handleSelectedPropostaChange(processId, value)
+                                                        }
+                                                    >
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Sem proposta vinculada" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="">Sem proposta</SelectItem>
+                                                            {propostas.map((proposta) => (
+                                                                <SelectItem key={proposta.id} value={proposta.id}>
+                                                                    {proposta.label}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <Label className="text-sm font-medium">Envolvidos do processo</Label>
+                                                {detail.participants.length === 0 ? (
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Nenhum envolvido identificado para este processo.
+                                                    </p>
+                                                ) : (
+                                                    <RadioGroup
+                                                        value={detail.primaryParticipantId ?? ""}
+                                                        onValueChange={(value) =>
+                                                            handlePrimaryParticipantChange(processId, value)
+                                                        }
+                                                        className="space-y-3"
+                                                    >
+                                                        {detail.participants.map((participant) => {
+                                                            const checked = detail.selectedParticipantIds.includes(
+                                                                participant.id,
+                                                            );
+                                                            return (
+                                                                <div
+                                                                    key={participant.id}
+                                                                    className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3"
+                                                                >
+                                                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                                        <div className="space-y-1">
+                                                                            <p className="text-sm font-medium text-foreground">
+                                                                                {participant.name}
+                                                                            </p>
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                {participant.document
+                                                                                    ? `Documento: ${participant.document}`
+                                                                                    : "Documento não informado"}
+                                                                            </p>
+                                                                            <div className="flex flex-wrap gap-2">
+                                                                                {participant.role ? (
+                                                                                    <Badge variant="secondary">
+                                                                                        {participant.role}
+                                                                                    </Badge>
+                                                                                ) : null}
+                                                                                {participant.side ? (
+                                                                                    <Badge variant="outline">
+                                                                                        {participant.side}
+                                                                                    </Badge>
+                                                                                ) : null}
+                                                                                {participant.type ? (
+                                                                                    <Badge variant="outline">
+                                                                                        {participant.type}
+                                                                                    </Badge>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-end gap-2">
+                                                                            <Checkbox
+                                                                                checked={checked}
+                                                                                onCheckedChange={() =>
+                                                                                    handleParticipantToggle(
+                                                                                        processId,
+                                                                                        participant.id,
+                                                                                    )
+                                                                                }
+                                                                            />
+                                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                                <RadioGroupItem
+                                                                                    value={participant.id}
+                                                                                    id={`primary-${processId}-${participant.id}`}
+                                                                                />
+                                                                                <Label
+                                                                                    htmlFor={`primary-${processId}-${participant.id}`}
+                                                                                    className="text-xs font-normal"
+                                                                                >
+                                                                                    Cliente principal
+                                                                                </Label>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="space-y-2">
+                                                                        <Label className="text-xs font-medium">
+                                                                            Relação com o processo
+                                                                        </Label>
+                                                                        <Input
+                                                                            value={
+                                                                                detail.relationshipByParticipantId[
+                                                                                    participant.id
+                                                                                ] ?? ""
+                                                                            }
+                                                                            onChange={(event) =>
+                                                                                handleParticipantRelationshipChange(
+                                                                                    processId,
+                                                                                    participant.id,
+                                                                                    event.target.value,
+                                                                                )
+                                                                            }
+                                                                            placeholder={
+                                                                                getParticipantDefaultRelationship(
+                                                                                    participant,
+                                                                                ) || "Descreva a relação"
+                                                                            }
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </RadioGroup>
+                                                )}
+                                            </div>
+                                            {detail.error ? (
+                                                <p className="text-sm text-destructive">{detail.error}</p>
+                                            ) : null}
+                                            <div className="flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                                <p className="text-xs text-muted-foreground">
+                                                    Selecione um cliente existente ou defina um envolvido como cliente
+                                                    principal para concluir o vínculo.
+                                                </p>
+                                                <Button
+                                                    onClick={() => void handleLinkProcess(processId)}
+                                                    disabled={!canSave || detail.saving}
+                                                >
+                                                    {detail.saving ? "Vinculando..." : "Salvar vinculação"}
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => handleUnassignedModalChange(false)}>
+                            Fechar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
                 <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
