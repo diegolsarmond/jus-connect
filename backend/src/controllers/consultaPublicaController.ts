@@ -86,19 +86,32 @@ const fetchFromPdpj = async (url: URL): Promise<unknown> => {
 export const consultarProcessosPublicos = async (req: Request, res: Response) => {
   const rawCpf = typeof req.query.cpfCnpjParte === 'string' ? req.query.cpfCnpjParte.trim() : '';
   const rawNumero = typeof req.query.numeroProcesso === 'string' ? req.query.numeroProcesso.trim() : '';
+  const rawOab = typeof req.query.oab === 'string' ? req.query.oab.trim() : '';
 
-  if (!rawCpf && !rawNumero) {
-    res.status(400).json({ error: 'Informe o CPF/CNPJ da parte ou o número do processo.' });
+  const normalizedCpf = rawCpf ? rawCpf.replace(/\D/g, '').slice(0, 14) : '';
+  const normalizedNumero = rawNumero ? rawNumero.replace(/\D/g, '').slice(0, 20) : '';
+  const normalizedOabDigits = rawOab ? rawOab.replace(/\D/g, '').slice(0, 6) : '';
+  const normalizedOabUf = rawOab ? rawOab.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase() : '';
+
+  if (!normalizedCpf && !normalizedNumero && !normalizedOabDigits) {
+    res.status(400).json({ error: 'Informe o CPF/CNPJ da parte, o número do processo ou a OAB do advogado.' });
     return;
   }
 
   try {
-    const requestUrl = rawCpf
-      ? new URL(PDPJ_BASE_URL)
-      : new URL(`${PDPJ_BASE_URL}/${encodeURIComponent(rawNumero)}`);
+    const requestUrl = normalizedNumero
+      ? new URL(`${PDPJ_BASE_URL}/${encodeURIComponent(normalizedNumero)}`)
+      : new URL(PDPJ_BASE_URL);
 
-    if (rawCpf) {
-      requestUrl.searchParams.set('cpfCnpjParte', rawCpf);
+    if (normalizedCpf) {
+      requestUrl.searchParams.set('cpfCnpjParte', normalizedCpf);
+    }
+
+    if (normalizedOabDigits) {
+      requestUrl.searchParams.set('numeroOab', normalizedOabDigits);
+      if (normalizedOabUf) {
+        requestUrl.searchParams.set('ufOab', normalizedOabUf);
+      }
     }
 
     const data = await fetchFromPdpj(requestUrl);
