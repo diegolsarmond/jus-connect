@@ -62,6 +62,7 @@ interface AppointmentFormProps {
   onCancel: () => void;
   initialDate?: Date;
   initialValues?: Appointment;
+  prefillValues?: Partial<Omit<Appointment, 'id' | 'status' | 'createdAt' | 'updatedAt'>>;
   submitLabel?: string;
   isSubmitting?: boolean;
 }
@@ -71,32 +72,34 @@ export function AppointmentForm({
   onCancel,
   initialDate,
   initialValues,
+  prefillValues,
   submitLabel,
   isSubmitting = false,
 }: AppointmentFormProps) {
   const defaultValues = useMemo<AppointmentFormData>(() => {
+    const sourceValues = initialValues ?? prefillValues;
     const hasLocation =
-      typeof initialValues?.location === 'string' && initialValues.location.trim().length > 0;
-    const fallbackMeetingFormat = initialValues ? (hasLocation ? 'presencial' : 'online') : 'presencial';
-    const meetingFormat = normalizeMeetingFormat(initialValues?.meetingFormat, fallbackMeetingFormat);
+      typeof sourceValues?.location === 'string' && sourceValues.location.trim().length > 0;
+    const fallbackMeetingFormat = sourceValues ? (hasLocation ? 'presencial' : 'online') : 'presencial';
+    const meetingFormat = normalizeMeetingFormat(sourceValues?.meetingFormat, fallbackMeetingFormat);
 
     return {
-      title: initialValues?.title ?? '',
-      description: initialValues?.description ?? '',
-      type: initialValues?.type ?? 'reuniao',
-      date: initialValues?.date ?? initialDate ?? new Date(),
-      startTime: initialValues?.startTime ?? '',
-      endTime: initialValues?.endTime ?? '',
-      clientId: initialValues?.clientId ? String(initialValues.clientId) : '',
-      clientName: initialValues?.clientName ?? '',
-      clientPhone: initialValues?.clientPhone ?? '',
-      clientEmail: initialValues?.clientEmail ?? '',
-      location: initialValues?.location ?? '',
+      title: sourceValues?.title ?? '',
+      description: sourceValues?.description ?? '',
+      type: sourceValues?.type ?? 'reuniao',
+      date: sourceValues?.date ?? initialDate ?? new Date(),
+      startTime: sourceValues?.startTime ?? '',
+      endTime: sourceValues?.endTime ?? '',
+      clientId: sourceValues?.clientId ? String(sourceValues.clientId) : '',
+      clientName: sourceValues?.clientName ?? '',
+      clientPhone: sourceValues?.clientPhone ?? '',
+      clientEmail: sourceValues?.clientEmail ?? '',
+      location: sourceValues?.location ?? '',
       meetingFormat,
-      reminders: initialValues?.reminders ?? true,
-      notifyClient: initialValues?.notifyClient ?? false,
+      reminders: sourceValues?.reminders ?? true,
+      notifyClient: sourceValues?.notifyClient ?? false,
     } satisfies AppointmentFormData;
-  }, [initialValues, initialDate]);
+  }, [initialValues, initialDate, prefillValues]);
 
   const form = useForm<AppointmentFormData>({
     resolver: zodResolver(appointmentSchema),
@@ -123,10 +126,16 @@ export function AppointmentForm({
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [highlightedClienteIndex, setHighlightedClienteIndex] = useState(-1);
   const clientFieldRef = useRef<HTMLDivElement | null>(null);
-  const [isAllDay, setIsAllDay] = useState<boolean>(() => Boolean(initialValues ? !initialValues.endTime : false));
+  const [isAllDay, setIsAllDay] = useState<boolean>(() => {
+    const source = initialValues ?? prefillValues;
+    return Boolean(source ? !source.endTime : false);
+  });
   const defaultHasClient = useMemo(
-    () => Boolean(initialValues?.clientId || initialValues?.clientName),
-    [initialValues],
+    () =>
+      Boolean(
+        (initialValues ?? prefillValues)?.clientId || (initialValues ?? prefillValues)?.clientName,
+      ),
+    [initialValues, prefillValues],
   );
   const [hasClient, setHasClient] = useState<boolean>(defaultHasClient);
   useEffect(() => {

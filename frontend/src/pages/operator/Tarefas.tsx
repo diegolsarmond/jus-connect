@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -192,6 +193,8 @@ export default function Tarefas() {
   const [openResponsible, setOpenResponsible] = useState(false);
   const [titleDropdownOpen, setTitleDropdownOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [searchParams] = useSearchParams();
+  const [prefillKey, setPrefillKey] = useState<string | null>(null);
 
   const {
     register,
@@ -213,6 +216,85 @@ export default function Tarefas() {
       priority: 1,
     },
   });
+
+  useEffect(() => {
+    const currentKey = searchParams.toString();
+    if (prefillKey === currentKey) {
+      return;
+    }
+
+    const hasIntimacaoSource =
+      searchParams.get('origem') === 'intimacao' ||
+      searchParams.get('intimacao') !== null ||
+      searchParams.get('processo') !== null;
+
+    if (!hasIntimacaoSource) {
+      return;
+    }
+
+    const parseDateParam = (value: string | null): Date | undefined => {
+      if (!value) {
+        return undefined;
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+
+      const direct = new Date(trimmed);
+      if (!Number.isNaN(direct.getTime())) {
+        return direct;
+      }
+
+      const parts = trimmed.split('/');
+      if (parts.length === 3) {
+        const [day, month, year] = parts.map((part) => Number(part));
+        if (
+          Number.isFinite(day) &&
+          Number.isFinite(month) &&
+          Number.isFinite(year) &&
+          day > 0 &&
+          month > 0 &&
+          month <= 12
+        ) {
+          const parsed = new Date(year, month - 1, day);
+          if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+          }
+        }
+      }
+
+      return undefined;
+    };
+
+    const dateParam = searchParams.get('data') ?? searchParams.get('prazo');
+    const resolvedDate = parseDateParam(dateParam) ?? new Date();
+    const timeParam = searchParams.get('hora');
+    const titleParam = searchParams.get('titulo');
+    const descriptionParam = searchParams.get('descricao');
+
+    const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
+
+    setValue('date', toDateInputValue(resolvedDate));
+    setValue('allDay', !timeParam);
+    setValue('time', timeParam ?? '');
+
+    if (titleParam && titleParam.trim()) {
+      setValue('title', titleParam.trim());
+    } else {
+      const fallback =
+        searchParams.get('processo')?.trim() || searchParams.get('intimacao')?.trim() || '';
+      setValue('title', fallback ? `Tratar intimação ${fallback}` : 'Tratar intimação');
+    }
+
+    if (descriptionParam && descriptionParam.trim()) {
+      setValue('description', descriptionParam.trim());
+    }
+
+    setPrefillKey(currentKey);
+    setOpen(true);
+  }, [prefillKey, searchParams, setValue]);
 
   useEffect(() => {
     const fetchUsers = async () => {
