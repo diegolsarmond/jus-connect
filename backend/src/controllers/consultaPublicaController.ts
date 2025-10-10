@@ -145,9 +145,18 @@ export const consultarProcessosPublicos = async (req: Request, res: Response) =>
       }
     }
 
+    const shouldPaginateUpstream = !normalizedNumero;
+
+    if (shouldPaginateUpstream) {
+      const upstreamPage = Math.max(0, page - 1);
+      requestUrl.searchParams.set('page', String(upstreamPage));
+      requestUrl.searchParams.set('pageSize', String(pageSize));
+      requestUrl.searchParams.set('size', String(pageSize));
+    }
+
     const data = await fetchFromPdpj(requestUrl);
 
-    const applyPagination = (items: unknown[]) => {
+    const applyLocalPagination = (items: unknown[]) => {
       const total = items.length;
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
       const safePage = Math.max(1, Math.min(page, totalPages));
@@ -162,14 +171,52 @@ export const consultarProcessosPublicos = async (req: Request, res: Response) =>
       };
     };
 
+    const applyRemotePagination = (payload: {
+      content: unknown[];
+      totalElements?: unknown;
+      number?: unknown;
+      size?: unknown;
+      totalPages?: unknown;
+    }) => {
+      const rawTotal = typeof payload.totalElements === 'number' ? payload.totalElements : null;
+      const rawPage = typeof payload.number === 'number' ? payload.number : null;
+      const rawSize = typeof payload.size === 'number' ? payload.size : null;
+      const rawTotalPages = typeof payload.totalPages === 'number' ? payload.totalPages : null;
+
+      const derivedPageSize = rawSize !== null && rawSize > 0 ? rawSize : pageSize;
+      const derivedTotal = rawTotal !== null && rawTotal >= 0 ? rawTotal : payload.content.length;
+      const derivedTotalPages =
+        rawTotalPages !== null && rawTotalPages > 0
+          ? rawTotalPages
+          : Math.max(1, Math.ceil(derivedTotal / derivedPageSize));
+      const derivedPage =
+        rawPage !== null && rawPage >= 0
+          ? rawPage + 1
+          : Math.max(1, Math.min(page, derivedTotalPages));
+
+      return {
+        content: payload.content,
+        total: derivedTotal,
+        page: derivedPage,
+        pageSize: derivedPageSize,
+        totalPages: derivedTotalPages,
+      };
+    };
+
     if (Array.isArray(data)) {
-      res.json(applyPagination(data));
+      res.json(applyLocalPagination(data));
       return;
     }
 
     if (data && typeof data === 'object') {
       if ('content' in data && Array.isArray((data as { content?: unknown[] }).content)) {
-        const pagination = applyPagination((data as { content: unknown[] }).content);
+        const pagination = applyRemotePagination(data as {
+          content: unknown[];
+          totalElements?: unknown;
+          number?: unknown;
+          size?: unknown;
+          totalPages?: unknown;
+        });
         res.json({
           ...data,
           ...pagination,
