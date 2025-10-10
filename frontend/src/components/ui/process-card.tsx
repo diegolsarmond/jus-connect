@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, Calendar, MapPin, Users, FileText } from "lucide-react";
+import { Eye, Calendar, MapPin, Users, FileText, Pencil } from "lucide-react";
 
 interface ProcessCardProps {
   numero: string;
@@ -11,6 +11,7 @@ interface ProcessCardProps {
   jurisdicao: string;
   orgaoJulgador: string;
   onView: () => void;
+  onEdit?: () => void;
 }
 
 export function ProcessCard({
@@ -21,6 +22,7 @@ export function ProcessCard({
   jurisdicao,
   orgaoJulgador,
   onView,
+  onEdit,
 }: ProcessCardProps) {
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 border-l-4 border-l-primary/20 hover:border-l-primary">
@@ -37,6 +39,17 @@ export function ProcessCard({
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            {onEdit ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onEdit}
+                className="gap-2"
+              >
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               size="sm"
