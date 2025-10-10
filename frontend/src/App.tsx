@@ -40,6 +40,9 @@ import MeuPlano from "./pages/operator/MeuPlano";
 import ManagePlanPayment from "./pages/operator/ManagePlanPayment";
 import Suporte from "./pages/operator/Suporte";
 import Conversas from "./pages/operator/Conversas";
+import ConsultaPublica from "./pages/operator/consultaPublica/ConsultaPublica";
+import ConsultaPublicaDetalhes from "./pages/operator/consultaPublica/DetalhesProcesso";
+import ConsultaPublicaListar from "./pages/operator/consultaPublica/ListarProcessos";
 import AreaAtuacao from "./pages/operator/configuracoes/parametros/AreaAtuacao";
 import SituacaoProcesso from "./pages/operator/configuracoes/parametros/SituacaoProcesso";
 import TipoProcesso from "./pages/operator/configuracoes/parametros/TipoProcesso";
@@ -197,6 +200,15 @@ const App = () => (
                 <Route
                   path="/processos/:processoId/editar"
                   element={withModule("processos", <EditarProcesso />)}
+                />
+                <Route path="/consulta-publica" element={withModule("processos", <ConsultaPublica />)} />
+                <Route
+                  path="/consulta-publica/processos"
+                  element={withModule("processos", <ConsultaPublicaListar />)}
+                />
+                <Route
+                  path="/consulta-publica/processos/:numeroProcesso"
+                  element={withModule("processos", <ConsultaPublicaDetalhes />)}
                 />
                 <Route path="/intimacoes" element={withModule("intimacoes", <Intimacoes />)} />
                 <Route path="/documentos">
