@@ -151,5 +151,5 @@ export const deleteCompanyOabMonitor = async (
     [empresaId, monitorId],
   );
 
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 };
