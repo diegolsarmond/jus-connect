@@ -1198,6 +1198,9 @@ export default function Processos() {
         Record<number, UnassignedProcessDetail>
     >({});
     const [unassignedModalOpen, setUnassignedModalOpen] = useState(false);
+    const [unassignedClientPopoverOpenId, setUnassignedClientPopoverOpenId] = useState<
+        number | null
+    >(null);
     const [unassignedModalDismissed, setUnassignedModalDismissed] = useState(false);
     const [unassignedLoading, setUnassignedLoading] = useState(false);
     const [unassignedError, setUnassignedError] = useState<string | null>(null);
@@ -4343,6 +4346,33 @@ export default function Processos() {
                                 }
 
                                 const hasExistingClient = Boolean(detail.selectedExistingClientId);
+                                const selectedExistingClient = hasExistingClient
+                                    ? clientes.find(
+                                          (cliente) =>
+                                              String(cliente.id) === detail.selectedExistingClientId,
+                                      ) ?? null
+                                    : null;
+                                const isClientPopoverOpen =
+                                    unassignedClientPopoverOpenId === processId;
+                                const clientButtonLabel = (() => {
+                                    if (clientesLoading && clientes.length === 0) {
+                                        return "Carregando clientes...";
+                                    }
+
+                                    if (selectedExistingClient) {
+                                        return `${selectedExistingClient.nome}${
+                                            selectedExistingClient.documento
+                                                ? ` — ${selectedExistingClient.documento}`
+                                                : ""
+                                        }`;
+                                    }
+
+                                    if (hasExistingClient) {
+                                        return `Cliente #${detail.selectedExistingClientId}`;
+                                    }
+
+                                    return "Cliente não cadastrado";
+                                })();
                                 const availablePropostas = hasExistingClient
                                     ? propostas.filter(
                                           (proposta) => proposta.solicitanteId === detail.selectedExistingClientId,
@@ -4363,32 +4393,96 @@ export default function Processos() {
                                             <div className="grid gap-4 md:grid-cols-2">
                                                 <div className="space-y-2">
                                                     <Label>Meus Clientes</Label>
-                                                    <Select
-                                                        value={
-                                                            detail.selectedExistingClientId ||
-                                                            NO_EXISTING_CLIENT_SELECT_VALUE
-                                                        }
-                                                        onValueChange={(value) =>
-                                                            handleExistingClientSelection(processId, value)
+                                                    <Popover
+                                                        open={isClientPopoverOpen}
+                                                        onOpenChange={(open) =>
+                                                            setUnassignedClientPopoverOpenId(
+                                                                open ? processId : null,
+                                                            )
                                                         }
                                                     >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Selecione um cliente" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value={NO_EXISTING_CLIENT_SELECT_VALUE}>
-                                                                Cliente não cadastrado
-                                                            </SelectItem>
-                                                            {clientes.map((cliente) => (
-                                                                <SelectItem key={cliente.id} value={String(cliente.id)}>
-                                                                    {cliente.nome}
-                                                                    {cliente.documento
-                                                                        ? ` — ${cliente.documento}`
-                                                                        : ""}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                        <PopoverTrigger asChild>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                role="combobox"
+                                                                aria-expanded={isClientPopoverOpen}
+                                                                className="w-full justify-between"
+                                                            >
+                                                                <span className="truncate">{clientButtonLabel}</span>
+                                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                                                            <Command>
+                                                                <CommandInput placeholder="Buscar cliente..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                                                                    <CommandGroup>
+                                                                        <CommandItem
+                                                                            value="Cliente não cadastrado"
+                                                                            onSelect={() => {
+                                                                                handleExistingClientSelection(
+                                                                                    processId,
+                                                                                    NO_EXISTING_CLIENT_SELECT_VALUE,
+                                                                                );
+                                                                                setUnassignedClientPopoverOpenId(null);
+                                                                            }}
+                                                                        >
+                                                                            <span>Cliente não cadastrado</span>
+                                                                            <Check
+                                                                                className={`ml-auto h-4 w-4 ${
+                                                                                    hasExistingClient
+                                                                                        ? "opacity-0"
+                                                                                        : "opacity-100"
+                                                                                }`}
+                                                                            />
+                                                                        </CommandItem>
+                                                                        {clientes.map((cliente) => {
+                                                                            const optionLabel = `${cliente.nome}${
+                                                                                cliente.documento
+                                                                                    ? ` — ${cliente.documento}`
+                                                                                    : ""
+                                                                            }`;
+                                                                            const isSelected =
+                                                                                detail.selectedExistingClientId ===
+                                                                                String(cliente.id);
+                                                                            const searchableText = [
+                                                                                cliente.nome,
+                                                                                cliente.documento,
+                                                                                cliente.tipo,
+                                                                                String(cliente.id),
+                                                                            ]
+                                                                                .filter(Boolean)
+                                                                                .join(" ");
+                                                                            return (
+                                                                                <CommandItem
+                                                                                    key={cliente.id}
+                                                                                    value={searchableText}
+                                                                                    onSelect={() => {
+                                                                                        handleExistingClientSelection(
+                                                                                            processId,
+                                                                                            String(cliente.id),
+                                                                                        );
+                                                                                        setUnassignedClientPopoverOpenId(null);
+                                                                                    }}
+                                                                                >
+                                                                                    <span>{optionLabel}</span>
+                                                                                    <Check
+                                                                                        className={`ml-auto h-4 w-4 ${
+                                                                                            isSelected
+                                                                                                ? "opacity-100"
+                                                                                                : "opacity-0"
+                                                                                        }`}
+                                                                                    />
+                                                                                </CommandItem>
+                                                                            );
+                                                                        })}
+                                                                    </CommandGroup>
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
                                                     {!hasExistingClient ? (
                                                         <p className="text-xs text-muted-foreground">
                                                             Se preferir, marque um envolvido abaixo para criar o
