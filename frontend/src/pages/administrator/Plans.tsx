@@ -432,14 +432,6 @@ export default function Plans() {
       ...createFormStateFromPlan(plan),
       modules: normalizedModules,
     });
-    setEditPublicConsultationModules(
-      orderModules(
-        plan.publicConsultationModules.filter((id) =>
-          availableModules.some((module) => module.id === id)
-        ),
-        availableModules
-      )
-    );
 
     setEditIntimationSyncEnabled(plan.intimationSyncEnabled);
     setEditIntimationSyncQuota(
