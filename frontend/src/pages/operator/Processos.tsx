@@ -134,11 +134,6 @@ interface ProcessoLoadResult {
     summary: ProcessoSummary;
 }
 
-interface Uf {
-    sigla: string;
-    nome: string;
-}
-
 interface Municipio {
     id: number;
     nome: string;
@@ -1175,7 +1170,7 @@ export default function Processos() {
     const [sistemaLoading, setSistemaLoading] = useState(false);
     const [sistemaError, setSistemaError] = useState<string | null>(null);
     const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
-    const [ufs, setUfs] = useState<Uf[]>([]);
+    const [ufOptions, setUfOptions] = useState<{ sigla: string; nome: string }[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
     const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
@@ -1365,30 +1360,6 @@ export default function Processos() {
     useEffect(() => {
         let cancelled = false;
 
-        const fetchUfs = async () => {
-            try {
-                const res = await fetch(
-                    "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
-                );
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = (await res.json()) as Uf[];
-                if (!cancelled) setUfs(data);
-            } catch (error) {
-                console.error(error);
-                if (!cancelled) setUfs([]);
-            }
-        };
-
-        fetchUfs();
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
-
-    useEffect(() => {
-        let cancelled = false;
-
         const fetchMonitors = async () => {
             setOabMonitorsLoading(true);
             setOabMonitorsError(null);
@@ -1571,9 +1542,20 @@ export default function Processos() {
                                 if (match) {
                                     optionNumero = formatOabDigits(match[1]);
                                 }
-                                const ufMatch = oabRaw.match(/([A-Za-z]{2})\b/);
-                                if (ufMatch) {
-                                    const normalizedUf = normalizeUf(ufMatch[1]);
+                                const ufMatches = oabRaw.match(/([A-Za-z]{2})(?=[^A-Za-z]*\d)/g);
+                                let ufCandidate: string | null = null;
+
+                                if (ufMatches && ufMatches.length > 0) {
+                                    ufCandidate = ufMatches[ufMatches.length - 1];
+                                } else {
+                                    const fallbackUfMatch = oabRaw.match(/\/\s*([A-Za-z]{2})\b/);
+                                    if (fallbackUfMatch) {
+                                        ufCandidate = fallbackUfMatch[1];
+                                    }
+                                }
+
+                                if (ufCandidate) {
+                                    const normalizedUf = normalizeUf(ufCandidate);
                                     if (normalizedUf.length === 2) {
                                         optionUf = normalizedUf;
                                     }
@@ -2523,13 +2505,15 @@ export default function Processos() {
     }, []);
 
     const handleOabSubmit = useCallback(async () => {
-        if (!oabUf || !oabNumero) {
-            setOabSubmitError("Informe a UF e o número da OAB.");
+        if (!oabUsuarioId) {
+            setOabSubmitError("Selecione o usuário responsável pela OAB.");
             return;
         }
 
-        if (!oabUsuarioId) {
-            setOabSubmitError("Selecione o usuário responsável pela OAB.");
+        if (!oabUf || !oabNumero) {
+            setOabSubmitError(
+                "O responsável selecionado não possui OAB válida para monitoramento.",
+            );
             return;
         }
 
@@ -2826,26 +2810,74 @@ export default function Processos() {
                     .map((id) => Number.parseInt(id, 10))
                     .filter((value) => Number.isFinite(value) && value > 0);
 
-                const municipioPayload = detail.form.municipio.trim()
-                    ? detail.form.municipio
-                    : (() => {
-                          const [municipio] = detail.process.jurisdicao.split("-");
-                          return municipio ? municipio.trim() : "";
-                      })();
+                const numeroFromForm = detail.form.numero.trim();
+                const numeroFromProcess =
+                    typeof detail.process.numero === "string" ? detail.process.numero.trim() : "";
+                const numeroPayload = numeroFromForm || numeroFromProcess;
+                if (!numeroPayload) {
+                    throw new Error("Informe o número do processo antes de vincular.");
+                }
 
-                const ufPayload = detail.form.uf.trim()
-                    ? detail.form.uf
-                    : (() => {
-                          const parts = detail.process.jurisdicao.split("-");
-                          const ufCandidate = parts.length > 1 ? parts[parts.length - 1].trim() : "";
-                          return ufCandidate.length === 2 ? ufCandidate : "";
-                      })();
+                const municipioFromForm = detail.form.municipio.trim();
+                const municipioFromJurisdicao = (() => {
+                    const [municipio] = detail.process.jurisdicao.split("-");
+                    return municipio ? municipio.trim() : "";
+                })();
+                const municipioPayload = municipioFromForm || municipioFromJurisdicao;
+                if (!municipioPayload) {
+                    throw new Error("Informe o município do processo antes de vincular.");
+                }
+
+                const ufFromForm = detail.form.uf.trim();
+                const ufFromJurisdicao = (() => {
+                    const raw = detail.process.jurisdicao;
+                    if (typeof raw !== "string") {
+                        return "";
+                    }
+
+                    const normalized = raw.trim();
+                    if (!normalized) {
+                        return "";
+                    }
+
+                    const separators = ["-", "/"];
+                    for (const separator of separators) {
+                        const parts = normalized.split(separator);
+                        if (parts.length < 2) {
+                            continue;
+                        }
+
+                        for (let index = parts.length - 1; index >= 0; index -= 1) {
+                            const candidate = parts[index]?.trim().toUpperCase();
+                            if (candidate && candidate.length === 2) {
+                                return candidate;
+                            }
+                        }
+                    }
+
+                    const words = normalized.split(" ");
+                    for (let index = words.length - 1; index >= 0; index -= 1) {
+                        const candidate = words[index]?.trim().toUpperCase();
+                        if (candidate && candidate.length === 2) {
+                            return candidate;
+                        }
+                    }
+
+                    return "";
+                })();
+                const ufPayload = ufFromForm || ufFromJurisdicao;
+                if (!ufPayload) {
+                    throw new Error("Informe a UF do processo antes de vincular.");
+                }
+
+                const grauPayload =
+                    detail.grau && detail.grau.trim() ? detail.grau.trim() : "1º Grau";
 
                 const payload: Record<string, unknown> = {
                     cliente_id: clienteId,
-                    numero: detail.form.numero || detail.process.numero,
-                    uf: ufPayload || detail.form.uf || null,
-                    municipio: municipioPayload || detail.form.municipio || null,
+                    numero: numeroPayload,
+                    uf: ufPayload,
+                    municipio: municipioPayload,
                     advogados: advogadosPayload,
                 };
 
@@ -2882,7 +2914,7 @@ export default function Processos() {
                 }
 
                 payload.monitorar_processo = detail.form.monitorarProcesso;
-                payload.grau = detail.grau || "1º Grau";
+                payload.grau = grauPayload;
 
                 if (descricaoPayload) {
                     payload.descricao = descricaoPayload;
@@ -3062,6 +3094,30 @@ export default function Processos() {
             active = false;
         };
     }, [applyProcessosData, loadProcessos, page, toast]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchUfs = async () => {
+            try {
+                const res = await fetch(
+                    "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
+                );
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = (await res.json()) as { sigla: string; nome: string }[];
+                if (!cancelled) setUfOptions(data);
+            } catch (error) {
+                console.error(error);
+                if (!cancelled) setUfOptions([]);
+            }
+        };
+
+        fetchUfs();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (typeof window === "undefined") {
@@ -4212,32 +4268,6 @@ export default function Processos() {
                                     <p className="text-sm text-destructive">{oabUsuariosError}</p>
                                 ) : null}
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="oab-uf">Estado</Label>
-                                    <Select value={oabUf} onValueChange={setOabUf}>
-                                        <SelectTrigger id="oab-uf">
-                                            <SelectValue placeholder="Selecione o estado" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {ufs.map((uf) => (
-                                                <SelectItem key={uf.sigla} value={uf.sigla}>
-                                                    {uf.nome} ({uf.sigla})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="oab-numero">Número da OAB</Label>
-                                    <Input
-                                        id="oab-numero"
-                                        value={oabNumero}
-                                        onChange={(event) => setOabNumero(formatOabDigits(event.target.value))}
-                                        placeholder="000000"
-                                    />
-                                </div>
-                            </div>
                             {oabSubmitError ? (
                                 <p className="text-sm text-destructive">{oabSubmitError}</p>
                             ) : null}
@@ -4264,7 +4294,7 @@ export default function Processos() {
             <Dialog open={unassignedModalOpen} onOpenChange={handleUnassignedModalChange}>
                 <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>Processos sem cliente vinculado</DialogTitle>
+                        <DialogTitle>Processos sincronizados sem cliente vinculado</DialogTitle>
                         <DialogDescription>
                             Vincule clientes, propostas e relações com os envolvidos para completar o cadastro.
                         </DialogDescription>
@@ -4288,7 +4318,7 @@ export default function Processos() {
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <p className="text-sm text-muted-foreground">
                                         Mostrando {unassignedPageStart}–{unassignedPageEnd} de {unassignedTotal}{" "}
-                                        processos sem cliente
+                                        processos clientes vinculados 
                                     </p>
                                 </div>
                             ) : null}
@@ -4332,7 +4362,7 @@ export default function Processos() {
                                         <CardContent className="space-y-4">
                                             <div className="grid gap-4 md:grid-cols-2">
                                                 <div className="space-y-2">
-                                                    <Label>Cliente existente</Label>
+                                                    <Label>Meus Clientes</Label>
                                                     <Select
                                                         value={
                                                             detail.selectedExistingClientId ||
@@ -4347,7 +4377,7 @@ export default function Processos() {
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             <SelectItem value={NO_EXISTING_CLIENT_SELECT_VALUE}>
-                                                                Sem cliente
+                                                                Cliente não cadastrado
                                                             </SelectItem>
                                                             {clientes.map((cliente) => (
                                                                 <SelectItem key={cliente.id} value={String(cliente.id)}>
@@ -4435,11 +4465,6 @@ export default function Processos() {
                                                                                             {participant.role}
                                                                                         </Badge>
                                                                                     ) : null}
-                                                                                    {participant.side ? (
-                                                                                        <Badge variant="outline">
-                                                                                            {participant.side}
-                                                                                        </Badge>
-                                                                                    ) : null}
                                                                                     {participant.type ? (
                                                                                         <Badge variant="outline">
                                                                                             {participant.type}
@@ -4456,12 +4481,12 @@ export default function Processos() {
                                                                                             participant.id,
                                                                                         )
                                                                                     }
-                                                                                />
+                                                                                /> 
                                                                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                                                     <RadioGroupItem
                                                                                         value={participant.id}
                                                                                         id={`primary-${processId}-${participant.id}`}
-                                                                                    />
+                                                                                    /> 
                                                                                     <Label
                                                                                         htmlFor={`primary-${processId}-${participant.id}`}
                                                                                         className="text-xs font-normal"
@@ -4472,28 +4497,7 @@ export default function Processos() {
                                                                             </div>
                                                                         </div>
                                                                         <div className="space-y-2">
-                                                                            <Label className="text-xs font-medium">
-                                                                                Relação com o processo
-                                                                            </Label>
-                                                                            <Input
-                                                                                value={
-                                                                                    detail.relationshipByParticipantId[
-                                                                                        participant.id
-                                                                                    ] ?? ""
-                                                                                }
-                                                                                onChange={(event) =>
-                                                                                    handleParticipantRelationshipChange(
-                                                                                        processId,
-                                                                                        participant.id,
-                                                                                        event.target.value,
-                                                                                    )
-                                                                                }
-                                                                                placeholder={
-                                                                                    getParticipantDefaultRelationship(
-                                                                                        participant,
-                                                                                    ) || "Descreva a relação"
-                                                                                }
-                                                                            />
+
                                                                         </div>
                                                                     </div>
                                                                 );
@@ -4776,7 +4780,7 @@ export default function Processos() {
                                     <SelectValue placeholder="Selecione a UF" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {ufs.map((uf) => (
+                                    {ufOptions.map((uf) => (
                                         <SelectItem key={uf.sigla} value={uf.sigla}>
                                             {uf.nome} ({uf.sigla})
                                         </SelectItem>

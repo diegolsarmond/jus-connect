@@ -61,7 +61,7 @@ describe("RequireModule", () => {
     });
 
     const content = container.textContent ?? "";
-    expect(content).toContain("Centralize conversas com clientes");
+    expect(content).toContain("Consulte processos públicos com agilidade");
 
     const plansLink = container.querySelector('a[href="/meu-plano"]');
     expect(plansLink).not.toBeNull();
