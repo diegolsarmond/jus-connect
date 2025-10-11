@@ -534,6 +534,9 @@ export default function Plans() {
       limite_propostas: proposalLimit,
       sincronizacao_processos_habilitada: editFormState.processSyncEnabled,
       sincronizacao_processos_cota: editFormState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacao_processos_limite: editFormState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacaoProcessosLimite: editFormState.processSyncEnabled ? processSyncQuota : null,
+      processSyncLimit: editFormState.processSyncEnabled ? processSyncQuota : null,
       consulta_publica_modulos: orderedPublicConsultationModules,
       consultaPublicaModulos: orderedPublicConsultationModules,
       publicConsultationModules: orderedPublicConsultationModules,
@@ -543,6 +546,13 @@ export default function Plans() {
       intimationSyncEnabled: editIntimationSyncEnabled,
       sincronizacao_intimacoes_cota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       sincronizacaoIntimacoesCota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
+      sincronizacao_intimacoes_limite: editIntimationSyncEnabled
+        ? intimationSyncQuotaValue
+        : null,
+      sincronizacaoIntimacoesLimite: editIntimationSyncEnabled
+        ? intimationSyncQuotaValue
+        : null,
+      intimationSyncLimit: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       intimationSyncQuota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       limite_advogados_processos: processMonitorLawyerLimitValue,
       limiteAdvogadosProcessos: processMonitorLawyerLimitValue,
