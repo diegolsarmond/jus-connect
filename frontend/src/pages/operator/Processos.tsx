@@ -270,6 +270,8 @@ interface OabUsuarioOption {
     id: string;
     nome: string;
     oab: string | null;
+    oabNumero: string | null;
+    oabUf: string | null;
 }
 
 const UNASSIGNED_PAGE_SIZE = 5;
@@ -1534,13 +1536,17 @@ export default function Processos() {
                         );
 
                         let oab: string | null = null;
+                        let optionNumero: string | null = null;
+                        let optionUf: string | null = null;
 
                         if (numeroRaw) {
                             const digits = formatOabDigits(numeroRaw);
                             if (digits) {
+                                optionNumero = digits;
                                 if (ufRaw) {
                                     const normalizedUf = normalizeUf(ufRaw);
                                     if (normalizedUf.length === 2) {
+                                        optionUf = normalizedUf;
                                         oab = formatOabDisplay(digits, normalizedUf);
                                     } else {
                                         oab = digits;
@@ -1559,15 +1565,33 @@ export default function Processos() {
 
                             if (oabRaw) {
                                 oab = oabRaw;
+                                const match = oabRaw.match(/(\d{3,})/);
+                                if (match) {
+                                    optionNumero = formatOabDigits(match[1]);
+                                }
+                                const ufMatch = oabRaw.match(/([A-Za-z]{2})\b/);
+                                if (ufMatch) {
+                                    const normalizedUf = normalizeUf(ufMatch[1]);
+                                    if (normalizedUf.length === 2) {
+                                        optionUf = normalizedUf;
+                                    }
+                                }
                             } else if (ufRaw) {
                                 const normalizedUf = normalizeUf(ufRaw);
                                 if (normalizedUf.length === 2) {
+                                    optionUf = normalizedUf;
                                     oab = normalizedUf;
                                 }
                             }
                         }
 
-                        options.push({ id, nome, oab: oab ?? null });
+                        options.push({
+                            id,
+                            nome,
+                            oab: oab ?? null,
+                            oabNumero: optionNumero,
+                            oabUf: optionUf,
+                        });
                         seen.add(id);
                     }
 
@@ -2293,8 +2317,20 @@ export default function Processos() {
             setOabModalDismissed(true);
             setOabSubmitError(null);
             setOabUsuarioId("");
+            setOabUf("");
+            setOabNumero("");
         }
     }, []);
+
+    const handleOabUsuarioChange = useCallback(
+        (value: string) => {
+            setOabUsuarioId(value);
+            const option = oabUsuarioOptions.find((item) => item.id === value);
+            setOabUf(option?.oabUf ?? "");
+            setOabNumero(option?.oabNumero ?? "");
+        },
+        [oabUsuarioOptions],
+    );
 
     const handleRemoveOabMonitor = useCallback(
         async (monitorId: number) => {
@@ -4144,6 +4180,34 @@ export default function Processos() {
                                     Selecione o responsável e informe os dados da OAB que deseja monitorar.
                                 </p>
                             </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="oab-usuario">Responsável</Label>
+                                <Select
+                                    value={oabUsuarioId}
+                                    onValueChange={handleOabUsuarioChange}
+                                    disabled={oabUsuariosLoading || oabUsuarioOptions.length === 0}
+                                >
+                                    <SelectTrigger id="oab-usuario">
+                                        <SelectValue
+                                            placeholder={
+                                                oabUsuariosLoading
+                                                    ? "Carregando usuários..."
+                                                    : oabUsuariosError ?? "Selecione o responsável"
+                                            }
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {oabUsuarioOptions.map((option) => (
+                                            <SelectItem key={option.id} value={option.id}>
+                                                {option.oab ? `${option.nome} (${option.oab})` : option.nome}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {oabUsuariosError ? (
+                                    <p className="text-sm text-destructive">{oabUsuariosError}</p>
+                                ) : null}
+                            </div>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="oab-uf">Estado</Label>
@@ -4169,34 +4233,6 @@ export default function Processos() {
                                         placeholder="000000"
                                     />
                                 </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="oab-usuario">Responsável</Label>
-                                <Select
-                                    value={oabUsuarioId}
-                                    onValueChange={setOabUsuarioId}
-                                    disabled={oabUsuariosLoading || oabUsuarioOptions.length === 0}
-                                >
-                                    <SelectTrigger id="oab-usuario">
-                                        <SelectValue
-                                            placeholder={
-                                                oabUsuariosLoading
-                                                    ? "Carregando usuários..."
-                                                    : oabUsuariosError ?? "Selecione o responsável"
-                                            }
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {oabUsuarioOptions.map((option) => (
-                                            <SelectItem key={option.id} value={option.id}>
-                                                {option.oab ? `${option.nome} (${option.oab})` : option.nome}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {oabUsuariosError ? (
-                                    <p className="text-sm text-destructive">{oabUsuariosError}</p>
-                                ) : null}
                             </div>
                             {oabSubmitError ? (
                                 <p className="text-sm text-destructive">{oabSubmitError}</p>
