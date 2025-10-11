@@ -213,7 +213,19 @@ export const listUsuarios = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Token inválido.' });
     }
 
-    const result = await pool.query(baseUsuarioSelect);
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const { empresaId } = empresaLookup;
+
+    const query =
+      empresaId === null ? baseUsuarioSelect : `${baseUsuarioSelect} WHERE u.empresa = $1`;
+    const values = empresaId === null ? [] : [empresaId];
+
+    const result = await pool.query(query, values);
     res.json(result.rows.map((row) => mapUsuarioRowToResponse(row as UsuarioRow)));
   } catch (error) {
     console.error(error);
