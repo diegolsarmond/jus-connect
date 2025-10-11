@@ -74,6 +74,7 @@ import {
     RefreshCw,
     ChevronLeft,
     ChevronRight,
+    Loader2,
 } from "lucide-react";
 
 const NO_EXISTING_CLIENT_SELECT_VALUE = "__no_existing_client__";
@@ -1147,7 +1148,6 @@ export default function Processos() {
     const [oabUsuariosLoading, setOabUsuariosLoading] = useState(false);
     const [oabUsuariosError, setOabUsuariosError] = useState<string | null>(null);
     const [oabUsuarioId, setOabUsuarioId] = useState("");
-    const [isOabListModalOpen, setIsOabListModalOpen] = useState(false);
     const [oabRemovingId, setOabRemovingId] = useState<number | null>(null);
     const [processForm, setProcessForm] = useState<ProcessFormState>(
         createEmptyProcessForm,
@@ -2294,10 +2294,6 @@ export default function Processos() {
             setOabSubmitError(null);
             setOabUsuarioId("");
         }
-    }, []);
-
-    const handleOabListModalChange = useCallback((open: boolean) => {
-        setIsOabListModalOpen(open);
     }, []);
 
     const handleRemoveOabMonitor = useCallback(
@@ -3844,7 +3840,7 @@ export default function Processos() {
                     <Button
                         variant="outline"
                         onClick={() => {
-                            if (oabMonitorsLoading || hasOabMonitors) {
+                            if (oabMonitorsLoading) {
                                 return;
                             }
                             setOabModalDismissed(false);
@@ -3868,7 +3864,7 @@ export default function Processos() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                            if (oabMonitorsLoading || hasOabMonitors) {
+                            if (oabMonitorsLoading) {
                                 return;
                             }
                             setOabModalDismissed(false);
@@ -3897,9 +3893,14 @@ export default function Processos() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleOabListModalChange(true)}
+                            onClick={() => {
+                                if (oabMonitorsLoading) {
+                                    return;
+                                }
+                                setIsOabModalOpen(true);
+                            }}
                         >
-                            Ver OABs monitoradas
+                            Gerenciar OABs
                         </Button>
                     </div>
                 </CardContent>
@@ -4077,75 +4078,132 @@ export default function Processos() {
                 </div>
             )}
 
-            <Dialog open={isOabModalOpen && !hasOabMonitors} onOpenChange={handleOabModalChange}>
-                <DialogContent className="sm:max-w-md">
+            <Dialog open={isOabModalOpen} onOpenChange={handleOabModalChange}>
+                <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
-                        <DialogTitle>Adicionar OAB para monitoramento</DialogTitle>
+                        <DialogTitle>Gerenciar OABs monitoradas</DialogTitle>
                         <DialogDescription>
-                            Informe a OAB responsável para que possamos baixar automaticamente novos processos.
+                            Cadastre novas OABs monitoradas ou remova registros que não deseja mais acompanhar.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="oab-uf">Estado</Label>
-                            <Select value={oabUf} onValueChange={setOabUf}>
-                                <SelectTrigger id="oab-uf">
-                                    <SelectValue placeholder="Selecione o estado" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {ufs.map((uf) => (
-                                        <SelectItem key={uf.sigla} value={uf.sigla}>
-                                            {uf.nome} ({uf.sigla})
-                                        </SelectItem>
+                    <div className="space-y-6">
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-foreground">OABs cadastradas</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Visualize e gerencie os números monitorados pela sua empresa.
+                                </p>
+                            </div>
+                            {oabMonitorsLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Carregando OABs monitoradas...
+                                </div>
+                            ) : oabMonitorsError ? (
+                                <p className="text-sm text-destructive">{oabMonitorsError}</p>
+                            ) : oabMonitors.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    Nenhuma OAB cadastrada no momento.
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {oabMonitors.map((monitor) => (
+                                        <div
+                                            key={monitor.id}
+                                            className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card/60 p-3"
+                                        >
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-medium text-foreground">
+                                                    {formatOabDisplay(monitor.numero, monitor.uf)}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {monitor.usuarioNome ?? "Usuário não identificado"}
+                                                    {monitor.usuarioOab ? ` • ${monitor.usuarioOab}` : ""}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Monitorando desde {formatDateTimeToPtBR(monitor.createdAt)}
+                                                </p>
+                                            </div>
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() => handleRemoveOabMonitor(monitor.id)}
+                                                disabled={oabRemovingId === monitor.id}
+                                            >
+                                                {oabRemovingId === monitor.id ? "Removendo..." : "Remover"}
+                                            </Button>
+                                        </div>
                                     ))}
-                                </SelectContent>
-                            </Select>
+                                </div>
+                            )}
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="oab-numero">Número da OAB</Label>
-                            <Input
-                                id="oab-numero"
-                                value={oabNumero}
-                                onChange={(event) => setOabNumero(formatOabDigits(event.target.value))}
-                                placeholder="000000"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="oab-usuario">Responsável</Label>
-                            <Select
-                                value={oabUsuarioId}
-                                onValueChange={setOabUsuarioId}
-                                disabled={oabUsuariosLoading || oabUsuarioOptions.length === 0}
-                            >
-                                <SelectTrigger id="oab-usuario">
-                                    <SelectValue
-                                        placeholder={
-                                            oabUsuariosLoading
-                                                ? "Carregando usuários..."
-                                                : oabUsuariosError ?? "Selecione o responsável"
-                                        }
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-foreground">Cadastrar nova OAB</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Selecione o responsável e informe os dados da OAB que deseja monitorar.
+                                </p>
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="oab-uf">Estado</Label>
+                                    <Select value={oabUf} onValueChange={setOabUf}>
+                                        <SelectTrigger id="oab-uf">
+                                            <SelectValue placeholder="Selecione o estado" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {ufs.map((uf) => (
+                                                <SelectItem key={uf.sigla} value={uf.sigla}>
+                                                    {uf.nome} ({uf.sigla})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="oab-numero">Número da OAB</Label>
+                                    <Input
+                                        id="oab-numero"
+                                        value={oabNumero}
+                                        onChange={(event) => setOabNumero(formatOabDigits(event.target.value))}
+                                        placeholder="000000"
                                     />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {oabUsuarioOptions.map((option) => (
-                                        <SelectItem key={option.id} value={option.id}>
-                                            {option.oab ? `${option.nome} (${option.oab})` : option.nome}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {oabUsuariosError ? (
-                                <p className="text-sm text-destructive">{oabUsuariosError}</p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="oab-usuario">Responsável</Label>
+                                <Select
+                                    value={oabUsuarioId}
+                                    onValueChange={setOabUsuarioId}
+                                    disabled={oabUsuariosLoading || oabUsuarioOptions.length === 0}
+                                >
+                                    <SelectTrigger id="oab-usuario">
+                                        <SelectValue
+                                            placeholder={
+                                                oabUsuariosLoading
+                                                    ? "Carregando usuários..."
+                                                    : oabUsuariosError ?? "Selecione o responsável"
+                                            }
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {oabUsuarioOptions.map((option) => (
+                                            <SelectItem key={option.id} value={option.id}>
+                                                {option.oab ? `${option.nome} (${option.oab})` : option.nome}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {oabUsuariosError ? (
+                                    <p className="text-sm text-destructive">{oabUsuariosError}</p>
+                                ) : null}
+                            </div>
+                            {oabSubmitError ? (
+                                <p className="text-sm text-destructive">{oabSubmitError}</p>
                             ) : null}
                         </div>
-                        {oabSubmitError ? (
-                            <p className="text-sm text-destructive">{oabSubmitError}</p>
-                        ) : null}
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => handleOabModalChange(false)}>
-                            Cancelar
-                        </Button>
                         <Button
                             type="button"
                             onClick={handleOabSubmit}
@@ -4160,62 +4218,6 @@ export default function Processos() {
                             {oabSubmitLoading ? "Cadastrando..." : "Cadastrar"}
                         </Button>
                     </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={isOabListModalOpen} onOpenChange={handleOabListModalChange}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>OABs monitoradas</DialogTitle>
-                        <DialogDescription>
-                            Consulte ou remova as OABs cadastradas para monitoramento automático de processos.
-                        </DialogDescription>
-                    </DialogHeader>
-                    {oabMonitorsLoading && oabMonitors.length === 0 ? (
-                        <div className="space-y-2">
-                            {[0, 1, 2].map((item) => (
-                                <Skeleton key={item} className="h-16 w-full" />
-                            ))}
-                        </div>
-                    ) : oabMonitorsError ? (
-                        <p className="text-sm text-destructive">{oabMonitorsError}</p>
-                    ) : oabMonitors.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            Nenhuma OAB monitorada no momento.
-                        </p>
-                    ) : (
-                        <div className="space-y-3">
-                            {oabMonitors.map((monitor) => (
-                                <div
-                                    key={monitor.id}
-                                    className="flex items-start justify-between gap-3 rounded-md border border-border/60 bg-muted/30 p-3"
-                                >
-                                    <div className="space-y-1">
-                                        <p className="text-sm font-medium text-foreground">
-                                            {formatOabDisplay(monitor.numero, monitor.uf)}
-                                        </p>
-                                        {monitor.usuarioNome ? (
-                                            <p className="text-xs text-muted-foreground">
-                                                {monitor.usuarioNome}
-                                                {monitor.usuarioOab ? ` · ${monitor.usuarioOab}` : ""}
-                                            </p>
-                                        ) : null}
-                                        <p className="text-xs text-muted-foreground">
-                                            Monitorando desde {formatDateTimeToPtBR(monitor.createdAt)}
-                                        </p>
-                                    </div>
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        onClick={() => handleRemoveOabMonitor(monitor.id)}
-                                        disabled={oabRemovingId === monitor.id}
-                                    >
-                                        {oabRemovingId === monitor.id ? "Removendo..." : "Remover"}
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </DialogContent>
             </Dialog>
 
