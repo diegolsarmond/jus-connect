@@ -1170,7 +1170,7 @@ export default function Processos() {
     const [sistemaLoading, setSistemaLoading] = useState(false);
     const [sistemaError, setSistemaError] = useState<string | null>(null);
     const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
-    const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
+    const [ufOptions, setUfOptions] = useState<{ sigla: string; nome: string }[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
     const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
@@ -3086,10 +3086,10 @@ export default function Processos() {
                 );
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = (await res.json()) as { sigla: string; nome: string }[];
-                if (!cancelled) setUfs(data);
+                if (!cancelled) setUfOptions(data);
             } catch (error) {
                 console.error(error);
-                if (!cancelled) setUfs([]);
+                if (!cancelled) setUfOptions([]);
             }
         };
 
@@ -4787,7 +4787,7 @@ export default function Processos() {
                                     <SelectValue placeholder="Selecione a UF" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {ufs.map((uf) => (
+                                    {ufOptions.map((uf) => (
                                         <SelectItem key={uf.sigla} value={uf.sigla}>
                                             {uf.nome} ({uf.sigla})
                                         </SelectItem>
