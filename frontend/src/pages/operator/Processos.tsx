@@ -1170,6 +1170,7 @@ export default function Processos() {
     const [sistemaLoading, setSistemaLoading] = useState(false);
     const [sistemaError, setSistemaError] = useState<string | null>(null);
     const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
+    const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
     const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
@@ -3051,6 +3052,30 @@ export default function Processos() {
             active = false;
         };
     }, [applyProcessosData, loadProcessos, page, toast]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchUfs = async () => {
+            try {
+                const res = await fetch(
+                    "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
+                );
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = (await res.json()) as { sigla: string; nome: string }[];
+                if (!cancelled) setUfs(data);
+            } catch (error) {
+                console.error(error);
+                if (!cancelled) setUfs([]);
+            }
+        };
+
+        fetchUfs();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (typeof window === "undefined") {
