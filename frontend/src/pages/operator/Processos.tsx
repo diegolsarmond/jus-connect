@@ -2819,9 +2819,32 @@ export default function Processos() {
 
                 const ufFromForm = detail.form.uf.trim();
                 const ufFromJurisdicao = (() => {
-                    const parts = detail.process.jurisdicao.split("-");
-                    const ufCandidate = parts.length > 1 ? parts[parts.length - 1].trim() : "";
-                    return ufCandidate.length === 2 ? ufCandidate : "";
+                    const raw = detail.process.jurisdicao;
+                    if (typeof raw !== "string") {
+                        return "";
+                    }
+
+                    const normalized = raw.trim();
+                    if (!normalized) {
+                        return "";
+                    }
+
+                    const separators = ["-", "/"];
+                    for (const separator of separators) {
+                        const parts = normalized.split(separator);
+                        if (parts.length < 2) {
+                            continue;
+                        }
+
+                        const candidate = parts[parts.length - 1]?.trim().toUpperCase();
+                        if (candidate && candidate.length === 2) {
+                            return candidate;
+                        }
+                    }
+
+                    const words = normalized.split(" ");
+                    const lastWord = words[words.length - 1]?.trim().toUpperCase();
+                    return lastWord && lastWord.length === 2 ? lastWord : "";
                 })();
                 const ufPayload = ufFromForm || ufFromJurisdicao;
                 if (!ufPayload) {
