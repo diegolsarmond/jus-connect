@@ -231,7 +231,8 @@ const parseAdvogados = (value) => {
             : typeof raw.name === 'string'
                 ? raw.name
                 : null;
-        advogados.push({ id: parsedId, nome: nomeValue });
+        const oabValue = normalizeString(raw.oab);
+        advogados.push({ id: parsedId, nome: nomeValue, oab: oabValue });
     };
     if (Array.isArray(value)) {
         value.forEach(processRawItem);
@@ -417,12 +418,13 @@ const baseProcessoSelect = `
     c.tipo AS cliente_tipo,
     (
       SELECT COALESCE(
-        jsonb_agg(jsonb_build_object('id', pa.usuario_id, 'nome', u.nome_completo) ORDER BY u.nome_completo)
+        jsonb_agg(jsonb_build_object('id', pa.usuario_id, 'nome', u.nome_completo, 'oab', COALESCE(NULLIF(CONCAT_WS('/', NULLIF(up.oab_number, ''), NULLIF(up.oab_uf, '')), ''), NULLIF(u.oab, ''))) ORDER BY u.nome_completo)
           FILTER (WHERE pa.usuario_id IS NOT NULL),
         '[]'::jsonb
       )
       FROM public.processo_advogados pa
       LEFT JOIN public.usuarios u ON u.id = pa.usuario_id
+      LEFT JOIN public.user_profiles up ON up.user_id = pa.usuario_id
       WHERE pa.processo_id = p.id
     ) AS advogados,
     (

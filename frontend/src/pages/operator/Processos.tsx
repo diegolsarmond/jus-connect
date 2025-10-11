@@ -91,6 +91,7 @@ interface ProcessoAdvogado {
     id: number;
     nome: string;
     funcao?: string;
+    oab?: string | null;
 }
 
 interface ProcessoProposta {
@@ -204,6 +205,7 @@ interface ApiProcessoAdvogado {
     cargo?: string | null;
     perfil?: string | null;
     perfil_nome?: string | null;
+    oab?: string | null;
 }
 
 interface AdvogadoOption {
@@ -826,8 +828,46 @@ const mapProcessoDetailToFormState = (
     const numeroValue =
         typeof processo.numero === "string" ? formatProcessNumber(processo.numero) : "";
 
-    const ufValue =
-        typeof processo.uf === "string" ? processo.uf.trim().toUpperCase() : "";
+    const ufValue = (() => {
+        if (typeof processo.uf === "string") {
+            const trimmed = processo.uf.trim().toUpperCase();
+            if (trimmed) {
+                return trimmed;
+            }
+        }
+
+        if (typeof processo.jurisdicao === "string") {
+            const normalized = processo.jurisdicao.trim();
+            if (!normalized) {
+                return "";
+            }
+
+            const separators = ["-", "/"];
+            for (const separator of separators) {
+                const parts = normalized.split(separator);
+                if (parts.length < 2) {
+                    continue;
+                }
+
+                for (let index = parts.length - 1; index >= 0; index -= 1) {
+                    const candidate = parts[index]?.trim().toUpperCase();
+                    if (candidate && candidate.length === 2) {
+                        return candidate;
+                    }
+                }
+            }
+
+            const words = normalized.split(" ");
+            for (let index = words.length - 1; index >= 0; index -= 1) {
+                const candidate = words[index]?.trim().toUpperCase();
+                if (candidate && candidate.length === 2) {
+                    return candidate;
+                }
+            }
+        }
+
+        return "";
+    })();
 
     const municipioValue =
         typeof processo.municipio === "string" ? processo.municipio.trim() : "";
@@ -975,7 +1015,9 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
                 advogado.perfil_nome,
             );
 
-            advogados.push({ id: idValue, nome, funcao });
+            const oab = pickFirstNonEmptyString(advogado.oab);
+
+            advogados.push({ id: idValue, nome, funcao, oab });
             seen.add(idValue);
         }
     }
@@ -983,7 +1025,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     if (advogados.length === 0) {
         const fallbackNome = processo.advogado_responsavel?.trim();
         if (fallbackNome) {
-            advogados.push({ id: 0, nome: fallbackNome });
+            advogados.push({ id: 0, nome: fallbackNome, oab: null });
         }
     }
 
@@ -1198,6 +1240,9 @@ export default function Processos() {
         Record<number, UnassignedProcessDetail>
     >({});
     const [unassignedModalOpen, setUnassignedModalOpen] = useState(false);
+    const [unassignedClientPopoverOpenId, setUnassignedClientPopoverOpenId] = useState<
+        number | null
+    >(null);
     const [unassignedModalDismissed, setUnassignedModalDismissed] = useState(false);
     const [unassignedLoading, setUnassignedLoading] = useState(false);
     const [unassignedError, setUnassignedError] = useState<string | null>(null);
@@ -1547,7 +1592,17 @@ export default function Processos() {
 
                                 if (ufMatches && ufMatches.length > 0) {
                                     ufCandidate = ufMatches[ufMatches.length - 1];
-                                } else {
+                                }
+
+                                if (!ufCandidate) {
+                                    const lettersAfterNumberMatches = [...oabRaw.matchAll(/\d{3,}[^A-Za-z]*([A-Za-z]{2})\b/g)];
+                                    if (lettersAfterNumberMatches.length > 0) {
+                                        const lastMatch = lettersAfterNumberMatches[lettersAfterNumberMatches.length - 1];
+                                        ufCandidate = lastMatch[1];
+                                    }
+                                }
+
+                                if (!ufCandidate) {
                                     const fallbackUfMatch = oabRaw.match(/\/\s*([A-Za-z]{2})\b/);
                                     if (fallbackUfMatch) {
                                         ufCandidate = fallbackUfMatch[1];
@@ -3797,7 +3852,9 @@ export default function Processos() {
                 processo.tipo,
                 processo.orgaoJulgador,
                 processo.classeJudicial,
-                processo.advogados.map((adv) => adv.nome).join(" "),
+                processo.advogados
+                    .map((adv) => [adv.nome, adv.oab].filter(Boolean).join(" "))
+                    .join(" "),
                 processo.proposta?.label,
                 processo.proposta?.solicitante ?? null,
             ];
@@ -4109,6 +4166,17 @@ export default function Processos() {
                             numero={processo.numero}
                             status={processo.status}
                             cliente={processo.cliente.nome}
+                            advogados={
+                                processo.advogados.length > 0
+                                    ? processo.advogados
+                                          .map((advogado) =>
+                                              advogado.oab
+                                                  ? `${advogado.nome} (${advogado.oab})`
+                                                  : advogado.nome,
+                                          )
+                                          .join(", ")
+                                    : "Não informado"
+                            }
                             dataDistribuicao={processo.dataDistribuicao}
                             jurisdicao={processo.jurisdicao}
                             orgaoJulgador={processo.orgaoJulgador}
@@ -4343,6 +4411,33 @@ export default function Processos() {
                                 }
 
                                 const hasExistingClient = Boolean(detail.selectedExistingClientId);
+                                const selectedExistingClient = hasExistingClient
+                                    ? clientes.find(
+                                          (cliente) =>
+                                              String(cliente.id) === detail.selectedExistingClientId,
+                                      ) ?? null
+                                    : null;
+                                const isClientPopoverOpen =
+                                    unassignedClientPopoverOpenId === processId;
+                                const clientButtonLabel = (() => {
+                                    if (clientesLoading && clientes.length === 0) {
+                                        return "Carregando clientes...";
+                                    }
+
+                                    if (selectedExistingClient) {
+                                        return `${selectedExistingClient.nome}${
+                                            selectedExistingClient.documento
+                                                ? ` — ${selectedExistingClient.documento}`
+                                                : ""
+                                        }`;
+                                    }
+
+                                    if (hasExistingClient) {
+                                        return `Cliente #${detail.selectedExistingClientId}`;
+                                    }
+
+                                    return "Cliente não cadastrado";
+                                })();
                                 const availablePropostas = hasExistingClient
                                     ? propostas.filter(
                                           (proposta) => proposta.solicitanteId === detail.selectedExistingClientId,
@@ -4363,32 +4458,96 @@ export default function Processos() {
                                             <div className="grid gap-4 md:grid-cols-2">
                                                 <div className="space-y-2">
                                                     <Label>Meus Clientes</Label>
-                                                    <Select
-                                                        value={
-                                                            detail.selectedExistingClientId ||
-                                                            NO_EXISTING_CLIENT_SELECT_VALUE
-                                                        }
-                                                        onValueChange={(value) =>
-                                                            handleExistingClientSelection(processId, value)
+                                                    <Popover
+                                                        open={isClientPopoverOpen}
+                                                        onOpenChange={(open) =>
+                                                            setUnassignedClientPopoverOpenId(
+                                                                open ? processId : null,
+                                                            )
                                                         }
                                                     >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Selecione um cliente" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value={NO_EXISTING_CLIENT_SELECT_VALUE}>
-                                                                Cliente não cadastrado
-                                                            </SelectItem>
-                                                            {clientes.map((cliente) => (
-                                                                <SelectItem key={cliente.id} value={String(cliente.id)}>
-                                                                    {cliente.nome}
-                                                                    {cliente.documento
-                                                                        ? ` — ${cliente.documento}`
-                                                                        : ""}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                        <PopoverTrigger asChild>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                role="combobox"
+                                                                aria-expanded={isClientPopoverOpen}
+                                                                className="w-full justify-between"
+                                                            >
+                                                                <span className="truncate">{clientButtonLabel}</span>
+                                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                                                            <Command>
+                                                                <CommandInput placeholder="Buscar cliente..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                                                                    <CommandGroup>
+                                                                        <CommandItem
+                                                                            value="Cliente não cadastrado"
+                                                                            onSelect={() => {
+                                                                                handleExistingClientSelection(
+                                                                                    processId,
+                                                                                    NO_EXISTING_CLIENT_SELECT_VALUE,
+                                                                                );
+                                                                                setUnassignedClientPopoverOpenId(null);
+                                                                            }}
+                                                                        >
+                                                                            <span>Cliente não cadastrado</span>
+                                                                            <Check
+                                                                                className={`ml-auto h-4 w-4 ${
+                                                                                    hasExistingClient
+                                                                                        ? "opacity-0"
+                                                                                        : "opacity-100"
+                                                                                }`}
+                                                                            />
+                                                                        </CommandItem>
+                                                                        {clientes.map((cliente) => {
+                                                                            const optionLabel = `${cliente.nome}${
+                                                                                cliente.documento
+                                                                                    ? ` — ${cliente.documento}`
+                                                                                    : ""
+                                                                            }`;
+                                                                            const isSelected =
+                                                                                detail.selectedExistingClientId ===
+                                                                                String(cliente.id);
+                                                                            const searchableText = [
+                                                                                cliente.nome,
+                                                                                cliente.documento,
+                                                                                cliente.tipo,
+                                                                                String(cliente.id),
+                                                                            ]
+                                                                                .filter(Boolean)
+                                                                                .join(" ");
+                                                                            return (
+                                                                                <CommandItem
+                                                                                    key={cliente.id}
+                                                                                    value={searchableText}
+                                                                                    onSelect={() => {
+                                                                                        handleExistingClientSelection(
+                                                                                            processId,
+                                                                                            String(cliente.id),
+                                                                                        );
+                                                                                        setUnassignedClientPopoverOpenId(null);
+                                                                                    }}
+                                                                                >
+                                                                                    <span>{optionLabel}</span>
+                                                                                    <Check
+                                                                                        className={`ml-auto h-4 w-4 ${
+                                                                                            isSelected
+                                                                                                ? "opacity-100"
+                                                                                                : "opacity-0"
+                                                                                        }`}
+                                                                                    />
+                                                                                </CommandItem>
+                                                                            );
+                                                                        })}
+                                                                    </CommandGroup>
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
                                                     {!hasExistingClient ? (
                                                         <p className="text-xs text-muted-foreground">
                                                             Se preferir, marque um envolvido abaixo para criar o
