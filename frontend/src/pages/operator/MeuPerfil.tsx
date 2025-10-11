@@ -962,6 +962,56 @@ export default function MeuPerfil() {
     [mutateProfile],
   );
 
+  const handleZipSave = useCallback(
+    async (rawValue: string) => {
+      const zipValue = toNullableString(rawValue);
+      const address: NonNullable<UpdateMeuPerfilPayload["address"]> = { zip: zipValue };
+      const digits = zipValue?.replace(/\D/g, "") ?? "";
+
+      if (digits.length === 8) {
+        try {
+          const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+          if (response.ok) {
+            const data = (await response.json()) as {
+              logradouro?: string;
+              localidade?: string;
+              uf?: string;
+              erro?: boolean;
+            };
+
+            if (!data?.erro) {
+              if (typeof data.logradouro === "string") {
+                const street = toNullableString(data.logradouro);
+                if (street !== null) {
+                  address.street = street;
+                }
+              }
+
+              if (typeof data.localidade === "string") {
+                const city = toNullableString(data.localidade);
+                if (city !== null) {
+                  address.city = city;
+                }
+              }
+
+              if (typeof data.uf === "string") {
+                const state = toNullableString(data.uf);
+                if (state !== null) {
+                  address.state = state;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Erro ao buscar CEP:", error);
+        }
+      }
+
+      await mutateProfile({ address });
+    },
+    [mutateProfile],
+  );
+
   const handleSpecialtiesSave = useCallback(
     async (values: string[]) => {
       const normalized = values
@@ -1376,6 +1426,13 @@ export default function MeuPerfil() {
             {profile && (
               <div className="grid gap-4 md:grid-cols-2">
                 <EditableField
+                  label="CEP"
+                  value={profile.address.zip ?? ""}
+                  onSave={handleZipSave}
+                  validation={validateZip}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
                   label="Rua"
                   value={profile.address.street ?? ""}
                   onSave={handleAddressSave("street")}
@@ -1391,13 +1448,6 @@ export default function MeuPerfil() {
                   label="Estado"
                   value={profile.address.state ?? ""}
                   onSave={handleAddressSave("state")}
-                  disabled={isUpdatingProfile}
-                />
-                <EditableField
-                  label="CEP"
-                  value={profile.address.zip ?? ""}
-                  onSave={handleAddressSave("zip")}
-                  validation={validateZip}
                   disabled={isUpdatingProfile}
                 />
               </div>
