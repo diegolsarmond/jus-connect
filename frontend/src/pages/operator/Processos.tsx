@@ -2826,26 +2826,43 @@ export default function Processos() {
                     .map((id) => Number.parseInt(id, 10))
                     .filter((value) => Number.isFinite(value) && value > 0);
 
-                const municipioPayload = detail.form.municipio.trim()
-                    ? detail.form.municipio
-                    : (() => {
-                          const [municipio] = detail.process.jurisdicao.split("-");
-                          return municipio ? municipio.trim() : "";
-                      })();
+                const numeroFromForm = detail.form.numero.trim();
+                const numeroFromProcess =
+                    typeof detail.process.numero === "string" ? detail.process.numero.trim() : "";
+                const numeroPayload = numeroFromForm || numeroFromProcess;
+                if (!numeroPayload) {
+                    throw new Error("Informe o número do processo antes de vincular.");
+                }
 
-                const ufPayload = detail.form.uf.trim()
-                    ? detail.form.uf
-                    : (() => {
-                          const parts = detail.process.jurisdicao.split("-");
-                          const ufCandidate = parts.length > 1 ? parts[parts.length - 1].trim() : "";
-                          return ufCandidate.length === 2 ? ufCandidate : "";
-                      })();
+                const municipioFromForm = detail.form.municipio.trim();
+                const municipioFromJurisdicao = (() => {
+                    const [municipio] = detail.process.jurisdicao.split("-");
+                    return municipio ? municipio.trim() : "";
+                })();
+                const municipioPayload = municipioFromForm || municipioFromJurisdicao;
+                if (!municipioPayload) {
+                    throw new Error("Informe o município do processo antes de vincular.");
+                }
+
+                const ufFromForm = detail.form.uf.trim();
+                const ufFromJurisdicao = (() => {
+                    const parts = detail.process.jurisdicao.split("-");
+                    const ufCandidate = parts.length > 1 ? parts[parts.length - 1].trim() : "";
+                    return ufCandidate.length === 2 ? ufCandidate : "";
+                })();
+                const ufPayload = ufFromForm || ufFromJurisdicao;
+                if (!ufPayload) {
+                    throw new Error("Informe a UF do processo antes de vincular.");
+                }
+
+                const grauPayload =
+                    detail.grau && detail.grau.trim() ? detail.grau.trim() : "1º Grau";
 
                 const payload: Record<string, unknown> = {
                     cliente_id: clienteId,
-                    numero: detail.form.numero || detail.process.numero,
-                    uf: ufPayload || detail.form.uf || null,
-                    municipio: municipioPayload || detail.form.municipio || null,
+                    numero: numeroPayload,
+                    uf: ufPayload,
+                    municipio: municipioPayload,
                     advogados: advogadosPayload,
                 };
 
@@ -2882,7 +2899,7 @@ export default function Processos() {
                 }
 
                 payload.monitorar_processo = detail.form.monitorarProcesso;
-                payload.grau = detail.grau || "1º Grau";
+                payload.grau = grauPayload;
 
                 if (descricaoPayload) {
                     payload.descricao = descricaoPayload;
