@@ -98,7 +98,7 @@ export const fetchPlanLimitsForCompany = async (
             pl.limite_processos,
             pl.limite_propostas,
             pl.limite_clientes,
-            pl.limite_advogados_intimacoes_monitoradas,
+            pl.limite_advogados_intimacao AS limite_advogados_intimacoes_monitoradas,
             pl.sincronizacao_processos_habilitada,
             pl.sincronizacao_processos_cota
        FROM public.empresas emp
