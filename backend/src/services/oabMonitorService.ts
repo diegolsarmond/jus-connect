@@ -131,8 +131,8 @@ export const createCompanyOabMonitor = async (
                created_at,
                updated_at,
                usuario_id,
-               (SELECT nome_completo FROM public.usuarios WHERE id = EXCLUDED.usuario_id) AS usuario_nome,
-               (SELECT oab FROM public.usuarios WHERE id = EXCLUDED.usuario_id) AS usuario_oab`,
+               (SELECT nome_completo FROM public.usuarios WHERE id = usuario_id) AS usuario_nome,
+               (SELECT oab FROM public.usuarios WHERE id = usuario_id) AS usuario_oab`,
     [empresaId, sanitizedUf, sanitizedNumero, sanitizedUsuarioId],
   );
 
