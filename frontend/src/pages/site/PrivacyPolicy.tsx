@@ -50,7 +50,8 @@ const PrivacyPolicy = () => {
             <p>
               Implementamos controles técnicos e administrativos para proteger os dados contra acessos não autorizados, perdas ou
               alterações indevidas. Os registros são armazenados em ambientes seguros, com criptografia e monitoramento contínuo,
-              respeitando os prazos legais e contratuais aplicáveis.
+              respeitando os prazos legais e contratuais aplicáveis. A segurança do sistema é continuamente revisada para
+              assegurar a integridade das informações tratadas pela plataforma.
             </p>
           </article>
 
