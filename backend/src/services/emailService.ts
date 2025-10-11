@@ -1,3 +1,4 @@
+import net from 'net';
 import tls from 'tls';
 import os from 'os';
 
@@ -38,8 +39,8 @@ const isSmtpConfigured = Boolean(smtpUser && smtpPass);
 const DEFAULT_SMTP_CONFIG: SmtpConfig | null = isSmtpConfigured
   ? {
       host: process.env.SMTP_HOST || 'smtp.resend.com',
-      port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
-      secure: parseBoolean(process.env.SMTP_SECURE, true),
+      port: Number.parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: parseBoolean(process.env.SMTP_SECURE, false),
       rejectUnauthorized: parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED, true),
       auth: {
         user: smtpUser!,
@@ -66,7 +67,9 @@ interface SmtpResponse {
 
 const CRLF = '\r\n';
 
-function waitForResponse(socket: tls.TLSSocket, timeoutMs = 15000): Promise<SmtpResponse> {
+type SmtpSocket = NodeJS.Socket;
+
+function waitForResponse(socket: SmtpSocket, timeoutMs = 15000): Promise<SmtpResponse> {
   return new Promise((resolve, reject) => {
     let buffer = '';
     let resolved = false;
@@ -125,7 +128,7 @@ function waitForResponse(socket: tls.TLSSocket, timeoutMs = 15000): Promise<Smtp
 }
 
 async function sendCommand(
-  socket: tls.TLSSocket,
+  socket: SmtpSocket,
   command: string | null,
   expectedCodes: number[]
 ): Promise<SmtpResponse> {
@@ -177,6 +180,20 @@ function buildMessageBody(text: string, html: string, boundary: string): string 
   return parts.join(CRLF);
 }
 
+function createTlsConnection(options: tls.ConnectionOptions): Promise<tls.TLSSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect(options, () => {
+      socket.off('error', handleError);
+      resolve(socket);
+    });
+    const handleError = (error: Error) => {
+      socket.destroy();
+      reject(error);
+    };
+    socket.once('error', handleError);
+  });
+}
+
 export async function sendEmail({ to, subject, html, text }: SendEmailParams): Promise<void> {
   if (!DEFAULT_SMTP_CONFIG) {
     console.warn(
@@ -185,21 +202,44 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
     return;
   }
 
-  const { host, port, auth, rejectUnauthorized } = DEFAULT_SMTP_CONFIG;
+  const { host, port, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
   const clientName = os.hostname() || 'localhost';
   const boundary = `----=_Boundary_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
   const headers = buildMessageHeaders(to, subject, boundary);
   const messageBody = buildMessageBody(text, html, boundary);
   const message = sanitizeMessageBody([...headers, '', messageBody].join(CRLF));
 
-  const socket = tls.connect({
-    host,
-    port,
-    rejectUnauthorized,
-  });
+  let socket: SmtpSocket;
+
+  if (secure) {
+    socket = await createTlsConnection({
+      host,
+      port,
+      rejectUnauthorized,
+    });
+  } else {
+    const plainSocket = net.createConnection({ host, port });
+
+    try {
+      await waitForResponse(plainSocket); // 220 greeting
+      await sendCommand(plainSocket, `EHLO ${clientName}`, [250]);
+      await sendCommand(plainSocket, 'STARTTLS', [220]);
+    } catch (error) {
+      plainSocket.end();
+      throw error;
+    }
+
+    socket = await createTlsConnection({
+      host,
+      rejectUnauthorized,
+      socket: plainSocket,
+    });
+  }
 
   try {
-    await waitForResponse(socket); // 220 greeting
+    if (secure) {
+      await waitForResponse(socket); // 220 greeting
+    }
     await sendCommand(socket, `EHLO ${clientName}`, [250]);
     await sendCommand(socket, 'AUTH LOGIN', [334]);
     await sendCommand(socket, Buffer.from(auth.user, 'utf8').toString('base64'), [334]);
