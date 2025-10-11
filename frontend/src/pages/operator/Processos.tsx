@@ -1548,9 +1548,21 @@ export default function Processos() {
                                 if (ufMatches && ufMatches.length > 0) {
                                     ufCandidate = ufMatches[ufMatches.length - 1];
                                 } else {
-                                    const fallbackUfMatch = oabRaw.match(/\/\s*([A-Za-z]{2})\b/);
-                                    if (fallbackUfMatch) {
-                                        ufCandidate = fallbackUfMatch[1];
+                                    const ufAfterDigitsRegex = /\d[\d.\/-\s]*[-\s]?([A-Za-z]{2})\b/g;
+                                    let ufAfterDigitsMatch: RegExpExecArray | null = null;
+                                    let match: RegExpExecArray | null;
+
+                                    while ((match = ufAfterDigitsRegex.exec(oabRaw)) !== null) {
+                                        ufAfterDigitsMatch = match;
+                                    }
+
+                                    if (ufAfterDigitsMatch) {
+                                        ufCandidate = ufAfterDigitsMatch[1];
+                                    } else {
+                                        const fallbackUfMatch = oabRaw.match(/\/\s*([A-Za-z]{2})\b/);
+                                        if (fallbackUfMatch) {
+                                            ufCandidate = fallbackUfMatch[1];
+                                        }
                                     }
                                 }
 
