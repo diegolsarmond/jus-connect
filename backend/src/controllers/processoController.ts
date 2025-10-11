@@ -3035,7 +3035,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'area_atuacao_id inválido' });
   }
 
-  const areaAtuacaoIdValue = areaAtuacaoResolution.value;
+  let areaAtuacaoIdValue = areaAtuacaoResolution.value;
 
   const sistemaCnjResolution = resolveNullablePositiveInteger(sistema_cnj_id);
 
@@ -3043,7 +3043,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'sistema_cnj_id inválido' });
   }
 
-  const sistemaCnjIdValue = sistemaCnjResolution.value;
+  let sistemaCnjIdValue = sistemaCnjResolution.value;
 
   const envolvidosResolution = resolveNullablePositiveInteger(envolvidos_id);
 
@@ -3051,7 +3051,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'envolvidos_id inválido' });
   }
 
-  const envolvidosIdValue = envolvidosResolution.value;
+  let envolvidosIdValue = envolvidosResolution.value;
 
   const setorResolution = resolveNullablePositiveInteger(setor_id);
 
@@ -3059,7 +3059,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'setor_id inválido' });
   }
 
-  const setorIdValue = setorResolution.value;
+  let setorIdValue = setorResolution.value;
   const instanciaValue = normalizeString(instancia);
   const descricaoValue = normalizeString(descricao);
   const monitorarProcessoFlag = parseBooleanFlag(monitorar_processo);

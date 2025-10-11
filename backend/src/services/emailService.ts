@@ -67,7 +67,7 @@ interface SmtpResponse {
 
 const CRLF = '\r\n';
 
-type SmtpSocket = NodeJS.Socket;
+type SmtpSocket = net.Socket;
 
 function waitForResponse(socket: SmtpSocket, timeoutMs = 15000): Promise<SmtpResponse> {
   return new Promise((resolve, reject) => {
