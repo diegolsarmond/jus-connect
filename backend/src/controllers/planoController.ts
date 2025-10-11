@@ -17,6 +17,12 @@ type PlanoRow = {
   limite_clientes: number | string | null;
   sincronizacao_processos_habilitada: boolean | number | string | null;
   sincronizacao_processos_cota: number | string | null;
+  sincronizacao_processos_limite: number | string | null;
+  max_propostas: number | string | null;
+  sincronizacao_intimacoes_habilitada: boolean | number | string | null;
+  sincronizacao_intimacoes_limite: number | string | null;
+  limite_advogados_processos: number | string | null;
+  limite_advogados_intimacao: number | string | null;
 };
 
 
@@ -31,6 +37,12 @@ type PlanoResponseRow = Omit<
     | 'limite_clientes'
     | 'sincronizacao_processos_habilitada'
     | 'sincronizacao_processos_cota'
+    | 'sincronizacao_processos_limite'
+    | 'max_propostas'
+    | 'sincronizacao_intimacoes_habilitada'
+    | 'sincronizacao_intimacoes_limite'
+    | 'limite_advogados_processos'
+    | 'limite_advogados_intimacao'
     | 'ativo'
 
 > & {
@@ -42,6 +54,12 @@ type PlanoResponseRow = Omit<
   limite_clientes: number | null;
   sincronizacao_processos_habilitada: boolean;
   sincronizacao_processos_cota: number | null;
+  sincronizacao_processos_limite: number | null;
+  max_propostas: number | null;
+  sincronizacao_intimacoes_habilitada: boolean;
+  sincronizacao_intimacoes_limite: number | null;
+  limite_advogados_processos: number | null;
+  limite_advogados_intimacao: number | null;
   ativo: boolean;
   recursos_personalizados: {
     disponiveis: string[];
@@ -143,6 +161,12 @@ type RecursosDetails = {
   limiteClientes: number | null;
   sincronizacaoProcessosHabilitada: boolean | null;
   sincronizacaoProcessosCota: number | null;
+  sincronizacaoProcessosLimite: number | null;
+  maxPropostas: number | null;
+  sincronizacaoIntimacoesHabilitada: boolean | null;
+  sincronizacaoIntimacoesLimite: number | null;
+  limiteAdvogadosProcessos: number | null;
+  limiteAdvogadosIntimacao: number | null;
 };
 
 const FEATURE_KEYS = [
@@ -217,8 +241,6 @@ const LIMIT_PROPOSAL_KEYS = [
   'limite_propostas',
   'limitePropostas',
   'proposalLimit',
-  'max_propostas',
-  'maxPropostas',
   'propostas',
 ] as const;
 const LIMIT_CLIENT_KEYS = [
@@ -228,6 +250,8 @@ const LIMIT_CLIENT_KEYS = [
   'clientes',
   'maxClientes',
 ] as const;
+
+const MAX_PROPOSAL_KEYS = ['max_propostas', 'maxPropostas'] as const;
 
 const SYNC_ENABLED_KEYS = [
   'sincronizacao_processos_habilitada',
@@ -240,8 +264,44 @@ const SYNC_QUOTA_KEYS = [
   'sincronizacao_processos_cota',
   'sincronizacaoProcessosCota',
   'processSyncQuota',
+] as const;
+
+const SYNC_LIMIT_KEYS = [
   'sincronizacao_processos_limite',
+  'sincronizacaoProcessosLimite',
   'processSyncLimit',
+] as const;
+
+const INTIMATION_SYNC_ENABLED_KEYS = [
+  'sincronizacao_intimacoes_habilitada',
+  'sincronizacaoIntimacoesHabilitada',
+  'intimationSyncEnabled',
+  'syncIntimacoes',
+] as const;
+
+const INTIMATION_SYNC_LIMIT_KEYS = [
+  'sincronizacao_intimacoes_limite',
+  'sincronizacaoIntimacoesLimite',
+  'intimationSyncLimit',
+  'sincronizacao_intimacoes_cota',
+  'sincronizacaoIntimacoesCota',
+  'intimationSyncQuota',
+] as const;
+
+const LAWYER_PROCESS_LIMIT_KEYS = [
+  'limite_advogados_processos',
+  'limiteAdvogadosProcessos',
+  'processMonitorLawyerLimit',
+  'limite_advogados_processos_monitorados',
+] as const;
+
+const LAWYER_INTIMATION_LIMIT_KEYS = [
+  'limite_advogados_intimacao',
+  'limiteAdvogadosIntimacao',
+  'limite_advogados_intimacoes',
+  'limiteAdvogadosIntimacoes',
+  'intimationMonitorLawyerLimit',
+  'limite_advogados_intimacoes_monitoradas',
 ] as const;
 
 const BODY_MODULE_KEYS = ['modulos', 'modules'] as const;
@@ -274,8 +334,6 @@ const BODY_LIMITE_PROPOSTAS_KEYS = [
   'limite_propostas',
   'limitePropostas',
   'proposalLimit',
-  'max_propostas',
-  'maxPropostas',
 ] as const;
 const BODY_LIMITE_CLIENTES_KEYS = [
   'limite_clientes',
@@ -293,8 +351,40 @@ const BODY_SYNC_QUOTA_KEYS = [
   'sincronizacao_processos_cota',
   'sincronizacaoProcessosCota',
   'processSyncQuota',
+] as const;
+const BODY_SYNC_LIMIT_KEYS = [
   'sincronizacao_processos_limite',
+  'sincronizacaoProcessosLimite',
   'processSyncLimit',
+] as const;
+const BODY_MAX_PROPOSTAS_KEYS = ['max_propostas', 'maxPropostas'] as const;
+const BODY_INTIMATION_SYNC_ENABLED_KEYS = [
+  'sincronizacao_intimacoes_habilitada',
+  'sincronizacaoIntimacoesHabilitada',
+  'intimationSyncEnabled',
+  'syncIntimacoes',
+] as const;
+const BODY_INTIMATION_SYNC_LIMIT_KEYS = [
+  'sincronizacao_intimacoes_limite',
+  'sincronizacaoIntimacoesLimite',
+  'intimationSyncLimit',
+  'sincronizacao_intimacoes_cota',
+  'sincronizacaoIntimacoesCota',
+  'intimationSyncQuota',
+] as const;
+const BODY_LAWYER_PROCESS_LIMIT_KEYS = [
+  'limite_advogados_processos',
+  'limiteAdvogadosProcessos',
+  'processMonitorLawyerLimit',
+  'limite_advogados_processos_monitorados',
+] as const;
+const BODY_LAWYER_INTIMATION_LIMIT_KEYS = [
+  'limite_advogados_intimacao',
+  'limiteAdvogadosIntimacao',
+  'limite_advogados_intimacoes',
+  'limiteAdvogadosIntimacoes',
+  'intimationMonitorLawyerLimit',
+  'limite_advogados_intimacoes_monitoradas',
 ] as const;
 const BODY_ATIVO_KEYS = ['ativo', 'isActive'] as const;
 
@@ -507,6 +597,12 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
   let limiteClientes: number | null = null;
   let sincronizacaoProcessosHabilitada: boolean | null = null;
   let sincronizacaoProcessosCota: number | null = null;
+  let sincronizacaoProcessosLimite: number | null = null;
+  let maxPropostas: number | null = null;
+  let sincronizacaoIntimacoesHabilitada: boolean | null = null;
+  let sincronizacaoIntimacoesLimite: number | null = null;
+  let limiteAdvogadosProcessos: number | null = null;
+  let limiteAdvogadosIntimacao: number | null = null;
   const visited = new Set<unknown>();
 
   const pushFeature = (entry: unknown) => {
@@ -596,8 +692,14 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
   const limitUserKeySet = new Set<string>(LIMIT_USER_KEYS);
   const limitProposalKeySet = new Set<string>(LIMIT_PROPOSAL_KEYS);
   const limitClientKeySet = new Set<string>(LIMIT_CLIENT_KEYS);
+  const maxProposalKeySet = new Set<string>(MAX_PROPOSAL_KEYS);
   const syncEnabledKeySet = new Set<string>(SYNC_ENABLED_KEYS);
   const syncQuotaKeySet = new Set<string>(SYNC_QUOTA_KEYS);
+  const syncLimitKeySet = new Set<string>(SYNC_LIMIT_KEYS);
+  const intimationSyncEnabledKeySet = new Set<string>(INTIMATION_SYNC_ENABLED_KEYS);
+  const intimationSyncLimitKeySet = new Set<string>(INTIMATION_SYNC_LIMIT_KEYS);
+  const lawyerProcessLimitKeySet = new Set<string>(LAWYER_PROCESS_LIMIT_KEYS);
+  const lawyerIntimationLimitKeySet = new Set<string>(LAWYER_INTIMATION_LIMIT_KEYS);
   const customResourceKeySet = new Set<string>(CUSTOM_RESOURCE_KEYS);
 
   const visit = (input: unknown): void => {
@@ -728,6 +830,16 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
         }
       }
 
+      for (const key of MAX_PROPOSAL_KEYS) {
+        if (key in obj && maxPropostas === null) {
+          const parsed = toInteger(obj[key]);
+          if (parsed !== null) {
+            maxPropostas = parsed;
+            break;
+          }
+        }
+      }
+
       for (const key of LIMIT_CLIENT_KEYS) {
         if (key in obj && limiteClientes === null) {
           const parsed = toInteger(obj[key]);
@@ -758,6 +870,56 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
         }
       }
 
+      for (const key of SYNC_LIMIT_KEYS) {
+        if (key in obj && sincronizacaoProcessosLimite === null) {
+          const parsed = parseNullableInteger(obj[key]);
+          if (parsed !== null) {
+            sincronizacaoProcessosLimite = parsed;
+            break;
+          }
+        }
+      }
+
+      for (const key of INTIMATION_SYNC_ENABLED_KEYS) {
+        if (key in obj && sincronizacaoIntimacoesHabilitada === null) {
+          const parsed = parseBooleanFlag(obj[key]);
+          if (parsed !== null) {
+            sincronizacaoIntimacoesHabilitada = parsed;
+            break;
+          }
+        }
+      }
+
+      for (const key of INTIMATION_SYNC_LIMIT_KEYS) {
+        if (key in obj && sincronizacaoIntimacoesLimite === null) {
+          const parsed = parseNullableInteger(obj[key]);
+          if (parsed !== null) {
+            sincronizacaoIntimacoesLimite = parsed;
+            break;
+          }
+        }
+      }
+
+      for (const key of LAWYER_PROCESS_LIMIT_KEYS) {
+        if (key in obj && limiteAdvogadosProcessos === null) {
+          const parsed = toInteger(obj[key]);
+          if (parsed !== null) {
+            limiteAdvogadosProcessos = parsed;
+            break;
+          }
+        }
+      }
+
+      for (const key of LAWYER_INTIMATION_LIMIT_KEYS) {
+        if (key in obj && limiteAdvogadosIntimacao === null) {
+          const parsed = toInteger(obj[key]);
+          if (parsed !== null) {
+            limiteAdvogadosIntimacao = parsed;
+            break;
+          }
+        }
+      }
+
       Object.entries(obj).forEach(([key, item]) => {
         if (customResourceKeySet.has(key)) {
           return;
@@ -769,7 +931,13 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
           limitProcessKeySet.has(key) ||
           limitUserKeySet.has(key) ||
           limitProposalKeySet.has(key) ||
-          limitClientKeySet.has(key)
+          limitClientKeySet.has(key) ||
+          maxProposalKeySet.has(key) ||
+          syncLimitKeySet.has(key) ||
+          intimationSyncEnabledKeySet.has(key) ||
+          intimationSyncLimitKeySet.has(key) ||
+          lawyerProcessLimitKeySet.has(key) ||
+          lawyerIntimationLimitKeySet.has(key)
         ) {
           return;
         }
@@ -797,6 +965,12 @@ const parseRecursosDetails = (value: unknown): RecursosDetails => {
     limiteClientes,
     sincronizacaoProcessosHabilitada,
     sincronizacaoProcessosCota,
+    sincronizacaoProcessosLimite,
+    maxPropostas,
+    sincronizacaoIntimacoesHabilitada,
+    sincronizacaoIntimacoesLimite,
+    limiteAdvogadosProcessos,
+    limiteAdvogadosIntimacao,
   };
 };
 
@@ -815,6 +989,12 @@ const prepareRecursosForStorage = ({
     limiteClientes: number | null;
     sincronizacaoProcessosHabilitada: boolean;
     sincronizacaoProcessosCota: number | null;
+    sincronizacaoProcessosLimite: number | null;
+    maxPropostas: number | null;
+    sincronizacaoIntimacoesHabilitada: boolean;
+    sincronizacaoIntimacoesLimite: number | null;
+    limiteAdvogadosProcessos: number | null;
+    limiteAdvogadosIntimacao: number | null;
   };
   fallback?: RecursosDetails | null;
 }): string | null => {
@@ -830,6 +1010,12 @@ const prepareRecursosForStorage = ({
       limiteClientes: null,
       sincronizacaoProcessosHabilitada: null,
       sincronizacaoProcessosCota: null,
+      sincronizacaoProcessosLimite: null,
+      maxPropostas: null,
+      sincronizacaoIntimacoesHabilitada: null,
+      sincronizacaoIntimacoesLimite: null,
+      limiteAdvogadosProcessos: null,
+      limiteAdvogadosIntimacao: null,
     };
 
   let featureList: string[];
@@ -922,6 +1108,11 @@ const prepareRecursosForStorage = ({
     limitsPayload.limitePropostas = limits.limitePropostas;
   }
 
+  if (limits.maxPropostas != null) {
+    limitsPayload.maxPropostas = limits.maxPropostas;
+    limitsPayload.max_propostas = limits.maxPropostas;
+  }
+
   if (limits.limiteClientes != null) {
     limitsPayload.clientes = limits.limiteClientes;
     limitsPayload.limiteClientes = limits.limiteClientes;
@@ -939,12 +1130,47 @@ const prepareRecursosForStorage = ({
     payload.sincronizacaoProcessosCota = limits.sincronizacaoProcessosCota;
   }
 
+  if (limits.sincronizacaoProcessosLimite != null) {
+    payload.sincronizacao_processos_limite = limits.sincronizacaoProcessosLimite;
+    payload.sincronizacaoProcessosLimite = limits.sincronizacaoProcessosLimite;
+    payload.processSyncLimit = limits.sincronizacaoProcessosLimite;
+  }
+
+  payload.sincronizacao_intimacoes_habilitada = limits.sincronizacaoIntimacoesHabilitada;
+  payload.sincronizacaoIntimacoesHabilitada = limits.sincronizacaoIntimacoesHabilitada;
+  payload.intimationSyncEnabled = limits.sincronizacaoIntimacoesHabilitada;
+
+  if (limits.sincronizacaoIntimacoesLimite != null) {
+    payload.sincronizacao_intimacoes_limite = limits.sincronizacaoIntimacoesLimite;
+    payload.sincronizacaoIntimacoesLimite = limits.sincronizacaoIntimacoesLimite;
+    payload.intimationSyncLimit = limits.sincronizacaoIntimacoesLimite;
+  }
+
+  if (limits.limiteAdvogadosProcessos != null) {
+    payload.limite_advogados_processos = limits.limiteAdvogadosProcessos;
+    payload.limiteAdvogadosProcessos = limits.limiteAdvogadosProcessos;
+    payload.processMonitorLawyerLimit = limits.limiteAdvogadosProcessos;
+  }
+
+  if (limits.limiteAdvogadosIntimacao != null) {
+    payload.limite_advogados_intimacao = limits.limiteAdvogadosIntimacao;
+    payload.limite_advogados_intimacoes = limits.limiteAdvogadosIntimacao;
+    payload.limiteAdvogadosIntimacoes = limits.limiteAdvogadosIntimacao;
+    payload.intimationMonitorLawyerLimit = limits.limiteAdvogadosIntimacao;
+  }
+
   if (
     !uniqueModules.length &&
     !normalizedFeatures.length &&
     Object.keys(limitsPayload).length === 0 &&
     !limits.sincronizacaoProcessosHabilitada &&
     limits.sincronizacaoProcessosCota == null &&
+    limits.sincronizacaoProcessosLimite == null &&
+    !limits.sincronizacaoIntimacoesHabilitada &&
+    limits.sincronizacaoIntimacoesLimite == null &&
+    limits.limiteAdvogadosProcessos == null &&
+    limits.limiteAdvogadosIntimacao == null &&
+    limits.maxPropostas == null &&
     customAvailableNormalized.length === 0 &&
     customUnavailableNormalized.length === 0
   ) {
@@ -1026,6 +1252,36 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     recursosDetalhes.sincronizacaoProcessosCota ??
     null;
 
+  const sincronizacaoProcessosLimite =
+    parseNullableInteger(row.sincronizacao_processos_limite) ??
+    recursosDetalhes.sincronizacaoProcessosLimite ??
+    sincronizacaoProcessosCota;
+
+  const maxPropostasValue =
+    parseNullableInteger(row.max_propostas) ??
+    recursosDetalhes.maxPropostas ??
+    limitePropostas;
+
+  const sincronizacaoIntimacoesHabilitada =
+    parseBooleanFlag(row.sincronizacao_intimacoes_habilitada) ??
+    recursosDetalhes.sincronizacaoIntimacoesHabilitada ??
+    false;
+
+  const sincronizacaoIntimacoesLimite =
+    parseNullableInteger(row.sincronizacao_intimacoes_limite) ??
+    recursosDetalhes.sincronizacaoIntimacoesLimite ??
+    null;
+
+  const limiteAdvogadosProcessosValue =
+    parseNullableInteger(row.limite_advogados_processos) ??
+    recursosDetalhes.limiteAdvogadosProcessos ??
+    null;
+
+  const limiteAdvogadosIntimacaoValue =
+    parseNullableInteger(row.limite_advogados_intimacao) ??
+    recursosDetalhes.limiteAdvogadosIntimacao ??
+    null;
+
   const valorMensal =
     typeof row.valor_mensal === 'number' || typeof row.valor_mensal === 'string'
       ? row.valor_mensal
@@ -1052,6 +1308,12 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
     limite_clientes: limiteClientes,
     sincronizacao_processos_habilitada: sincronizacaoProcessosHabilitada,
     sincronizacao_processos_cota: sincronizacaoProcessosCota,
+    sincronizacao_processos_limite: sincronizacaoProcessosLimite,
+    max_propostas: maxPropostasValue,
+    sincronizacao_intimacoes_habilitada: sincronizacaoIntimacoesHabilitada,
+    sincronizacao_intimacoes_limite: sincronizacaoIntimacoesLimite,
+    limite_advogados_processos: limiteAdvogadosProcessosValue,
+    limite_advogados_intimacao: limiteAdvogadosIntimacaoValue,
     recursos_personalizados: customResources,
   };
 };
@@ -1059,7 +1321,7 @@ const formatPlanoRow = (row: PlanoRow): PlanoResponseRow => {
 export const listPlanos = async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos'
+      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota, sincronizacao_processos_limite, max_propostas, sincronizacao_intimacoes_habilitada, sincronizacao_intimacoes_limite, limite_advogados_processos, limite_advogados_intimacao FROM public.planos'
 
     );
     const formatted = result.rows.map((row) => formatPlanoRow(row as PlanoRow));
@@ -1220,6 +1482,104 @@ export const createPlano = async (req: Request, res: Response) => {
     return res.status(400).json({ error: message });
   }
 
+  const syncLimitEntry = pickFirstDefined(body, BODY_SYNC_LIMIT_KEYS);
+  let syncLimit: number | null = syncQuota;
+  if (syncLimitEntry.provided) {
+    try {
+      syncLimit = parseOptionalIntegerOrDefault(
+        syncLimitEntry.value,
+        'sincronizacao_processos_limite',
+        syncQuota
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'sincronizacao_processos_limite inválido';
+      return res.status(400).json({ error: message });
+    }
+  }
+
+  const maxPropostasEntry = pickFirstDefined(body, BODY_MAX_PROPOSTAS_KEYS);
+  let maxPropostas = limitePropostas;
+  if (maxPropostasEntry.provided) {
+    try {
+      maxPropostas = parseOptionalIntegerOrDefault(
+        maxPropostasEntry.value,
+        'max_propostas',
+        limitePropostas
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'max_propostas inválido';
+      return res.status(400).json({ error: message });
+    }
+  }
+
+  const intimationSyncEnabledEntry = pickFirstDefined(
+    body,
+    BODY_INTIMATION_SYNC_ENABLED_KEYS
+  );
+  let intimationSyncEnabled: boolean;
+  try {
+    intimationSyncEnabled = parseBooleanOrDefault(
+      intimationSyncEnabledEntry.value,
+      'sincronizacao_intimacoes_habilitada',
+      false
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'sincronizacao_intimacoes_habilitada inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  const intimationSyncLimitEntry = pickFirstDefined(
+    body,
+    BODY_INTIMATION_SYNC_LIMIT_KEYS
+  );
+  let intimationSyncLimit: number | null;
+  try {
+    intimationSyncLimit = parseOptionalIntegerOrDefault(
+      intimationSyncLimitEntry.provided ? intimationSyncLimitEntry.value : undefined,
+      'sincronizacao_intimacoes_limite',
+      null
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'sincronizacao_intimacoes_limite inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  const lawyerProcessLimitEntry = pickFirstDefined(
+    body,
+    BODY_LAWYER_PROCESS_LIMIT_KEYS
+  );
+  let lawyerProcessLimit: number | null;
+  try {
+    lawyerProcessLimit = parseOptionalIntegerOrDefault(
+      lawyerProcessLimitEntry.provided ? lawyerProcessLimitEntry.value : undefined,
+      'limite_advogados_processos',
+      null
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'limite_advogados_processos inválido';
+    return res.status(400).json({ error: message });
+  }
+
+  const lawyerIntimationLimitEntry = pickFirstDefined(
+    body,
+    BODY_LAWYER_INTIMATION_LIMIT_KEYS
+  );
+  let lawyerIntimationLimit: number | null;
+  try {
+    lawyerIntimationLimit = parseOptionalIntegerOrDefault(
+      lawyerIntimationLimitEntry.provided ? lawyerIntimationLimitEntry.value : undefined,
+      'limite_advogados_intimacao',
+      null
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'limite_advogados_intimacao inválido';
+    return res.status(400).json({ error: message });
+  }
+
   const recursosPayload = prepareRecursosForStorage({
     recursosInput: recursosEntry.provided ? recursosEntry.value : undefined,
     modules,
@@ -1230,12 +1590,18 @@ export const createPlano = async (req: Request, res: Response) => {
       limiteClientes,
       sincronizacaoProcessosHabilitada: syncEnabled,
       sincronizacaoProcessosCota: syncQuota,
+      sincronizacaoProcessosLimite: syncLimit,
+      maxPropostas,
+      sincronizacaoIntimacoesHabilitada: intimationSyncEnabled,
+      sincronizacaoIntimacoesLimite: intimationSyncLimit,
+      limiteAdvogadosProcessos: lawyerProcessLimit,
+      limiteAdvogadosIntimacao: lawyerIntimationLimit,
     },
   });
 
   try {
     const result = await pool.query(
-      'INSERT INTO public.planos (nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota) VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
+      'INSERT INTO public.planos (nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota, sincronizacao_processos_limite, max_propostas, sincronizacao_intimacoes_habilitada, sincronizacao_intimacoes_limite, limite_advogados_processos, limite_advogados_intimacao) VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota, sincronizacao_processos_limite, max_propostas, sincronizacao_intimacoes_habilitada, sincronizacao_intimacoes_limite, limite_advogados_processos, limite_advogados_intimacao',
       [
         nome,
         valorMensal,
@@ -1249,6 +1615,12 @@ export const createPlano = async (req: Request, res: Response) => {
         limiteClientes,
         syncEnabled,
         syncQuota,
+        syncLimit,
+        maxPropostas,
+        intimationSyncEnabled,
+        intimationSyncLimit,
+        lawyerProcessLimit,
+        lawyerIntimationLimit,
       ]
     );
 
@@ -1266,7 +1638,7 @@ export const updatePlano = async (req: Request, res: Response) => {
 
   try {
     const existingResult = await pool.query(
-      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota FROM public.planos WHERE id = $1',
+      'SELECT id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota, sincronizacao_processos_limite, max_propostas, sincronizacao_intimacoes_habilitada, sincronizacao_intimacoes_limite, limite_advogados_processos, limite_advogados_intimacao FROM public.planos WHERE id = $1',
       [id]
     );
 
@@ -1439,6 +1811,113 @@ export const updatePlano = async (req: Request, res: Response) => {
       return res.status(400).json({ error: message });
     }
 
+    const syncLimitEntry = pickFirstDefined(body, BODY_SYNC_LIMIT_KEYS);
+    let syncLimitValue = currentPlano.sincronizacao_processos_limite;
+    if (syncLimitEntry.provided) {
+      try {
+        syncLimitValue = parseOptionalIntegerOrDefault(
+          syncLimitEntry.value,
+          'sincronizacao_processos_limite',
+          syncQuotaValue
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'sincronizacao_processos_limite inválido';
+        return res.status(400).json({ error: message });
+      }
+    } else if (syncQuotaEntry.provided) {
+      syncLimitValue = syncQuotaValue;
+    }
+
+    const maxPropostasEntry = pickFirstDefined(body, BODY_MAX_PROPOSTAS_KEYS);
+    let maxPropostasValue = currentPlano.max_propostas ?? currentPlano.limite_propostas;
+    if (maxPropostasEntry.provided) {
+      try {
+        maxPropostasValue = parseOptionalIntegerOrDefault(
+          maxPropostasEntry.value,
+          'max_propostas',
+          currentPlano.max_propostas ?? currentPlano.limite_propostas
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'max_propostas inválido';
+        return res.status(400).json({ error: message });
+      }
+    } else if (limitePropostasEntry.provided) {
+      maxPropostasValue = limitePropostasValue;
+    }
+
+    const intimationSyncEnabledEntry = pickFirstDefined(
+      body,
+      BODY_INTIMATION_SYNC_ENABLED_KEYS
+    );
+    let intimationSyncEnabledValue = currentPlano.sincronizacao_intimacoes_habilitada;
+    if (intimationSyncEnabledEntry.provided) {
+      try {
+        intimationSyncEnabledValue = parseBooleanOrDefault(
+          intimationSyncEnabledEntry.value,
+          'sincronizacao_intimacoes_habilitada',
+          currentPlano.sincronizacao_intimacoes_habilitada
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'sincronizacao_intimacoes_habilitada inválido';
+        return res.status(400).json({ error: message });
+      }
+    }
+
+    const intimationSyncLimitEntry = pickFirstDefined(
+      body,
+      BODY_INTIMATION_SYNC_LIMIT_KEYS
+    );
+    let intimationSyncLimitValue: number | null;
+    try {
+      intimationSyncLimitValue = parseOptionalIntegerOrDefault(
+        intimationSyncLimitEntry.provided ? intimationSyncLimitEntry.value : undefined,
+        'sincronizacao_intimacoes_limite',
+        currentPlano.sincronizacao_intimacoes_limite
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'sincronizacao_intimacoes_limite inválido';
+      return res.status(400).json({ error: message });
+    }
+
+    const lawyerProcessLimitEntry = pickFirstDefined(
+      body,
+      BODY_LAWYER_PROCESS_LIMIT_KEYS
+    );
+    let lawyerProcessLimitValue: number | null;
+    try {
+      lawyerProcessLimitValue = parseOptionalIntegerOrDefault(
+        lawyerProcessLimitEntry.provided ? lawyerProcessLimitEntry.value : undefined,
+        'limite_advogados_processos',
+        currentPlano.limite_advogados_processos
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'limite_advogados_processos inválido';
+      return res.status(400).json({ error: message });
+    }
+
+    const lawyerIntimationLimitEntry = pickFirstDefined(
+      body,
+      BODY_LAWYER_INTIMATION_LIMIT_KEYS
+    );
+    let lawyerIntimationLimitValue: number | null;
+    try {
+      lawyerIntimationLimitValue = parseOptionalIntegerOrDefault(
+        lawyerIntimationLimitEntry.provided ? lawyerIntimationLimitEntry.value : undefined,
+        'limite_advogados_intimacao',
+        currentPlano.limite_advogados_intimacao
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'limite_advogados_intimacao inválido';
+      return res.status(400).json({ error: message });
+    }
+
     const recursosPayload = prepareRecursosForStorage({
       recursosInput: recursosEntry.provided ? recursosEntry.value : undefined,
       modules,
@@ -1449,12 +1928,18 @@ export const updatePlano = async (req: Request, res: Response) => {
         limiteClientes: limiteClientesValue,
         sincronizacaoProcessosHabilitada: syncEnabledValue,
         sincronizacaoProcessosCota: syncQuotaValue,
+        sincronizacaoProcessosLimite: syncLimitValue,
+        maxPropostas: maxPropostasValue,
+        sincronizacaoIntimacoesHabilitada: intimationSyncEnabledValue,
+        sincronizacaoIntimacoesLimite: intimationSyncLimitValue,
+        limiteAdvogadosProcessos: lawyerProcessLimitValue,
+        limiteAdvogadosIntimacao: lawyerIntimationLimitValue,
       },
       fallback: currentRecursos,
     });
 
     const result = await pool.query(
-      'UPDATE public.planos SET nome = $1, valor_mensal = $2, valor_anual = $3, ativo = $4, modulos = $5, recursos = $6, limite_processos = $7, limite_usuarios = $8, limite_propostas = $9, limite_clientes = $10, sincronizacao_processos_habilitada = $11, sincronizacao_processos_cota = $12 WHERE id = $13 RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota',
+      'UPDATE public.planos SET nome = $1, valor_mensal = $2, valor_anual = $3, ativo = $4, modulos = $5, recursos = $6, limite_processos = $7, limite_usuarios = $8, limite_propostas = $9, limite_clientes = $10, sincronizacao_processos_habilitada = $11, sincronizacao_processos_cota = $12, sincronizacao_processos_limite = $13, max_propostas = $14, sincronizacao_intimacoes_habilitada = $15, sincronizacao_intimacoes_limite = $16, limite_advogados_processos = $17, limite_advogados_intimacao = $18 WHERE id = $19 RETURNING id, nome, valor_mensal, valor_anual, ativo, datacadastro, modulos, recursos, limite_processos, limite_usuarios, limite_propostas, limite_clientes, sincronizacao_processos_habilitada, sincronizacao_processos_cota, sincronizacao_processos_limite, max_propostas, sincronizacao_intimacoes_habilitada, sincronizacao_intimacoes_limite, limite_advogados_processos, limite_advogados_intimacao',
       [
         nomeValue,
         valorMensalValue,
@@ -1468,6 +1953,12 @@ export const updatePlano = async (req: Request, res: Response) => {
         limiteClientesValue,
         syncEnabledValue,
         syncQuotaValue,
+        syncLimitValue,
+        maxPropostasValue,
+        intimationSyncEnabledValue,
+        intimationSyncLimitValue,
+        lawyerProcessLimitValue,
+        lawyerIntimationLimitValue,
         id,
       ]
     );

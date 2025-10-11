@@ -240,7 +240,6 @@ export default function Plans() {
   const [editFormState, setEditFormState] = useState<PlanFormState>(initialPlanFormState);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const [editPublicConsultationModules, setEditPublicConsultationModules] = useState<string[]>([]);
   const [editIntimationSyncEnabled, setEditIntimationSyncEnabled] = useState(false);
   const [editIntimationSyncQuota, setEditIntimationSyncQuota] = useState("");
   const [editProcessMonitorLawyerLimit, setEditProcessMonitorLawyerLimit] = useState("");
@@ -282,33 +281,34 @@ export default function Plans() {
     [availablePublicConsultationModules],
   );
 
-  useEffect(() => {
-    const nextPublicModules = orderModules(
-      editFormState.modules.filter((id) => publicConsultationModuleIdSet.has(id)),
-      availableModules,
-    );
-
-    setEditPublicConsultationModules((previous) =>
-      areArraysEqual(previous, nextPublicModules) ? previous : nextPublicModules,
-    );
-  }, [availableModules, publicConsultationModuleIdSet, editFormState.modules]);
-
 
   const normalizePlans = (rawPlans: Plan[], modules: ModuleInfo[]) =>
     rawPlans
-      .map((plan) => ({
-        ...plan,
-        modules: orderModules(
-          plan.modules.filter((id) => modules.some((module) => module.id === id)),
-          modules
-        ),
-        publicConsultationModules: orderModules(
-          plan.publicConsultationModules.filter((id) =>
-            modules.some((module) => module.id === id)
+      .map((plan) => {
+        const moduleIds = Array.isArray(plan.modules) ? plan.modules : [];
+        const publicConsultationModuleIds = Array.isArray(plan.publicConsultationModules)
+          ? plan.publicConsultationModules
+          : [];
+
+        return {
+          ...plan,
+          modules: orderModules(
+            Array.from(
+              new Set([
+                ...moduleIds,
+                ...publicConsultationModuleIds,
+              ]),
+            ).filter((id) => modules.some((module) => module.id === id)),
+            modules
           ),
-          modules
-        ),
-      }))
+          publicConsultationModules: orderModules(
+            publicConsultationModuleIds.filter((id) =>
+              modules.some((module) => module.id === id)
+            ),
+            modules
+          ),
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
   const loadInitialData = async () => {
@@ -420,15 +420,19 @@ export default function Plans() {
 
   const openEditDialog = (plan: Plan) => {
     setEditingPlan(plan);
-    setEditFormState(createFormStateFromPlan(plan));
-    setEditPublicConsultationModules(
-      orderModules(
-        plan.publicConsultationModules.filter((id) =>
-          availableModules.some((module) => module.id === id)
-        ),
-        availableModules
-      )
+
+    const normalizedModules = orderModules(
+      Array.from(new Set([...plan.modules, ...plan.publicConsultationModules])).filter((id) =>
+        availableModules.some((module) => module.id === id)
+      ),
+      availableModules,
     );
+
+    setEditFormState({
+      ...createFormStateFromPlan(plan),
+      modules: normalizedModules,
+    });
+
     setEditIntimationSyncEnabled(plan.intimationSyncEnabled);
     setEditIntimationSyncQuota(
       plan.intimationSyncQuota != null ? String(plan.intimationSyncQuota) : ""
@@ -447,7 +451,6 @@ export default function Plans() {
     setIsEditDialogOpen(false);
     setEditingPlan(null);
     setEditFormState(initialPlanFormState);
-    setEditPublicConsultationModules([]);
     setEditIntimationSyncEnabled(false);
     setEditIntimationSyncQuota("");
     setEditProcessMonitorLawyerLimit("");
@@ -465,24 +468,6 @@ export default function Plans() {
       ...previous,
       modules: normalizedModules,
     }));
-
-    setEditPublicConsultationModules((previous) => {
-      const nextPublicModules = orderModules(
-        normalizedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
-        availableModules
-      );
-
-      return areArraysEqual(previous, nextPublicModules) ? previous : nextPublicModules;
-    });
-  };
-
-  const handleEditPublicConsultationModuleChange = (modules: string[]) => {
-    setEditPublicConsultationModules(
-      orderModules(
-        modules.filter((id) => publicConsultationModuleIdSet.has(id)),
-        availableModules
-      )
-    );
   };
 
   const editCustomAvailableTopics = useMemo(
@@ -521,9 +506,16 @@ export default function Plans() {
     setEditError(null);
 
     const orderedModules = orderModules(editFormState.modules, availableModules);
+    const existingPublicConsultationModuleIds = new Set(
+      editingPlan.publicConsultationModules,
+    );
     const orderedPublicConsultationModules = orderModules(
-      editPublicConsultationModules,
-      availableModules
+      orderedModules.filter(
+        (id) =>
+          publicConsultationModuleIdSet.has(id) ||
+          existingPublicConsultationModuleIds.has(id),
+      ),
+      availableModules,
     );
     const clientLimit = parseInteger(editFormState.clientLimit);
     const userLimit = parseInteger(editFormState.userLimit);
@@ -561,6 +553,9 @@ export default function Plans() {
       limite_propostas: proposalLimit,
       sincronizacao_processos_habilitada: editFormState.processSyncEnabled,
       sincronizacao_processos_cota: editFormState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacao_processos_limite: editFormState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacaoProcessosLimite: editFormState.processSyncEnabled ? processSyncQuota : null,
+      processSyncLimit: editFormState.processSyncEnabled ? processSyncQuota : null,
       consulta_publica_modulos: orderedPublicConsultationModules,
       consultaPublicaModulos: orderedPublicConsultationModules,
       publicConsultationModules: orderedPublicConsultationModules,
@@ -570,6 +565,13 @@ export default function Plans() {
       intimationSyncEnabled: editIntimationSyncEnabled,
       sincronizacao_intimacoes_cota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       sincronizacaoIntimacoesCota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
+      sincronizacao_intimacoes_limite: editIntimationSyncEnabled
+        ? intimationSyncQuotaValue
+        : null,
+      sincronizacaoIntimacoesLimite: editIntimationSyncEnabled
+        ? intimationSyncQuotaValue
+        : null,
+      intimationSyncLimit: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       intimationSyncQuota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       limite_advogados_processos: processMonitorLawyerLimitValue,
       limiteAdvogadosProcessos: processMonitorLawyerLimitValue,
@@ -603,7 +605,12 @@ export default function Plans() {
           updatedPlan = {
             ...parsed,
             modules: orderModules(
-              parsed.modules.filter((id) => availableModules.some((module) => module.id === id)),
+              Array.from(
+                new Set([
+                  ...parsed.modules,
+                  ...parsed.publicConsultationModules,
+                ]).filter((id) => availableModules.some((module) => module.id === id)),
+              ),
               availableModules
             ),
             publicConsultationModules: orderModules(
@@ -822,19 +829,6 @@ export default function Plans() {
                 disabled={isSavingEdit}
               />
               {renderModuleBadges(editFormState.modules)}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Módulos de consulta pública disponíveis</Label>
-              <ModuleMultiSelect
-                modules={availablePublicConsultationModules}
-                selected={editPublicConsultationModules}
-                onChange={handleEditPublicConsultationModuleChange}
-                disabled={
-                  isSavingEdit || availablePublicConsultationModules.length === 0
-                }
-              />
-              {renderModuleBadges(editPublicConsultationModules)}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

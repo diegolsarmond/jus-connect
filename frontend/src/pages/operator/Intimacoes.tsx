@@ -1099,6 +1099,7 @@ export default function Intimacoes() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const canManageOabs = !loading && intimacoes.length === 0;
+  const canSubmitOab = !loading;
 
   const loadIntimacoes = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -3002,9 +3003,9 @@ export default function Intimacoes() {
                   />
                 </div>
               </div>
-              {!canManageOabs ? (
+              {!canSubmitOab ? (
                 <p className="text-xs text-muted-foreground">
-                  Cadastros disponíveis quando não houver intimações pendentes para o período atual.
+                  Aguarde o carregamento das intimações para cadastrar uma nova OAB.
                 </p>
               ) : null}
             </div>
@@ -3015,7 +3016,7 @@ export default function Intimacoes() {
               onClick={() => {
                 void handleRegisterOab();
               }}
-              disabled={!isOabFormValid || oabSubmitting || !canManageOabs}
+              disabled={!isOabFormValid || oabSubmitting || !canSubmitOab}
             >
               {oabSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Cadastrar

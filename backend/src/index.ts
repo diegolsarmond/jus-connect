@@ -322,6 +322,7 @@ registerModuleRoutes('suporte', supportRoutes);
 registerModuleRoutes('intimacoes', intimacaoRoutes);
 registerModuleRoutes('configuracoes-integracoes', integrationApiKeyRoutes);
 registerModuleRoutes('conversas', chatRoutes);
+protectedApiRouter.use(notificationRoutes);
 protectedApiRouter.use(userProfileRoutes);
 app.use('/api', wahaWebhookRoutes);
 app.use('/api', asaasWebhookRoutes);

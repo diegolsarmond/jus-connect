@@ -139,7 +139,6 @@ export default function NewPlan() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
-  const [publicConsultationModules, setPublicConsultationModules] = useState<string[]>([]);
   const [intimationSyncEnabled, setIntimationSyncEnabled] = useState(false);
   const [intimationSyncQuota, setIntimationSyncQuota] = useState("");
   const [processMonitorLawyerLimit, setProcessMonitorLawyerLimit] = useState("");
@@ -246,19 +245,6 @@ export default function NewPlan() {
         availableModules
       );
 
-      setPublicConsultationModules((current) => {
-        const nextPublicModules = orderModules(
-          normalizedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
-          availableModules,
-        );
-
-        if (areArraysEqual(current, nextPublicModules)) {
-          return current;
-        }
-
-        return nextPublicModules;
-      });
-
       if (areArraysEqual(prev.modules, normalizedModules)) {
         return prev;
       }
@@ -268,8 +254,7 @@ export default function NewPlan() {
         modules: normalizedModules,
       };
     });
-
-  }, [availableModules, publicConsultationModuleIdSet]);
+  }, [availableModules]);
 
   const handleModuleChange = (next: string[]) => {
     const normalizedModules = orderModules(
@@ -281,25 +266,6 @@ export default function NewPlan() {
       ...prev,
       modules: normalizedModules,
     }));
-
-    setPublicConsultationModules((prev) => {
-      const nextPublicModules = orderModules(
-        normalizedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
-        availableModules,
-      );
-
-      if (areArraysEqual(prev, nextPublicModules)) {
-        return prev;
-      }
-
-      return nextPublicModules;
-    });
-  };
-
-  const handlePublicConsultationModuleChange = (next: string[]) => {
-    setPublicConsultationModules(
-      orderModules(next.filter((id) => publicConsultationModuleIdSet.has(id)), availableModules),
-    );
   };
 
   const handleMonthlyPriceChange = (value: string) => {
@@ -348,7 +314,7 @@ export default function NewPlan() {
 
     const orderedModules = orderModules(formState.modules, availableModules);
     const orderedPublicConsultationModules = orderModules(
-      publicConsultationModules,
+      orderedModules.filter((id) => publicConsultationModuleIdSet.has(id)),
       availableModules,
     );
     const clientLimit = parseInteger(formState.clientLimit);
@@ -387,6 +353,9 @@ export default function NewPlan() {
       limite_propostas: proposalLimit,
       sincronizacao_processos_habilitada: formState.processSyncEnabled,
       sincronizacao_processos_cota: formState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacao_processos_limite: formState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacaoProcessosLimite: formState.processSyncEnabled ? processSyncQuota : null,
+      processSyncLimit: formState.processSyncEnabled ? processSyncQuota : null,
       consulta_publica_modulos: orderedPublicConsultationModules,
       consultaPublicaModulos: orderedPublicConsultationModules,
       publicConsultationModules: orderedPublicConsultationModules,
@@ -396,6 +365,9 @@ export default function NewPlan() {
       intimationSyncEnabled: intimationSyncEnabled,
       sincronizacao_intimacoes_cota: intimationSyncEnabled ? intimationSyncQuotaValue : null,
       sincronizacaoIntimacoesCota: intimationSyncEnabled ? intimationSyncQuotaValue : null,
+      sincronizacao_intimacoes_limite: intimationSyncEnabled ? intimationSyncQuotaValue : null,
+      sincronizacaoIntimacoesLimite: intimationSyncEnabled ? intimationSyncQuotaValue : null,
+      intimationSyncLimit: intimationSyncEnabled ? intimationSyncQuotaValue : null,
       intimationSyncQuota: intimationSyncEnabled ? intimationSyncQuotaValue : null,
       limite_advogados_processos: processMonitorLawyerLimitValue,
       limiteAdvogadosProcessos: processMonitorLawyerLimitValue,
@@ -422,7 +394,6 @@ export default function NewPlan() {
       }
 
       setFormState(initialPlanFormState);
-      setPublicConsultationModules([]);
       setIntimationSyncEnabled(false);
       setIntimationSyncQuota("");
       setProcessMonitorLawyerLimit("");
@@ -534,45 +505,25 @@ export default function NewPlan() {
             </div>
 
             <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Módulos disponíveis</Label>
-              <ModuleMultiSelect
-                modules={availableModules}
-                selected={formState.modules}
-                onChange={handleModuleChange}
-                disabled={loadingModules || submitting}
-              />
-              {loadingModules ? (
-                <p className="text-xs text-muted-foreground">Carregando módulos…</p>
+              <div className="space-y-2">
+                <Label>Módulos disponíveis</Label>
+                <ModuleMultiSelect
+                  modules={availableModules}
+                  selected={formState.modules}
+                  onChange={handleModuleChange}
+                  disabled={loadingModules || submitting}
+                />
+                {loadingModules ? (
+                  <p className="text-xs text-muted-foreground">Carregando módulos…</p>
+                ) : null}
+                {renderModuleBadges(formState.modules)}
+              </div>
+              {fetchError ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Não foi possível carregar os módulos</AlertTitle>
+                  <AlertDescription>{fetchError}</AlertDescription>
+                </Alert>
               ) : null}
-              {renderModuleBadges(formState.modules)}
-            </div>
-            <div className="space-y-2">
-              <Label>Módulos de consulta pública</Label>
-              <ModuleMultiSelect
-                modules={availablePublicConsultationModules}
-                selected={publicConsultationModules}
-                onChange={handlePublicConsultationModuleChange}
-                disabled={
-                  loadingModules ||
-                  submitting ||
-                  availablePublicConsultationModules.length === 0
-                }
-              />
-              {availablePublicConsultationModules.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Nenhum módulo de consulta pública disponível no momento.
-                </p>
-              ) : (
-                renderModuleBadges(publicConsultationModules)
-              )}
-            </div>
-            {fetchError ? (
-              <Alert variant="destructive">
-                <AlertTitle>Não foi possível carregar os módulos</AlertTitle>
-                <AlertDescription>{fetchError}</AlertDescription>
-              </Alert>
-            ) : null}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

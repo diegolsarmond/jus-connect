@@ -31,6 +31,9 @@ export const useChatMessages = (
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const activeConversationRef = useRef<string | undefined>(conversationId);
+  const cacheRef = useRef(
+    new Map<string, { messages: Message[]; cursor: string | null; hasMore: boolean }>(),
+  );
 
   useEffect(() => {
     activeConversationRef.current = conversationId;
@@ -139,9 +142,26 @@ export const useChatMessages = (
       reset();
       return;
     }
-    reset();
+    const cached = cacheRef.current.get(conversationId);
+    if (cached) {
+      setMessages(cached.messages);
+      setCursor(cached.cursor);
+      setHasMore(cached.hasMore);
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    } else {
+      reset();
+    }
     void reload();
   }, [conversationId, reload, reset]);
+
+  useEffect(() => {
+    const activeId = activeConversationRef.current;
+    if (!activeId) {
+      return;
+    }
+    cacheRef.current.set(activeId, { messages, cursor, hasMore });
+  }, [messages, cursor, hasMore]);
 
   return {
     messages,
