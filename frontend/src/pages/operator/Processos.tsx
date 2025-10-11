@@ -1143,6 +1143,7 @@ export default function Processos() {
     const [oabNumero, setOabNumero] = useState("");
     const [oabMonitors, setOabMonitors] = useState<OabMonitor[]>([]);
     const [oabMonitorsLoading, setOabMonitorsLoading] = useState(false);
+    const [oabMonitorsInitialized, setOabMonitorsInitialized] = useState(false);
     const [oabMonitorsError, setOabMonitorsError] = useState<string | null>(null);
     const [oabSubmitLoading, setOabSubmitLoading] = useState(false);
     const [oabSubmitError, setOabSubmitError] = useState<string | null>(null);
@@ -1438,6 +1439,7 @@ export default function Processos() {
             } finally {
                 if (!cancelled) {
                     setOabMonitorsLoading(false);
+                    setOabMonitorsInitialized(true);
                 }
             }
         };
@@ -3168,6 +3170,7 @@ export default function Processos() {
 
     useEffect(() => {
         if (
+            oabMonitorsInitialized &&
             !processosLoading &&
             totalProcessos === 0 &&
             !oabModalDismissed &&
@@ -3177,6 +3180,7 @@ export default function Processos() {
             setIsOabModalOpen(true);
         }
     }, [
+        oabMonitorsInitialized,
         processosLoading,
         totalProcessos,
         oabModalDismissed,
