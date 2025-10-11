@@ -139,6 +139,12 @@ interface Municipio {
     nome: string;
 }
 
+interface Uf {
+    id: number;
+    sigla: string;
+    nome: string;
+}
+
 interface ClienteResumo {
     id: number;
     nome: string;
@@ -1170,6 +1176,7 @@ export default function Processos() {
     const [sistemaLoading, setSistemaLoading] = useState(false);
     const [sistemaError, setSistemaError] = useState<string | null>(null);
     const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
+    const [ufs, setUfs] = useState<Uf[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
     const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
@@ -1356,6 +1363,39 @@ export default function Processos() {
         },
         [page, pageSize],
     );
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchUfs = async () => {
+            try {
+                const response = await fetch(
+                    "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
+                );
+
+                if (!response.ok) {
+                    throw new Error("Falha ao carregar UFs");
+                }
+
+                const data = (await response.json()) as Uf[];
+
+                if (!cancelled) {
+                    setUfs(data);
+                }
+            } catch (error) {
+                console.error("Erro ao carregar lista de UFs", error);
+
+                if (!cancelled) {
+                    setUfs([]);
+                }
+            }
+        };
+
+        fetchUfs();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
     useEffect(() => {
         let cancelled = false;
 
