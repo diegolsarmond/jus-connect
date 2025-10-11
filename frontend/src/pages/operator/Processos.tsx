@@ -826,8 +826,46 @@ const mapProcessoDetailToFormState = (
     const numeroValue =
         typeof processo.numero === "string" ? formatProcessNumber(processo.numero) : "";
 
-    const ufValue =
-        typeof processo.uf === "string" ? processo.uf.trim().toUpperCase() : "";
+    const ufValue = (() => {
+        if (typeof processo.uf === "string") {
+            const trimmed = processo.uf.trim().toUpperCase();
+            if (trimmed) {
+                return trimmed;
+            }
+        }
+
+        if (typeof processo.jurisdicao === "string") {
+            const normalized = processo.jurisdicao.trim();
+            if (!normalized) {
+                return "";
+            }
+
+            const separators = ["-", "/"];
+            for (const separator of separators) {
+                const parts = normalized.split(separator);
+                if (parts.length < 2) {
+                    continue;
+                }
+
+                for (let index = parts.length - 1; index >= 0; index -= 1) {
+                    const candidate = parts[index]?.trim().toUpperCase();
+                    if (candidate && candidate.length === 2) {
+                        return candidate;
+                    }
+                }
+            }
+
+            const words = normalized.split(" ");
+            for (let index = words.length - 1; index >= 0; index -= 1) {
+                const candidate = words[index]?.trim().toUpperCase();
+                if (candidate && candidate.length === 2) {
+                    return candidate;
+                }
+            }
+        }
+
+        return "";
+    })();
 
     const municipioValue =
         typeof processo.municipio === "string" ? processo.municipio.trim() : "";
