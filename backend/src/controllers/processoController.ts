@@ -16,11 +16,18 @@ import {
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const normalizeString = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
+  const asString =
+    typeof value === 'number' && Number.isFinite(value)
+      ? String(value)
+      : typeof value === 'string'
+        ? value
+        : null;
+
+  if (asString === null) {
     return null;
   }
 
-  const trimmed = value.trim();
+  const trimmed = asString.trim();
   return trimmed === '' ? null : trimmed;
 };
 
@@ -3116,27 +3123,40 @@ export const updateProcesso = async (req: Request, res: Response) => {
         existingProcess.rows[0]?.monitorar_processo === true;
     }
 
-    const existingRow = existingProcess.rows[0] ?? {};
-
     if (!finalNumeroValue) {
       const existingNumero = normalizeString(
-        (existingRow as { numero_cnj?: unknown }).numero_cnj,
+        (existingProcess.rows[0] as { numero_cnj?: unknown })?.numero_cnj,
       );
-      finalNumeroValue = existingNumero;
+      if (existingNumero) {
+        finalNumeroValue = existingNumero;
+      }
     }
 
     if (!finalUfValue) {
-      finalUfValue = normalizeUppercase((existingRow as { uf?: unknown }).uf);
+      const existingUf = normalizeUppercase(
+        (existingProcess.rows[0] as { uf?: unknown })?.uf,
+      );
+      if (existingUf) {
+        finalUfValue = existingUf;
+      }
     }
 
     if (!finalMunicipioValue) {
-      finalMunicipioValue = normalizeString(
-        (existingRow as { municipio?: unknown }).municipio,
+      const existingMunicipio = normalizeString(
+        (existingProcess.rows[0] as { municipio?: unknown })?.municipio,
       );
+      if (existingMunicipio) {
+        finalMunicipioValue = existingMunicipio;
+      }
     }
 
     if (!finalGrauValue) {
-      finalGrauValue = normalizeString((existingRow as { grau?: unknown }).grau);
+      const existingGrau = normalizeString(
+        (existingProcess.rows[0] as { grau?: unknown })?.grau,
+      );
+      if (existingGrau) {
+        finalGrauValue = existingGrau;
+      }
     }
 
     if (!finalNumeroValue || !finalUfValue || !finalMunicipioValue || !finalGrauValue) {

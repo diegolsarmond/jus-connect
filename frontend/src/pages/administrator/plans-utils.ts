@@ -417,8 +417,11 @@ export const parsePlan = (raw: unknown): Plan | null => {
   const processSyncQuota =
     parseInteger(
       data.sincronizacao_processos_cota ??
+        data.sincronizacao_processos_limite ??
         data.processSyncQuota ??
         data.quotaSincronizacaoProcessos ??
+        data.sincronizacaoProcessosLimite ??
+        data.processSyncLimit ??
         data.processSyncLimit
     ) ?? null;
 
@@ -440,8 +443,11 @@ export const parsePlan = (raw: unknown): Plan | null => {
 
   const intimationSyncQuota =
     parseInteger(
-      data.sincronizacao_intimacoes_cota ??
+      data.sincronizacao_intimacoes_limite ??
+        data.sincronizacao_intimacoes_cota ??
+        data.sincronizacaoIntimacoesLimite ??
         data.sincronizacaoIntimacoesCota ??
+        data.intimationSyncLimit ??
         data.intimationSyncQuota ??
         data.quotaSincronizacaoIntimacoes
     ) ?? null;

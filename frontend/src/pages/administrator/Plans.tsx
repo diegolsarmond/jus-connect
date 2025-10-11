@@ -284,24 +284,31 @@ export default function Plans() {
 
   const normalizePlans = (rawPlans: Plan[], modules: ModuleInfo[]) =>
     rawPlans
-      .map((plan) => ({
-        ...plan,
-        modules: orderModules(
-          Array.from(
-            new Set([
-              ...plan.modules,
-              ...plan.publicConsultationModules,
-            ]).filter((id) => modules.some((module) => module.id === id)),
+      .map((plan) => {
+        const moduleIds = Array.isArray(plan.modules) ? plan.modules : [];
+        const publicConsultationModuleIds = Array.isArray(plan.publicConsultationModules)
+          ? plan.publicConsultationModules
+          : [];
+
+        return {
+          ...plan,
+          modules: orderModules(
+            Array.from(
+              new Set([
+                ...moduleIds,
+                ...publicConsultationModuleIds,
+              ]),
+            ).filter((id) => modules.some((module) => module.id === id)),
+            modules
           ),
-          modules
-        ),
-        publicConsultationModules: orderModules(
-          plan.publicConsultationModules.filter((id) =>
-            modules.some((module) => module.id === id)
+          publicConsultationModules: orderModules(
+            publicConsultationModuleIds.filter((id) =>
+              modules.some((module) => module.id === id)
+            ),
+            modules
           ),
-          modules
-        ),
-      }))
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
   const loadInitialData = async () => {
@@ -413,7 +420,19 @@ export default function Plans() {
 
   const openEditDialog = (plan: Plan) => {
     setEditingPlan(plan);
-    setEditFormState(createFormStateFromPlan(plan));
+
+    const normalizedModules = orderModules(
+      Array.from(new Set([...plan.modules, ...plan.publicConsultationModules])).filter((id) =>
+        availableModules.some((module) => module.id === id)
+      ),
+      availableModules,
+    );
+
+    setEditFormState({
+      ...createFormStateFromPlan(plan),
+      modules: normalizedModules,
+    });
+
     setEditIntimationSyncEnabled(plan.intimationSyncEnabled);
     setEditIntimationSyncQuota(
       plan.intimationSyncQuota != null ? String(plan.intimationSyncQuota) : ""
@@ -534,6 +553,9 @@ export default function Plans() {
       limite_propostas: proposalLimit,
       sincronizacao_processos_habilitada: editFormState.processSyncEnabled,
       sincronizacao_processos_cota: editFormState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacao_processos_limite: editFormState.processSyncEnabled ? processSyncQuota : null,
+      sincronizacaoProcessosLimite: editFormState.processSyncEnabled ? processSyncQuota : null,
+      processSyncLimit: editFormState.processSyncEnabled ? processSyncQuota : null,
       consulta_publica_modulos: orderedPublicConsultationModules,
       consultaPublicaModulos: orderedPublicConsultationModules,
       publicConsultationModules: orderedPublicConsultationModules,
@@ -543,6 +565,13 @@ export default function Plans() {
       intimationSyncEnabled: editIntimationSyncEnabled,
       sincronizacao_intimacoes_cota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       sincronizacaoIntimacoesCota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
+      sincronizacao_intimacoes_limite: editIntimationSyncEnabled
+        ? intimationSyncQuotaValue
+        : null,
+      sincronizacaoIntimacoesLimite: editIntimationSyncEnabled
+        ? intimationSyncQuotaValue
+        : null,
+      intimationSyncLimit: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       intimationSyncQuota: editIntimationSyncEnabled ? intimationSyncQuotaValue : null,
       limite_advogados_processos: processMonitorLawyerLimitValue,
       limiteAdvogadosProcessos: processMonitorLawyerLimitValue,

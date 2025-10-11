@@ -51,6 +51,11 @@ const moduleCopyMap: Record<string, ModuleCopy> = {
     description:
       "Monitore prazos, publique movimentações e concentre documentos importantes em um só ambiente seguro.",
   },
+  "consulta-publica": {
+    title: "Consulte processos públicos com agilidade",
+    description:
+      "Habilite a consulta pública para pesquisar processos, conferir detalhes e acessar informações abertas em poucos passos.",
+  },
   intimacoes: {
     title: "Automatize o acompanhamento de intimações",
     description:
