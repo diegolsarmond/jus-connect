@@ -134,11 +134,6 @@ interface ProcessoLoadResult {
     summary: ProcessoSummary;
 }
 
-interface Uf {
-    sigla: string;
-    nome: string;
-}
-
 interface Municipio {
     id: number;
     nome: string;
@@ -1175,7 +1170,6 @@ export default function Processos() {
     const [sistemaLoading, setSistemaLoading] = useState(false);
     const [sistemaError, setSistemaError] = useState<string | null>(null);
     const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
-    const [ufs, setUfs] = useState<Uf[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
     const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
@@ -1362,30 +1356,6 @@ export default function Processos() {
         },
         [page, pageSize],
     );
-    useEffect(() => {
-        let cancelled = false;
-
-        const fetchUfs = async () => {
-            try {
-                const res = await fetch(
-                    "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
-                );
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = (await res.json()) as Uf[];
-                if (!cancelled) setUfs(data);
-            } catch (error) {
-                console.error(error);
-                if (!cancelled) setUfs([]);
-            }
-        };
-
-        fetchUfs();
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
-
     useEffect(() => {
         let cancelled = false;
 
@@ -2523,13 +2493,15 @@ export default function Processos() {
     }, []);
 
     const handleOabSubmit = useCallback(async () => {
-        if (!oabUf || !oabNumero) {
-            setOabSubmitError("Informe a UF e o número da OAB.");
+        if (!oabUsuarioId) {
+            setOabSubmitError("Selecione o usuário responsável pela OAB.");
             return;
         }
 
-        if (!oabUsuarioId) {
-            setOabSubmitError("Selecione o usuário responsável pela OAB.");
+        if (!oabUf || !oabNumero) {
+            setOabSubmitError(
+                "O responsável selecionado não possui OAB válida para monitoramento.",
+            );
             return;
         }
 
@@ -4211,32 +4183,6 @@ export default function Processos() {
                                 {oabUsuariosError ? (
                                     <p className="text-sm text-destructive">{oabUsuariosError}</p>
                                 ) : null}
-                            </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="oab-uf">Estado</Label>
-                                    <Select value={oabUf} onValueChange={setOabUf}>
-                                        <SelectTrigger id="oab-uf">
-                                            <SelectValue placeholder="Selecione o estado" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {ufs.map((uf) => (
-                                                <SelectItem key={uf.sigla} value={uf.sigla}>
-                                                    {uf.nome} ({uf.sigla})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="oab-numero">Número da OAB</Label>
-                                    <Input
-                                        id="oab-numero"
-                                        value={oabNumero}
-                                        onChange={(event) => setOabNumero(formatOabDigits(event.target.value))}
-                                        placeholder="000000"
-                                    />
-                                </div>
                             </div>
                             {oabSubmitError ? (
                                 <p className="text-sm text-destructive">{oabSubmitError}</p>
