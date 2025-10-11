@@ -2847,15 +2847,23 @@ export default function Processos() {
                             continue;
                         }
 
-                        const candidate = parts[parts.length - 1]?.trim().toUpperCase();
+                        for (let index = parts.length - 1; index >= 0; index -= 1) {
+                            const candidate = parts[index]?.trim().toUpperCase();
+                            if (candidate && candidate.length === 2) {
+                                return candidate;
+                            }
+                        }
+                    }
+
+                    const words = normalized.split(" ");
+                    for (let index = words.length - 1; index >= 0; index -= 1) {
+                        const candidate = words[index]?.trim().toUpperCase();
                         if (candidate && candidate.length === 2) {
                             return candidate;
                         }
                     }
 
-                    const words = normalized.split(" ");
-                    const lastWord = words[words.length - 1]?.trim().toUpperCase();
-                    return lastWord && lastWord.length === 2 ? lastWord : "";
+                    return "";
                 })();
                 const ufPayload = ufFromForm || ufFromJurisdicao;
                 if (!ufPayload) {
