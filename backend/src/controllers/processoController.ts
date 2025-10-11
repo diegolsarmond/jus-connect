@@ -1017,6 +1017,7 @@ type RawCrawlerParticipant = {
   documento_principal?: unknown;
   tipo_documento_principal?: unknown;
   data_cadastro?: unknown;
+  tipo_parte?: unknown;
 };
 
 type RawOpportunityParticipant = {
@@ -1143,7 +1144,7 @@ const buildCrawlerParticipant = (
     side: normalizeParticipantSide(row.polo),
     type: normalizeString(row.polo),
     person_type: normalizeUppercase(row.tipo_pessoa),
-    role: null,
+    role: normalizeString(row.tipo_parte),
     party_role: null,
     lawyers: null,
     representatives: null,
@@ -1220,7 +1221,8 @@ const fetchProcessParticipants = async (
           tipo_pessoa,
           documento_principal,
           tipo_documento_principal,
-          data_cadastro
+          data_cadastro,
+          tipo_parte
         FROM public.trigger_envolvidos_processo
        WHERE numero_cnj = $1`,
       [normalizedNumero],
