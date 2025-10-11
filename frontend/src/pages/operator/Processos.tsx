@@ -91,6 +91,7 @@ interface ProcessoAdvogado {
     id: number;
     nome: string;
     funcao?: string;
+    oab?: string | null;
 }
 
 interface ProcessoProposta {
@@ -204,6 +205,7 @@ interface ApiProcessoAdvogado {
     cargo?: string | null;
     perfil?: string | null;
     perfil_nome?: string | null;
+    oab?: string | null;
 }
 
 interface AdvogadoOption {
@@ -1013,7 +1015,9 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
                 advogado.perfil_nome,
             );
 
-            advogados.push({ id: idValue, nome, funcao });
+            const oab = pickFirstNonEmptyString(advogado.oab);
+
+            advogados.push({ id: idValue, nome, funcao, oab });
             seen.add(idValue);
         }
     }
@@ -1021,7 +1025,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
     if (advogados.length === 0) {
         const fallbackNome = processo.advogado_responsavel?.trim();
         if (fallbackNome) {
-            advogados.push({ id: 0, nome: fallbackNome });
+            advogados.push({ id: 0, nome: fallbackNome, oab: null });
         }
     }
 
@@ -3848,7 +3852,9 @@ export default function Processos() {
                 processo.tipo,
                 processo.orgaoJulgador,
                 processo.classeJudicial,
-                processo.advogados.map((adv) => adv.nome).join(" "),
+                processo.advogados
+                    .map((adv) => [adv.nome, adv.oab].filter(Boolean).join(" "))
+                    .join(" "),
                 processo.proposta?.label,
                 processo.proposta?.solicitante ?? null,
             ];
@@ -4160,6 +4166,17 @@ export default function Processos() {
                             numero={processo.numero}
                             status={processo.status}
                             cliente={processo.cliente.nome}
+                            advogados={
+                                processo.advogados.length > 0
+                                    ? processo.advogados
+                                          .map((advogado) =>
+                                              advogado.oab
+                                                  ? `${advogado.nome} (${advogado.oab})`
+                                                  : advogado.nome,
+                                          )
+                                          .join(", ")
+                                    : "Não informado"
+                            }
                             dataDistribuicao={processo.dataDistribuicao}
                             jurisdicao={processo.jurisdicao}
                             orgaoJulgador={processo.orgaoJulgador}
