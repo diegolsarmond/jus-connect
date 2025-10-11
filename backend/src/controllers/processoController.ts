@@ -3546,6 +3546,36 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
         .json({ error: 'Informe o usuário responsável pela OAB.' });
     }
 
+    const planLimits = await fetchPlanLimitsForCompany(empresaId);
+    const planLimit = planLimits?.limiteAdvogadosProcessos;
+
+    if (planLimit != null) {
+      const normalizedUf =
+        typeof uf === 'string'
+          ? uf.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase()
+          : '';
+      const normalizedNumero =
+        typeof numero === 'string'
+          ? numero.replace(/\D/g, '').slice(0, 12)
+          : '';
+      const canEvaluateExisting =
+        normalizedUf.length === 2 && normalizedNumero.length > 0;
+      const monitors = await listCompanyOabMonitors(empresaId);
+      const alreadyMonitored =
+        canEvaluateExisting &&
+        monitors.some(
+          (monitor) =>
+            monitor.uf === normalizedUf && monitor.numero === normalizedNumero,
+        );
+
+      if (!alreadyMonitored && monitors.length >= planLimit) {
+        return res.status(400).json({
+          error:
+            'Limite de advogados monitorados por processos atingido pelo plano atual.',
+        });
+      }
+    }
+
     try {
       const monitor = await createCompanyOabMonitor(empresaId, uf, numero, usuarioId);
       return res.status(201).json(monitor);
