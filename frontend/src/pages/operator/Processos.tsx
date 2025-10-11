@@ -1574,7 +1574,17 @@ export default function Processos() {
 
                                 if (ufMatches && ufMatches.length > 0) {
                                     ufCandidate = ufMatches[ufMatches.length - 1];
-                                } else {
+                                }
+
+                                if (!ufCandidate) {
+                                    const lettersAfterNumberMatches = [...oabRaw.matchAll(/\d{3,}[^A-Za-z]*([A-Za-z]{2})\b/g)];
+                                    if (lettersAfterNumberMatches.length > 0) {
+                                        const lastMatch = lettersAfterNumberMatches[lettersAfterNumberMatches.length - 1];
+                                        ufCandidate = lastMatch[1];
+                                    }
+                                }
+
+                                if (!ufCandidate) {
                                     const fallbackUfMatch = oabRaw.match(/\/\s*([A-Za-z]{2})\b/);
                                     if (fallbackUfMatch) {
                                         ufCandidate = fallbackUfMatch[1];
