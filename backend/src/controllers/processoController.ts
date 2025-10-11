@@ -2946,6 +2946,10 @@ export const updateProcesso = async (req: Request, res: Response) => {
     data_encerramento,
   } = req.body;
 
+  const body = req.body ?? {};
+  const hasBodyField = (field: string) =>
+    Object.prototype.hasOwnProperty.call(body, field);
+
   const parsedClienteId = Number(cliente_id);
 
   if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
@@ -3051,32 +3055,35 @@ export const updateProcesso = async (req: Request, res: Response) => {
   const dataRecebimentoValue = normalizeDate(data_recebimento);
   const dataArquivamentoValue = normalizeDate(data_arquivamento);
   const dataEncerramentoValue = normalizeDate(data_encerramento);
-  const rawAdvogados = Array.isArray(advogados) ? advogados : [];
-  const advogadoIds = Array.from(
-    new Set(
-      rawAdvogados
-        .map((value: unknown) => {
-          if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
-            return value;
-          }
+  const rawAdvogados = Array.isArray(advogados) ? advogados : null;
+  const shouldUpdateAdvogados = rawAdvogados !== null;
+  const advogadoIds = rawAdvogados
+    ? Array.from(
+        new Set(
+          rawAdvogados
+            .map((value: unknown) => {
+              if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+                return value;
+              }
 
-          if (typeof value === 'string') {
-            const trimmed = value.trim();
-            if (!trimmed) {
+              if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                  return null;
+                }
+
+                const parsed = Number.parseInt(trimmed, 10);
+                if (Number.isFinite(parsed) && parsed > 0) {
+                  return parsed;
+                }
+              }
+
               return null;
-            }
-
-            const parsed = Number.parseInt(trimmed, 10);
-            if (Number.isFinite(parsed) && parsed > 0) {
-              return parsed;
-            }
-          }
-
-          return null;
-        })
-        .filter((value): value is number => value !== null && Number.isInteger(value) && value > 0)
-    )
-  );
+            })
+            .filter((value): value is number => value !== null && Number.isInteger(value) && value > 0),
+        ),
+      )
+    : [];
 
   try {
     if (!req.auth) {
@@ -3109,56 +3116,204 @@ export const updateProcesso = async (req: Request, res: Response) => {
     }
 
     const existingProcess = await pool.query(
-      `SELECT monitorar_processo, numero_cnj, uf, municipio, grau
+      `SELECT monitorar_processo,
+              numero_cnj,
+              uf,
+              municipio,
+              grau,
+              orgao_julgador,
+              situacao_processo_id,
+              classe_judicial,
+              assunto,
+              jurisdicao,
+              oportunidade_id,
+              advogado_responsavel,
+              data_distribuicao,
+              area_atuacao_id,
+              tipo_processo_id,
+              instancia,
+              sistema_cnj_id,
+              envolvidos_id,
+              descricao,
+              setor_id,
+              data_citacao,
+              data_recebimento,
+              data_arquivamento,
+              data_encerramento,
+              justica_gratuita,
+              liminar,
+              nivel_sigilo,
+              tramitacaoatual,
+              permite_peticionar
          FROM public.processos
         WHERE id = $1
           AND idempresa IS NOT DISTINCT FROM $2`,
-      [parsedId, empresaId]
+      [parsedId, empresaId],
     );
 
     if (existingProcess.rowCount === 0) {
       return res.status(404).json({ error: 'Processo não encontrado' });
     }
 
+    const existingRow = existingProcess.rows[0] as Record<string, unknown>;
+
     if (monitorarProcessoValue === null) {
-      monitorarProcessoValue =
-        existingProcess.rows[0]?.monitorar_processo === true;
+      monitorarProcessoValue = existingRow['monitorar_processo'] === true;
     }
 
     if (!finalNumeroValue) {
-      const existingNumero = normalizeString(
-        (existingProcess.rows[0] as { numero_cnj?: unknown })?.numero_cnj,
-      );
+      const existingNumero = normalizeString(existingRow['numero_cnj']);
       if (existingNumero) {
         finalNumeroValue = existingNumero;
       }
     }
 
     if (!finalUfValue) {
-      const existingUf = normalizeUppercase(
-        (existingProcess.rows[0] as { uf?: unknown })?.uf,
-      );
+      const existingUf = normalizeUppercase(existingRow['uf']);
       if (existingUf) {
         finalUfValue = existingUf;
       }
     }
 
     if (!finalMunicipioValue) {
-      const existingMunicipio = normalizeString(
-        (existingProcess.rows[0] as { municipio?: unknown })?.municipio,
-      );
+      const existingMunicipio = normalizeString(existingRow['municipio']);
       if (existingMunicipio) {
         finalMunicipioValue = existingMunicipio;
       }
     }
 
     if (!finalGrauValue) {
-      const existingGrau = normalizeString(
-        (existingProcess.rows[0] as { grau?: unknown })?.grau,
-      );
+      const existingGrau = normalizeString(existingRow['grau']);
       if (existingGrau) {
         finalGrauValue = existingGrau;
       }
+    }
+
+    let finalOrgaoValue = orgaoValue;
+    if (!hasBodyField('orgao_julgador')) {
+      finalOrgaoValue = normalizeString(existingRow['orgao_julgador']);
+    }
+
+    let finalClasseValue = classeValue;
+    if (!hasBodyField('classe_judicial')) {
+      finalClasseValue = normalizeString(existingRow['classe_judicial']);
+    }
+
+    let finalAssuntoValue = assuntoValue;
+    if (!hasBodyField('assunto')) {
+      finalAssuntoValue = normalizeString(existingRow['assunto']);
+    }
+
+    let finalJurisdicaoValue = jurisdicaoValue;
+    if (!hasBodyField('jurisdicao')) {
+      finalJurisdicaoValue = normalizeString(existingRow['jurisdicao']);
+    }
+
+    const hasOportunidadeField =
+      hasBodyField('oportunidade_id') || hasBodyField('proposta_id');
+    let finalOportunidadeIdValue = oportunidadeIdValue;
+    if (!hasOportunidadeField) {
+      finalOportunidadeIdValue = parseOptionalInteger(existingRow['oportunidade_id']);
+    }
+
+    const existingAdvogadoResponsavel = normalizeString(
+      existingRow['advogado_responsavel'],
+    );
+
+    const existingDataDistribuicao = normalizeDate(existingRow['data_distribuicao']);
+
+    let finalDataDistribuicaoValue = dataDistribuicaoValue;
+    if (!hasBodyField('data_distribuicao')) {
+      finalDataDistribuicaoValue = existingDataDistribuicao;
+    }
+
+    const existingSituacaoProcessoId = parseOptionalInteger(
+      existingRow['situacao_processo_id'],
+    );
+    if (!hasBodyField('situacao_processo_id') && !statusValue) {
+      situacaoProcessoIdValue = existingSituacaoProcessoId;
+    }
+
+    const existingTipoProcessoId = parseOptionalInteger(existingRow['tipo_processo_id']);
+    if (!hasBodyField('tipo_processo_id') && !tipoValue) {
+      tipoProcessoIdValue = existingTipoProcessoId;
+    }
+
+    const existingAreaAtuacaoId = parseOptionalInteger(existingRow['area_atuacao_id']);
+    if (!hasBodyField('area_atuacao_id')) {
+      areaAtuacaoIdValue = existingAreaAtuacaoId;
+    }
+
+    let finalInstanciaValue = instanciaValue;
+    if (!hasBodyField('instancia')) {
+      finalInstanciaValue = normalizeString(existingRow['instancia']);
+    }
+
+    const existingSistemaCnjId = parseOptionalInteger(existingRow['sistema_cnj_id']);
+    if (!hasBodyField('sistema_cnj_id')) {
+      sistemaCnjIdValue = existingSistemaCnjId;
+    }
+
+    const existingEnvolvidosId = parseOptionalInteger(existingRow['envolvidos_id']);
+    if (!hasBodyField('envolvidos_id')) {
+      envolvidosIdValue = existingEnvolvidosId;
+    }
+
+    let finalDescricaoValue = descricaoValue;
+    if (!hasBodyField('descricao')) {
+      finalDescricaoValue = normalizeString(existingRow['descricao']);
+    }
+
+    const existingSetorId = parseOptionalInteger(existingRow['setor_id']);
+    if (!hasBodyField('setor_id')) {
+      setorIdValue = existingSetorId;
+    }
+
+    const existingDataCitacao = normalizeDate(existingRow['data_citacao']);
+    const existingDataRecebimento = normalizeDate(existingRow['data_recebimento']);
+    const existingDataArquivamento = normalizeDate(existingRow['data_arquivamento']);
+    const existingDataEncerramento = normalizeDate(existingRow['data_encerramento']);
+
+    let finalDataCitacaoValue = dataCitacaoValue;
+    if (!hasBodyField('data_citacao')) {
+      finalDataCitacaoValue = existingDataCitacao;
+    }
+
+    let finalDataRecebimentoValue = dataRecebimentoValue;
+    if (!hasBodyField('data_recebimento')) {
+      finalDataRecebimentoValue = existingDataRecebimento;
+    }
+
+    let finalDataArquivamentoValue = dataArquivamentoValue;
+    if (!hasBodyField('data_arquivamento')) {
+      finalDataArquivamentoValue = existingDataArquivamento;
+    }
+
+    let finalDataEncerramentoValue = dataEncerramentoValue;
+    if (!hasBodyField('data_encerramento')) {
+      finalDataEncerramentoValue = existingDataEncerramento;
+    }
+
+    let finalJusticaGratuitaFlag = justicaGratuitaFlag;
+    if (!hasBodyField('justica_gratuita')) {
+      finalJusticaGratuitaFlag = parseBooleanFlag(existingRow['justica_gratuita']);
+    }
+
+    let finalLiminarFlag = liminarFlag;
+    if (!hasBodyField('liminar')) {
+      finalLiminarFlag = parseBooleanFlag(existingRow['liminar']);
+    }
+
+    let finalNivelSigiloValue = nivelSigiloValue;
+    if (!hasBodyField('nivel_sigilo')) {
+      finalNivelSigiloValue = parseOptionalInteger(existingRow['nivel_sigilo']);
+    }
+
+    const hasTramitacaoField =
+      hasBodyField('tramitacao_atual') || hasBodyField('tramitacaoatual');
+    let finalTramitacaoAtualValue = tramitacaoAtualValue;
+    if (!hasTramitacaoField) {
+      finalTramitacaoAtualValue = normalizeString(existingRow['tramitacaoatual']);
     }
 
     if (!finalNumeroValue || !finalUfValue || !finalMunicipioValue || !finalGrauValue) {
@@ -3170,7 +3325,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
 
     const clienteExists = await pool.query(
       'SELECT 1 FROM public.clientes WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
-      [parsedClienteId, empresaId]
+      [parsedClienteId, empresaId],
     );
 
     if (clienteExists.rowCount === 0) {
@@ -3215,7 +3370,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
          FROM public.usuarios
          WHERE id = ANY($1::int[])
            AND empresa IS NOT DISTINCT FROM $2`,
-        [advogadoIds, empresaId]
+        [advogadoIds, empresaId],
       );
 
       const advogadosMap = new Map<number, string | null>();
@@ -3225,7 +3380,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
           const nomeValue = (row as { nome?: unknown }).nome;
           advogadosMap.set(
             idValue,
-            typeof nomeValue === 'string' ? nomeValue : null
+            typeof nomeValue === 'string' ? nomeValue : null,
           );
         }
       }
@@ -3250,9 +3405,21 @@ export const updateProcesso = async (req: Request, res: Response) => {
       .filter((nome) => nome !== '')
       .join(', ');
 
-    const advogadoColumnValue = advogadoConcatValue || advogadoValue;
+    const hasAdvogadoResponsavelField = hasBodyField('advogado_responsavel');
+    let finalAdvogadoColumnValue = advogadoConcatValue || advogadoValue;
+    if (!shouldUpdateAdvogados && !hasAdvogadoResponsavelField) {
+      finalAdvogadoColumnValue = existingAdvogadoResponsavel;
+    }
+
     const finalMonitorarProcesso = monitorarProcessoValue ?? false;
-    const finalPermitePeticionar = permitePeticionarFlag ?? true;
+
+    let finalPermitePeticionarFlag = permitePeticionarFlag;
+    if (!hasBodyField('permite_peticionar')) {
+      finalPermitePeticionarFlag = parseBooleanFlag(
+        existingRow['permite_peticionar'],
+      );
+    }
+    const finalPermitePeticionar = finalPermitePeticionarFlag ?? true;
 
     const clientDb = await pool.connect();
 
@@ -3300,35 +3467,35 @@ export const updateProcesso = async (req: Request, res: Response) => {
           finalNumeroValue,
           finalUfValue,
           finalMunicipioValue,
-          orgaoValue,
+          finalOrgaoValue,
           situacaoProcessoIdValue,
-          classeValue,
-          assuntoValue,
-          jurisdicaoValue,
-          oportunidadeIdValue,
-          advogadoColumnValue,
-          dataDistribuicaoValue,
+          finalClasseValue,
+          finalAssuntoValue,
+          finalJurisdicaoValue,
+          finalOportunidadeIdValue,
+          finalAdvogadoColumnValue,
+          finalDataDistribuicaoValue,
           areaAtuacaoIdValue,
           tipoProcessoIdValue,
-          instanciaValue,
+          finalInstanciaValue,
           sistemaCnjIdValue,
           finalMonitorarProcesso,
           envolvidosIdValue,
-          descricaoValue,
+          finalDescricaoValue,
           setorIdValue,
-          dataCitacaoValue,
-          dataRecebimentoValue,
-          dataArquivamentoValue,
-          dataEncerramentoValue,
+          finalDataCitacaoValue,
+          finalDataRecebimentoValue,
+          finalDataArquivamentoValue,
+          finalDataEncerramentoValue,
           finalGrauValue,
-          justicaGratuitaFlag,
-          liminarFlag,
-          nivelSigiloValue,
-          tramitacaoAtualValue,
+          finalJusticaGratuitaFlag,
+          finalLiminarFlag,
+          finalNivelSigiloValue,
+          finalTramitacaoAtualValue,
           finalPermitePeticionar,
           parsedId,
           empresaId,
-        ]
+        ],
       );
 
       if (updateResult.rowCount === 0) {
@@ -3336,34 +3503,37 @@ export const updateProcesso = async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Processo não encontrado' });
       }
 
-      await clientDb.query('DELETE FROM public.processo_advogados WHERE processo_id = $1', [
-        parsedId,
-      ]);
-
-      if (advogadosSelecionados.length > 0) {
-        const values: unknown[] = [];
-        const placeholders = advogadosSelecionados
-          .map((adv, index) => {
-            values.push(parsedId, adv.id);
-            const baseIndex = index * 2;
-            return `($${baseIndex + 1}, $${baseIndex + 2})`;
-          })
-          .join(', ');
-
+      if (shouldUpdateAdvogados) {
         await clientDb.query(
-          `INSERT INTO public.processo_advogados (processo_id, usuario_id)
-           VALUES ${placeholders}
-           ON CONFLICT (processo_id, usuario_id) DO UPDATE
-             SET atualizado_em = NOW()`,
-          values
+          'DELETE FROM public.processo_advogados WHERE processo_id = $1',
+          [parsedId],
         );
+
+        if (advogadosSelecionados.length > 0) {
+          const values: unknown[] = [];
+          const placeholders = advogadosSelecionados
+            .map((adv, index) => {
+              values.push(parsedId, adv.id);
+              const baseIndex = index * 2;
+              return `($${baseIndex + 1}, $${baseIndex + 2})`;
+            })
+            .join(', ');
+
+          await clientDb.query(
+            `INSERT INTO public.processo_advogados (processo_id, usuario_id)
+             VALUES ${placeholders}
+             ON CONFLICT (processo_id, usuario_id) DO UPDATE
+               SET atualizado_em = NOW()`,
+            values,
+          );
+        }
       }
 
       const finalResult = await clientDb.query(
         `${baseProcessoSelect}
          WHERE p.id = $1
          LIMIT 1`,
-        [parsedId]
+        [parsedId],
       );
 
       await clientDb.query('COMMIT');
