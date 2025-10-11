@@ -7,6 +7,7 @@ export interface CompanyPlanLimits {
   limiteProcessos: number | null;
   limitePropostas: number | null;
   limiteClientes: number | null;
+  limiteAdvogadosProcessos: number | null;
   limiteAdvogadosIntimacoesMonitoradas: number | null;
   sincronizacaoProcessosHabilitada: boolean | null;
   sincronizacaoProcessosCota: number | null;
@@ -90,6 +91,7 @@ export const fetchPlanLimitsForCompany = async (
     limite_processos: unknown;
     limite_propostas: unknown;
     limite_clientes: unknown;
+    limite_advogados_processos: unknown;
     limite_advogados_intimacoes_monitoradas: unknown;
     sincronizacao_processos_habilitada: unknown;
     sincronizacao_processos_cota: unknown;
@@ -98,6 +100,7 @@ export const fetchPlanLimitsForCompany = async (
             pl.limite_processos,
             pl.limite_propostas,
             pl.limite_clientes,
+            pl.limite_advogados_processos,
             pl.limite_advogados_intimacao AS limite_advogados_intimacoes_monitoradas,
             pl.sincronizacao_processos_habilitada,
             pl.sincronizacao_processos_cota
@@ -119,6 +122,7 @@ export const fetchPlanLimitsForCompany = async (
     limiteProcessos: toNonNegativeLimit(row.limite_processos),
     limitePropostas: toNonNegativeLimit(row.limite_propostas),
     limiteClientes: toNonNegativeLimit(row.limite_clientes),
+    limiteAdvogadosProcessos: toNonNegativeLimit(row.limite_advogados_processos),
     limiteAdvogadosIntimacoesMonitoradas: toNonNegativeLimit(
       row.limite_advogados_intimacoes_monitoradas,
     ),

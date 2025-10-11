@@ -134,11 +134,6 @@ interface ProcessoLoadResult {
     summary: ProcessoSummary;
 }
 
-interface Uf {
-    sigla: string;
-    nome: string;
-}
-
 interface Municipio {
     id: number;
     nome: string;
@@ -1143,6 +1138,7 @@ export default function Processos() {
     const [oabNumero, setOabNumero] = useState("");
     const [oabMonitors, setOabMonitors] = useState<OabMonitor[]>([]);
     const [oabMonitorsLoading, setOabMonitorsLoading] = useState(false);
+    const [oabMonitorsInitialized, setOabMonitorsInitialized] = useState(false);
     const [oabMonitorsError, setOabMonitorsError] = useState<string | null>(null);
     const [oabSubmitLoading, setOabSubmitLoading] = useState(false);
     const [oabSubmitError, setOabSubmitError] = useState<string | null>(null);
@@ -1174,7 +1170,7 @@ export default function Processos() {
     const [sistemaLoading, setSistemaLoading] = useState(false);
     const [sistemaError, setSistemaError] = useState<string | null>(null);
     const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
-    const [ufs, setUfs] = useState<Uf[]>([]);
+    const [ufOptions, setUfOptions] = useState<{ sigla: string; nome: string }[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
     const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
@@ -1364,30 +1360,6 @@ export default function Processos() {
     useEffect(() => {
         let cancelled = false;
 
-        const fetchUfs = async () => {
-            try {
-                const res = await fetch(
-                    "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
-                );
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = (await res.json()) as Uf[];
-                if (!cancelled) setUfs(data);
-            } catch (error) {
-                console.error(error);
-                if (!cancelled) setUfs([]);
-            }
-        };
-
-        fetchUfs();
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
-
-    useEffect(() => {
-        let cancelled = false;
-
         const fetchMonitors = async () => {
             setOabMonitorsLoading(true);
             setOabMonitorsError(null);
@@ -1438,6 +1410,7 @@ export default function Processos() {
             } finally {
                 if (!cancelled) {
                     setOabMonitorsLoading(false);
+                    setOabMonitorsInitialized(true);
                 }
             }
         };
@@ -2532,13 +2505,15 @@ export default function Processos() {
     }, []);
 
     const handleOabSubmit = useCallback(async () => {
-        if (!oabUf || !oabNumero) {
-            setOabSubmitError("Informe a UF e o número da OAB.");
+        if (!oabUsuarioId) {
+            setOabSubmitError("Selecione o usuário responsável pela OAB.");
             return;
         }
 
-        if (!oabUsuarioId) {
-            setOabSubmitError("Selecione o usuário responsável pela OAB.");
+        if (!oabUf || !oabNumero) {
+            setOabSubmitError(
+                "O responsável selecionado não possui OAB válida para monitoramento.",
+            );
             return;
         }
 
@@ -2835,26 +2810,66 @@ export default function Processos() {
                     .map((id) => Number.parseInt(id, 10))
                     .filter((value) => Number.isFinite(value) && value > 0);
 
-                const municipioPayload = detail.form.municipio.trim()
-                    ? detail.form.municipio
-                    : (() => {
-                          const [municipio] = detail.process.jurisdicao.split("-");
-                          return municipio ? municipio.trim() : "";
-                      })();
+                const numeroFromForm = detail.form.numero.trim();
+                const numeroFromProcess =
+                    typeof detail.process.numero === "string" ? detail.process.numero.trim() : "";
+                const numeroPayload = numeroFromForm || numeroFromProcess;
+                if (!numeroPayload) {
+                    throw new Error("Informe o número do processo antes de vincular.");
+                }
 
-                const ufPayload = detail.form.uf.trim()
-                    ? detail.form.uf
-                    : (() => {
-                          const parts = detail.process.jurisdicao.split("-");
-                          const ufCandidate = parts.length > 1 ? parts[parts.length - 1].trim() : "";
-                          return ufCandidate.length === 2 ? ufCandidate : "";
-                      })();
+                const municipioFromForm = detail.form.municipio.trim();
+                const municipioFromJurisdicao = (() => {
+                    const [municipio] = detail.process.jurisdicao.split("-");
+                    return municipio ? municipio.trim() : "";
+                })();
+                const municipioPayload = municipioFromForm || municipioFromJurisdicao;
+                if (!municipioPayload) {
+                    throw new Error("Informe o município do processo antes de vincular.");
+                }
+
+                const ufFromForm = detail.form.uf.trim();
+                const ufFromJurisdicao = (() => {
+                    const raw = detail.process.jurisdicao;
+                    if (typeof raw !== "string") {
+                        return "";
+                    }
+
+                    const normalized = raw.trim();
+                    if (!normalized) {
+                        return "";
+                    }
+
+                    const separators = ["-", "/"];
+                    for (const separator of separators) {
+                        const parts = normalized.split(separator);
+                        if (parts.length < 2) {
+                            continue;
+                        }
+
+                        const candidate = parts[parts.length - 1]?.trim().toUpperCase();
+                        if (candidate && candidate.length === 2) {
+                            return candidate;
+                        }
+                    }
+
+                    const words = normalized.split(" ");
+                    const lastWord = words[words.length - 1]?.trim().toUpperCase();
+                    return lastWord && lastWord.length === 2 ? lastWord : "";
+                })();
+                const ufPayload = ufFromForm || ufFromJurisdicao;
+                if (!ufPayload) {
+                    throw new Error("Informe a UF do processo antes de vincular.");
+                }
+
+                const grauPayload =
+                    detail.grau && detail.grau.trim() ? detail.grau.trim() : "1º Grau";
 
                 const payload: Record<string, unknown> = {
                     cliente_id: clienteId,
-                    numero: detail.form.numero || detail.process.numero,
-                    uf: ufPayload || detail.form.uf || null,
-                    municipio: municipioPayload || detail.form.municipio || null,
+                    numero: numeroPayload,
+                    uf: ufPayload,
+                    municipio: municipioPayload,
                     advogados: advogadosPayload,
                 };
 
@@ -2891,7 +2906,7 @@ export default function Processos() {
                 }
 
                 payload.monitorar_processo = detail.form.monitorarProcesso;
-                payload.grau = detail.grau || "1º Grau";
+                payload.grau = grauPayload;
 
                 if (descricaoPayload) {
                     payload.descricao = descricaoPayload;
@@ -3073,6 +3088,30 @@ export default function Processos() {
     }, [applyProcessosData, loadProcessos, page, toast]);
 
     useEffect(() => {
+        let cancelled = false;
+
+        const fetchUfs = async () => {
+            try {
+                const res = await fetch(
+                    "https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome",
+                );
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = (await res.json()) as { sigla: string; nome: string }[];
+                if (!cancelled) setUfOptions(data);
+            } catch (error) {
+                console.error(error);
+                if (!cancelled) setUfOptions([]);
+            }
+        };
+
+        fetchUfs();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
         if (typeof window === "undefined") {
             return;
         }
@@ -3179,6 +3218,7 @@ export default function Processos() {
 
     useEffect(() => {
         if (
+            oabMonitorsInitialized &&
             !processosLoading &&
             totalProcessos === 0 &&
             !oabModalDismissed &&
@@ -3188,6 +3228,7 @@ export default function Processos() {
             setIsOabModalOpen(true);
         }
     }, [
+        oabMonitorsInitialized,
         processosLoading,
         totalProcessos,
         oabModalDismissed,
@@ -4219,32 +4260,6 @@ export default function Processos() {
                                     <p className="text-sm text-destructive">{oabUsuariosError}</p>
                                 ) : null}
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="oab-uf">Estado</Label>
-                                    <Select value={oabUf} onValueChange={setOabUf}>
-                                        <SelectTrigger id="oab-uf">
-                                            <SelectValue placeholder="Selecione o estado" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {ufs.map((uf) => (
-                                                <SelectItem key={uf.sigla} value={uf.sigla}>
-                                                    {uf.nome} ({uf.sigla})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="oab-numero">Número da OAB</Label>
-                                    <Input
-                                        id="oab-numero"
-                                        value={oabNumero}
-                                        onChange={(event) => setOabNumero(formatOabDigits(event.target.value))}
-                                        placeholder="000000"
-                                    />
-                                </div>
-                            </div>
                             {oabSubmitError ? (
                                 <p className="text-sm text-destructive">{oabSubmitError}</p>
                             ) : null}
@@ -4783,7 +4798,7 @@ export default function Processos() {
                                     <SelectValue placeholder="Selecione a UF" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {ufs.map((uf) => (
+                                    {ufOptions.map((uf) => (
                                         <SelectItem key={uf.sigla} value={uf.sigla}>
                                             {uf.nome} ({uf.sigla})
                                         </SelectItem>

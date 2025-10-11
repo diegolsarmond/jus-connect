@@ -203,15 +203,36 @@ const App = () => (
                 />
                 <Route
                   path="/consulta-publica"
-                  element={withModule(["consulta-publica", "processos"], <ConsultaPublica />)}
+                  element={(
+                    <RequireModule
+                      module="consulta-publica"
+                      userFallbackModules="processos"
+                    >
+                      <ConsultaPublica />
+                    </RequireModule>
+                  )}
                 />
                 <Route
                   path="/consulta-publica/processos"
-                  element={withModule(["consulta-publica", "processos"], <ConsultaPublicaListar />)}
+                  element={(
+                    <RequireModule
+                      module="consulta-publica"
+                      userFallbackModules="processos"
+                    >
+                      <ConsultaPublicaListar />
+                    </RequireModule>
+                  )}
                 />
                 <Route
                   path="/consulta-publica/processos/:numeroProcesso"
-                  element={withModule(["consulta-publica", "processos"], <ConsultaPublicaDetalhes />)}
+                  element={(
+                    <RequireModule
+                      module="consulta-publica"
+                      userFallbackModules="processos"
+                    >
+                      <ConsultaPublicaDetalhes />
+                    </RequireModule>
+                  )}
                 />
                 <Route path="/intimacoes" element={withModule("intimacoes", <Intimacoes />)} />
                 <Route path="/documentos">
