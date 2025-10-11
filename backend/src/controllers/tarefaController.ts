@@ -230,6 +230,15 @@ export const createTarefa = async (req: Request, res: Response) => {
     ? repetir_cada_unidade.charAt(0).toUpperCase() + repetir_cada_unidade.slice(1).toLowerCase()
     : null;
 
+  const normalizedHora = typeof hora === 'string' && hora.trim().length > 0 ? hora : null;
+  const normalizedAgendaDescription =
+    typeof descricao === 'string' && descricao.trim().length > 0 ? descricao : null;
+  const shouldCreateAgenda =
+    mostrar_na_agenda === true ||
+    mostrar_na_agenda === 'true' ||
+    mostrar_na_agenda === 1 ||
+    mostrar_na_agenda === '1';
+
   const client = await pool.connect();
   try {
     if (!req.auth) {
@@ -262,7 +271,7 @@ export const createTarefa = async (req: Request, res: Response) => {
         titulo,
         descricao,
         data,
-        hora,
+        normalizedHora,
         dia_inteiro,
         prioridade,
         mostrar_na_agenda,
@@ -278,6 +287,43 @@ export const createTarefa = async (req: Request, res: Response) => {
     );
 
     const tarefa = result.rows[0];
+
+    if (shouldCreateAgenda) {
+      await client.query(
+        `INSERT INTO public.agenda (
+           titulo,
+           tipo,
+           descricao,
+           data,
+           hora_inicio,
+           hora_fim,
+           cliente,
+           tipo_local,
+           local,
+           lembrete,
+           status,
+           datacadastro,
+           idempresa,
+           idusuario
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13)`,
+        [
+          titulo,
+          null,
+          normalizedAgendaDescription,
+          data,
+          normalizedHora,
+          null,
+          null,
+          null,
+          null,
+          true,
+          1,
+          empresaId,
+          req.auth.userId,
+        ],
+      );
+    }
 
     if (Array.isArray(responsaveis) && responsaveis.length > 0) {
       const values = responsaveis
