@@ -61,7 +61,7 @@ describe("RequireModule", () => {
     });
 
     const content = container.textContent ?? "";
-    expect(content).toContain("Centralize conversas com clientes");
+    expect(content).toContain("Consulte processos públicos com agilidade");
 
     const plansLink = container.querySelector('a[href="/meu-plano"]');
     expect(plansLink).not.toBeNull();
@@ -127,5 +127,67 @@ describe("RequireModule", () => {
     });
 
     expect(container.textContent ?? "").toContain("Conteúdo restrito");
+  });
+
+  it("allows access when only the fallback module is granted to the user but the plan includes the required module", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { modulos: ["processos"] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAuth>);
+
+    vi.mocked(usePlan).mockReturnValue({
+      plan: {
+        id: 1,
+        nome: "Plano Completo",
+        modules: ["consulta-publica"],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>);
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <RequireModule module="consulta-publica" userFallbackModules="processos">
+            <div>Conteúdo restrito</div>
+          </RequireModule>
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent ?? "").toContain("Conteúdo restrito");
+  });
+
+  it("shows the upgrade prompt when only the fallback module is in the plan", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: { modulos: ["processos"] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAuth>);
+
+    vi.mocked(usePlan).mockReturnValue({
+      plan: {
+        id: 1,
+        nome: "Plano Básico",
+        modules: ["processos"],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>);
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <RequireModule module="consulta-publica" userFallbackModules="processos">
+            <div>Conteúdo restrito</div>
+          </RequireModule>
+        </MemoryRouter>,
+      );
+    });
+
+    const content = container.textContent ?? "";
+    expect(content).toContain("Centralize conversas com clientes");
+    expect(content).not.toContain("Conteúdo restrito");
   });
 });
