@@ -79,6 +79,35 @@ import {
 
 const NO_EXISTING_CLIENT_SELECT_VALUE = "__no_existing_client__";
 const NO_PROPOSTA_SELECT_VALUE = "__no_proposta__";
+const VALID_UF_CODES = new Set([
+    "AC",
+    "AL",
+    "AP",
+    "AM",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MT",
+    "MS",
+    "MG",
+    "PA",
+    "PB",
+    "PR",
+    "PE",
+    "PI",
+    "RJ",
+    "RN",
+    "RS",
+    "RO",
+    "RR",
+    "SC",
+    "SP",
+    "SE",
+    "TO",
+]);
 
 interface ProcessoCliente {
     id: number;
@@ -849,7 +878,7 @@ const mapProcessoDetailToFormState = (
 
                 for (let index = parts.length - 1; index >= 0; index -= 1) {
                     const candidate = parts[index]?.trim().toUpperCase();
-                    if (candidate && candidate.length === 2) {
+                    if (candidate && VALID_UF_CODES.has(candidate)) {
                         return candidate;
                     }
                 }
@@ -858,7 +887,7 @@ const mapProcessoDetailToFormState = (
             const words = normalized.split(" ");
             for (let index = words.length - 1; index >= 0; index -= 1) {
                 const candidate = words[index]?.trim().toUpperCase();
-                if (candidate && candidate.length === 2) {
+                if (candidate && VALID_UF_CODES.has(candidate)) {
                     return candidate;
                 }
             }
