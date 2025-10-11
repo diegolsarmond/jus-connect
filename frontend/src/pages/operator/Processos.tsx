@@ -1569,9 +1569,20 @@ export default function Processos() {
                                 if (match) {
                                     optionNumero = formatOabDigits(match[1]);
                                 }
-                                const ufMatch = oabRaw.match(/([A-Za-z]{2})\b/);
-                                if (ufMatch) {
-                                    const normalizedUf = normalizeUf(ufMatch[1]);
+                                const ufMatches = oabRaw.match(/([A-Za-z]{2})(?=[^A-Za-z]*\d)/g);
+                                let ufCandidate: string | null = null;
+
+                                if (ufMatches && ufMatches.length > 0) {
+                                    ufCandidate = ufMatches[ufMatches.length - 1];
+                                } else {
+                                    const fallbackUfMatch = oabRaw.match(/\/\s*([A-Za-z]{2})\b/);
+                                    if (fallbackUfMatch) {
+                                        ufCandidate = fallbackUfMatch[1];
+                                    }
+                                }
+
+                                if (ufCandidate) {
+                                    const normalizedUf = normalizeUf(ufCandidate);
                                     if (normalizedUf.length === 2) {
                                         optionUf = normalizedUf;
                                     }
