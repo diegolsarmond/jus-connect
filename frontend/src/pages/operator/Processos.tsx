@@ -79,6 +79,35 @@ import {
 
 const NO_EXISTING_CLIENT_SELECT_VALUE = "__no_existing_client__";
 const NO_PROPOSTA_SELECT_VALUE = "__no_proposta__";
+const VALID_UF_CODES = new Set([
+    "AC",
+    "AL",
+    "AP",
+    "AM",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MT",
+    "MS",
+    "MG",
+    "PA",
+    "PB",
+    "PR",
+    "PE",
+    "PI",
+    "RJ",
+    "RN",
+    "RS",
+    "RO",
+    "RR",
+    "SC",
+    "SP",
+    "SE",
+    "TO",
+]);
 
 interface ProcessoCliente {
     id: number;
@@ -2840,6 +2869,24 @@ export default function Processos() {
                         return "";
                     }
 
+                    const parseUfCandidate = (value?: string | null) => {
+                        if (!value) {
+                            return "";
+                        }
+
+                        const uppercase = value.trim().toUpperCase();
+                        if (!uppercase) {
+                            return "";
+                        }
+
+                        const lettersOnly = uppercase.replace(/[^A-Z]/g, "");
+                        if (lettersOnly.length !== 2) {
+                            return "";
+                        }
+
+                        return VALID_UF_CODES.has(lettersOnly) ? lettersOnly : "";
+                    };
+
                     const separators = ["-", "/"];
                     for (const separator of separators) {
                         const parts = normalized.split(separator);
@@ -2848,8 +2895,8 @@ export default function Processos() {
                         }
 
                         for (let index = parts.length - 1; index >= 0; index -= 1) {
-                            const candidate = parts[index]?.trim().toUpperCase();
-                            if (candidate && candidate.length === 2) {
+                            const candidate = parseUfCandidate(parts[index]);
+                            if (candidate) {
                                 return candidate;
                             }
                         }
@@ -2857,8 +2904,8 @@ export default function Processos() {
 
                     const words = normalized.split(" ");
                     for (let index = words.length - 1; index >= 0; index -= 1) {
-                        const candidate = words[index]?.trim().toUpperCase();
-                        if (candidate && candidate.length === 2) {
+                        const candidate = parseUfCandidate(words[index]);
+                        if (candidate) {
                             return candidate;
                         }
                     }
