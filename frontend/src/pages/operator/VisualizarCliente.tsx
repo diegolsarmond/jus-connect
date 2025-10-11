@@ -1217,7 +1217,7 @@ export default function VisualizarCliente() {
       </Card>
 
       <Tabs defaultValue="documentos" className="space-y-6">
-        <TabsList className="grid w-full gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+        <TabsList className="grid h-auto w-full gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           <TabsTrigger value="documentos" className="w-full">
             Documentos
           </TabsTrigger>
