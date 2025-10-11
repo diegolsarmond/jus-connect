@@ -80,6 +80,53 @@ import {
 const NO_EXISTING_CLIENT_SELECT_VALUE = "__no_existing_client__";
 const NO_PROPOSTA_SELECT_VALUE = "__no_proposta__";
 
+const BRAZILIAN_UFS = new Set([
+    "AC",
+    "AL",
+    "AP",
+    "AM",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MT",
+    "MS",
+    "MG",
+    "PA",
+    "PB",
+    "PR",
+    "PE",
+    "PI",
+    "RJ",
+    "RN",
+    "RS",
+    "RO",
+    "RR",
+    "SC",
+    "SP",
+    "SE",
+    "TO",
+]);
+
+const normalizeUfCandidate = (value: string | undefined): string | null => {
+    if (!value) {
+        return null;
+    }
+
+    const candidate = value.trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(candidate)) {
+        return null;
+    }
+
+    if (!BRAZILIAN_UFS.has(candidate)) {
+        return null;
+    }
+
+    return candidate;
+};
+
 interface ProcessoCliente {
     id: number;
     nome: string;
@@ -848,8 +895,8 @@ const mapProcessoDetailToFormState = (
                 }
 
                 for (let index = parts.length - 1; index >= 0; index -= 1) {
-                    const candidate = parts[index]?.trim().toUpperCase();
-                    if (candidate && candidate.length === 2) {
+                    const candidate = normalizeUfCandidate(parts[index]);
+                    if (candidate) {
                         return candidate;
                     }
                 }
@@ -857,8 +904,8 @@ const mapProcessoDetailToFormState = (
 
             const words = normalized.split(" ");
             for (let index = words.length - 1; index >= 0; index -= 1) {
-                const candidate = words[index]?.trim().toUpperCase();
-                if (candidate && candidate.length === 2) {
+                const candidate = normalizeUfCandidate(words[index]);
+                if (candidate) {
                     return candidate;
                 }
             }
