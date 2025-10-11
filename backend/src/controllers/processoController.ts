@@ -1017,6 +1017,7 @@ type RawCrawlerParticipant = {
   documento_principal?: unknown;
   tipo_documento_principal?: unknown;
   data_cadastro?: unknown;
+  tipo_parte?: unknown;
 };
 
 type RawOpportunityParticipant = {
@@ -1143,7 +1144,7 @@ const buildCrawlerParticipant = (
     side: normalizeParticipantSide(row.polo),
     type: normalizeString(row.polo),
     person_type: normalizeUppercase(row.tipo_pessoa),
-    role: null,
+    role: normalizeString(row.tipo_parte),
     party_role: null,
     lawyers: null,
     representatives: null,
@@ -1220,7 +1221,8 @@ const fetchProcessParticipants = async (
           tipo_pessoa,
           documento_principal,
           tipo_documento_principal,
-          data_cadastro
+          data_cadastro,
+          tipo_parte
         FROM public.trigger_envolvidos_processo
        WHERE numero_cnj = $1`,
       [normalizedNumero],
@@ -3544,6 +3546,36 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
       return res
         .status(400)
         .json({ error: 'Informe o usuário responsável pela OAB.' });
+    }
+
+    const planLimits = await fetchPlanLimitsForCompany(empresaId);
+    const planLimit = planLimits?.limiteAdvogadosProcessos;
+
+    if (planLimit != null) {
+      const normalizedUf =
+        typeof uf === 'string'
+          ? uf.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase()
+          : '';
+      const normalizedNumero =
+        typeof numero === 'string'
+          ? numero.replace(/\D/g, '').slice(0, 12)
+          : '';
+      const canEvaluateExisting =
+        normalizedUf.length === 2 && normalizedNumero.length > 0;
+      const monitors = await listCompanyOabMonitors(empresaId);
+      const alreadyMonitored =
+        canEvaluateExisting &&
+        monitors.some(
+          (monitor) =>
+            monitor.uf === normalizedUf && monitor.numero === normalizedNumero,
+        );
+
+      if (!alreadyMonitored && monitors.length >= planLimit) {
+        return res.status(400).json({
+          error:
+            'Limite de advogados monitorados por processos atingido pelo plano atual.',
+        });
+      }
     }
 
     try {

@@ -24,7 +24,7 @@ const smtpPass = process.env.SMTP_PASSWORD ?? process.env.SMTP_PASS;
 const isSmtpConfigured = Boolean(smtpUser && smtpPass);
 const DEFAULT_SMTP_CONFIG = isSmtpConfigured
     ? {
-        host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+        host: process.env.SMTP_HOST || 'smtp.resend.com',
         port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
         secure: parseBoolean(process.env.SMTP_SECURE, true),
         rejectUnauthorized: parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED, true),
