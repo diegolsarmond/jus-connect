@@ -1401,9 +1401,11 @@ export default function VisualizarCliente() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() =>
-                                  navigate(`/clientes/${id}/processos/${p.id}`)
-                                }
+                                onClick={() => {
+                                  navigate(
+                                    `/processos/${encodeURIComponent(p.numero || String(p.id))}`
+                                  );
+                                }}
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
