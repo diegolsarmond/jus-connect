@@ -1170,7 +1170,7 @@ export default function Processos() {
     const [sistemaLoading, setSistemaLoading] = useState(false);
     const [sistemaError, setSistemaError] = useState<string | null>(null);
     const [sistemaPopoverOpen, setSistemaPopoverOpen] = useState(false);
-    const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
+    const [ufOptions, setUfOptions] = useState<{ sigla: string; nome: string }[]>([]);
     const [municipios, setMunicipios] = useState<Municipio[]>([]);
     const [municipiosLoading, setMunicipiosLoading] = useState(false);
     const [municipioPopoverOpen, setMunicipioPopoverOpen] = useState(false);
@@ -1542,9 +1542,20 @@ export default function Processos() {
                                 if (match) {
                                     optionNumero = formatOabDigits(match[1]);
                                 }
-                                const ufMatch = oabRaw.match(/([A-Za-z]{2})\b/);
-                                if (ufMatch) {
-                                    const normalizedUf = normalizeUf(ufMatch[1]);
+                                const ufMatches = oabRaw.match(/([A-Za-z]{2})(?=[^A-Za-z]*\d)/g);
+                                let ufCandidate: string | null = null;
+
+                                if (ufMatches && ufMatches.length > 0) {
+                                    ufCandidate = ufMatches[ufMatches.length - 1];
+                                } else {
+                                    const fallbackUfMatch = oabRaw.match(/\/\s*([A-Za-z]{2})\b/);
+                                    if (fallbackUfMatch) {
+                                        ufCandidate = fallbackUfMatch[1];
+                                    }
+                                }
+
+                                if (ufCandidate) {
+                                    const normalizedUf = normalizeUf(ufCandidate);
                                     if (normalizedUf.length === 2) {
                                         optionUf = normalizedUf;
                                     }
@@ -3086,10 +3097,10 @@ export default function Processos() {
                 );
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = (await res.json()) as { sigla: string; nome: string }[];
-                if (!cancelled) setUfs(data);
+                if (!cancelled) setUfOptions(data);
             } catch (error) {
                 console.error(error);
-                if (!cancelled) setUfs([]);
+                if (!cancelled) setUfOptions([]);
             }
         };
 
@@ -4275,7 +4286,7 @@ export default function Processos() {
             <Dialog open={unassignedModalOpen} onOpenChange={handleUnassignedModalChange}>
                 <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>Processos sem cliente vinculado</DialogTitle>
+                        <DialogTitle>Processos sincronizados sem cliente vinculado</DialogTitle>
                         <DialogDescription>
                             Vincule clientes, propostas e relações com os envolvidos para completar o cadastro.
                         </DialogDescription>
@@ -4299,7 +4310,7 @@ export default function Processos() {
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <p className="text-sm text-muted-foreground">
                                         Mostrando {unassignedPageStart}–{unassignedPageEnd} de {unassignedTotal}{" "}
-                                        processos sem cliente
+                                        processos clientes vinculados 
                                     </p>
                                 </div>
                             ) : null}
@@ -4343,7 +4354,7 @@ export default function Processos() {
                                         <CardContent className="space-y-4">
                                             <div className="grid gap-4 md:grid-cols-2">
                                                 <div className="space-y-2">
-                                                    <Label>Cliente existente</Label>
+                                                    <Label>Meus Clientes</Label>
                                                     <Select
                                                         value={
                                                             detail.selectedExistingClientId ||
@@ -4358,7 +4369,7 @@ export default function Processos() {
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             <SelectItem value={NO_EXISTING_CLIENT_SELECT_VALUE}>
-                                                                Sem cliente
+                                                                Cliente não cadastrado
                                                             </SelectItem>
                                                             {clientes.map((cliente) => (
                                                                 <SelectItem key={cliente.id} value={String(cliente.id)}>
@@ -4446,11 +4457,6 @@ export default function Processos() {
                                                                                             {participant.role}
                                                                                         </Badge>
                                                                                     ) : null}
-                                                                                    {participant.side ? (
-                                                                                        <Badge variant="outline">
-                                                                                            {participant.side}
-                                                                                        </Badge>
-                                                                                    ) : null}
                                                                                     {participant.type ? (
                                                                                         <Badge variant="outline">
                                                                                             {participant.type}
@@ -4467,12 +4473,12 @@ export default function Processos() {
                                                                                             participant.id,
                                                                                         )
                                                                                     }
-                                                                                />
+                                                                                /> 
                                                                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                                                     <RadioGroupItem
                                                                                         value={participant.id}
                                                                                         id={`primary-${processId}-${participant.id}`}
-                                                                                    />
+                                                                                    /> 
                                                                                     <Label
                                                                                         htmlFor={`primary-${processId}-${participant.id}`}
                                                                                         className="text-xs font-normal"
@@ -4483,28 +4489,7 @@ export default function Processos() {
                                                                             </div>
                                                                         </div>
                                                                         <div className="space-y-2">
-                                                                            <Label className="text-xs font-medium">
-                                                                                Relação com o processo
-                                                                            </Label>
-                                                                            <Input
-                                                                                value={
-                                                                                    detail.relationshipByParticipantId[
-                                                                                        participant.id
-                                                                                    ] ?? ""
-                                                                                }
-                                                                                onChange={(event) =>
-                                                                                    handleParticipantRelationshipChange(
-                                                                                        processId,
-                                                                                        participant.id,
-                                                                                        event.target.value,
-                                                                                    )
-                                                                                }
-                                                                                placeholder={
-                                                                                    getParticipantDefaultRelationship(
-                                                                                        participant,
-                                                                                    ) || "Descreva a relação"
-                                                                                }
-                                                                            />
+
                                                                         </div>
                                                                     </div>
                                                                 );
@@ -4787,7 +4772,7 @@ export default function Processos() {
                                     <SelectValue placeholder="Selecione a UF" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {ufs.map((uf) => (
+                                    {ufOptions.map((uf) => (
                                         <SelectItem key={uf.sigla} value={uf.sigla}>
                                             {uf.nome} ({uf.sigla})
                                         </SelectItem>
