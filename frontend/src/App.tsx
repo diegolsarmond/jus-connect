@@ -201,14 +201,14 @@ const App = () => (
                   path="/processos/:processoId/editar"
                   element={withModule("processos", <EditarProcesso />)}
                 />
-                <Route path="/consulta-publica" element={withModule("processos", <ConsultaPublica />)} />
+                <Route path="/consulta-publica" element={withModule("consulta-publica", <ConsultaPublica />)} />
                 <Route
                   path="/consulta-publica/processos"
-                  element={withModule("processos", <ConsultaPublicaListar />)}
+                  element={withModule("consulta-publica", <ConsultaPublicaListar />)}
                 />
                 <Route
                   path="/consulta-publica/processos/:numeroProcesso"
-                  element={withModule("processos", <ConsultaPublicaDetalhes />)}
+                  element={withModule("consulta-publica", <ConsultaPublicaDetalhes />)}
                 />
                 <Route path="/intimacoes" element={withModule("intimacoes", <Intimacoes />)} />
                 <Route path="/documentos">

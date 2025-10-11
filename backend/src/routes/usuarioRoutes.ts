@@ -87,7 +87,7 @@ router.get(['/usuarios', '/users'], listUsuarios);
  *               items:
  *                 $ref: '#/components/schemas/Usuario'
  */
-router.get(['/usuarios/empresa', '/users/company'], listUsuariosByEmpresa);
+router.get(['/usuarios/empresa', '/users/company', '/get_api_usuarios_empresa'], listUsuariosByEmpresa);
 
 /**
  * @swagger

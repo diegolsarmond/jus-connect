@@ -270,6 +270,7 @@ export const ChatWindow = ({
   const participants = conversation?.participants ?? [];
   const visibleParticipants = participants.slice(0, MAX_VISIBLE_PARTICIPANTS);
   const overflowCount = participants.length - visibleParticipants.length;
+  const isPreparingConversation = isLoading && messages.length === 0;
   const tagOptions = useMemo(() => {
     const all = new Set<string>();
     for (const tag of availableTags) {
@@ -947,7 +948,7 @@ export const ChatWindow = ({
         </header>
 
         <div className={styles.viewportWrapper}>
-          {isLoading && (
+          {isPreparingConversation && (
             <div
               className={styles.loadingOverlay}
               role="status"
@@ -993,7 +994,7 @@ export const ChatWindow = ({
           )}
           <ChatInput
             onSend={handleSend}
-            disabled={isLoading}
+            disabled={isPreparingConversation}
             onTypingActivity={onTypingActivity}
           />
         </div>
