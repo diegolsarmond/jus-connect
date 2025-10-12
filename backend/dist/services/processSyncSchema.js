@@ -8,7 +8,7 @@ const promises_1 = require("node:fs/promises");
 const node_fs_1 = require("node:fs");
 const node_path_1 = __importDefault(require("node:path"));
 const db_1 = __importDefault(require("./db"));
-const SCHEMA_FILES = ['process_sync.sql', 'process_response.sql', 'sync_audit.sql'];
+const SCHEMA_FILES = ['process_sync.sql', 'process_response.sql', 'sync_audit.sql', 'vw_processos_sync_targets.sql'];
 let cachedEntries = null;
 let initializationPromise = null;
 async function resolveFilePath(file) {

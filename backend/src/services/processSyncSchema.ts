@@ -3,7 +3,12 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import pool from './db';
 
-const SCHEMA_FILES = ['process_sync.sql', 'process_response.sql', 'sync_audit.sql'] as const;
+const SCHEMA_FILES = [
+  'process_sync.sql',
+  'process_response.sql',
+  'sync_audit.sql',
+  'vw_processos_sync_targets.sql',
+] as const;
 
 type Queryable = {
   query: (text: string) => Promise<unknown>;
