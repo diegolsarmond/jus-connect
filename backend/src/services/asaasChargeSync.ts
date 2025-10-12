@@ -276,7 +276,7 @@ export class AsaasChargeSyncService {
 
   private async loadPendingCharges(): Promise<AsaasChargeRow[]> {
     const { rows } = await this.db.query(
-      'SELECT id, asaas_id, financial_flow_id, status FROM asaas_charges WHERE status = ANY($1)',
+      'SELECT id, asaas_charge_id AS asaas_id, financial_flow_id, status FROM asaas_charges WHERE status = ANY($1)',
       [TRACKED_PAYMENT_STATUSES],
     );
 
