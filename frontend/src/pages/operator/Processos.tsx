@@ -114,6 +114,7 @@ export interface Processo {
     orgaoJulgador: string;
     proposta: ProcessoProposta | null;
     ultimaSincronizacao: string | null;
+    ultimaMovimentacao: string;
     consultasApiCount: number;
     movimentacoesCount: number;
 }
@@ -394,12 +395,18 @@ const UF_BY_RAMO_TR: Record<string, Record<string, string>> = {
 
 const inferUfFromProcessNumber = (value: string): string => {
     const digits = value.replace(/\D/g, "");
-    if (digits.length < 16) {
+    if (digits.length < 7) {
         return "";
     }
 
-    const ramo = digits.charAt(13);
-    const tribunal = digits.slice(14, 16);
+    const ramoIndex = digits.length - 7;
+    const ramo = digits.charAt(ramoIndex);
+    const tribunal = digits.slice(ramoIndex + 1, ramoIndex + 3);
+    if (!ramo || tribunal.length !== 2) {
+        return "";
+    }
+
+
     const ramoMap = UF_BY_RAMO_TR[ramo];
     return ramoMap?.[tribunal] ?? "";
 };
@@ -1109,6 +1116,8 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
 
     const lastSyncAt = processo.ultima_sincronizacao ?? null;
 
+    const ultimaMovimentacao = formatDateToPtBR(processo.ultima_movimentacao);
+
     const movimentacoesCount = Math.max(
         parseApiInteger(processo.movimentacoes_count),
         0,
@@ -1139,6 +1148,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
         orgaoJulgador,
         proposta,
         ultimaSincronizacao: lastSyncAt,
+        ultimaMovimentacao,
         consultasApiCount,
         movimentacoesCount,
     };
@@ -4445,6 +4455,7 @@ export default function Processos() {
                                     : "Não informado"
                             }
                             dataDistribuicao={processo.dataDistribuicao}
+                            ultimaMovimentacao={processo.ultimaMovimentacao}
                             jurisdicao={processo.jurisdicao}
                             orgaoJulgador={processo.orgaoJulgador}
                             onView={() => handleViewProcessDetails(processo)}
