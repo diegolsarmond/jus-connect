@@ -392,9 +392,10 @@ async function startServer() {
       ensureChatSchema(),
       ensureSupportSchema(),
       ensureProcessSyncSchema(),
-      bootstrapOabMonitoradas(),
-      bootstrapIntimacaoOabMonitoradas(),
     ]);
+
+    await bootstrapOabMonitoradas();
+    await bootstrapIntimacaoOabMonitoradas();
   } catch (error) {
     console.error('Failed to initialize application storage schema', error);
     process.exit(1);
