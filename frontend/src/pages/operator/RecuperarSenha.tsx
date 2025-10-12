@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 
 const recoverSchema = z.object({
-  cpf: z.string().min(11, "CPF é obrigatório"),
+  email: z.string().email("E-mail é obrigatório"),
 });
 
 type RecoverForm = z.infer<typeof recoverSchema>;
@@ -16,7 +16,7 @@ type RecoverForm = z.infer<typeof recoverSchema>;
 export default function RecuperarSenha() {
   const form = useForm<RecoverForm>({
     resolver: zodResolver(recoverSchema),
-    defaultValues: { cpf: "" },
+    defaultValues: { email: "" },
   });
 
   function onSubmit(values: RecoverForm) {
@@ -34,12 +34,12 @@ export default function RecuperarSenha() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="cpf"
+                name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CPF</FormLabel>
+                    <FormLabel>E-mail</FormLabel>
                     <FormControl>
-                      <Input placeholder="000.000.000-00" {...field} />
+                      <Input placeholder="seuemail@exemplo.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
