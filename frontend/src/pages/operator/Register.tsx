@@ -187,7 +187,7 @@ const Register = () => {
 
       toast({
         title: "Cadastro realizado!",
-        description: "Sua conta foi criada com sucesso. Você já pode fazer login."
+        description: "Sua conta foi criada, confirme o e-mail para ter acesso ao sistema."
       });
       navigate(routes.login);
     } catch (error) {

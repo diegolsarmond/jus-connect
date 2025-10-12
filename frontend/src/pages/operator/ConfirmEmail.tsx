@@ -84,6 +84,7 @@ const ConfirmEmail = () => {
             setConfirmedAt(null);
             return;
           }
+
           resolvedMessage = error.message;
         } else if (error instanceof Error && error.message.trim().length > 0) {
           resolvedMessage = error.message;
