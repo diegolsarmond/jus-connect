@@ -78,6 +78,13 @@ const ConfirmEmail = () => {
         let resolvedMessage = "Não foi possível confirmar o e-mail. Tente novamente.";
 
         if (error instanceof ApiError) {
+          if (error.status === 409) {
+            setStatus("success");
+            setMessage("Este e-mail já foi confirmado anteriormente.");
+            setConfirmedAt(null);
+            return;
+          }
+
           resolvedMessage = error.message;
         } else if (error instanceof Error && error.message.trim().length > 0) {
           resolvedMessage = error.message;
