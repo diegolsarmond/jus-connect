@@ -2924,6 +2924,16 @@ export default function Processos() {
                 }
 
                 const ufFromForm = detail.form.uf.trim();
+                const ufFromProcess = (() => {
+                    if (typeof detail.process.uf === "string") {
+                        const candidate = detail.process.uf.trim().toUpperCase();
+                        if (candidate) {
+                            return candidate;
+                        }
+                    }
+
+                    return "";
+                })();
                 const ufFromJurisdicao = (() => {
                     const raw = detail.process.jurisdicao;
                     if (typeof raw !== "string") {
@@ -2960,7 +2970,7 @@ export default function Processos() {
 
                     return "";
                 })();
-                const ufPayload = ufFromForm || ufFromJurisdicao;
+                const ufPayload = ufFromForm || ufFromProcess || ufFromJurisdicao;
                 if (!ufPayload) {
                     throw new Error("Informe a UF do processo antes de vincular.");
                 }
