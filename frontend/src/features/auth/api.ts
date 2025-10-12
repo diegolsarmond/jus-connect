@@ -332,6 +332,31 @@ export const changePasswordRequest = async (
   };
 };
 
+export const requestPasswordReset = async (
+  email: string,
+): Promise<{ message: string }> => {
+  const response = await fetch(getApiUrl("auth/request-password-reset"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response);
+  }
+
+  const data = (await response.json()) as { message?: unknown };
+  return {
+    message:
+      typeof data?.message === "string" && data.message.trim().length > 0
+        ? data.message
+        : "Se o e-mail informado estiver cadastrado, enviaremos as instruções para redefinir a senha.",
+  };
+};
+
 export const confirmEmailRequest = async (
   token: string,
   signal?: AbortSignal,
