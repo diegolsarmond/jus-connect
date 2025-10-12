@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Loader2,
   FileText,
   Gavel,
   Users,
@@ -15,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 import { format } from "date-fns";
@@ -308,13 +308,9 @@ const DetalhesProcesso = () => {
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 space-y-6">
-        <Skeleton className="h-10 w-40" />
-        <Card className="p-6 space-y-4">
-          <Skeleton className="h-6 w-1/3" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-        </Card>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-4 sm:p-6">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Carregando processo...</p>
       </div>
     );
   }
