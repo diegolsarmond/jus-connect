@@ -226,7 +226,9 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
     return;
   }
 
-  const { host, port, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
+  const { host, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
+  const port = DEFAULT_SMTP_CONFIG.port;
+  const directTls = secure || port === 465;
   const clientName = os.hostname() || 'localhost';
   const boundary = `----=_Boundary_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
   const headers = buildMessageHeaders(to, subject, boundary);
@@ -235,7 +237,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
 
   let socket: SmtpSocket;
 
-  if (secure) {
+  if (directTls) {
     socket = await createTlsConnection({
       host,
       port,
@@ -261,7 +263,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
   }
 
   try {
-    if (secure) {
+    if (directTls) {
       await waitForResponse(socket); // 220 greeting
     }
     await sendCommand(socket, `EHLO ${clientName}`, [250]);
