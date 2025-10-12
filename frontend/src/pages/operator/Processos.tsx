@@ -4720,6 +4720,8 @@ export default function Processos() {
                                                                 const checked = detail.selectedParticipantIds.includes(
                                                                     participant.id,
                                                                 );
+                                                                const primaryParticipantId = `primary-${processId}-${participant.id}`;
+                                                                const involvedParticipantId = `involved-${processId}-${participant.id}`;
                                                                 return (
                                                                     <div
                                                                         key={participant.id}
@@ -4749,25 +4751,34 @@ export default function Processos() {
                                                                                 </div>
                                                                             </div>
                                                                             <div className="flex flex-col items-end gap-2">
-                                                                                <Checkbox
-                                                                                    checked={checked}
-                                                                                    onCheckedChange={() =>
-                                                                                        handleParticipantToggle(
-                                                                                            processId,
-                                                                                            participant.id,
-                                                                                        )
-                                                                                    }
-                                                                                /> 
                                                                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                                                     <RadioGroupItem
                                                                                         value={participant.id}
-                                                                                        id={`primary-${processId}-${participant.id}`}
-                                                                                    /> 
+                                                                                        id={primaryParticipantId}
+                                                                                    />
                                                                                     <Label
-                                                                                        htmlFor={`primary-${processId}-${participant.id}`}
+                                                                                        htmlFor={primaryParticipantId}
                                                                                         className="text-xs font-normal"
                                                                                     >
-                                                                                        Cliente principal
+                                                                                        Cliente principal (selecione apenas um)
+                                                                                    </Label>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                                    <Checkbox
+                                                                                        id={involvedParticipantId}
+                                                                                        checked={checked}
+                                                                                        onCheckedChange={() =>
+                                                                                            handleParticipantToggle(
+                                                                                                processId,
+                                                                                                participant.id,
+                                                                                            )
+                                                                                        }
+                                                                                    />
+                                                                                    <Label
+                                                                                        htmlFor={involvedParticipantId}
+                                                                                        className="text-xs font-normal"
+                                                                                    >
+                                                                                        Envolvido no processo (você pode selecionar mais de um)
                                                                                     </Label>
                                                                                 </div>
                                                                             </div>
