@@ -395,12 +395,18 @@ const UF_BY_RAMO_TR: Record<string, Record<string, string>> = {
 
 const inferUfFromProcessNumber = (value: string): string => {
     const digits = value.replace(/\D/g, "");
-    if (digits.length < 16) {
+    if (digits.length < 7) {
         return "";
     }
 
-    const ramo = digits.charAt(13);
-    const tribunal = digits.slice(14, 16);
+    const ramoIndex = digits.length - 7;
+    const ramo = digits.charAt(ramoIndex);
+    const tribunal = digits.slice(ramoIndex + 1, ramoIndex + 3);
+    if (!ramo || tribunal.length !== 2) {
+        return "";
+    }
+
+
     const ramoMap = UF_BY_RAMO_TR[ramo];
     return ramoMap?.[tribunal] ?? "";
 };
