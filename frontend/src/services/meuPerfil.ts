@@ -162,6 +162,9 @@ interface RawProfileResponse {
   website?: unknown;
   address?: {
     street?: unknown;
+    number?: unknown;
+    complement?: unknown;
+    neighborhood?: unknown;
     city?: unknown;
     state?: unknown;
     zip?: unknown;
@@ -199,6 +202,9 @@ export interface MeuPerfilProfile {
   website: string | null;
   address: {
     street: string | null;
+    number: string | null;
+    complement: string | null;
+    neighborhood: string | null;
     city: string | null;
     state: string | null;
     zip: string | null;
@@ -243,6 +249,9 @@ const mapProfileResponse = (payload: RawProfileResponse): MeuPerfilProfile => {
     website: toStringOrNull(payload.website),
     address: {
       street: toStringOrNull(address?.street),
+      number: toStringOrNull(address?.number),
+      complement: toStringOrNull(address?.complement),
+      neighborhood: toStringOrNull(address?.neighborhood),
       city: toStringOrNull(address?.city),
       state: toStringOrNull(address?.state),
       zip: toStringOrNull(address?.zip),
@@ -405,6 +414,9 @@ export interface UpdateMeuPerfilPayload {
   website?: string | null;
   address?: {
     street?: string | null;
+    number?: string | null;
+    complement?: string | null;
+    neighborhood?: string | null;
     city?: string | null;
     state?: string | null;
     zip?: string | null;
