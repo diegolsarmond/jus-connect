@@ -771,7 +771,9 @@ export default function VisualizarCliente() {
           fetch(joinUrl(apiUrl, `/api/clientes/${id}`), {
             headers: { Accept: "application/json" },
           }),
-          fetch(joinUrl(apiUrl, `/api/clientes/${id}/processos`)),
+          fetch(joinUrl(apiUrl, `/api/clientes/${id}/processos`), {
+            headers: { Accept: "application/json" },
+          }),
           fetch(joinUrl(apiUrl, `/api/tipo-documentos`)),
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/documentos`)),
           fetch(joinUrl(apiUrl, `/api/clientes/${id}/atributos`)),
