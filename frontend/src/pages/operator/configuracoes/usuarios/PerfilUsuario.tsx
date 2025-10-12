@@ -203,9 +203,12 @@ export default function PerfilUsuario() {
                   <span className="text-xs uppercase text-muted-foreground">Endereço</span>
                   <p className="text-sm text-foreground">
                     {profile.address.street ? `${profile.address.street}, ` : ""}
+                    {profile.address.number ? `${profile.address.number} - ` : ""}
+                    {profile.address.neighborhood ? `${profile.address.neighborhood}, ` : ""}
                     {profile.address.city ? `${profile.address.city} - ` : ""}
                     {profile.address.state ?? ""}
                     {profile.address.zip ? ` • CEP ${profile.address.zip}` : ""}
+                    {profile.address.complement ? ` • ${profile.address.complement}` : ""}
                   </p>
                 </div>
               </div>
