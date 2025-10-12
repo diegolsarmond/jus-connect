@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bell,
@@ -706,6 +706,9 @@ export default function MeuPerfil() {
   const [isSpecialtyLoading, setIsSpecialtyLoading] = useState(false);
   const [specialtyError, setSpecialtyError] = useState<string | null>(null);
 
+  const latestZipLookupIdRef = useRef(0);
+  const zipLookupAbortRef = useRef<AbortController | null>(null);
+
   const loadProfile = useCallback(async (signal?: AbortSignal) => {
     setIsProfileLoading(true);
     setProfileError(null);
@@ -967,10 +970,17 @@ export default function MeuPerfil() {
       const zipValue = toNullableString(rawValue);
       const address: NonNullable<UpdateMeuPerfilPayload["address"]> = { zip: zipValue };
       const digits = zipValue?.replace(/\D/g, "") ?? "";
+      const requestId = latestZipLookupIdRef.current + 1;
+      latestZipLookupIdRef.current = requestId;
 
       if (digits.length === 8) {
+        const controller = new AbortController();
+        zipLookupAbortRef.current?.abort();
+        zipLookupAbortRef.current = controller;
         try {
-          const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+          const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`, {
+            signal: controller.signal,
+          });
           if (response.ok) {
             const data = (await response.json()) as {
               logradouro?: string;
@@ -978,6 +988,10 @@ export default function MeuPerfil() {
               uf?: string;
               erro?: boolean;
             };
+
+            if (requestId !== latestZipLookupIdRef.current) {
+              return;
+            }
 
             if (!data?.erro) {
               if (typeof data.logradouro === "string") {
@@ -1003,7 +1017,14 @@ export default function MeuPerfil() {
             }
           }
         } catch (error) {
+          if (isAbortError(error)) {
+            return;
+          }
           console.error("Erro ao buscar CEP:", error);
+        } finally {
+          if (zipLookupAbortRef.current === controller) {
+            zipLookupAbortRef.current = null;
+          }
         }
       }
 
