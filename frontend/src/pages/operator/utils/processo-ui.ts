@@ -56,6 +56,29 @@ const HTML_ENTITY_HEX_REGEX = /&#x([0-9a-f]+);/gi;
 const CSS_SELECTOR_LINE_REGEX =
   /^[\s0-9A-Za-z@.#*,:>+~"'\-()[\]=%/\\]+$/u;
 
+function encontrarIndiceFechamentoBloco(texto: string, abertura: number): number {
+  let profundidade = 1;
+
+  for (let indice = abertura + 1; indice < texto.length; indice += 1) {
+    const caractereAtual = texto[indice];
+
+    if (caractereAtual === "{") {
+      profundidade += 1;
+      continue;
+    }
+
+    if (caractereAtual === "}") {
+      profundidade -= 1;
+
+      if (profundidade === 0) {
+        return indice;
+      }
+    }
+  }
+
+  return -1;
+}
+
 function removerCssInline(texto: string): string {
   if (!texto.includes("{") || !texto.includes("}")) {
     return texto;
@@ -70,8 +93,23 @@ function removerCssInline(texto: string): string {
 
     if (caractere === "{") {
       if (profundidade === 0) {
+        const fechamento = encontrarIndiceFechamentoBloco(texto, index);
+
+        if (fechamento === -1) {
+          continue;
+        }
+
+        const conteudoBloco = texto.slice(index + 1, fechamento);
+        const possuiEstruturaCss = /[:;]/.test(conteudoBloco);
+
         let inicioLinha = texto.lastIndexOf("\n", index - 1);
         inicioLinha = inicioLinha === -1 ? 0 : inicioLinha + 1;
+
+        const linhaAtual = texto.slice(inicioLinha, index).trim();
+
+        if (!linhaAtual || !CSS_SELECTOR_LINE_REGEX.test(linhaAtual) || !possuiEstruturaCss) {
+          continue;
+        }
 
         let inicioRemocao = inicioLinha;
 
