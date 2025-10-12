@@ -1,3 +1,4 @@
+import net from 'net';
 import tls from 'tls';
 import os from 'os';
 
@@ -37,9 +38,9 @@ const isSmtpConfigured = Boolean(smtpUser && smtpPass);
 
 const DEFAULT_SMTP_CONFIG: SmtpConfig | null = isSmtpConfigured
   ? {
-      host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-      port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
-      secure: parseBoolean(process.env.SMTP_SECURE, true),
+      host: (process.env.SMTP_HOST || 'smtp.resend.com').trim(),
+      port: Number.parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: parseBoolean(process.env.SMTP_SECURE, false),
       rejectUnauthorized: parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED, true),
       auth: {
         user: smtpUser!,
@@ -49,7 +50,18 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig | null = isSmtpConfigured
   : null;
 
 const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
-const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'no-reply@localhost';
+const fallbackFromAddress = 'no-reply@quantumtecnologia.com.br';
+const smtpFrom = process.env.SMTP_FROM;
+const normalizedSmtpFrom = smtpFrom?.trim();
+const normalizedSmtpUser = smtpUser?.trim();
+const resolveValidAddress = (value: string | undefined | null) =>
+  value && value.includes('@') ? value : null;
+const defaultFromAddress =
+  resolveValidAddress(normalizedSmtpFrom) ??
+  resolveValidAddress(normalizedSmtpUser) ??
+  fallbackFromAddress;
+const usingFallbackFromAddress =
+  !resolveValidAddress(normalizedSmtpFrom) && !resolveValidAddress(normalizedSmtpUser);
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 
 export interface SendEmailParams {
@@ -66,7 +78,9 @@ interface SmtpResponse {
 
 const CRLF = '\r\n';
 
-function waitForResponse(socket: tls.TLSSocket, timeoutMs = 15000): Promise<SmtpResponse> {
+type SmtpSocket = net.Socket;
+
+function waitForResponse(socket: SmtpSocket, timeoutMs = 15000): Promise<SmtpResponse> {
   return new Promise((resolve, reject) => {
     let buffer = '';
     let resolved = false;
@@ -125,7 +139,7 @@ function waitForResponse(socket: tls.TLSSocket, timeoutMs = 15000): Promise<Smtp
 }
 
 async function sendCommand(
-  socket: tls.TLSSocket,
+  socket: SmtpSocket,
   command: string | null,
   expectedCodes: number[]
 ): Promise<SmtpResponse> {
@@ -177,6 +191,20 @@ function buildMessageBody(text: string, html: string, boundary: string): string 
   return parts.join(CRLF);
 }
 
+function createTlsConnection(options: tls.ConnectionOptions): Promise<tls.TLSSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect(options, () => {
+      socket.off('error', handleError);
+      resolve(socket);
+    });
+    const handleError = (error: Error) => {
+      socket.destroy();
+      reject(error);
+    };
+    socket.once('error', handleError);
+  });
+}
+
 export async function sendEmail({ to, subject, html, text }: SendEmailParams): Promise<void> {
   if (!DEFAULT_SMTP_CONFIG) {
     console.warn(
@@ -185,24 +213,62 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
     return;
   }
 
-  const { host, port, auth, rejectUnauthorized } = DEFAULT_SMTP_CONFIG;
+  if (usingFallbackFromAddress) {
+    console.warn(
+      `Remetente SMTP padrão indefinido ou inválido. Defina SMTP_FROM com um endereço de e-mail válido. Usando "${fallbackFromAddress}" como padrão.`
+    );
+  }
+
+  if (!defaultFromAddress || !defaultFromAddress.includes('@')) {
+    console.error(
+      'Não foi possível determinar um remetente SMTP válido. Defina SMTP_FROM com um endereço de e-mail válido.'
+    );
+    return;
+  }
+
+  const { host, port, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
   const clientName = os.hostname() || 'localhost';
   const boundary = `----=_Boundary_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
   const headers = buildMessageHeaders(to, subject, boundary);
   const messageBody = buildMessageBody(text, html, boundary);
   const message = sanitizeMessageBody([...headers, '', messageBody].join(CRLF));
 
-  const socket = tls.connect({
-    host,
-    port,
-    rejectUnauthorized,
-  });
+  let socket: SmtpSocket;
+
+  if (secure) {
+    socket = await createTlsConnection({
+      host,
+      port,
+      rejectUnauthorized,
+    });
+  } else {
+    const plainSocket = net.createConnection({ host, port });
+
+    try {
+      await waitForResponse(plainSocket); // 220 greeting
+      await sendCommand(plainSocket, `EHLO ${clientName}`, [250]);
+      await sendCommand(plainSocket, 'STARTTLS', [220]);
+    } catch (error) {
+      plainSocket.end();
+      throw error;
+    }
+
+    socket = await createTlsConnection({
+      host,
+      rejectUnauthorized,
+      socket: plainSocket,
+    });
+  }
 
   try {
-    await waitForResponse(socket); // 220 greeting
+    if (secure) {
+      await waitForResponse(socket); // 220 greeting
+    }
     await sendCommand(socket, `EHLO ${clientName}`, [250]);
     await sendCommand(socket, 'AUTH LOGIN', [334]);
-    await sendCommand(socket, Buffer.from(auth.user, 'utf8').toString('base64'), [334]);
+    const loginUser =
+      host.toLowerCase() === 'smtp.resend.com' && auth.user.startsWith('re_') ? 'resend' : auth.user;
+    await sendCommand(socket, Buffer.from(loginUser, 'utf8').toString('base64'), [334]);
     await sendCommand(socket, Buffer.from(auth.pass, 'utf8').toString('base64'), [235]);
     await sendCommand(socket, `MAIL FROM:<${defaultFromAddress}>`, [250]);
     await sendCommand(socket, `RCPT TO:<${to}>`, [250, 251]);

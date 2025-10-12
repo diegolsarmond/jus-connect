@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendEmail = sendEmail;
+const net_1 = __importDefault(require("net"));
 const tls_1 = __importDefault(require("tls"));
 const os_1 = __importDefault(require("os"));
 const parseBoolean = (value, defaultValue) => {
@@ -24,9 +25,9 @@ const smtpPass = process.env.SMTP_PASSWORD ?? process.env.SMTP_PASS;
 const isSmtpConfigured = Boolean(smtpUser && smtpPass);
 const DEFAULT_SMTP_CONFIG = isSmtpConfigured
     ? {
-        host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-        port: Number.parseInt(process.env.SMTP_PORT || '465', 10),
-        secure: parseBoolean(process.env.SMTP_SECURE, true),
+        host: process.env.SMTP_HOST || 'smtp.resend.com',
+        port: Number.parseInt(process.env.SMTP_PORT || '587', 10),
+        secure: parseBoolean(process.env.SMTP_SECURE, false),
         rejectUnauthorized: parseBoolean(process.env.SMTP_REJECT_UNAUTHORIZED, true),
         auth: {
             user: smtpUser,
@@ -35,7 +36,7 @@ const DEFAULT_SMTP_CONFIG = isSmtpConfigured
     }
     : null;
 const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
-const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'no-reply@localhost';
+const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'naoresponda@quantumtecnologia.com.br';
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 const CRLF = '\r\n';
 function waitForResponse(socket, timeoutMs = 15000) {
@@ -130,24 +131,59 @@ function buildMessageBody(text, html, boundary) {
     ];
     return parts.join(CRLF);
 }
+function createTlsConnection(options) {
+    return new Promise((resolve, reject) => {
+        const socket = tls_1.default.connect(options, () => {
+            socket.off('error', handleError);
+            resolve(socket);
+        });
+        const handleError = (error) => {
+            socket.destroy();
+            reject(error);
+        };
+        socket.once('error', handleError);
+    });
+}
 async function sendEmail({ to, subject, html, text }) {
     if (!DEFAULT_SMTP_CONFIG) {
         console.warn('Configuração SMTP ausente. Defina SMTP_USER e SMTP_PASSWORD (ou SMTP_PASS) para habilitar o envio de e-mails.');
         return;
     }
-    const { host, port, auth, rejectUnauthorized } = DEFAULT_SMTP_CONFIG;
+    const { host, port, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
     const clientName = os_1.default.hostname() || 'localhost';
     const boundary = `----=_Boundary_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
     const headers = buildMessageHeaders(to, subject, boundary);
     const messageBody = buildMessageBody(text, html, boundary);
     const message = sanitizeMessageBody([...headers, '', messageBody].join(CRLF));
-    const socket = tls_1.default.connect({
-        host,
-        port,
-        rejectUnauthorized,
-    });
+    let socket;
+    if (secure) {
+        socket = await createTlsConnection({
+            host,
+            port,
+            rejectUnauthorized,
+        });
+    }
+    else {
+        const plainSocket = net_1.default.createConnection({ host, port });
+        try {
+            await waitForResponse(plainSocket); // 220 greeting
+            await sendCommand(plainSocket, `EHLO ${clientName}`, [250]);
+            await sendCommand(plainSocket, 'STARTTLS', [220]);
+        }
+        catch (error) {
+            plainSocket.end();
+            throw error;
+        }
+        socket = await createTlsConnection({
+            host,
+            rejectUnauthorized,
+            socket: plainSocket,
+        });
+    }
     try {
-        await waitForResponse(socket); // 220 greeting
+        if (secure) {
+            await waitForResponse(socket); // 220 greeting
+        }
         await sendCommand(socket, `EHLO ${clientName}`, [250]);
         await sendCommand(socket, 'AUTH LOGIN', [334]);
         await sendCommand(socket, Buffer.from(auth.user, 'utf8').toString('base64'), [334]);

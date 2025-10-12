@@ -8,6 +8,7 @@ export interface ProcessoClienteResumo {
 export interface ProcessoAdvogado {
   id: number;
   nome: string | null;
+  oab: string | null;
 }
 
 export interface ProcessoParticipantLawyer {

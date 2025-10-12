@@ -1,12 +1,13 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, Calendar, MapPin, Users, FileText, Pencil } from "lucide-react";
+import { Eye, Calendar, MapPin, Users, FileText, Pencil, Gavel } from "lucide-react";
 
 interface ProcessCardProps {
   numero: string;
   status: string;
   cliente: string;
+  advogados: string;
   dataDistribuicao: string;
   jurisdicao: string;
   orgaoJulgador: string;
@@ -18,6 +19,7 @@ export function ProcessCard({
   numero,
   status,
   cliente,
+  advogados,
   dataDistribuicao,
   jurisdicao,
   orgaoJulgador,
@@ -68,6 +70,14 @@ export function ProcessCard({
           <div className="min-w-0">
             <p className="text-muted-foreground text-xs">Cliente</p>
             <p className="font-medium truncate">{cliente}</p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2">
+          <Gavel className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+          <div className="min-w-0">
+            <p className="text-muted-foreground text-xs">Advogados</p>
+            <p className="font-medium truncate">{advogados}</p>
           </div>
         </div>
         
