@@ -40,7 +40,11 @@ SELECT
   proc.uf AS processo_uf,
   proc.municipio AS processo_municipio,
   proc.orgao_julgador,
-  proc.tipo AS processo_tipo,
+  COALESCE(
+    to_jsonb(proc)->>'tipo',
+    to_jsonb(proc)->>'tipo_processo'
+  ) AS processo_tipo,
+
   proc.status AS processo_status,
   proc.classe_judicial,
   proc.assunto AS processo_assunto,
