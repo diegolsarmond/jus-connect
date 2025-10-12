@@ -20,6 +20,57 @@ interface PasswordStrength {
   suggestions: string[];
 }
 
+type PasswordInputProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  showPassword: boolean;
+  onToggleVisibility: () => void;
+  autoComplete?: string;
+  disabled?: boolean;
+};
+
+const PasswordInput = ({
+  id,
+  label,
+  value,
+  onChange,
+  showPassword,
+  onToggleVisibility,
+  autoComplete,
+  disabled,
+}: PasswordInputProps) => (
+  <div className="space-y-2">
+    <Label htmlFor={id}>{label}</Label>
+    <div className="relative">
+      <Input
+        id={id}
+        type={showPassword ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="pr-10"
+        autoComplete={autoComplete}
+        disabled={disabled}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+        onClick={onToggleVisibility}
+        disabled={disabled}
+      >
+        {showPassword ? (
+          <EyeOff className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <Eye className="h-4 w-4 text-muted-foreground" />
+        )}
+      </Button>
+    </div>
+  </div>
+);
+
 export default function AlterarSenha() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -161,55 +212,6 @@ export default function AlterarSenha() {
       setIsLoading(false);
     }
   };
-
-  const PasswordInput = ({
-    id,
-    label,
-    value,
-    onChange,
-    showPassword,
-    onToggleVisibility,
-    autoComplete,
-    disabled,
-  }: {
-    id: string;
-    label: string;
-    value: string;
-    onChange: (value: string) => void;
-    showPassword: boolean;
-    onToggleVisibility: () => void;
-    autoComplete?: string;
-    disabled?: boolean;
-  }) => (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="relative">
-        <Input
-          id={id}
-          type={showPassword ? "text" : "password"}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="pr-10"
-          autoComplete={autoComplete}
-          disabled={disabled}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-          onClick={onToggleVisibility}
-          disabled={disabled}
-        >
-          {showPassword ? (
-            <EyeOff className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <Eye className="h-4 w-4 text-muted-foreground" />
-          )}
-        </Button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-6">
