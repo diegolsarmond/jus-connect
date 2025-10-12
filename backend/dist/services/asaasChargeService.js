@@ -40,6 +40,7 @@ exports.ChargeConflictError = exports.ValidationError = exports.ASAAS_BILLING_TY
 const financialFlowIdentifier_1 = require("../utils/financialFlowIdentifier");
 const db_1 = __importDefault(require("./db"));
 const integrationResolver_1 = __importStar(require("./asaas/integrationResolver"));
+const asaasClient_1 = require("./asaas/asaasClient");
 exports.ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD', 'DEBIT_CARD'];
 class ValidationError extends Error {
     constructor(message) {
@@ -61,7 +62,7 @@ class HttpAsaasClient {
         this.config = config;
     }
     resolveBaseUrl() {
-        const configured = this.config.baseUrl ?? process.env.ASAAS_BASE_URL;
+        const configured = this.config.baseUrl ?? process.env.ASAAS_API_URL ?? process.env.ASAAS_BASE_URL;
         const base = configured && configured.trim() ? configured.trim() : DEFAULT_BASE_URL;
         return base.endsWith('/') ? base : `${base}/`;
     }
@@ -71,23 +72,61 @@ class HttpAsaasClient {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${this.config.apiKey}`,
+                access_token: this.config.apiKey,
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
             },
             body: JSON.stringify(payload),
         });
         if (!response.ok) {
-            let errorBody;
+            let errorBody = null;
+            let message = 'Falha ao criar cobrança no Asaas';
+            let errorCode;
             try {
                 errorBody = await response.json();
             }
             catch (error) {
-                errorBody = await response.text();
+                try {
+                    errorBody = await response.text();
+                }
+                catch (textError) {
+                    errorBody = null;
+                }
             }
-            const error = new Error('Falha ao criar cobrança no Asaas');
-            error.status = response.status;
-            error.body = errorBody;
-            throw error;
+            if (errorBody && typeof errorBody === 'object') {
+                const payload = errorBody;
+                if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+                    const firstError = payload.errors[0];
+                    if (firstError && typeof firstError === 'object') {
+                        const normalized = firstError;
+                        const description = normalized.description;
+                        const errMessage = normalized.message;
+                        if (typeof description === 'string' && description.trim()) {
+                            message = description.trim();
+                        }
+                        else if (typeof errMessage === 'string' && errMessage.trim()) {
+                            message = errMessage.trim();
+                        }
+                        const code = normalized.code;
+                        if (typeof code === 'string' && code.trim()) {
+                            errorCode = code.trim();
+                        }
+                    }
+                }
+                else if (typeof payload.message === 'string' && payload.message.trim()) {
+                    message = payload.message.trim();
+                    if (typeof payload.code === 'string' && payload.code.trim()) {
+                        errorCode = payload.code.trim();
+                    }
+                }
+                else if (typeof payload.error === 'string' && payload.error.trim()) {
+                    message = payload.error.trim();
+                }
+            }
+            else if (typeof errorBody === 'string' && errorBody.trim()) {
+                message = errorBody.trim();
+            }
+            throw new asaasClient_1.AsaasApiError(message, response.status, errorBody, errorCode);
         }
         const data = (await response.json());
         return data;
