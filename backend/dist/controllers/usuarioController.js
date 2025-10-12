@@ -120,7 +120,14 @@ const listUsuarios = async (req, res) => {
         if (!req.auth) {
             return res.status(401).json({ error: 'Token inválido.' });
         }
-        const result = await db_1.default.query(baseUsuarioSelect);
+        const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+        if (!empresaLookup.success) {
+            return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+        }
+        const { empresaId } = empresaLookup;
+        const query = empresaId === null ? baseUsuarioSelect : `${baseUsuarioSelect} WHERE u.empresa = $1`;
+        const values = empresaId === null ? [] : [empresaId];
+        const result = await db_1.default.query(query, values);
         res.json(result.rows.map((row) => mapUsuarioRowToResponse(row)));
     }
     catch (error) {

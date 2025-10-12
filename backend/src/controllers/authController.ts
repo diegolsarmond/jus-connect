@@ -891,7 +891,7 @@ export const register = async (req: Request, res: Response) => {
 
   res.status(201).json({
     ...registrationResponse,
-    message: 'Cadastro realizado. Verifique seu e-mail para confirmar o acesso.',
+    message: 'Sua conta foi criada, confirme o e-mail para ter acesso ao sistema.',
     requiresEmailConfirmation: true,
   });
 };

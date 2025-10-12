@@ -7,20 +7,48 @@ export type AsaasEnvironment = keyof typeof ASAAS_DEFAULT_BASE_URLS;
 
 const PRODUCAO_ALIASES = new Set(['producao', 'production', 'prod', 'live']);
 
-export function normalizeAsaasEnvironment(value: string | null | undefined): AsaasEnvironment {
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
+const stripDiacritics = (value: string): string =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    if (normalized) {
-      const withoutDiacritics = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const isKnownEnvironment = (value: string): value is AsaasEnvironment =>
+  Object.prototype.hasOwnProperty.call(ASAAS_DEFAULT_BASE_URLS, value);
 
-      if (PRODUCAO_ALIASES.has(withoutDiacritics)) {
-        return 'producao';
-      }
-    }
+const resolveKnownEnvironment = (value: string): AsaasEnvironment | null => {
+  const trimmed = value.trim().toLowerCase();
+
+  if (!trimmed) {
+    return null;
   }
 
-  return 'homologacao';
+  if (isKnownEnvironment(trimmed)) {
+    return trimmed;
+  }
+
+  const withoutDiacritics = stripDiacritics(trimmed);
+
+  if (isKnownEnvironment(withoutDiacritics)) {
+    return withoutDiacritics;
+  }
+
+  if (PRODUCAO_ALIASES.has(withoutDiacritics)) {
+    return 'producao';
+  }
+
+  return null;
+};
+
+export function resolveAsaasEnvironment(
+  value: string | null | undefined,
+): AsaasEnvironment | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  return resolveKnownEnvironment(value);
+}
+
+export function normalizeAsaasEnvironment(value: string | null | undefined): AsaasEnvironment {
+  return resolveAsaasEnvironment(value) ?? 'homologacao';
 }
 
 export function normalizeAsaasBaseUrl(
