@@ -2285,7 +2285,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
     }
 
     let query: string;
-    let params: [number, number] | [string, number];
+    let params: (string | number)[];
 
     if (hasNumericId) {
       query = `${baseProcessoSelect}
