@@ -387,8 +387,8 @@ const UF_BY_RAMO_TR: Record<string, Record<string, string>> = {
         "22": "RO",
         "23": "RR",
         "24": "SC",
-        "25": "SP",
-        "26": "SE",
+        "25": "SE",
+        "26": "SP",
         "27": "TO",
     },
 };
