@@ -114,6 +114,7 @@ export interface Processo {
     orgaoJulgador: string;
     proposta: ProcessoProposta | null;
     ultimaSincronizacao: string | null;
+    ultimaMovimentacao: string;
     consultasApiCount: number;
     movimentacoesCount: number;
 }
@@ -404,6 +405,7 @@ const inferUfFromProcessNumber = (value: string): string => {
     if (!ramo || tribunal.length !== 2) {
         return "";
     }
+
 
     const ramoMap = UF_BY_RAMO_TR[ramo];
     return ramoMap?.[tribunal] ?? "";
@@ -1114,6 +1116,8 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
 
     const lastSyncAt = processo.ultima_sincronizacao ?? null;
 
+    const ultimaMovimentacao = formatDateToPtBR(processo.ultima_movimentacao);
+
     const movimentacoesCount = Math.max(
         parseApiInteger(processo.movimentacoes_count),
         0,
@@ -1144,6 +1148,7 @@ const mapApiProcessoToProcesso = (processo: ApiProcesso): Processo => {
         orgaoJulgador,
         proposta,
         ultimaSincronizacao: lastSyncAt,
+        ultimaMovimentacao,
         consultasApiCount,
         movimentacoesCount,
     };
@@ -1304,6 +1309,16 @@ export default function Processos() {
     const [unassignedClientPopoverOpenId, setUnassignedClientPopoverOpenId] = useState<
         number | null
     >(null);
+    const [unassignedMunicipioPopoverOpenId, setUnassignedMunicipioPopoverOpenId] =
+        useState<number | null>(null);
+    const [unassignedMunicipiosByUf, setUnassignedMunicipiosByUf] = useState<
+        Record<string, Municipio[]>
+    >({});
+    const [unassignedMunicipiosLoadingUf, setUnassignedMunicipiosLoadingUf] =
+        useState<string | null>(null);
+    const [unassignedMunicipiosErrorByUf, setUnassignedMunicipiosErrorByUf] = useState<
+        Record<string, string>
+    >({});
     const [unassignedModalDismissed, setUnassignedModalDismissed] = useState(false);
     const [unassignedLoading, setUnassignedLoading] = useState(false);
     const [unassignedError, setUnassignedError] = useState<string | null>(null);
@@ -2587,6 +2602,146 @@ export default function Processos() {
             });
         },
         [],
+    );
+
+    const ensureUnassignedMunicipios = useCallback(
+        async (uf: string) => {
+            const normalized = uf.trim().toUpperCase();
+            if (!normalized) {
+                return;
+            }
+
+            if (
+                unassignedMunicipiosLoadingUf === normalized ||
+                (unassignedMunicipiosByUf[normalized] && !unassignedMunicipiosErrorByUf[normalized])
+            ) {
+                return;
+            }
+
+            setUnassignedMunicipiosLoadingUf(normalized);
+            setUnassignedMunicipiosErrorByUf((prev) => {
+                const next = { ...prev };
+                delete next[normalized];
+                return next;
+            });
+
+            try {
+                const res = await fetch(
+                    `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${normalized}/municipios?orderBy=nome`,
+                );
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+
+                const data = (await res.json()) as Municipio[];
+
+                setUnassignedMunicipiosByUf((prev) => ({
+                    ...prev,
+                    [normalized]: data,
+                }));
+            } catch (error) {
+                console.error(error);
+                setUnassignedMunicipiosByUf((prev) => ({
+                    ...prev,
+                    [normalized]: [],
+                }));
+                setUnassignedMunicipiosErrorByUf((prev) => ({
+                    ...prev,
+                    [normalized]: "Erro ao carregar municípios",
+                }));
+            } finally {
+                setUnassignedMunicipiosLoadingUf((current) =>
+                    current === normalized ? null : current,
+                );
+            }
+        },
+        [
+            unassignedMunicipiosByUf,
+            unassignedMunicipiosErrorByUf,
+            unassignedMunicipiosLoadingUf,
+        ],
+    );
+
+    const handleUnassignedUfChange = useCallback(
+        (processId: number, uf: string) => {
+            const normalized = uf.trim().toUpperCase();
+
+            setUnassignedDetails((prev) => {
+                const current = prev[processId];
+                if (!current) {
+                    return prev;
+                }
+
+                const nextMunicipio =
+                    normalized === current.form.uf.trim().toUpperCase()
+                        ? current.form.municipio
+                        : "";
+
+                return {
+                    ...prev,
+                    [processId]: {
+                        ...current,
+                        form: {
+                            ...current.form,
+                            uf: normalized,
+                            municipio: nextMunicipio,
+                        },
+                    },
+                };
+            });
+
+            if (!normalized) {
+                return;
+            }
+
+            setUnassignedMunicipiosErrorByUf((prev) => {
+                const next = { ...prev };
+                delete next[normalized];
+                return next;
+            });
+
+            void ensureUnassignedMunicipios(normalized);
+        },
+        [ensureUnassignedMunicipios],
+    );
+
+    const handleUnassignedMunicipioSelect = useCallback(
+        (processId: number, municipio: string) => {
+            setUnassignedDetails((prev) => {
+                const current = prev[processId];
+                if (!current) {
+                    return prev;
+                }
+
+                return {
+                    ...prev,
+                    [processId]: {
+                        ...current,
+                        form: {
+                            ...current.form,
+                            municipio,
+                        },
+                    },
+                };
+            });
+
+            setUnassignedMunicipioPopoverOpenId((current) =>
+                current === processId ? null : current,
+            );
+        },
+        [],
+    );
+
+    const handleUnassignedMunicipioPopoverChange = useCallback(
+        (processId: number, open: boolean, uf: string) => {
+            setUnassignedMunicipioPopoverOpenId(open ? processId : null);
+
+            if (open) {
+                void ensureUnassignedMunicipios(uf);
+            }
+        },
+        [ensureUnassignedMunicipios],
     );
 
     const handleExistingClientSelection = useCallback(
@@ -4300,6 +4455,7 @@ export default function Processos() {
                                     : "Não informado"
                             }
                             dataDistribuicao={processo.dataDistribuicao}
+                            ultimaMovimentacao={processo.ultimaMovimentacao}
                             jurisdicao={processo.jurisdicao}
                             orgaoJulgador={processo.orgaoJulgador}
                             onView={() => handleViewProcessDetails(processo)}
@@ -4567,6 +4723,34 @@ export default function Processos() {
                                     : [];
                                 const canSave =
                                     hasExistingClient || Boolean(detail.primaryParticipantId);
+                                const municipioOptions = detail.form.uf
+                                    ? unassignedMunicipiosByUf[detail.form.uf] ?? []
+                                    : [];
+                                const municipioLoading = detail.form.uf
+                                    ? unassignedMunicipiosLoadingUf === detail.form.uf
+                                    : false;
+                                const municipioError = detail.form.uf
+                                    ? unassignedMunicipiosErrorByUf[detail.form.uf]
+                                    : undefined;
+                                const isMunicipioPopoverOpen =
+                                    unassignedMunicipioPopoverOpenId === processId;
+                                const municipioButtonLabel = (() => {
+                                    if (!detail.form.uf) {
+                                        return "Selecione a UF";
+                                    }
+
+                                    if (municipioLoading) {
+                                        return "Carregando municípios...";
+                                    }
+
+                                    if (detail.form.municipio) {
+                                        return detail.form.municipio;
+                                    }
+
+                                    return municipioOptions.length === 0
+                                        ? "Selecione o município (opcional)"
+                                        : "Selecione o município";
+                                })();
 
                                 return (
                                     <Card key={processId} className="border-border/60 bg-card/60 shadow-sm">
@@ -4705,6 +4889,123 @@ export default function Processos() {
                                                         </Select>
                                                     </div>
                                                 ) : null}
+                                                <div className="space-y-2">
+                                                    <Label htmlFor={`unassigned-uf-${processId}`}>UF</Label>
+                                                    <Select
+                                                        value={detail.form.uf}
+                                                        onValueChange={(value) =>
+                                                            handleUnassignedUfChange(processId, value)
+                                                        }
+                                                    >
+                                                        <SelectTrigger id={`unassigned-uf-${processId}`}>
+                                                            <SelectValue placeholder="Selecione a UF" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {ufOptions.map((uf) => (
+                                                                <SelectItem key={uf.sigla} value={uf.sigla}>
+                                                                    {uf.nome} ({uf.sigla})
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor={`unassigned-municipio-${processId}`}>
+                                                        Município
+                                                    </Label>
+                                                    <Popover
+                                                        open={isMunicipioPopoverOpen}
+                                                        onOpenChange={(open) =>
+                                                            handleUnassignedMunicipioPopoverChange(
+                                                                processId,
+                                                                open,
+                                                                detail.form.uf,
+                                                            )
+                                                        }
+                                                    >
+                                                        <PopoverTrigger asChild>
+                                                            <Button
+                                                                id={`unassigned-municipio-${processId}`}
+                                                                type="button"
+                                                                variant="outline"
+                                                                role="combobox"
+                                                                aria-expanded={isMunicipioPopoverOpen}
+                                                                className="w-full justify-between"
+                                                                disabled={!detail.form.uf || municipioLoading}
+                                                            >
+                                                                <span className="truncate">{municipioButtonLabel}</span>
+                                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent
+                                                            className="w-[var(--radix-popover-trigger-width)] p-0"
+                                                            align="start"
+                                                        >
+                                                            <Command>
+                                                                <CommandInput placeholder="Pesquisar município..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>
+                                                                        {!detail.form.uf
+                                                                            ? "Selecione a UF primeiro"
+                                                                            : municipioLoading
+                                                                                ? "Carregando municípios..."
+                                                                                : municipioError ??
+                                                                                  "Nenhum município encontrado"}
+                                                                    </CommandEmpty>
+                                                                    <CommandGroup>
+                                                                        <CommandItem
+                                                                            value=""
+                                                                            onSelect={() =>
+                                                                                handleUnassignedMunicipioSelect(
+                                                                                    processId,
+                                                                                    "",
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <Check
+                                                                                className={`mr-2 h-4 w-4 ${
+                                                                                    detail.form.municipio
+                                                                                        ? "opacity-0"
+                                                                                        : "opacity-100"
+                                                                                }`}
+                                                                            />
+                                                                            Nenhum município selecionado
+                                                                        </CommandItem>
+                                                                        {municipioOptions.map((municipio) => {
+                                                                            const selected =
+                                                                                detail.form.municipio ===
+                                                                                municipio.nome;
+                                                                            return (
+                                                                                <CommandItem
+                                                                                    key={municipio.id}
+                                                                                    value={municipio.nome}
+                                                                                    onSelect={() =>
+                                                                                        handleUnassignedMunicipioSelect(
+                                                                                            processId,
+                                                                                            municipio.nome,
+                                                                                        )
+                                                                                    }
+                                                                                >
+                                                                                    <Check
+                                                                                        className={`mr-2 h-4 w-4 ${
+                                                                                            selected
+                                                                                                ? "opacity-100"
+                                                                                                : "opacity-0"
+                                                                                        }`}
+                                                                                    />
+                                                                                    {municipio.nome}
+                                                                                </CommandItem>
+                                                                            );
+                                                                        })}
+                                                                    </CommandGroup>
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                    {municipioError ? (
+                                                        <p className="text-xs text-destructive">{municipioError}</p>
+                                                    ) : null}
+                                                </div>
                                             </div>
                                             {!hasExistingClient ? (
                                                 <div className="space-y-3">
@@ -4725,6 +5026,8 @@ export default function Processos() {
                                                                 const checked = detail.selectedParticipantIds.includes(
                                                                     participant.id,
                                                                 );
+                                                                const primaryParticipantId = `primary-${processId}-${participant.id}`;
+                                                                const involvedParticipantId = `involved-${processId}-${participant.id}`;
                                                                 return (
                                                                     <div
                                                                         key={participant.id}
@@ -4754,25 +5057,34 @@ export default function Processos() {
                                                                                 </div>
                                                                             </div>
                                                                             <div className="flex flex-col items-end gap-2">
-                                                                                <Checkbox
-                                                                                    checked={checked}
-                                                                                    onCheckedChange={() =>
-                                                                                        handleParticipantToggle(
-                                                                                            processId,
-                                                                                            participant.id,
-                                                                                        )
-                                                                                    }
-                                                                                /> 
                                                                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                                                     <RadioGroupItem
                                                                                         value={participant.id}
-                                                                                        id={`primary-${processId}-${participant.id}`}
-                                                                                    /> 
+                                                                                        id={primaryParticipantId}
+                                                                                    />
                                                                                     <Label
-                                                                                        htmlFor={`primary-${processId}-${participant.id}`}
+                                                                                        htmlFor={primaryParticipantId}
                                                                                         className="text-xs font-normal"
                                                                                     >
-                                                                                        Cliente principal
+                                                                                        Cliente principal (selecione apenas um)
+                                                                                    </Label>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                                                    <Checkbox
+                                                                                        id={involvedParticipantId}
+                                                                                        checked={checked}
+                                                                                        onCheckedChange={() =>
+                                                                                            handleParticipantToggle(
+                                                                                                processId,
+                                                                                                participant.id,
+                                                                                            )
+                                                                                        }
+                                                                                    />
+                                                                                    <Label
+                                                                                        htmlFor={involvedParticipantId}
+                                                                                        className="text-xs font-normal"
+                                                                                    >
+                                                                                        Envolvido no processo (você pode selecionar mais de um)
                                                                                     </Label>
                                                                                 </div>
                                                                             </div>

@@ -128,6 +128,10 @@ const sanitizeSubscriptionStatus = (
   }
 
   const normalized = value.trim().toLowerCase();
+  if (normalized === "trial") {
+    return "trialing";
+  }
+
   if (
     normalized === "active" ||
     normalized === "trialing" ||
