@@ -251,6 +251,49 @@ const parseBooleanFlag = (value: unknown): boolean | null => {
   return null;
 };
 
+const parseDiasSemanaArray = (
+  value: unknown,
+): { ok: true; value: number[] | null } | { ok: false } => {
+  if (value === undefined || value === null) {
+    return { ok: true, value: null };
+  }
+
+  if (!Array.isArray(value)) {
+    return { ok: false };
+  }
+
+  const set = new Set<number>();
+
+  for (const item of value) {
+    let parsed: number | null = null;
+
+    if (typeof item === 'number' && Number.isInteger(item)) {
+      parsed = item;
+    } else if (typeof item === 'string') {
+      const trimmed = item.trim();
+      if (trimmed) {
+        const candidate = Number.parseInt(trimmed, 10);
+        if (Number.isInteger(candidate)) {
+          parsed = candidate;
+        }
+      }
+    }
+
+    if (parsed == null || parsed < 1 || parsed > 7) {
+      return { ok: false };
+    }
+
+    set.add(Math.trunc(parsed));
+  }
+
+  if (set.size === 0) {
+    return { ok: false };
+  }
+
+  const normalized = Array.from(set).sort((a, b) => a - b);
+  return { ok: true, value: normalized };
+};
+
 const parsePositiveIntegerQuery = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
     return value;
@@ -1402,6 +1445,176 @@ const fetchProcessParticipants = async (
   });
 };
 
+const AUTO_LINK_BATCH_LIMIT = 25;
+
+const sanitizeCpfDigits = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const digits = value.replace(/\D+/g, '');
+
+  if (digits.length !== 11) {
+    return null;
+  }
+
+  if (/^(\d)\1{10}$/.test(digits)) {
+    return null;
+  }
+
+  return digits;
+};
+
+const tryAutoLinkProcessClientByCpf = async (
+  processId: number,
+  numeroCnj: string,
+  oportunidadeId: number | null,
+  empresaId: number,
+): Promise<void> => {
+  const participants = await fetchProcessParticipants(numeroCnj, oportunidadeId);
+
+  if (!Array.isArray(participants) || participants.length === 0) {
+    return;
+  }
+
+  const cpfSet = new Set<string>();
+
+  for (const participant of participants) {
+    const digits = sanitizeCpfDigits(participant.document);
+    if (digits) {
+      cpfSet.add(digits);
+    }
+  }
+
+  if (cpfSet.size === 0) {
+    return;
+  }
+
+  const documentos = Array.from(cpfSet);
+
+  const clientResult = await pool.query(
+    `SELECT id, nome, documento, tipo
+       FROM public.clientes
+      WHERE documento = ANY($1::text[])
+        AND idempresa IS NOT DISTINCT FROM $2
+      LIMIT 2`,
+    [documentos, empresaId],
+  );
+
+  const matchedClients = clientResult.rows
+    .map((row) => {
+      const idValue = Number((row as { id?: unknown }).id);
+      if (!Number.isInteger(idValue) || idValue <= 0) {
+        return null;
+      }
+
+      const documentoDigits = sanitizeCpfDigits(
+        typeof (row as { documento?: unknown }).documento === 'string'
+          ? (row as { documento: string }).documento
+          : null,
+      );
+
+      if (!documentoDigits || !cpfSet.has(documentoDigits)) {
+        return null;
+      }
+
+      const nomeValue =
+        typeof (row as { nome?: unknown }).nome === 'string'
+          ? (row as { nome: string }).nome
+          : null;
+
+      const tipoRaw = (row as { tipo?: unknown }).tipo;
+      const tipoValue =
+        tipoRaw === null || tipoRaw === undefined
+          ? null
+          : typeof tipoRaw === 'string'
+            ? tipoRaw
+            : String(tipoRaw);
+
+      return {
+        id: idValue,
+        nome: nomeValue,
+        documento: documentoDigits,
+        tipo: tipoValue,
+      };
+    })
+    .filter(
+      (
+        value,
+      ): value is {
+        id: number;
+        nome: string | null;
+        documento: string | null;
+        tipo: string | null;
+      } => value !== null,
+    );
+
+  if (matchedClients.length !== 1) {
+    return;
+  }
+
+  const client = matchedClients[0];
+
+  await pool.query(
+    `UPDATE public.processos
+        SET cliente_id = $1,
+            atualizado_em = NOW()
+      WHERE id = $2
+        AND (cliente_id IS NULL OR cliente_id <= 0)`,
+    [client.id, processId],
+  );
+};
+
+const autoLinkProcessesWithoutClient = async (
+  empresaId: number,
+  limit: number,
+): Promise<void> => {
+  if (!Number.isInteger(empresaId) || empresaId <= 0) {
+    return;
+  }
+
+  const baseLimit = Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : AUTO_LINK_BATCH_LIMIT;
+  const effectiveLimit = Math.max(1, Math.min(baseLimit, AUTO_LINK_BATCH_LIMIT));
+
+  const candidateResult = await pool.query(
+    `SELECT id, numero_cnj, oportunidade_id
+       FROM public.processos
+      WHERE idempresa = $1
+        AND (cliente_id IS NULL OR cliente_id <= 0)
+        AND numero_cnj IS NOT NULL
+      ORDER BY atualizado_em DESC
+      LIMIT $2`,
+    [empresaId, effectiveLimit],
+  );
+
+  for (const row of candidateResult.rows) {
+    const processId = Number((row as { id?: unknown }).id);
+    if (!Number.isInteger(processId) || processId <= 0) {
+      continue;
+    }
+
+    const numeroValue = normalizeString((row as { numero_cnj?: unknown }).numero_cnj);
+    if (!numeroValue) {
+      continue;
+    }
+
+    const oportunidadeIdValue = parseOptionalInteger(
+      (row as { oportunidade_id?: unknown }).oportunidade_id,
+    );
+
+    try {
+      await tryAutoLinkProcessClientByCpf(
+        processId,
+        numeroValue,
+        oportunidadeIdValue,
+        empresaId,
+      );
+    } catch (error) {
+      console.error('Erro ao vincular cliente automaticamente ao processo', error);
+    }
+  }
+};
+
 const safeJsonStringify = (value: unknown): string | null => {
   if (value === null || value === undefined) {
     return null;
@@ -2038,6 +2251,15 @@ export const listProcessos = async (req: Request, res: Response) => {
           ? (pageParam - 1) * limit
           : null;
     const onlyWithoutClient = parseBooleanFlag(req.query.semCliente) === true;
+
+    if (onlyWithoutClient) {
+      try {
+        const autoLinkLimit = limitParam ?? AUTO_LINK_BATCH_LIMIT;
+        await autoLinkProcessesWithoutClient(empresaId, autoLinkLimit);
+      } catch (autoLinkError) {
+        console.error('Erro ao vincular cliente automaticamente ao processo', autoLinkError);
+      }
+    }
 
     const queryParams: unknown[] = [empresaId];
     const whereConditions = ['p.idempresa = $1'];
@@ -3733,7 +3955,7 @@ export const listOabMonitoradas = async (req: Request, res: Response) => {
 };
 
 export const createOabMonitorada = async (req: Request, res: Response) => {
-  const { uf, numero } = req.body ?? {};
+  const { uf, numero, diasSemana } = req.body ?? {};
   const usuarioIdRaw =
     (req.body as { usuarioId?: unknown })?.usuarioId ??
     (req.body as { usuario_id?: unknown })?.usuario_id;
@@ -3769,6 +3991,12 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
         .json({ error: 'Informe o usuário responsável pela OAB.' });
     }
 
+    const diasSemanaResult = parseDiasSemanaArray(diasSemana);
+
+    if (!diasSemanaResult.ok) {
+      return res.status(400).json({ error: 'Informe ao menos um dia da semana válido.' });
+    }
+
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     const planLimit = planLimits?.limiteAdvogadosProcessos;
 
@@ -3800,7 +4028,13 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
     }
 
     try {
-      const monitor = await createCompanyOabMonitor(empresaId, uf, numero, usuarioId);
+      const monitor = await createCompanyOabMonitor(
+        empresaId,
+        uf,
+        numero,
+        usuarioId,
+        diasSemanaResult.value,
+      );
       return res.status(201).json(monitor);
     } catch (serviceError) {
       const message =
