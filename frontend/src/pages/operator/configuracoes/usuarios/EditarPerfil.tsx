@@ -747,6 +747,8 @@ export default function EditarPerfil() {
             </div>
           </ProfileCard>
 
+        </div>
+
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Avatar */}
