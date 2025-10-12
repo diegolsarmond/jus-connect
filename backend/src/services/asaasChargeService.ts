@@ -159,6 +159,7 @@ class HttpAsaasClient implements AsaasClient {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.config.apiKey}`,
+        access_token: this.config.apiKey,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
