@@ -220,7 +220,7 @@ class IntegrationApiKeyService {
     }
     async list() {
         const result = await this.db.query(`SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
-       FROM integration_api_keys
+       FROM integration_api_keys WHERE gloabal IS FALSE
        ORDER BY created_at DESC`);
         return result.rows.map(mapRow);
     }
