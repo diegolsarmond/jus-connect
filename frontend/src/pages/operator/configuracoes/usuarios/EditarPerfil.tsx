@@ -45,12 +45,23 @@ interface ApiUsuario {
   observacoes: string | null;
 }
 
+interface ApiPerfil {
+  id: unknown;
+}
+
 const roleLabels: Record<UserRole, string> = {
   admin: "Administrador",
   advogado: "Advogado",
   estagiario: "Estagiário",
   secretario: "Secretário",
 };
+
+const orderedRoles: readonly UserRole[] = [
+  "admin",
+  "advogado",
+  "estagiario",
+  "secretario",
+];
 
 const roleBadgeVariants: Record<UserRole, "outline" | "default" | "secondary" | "destructive"> = {
   admin: "destructive",
@@ -277,6 +288,7 @@ export default function EditarPerfil() {
   const [error, setError] = useState<string | null>(null);
   const [apiUser, setApiUser] = useState<ApiUsuario | null>(null);
   const [escritorios, setEscritorios] = useState<ApiEscritorio[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<UserRole[]>([]);
 
   const fetchUser = useCallback(async () => {
     if (!id) {
@@ -347,6 +359,47 @@ export default function EditarPerfil() {
     };
 
     fetchEscritorios();
+  }, [apiBaseUrl]);
+
+  useEffect(() => {
+    const fetchPerfis = async () => {
+      try {
+        const url = joinUrl(apiBaseUrl, "/api/perfis");
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+
+        if (!response.ok) {
+          throw new Error(`Erro ${response.status}`);
+        }
+
+        const json = await response.json();
+        const array = (
+          Array.isArray(json)
+            ? json
+            : Array.isArray((json as { rows?: unknown })?.rows)
+              ? ((json as { rows: ApiPerfil[] }).rows)
+              : Array.isArray((json as { data?: unknown })?.data)
+                ? ((json as { data: ApiPerfil[] }).data)
+                : Array.isArray((json as { data?: { rows?: unknown } })?.data?.rows)
+                  ? ((json as { data: { rows: ApiPerfil[] } }).data.rows)
+                  : []
+        ) as ApiPerfil[];
+
+        const roleSet = new Set<UserRole>();
+
+        array.forEach((item) => {
+          const id = Number((item as { id?: unknown }).id);
+          if (Number.isFinite(id)) {
+            roleSet.add(perfilToRole(id));
+          }
+        });
+
+        setAvailableRoles(orderedRoles.filter((role) => roleSet.has(role)));
+      } catch (err) {
+        console.error("Erro ao carregar perfis:", err);
+      }
+    };
+
+    fetchPerfis();
   }, [apiBaseUrl]);
 
   const handleInputChange = <K extends keyof UserFormData>(field: K, value: UserFormData[K]) => {
@@ -564,15 +617,17 @@ export default function EditarPerfil() {
                   <Select
                     value={formData.role}
                     onValueChange={(value) => handleInputChange("role", value as UserRole)}
+                    disabled={availableRoles.length === 0}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="advogado">Advogado</SelectItem>
-                      <SelectItem value="estagiario">Estagiário</SelectItem>
-                      <SelectItem value="secretario">Secretário</SelectItem>
+                      {availableRoles.map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {roleLabels[role]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
