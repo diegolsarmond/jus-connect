@@ -42,8 +42,7 @@ const ensureTable = async (): Promise<void> => {
           numero VARCHAR(20) NOT NULL,
           dias_semana SMALLINT[],
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          dias_semana SMALLINT[]
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         CREATE UNIQUE INDEX IF NOT EXISTS oab_monitoradas_empresa_tipo_uf_numero_idx
           ON public.oab_monitoradas (empresa_id, tipo, uf, numero);
