@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -33,7 +34,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createPlanPayment, PlanPaymentMethod, PlanPaymentResult } from "@/features/plans/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { getApiUrl } from "@/lib/api";
-import { tokenizeCard, type CardTokenPayload } from "@/lib/flows";
+import { fetchFlows, tokenizeCard, type CardTokenPayload, type Flow } from "@/lib/flows";
 import {
   clearPersistedManagePlanSelection,
   getPersistedManagePlanSelection,
@@ -47,6 +48,8 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
   minimumFractionDigits: 2,
 });
+
+const dateFormatter = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" });
 
 const getFormattedPrice = (display: string | null, numeric: number | null) => {
   if (typeof display === "string" && display.trim().length > 0) {
@@ -116,6 +119,80 @@ type CardFormState = {
 
 type CardFormErrors = Partial<Record<keyof CardFormState, string>>;
 
+const initialCardFormState: CardFormState = {
+  holderName: "",
+  holderEmail: "",
+  document: "",
+  number: "",
+  expiryMonth: "",
+  expiryYear: "",
+  cvv: "",
+  phone: "",
+  postalCode: "",
+  addressNumber: "",
+  addressComplement: "",
+};
+
+const flowStatusLabels: Record<Flow["status"], string> = {
+  pendente: "Pendente",
+  pago: "Pago",
+  estornado: "Estornado",
+};
+
+const formatDateLabel = (value: string | null | undefined): string => {
+  if (!value) {
+    return "—";
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+
+  return dateFormatter.format(new Date(timestamp));
+};
+
+const isValidCardNumber = (digits: string): boolean => {
+  let sum = 0;
+  let shouldDouble = false;
+
+  for (let index = digits.length - 1; index >= 0; index -= 1) {
+    let value = Number.parseInt(digits.charAt(index), 10);
+    if (Number.isNaN(value)) {
+      return false;
+    }
+
+    if (shouldDouble) {
+      value *= 2;
+      if (value > 9) {
+        value -= 9;
+      }
+    }
+
+    sum += value;
+    shouldDouble = !shouldDouble;
+  }
+
+  return sum % 10 === 0;
+};
+
+const parseExpiryYear = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d{2}$/.test(trimmed)) {
+    return 2000 + Number.parseInt(trimmed, 10);
+  }
+
+  if (/^\d{4}$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+
+  return null;
+};
+
 const validateCardForm = (form: CardFormState): CardFormErrors => {
   const errors: CardFormErrors = {};
 
@@ -131,7 +208,8 @@ const validateCardForm = (form: CardFormState): CardFormErrors => {
     errors.document = "Informe um CPF ou CNPJ válido.";
   }
 
-  if (sanitizeDigits(form.number).length < 13) {
+  const cardDigits = sanitizeDigits(form.number);
+  if (cardDigits.length < 13 || !isValidCardNumber(cardDigits)) {
     errors.number = "Informe um número de cartão válido.";
   }
 
@@ -140,8 +218,20 @@ const validateCardForm = (form: CardFormState): CardFormErrors => {
     errors.expiryMonth = "Mês inválido.";
   }
 
-  if (!form.expiryYear || form.expiryYear.trim().length < 2) {
+  const parsedYear = parseExpiryYear(form.expiryYear);
+  if (parsedYear === null) {
     errors.expiryYear = "Ano inválido.";
+  }
+
+  if (!errors.expiryMonth && !errors.expiryYear && Number.isFinite(month) && parsedYear !== null) {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    if (parsedYear < currentYear || (parsedYear === currentYear && month < currentMonth)) {
+      errors.expiryMonth = "Validade expirada.";
+      errors.expiryYear = "Validade expirada.";
+    }
   }
 
   const cvvLength = sanitizeDigits(form.cvv).length;
@@ -286,20 +376,12 @@ const ManagePlanPayment = () => {
   const [isTokenizingCard, setIsTokenizingCard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentResult, setPaymentResult] = useState<PlanPaymentResult | null>(null);
-  const [cardForm, setCardForm] = useState<CardFormState>({
-    holderName: "",
-    holderEmail: "",
-    document: "",
-    number: "",
-    expiryMonth: "",
-    expiryYear: "",
-    cvv: "",
-    phone: "",
-    postalCode: "",
-    addressNumber: "",
-    addressComplement: "",
-  });
+  const [cardForm, setCardForm] = useState<CardFormState>(() => ({ ...initialCardFormState }));
   const [cardErrors, setCardErrors] = useState<CardFormErrors>({});
+  const [autoChargeConfirmed, setAutoChargeConfirmed] = useState(false);
+  const [history, setHistory] = useState<Flow[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.empresa_id) {
@@ -388,6 +470,56 @@ const ManagePlanPayment = () => {
     };
   }, [toast, user?.empresa_id]);
 
+  useEffect(() => {
+    if (!selectedPlan) {
+      setHistory([]);
+      setHistoryError(null);
+      setIsHistoryLoading(false);
+      return;
+    }
+
+    let isActive = true;
+
+    const loadHistory = async () => {
+      setIsHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const flows = await fetchFlows();
+        if (!isActive) {
+          return;
+        }
+
+        const planFlows = flows.filter((flow) =>
+          flow.descricao.toLowerCase().includes("assinatura"),
+        );
+        setHistory(planFlows);
+      } catch (historyLoadError) {
+        if (!isActive) {
+          return;
+        }
+
+        console.error("Erro ao carregar histórico de pagamentos do plano", historyLoadError);
+        setHistoryError("Não foi possível carregar o histórico de pagamentos.");
+      } finally {
+        if (isActive) {
+          setIsHistoryLoading(false);
+        }
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedPlan]);
+
+  useEffect(() => {
+    if (paymentMethod !== "cartao") {
+      setAutoChargeConfirmed(false);
+    }
+  }, [paymentMethod]);
+
   const formattedPrice = useMemo(() => {
     if (!selectedPlan) {
       return null;
@@ -408,9 +540,38 @@ const ManagePlanPayment = () => {
       : getFormattedPrice(selectedPlan.precoAnual, selectedPlan.valorAnual);
   }, [pricingMode, selectedPlan]);
 
+  const planPaymentHistory = useMemo(() => {
+    const sorted = [...history].sort((a, b) => {
+      const timeA = Date.parse(a.vencimento);
+      const timeB = Date.parse(b.vencimento);
+
+      if (Number.isNaN(timeA) && Number.isNaN(timeB)) {
+        return 0;
+      }
+
+      if (Number.isNaN(timeA)) {
+        return 1;
+      }
+
+      if (Number.isNaN(timeB)) {
+        return -1;
+      }
+
+      return timeB - timeA;
+    });
+
+    return sorted.slice(0, 5);
+  }, [history]);
+
   const cadenceLabel = pricingMode === "anual" ? "ano" : "mês";
   const alternateCadence = pricingMode === "anual" ? "mês" : "ano";
   const features = selectedPlan?.recursos ?? [];
+
+  const handleResetCardForm = useCallback(() => {
+    setCardForm({ ...initialCardFormState });
+    setCardErrors({});
+    setAutoChargeConfirmed(false);
+  }, []);
 
   const handlePaymentMethodChange = useCallback((value: string) => {
     if (value === "pix" || value === "boleto" || value === "cartao" || value === "debito") {
@@ -434,6 +595,13 @@ const ManagePlanPayment = () => {
       });
     };
   }, []);
+
+  const handleEditCard = useCallback(() => {
+    setPaymentMethod("cartao");
+    handleResetCardForm();
+    setPaymentResult(null);
+    setError(null);
+  }, [handleResetCardForm]);
 
   const pixPayload = paymentResult?.charge.pixPayload ?? null;
   const pixQrCodeRaw = paymentResult?.charge.pixQrCode ?? null;
@@ -527,6 +695,17 @@ const ManagePlanPayment = () => {
       setError(message);
       toast({
         title: "Dados obrigatórios",
+        description: message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (paymentMethod === "cartao" && !autoChargeConfirmed) {
+      const message = "Confirme a cobrança automática no cartão para continuar.";
+      setError(message);
+      toast({
+        title: "Confirmação obrigatória",
         description: message,
         variant: "destructive",
       });
@@ -639,6 +818,7 @@ const ManagePlanPayment = () => {
     cardForm,
     companyDocument,
     companyName,
+    autoChargeConfirmed,
     paymentMethod,
     pricingMode,
     selectedPlan,
@@ -667,7 +847,8 @@ const ManagePlanPayment = () => {
     !companyName.trim() ||
     !companyDocument.trim() ||
     !billingEmail.trim() ||
-    !isCardFormComplete;
+    !isCardFormComplete ||
+    (paymentMethod === "cartao" && !autoChargeConfirmed);
 
   const handleReturnToPlanSelection = useCallback(() => {
     clearPersistedManagePlanSelection();
@@ -960,6 +1141,25 @@ const ManagePlanPayment = () => {
                   Os dados informados são utilizados apenas para gerar um token seguro junto ao Asaas. O número do cartão não é
                   armazenado pela Jus Connect.
                 </p>
+
+                <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="auto-charge-confirmation"
+                      checked={autoChargeConfirmed}
+                      onCheckedChange={(checked) => setAutoChargeConfirmed(checked === true)}
+                      disabled={isSubmitting || isTokenizingCard}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="auto-charge-confirmation" className="text-sm font-medium">
+                        Confirmar cobrança automática
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Autorizo a renovação automática do plano no cartão informado.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1224,9 +1424,33 @@ const ManagePlanPayment = () => {
                     </Button>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Estamos preparando a integração com cartão de crédito. Entre em contato com o suporte para processar este pagamento.
-                  </p>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-white/90 p-4">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-primary">Cobrança automática confirmada</p>
+                        <p className="text-sm text-muted-foreground">
+                          As próximas renovações serão debitadas automaticamente no cartão confirmado abaixo.
+                        </p>
+                      </div>
+                    </div>
+
+                    {(paymentResult.charge.cardBrand || paymentResult.charge.cardLast4) && (
+                      <div className="rounded-2xl border border-primary/20 bg-white/80 p-4 text-sm text-slate-700">
+                        <p className="font-medium text-primary">
+                          {paymentResult.charge.cardBrand ?? "Cartão"}
+                          {paymentResult.charge.cardLast4 ? ` •••• ${paymentResult.charge.cardLast4}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          A renovação ocorrerá automaticamente até que um novo cartão seja cadastrado.
+                        </p>
+                      </div>
+                    )}
+
+                    <Button type="button" variant="outline" className="w-full rounded-full" onClick={handleEditCard}>
+                      Trocar dados do cartão
+                    </Button>
+                  </div>
                 )}
 
                 <Alert className="border-primary/30 bg-primary/5 text-primary">
@@ -1259,6 +1483,53 @@ const ManagePlanPayment = () => {
                   <p>Os documentos fiscais serão enviados por e-mail e ficarão disponíveis para download.</p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border border-border/60">
+            <CardHeader>
+              <CardTitle>Histórico de pagamentos</CardTitle>
+              <CardDescription>Consulte as últimas cobranças registradas para o plano.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {historyError ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Não foi possível carregar o histórico</AlertTitle>
+                  <AlertDescription>{historyError}</AlertDescription>
+                </Alert>
+              ) : isHistoryLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando histórico…</p>
+              ) : planPaymentHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma cobrança de plano foi encontrada nos registros recentes.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {planPaymentHistory.map((flow) => (
+                    <div
+                      key={flow.id}
+                      className="rounded-2xl border border-border/60 bg-white/80 p-4 shadow-sm"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-foreground">{flow.descricao}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Vencimento {formatDateLabel(flow.vencimento)} • {currencyFormatter.format(flow.valor)}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="rounded-full border-primary/30 text-primary">
+                          {flowStatusLabels[flow.status]}
+                        </Badge>
+                      </div>
+                      {flow.pagamento && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Pago em {formatDateLabel(flow.pagamento)}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
