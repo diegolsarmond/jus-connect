@@ -165,6 +165,9 @@ class HttpAsaasClient implements AsaasClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new AsaasConfigurationError('Falha ao consultar cobranças no Asaas: credenciais inválidas ou expiradas.');
+      }
       throw new Error(`Falha ao consultar cobranças no Asaas: ${response.status} ${response.statusText}`);
     }
 
