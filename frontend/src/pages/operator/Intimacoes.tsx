@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -103,6 +104,7 @@ type MonitoredOab = {
   usuarioOabUf: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  diasSemana: number[] | null;
 };
 
 type CompanyUserOption = {
@@ -154,7 +156,23 @@ type ApiMonitoredOab = {
   usuarioOabNumero?: string | null;
   usuario_oab_uf?: string | null;
   usuarioOabUf?: string | null;
+  dias_semana?: unknown;
+  diasSemana?: unknown;
 };
+
+const DIA_SEMANA_LABELS: Record<number, string> = {
+  1: "Segunda-feira",
+  2: "Terça-feira",
+  3: "Quarta-feira",
+  4: "Quinta-feira",
+  5: "Sexta-feira",
+  6: "Sábado",
+  7: "Domingo",
+};
+
+const BUSINESS_DAY_VALUES = [1, 2, 3, 4, 5] as const;
+const DEFAULT_MONITOR_DAYS = [...BUSINESS_DAY_VALUES];
+const BUSINESS_DAY_SET = new Set<number>(BUSINESS_DAY_VALUES);
 
 const pickFirstNonEmptyString = (
   ...values: Array<string | null | undefined>
@@ -398,6 +416,95 @@ const parseCompanyUsers = (payload: unknown): CompanyUserOption[] => {
   return options;
 };
 
+const parseApiDiasSemana = (value: unknown): number[] | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const collect = (entries: unknown[]): number[] => {
+    const set = new Set<number>();
+
+    for (const entry of entries) {
+      let parsed: number | null = null;
+
+      if (typeof entry === "number" && Number.isFinite(entry)) {
+        parsed = Math.trunc(entry);
+      } else if (typeof entry === "string") {
+        const trimmed = entry.trim();
+        if (trimmed) {
+          const candidate = Number.parseInt(trimmed, 10);
+          if (Number.isFinite(candidate)) {
+            parsed = Math.trunc(candidate);
+          }
+        }
+      }
+
+      if (parsed != null && parsed >= 1 && parsed <= 7) {
+        set.add(parsed);
+      }
+    }
+
+    if (set.size === 0) {
+      return [];
+    }
+
+    return Array.from(set).sort((a, b) => a - b);
+  };
+
+  if (Array.isArray(value)) {
+    return collect(value);
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.replace(/[{}]/g, "");
+    if (!normalized.trim()) {
+      return [];
+    }
+    return collect(normalized.split(","));
+  }
+
+  return null;
+};
+
+const formatDiasSemanaDescription = (dias: number[] | null | undefined): string => {
+  if (!dias) {
+    return "Sincroniza todos os dias da semana.";
+  }
+
+  if (dias.length === 0) {
+    return "Sincronização sem dias selecionados.";
+  }
+
+  const normalized = Array.from(new Set(dias)).sort((a, b) => a - b);
+
+  if (normalized.length === 7) {
+    return "Sincroniza todos os dias da semana.";
+  }
+
+  if (
+    normalized.length === BUSINESS_DAY_VALUES.length &&
+    BUSINESS_DAY_VALUES.every((value, index) => value === normalized[index])
+  ) {
+    return "Sincroniza de segunda a sexta-feira.";
+  }
+
+  const labels = normalized
+    .map((value) => DIA_SEMANA_LABELS[value])
+    .filter((label): label is string => Boolean(label));
+
+  if (labels.length === 0) {
+    return "Sincroniza em dias configurados.";
+  }
+
+  if (labels.length === 1) {
+    return `Sincroniza em ${labels[0]}.`;
+  }
+
+  const last = labels[labels.length - 1];
+  const initial = labels.slice(0, -1).join(", ");
+  return `Sincroniza em ${initial} e ${last}.`;
+};
+
 const mapApiMonitoredOab = (payload: unknown): MonitoredOab | null => {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -451,6 +558,7 @@ const mapApiMonitoredOab = (payload: unknown): MonitoredOab | null => {
 
   const createdAt = pickFirstNonEmptyString(data.createdAt as string, data.created_at as string);
   const updatedAt = pickFirstNonEmptyString(data.updatedAt as string, data.updated_at as string);
+  const diasSemanaRaw = (data.diasSemana ?? data.dias_semana) as unknown;
 
   return {
     id,
@@ -462,6 +570,7 @@ const mapApiMonitoredOab = (payload: unknown): MonitoredOab | null => {
     usuarioOabUf: usuarioOabUf ?? null,
     createdAt: createdAt ?? null,
     updatedAt: updatedAt ?? null,
+    diasSemana: parseApiDiasSemana(diasSemanaRaw),
   };
 };
 
@@ -1078,6 +1187,7 @@ export default function Intimacoes() {
   const [oabModalOpen, setOabModalOpen] = useState(false);
   const [oabUf, setOabUf] = useState("");
   const [oabNumber, setOabNumber] = useState("");
+  const [oabDiasSemana, setOabDiasSemana] = useState<number[]>(DEFAULT_MONITOR_DAYS);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [oabSubmitting, setOabSubmitting] = useState(false);
   const [oabSubmitError, setOabSubmitError] = useState<string | null>(null);
@@ -1504,6 +1614,7 @@ export default function Intimacoes() {
       setRemovingOabId(null);
       setOabSubmitting(false);
       setOabSubmitError(null);
+      setOabDiasSemana(DEFAULT_MONITOR_DAYS);
     }
   }, []);
 
@@ -1515,6 +1626,7 @@ export default function Intimacoes() {
       const option = companyUsers.find((item) => item.id === value);
 
       if (!option) {
+        setOabDiasSemana(DEFAULT_MONITOR_DAYS);
         return;
       }
 
@@ -1522,9 +1634,35 @@ export default function Intimacoes() {
       setOabUf(option.oabUf ?? "");
       if (!option.oabNumber || !option.oabUf) {
         setOabSubmitError("O responsável selecionado não possui OAB válida para monitoramento.");
+        setOabDiasSemana(DEFAULT_MONITOR_DAYS);
+        return;
       }
+
+      const normalizedUf = sanitizeUfValue(option.oabUf) ?? option.oabUf.toUpperCase();
+      const normalizedNumber = (option.oabNumber ?? "").replace(/\D/g, "");
+
+      if (normalizedUf && normalizedNumber) {
+        const existingMonitor = monitoredOabs.find((monitor) => {
+          const monitorNumber = monitor.number.replace(/\D/g, "");
+          return monitor.uf === normalizedUf && monitorNumber === normalizedNumber;
+        });
+
+        if (existingMonitor) {
+          const filteredDays = (existingMonitor.diasSemana ?? DEFAULT_MONITOR_DAYS)
+            .map((day) => Number(day))
+            .filter((day) => BUSINESS_DAY_SET.has(day));
+
+          if (filteredDays.length > 0) {
+            const uniqueDays = Array.from(new Set(filteredDays)).sort((a, b) => a - b);
+            setOabDiasSemana(uniqueDays);
+            return;
+          }
+        }
+      }
+
+      setOabDiasSemana(DEFAULT_MONITOR_DAYS);
     },
-    [companyUsers],
+    [companyUsers, monitoredOabs],
   );
 
   const handleRegisterOab = useCallback(async () => {
@@ -1542,6 +1680,11 @@ export default function Intimacoes() {
       return;
     }
 
+    if (oabDiasSemana.length === 0) {
+      setOabSubmitError("Selecione ao menos um dia da semana para sincronização.");
+      return;
+    }
+
     setOabSubmitError(null);
     setOabSubmitting(true);
 
@@ -1549,7 +1692,12 @@ export default function Intimacoes() {
       const response = await fetch(getApiUrl("intimacoes/oab-monitoradas"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uf: sanitizedUf, numero: sanitizedNumber, usuarioId: parsedUserId }),
+        body: JSON.stringify({
+          uf: sanitizedUf,
+          numero: sanitizedNumber,
+          usuarioId: parsedUserId,
+          diasSemana: oabDiasSemana,
+        }),
       });
 
       if (!response.ok) {
@@ -1582,6 +1730,7 @@ export default function Intimacoes() {
       setOabNumber("");
       setOabUf("");
       setSelectedUserId("");
+      setOabDiasSemana(DEFAULT_MONITOR_DAYS);
     } catch (registerError) {
       const message =
         registerError instanceof Error
@@ -1596,7 +1745,7 @@ export default function Intimacoes() {
     } finally {
       setOabSubmitting(false);
     }
-  }, [oabNumber, oabUf, selectedUserId, toast]);
+  }, [oabNumber, oabUf, oabDiasSemana, selectedUserId, toast]);
 
   const handleRemoveMonitoredOab = useCallback(
     async (id: string) => {
@@ -2938,6 +3087,9 @@ export default function Intimacoes() {
                           <p className="text-xs text-muted-foreground">
                             Monitorando desde {formatDateTimeToPtBR(item.createdAt)}
                           </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDiasSemanaDescription(item.diasSemana)}
+                          </p>
                         </div>
                         <Button
                           type="button"
@@ -3000,6 +3152,38 @@ export default function Intimacoes() {
                 {!companyUsersError && !companyUsersLoading && companyUsers.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Nenhum responsável disponível.</p>
                 ) : null}
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">Dias da semana</p>
+                <p className="text-xs text-muted-foreground">
+                  Defina os dias para execução da sincronização automática.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {BUSINESS_DAY_VALUES.map((day) => {
+                    const label = DIA_SEMANA_LABELS[day];
+                    const checked = oabDiasSemana.includes(day);
+                    return (
+                      <label key={day} className="flex items-center gap-2 text-sm text-foreground">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(next) => {
+                            setOabDiasSemana((prev) => {
+                              const nextSet = new Set(prev);
+                              if (next === true) {
+                                nextSet.add(day);
+                              } else {
+                                nextSet.delete(day);
+                              }
+                              return Array.from(nextSet).sort((a, b) => a - b);
+                            });
+                            setOabSubmitError(null);
+                          }}
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
               {oabSubmitError ? <p className="text-sm text-destructive">{oabSubmitError}</p> : null}
               {!canSubmitOab ? (
