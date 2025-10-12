@@ -33,24 +33,115 @@ const ensureTable = async (): Promise<void> => {
   if (!ensureTablePromise) {
     ensureTablePromise = pool
       .query(`
-        CREATE TABLE IF NOT EXISTS public.intimacoes_oab_monitoradas (
+        CREATE TABLE IF NOT EXISTS public.oab_monitoradas (
           id BIGSERIAL PRIMARY KEY,
-          usuario_id INTEGER REFERENCES public.usuarios(id),
           empresa_id INTEGER NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+          usuario_id INTEGER REFERENCES public.usuarios(id),
+          tipo TEXT NOT NULL,
           uf CHAR(2) NOT NULL,
           numero VARCHAR(20) NOT NULL,
+          dias_semana SMALLINT[],
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           dias_semana SMALLINT[]
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS intimacoes_oab_monitoradas_empresa_uf_numero_idx
-          ON public.intimacoes_oab_monitoradas (empresa_id, uf, numero);
-        ALTER TABLE public.intimacoes_oab_monitoradas
+        CREATE UNIQUE INDEX IF NOT EXISTS oab_monitoradas_empresa_tipo_uf_numero_idx
+          ON public.oab_monitoradas (empresa_id, tipo, uf, numero);
+        ALTER TABLE public.oab_monitoradas
           ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES public.usuarios(id);
-        ALTER TABLE public.intimacoes_oab_monitoradas
-          ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-        ALTER TABLE public.intimacoes_oab_monitoradas
+        ALTER TABLE public.oab_monitoradas
           ADD COLUMN IF NOT EXISTS dias_semana SMALLINT[];
+        ALTER TABLE public.oab_monitoradas
+          ADD COLUMN IF NOT EXISTS tipo TEXT;
+        ALTER TABLE public.oab_monitoradas
+          ALTER COLUMN tipo SET NOT NULL;
+        DO $$
+        BEGIN
+          IF to_regclass('public.processo_oab_monitoradas') IS NOT NULL THEN
+            EXECUTE '
+              INSERT INTO public.oab_monitoradas (
+                empresa_id,
+                usuario_id,
+                tipo,
+                uf,
+                numero,
+                dias_semana,
+                created_at,
+                updated_at
+              )
+              SELECT
+                empresa_id,
+                usuario_id,
+                ''processo'',
+                uf,
+                numero,
+                dias_semana,
+                created_at,
+                updated_at
+                FROM public.processo_oab_monitoradas
+              ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+                SET usuario_id = EXCLUDED.usuario_id,
+                    dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
+                    created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
+                    updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
+            ';
+            EXECUTE '
+              WITH seq AS (
+                SELECT COALESCE(MAX(id), 0) AS max_id FROM public.oab_monitoradas
+              )
+              SELECT setval(
+                ''public.oab_monitoradas_id_seq'',
+                CASE WHEN seq.max_id = 0 THEN 1 ELSE seq.max_id END,
+                seq.max_id <> 0
+              )
+              FROM seq;
+            ';
+            EXECUTE 'DROP TABLE IF EXISTS public.processo_oab_monitoradas;';
+          END IF;
+          IF to_regclass('public.intimacoes_oab_monitoradas') IS NOT NULL THEN
+            EXECUTE '
+              INSERT INTO public.oab_monitoradas (
+                empresa_id,
+                usuario_id,
+                tipo,
+                uf,
+                numero,
+                dias_semana,
+                created_at,
+                updated_at
+              )
+              SELECT
+                empresa_id,
+                usuario_id,
+                ''intimacao'',
+                uf,
+                numero,
+                dias_semana,
+                created_at,
+                updated_at
+                FROM public.intimacoes_oab_monitoradas
+              ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+                SET usuario_id = EXCLUDED.usuario_id,
+                    dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
+                    created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
+                    updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
+            ';
+            EXECUTE '
+              WITH seq AS (
+                SELECT COALESCE(MAX(id), 0) AS max_id FROM public.oab_monitoradas
+              )
+              SELECT setval(
+                ''public.oab_monitoradas_id_seq'',
+                CASE WHEN seq.max_id = 0 THEN 1 ELSE seq.max_id END,
+                seq.max_id <> 0
+              )
+              FROM seq;
+            ';
+            EXECUTE 'DROP TABLE IF EXISTS public.intimacoes_oab_monitoradas;';
+          END IF;
+        END
+        $$;
+
       `)
       .then(() => undefined)
       .catch((error) => {
@@ -187,10 +278,11 @@ export const listIntimacaoOabMonitors = async (
             u.nome_completo AS usuario_nome,
             COALESCE(p.oab_number, NULLIF(u.oab, '')) AS usuario_oab_numero,
             p.oab_uf AS usuario_oab_uf
-       FROM public.intimacoes_oab_monitoradas m
+       FROM public.oab_monitoradas m
   LEFT JOIN public.usuarios u ON u.id = m.usuario_id
   LEFT JOIN public.user_profiles p ON p.user_id = m.usuario_id
       WHERE m.empresa_id = $1
+        AND m.tipo = 'intimacao'
       ORDER BY m.created_at DESC NULLS LAST, m.id DESC`,
     [empresaId],
   );
@@ -227,9 +319,10 @@ export const createIntimacaoOabMonitor = async (
 
   const result = await pool.query<IntimacaoOabMonitorRow>(
     `WITH upsert AS (
-       INSERT INTO public.intimacoes_oab_monitoradas (empresa_id, usuario_id, uf, numero, dias_semana)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (empresa_id, uf, numero) DO UPDATE
+       INSERT INTO public.oab_monitoradas (empresa_id, usuario_id, uf, numero, dias_semana, tipo)
+       VALUES ($1, $2, $3, $4, $5, 'intimacao')
+       ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+
          SET usuario_id = EXCLUDED.usuario_id,
              updated_at = NOW(),
              dias_semana = EXCLUDED.dias_semana
@@ -262,8 +355,8 @@ export const deleteIntimacaoOabMonitor = async (
   await ensureTable();
 
   const result = await pool.query(
-    `DELETE FROM public.intimacoes_oab_monitoradas
-      WHERE id = $1 AND empresa_id = $2
+    `DELETE FROM public.oab_monitoradas
+      WHERE id = $1 AND empresa_id = $2 AND tipo = 'intimacao'
       RETURNING id`,
     [monitorId, empresaId],
   );
