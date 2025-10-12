@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, Calendar, MapPin, Users, FileText, Pencil, Gavel } from "lucide-react";
+import { Eye, Calendar, MapPin, Users, FileText, Pencil, Gavel, Clock } from "lucide-react";
 
 interface ProcessCardProps {
   numero: string;
@@ -9,6 +9,7 @@ interface ProcessCardProps {
   cliente: string;
   advogados: string;
   dataDistribuicao: string;
+  ultimaMovimentacao: string;
   jurisdicao: string;
   orgaoJulgador: string;
   onView: () => void;
@@ -21,6 +22,7 @@ export function ProcessCard({
   cliente,
   advogados,
   dataDistribuicao,
+  ultimaMovimentacao,
   jurisdicao,
   orgaoJulgador,
   onView,
@@ -89,7 +91,15 @@ export function ProcessCard({
               <p className="truncate">{dataDistribuicao}</p>
             </div>
           </div>
-          
+
+          <div className="flex items-start gap-2">
+            <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <p className="text-muted-foreground text-xs">Última movimentação</p>
+              <p className="truncate">{ultimaMovimentacao}</p>
+            </div>
+          </div>
+
           <div className="flex items-start gap-2">
             <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
             <div className="min-w-0">
