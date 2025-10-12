@@ -266,7 +266,9 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
     }
     await sendCommand(socket, `EHLO ${clientName}`, [250]);
     await sendCommand(socket, 'AUTH LOGIN', [334]);
-    await sendCommand(socket, Buffer.from(auth.user, 'utf8').toString('base64'), [334]);
+    const loginUser =
+      host.toLowerCase() === 'smtp.resend.com' && auth.user.startsWith('re_') ? 'resend' : auth.user;
+    await sendCommand(socket, Buffer.from(loginUser, 'utf8').toString('base64'), [334]);
     await sendCommand(socket, Buffer.from(auth.pass, 'utf8').toString('base64'), [235]);
     await sendCommand(socket, `MAIL FROM:<${defaultFromAddress}>`, [250]);
     await sendCommand(socket, `RCPT TO:<${to}>`, [250, 251]);
