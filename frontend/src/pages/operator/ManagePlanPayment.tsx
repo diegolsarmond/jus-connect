@@ -62,6 +62,44 @@ const getFormattedPrice = (display: string | null, numeric: number | null) => {
 
 const sanitizeDigits = (value: string): string => value.replace(/\D+/g, "");
 
+const formatCpfCnpj = (value: string): string => {
+  const digits = sanitizeDigits(value).slice(0, 14);
+
+  if (digits.length <= 11) {
+    if (digits.length <= 3) {
+      return digits;
+    }
+
+    if (digits.length <= 6) {
+      return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    }
+
+    if (digits.length <= 9) {
+      return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    }
+
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+
+  if (digits.length <= 5) {
+    return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  }
+
+  if (digits.length <= 8) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  }
+
+  if (digits.length <= 12) {
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  }
+
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
 type CardFormState = {
   holderName: string;
   holderEmail: string;
@@ -311,7 +349,9 @@ const ManagePlanPayment = () => {
           "cpf_cnpj",
         ]);
         if (resolvedDocument) {
-          setCompanyDocument((previous) => (previous.trim().length > 0 ? previous : resolvedDocument));
+          setCompanyDocument((previous) =>
+            previous.trim().length > 0 ? previous : formatCpfCnpj(resolvedDocument),
+          );
         }
 
         const resolvedEmail = getFirstString(record, [
@@ -941,12 +981,12 @@ const ManagePlanPayment = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="company-doc">CNPJ</Label>
+                  <Label htmlFor="company-doc">CPF ou CNPJ</Label>
                   <Input
                     id="company-doc"
-                    placeholder="00.000.000/0000-00"
+                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
                     value={companyDocument}
-                    onChange={(event) => setCompanyDocument(event.target.value)}
+                    onChange={(event) => setCompanyDocument(formatCpfCnpj(event.target.value))}
                   />
                 </div>
               </div>
