@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Link } from "react-router-dom";
+import { ApiError, requestPasswordReset } from "@/features/auth/api";
 
 const recoverSchema = z.object({
   email: z.string().email("E-mail é obrigatório"),
@@ -14,13 +16,36 @@ const recoverSchema = z.object({
 type RecoverForm = z.infer<typeof recoverSchema>;
 
 export default function RecuperarSenha() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const form = useForm<RecoverForm>({
     resolver: zodResolver(recoverSchema),
     defaultValues: { email: "" },
   });
 
-  function onSubmit(values: RecoverForm) {
-    console.log(values);
+  async function onSubmit(values: RecoverForm) {
+    if (isLoading) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsLoading(true);
+
+    try {
+      const result = await requestPasswordReset(values.email);
+      setSuccessMessage(result.message);
+      form.reset({ email: "" });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage("Não foi possível enviar a solicitação. Tente novamente.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -45,8 +70,14 @@ export default function RecuperarSenha() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full">
-                Enviar
+              {successMessage && (
+                <p className="text-sm text-green-600 text-center">{successMessage}</p>
+              )}
+              {errorMessage && (
+                <p className="text-sm text-red-600 text-center">{errorMessage}</p>
+              )}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Enviando..." : "Enviar"}
               </Button>
             </form>
           </Form>
