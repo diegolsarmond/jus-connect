@@ -1544,7 +1544,7 @@ const tryAutoLinkProcessClientByCpf = async (
       ): value is {
         id: number;
         nome: string | null;
-        documento: string | null;
+        documento: string;
         tipo: string | null;
       } => value !== null,
     );
