@@ -50,7 +50,18 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig | null = isSmtpConfigured
   : null;
 
 const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
-const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'no-reply@localhost';
+const fallbackFromAddress = 'no-reply@quantumtecnologia.com.br';
+const smtpFrom = process.env.SMTP_FROM;
+const normalizedSmtpFrom = smtpFrom?.trim();
+const normalizedSmtpUser = smtpUser?.trim();
+const resolveValidAddress = (value: string | undefined | null) =>
+  value && value.includes('@') ? value : null;
+const defaultFromAddress =
+  resolveValidAddress(normalizedSmtpFrom) ??
+  resolveValidAddress(normalizedSmtpUser) ??
+  fallbackFromAddress;
+const usingFallbackFromAddress =
+  !resolveValidAddress(normalizedSmtpFrom) && !resolveValidAddress(normalizedSmtpUser);
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 
 export interface SendEmailParams {
@@ -202,6 +213,19 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
     return;
   }
 
+  if (usingFallbackFromAddress) {
+    console.warn(
+      `Remetente SMTP padrão indefinido ou inválido. Defina SMTP_FROM com um endereço de e-mail válido. Usando "${fallbackFromAddress}" como padrão.`
+    );
+  }
+
+  if (!defaultFromAddress || !defaultFromAddress.includes('@')) {
+    console.error(
+      'Não foi possível determinar um remetente SMTP válido. Defina SMTP_FROM com um endereço de e-mail válido.'
+    );
+    return;
+  }
+
   const { host, port, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
   const clientName = os.hostname() || 'localhost';
   const boundary = `----=_Boundary_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
@@ -242,7 +266,9 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
     }
     await sendCommand(socket, `EHLO ${clientName}`, [250]);
     await sendCommand(socket, 'AUTH LOGIN', [334]);
-    await sendCommand(socket, Buffer.from(auth.user, 'utf8').toString('base64'), [334]);
+    const loginUser =
+      host.toLowerCase() === 'smtp.resend.com' && auth.user.startsWith('re_') ? 'resend' : auth.user;
+    await sendCommand(socket, Buffer.from(loginUser, 'utf8').toString('base64'), [334]);
     await sendCommand(socket, Buffer.from(auth.pass, 'utf8').toString('base64'), [235]);
     await sendCommand(socket, `MAIL FROM:<${defaultFromAddress}>`, [250]);
     await sendCommand(socket, `RCPT TO:<${to}>`, [250, 251]);
