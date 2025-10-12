@@ -3753,8 +3753,20 @@ export default function Processos() {
             const navigateOptions = state ? { state } : undefined;
 
             const clienteId = processoToView.cliente?.id ?? null;
+            const numeroProcesso =
+                typeof processoToView.numero === "string" && processoToView.numero.trim().length > 0
+                    ? processoToView.numero.trim()
+                    : null;
 
             if (clienteId && clienteId > 0) {
+                if (numeroProcesso) {
+                    navigate(
+                        `/clientes/${clienteId}/processos/${encodeURIComponent(numeroProcesso)}`,
+                        navigateOptions,
+                    );
+                    return;
+                }
+
                 navigate(`/clientes/${clienteId}/processos/${processoToView.id}`, navigateOptions);
                 return;
             }
@@ -3763,6 +3775,11 @@ export default function Processos() {
                 title: "Cliente do processo não identificado",
                 description: "Abrindo detalhes do processo diretamente.",
             });
+            if (numeroProcesso) {
+                navigate(`/processos/${encodeURIComponent(numeroProcesso)}`, navigateOptions);
+                return;
+            }
+
             navigate(`/processos/${processoToView.id}`, navigateOptions);
         },
         [navigate, toast],

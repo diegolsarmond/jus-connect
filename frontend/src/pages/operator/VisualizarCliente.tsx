@@ -1402,6 +1402,16 @@ export default function VisualizarCliente() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => {
+                                  const numero =
+                                    typeof p.numero === "string" && p.numero.trim().length > 0
+                                      ? p.numero.trim()
+                                      : null;
+
+                                  if (numero) {
+                                    navigate(`/processos/${encodeURIComponent(numero)}`);
+                                    return;
+                                  }
+
                                   navigate(`/processos/${p.id}`);
                                 }}
                               >

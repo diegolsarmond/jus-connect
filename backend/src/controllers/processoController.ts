@@ -2258,9 +2258,12 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
 
 export const getProcessoById = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const parsedId = Number(id);
+  const trimmedId = typeof id === 'string' ? id.trim() : '';
+  const parsedId = Number(trimmedId);
+  const hasNumericId = Number.isInteger(parsedId) && parsedId > 0;
+  const normalizedNumero = hasNumericId ? null : normalizeString(trimmedId);
 
-  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+  if (!hasNumericId && !normalizedNumero) {
     return res.status(400).json({ error: 'ID inválido' });
   }
 
@@ -2281,13 +2284,28 @@ export const getProcessoById = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Processo não encontrado' });
     }
 
-    const result = await pool.query(
-      `${baseProcessoSelect}
+    let query: string;
+    let params: [number, number] | [string, number];
+
+    if (hasNumericId) {
+      query = `${baseProcessoSelect}
        WHERE p.id = $1
          AND p.idempresa = $2
-       LIMIT 1`,
-      [parsedId, empresaId]
-    );
+       LIMIT 1`;
+      params = [parsedId, empresaId];
+    } else {
+      if (!normalizedNumero) {
+        return res.status(400).json({ error: 'ID inválido' });
+      }
+
+      query = `${baseProcessoSelect}
+       WHERE p.numero_cnj = $1
+         AND p.idempresa = $2
+       LIMIT 1`;
+      params = [normalizedNumero, empresaId];
+    }
+
+    const result = await pool.query(query, params);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Processo não encontrado' });
@@ -2320,9 +2338,12 @@ export const createProcessoMovimentacaoManual = async (
   res: Response,
 ) => {
   const { id } = req.params;
-  const parsedId = Number(id);
+  const trimmedId = typeof id === 'string' ? id.trim() : '';
+  const parsedId = Number(trimmedId);
+  const hasNumericId = Number.isInteger(parsedId) && parsedId > 0;
+  const normalizedNumero = hasNumericId ? null : normalizeString(trimmedId);
 
-  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+  if (!hasNumericId && !normalizedNumero) {
     return res.status(400).json({ error: 'ID inválido' });
   }
 
@@ -2343,10 +2364,23 @@ export const createProcessoMovimentacaoManual = async (
       return res.status(404).json({ error: 'Processo não encontrado' });
     }
 
-    const processoResult = await pool.query(
-      'SELECT numero_cnj, instancia FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
-      [parsedId, empresaId],
-    );
+    let processoResult;
+
+    if (hasNumericId) {
+      processoResult = await pool.query(
+        'SELECT numero_cnj, instancia FROM public.processos WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
+        [parsedId, empresaId],
+      );
+    } else {
+      if (!normalizedNumero) {
+        return res.status(400).json({ error: 'ID inválido' });
+      }
+
+      processoResult = await pool.query(
+        'SELECT numero_cnj, instancia FROM public.processos WHERE numero_cnj = $1 AND idempresa IS NOT DISTINCT FROM $2',
+        [normalizedNumero, empresaId],
+      );
+    }
 
     if (processoResult.rowCount === 0) {
       return res.status(404).json({ error: 'Processo não encontrado' });
@@ -2354,6 +2388,10 @@ export const createProcessoMovimentacaoManual = async (
 
     const processoData = processoResult.rows[0];
     const numeroCnj = normalizeString(processoData?.numero_cnj);
+
+    if (!numeroCnj) {
+      return res.status(404).json({ error: 'Processo não encontrado' });
+    }
     const instanciaRaw = processoData?.instancia;
     let instanciaProcesso: number | null = null;
 

@@ -2148,7 +2148,7 @@ export default function VisualizarProcesso() {
       }
 
       try {
-        const resposta = await fetch(getApiUrl(`processos/${processoId}`), {
+        const resposta = await fetch(getApiUrl(`processos/${encodeURIComponent(processoId)}`), {
           headers: { Accept: "application/json" },
         });
 
@@ -2233,12 +2233,14 @@ export default function VisualizarProcesso() {
       setErroMovimentacao(null);
 
       try {
-        const resposta = await fetch(getApiUrl(`processos/${processoId}/movimentacoes`), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
+        const resposta = await fetch(
+          getApiUrl(`processos/${encodeURIComponent(processoId)}/movimentacoes`),
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
           body: JSON.stringify({
             data: formMovimentacao.data,
             tipo: formMovimentacao.tipo.trim(),
@@ -2416,7 +2418,8 @@ export default function VisualizarProcesso() {
 
   const handleAbrirRelacionado = useCallback(
     (identificador: string) => {
-      navigate(`/processos/${identificador}`);
+      const destino = encodeURIComponent(identificador);
+      navigate(`/processos/${destino}`);
     },
     [navigate],
   );
