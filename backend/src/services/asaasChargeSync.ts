@@ -116,7 +116,10 @@ class HttpAsaasClient implements AsaasClient {
   private readonly apiKey: string | null;
   private readonly apiUrl: string;
 
-  constructor(apiKey = process.env.ASAAS_API_KEY ?? null, apiUrl = process.env.ASAAS_API_URL ?? 'https://www.asaas.com/api/v3') {
+  constructor(
+    apiKey = process.env.ASAAS_ACCESS_TOKEN ?? process.env.ASAAS_API_KEY ?? null,
+    apiUrl = process.env.ASAAS_API_URL ?? 'https://www.asaas.com/api/v3',
+  ) {
     this.apiKey = apiKey && apiKey.trim() ? apiKey.trim() : null;
     this.apiUrl = apiUrl && apiUrl.trim() ? apiUrl.trim() : 'https://www.asaas.com/api/v3';
   }
@@ -128,7 +131,7 @@ class HttpAsaasClient implements AsaasClient {
   async listPayments(params: ListPaymentsParams): Promise<AsaasPaymentsResponse> {
     if (!this.hasValidConfiguration()) {
       throw new AsaasConfigurationError(
-        'Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.',
+        'Integração com o Asaas não está configurada. Defina ASAAS_ACCESS_TOKEN (ou ASAAS_API_KEY) e ASAAS_API_URL conforme necessário.',
       );
     }
 
@@ -203,7 +206,7 @@ export class AsaasChargeSyncService {
   async syncPendingCharges(): Promise<AsaasSyncResult> {
     if (!this.hasValidConfiguration()) {
       throw new AsaasConfigurationError(
-        'Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.',
+        'Integração com o Asaas não está configurada. Defina ASAAS_ACCESS_TOKEN (ou ASAAS_API_KEY) e ASAAS_API_URL conforme necessário.',
       );
     }
 

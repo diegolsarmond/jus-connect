@@ -146,7 +146,8 @@ class HttpAsaasClient implements AsaasClient {
   constructor(private readonly config: AsaasClientConfig) {}
 
   private resolveBaseUrl(): string {
-    const configured = this.config.baseUrl ?? process.env.ASAAS_BASE_URL;
+    const configured =
+      this.config.baseUrl ?? process.env.ASAAS_API_URL ?? process.env.ASAAS_BASE_URL;
     const base = configured && configured.trim() ? configured.trim() : DEFAULT_BASE_URL;
     return base.endsWith('/') ? base : `${base}/`;
   }
@@ -347,13 +348,16 @@ async function defaultClientFactory({
     }
   }
 
-  const apiKey = process.env.ASAAS_API_KEY;
+  const apiKey = process.env.ASAAS_ACCESS_TOKEN ?? process.env.ASAAS_API_KEY;
   if (!apiKey) {
     throw new ValidationError('Nenhuma credencial do Asaas configurada');
   }
 
   return {
-    client: new HttpAsaasClient({ apiKey, baseUrl: process.env.ASAAS_BASE_URL }),
+    client: new HttpAsaasClient({
+      apiKey,
+      baseUrl: process.env.ASAAS_API_URL ?? process.env.ASAAS_BASE_URL,
+    }),
     credentialId: null,
     integrationApiKeyId: null,
   };

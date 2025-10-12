@@ -249,7 +249,7 @@ export class CronJobsService {
   async triggerAsaasSyncNow(): Promise<{ status: AsaasSyncStatus; triggered: boolean }> {
     if (!this.asaasService.hasValidConfiguration()) {
       throw new AsaasConfigurationError(
-        'Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.',
+        'Integração com o Asaas não está configurada. Defina ASAAS_ACCESS_TOKEN (ou ASAAS_API_KEY) e ASAAS_API_URL conforme necessário.',
       );
     }
 
@@ -324,7 +324,7 @@ export class CronJobsService {
     if (!this.asaasService.hasValidConfiguration()) {
       this.stopAsaasChargeSyncJob();
       throw new AsaasConfigurationError(
-        'Integração com o Asaas não está configurada. Defina ASAAS_API_KEY e ASAAS_API_URL conforme necessário.',
+        'Integração com o Asaas não está configurada. Defina ASAAS_ACCESS_TOKEN (ou ASAAS_API_KEY) e ASAAS_API_URL conforme necessário.',
       );
     }
 
