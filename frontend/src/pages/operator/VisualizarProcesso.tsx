@@ -2471,7 +2471,7 @@ export default function VisualizarProcesso() {
       );
 
       if (!integracaoAtiva) {
-        throw new Error("Nenhuma integração de IA ativa disponível.");
+          throw new Error("Nenhuma integração de IA ativa disponível. Acesse o Menu Integrações e insira sua chave de API ou entre em contato com o suporte para verificar nossos planos.");
       }
 
       const promptResumo = montarPromptResumoMovimentacao(movimentacaoSelecionada);
