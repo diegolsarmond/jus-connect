@@ -295,6 +295,7 @@ export const createCompanyOabMonitor = async (
     `INSERT INTO public.oab_monitoradas (empresa_id, uf, numero, usuario_id, dias_semana, tipo)
      VALUES ($1, $2, $3, $4, $5, 'processo')
      ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+
        SET updated_at = NOW(),
            usuario_id = EXCLUDED.usuario_id,
            dias_semana = EXCLUDED.dias_semana

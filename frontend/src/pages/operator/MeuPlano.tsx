@@ -952,7 +952,7 @@ function MeuPlanoContent() {
         <p className="text-muted-foreground">
           {isTrialing
             ? "Você está em período de avaliação. Escolha o plano ideal e finalize a contratação quando estiver pronto."
-            : "Acompanhe as informações do plano contratado e compare facilmente com outras opções disponíveis."}
+            : "Visualize os detalhes do plano atual e faça upgrade quando desejar."}
         </p>
       </div>
 
@@ -1116,16 +1116,16 @@ function MeuPlanoContent() {
                 <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                   <DialogTrigger asChild>
                     <Button size="lg" className="rounded-full shadow-lg shadow-primary/20">
-                      {isTrialing ? "Contratar plano" : "Alterar plano"}
+                      {isTrialing ? "Contratar plano" : "Fazer upgrade"}
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-5xl lg:max-w-6xl xl:max-w-7xl">
                     <DialogHeader>
-                      <DialogTitle>{isTrialing ? "Escolha seu plano" : "Escolha um novo plano"}</DialogTitle>
+                      <DialogTitle>{isTrialing ? "Escolha seu plano" : "Faça upgrade do seu plano"}</DialogTitle>
                       <DialogDescription>
                         {isTrialing
                           ? "Selecione o plano que deseja contratar ao final do período de avaliação e prossiga para o pagamento."
-                          : "Compare os planos disponíveis e avance para a etapa de pagamento da opção que melhor atende às necessidades do seu time."}
+                          : "Compare as opções disponíveis e avance para a etapa de pagamento do upgrade desejado."}
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6">
@@ -1281,7 +1281,7 @@ function MeuPlanoContent() {
                                       onClick={() => handlePlanSelection(plano)}
                                       disabled={isAtual && !previewPlano && !isTrialing}
                                     >
-                                      {isTrialing ? "Contratar este plano" : "Escolher este plano"}
+                                      {isTrialing ? "Contratar este plano" : "Fazer upgrade"}
                                     </Button>
                                   </CardFooter>
                                 </Card>
@@ -1304,89 +1304,91 @@ function MeuPlanoContent() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <Card className="rounded-3xl border border-border/60">
-              <CardHeader>
-                <CardTitle>Utilização dos recursos</CardTitle>
-                <CardDescription>
-                  {previewPlano
-                    ? "Confira como os seus dados atuais se encaixam nos limites do plano pré-visualizado."
-                    : "Acompanhe o consumo dos principais limites do plano."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {usageItems.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Ainda não há métricas disponíveis para este plano.
-                  </p>
-                ) : (
-                  usageItems.map((item) => {
-                    const limit = item.limit ?? null;
-                    const hasLimit = limit !== null && Number.isFinite(limit) && limit > 0;
-                    const hasCurrent = typeof item.current === "number" && Number.isFinite(item.current);
-                    const progress = hasLimit && hasCurrent ? Math.min(100, Math.round((item.current / limit) * 100)) : 0;
-                    const limitFormatted = hasLimit ? countFormatter.format(limit) : null;
-                    const currentFormatted = hasCurrent ? countFormatter.format(item.current ?? 0) : "—";
-                    return (
-                      <div key={item.label} className="space-y-2 rounded-2xl border border-border/60 p-4">
-                        <div className="flex items-center justify-between text-sm font-medium">
-                          <span>{item.label}</span>
-                          <span className="text-foreground">
-                            {hasLimit
-                              ? `${hasCurrent ? currentFormatted : "—"}/${limitFormatted}`
-                              : hasCurrent
-                                ? currentFormatted
-                                : "—"}
-                          </span>
-                        </div>
-                        {hasLimit ? (
-                          hasCurrent ? (
-                            <Progress value={progress} aria-label={`Consumo de ${item.label}`} />
+          {isTrialing && (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+              <Card className="rounded-3xl border border-border/60">
+                <CardHeader>
+                  <CardTitle>Utilização dos recursos</CardTitle>
+                  <CardDescription>
+                    {previewPlano
+                      ? "Confira como os seus dados atuais se encaixam nos limites do plano pré-visualizado."
+                      : "Acompanhe o consumo dos principais limites do plano."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {usageItems.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Ainda não há métricas disponíveis para este plano.
+                    </p>
+                  ) : (
+                    usageItems.map((item) => {
+                      const limit = item.limit ?? null;
+                      const hasLimit = limit !== null && Number.isFinite(limit) && limit > 0;
+                      const hasCurrent = typeof item.current === "number" && Number.isFinite(item.current);
+                      const progress = hasLimit && hasCurrent ? Math.min(100, Math.round((item.current / limit) * 100)) : 0;
+                      const limitFormatted = hasLimit ? countFormatter.format(limit) : null;
+                      const currentFormatted = hasCurrent ? countFormatter.format(item.current ?? 0) : "—";
+                      return (
+                        <div key={item.label} className="space-y-2 rounded-2xl border border-border/60 p-4">
+                          <div className="flex items-center justify-between text-sm font-medium">
+                            <span>{item.label}</span>
+                            <span className="text-foreground">
+                              {hasLimit
+                                ? `${hasCurrent ? currentFormatted : "—"}/${limitFormatted}`
+                                : hasCurrent
+                                  ? currentFormatted
+                                  : "—"}
+                            </span>
+                          </div>
+                          {hasLimit ? (
+                            hasCurrent ? (
+                              <Progress value={progress} aria-label={`Consumo de ${item.label}`} />
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                Dados indisponíveis para este recurso no momento.
+                              </p>
+                            )
                           ) : (
-                            <p className="text-xs text-muted-foreground">
-                              Dados indisponíveis para este recurso no momento.
-                            </p>
-                          )
-                        ) : (
-                          <p className="text-xs text-muted-foreground">Sem limite definido para este recurso.</p>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
+                            <p className="text-xs text-muted-foreground">Sem limite definido para este recurso.</p>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
 
-            <Card className="rounded-3xl border border-border/60">
-              <CardHeader>
-                <CardTitle>Benefícios inclusos</CardTitle>
-                <CardDescription>
-                  {previewPlano
-                    ? "Principais recursos contemplados no plano selecionado."
-                    : "Recursos disponíveis no plano contratado."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {beneficios.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Este plano não possui benefícios listados. Atualize os dados do plano para exibir aqui.
-                  </p>
-                ) : (
-                  <ul className="grid gap-3 sm:grid-cols-2">
-                    {beneficios.map((beneficio) => (
-                      <li
-                        key={beneficio}
-                        className="flex items-start gap-2 rounded-2xl border border-border/60 bg-background/80 p-3 text-sm"
-                      >
-                        <Check className="mt-0.5 h-4 w-4 text-primary" />
-                        <span>{beneficio}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+              <Card className="rounded-3xl border border-border/60">
+                <CardHeader>
+                  <CardTitle>Benefícios inclusos</CardTitle>
+                  <CardDescription>
+                    {previewPlano
+                      ? "Principais recursos contemplados no plano selecionado."
+                      : "Recursos disponíveis no plano contratado."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {beneficios.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Este plano não possui benefícios listados. Atualize os dados do plano para exibir aqui.
+                    </p>
+                  ) : (
+                    <ul className="grid gap-3 sm:grid-cols-2">
+                      {beneficios.map((beneficio) => (
+                        <li
+                          key={beneficio}
+                          className="flex items-start gap-2 rounded-2xl border border-border/60 bg-background/80 p-3 text-sm"
+                        >
+                          <Check className="mt-0.5 h-4 w-4 text-primary" />
+                          <span>{beneficio}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </>
       )}
     </div>

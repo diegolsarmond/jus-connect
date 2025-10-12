@@ -42,7 +42,8 @@ const ensureTable = async (): Promise<void> => {
           numero VARCHAR(20) NOT NULL,
           dias_semana SMALLINT[],
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          dias_semana SMALLINT[]
         );
         CREATE UNIQUE INDEX IF NOT EXISTS oab_monitoradas_empresa_tipo_uf_numero_idx
           ON public.oab_monitoradas (empresa_id, tipo, uf, numero);
@@ -140,6 +141,7 @@ const ensureTable = async (): Promise<void> => {
           END IF;
         END
         $$;
+
       `)
       .then(() => undefined)
       .catch((error) => {
@@ -320,6 +322,7 @@ export const createIntimacaoOabMonitor = async (
        INSERT INTO public.oab_monitoradas (empresa_id, usuario_id, uf, numero, dias_semana, tipo)
        VALUES ($1, $2, $3, $4, $5, 'intimacao')
        ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+
          SET usuario_id = EXCLUDED.usuario_id,
              updated_at = NOW(),
              dias_semana = EXCLUDED.dias_semana

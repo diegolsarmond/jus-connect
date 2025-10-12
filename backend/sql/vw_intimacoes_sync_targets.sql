@@ -60,3 +60,4 @@ WHERE m.tipo = 'intimacao'
   AND (m.dias_semana IS NULL
    OR cardinality(m.dias_semana) = 0
    OR EXTRACT(ISODOW FROM CURRENT_DATE)::smallint = ANY(m.dias_semana));
+
