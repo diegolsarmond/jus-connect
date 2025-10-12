@@ -443,7 +443,10 @@ export const updateTarefa = async (req: Request, res: Response) => {
     await client.query('BEGIN');
 
     const existingTaskResult = await client.query(
-      'SELECT idempresa FROM public.tarefas WHERE id = $1 FOR UPDATE',
+      `SELECT idempresa, idusuario, titulo, descricao, data, hora
+         FROM public.tarefas
+        WHERE id = $1
+        FOR UPDATE`,
       [id],
     );
 
@@ -451,6 +454,18 @@ export const updateTarefa = async (req: Request, res: Response) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Tarefa não encontrada' });
     }
+
+    const existingTaskRow = existingTaskResult.rows[0];
+
+    const previousAgendaDescription =
+      typeof existingTaskRow.descricao === 'string' && existingTaskRow.descricao.trim().length > 0
+        ? existingTaskRow.descricao
+        : null;
+
+    const previousHora =
+      typeof existingTaskRow.hora === 'string' && existingTaskRow.hora.trim().length > 0
+        ? existingTaskRow.hora
+        : null;
 
     const result = await client.query(
       `UPDATE public.tarefas SET id_oportunidades = $1, titulo = $2, descricao = $3, data = $4, hora = $5, dia_inteiro = $6, prioridade = $7, mostrar_na_agenda = $8, privada = $9, recorrente = $10, repetir_quantas_vezes = $11, repetir_cada_unidade = $12, repetir_intervalo = $13, concluido = $14, atualizado_em = NOW() WHERE id = $15
@@ -486,7 +501,40 @@ export const updateTarefa = async (req: Request, res: Response) => {
       [id],
     );
 
-    const existingAgenda = agendaResult.rows[0];
+    let existingAgenda = agendaResult.rows[0];
+
+    if (!existingAgenda) {
+      const legacyAgendaResult = await client.query(
+        `SELECT id
+           FROM public.agenda
+          WHERE id_tarefa IS NULL
+            AND idempresa IS NOT DISTINCT FROM $1
+            AND idusuario IS NOT DISTINCT FROM $2
+            AND titulo = $3
+            AND data = $4
+            AND hora_inicio IS NOT DISTINCT FROM $5
+            AND descricao IS NOT DISTINCT FROM $6
+          ORDER BY dataatualizacao DESC NULLS LAST, datacadastro DESC
+          LIMIT 2`,
+        [
+          existingTaskRow.idempresa,
+          existingTaskRow.idusuario ?? updatedTask.idusuario,
+          existingTaskRow.titulo,
+          existingTaskRow.data,
+          previousHora,
+          previousAgendaDescription,
+        ],
+      );
+
+      if (legacyAgendaResult.rows.length === 1) {
+        existingAgenda = legacyAgendaResult.rows[0];
+
+        await client.query('UPDATE public.agenda SET id_tarefa = $1 WHERE id = $2', [
+          updatedTask.id,
+          existingAgenda.id,
+        ]);
+      }
+    }
 
     if (shouldShowOnAgenda) {
       if (existingAgenda) {
