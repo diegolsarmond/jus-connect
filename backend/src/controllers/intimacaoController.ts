@@ -204,6 +204,49 @@ const parsePositiveInt = (value: unknown): number | 'invalid' => {
   return 'invalid';
 };
 
+const parseDiasSemanaArray = (
+  value: unknown,
+): { ok: true; value: number[] | null } | { ok: false } => {
+  if (value === undefined || value === null) {
+    return { ok: true, value: null };
+  }
+
+  if (!Array.isArray(value)) {
+    return { ok: false };
+  }
+
+  const set = new Set<number>();
+
+  for (const item of value) {
+    let parsed: number | null = null;
+
+    if (typeof item === 'number' && Number.isInteger(item)) {
+      parsed = item;
+    } else if (typeof item === 'string') {
+      const trimmed = item.trim();
+      if (trimmed) {
+        const candidate = Number.parseInt(trimmed, 10);
+        if (Number.isInteger(candidate)) {
+          parsed = candidate;
+        }
+      }
+    }
+
+    if (parsed == null || parsed < 1 || parsed > 7) {
+      return { ok: false };
+    }
+
+    set.add(Math.trunc(parsed));
+  }
+
+  if (set.size === 0) {
+    return { ok: false };
+  }
+
+  const normalized = Array.from(set).sort((a, b) => a - b);
+  return { ok: true, value: normalized };
+};
+
 export const listIntimacaoOabMonitoradasHandler = async (req: Request, res: Response) => {
   try {
     if (!req.auth) {
@@ -231,7 +274,7 @@ export const listIntimacaoOabMonitoradasHandler = async (req: Request, res: Resp
 };
 
 export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Response) => {
-  const { uf, numero, usuarioId } = req.body ?? {};
+  const { uf, numero, usuarioId, diasSemana } = req.body ?? {};
 
   try {
     if (!req.auth) {
@@ -262,6 +305,12 @@ export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
       return res.status(400).json({ error: 'Informe um usuário válido.' });
     }
 
+    const diasSemanaResult = parseDiasSemanaArray(diasSemana);
+
+    if (!diasSemanaResult.ok) {
+      return res.status(400).json({ error: 'Informe ao menos um dia da semana válido.' });
+    }
+
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     const limit = planLimits?.limiteAdvogadosIntimacoesMonitoradas;
 
@@ -283,7 +332,13 @@ export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
     }
 
     try {
-      const monitor = await createIntimacaoOabMonitor(empresaId, parsedUsuarioId, uf, numero);
+      const monitor = await createIntimacaoOabMonitor(
+        empresaId,
+        parsedUsuarioId,
+        uf,
+        numero,
+        diasSemanaResult.value,
+      );
       return res.status(201).json(monitor);
     } catch (serviceError) {
       const message =
