@@ -36,7 +36,7 @@ const DEFAULT_SMTP_CONFIG = isSmtpConfigured
     }
     : null;
 const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
-const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'no-reply@localhost';
+const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'naoresponda@quantumtecnologia.com.br';
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 const CRLF = '\r\n';
 function waitForResponse(socket, timeoutMs = 15000) {
