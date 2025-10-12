@@ -54,6 +54,7 @@ export const MessageViewport = ({
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: Math.min(messages.length, WINDOW_COUNT) });
   const previousLengthRef = useRef(0);
   const lastStickStateRef = useRef<boolean | null>(null);
+  const previousScrollMetricsRef = useRef({ scrollHeight: 0, distanceFromBottom: Infinity });
 
   const registerHeight = useCallback((id: string, height: number) => {
     const current = heightsRef.current.get(id);
@@ -111,7 +112,11 @@ export const MessageViewport = ({
 
   const updateRange = useCallback(
     (scrollTop: number, clientHeight: number, scrollHeight: number) => {
-      const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 120;
+      const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+      const previousMetrics = previousScrollMetricsRef.current;
+      const isNearBottom =
+        distanceFromBottom < 120 ||
+        (previousMetrics.distanceFromBottom < 120 && scrollHeight > previousMetrics.scrollHeight);
       if (lastStickStateRef.current !== isNearBottom) {
         lastStickStateRef.current = isNearBottom;
         onStickToBottomChange?.(isNearBottom);
@@ -126,6 +131,7 @@ export const MessageViewport = ({
         }
         return { start: startIndex, end: endIndex };
       });
+      previousScrollMetricsRef.current = { scrollHeight, distanceFromBottom };
     },
     [getIndexForOffset, messages.length, onStickToBottomChange],
   );
