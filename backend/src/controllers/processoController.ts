@@ -251,6 +251,49 @@ const parseBooleanFlag = (value: unknown): boolean | null => {
   return null;
 };
 
+const parseDiasSemanaArray = (
+  value: unknown,
+): { ok: true; value: number[] | null } | { ok: false } => {
+  if (value === undefined || value === null) {
+    return { ok: true, value: null };
+  }
+
+  if (!Array.isArray(value)) {
+    return { ok: false };
+  }
+
+  const set = new Set<number>();
+
+  for (const item of value) {
+    let parsed: number | null = null;
+
+    if (typeof item === 'number' && Number.isInteger(item)) {
+      parsed = item;
+    } else if (typeof item === 'string') {
+      const trimmed = item.trim();
+      if (trimmed) {
+        const candidate = Number.parseInt(trimmed, 10);
+        if (Number.isInteger(candidate)) {
+          parsed = candidate;
+        }
+      }
+    }
+
+    if (parsed == null || parsed < 1 || parsed > 7) {
+      return { ok: false };
+    }
+
+    set.add(Math.trunc(parsed));
+  }
+
+  if (set.size === 0) {
+    return { ok: false };
+  }
+
+  const normalized = Array.from(set).sort((a, b) => a - b);
+  return { ok: true, value: normalized };
+};
+
 const parsePositiveIntegerQuery = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
     return value;
@@ -3912,7 +3955,7 @@ export const listOabMonitoradas = async (req: Request, res: Response) => {
 };
 
 export const createOabMonitorada = async (req: Request, res: Response) => {
-  const { uf, numero } = req.body ?? {};
+  const { uf, numero, diasSemana } = req.body ?? {};
   const usuarioIdRaw =
     (req.body as { usuarioId?: unknown })?.usuarioId ??
     (req.body as { usuario_id?: unknown })?.usuario_id;
@@ -3948,6 +3991,12 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
         .json({ error: 'Informe o usuário responsável pela OAB.' });
     }
 
+    const diasSemanaResult = parseDiasSemanaArray(diasSemana);
+
+    if (!diasSemanaResult.ok) {
+      return res.status(400).json({ error: 'Informe ao menos um dia da semana válido.' });
+    }
+
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     const planLimit = planLimits?.limiteAdvogadosProcessos;
 
@@ -3979,7 +4028,13 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
     }
 
     try {
-      const monitor = await createCompanyOabMonitor(empresaId, uf, numero, usuarioId);
+      const monitor = await createCompanyOabMonitor(
+        empresaId,
+        uf,
+        numero,
+        usuarioId,
+        diasSemanaResult.value,
+      );
       return res.status(201).json(monitor);
     } catch (serviceError) {
       const message =

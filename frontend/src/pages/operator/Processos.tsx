@@ -268,7 +268,24 @@ interface OabMonitor {
     usuarioId: number | null;
     usuarioNome: string | null;
     usuarioOab: string | null;
+    diasSemana: number[] | null;
 }
+
+const DIA_SEMANA_LABELS: Record<number, string> = {
+    1: "Segunda-feira",
+    2: "Terça-feira",
+    3: "Quarta-feira",
+    4: "Quinta-feira",
+    5: "Sexta-feira",
+    6: "Sábado",
+    7: "Domingo",
+};
+
+const BUSINESS_DAY_VALUES = [1, 2, 3, 4, 5] as const;
+
+const DEFAULT_MONITOR_DAYS = [...BUSINESS_DAY_VALUES];
+
+const BUSINESS_DAY_SET = new Set<number>(BUSINESS_DAY_VALUES);
 
 interface OabUsuarioOption {
     id: string;
@@ -405,6 +422,92 @@ const inferUfFromProcessNumber = (value: string): string => {
     return ramoMap?.[tribunal] ?? "";
 };
 
+const parseApiDiasSemana = (value: unknown): number[] | null => {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    const collect = (entries: unknown[]): number[] => {
+        const set = new Set<number>();
+
+        for (const entry of entries) {
+            let parsed: number | null = null;
+
+            if (typeof entry === "number" && Number.isFinite(entry)) {
+                parsed = Math.trunc(entry);
+            } else if (typeof entry === "string") {
+                const trimmed = entry.trim();
+                if (trimmed) {
+                    const candidate = Number.parseInt(trimmed, 10);
+                    if (Number.isFinite(candidate)) {
+                        parsed = Math.trunc(candidate);
+                    }
+                }
+            }
+
+            if (parsed != null && parsed >= 1 && parsed <= 7) {
+                set.add(parsed);
+            }
+        }
+
+        if (set.size === 0) {
+            return [];
+        }
+
+        return Array.from(set).sort((a, b) => a - b);
+    };
+
+    if (Array.isArray(value)) {
+        return collect(value);
+    }
+
+    if (typeof value === "string") {
+        const normalized = value.replace(/[{}]/g, "");
+        if (!normalized.trim()) {
+            return [];
+        }
+        return collect(normalized.split(","));
+    }
+
+    return null;
+};
+
+const formatDiasSemanaDescription = (dias: number[] | null | undefined): string => {
+    if (!dias) {
+        return "Sincroniza todos os dias da semana.";
+    }
+
+    if (dias.length === 0) {
+        return "Sincronização sem dias selecionados.";
+    }
+
+    const normalized = Array.from(new Set(dias)).sort((a, b) => a - b);
+
+    if (normalized.length === 7) {
+        return "Sincroniza todos os dias da semana.";
+    }
+
+    if (normalized.length === BUSINESS_DAY_VALUES.length && BUSINESS_DAY_VALUES.every((value, index) => value === normalized[index])) {
+        return "Sincroniza de segunda a sexta-feira.";
+    }
+
+    const labels = normalized
+        .map((value) => DIA_SEMANA_LABELS[value])
+        .filter((label): label is string => Boolean(label));
+
+    if (labels.length === 0) {
+        return "Sincroniza em dias configurados.";
+    }
+
+    if (labels.length === 1) {
+        return `Sincroniza em ${labels[0]}.`;
+    }
+
+    const last = labels[labels.length - 1];
+    const initial = labels.slice(0, -1).join(", ");
+    return `Sincroniza em ${initial} e ${last}.`;
+};
+
 const mapApiOabMonitor = (payload: Record<string, unknown>): OabMonitor | null => {
     const idValue = parseOptionalInteger(payload.id);
     const ufRaw = pickFirstNonEmptyString(
@@ -476,6 +579,11 @@ const mapApiOabMonitor = (payload: Record<string, unknown>): OabMonitor | null =
             : undefined,
     );
 
+    const diasSemanaRaw =
+        (payload as { diasSemana?: unknown }).diasSemana ??
+        (payload as { dias_semana?: unknown }).dias_semana ??
+        null;
+
     return {
         id: idValue,
         uf,
@@ -485,6 +593,7 @@ const mapApiOabMonitor = (payload: Record<string, unknown>): OabMonitor | null =
         usuarioId: usuarioId,
         usuarioNome: usuarioNome ?? null,
         usuarioOab: usuarioOab ?? null,
+        diasSemana: parseApiDiasSemana(diasSemanaRaw),
     };
 };
 
@@ -1237,6 +1346,7 @@ export default function Processos() {
     const [oabModalDismissed, setOabModalDismissed] = useState(false);
     const [oabUf, setOabUf] = useState("");
     const [oabNumero, setOabNumero] = useState("");
+    const [oabDiasSemana, setOabDiasSemana] = useState<number[]>(DEFAULT_MONITOR_DAYS);
     const [oabMonitors, setOabMonitors] = useState<OabMonitor[]>([]);
     const [oabMonitorsLoading, setOabMonitorsLoading] = useState(false);
     const [oabMonitorsInitialized, setOabMonitorsInitialized] = useState(false);
@@ -2451,17 +2561,45 @@ export default function Processos() {
             setOabUsuarioId("");
             setOabUf("");
             setOabNumero("");
+            setOabDiasSemana(DEFAULT_MONITOR_DAYS);
         }
     }, []);
 
     const handleOabUsuarioChange = useCallback(
         (value: string) => {
             setOabUsuarioId(value);
+            setOabSubmitError(null);
             const option = oabUsuarioOptions.find((item) => item.id === value);
-            setOabUf(option?.oabUf ?? "");
-            setOabNumero(option?.oabNumero ?? "");
+            const optionUf = option?.oabUf ?? "";
+            const optionNumero = option?.oabNumero ?? "";
+            setOabUf(optionUf);
+            setOabNumero(optionNumero);
+
+            const normalizedUf = normalizeUf(optionUf);
+            const normalizedNumero = formatOabDigits(optionNumero);
+
+            if (normalizedUf && normalizedNumero) {
+                const existingMonitor = oabMonitors.find(
+                    (monitor) =>
+                        monitor.uf === normalizedUf &&
+                        monitor.numero === normalizedNumero,
+                );
+
+                if (existingMonitor) {
+                    const filteredDays = (existingMonitor.diasSemana ?? DEFAULT_MONITOR_DAYS)
+                        .map((day) => Number(day))
+                        .filter((day) => BUSINESS_DAY_SET.has(day));
+                    if (filteredDays.length > 0) {
+                        const uniqueDays = Array.from(new Set(filteredDays)).sort((a, b) => a - b);
+                        setOabDiasSemana(uniqueDays);
+                        return;
+                    }
+                }
+            }
+
+            setOabDiasSemana(DEFAULT_MONITOR_DAYS);
         },
-        [oabUsuarioOptions],
+        [oabMonitors, oabUsuarioOptions],
     );
 
     const handleRemoveOabMonitor = useCallback(
@@ -2665,6 +2803,11 @@ export default function Processos() {
             return;
         }
 
+        if (oabDiasSemana.length === 0) {
+            setOabSubmitError("Selecione ao menos um dia da semana para sincronização.");
+            return;
+        }
+
         setOabSubmitError(null);
         setOabSubmitLoading(true);
 
@@ -2679,6 +2822,7 @@ export default function Processos() {
                     uf: oabUf,
                     numero: formatOabDigits(oabNumero),
                     usuarioId: Number.parseInt(oabUsuarioId, 10),
+                    diasSemana: oabDiasSemana,
                 }),
             });
 
@@ -2713,6 +2857,7 @@ export default function Processos() {
             });
             setOabNumero("");
             setOabUsuarioId("");
+            setOabDiasSemana(DEFAULT_MONITOR_DAYS);
             toast({
                 title: "OAB cadastrada com sucesso",
                 description: `Monitoramento ativado para ${formatOabDisplay(monitor.numero, monitor.uf)}.`,
@@ -2730,7 +2875,7 @@ export default function Processos() {
         } finally {
             setOabSubmitLoading(false);
         }
-    }, [oabNumero, oabUf, oabUsuarioId, toast]);
+    }, [oabNumero, oabUf, oabUsuarioId, oabDiasSemana, toast]);
 
     const ensureClientForParticipant = useCallback(
         async (participant: ProcessoParticipantOption): Promise<number> => {
@@ -4409,6 +4554,9 @@ export default function Processos() {
                                                 <p className="text-xs text-muted-foreground">
                                                     Monitorando desde {formatDateTimeToPtBR(monitor.createdAt)}
                                                 </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {formatDiasSemanaDescription(monitor.diasSemana)}
+                                                </p>
                                             </div>
                                             <Button
                                                 variant="destructive"
@@ -4430,13 +4578,13 @@ export default function Processos() {
                                     Selecione o responsável e informe os dados da OAB que deseja monitorar.
                                 </p>
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="oab-usuario">Responsável</Label>
-                                <Select
-                                    value={oabUsuarioId}
-                                    onValueChange={handleOabUsuarioChange}
-                                    disabled={oabUsuariosLoading || oabUsuarioOptions.length === 0}
-                                >
+              <div className="space-y-2">
+                <Label htmlFor="oab-usuario">Responsável</Label>
+                <Select
+                    value={oabUsuarioId}
+                    onValueChange={handleOabUsuarioChange}
+                    disabled={oabUsuariosLoading || oabUsuarioOptions.length === 0}
+                >
                                     <SelectTrigger id="oab-usuario">
                                         <SelectValue
                                             placeholder={
@@ -4446,21 +4594,53 @@ export default function Processos() {
                                             }
                                         />
                                     </SelectTrigger>
-                                    <SelectContent>
-                                        {oabUsuarioOptions.map((option) => (
-                                            <SelectItem key={option.id} value={option.id}>
-                                                {option.oab ? `${option.nome} (${option.oab})` : option.nome}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {oabUsuariosError ? (
-                                    <p className="text-sm text-destructive">{oabUsuariosError}</p>
-                                ) : null}
-                            </div>
-                            {oabSubmitError ? (
-                                <p className="text-sm text-destructive">{oabSubmitError}</p>
-                            ) : null}
+                    <SelectContent>
+                        {oabUsuarioOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                                {option.oab ? `${option.nome} (${option.oab})` : option.nome}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {oabUsuariosError ? (
+                    <p className="text-sm text-destructive">{oabUsuariosError}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">Dias da semana</p>
+                <p className="text-xs text-muted-foreground">
+                  Escolha quando a sincronização automática deve ocorrer.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {BUSINESS_DAY_VALUES.map((day) => {
+                    const label = DIA_SEMANA_LABELS[day];
+                    const checked = oabDiasSemana.includes(day);
+                    return (
+                      <label key={day} className="flex items-center gap-2 text-sm text-foreground">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(next) => {
+                            setOabDiasSemana((prev) => {
+                              const nextSet = new Set(prev);
+                              if (next === true) {
+                                nextSet.add(day);
+                              } else {
+                                nextSet.delete(day);
+                              }
+                              return Array.from(nextSet).sort((a, b) => a - b);
+                            });
+                            setOabSubmitError(null);
+                          }}
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              {oabSubmitError ? (
+                  <p className="text-sm text-destructive">{oabSubmitError}</p>
+              ) : null}
                         </div>
                     </div>
                     <DialogFooter>

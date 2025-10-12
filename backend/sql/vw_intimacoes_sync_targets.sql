@@ -41,8 +41,9 @@ SELECT
   m.uf AS monitor_oab_uf,
   m.numero AS monitor_oab_numero,
   m.created_at,
-  m.updated_at
-FROM public.intimacoes_oab_monitoradas m
+  m.updated_at,
+  m.dias_semana
+FROM public.oab_monitoradas m
 JOIN public.empresas emp ON emp.id = m.empresa_id
 LEFT JOIN period_bounds period ON period.empresa_id = emp.id
 LEFT JOIN public.planos pl ON pl.id::text = emp.plano::text
@@ -54,4 +55,8 @@ LEFT JOIN LATERAL (
    WHERE i.idempresa = emp.id
      AND (period.period_start IS NULL OR i.created_at >= period.period_start)
      AND (period.period_end IS NULL OR i.created_at < period.period_end)
-) sync_stats ON TRUE;
+) sync_stats ON TRUE
+WHERE m.tipo = 'intimacao'
+  AND (m.dias_semana IS NULL
+   OR cardinality(m.dias_semana) = 0
+   OR EXTRACT(ISODOW FROM CURRENT_DATE)::smallint = ANY(m.dias_semana));
