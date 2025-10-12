@@ -247,7 +247,10 @@ const duplicateCheckResponses: QueryResponse[] = [
   };
 
   assert.equal(responseBody.requiresEmailConfirmation, true);
-  assert.match(responseBody.message, /Verifique seu e-mail/i);
+  assert.equal(
+    responseBody.message,
+    'Sua conta foi criada, confirme o e-mail para ter acesso ao sistema.'
+  );
   assert.equal(responseBody.user.id, 123);
   assert.equal(responseBody.user.perfil, 99);
   assert.equal(responseBody.user.empresa, 42);
@@ -469,7 +472,10 @@ test('register tolerates trailing spaces when matching existing company and prof
   };
 
   assert.equal(responseBody.requiresEmailConfirmation, true);
-  assert.match(responseBody.message, /Verifique seu e-mail/i);
+  assert.equal(
+    responseBody.message,
+    'Sua conta foi criada, confirme o e-mail para ter acesso ao sistema.'
+  );
   assert.equal(responseBody.empresa.nome, 'Acme Corp');
   assert.equal(responseBody.perfil.nome, 'Administrador');
 
