@@ -53,35 +53,80 @@ const ensureTable = async (): Promise<void> => {
         ALTER TABLE public.oab_monitoradas
           ALTER COLUMN tipo SET NOT NULL;
         DO $$
+        DECLARE
+          processo_has_dias_semana BOOLEAN := EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'processo_oab_monitoradas'
+              AND column_name = 'dias_semana'
+          );
+          intimacoes_has_dias_semana BOOLEAN := EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'intimacoes_oab_monitoradas'
+              AND column_name = 'dias_semana'
+          );
         BEGIN
           IF to_regclass('public.processo_oab_monitoradas') IS NOT NULL THEN
-            EXECUTE '
-              INSERT INTO public.oab_monitoradas (
-                empresa_id,
-                usuario_id,
-                tipo,
-                uf,
-                numero,
-                dias_semana,
-                created_at,
-                updated_at
-              )
-              SELECT
-                empresa_id,
-                usuario_id,
-                ''processo'',
-                uf,
-                numero,
-                dias_semana,
-                created_at,
-                updated_at
-                FROM public.processo_oab_monitoradas
-              ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
-                SET usuario_id = EXCLUDED.usuario_id,
-                    dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
-                    created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
-                    updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
-            ';
+            IF processo_has_dias_semana THEN
+              EXECUTE '
+                INSERT INTO public.oab_monitoradas (
+                  empresa_id,
+                  usuario_id,
+                  tipo,
+                  uf,
+                  numero,
+                  dias_semana,
+                  created_at,
+                  updated_at
+                )
+                SELECT
+                  empresa_id,
+                  usuario_id,
+                  ''processo'',
+                  uf,
+                  numero,
+                  dias_semana,
+                  created_at,
+                  updated_at
+                  FROM public.processo_oab_monitoradas
+                ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+                  SET usuario_id = EXCLUDED.usuario_id,
+                      dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
+                      created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
+                      updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
+              ';
+            ELSE
+              EXECUTE '
+                INSERT INTO public.oab_monitoradas (
+                  empresa_id,
+                  usuario_id,
+                  tipo,
+                  uf,
+                  numero,
+                  dias_semana,
+                  created_at,
+                  updated_at
+                )
+                SELECT
+                  empresa_id,
+                  usuario_id,
+                  ''processo'',
+                  uf,
+                  numero,
+                  NULL::smallint[],
+                  created_at,
+                  updated_at
+                  FROM public.processo_oab_monitoradas
+                ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+                  SET usuario_id = EXCLUDED.usuario_id,
+                      dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
+                      created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
+                      updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
+              ';
+            END IF;
             EXECUTE '
               WITH seq AS (
                 SELECT COALESCE(MAX(id), 0) AS max_id FROM public.oab_monitoradas
@@ -96,33 +141,63 @@ const ensureTable = async (): Promise<void> => {
             EXECUTE 'DROP TABLE IF EXISTS public.processo_oab_monitoradas;';
           END IF;
           IF to_regclass('public.intimacoes_oab_monitoradas') IS NOT NULL THEN
-            EXECUTE '
-              INSERT INTO public.oab_monitoradas (
-                empresa_id,
-                usuario_id,
-                tipo,
-                uf,
-                numero,
-                dias_semana,
-                created_at,
-                updated_at
-              )
-              SELECT
-                empresa_id,
-                usuario_id,
-                ''intimacao'',
-                uf,
-                numero,
-                dias_semana,
-                created_at,
-                updated_at
-                FROM public.intimacoes_oab_monitoradas
-              ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
-                SET usuario_id = EXCLUDED.usuario_id,
-                    dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
-                    created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
-                    updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
-            ';
+            IF intimacoes_has_dias_semana THEN
+              EXECUTE '
+                INSERT INTO public.oab_monitoradas (
+                  empresa_id,
+                  usuario_id,
+                  tipo,
+                  uf,
+                  numero,
+                  dias_semana,
+                  created_at,
+                  updated_at
+                )
+                SELECT
+                  empresa_id,
+                  usuario_id,
+                  ''intimacao'',
+                  uf,
+                  numero,
+                  dias_semana,
+                  created_at,
+                  updated_at
+                  FROM public.intimacoes_oab_monitoradas
+                ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+                  SET usuario_id = EXCLUDED.usuario_id,
+                      dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
+                      created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
+                      updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
+              ';
+            ELSE
+              EXECUTE '
+                INSERT INTO public.oab_monitoradas (
+                  empresa_id,
+                  usuario_id,
+                  tipo,
+                  uf,
+                  numero,
+                  dias_semana,
+                  created_at,
+                  updated_at
+                )
+                SELECT
+                  empresa_id,
+                  usuario_id,
+                  ''intimacao'',
+                  uf,
+                  numero,
+                  NULL::smallint[],
+                  created_at,
+                  updated_at
+                  FROM public.intimacoes_oab_monitoradas
+                ON CONFLICT (empresa_id, tipo, uf, numero) DO UPDATE
+                  SET usuario_id = EXCLUDED.usuario_id,
+                      dias_semana = COALESCE(EXCLUDED.dias_semana, public.oab_monitoradas.dias_semana),
+                      created_at = LEAST(public.oab_monitoradas.created_at, EXCLUDED.created_at),
+                      updated_at = GREATEST(public.oab_monitoradas.updated_at, EXCLUDED.updated_at);
+              ';
+            END IF;
             EXECUTE '
               WITH seq AS (
                 SELECT COALESCE(MAX(id), 0) AS max_id FROM public.oab_monitoradas
@@ -148,6 +223,8 @@ const ensureTable = async (): Promise<void> => {
 
   await ensureTablePromise;
 };
+
+export const bootstrapOabMonitoradas = (): Promise<void> => ensureTable();
 
 const sanitizeUf = (input: string): string => input.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase();
 
