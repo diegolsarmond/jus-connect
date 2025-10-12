@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -17,7 +16,6 @@ import { ProfileCard } from "@/components/profile/ProfileCard";
 import { AvatarUploader } from "@/components/profile/AvatarUploader";
 import { UserFormData } from "@/types/user";
 import { toast } from "@/components/ui/use-toast";
-import { CheckedState } from "@radix-ui/react-checkbox";
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type UserRole = UserFormData["role"];
@@ -749,26 +747,6 @@ export default function EditarPerfil() {
             </div>
           </ProfileCard>
 
-          {/* LGPD Consent */}
-          <ProfileCard title="Consentimento LGPD">
-            <div className="flex items-start space-x-3">
-              <Checkbox
-                id="lgpdConsent"
-                checked={formData.lgpdConsent}
-                onCheckedChange={(checked: CheckedState) =>
-                  handleInputChange("lgpdConsent", checked === true)
-                }
-              />
-              <div className="space-y-1 leading-none">
-                <Label htmlFor="lgpdConsent" className="cursor-pointer">
-                  Concordo com o tratamento dos meus dados pessoais
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Autorizo o tratamento de meus dados pessoais conforme nossa Política de Privacidade.
-                </p>
-              </div>
-            </div>
-          </ProfileCard>
         </div>
 
         {/* Sidebar */}
