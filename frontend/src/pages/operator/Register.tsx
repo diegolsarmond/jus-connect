@@ -113,6 +113,20 @@ const Register = () => {
     return "Não foi possível concluir o cadastro. Tente novamente.";
   };
 
+  const formatPhoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 2) {
+      return digits;
+    }
+    if (digits.length <= 6) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    }
+    if (digits.length <= 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -146,12 +160,13 @@ const Register = () => {
 
     setIsSubmitting(true);
 
+    const phoneDigits = formData.phone.replace(/\D/g, "");
     const payload = {
       name: formData.name.trim(),
       email: formData.email.trim(),
       company: formData.company.trim(),
       password: formData.password,
-      phone: formData.phone.trim().length > 0 ? formData.phone.trim() : undefined,
+      phone: phoneDigits.length > 0 ? phoneDigits : undefined,
       planId: parsedPlanId,
     };
 
@@ -191,9 +206,10 @@ const Register = () => {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: name === "phone" ? formatPhoneInput(value) : value
     }));
   };
 
