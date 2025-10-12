@@ -50,7 +50,14 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig | null = isSmtpConfigured
   : null;
 
 const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
-const defaultFromAddress = process.env.SMTP_FROM || smtpUser || 'no-reply@localhost';
+const fallbackFromAddress = 'no-reply@quantumtecnologia.com.br';
+const smtpFrom = process.env.SMTP_FROM;
+const defaultFromAddress =
+  (smtpFrom && smtpFrom.includes('@') ? smtpFrom : null) ??
+  (smtpUser && smtpUser.includes('@') ? smtpUser : null) ??
+  fallbackFromAddress;
+const usingFallbackFromAddress =
+  !(smtpFrom && smtpFrom.includes('@')) && !(smtpUser && smtpUser.includes('@'));
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 
 export interface SendEmailParams {
@@ -200,6 +207,12 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
       'Configuração SMTP ausente. Defina SMTP_USER e SMTP_PASSWORD (ou SMTP_PASS) para habilitar o envio de e-mails.'
     );
     return;
+  }
+
+  if (usingFallbackFromAddress) {
+    console.warn(
+      `Remetente SMTP padrão indefinido ou inválido. Defina SMTP_FROM com um endereço de e-mail válido. Usando "${fallbackFromAddress}" como padrão.`
+    );
   }
 
   const { host, port, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
