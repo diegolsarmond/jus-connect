@@ -53,6 +53,46 @@ const MULTIPLE_SPACES_REGEX = /[ \t]{2,}/g;
 const HTML_ENTITY_DEC_REGEX = /&#(\d+);/g;
 const HTML_ENTITY_HEX_REGEX = /&#x([0-9a-f]+);/gi;
 
+function removerCssInline(texto: string): string {
+  if (!texto.includes("{") || !texto.includes("}")) {
+    return texto;
+  }
+
+  let resultado = "";
+  let profundidade = 0;
+
+  for (let index = 0; index < texto.length; index += 1) {
+    const caractere = texto[index];
+
+    if (caractere === "{") {
+      profundidade += 1;
+
+      while (resultado.endsWith(" ") || resultado.endsWith("\t")) {
+        resultado = resultado.slice(0, -1);
+      }
+
+      while (resultado && !resultado.endsWith("\n")) {
+        resultado = resultado.slice(0, -1);
+      }
+
+      continue;
+    }
+
+    if (caractere === "}") {
+      if (profundidade > 0) {
+        profundidade -= 1;
+        continue;
+      }
+    }
+
+    if (profundidade === 0) {
+      resultado += caractere;
+    }
+  }
+
+  return resultado;
+}
+
 export function decodificarHtml(valor: string): string {
   if (typeof valor !== "string" || !valor) {
     return "";
@@ -93,6 +133,7 @@ export function normalizarTexto(valor?: string | null): string {
     .replace(/\r\n/g, "\n")
     .replace(/\u00a0/g, " ");
 
+  texto = removerCssInline(texto);
   texto = texto.replace(NORMALIZE_TAG_REGEX, " ");
   texto = texto.replace(/\*\*/g, "");
   texto = texto.replace(/\\/g, "");
