@@ -36,7 +36,7 @@ const Register = () => {
     // Simular cadastro
     toast({
       title: "Cadastro realizado!",
-      description: "Sua conta foi criada com sucesso."
+      description: "Sua conta foi criada, confirme o e-mail para ter acesso ao sistema."
     });
     navigate(routes.login);
   };
