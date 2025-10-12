@@ -304,9 +304,10 @@ export const createTarefa = async (req: Request, res: Response) => {
            status,
            datacadastro,
            idempresa,
-           idusuario
+           idusuario,
+           id_tarefa
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13, $14)`,
         [
           titulo,
           null,
@@ -321,6 +322,7 @@ export const createTarefa = async (req: Request, res: Response) => {
           1,
           empresaId,
           req.auth.userId,
+          tarefa.id,
         ],
       );
     }
@@ -427,16 +429,38 @@ export const updateTarefa = async (req: Request, res: Response) => {
     ? repetir_cada_unidade.charAt(0).toUpperCase() + repetir_cada_unidade.slice(1).toLowerCase()
     : null;
 
+  const normalizedHora = typeof hora === 'string' && hora.trim().length > 0 ? hora : null;
+  const normalizedAgendaDescription =
+    typeof descricao === 'string' && descricao.trim().length > 0 ? descricao : null;
+  const shouldShowOnAgenda =
+    mostrar_na_agenda === true ||
+    mostrar_na_agenda === 'true' ||
+    mostrar_na_agenda === 1 ||
+    mostrar_na_agenda === '1';
+
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const existingTaskResult = await client.query(
+      'SELECT idempresa FROM public.tarefas WHERE id = $1 FOR UPDATE',
+      [id],
+    );
+
+    if (existingTaskResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Tarefa não encontrada' });
+    }
+
+    const result = await client.query(
       `UPDATE public.tarefas SET id_oportunidades = $1, titulo = $2, descricao = $3, data = $4, hora = $5, dia_inteiro = $6, prioridade = $7, mostrar_na_agenda = $8, privada = $9, recorrente = $10, repetir_quantas_vezes = $11, repetir_cada_unidade = $12, repetir_intervalo = $13, concluido = $14, atualizado_em = NOW() WHERE id = $15
-       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido, idusuario`,
+       RETURNING id, id_oportunidades, titulo, descricao, data, hora, dia_inteiro, prioridade, mostrar_na_agenda, privada, recorrente, repetir_quantas_vezes, repetir_cada_unidade, repetir_intervalo, criado_em, atualizado_em, concluido, idempresa, idusuario`,
       [
         id_oportunidades,
         titulo,
         descricao,
         data,
-        hora,
+        normalizedHora,
         dia_inteiro,
         prioridade,
         mostrar_na_agenda,
@@ -447,15 +471,95 @@ export const updateTarefa = async (req: Request, res: Response) => {
         repetir_intervalo,
         concluido,
         id,
-      ]
+      ],
     );
+
     if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Tarefa não encontrada' });
     }
-    res.json(result.rows[0]);
+
+    const updatedTask = result.rows[0];
+
+    const agendaResult = await client.query(
+      'SELECT id FROM public.agenda WHERE id_tarefa = $1',
+      [id],
+    );
+
+    const existingAgenda = agendaResult.rows[0];
+
+    if (shouldShowOnAgenda) {
+      if (existingAgenda) {
+        await client.query(
+          `UPDATE public.agenda
+             SET titulo = $1,
+                 descricao = $2,
+                 data = $3,
+                 hora_inicio = $4,
+                 hora_fim = $5,
+                 status = $6,
+                 dataatualizacao = NOW()
+           WHERE id = $7`,
+          [
+            titulo,
+            normalizedAgendaDescription,
+            data,
+            normalizedHora,
+            null,
+            1,
+            existingAgenda.id,
+          ],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO public.agenda (
+             titulo,
+             tipo,
+             descricao,
+             data,
+             hora_inicio,
+             hora_fim,
+             cliente,
+             tipo_local,
+             local,
+             lembrete,
+             status,
+             datacadastro,
+             idempresa,
+             idusuario,
+             id_tarefa
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13, $14)`,
+          [
+            titulo,
+            null,
+            normalizedAgendaDescription,
+            data,
+            normalizedHora,
+            null,
+            null,
+            null,
+            null,
+            true,
+            1,
+            updatedTask.idempresa,
+            updatedTask.idusuario,
+            updatedTask.id,
+          ],
+        );
+      }
+    } else if (existingAgenda) {
+      await client.query('DELETE FROM public.agenda WHERE id = $1', [existingAgenda.id]);
+    }
+
+    await client.query('COMMIT');
+    res.json(updatedTask);
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 };
 
@@ -478,14 +582,25 @@ export const concluirTarefa = async (req: Request, res: Response) => {
 
 export const deleteTarefa = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const client = await pool.connect();
   try {
-    const result = await pool.query('UPDATE public.tarefas SET ativo = FALSE WHERE id = $1', [id]);
+    await client.query('BEGIN');
+
+    await client.query('DELETE FROM public.agenda WHERE id_tarefa = $1', [id]);
+
+    const result = await client.query('UPDATE public.tarefas SET ativo = FALSE WHERE id = $1', [id]);
     if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Tarefa não encontrada' });
     }
+
+    await client.query('COMMIT');
     res.status(204).send();
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 };
