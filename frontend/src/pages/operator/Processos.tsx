@@ -360,6 +360,55 @@ const formatDateTimeToPtBR = (value: string | null | undefined): string => {
 const formatOabDigits = (value: string): string => value.replace(/\D/g, "").slice(0, 12);
 const normalizeUf = (value: string): string => value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase();
 
+const UF_BY_RAMO_TR: Record<string, Record<string, string>> = {
+    "8": {
+        "01": "AC",
+        "02": "AL",
+        "03": "AM",
+        "04": "AP",
+        "05": "BA",
+        "06": "CE",
+        "07": "DF",
+        "08": "ES",
+        "09": "GO",
+        "10": "MA",
+        "11": "MT",
+        "12": "MS",
+        "13": "MG",
+        "14": "PA",
+        "15": "PB",
+        "16": "PR",
+        "17": "PE",
+        "18": "PI",
+        "19": "RJ",
+        "20": "RN",
+        "21": "RS",
+        "22": "RO",
+        "23": "RR",
+        "24": "SC",
+        "25": "SP",
+        "26": "SE",
+        "27": "TO",
+    },
+};
+
+const inferUfFromProcessNumber = (value: string): string => {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length < 7) {
+        return "";
+    }
+
+    const ramoIndex = digits.length - 7;
+    const ramo = digits.charAt(ramoIndex);
+    const tribunal = digits.slice(ramoIndex + 1, ramoIndex + 3);
+    if (!ramo || tribunal.length !== 2) {
+        return "";
+    }
+
+    const ramoMap = UF_BY_RAMO_TR[ramo];
+    return ramoMap?.[tribunal] ?? "";
+};
+
 const mapApiOabMonitor = (payload: Record<string, unknown>): OabMonitor | null => {
     const idValue = parseOptionalInteger(payload.id);
     const ufRaw = pickFirstNonEmptyString(
@@ -870,6 +919,11 @@ const mapProcessoDetailToFormState = (
                     return candidate;
                 }
             }
+        }
+
+        const inferredFromNumero = inferUfFromProcessNumber(numeroValue);
+        if (inferredFromNumero) {
+            return inferredFromNumero;
         }
 
         return "";
@@ -2934,6 +2988,7 @@ export default function Processos() {
 
                     return "";
                 })();
+                const ufFromNumero = inferUfFromProcessNumber(numeroPayload);
                 const ufFromJurisdicao = (() => {
                     const raw = detail.process.jurisdicao;
                     if (typeof raw !== "string") {
@@ -2970,7 +3025,7 @@ export default function Processos() {
 
                     return "";
                 })();
-                const ufPayload = ufFromForm || ufFromProcess || ufFromJurisdicao;
+                const ufPayload = ufFromForm || ufFromProcess || ufFromNumero || ufFromJurisdicao;
                 if (!ufPayload) {
                     throw new Error("Informe a UF do processo antes de vincular.");
                 }
