@@ -32,7 +32,11 @@ SELECT
       0
     )
   END AS processos_limite_restante,
-  proc.numero AS processo_numero,
+  COALESCE(
+    to_jsonb(proc)->>'numero',
+    to_jsonb(proc)->>'numero_processo',
+    to_jsonb(proc)->>'numero_processo_cnj'
+  ) AS processo_numero,
   proc.uf AS processo_uf,
   proc.municipio AS processo_municipio,
   proc.orgao_julgador,
