@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Eye, EyeOff, Shield, Check, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +87,15 @@ export default function AlterarSenha() {
   const location = useLocation();
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
+  const redirectTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Password strength calculation
   const calculatePasswordStrength = (password: string): PasswordStrength => {
@@ -198,7 +207,12 @@ export default function AlterarSenha() {
 
       const redirectTarget = resolveRedirectTarget(wasForcedChange);
       if (redirectTarget && redirectTarget !== location.pathname) {
-        navigate(redirectTarget, { replace: true });
+        if (redirectTimeoutRef.current) {
+          clearTimeout(redirectTimeoutRef.current);
+        }
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          navigate(redirectTarget, { replace: true });
+        }, 1000);
       }
     } catch (error) {
       if (error instanceof ApiError) {
