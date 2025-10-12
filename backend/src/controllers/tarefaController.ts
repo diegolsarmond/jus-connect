@@ -515,7 +515,7 @@ export const updateTarefa = async (req: Request, res: Response) => {
             AND hora_inicio IS NOT DISTINCT FROM $5
             AND descricao IS NOT DISTINCT FROM $6
           ORDER BY dataatualizacao DESC NULLS LAST, datacadastro DESC
-          LIMIT 1`,
+          LIMIT 2`,
         [
           existingTaskRow.idempresa,
           existingTaskRow.idusuario ?? updatedTask.idusuario,
@@ -526,7 +526,7 @@ export const updateTarefa = async (req: Request, res: Response) => {
         ],
       );
 
-      if (legacyAgendaResult.rows.length > 0) {
+      if (legacyAgendaResult.rows.length === 1) {
         existingAgenda = legacyAgendaResult.rows[0];
 
         await client.query('UPDATE public.agenda SET id_tarefa = $1 WHERE id = $2', [
