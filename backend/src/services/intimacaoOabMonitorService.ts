@@ -153,6 +153,8 @@ const ensureTable = async (): Promise<void> => {
   await ensureTablePromise;
 };
 
+export const bootstrapIntimacaoOabMonitoradas = (): Promise<void> => ensureTable();
+
 const sanitizeUf = (input: string): string => input.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase();
 
 const sanitizeNumero = (input: string): string => input.replace(/\D/g, '').slice(0, 12);
