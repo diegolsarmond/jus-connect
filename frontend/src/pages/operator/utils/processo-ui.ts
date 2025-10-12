@@ -52,45 +52,14 @@ const NORMALIZE_TAG_REGEX = /<[^>]+>/gi;
 const MULTIPLE_SPACES_REGEX = /[ \t]{2,}/g;
 const HTML_ENTITY_DEC_REGEX = /&#(\d+);/g;
 const HTML_ENTITY_HEX_REGEX = /&#x([0-9a-f]+);/gi;
+const STYLE_TAG_REGEX = /<style\b[^>]*>[\s\S]*?<\/style>/gi;
 
 function removerCssInline(texto: string): string {
-  if (!texto.includes("{") || !texto.includes("}")) {
+  if (!texto.toLowerCase().includes("<style")) {
     return texto;
   }
 
-  let resultado = "";
-  let profundidade = 0;
-
-  for (let index = 0; index < texto.length; index += 1) {
-    const caractere = texto[index];
-
-    if (caractere === "{") {
-      profundidade += 1;
-
-      while (resultado.endsWith(" ") || resultado.endsWith("\t")) {
-        resultado = resultado.slice(0, -1);
-      }
-
-      while (resultado && !resultado.endsWith("\n")) {
-        resultado = resultado.slice(0, -1);
-      }
-
-      continue;
-    }
-
-    if (caractere === "}") {
-      if (profundidade > 0) {
-        profundidade -= 1;
-        continue;
-      }
-    }
-
-    if (profundidade === 0) {
-      resultado += caractere;
-    }
-  }
-
-  return resultado;
+  return texto.replace(STYLE_TAG_REGEX, "");
 }
 
 export function decodificarHtml(valor: string): string {
