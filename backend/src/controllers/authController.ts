@@ -17,6 +17,7 @@ import {
   EmailConfirmationTokenError,
   confirmEmailWithToken,
 } from '../services/emailConfirmationService';
+import { createPasswordResetRequest } from '../services/passwordResetService';
 
 const TRIAL_DURATION_DAYS = 14;
 const GRACE_PERIOD_DAYS = 10;
@@ -1173,6 +1174,68 @@ export const login = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Erro ao realizar login', error);
     res.status(500).json({ error: 'Não foi possível concluir a autenticação.' });
+  }
+};
+
+export const requestPasswordReset = async (req: Request, res: Response) => {
+  const emailValue = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+
+  if (!emailValue || !EMAIL_REGEX.test(emailValue)) {
+    res.status(400).json({ error: 'Informe um e-mail válido.' });
+    return;
+  }
+
+  const normalizedEmail = normalizeEmail(emailValue);
+
+  try {
+    const userResult = await pool.query(
+      `SELECT id, nome_completo, email
+         FROM public.usuarios
+        WHERE LOWER(email) = $1
+        LIMIT 1`,
+      [normalizedEmail],
+    );
+
+    if (userResult.rowCount === 0) {
+      res.status(200).json({
+        message:
+          'Se o e-mail informado estiver cadastrado, enviaremos as instruções para redefinir a senha.',
+      });
+      return;
+    }
+
+    const userRow = userResult.rows[0] as {
+      id: number;
+      nome_completo: unknown;
+      email: unknown;
+    };
+
+    const userEmail = typeof userRow.email === 'string' ? userRow.email.trim() : normalizedEmail;
+
+    if (!userEmail) {
+      res.status(200).json({
+        message:
+          'Se o e-mail informado estiver cadastrado, enviaremos as instruções para redefinir a senha.',
+      });
+      return;
+    }
+
+    await createPasswordResetRequest({
+      id: userRow.id,
+      nome_completo:
+        typeof userRow.nome_completo === 'string' && userRow.nome_completo.trim()
+          ? userRow.nome_completo
+          : 'Usuário',
+      email: userEmail,
+    });
+
+    res.status(200).json({
+      message:
+        'Se o e-mail informado estiver cadastrado, enviaremos as instruções para redefinir a senha.',
+    });
+  } catch (error) {
+    console.error('Erro ao solicitar redefinição de senha', error);
+    res.status(500).json({ error: 'Não foi possível redefinir a senha do usuário.' });
   }
 };
 

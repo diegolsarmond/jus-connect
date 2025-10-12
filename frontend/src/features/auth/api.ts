@@ -331,3 +331,82 @@ export const changePasswordRequest = async (
         : "Senha atualizada com sucesso.",
   };
 };
+
+export const requestPasswordReset = async (
+  email: string,
+): Promise<{ message: string }> => {
+  const response = await fetch(getApiUrl("auth/request-password-reset"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response);
+  }
+
+  const data = (await response.json()) as { message?: unknown };
+  return {
+    message:
+      typeof data?.message === "string" && data.message.trim().length > 0
+        ? data.message
+        : "Se o e-mail informado estiver cadastrado, enviaremos as instruções para redefinir a senha.",
+  };
+};
+
+export const confirmEmailRequest = async (
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ message: string; confirmedAt?: string }> => {
+  const normalizedToken = token.trim();
+
+  if (!normalizedToken) {
+    throw new ApiError("Token de confirmação inválido.", 400);
+  }
+
+  const response = await fetch(getApiUrl("auth/confirm-email"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ token: normalizedToken }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response);
+  }
+
+  const data = (await response.json()) as {
+    message?: unknown;
+    confirmedAt?: unknown;
+    confirmed_at?: unknown;
+  };
+
+  const confirmedAtRaw = typeof data?.confirmedAt === "string"
+    ? data.confirmedAt
+    : typeof data?.confirmed_at === "string"
+      ? data.confirmed_at
+      : null;
+
+  let confirmedAt: string | undefined;
+
+  if (confirmedAtRaw) {
+    const parsed = new Date(confirmedAtRaw);
+    if (!Number.isNaN(parsed.getTime())) {
+      confirmedAt = parsed.toISOString();
+    }
+  }
+
+  return {
+    message:
+      typeof data?.message === "string" && data.message.trim().length > 0
+        ? data.message
+        : "E-mail confirmado com sucesso.",
+    confirmedAt,
+  };
+};

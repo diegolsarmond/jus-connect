@@ -958,7 +958,7 @@ export default function MeuPerfil() {
   );
 
   const handleAddressSave = useCallback(
-    (field: "street" | "city" | "state" | "zip") =>
+    (field: "street" | "number" | "complement" | "neighborhood" | "city" | "state" | "zip") =>
       async (rawValue: string) => {
         await mutateProfile({ address: { [field]: toNullableString(rawValue) } });
       },
@@ -984,6 +984,7 @@ export default function MeuPerfil() {
           if (response.ok) {
             const data = (await response.json()) as {
               logradouro?: string;
+              bairro?: string;
               localidade?: string;
               uf?: string;
               erro?: boolean;
@@ -998,6 +999,13 @@ export default function MeuPerfil() {
                 const street = toNullableString(data.logradouro);
                 if (street !== null) {
                   address.street = street;
+                }
+              }
+
+              if (typeof data.bairro === "string") {
+                const neighborhood = toNullableString(data.bairro);
+                if (neighborhood !== null) {
+                  address.neighborhood = neighborhood;
                 }
               }
 
@@ -1457,6 +1465,24 @@ export default function MeuPerfil() {
                   label="Rua"
                   value={profile.address.street ?? ""}
                   onSave={handleAddressSave("street")}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
+                  label="Número"
+                  value={profile.address.number ?? ""}
+                  onSave={handleAddressSave("number")}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
+                  label="Complemento"
+                  value={profile.address.complement ?? ""}
+                  onSave={handleAddressSave("complement")}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
+                  label="Bairro"
+                  value={profile.address.neighborhood ?? ""}
+                  onSave={handleAddressSave("neighborhood")}
                   disabled={isUpdatingProfile}
                 />
                 <EditableField

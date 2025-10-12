@@ -4,6 +4,7 @@ import {
   confirmEmail,
   getCurrentUser,
   login,
+  requestPasswordReset,
   refreshToken,
   register,
 } from '../controllers/authController';
@@ -122,6 +123,8 @@ router.post('/auth/register', sensitiveIpRateLimiter, register);
  *         description: Token já utilizado
  */
 router.post('/auth/confirm-email', sensitiveIpRateLimiter, confirmEmail);
+
+router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPasswordReset);
 
 /**
  * @swagger

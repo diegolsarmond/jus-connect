@@ -69,6 +69,7 @@ import NotificacoesPreferencias from "./pages/operator/configuracoes/usuarios/No
 import Login from "./pages/operator/Login";
 import Register from "./pages/operator/Register";
 import RecuperarSenha from "./pages/operator/RecuperarSenha";
+import ConfirmEmail from "./pages/operator/ConfirmEmail";
 import NotFound from "./pages/operator/NotFound";
 import SiteIndex from "./pages/site/Index";
 import SiteServices from "./pages/site/Services";
@@ -145,6 +146,7 @@ const App = () => (
               <Route path="/termos-de-uso" element={<SiteTermsOfUse />} />
               <Route path={routes.login} element={<Login />} />
               <Route path={routes.register} element={<Register />} />
+              <Route path={routes.confirmEmail} element={<ConfirmEmail />} />
               <Route path={routes.forgotPassword} element={<RecuperarSenha />} />
               <Route
                 element={(

@@ -18,6 +18,7 @@ export const routes = {
   dashboard: route("/app"),
   login: route("/login"),
   register: route("/register"),
+  confirmEmail: route("/confirmar-email"),
   forgotPassword: route("/recuperar-senha"),
   meuPlano: route("/meu-plano"),
   meuPlanoPayment: route("/meu-plano/gerenciar-pagamento"),
