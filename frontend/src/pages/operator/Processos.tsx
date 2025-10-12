@@ -2636,10 +2636,11 @@ export default function Processos() {
                 }));
             } catch (error) {
                 console.error(error);
-                setUnassignedMunicipiosByUf((prev) => ({
-                    ...prev,
-                    [normalized]: [],
-                }));
+                setUnassignedMunicipiosByUf((prev) => {
+                    const next = { ...prev };
+                    delete next[normalized];
+                    return next;
+                });
                 setUnassignedMunicipiosErrorByUf((prev) => ({
                     ...prev,
                     [normalized]: "Erro ao carregar municípios",
