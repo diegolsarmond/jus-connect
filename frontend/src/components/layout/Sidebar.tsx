@@ -168,7 +168,6 @@ export function Sidebar() {
       },
       { name: "Intimações", href: "/intimacoes", icon: BellRing, moduleId: "intimacoes" },
       { name: "Documentos Padrões", href: "/documentos", icon: FileText, moduleId: "documentos" },
-      { name: "Meus Arquivos", href: "/arquivos", icon: Folder, moduleId: "arquivos" },
       { name: "Financeiro", href: "/financeiro/lancamentos", icon: DollarSign, moduleId: "financeiro" },
       { name: "Relatórios", href: "/relatorios", icon: BarChart3, moduleId: "relatorios" },
       { name: "Meu Plano", href: "/meu-plano", icon: CreditCard, moduleId: "meu-plano" },
