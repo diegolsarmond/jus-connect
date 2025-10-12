@@ -194,8 +194,7 @@ const DetalhesProcesso = () => {
                 : typeof movement.detalhes === "string" && movement.detalhes.length > 0
                 ? movement.detalhes
                 : undefined,
-          }))
-          .reverse();
+          }));
 
         const orgaoDireto = Array.isArray(tramitacaoRaw?.orgaoJulgador)
           ? (tramitacaoRaw.orgaoJulgador as Array<Record<string, unknown>>)[0]

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bell,
@@ -706,6 +706,9 @@ export default function MeuPerfil() {
   const [isSpecialtyLoading, setIsSpecialtyLoading] = useState(false);
   const [specialtyError, setSpecialtyError] = useState<string | null>(null);
 
+  const latestZipLookupIdRef = useRef(0);
+  const zipLookupAbortRef = useRef<AbortController | null>(null);
+
   const loadProfile = useCallback(async (signal?: AbortSignal) => {
     setIsProfileLoading(true);
     setProfileError(null);
@@ -959,6 +962,74 @@ export default function MeuPerfil() {
       async (rawValue: string) => {
         await mutateProfile({ address: { [field]: toNullableString(rawValue) } });
       },
+    [mutateProfile],
+  );
+
+  const handleZipSave = useCallback(
+    async (rawValue: string) => {
+      const zipValue = toNullableString(rawValue);
+      const address: NonNullable<UpdateMeuPerfilPayload["address"]> = { zip: zipValue };
+      const digits = zipValue?.replace(/\D/g, "") ?? "";
+      const requestId = latestZipLookupIdRef.current + 1;
+      latestZipLookupIdRef.current = requestId;
+
+      if (digits.length === 8) {
+        const controller = new AbortController();
+        zipLookupAbortRef.current?.abort();
+        zipLookupAbortRef.current = controller;
+        try {
+          const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`, {
+            signal: controller.signal,
+          });
+          if (response.ok) {
+            const data = (await response.json()) as {
+              logradouro?: string;
+              localidade?: string;
+              uf?: string;
+              erro?: boolean;
+            };
+
+            if (requestId !== latestZipLookupIdRef.current) {
+              return;
+            }
+
+            if (!data?.erro) {
+              if (typeof data.logradouro === "string") {
+                const street = toNullableString(data.logradouro);
+                if (street !== null) {
+                  address.street = street;
+                }
+              }
+
+              if (typeof data.localidade === "string") {
+                const city = toNullableString(data.localidade);
+                if (city !== null) {
+                  address.city = city;
+                }
+              }
+
+              if (typeof data.uf === "string") {
+                const state = toNullableString(data.uf);
+                if (state !== null) {
+                  address.state = state;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          if (isAbortError(error)) {
+            return;
+          }
+          console.error("Erro ao buscar CEP:", error);
+        } finally {
+          if (zipLookupAbortRef.current === controller) {
+            zipLookupAbortRef.current = null;
+          }
+        }
+      }
+
+      await mutateProfile({ address });
+    },
     [mutateProfile],
   );
 
@@ -1376,6 +1447,13 @@ export default function MeuPerfil() {
             {profile && (
               <div className="grid gap-4 md:grid-cols-2">
                 <EditableField
+                  label="CEP"
+                  value={profile.address.zip ?? ""}
+                  onSave={handleZipSave}
+                  validation={validateZip}
+                  disabled={isUpdatingProfile}
+                />
+                <EditableField
                   label="Rua"
                   value={profile.address.street ?? ""}
                   onSave={handleAddressSave("street")}
@@ -1391,13 +1469,6 @@ export default function MeuPerfil() {
                   label="Estado"
                   value={profile.address.state ?? ""}
                   onSave={handleAddressSave("state")}
-                  disabled={isUpdatingProfile}
-                />
-                <EditableField
-                  label="CEP"
-                  value={profile.address.zip ?? ""}
-                  onSave={handleAddressSave("zip")}
-                  validation={validateZip}
                   disabled={isUpdatingProfile}
                 />
               </div>
