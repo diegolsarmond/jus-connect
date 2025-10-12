@@ -52,6 +52,8 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
 import cronJobs from './services/cronJobs';
+import { bootstrapOabMonitoradas } from './services/oabMonitorService';
+import { bootstrapIntimacaoOabMonitoradas } from './services/intimacaoOabMonitorService';
 import { ensureChatSchema } from './services/chatSchema';
 import { ensureProcessSyncSchema } from './services/processSyncSchema';
 import { ensureSupportSchema } from './services/supportSchema';
@@ -332,10 +334,6 @@ app.use('/api', authRoutes);
 app.use('/api', protectedApiRouter);
 app.use('/api/v1', authenticateRequest, usuarioRoutes);
 
-// Background jobs
-cronJobs.startProjudiSyncJob();
-cronJobs.startAsaasChargeSyncJob();
-
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);
 
@@ -390,11 +388,20 @@ if (!hasFrontendBuild) {
 
 async function startServer() {
   try {
-    await Promise.all([ensureChatSchema(), ensureSupportSchema(), ensureProcessSyncSchema()]);
+    await Promise.all([
+      ensureChatSchema(),
+      ensureSupportSchema(),
+      ensureProcessSyncSchema(),
+      bootstrapOabMonitoradas(),
+      bootstrapIntimacaoOabMonitoradas(),
+    ]);
   } catch (error) {
     console.error('Failed to initialize application storage schema', error);
     process.exit(1);
   }
+
+  cronJobs.startProjudiSyncJob();
+  cronJobs.startAsaasChargeSyncJob();
 
   const server = app.listen(port, () => {
     const actualPort = (server.address() as AddressInfo).port;
