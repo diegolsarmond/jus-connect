@@ -53,9 +53,10 @@ const MULTIPLE_SPACES_REGEX = /[ \t]{2,}/g;
 const HTML_ENTITY_DEC_REGEX = /&#(\d+);/g;
 const HTML_ENTITY_HEX_REGEX = /&#x([0-9a-f]+);/gi;
 const STYLE_TAG_REGEX = /<style\b[^>]*>[\s\S]*?<\/style>/gi;
+const STYLE_TAG_START_REGEX = /<style\b/i;
 
 function removerCssInline(texto: string): string {
-  if (!texto.toLowerCase().includes("<style")) {
+  if (!STYLE_TAG_START_REGEX.test(texto)) {
     return texto;
   }
 
