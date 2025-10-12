@@ -44,6 +44,7 @@ SELECT
     to_jsonb(proc)->>'tipo',
     to_jsonb(proc)->>'tipo_processo'
   ) AS processo_tipo,
+n
   proc.status AS processo_status,
   proc.classe_judicial,
   proc.assunto AS processo_assunto,
