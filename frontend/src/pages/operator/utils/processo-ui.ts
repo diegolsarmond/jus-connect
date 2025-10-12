@@ -53,6 +53,89 @@ const MULTIPLE_SPACES_REGEX = /[ \t]{2,}/g;
 const HTML_ENTITY_DEC_REGEX = /&#(\d+);/g;
 const HTML_ENTITY_HEX_REGEX = /&#x([0-9a-f]+);/gi;
 
+const CSS_SELECTOR_LINE_REGEX =
+  /^[\s0-9A-Za-z@.#*,:>+~"'\-()[\]=%/\\]+$/u;
+
+function removerCssInline(texto: string): string {
+  if (!texto.includes("{") || !texto.includes("}")) {
+    return texto;
+  }
+
+  const partes: string[] = [];
+  let profundidade = 0;
+  let ultimoIndiceMantido = 0;
+
+  for (let index = 0; index < texto.length; index += 1) {
+    const caractere = texto[index];
+
+    if (caractere === "{") {
+      if (profundidade === 0) {
+        let inicioLinha = texto.lastIndexOf("\n", index - 1);
+        inicioLinha = inicioLinha === -1 ? 0 : inicioLinha + 1;
+
+        let inicioRemocao = inicioLinha;
+
+        while (inicioRemocao > 0) {
+          const anteriorQuebra = texto.lastIndexOf("\n", inicioRemocao - 2);
+          const inicioAnterior = anteriorQuebra === -1 ? 0 : anteriorQuebra + 1;
+          const linhaAnterior = texto.slice(inicioAnterior, inicioRemocao - 1);
+          const linhaAnteriorAjustada = linhaAnterior.trim();
+
+          if (!linhaAnteriorAjustada) {
+            inicioRemocao = inicioAnterior;
+            break;
+          }
+
+          if (CSS_SELECTOR_LINE_REGEX.test(linhaAnteriorAjustada)) {
+            inicioRemocao = inicioAnterior;
+            continue;
+          }
+
+          break;
+        }
+
+        partes.push(texto.slice(ultimoIndiceMantido, inicioRemocao));
+        ultimoIndiceMantido = index + 1;
+      }
+
+      profundidade += 1;
+      continue;
+    }
+
+    if (caractere === "}" && profundidade > 0) {
+      profundidade -= 1;
+
+      if (profundidade === 0) {
+        let proximoIndice = index + 1;
+
+        while (proximoIndice < texto.length && /\s/.test(texto[proximoIndice])) {
+          const atual = texto[proximoIndice];
+          proximoIndice += 1;
+
+          if (atual === "\n") {
+            while (proximoIndice < texto.length && texto[proximoIndice] === "\n") {
+              proximoIndice += 1;
+            }
+            break;
+          }
+        }
+
+        ultimoIndiceMantido = proximoIndice;
+        index = proximoIndice - 1;
+      }
+
+      continue;
+    }
+  }
+
+  if (ultimoIndiceMantido < texto.length) {
+    partes.push(texto.slice(ultimoIndiceMantido));
+  }
+
+  const semCss = partes.join("").replace(/\/\*[\s\S]*?\*\//g, "");
+  return semCss;
+}
+
 export function decodificarHtml(valor: string): string {
   if (typeof valor !== "string" || !valor) {
     return "";
@@ -93,6 +176,7 @@ export function normalizarTexto(valor?: string | null): string {
     .replace(/\r\n/g, "\n")
     .replace(/\u00a0/g, " ");
 
+  texto = removerCssInline(texto);
   texto = texto.replace(NORMALIZE_TAG_REGEX, " ");
   texto = texto.replace(/\*\*/g, "");
   texto = texto.replace(/\\/g, "");
