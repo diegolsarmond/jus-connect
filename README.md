@@ -124,6 +124,20 @@ Configure as seguintes variáveis antes de iniciar o backend. Utilize o arquivo 
 | `ASAAS_WEBHOOK_SECRET` | Segredo configurado no webhook para validar a assinatura `x-asaas-signature`.                                                                       |
 | `ASAAS_ENVIRONMENT`    | Ambiente utilizado ao consumir a API. Aceita `homologacao` (padrão) ou os aliases de produção `producao`, `produção`, `production`, `prod` e `live`. |
 
+### SMTP para envio de e-mails
+
+Para que o fluxo de confirmação de cadastro funcione, defina as credenciais do servidor SMTP utilizado pela sua organização:
+
+| Variável                    | Descrição |
+| --------------------------- | --------- |
+| `SMTP_HOST`                 | Hostname do servidor SMTP (ex.: `smtp.seuprovedor.com`). |
+| `SMTP_PORT`                 | Porta utilizada na conexão (`587` para STARTTLS, `465` para TLS direto). |
+| `SMTP_SECURE`               | Informe `true` quando o servidor exige TLS direto na conexão (porta 465). Para STARTTLS utilize `false`. |
+| `SMTP_REJECT_UNAUTHORIZED`  | Mantenha `true` para validar o certificado. Ajuste para `false` apenas em ambientes de teste com certificados autoassinados. |
+| `SMTP_USER` e `SMTP_PASSWORD` | Credenciais válidas no servidor SMTP. |
+| `SMTP_FROM`                 | Endereço remetente padrão (deve corresponder a um endereço autorizado pelo servidor). |
+| `SMTP_FROM_NAME`            | Nome exibido no remetente dos e-mails (opcional). |
+
 > 💡 Defina as mesmas chaves no ambiente de build do frontend caso ele consuma endpoints intermediários (`VITE_API_URL`).
 
 ### Como obter o token de acesso
