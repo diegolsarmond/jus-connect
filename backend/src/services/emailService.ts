@@ -52,12 +52,16 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig | null = isSmtpConfigured
 const systemName = process.env.SYSTEM_NAME || 'Quantum JUD';
 const fallbackFromAddress = 'no-reply@quantumtecnologia.com.br';
 const smtpFrom = process.env.SMTP_FROM;
+const normalizedSmtpFrom = smtpFrom?.trim();
+const normalizedSmtpUser = smtpUser?.trim();
+const resolveValidAddress = (value: string | undefined | null) =>
+  value && value.includes('@') ? value : null;
 const defaultFromAddress =
-  (smtpFrom && smtpFrom.includes('@') ? smtpFrom : null) ??
-  (smtpUser && smtpUser.includes('@') ? smtpUser : null) ??
+  resolveValidAddress(normalizedSmtpFrom) ??
+  resolveValidAddress(normalizedSmtpUser) ??
   fallbackFromAddress;
 const usingFallbackFromAddress =
-  !(smtpFrom && smtpFrom.includes('@')) && !(smtpUser && smtpUser.includes('@'));
+  !resolveValidAddress(normalizedSmtpFrom) && !resolveValidAddress(normalizedSmtpUser);
 const defaultFromName = process.env.SMTP_FROM_NAME || systemName;
 
 export interface SendEmailParams {
@@ -213,6 +217,13 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
     console.warn(
       `Remetente SMTP padrão indefinido ou inválido. Defina SMTP_FROM com um endereço de e-mail válido. Usando "${fallbackFromAddress}" como padrão.`
     );
+  }
+
+  if (!defaultFromAddress || !defaultFromAddress.includes('@')) {
+    console.error(
+      'Não foi possível determinar um remetente SMTP válido. Defina SMTP_FROM com um endereço de e-mail válido.'
+    );
+    return;
   }
 
   const { host, port, auth, rejectUnauthorized, secure } = DEFAULT_SMTP_CONFIG;
