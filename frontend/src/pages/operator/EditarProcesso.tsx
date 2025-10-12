@@ -315,6 +315,13 @@ const EditarProcesso = () => {
       }
 
       toast({ title: "Processo atualizado com sucesso" });
+      const numero = processo?.numero && processo.numero.trim().length > 0 ? processo.numero.trim() : null;
+
+      if (numero) {
+        navigate(`/processos/${encodeURIComponent(numero)}`);
+        return;
+      }
+
       navigate(`/processos/${processoId}`);
     } catch (error) {
       const mensagem =
