@@ -1402,9 +1402,7 @@ export default function VisualizarCliente() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => {
-                                  navigate(
-                                    `/processos/${encodeURIComponent(p.numero || String(p.id))}`
-                                  );
+                                  navigate(`/processos/${p.id}`);
                                 }}
                               >
                                 <Eye className="h-4 w-4" />
