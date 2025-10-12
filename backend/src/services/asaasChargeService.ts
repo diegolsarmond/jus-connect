@@ -4,6 +4,7 @@ import pool from './db';
 import resolveAsaasIntegration, {
   AsaasIntegrationNotConfiguredError,
 } from './asaas/integrationResolver';
+import { AsaasApiError } from './asaas/asaasClient';
 import { normalizeAsaasEnvironment } from './asaas/urlNormalization';
 
 export const ASAAS_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD', 'DEBIT_CARD'] as const;
@@ -167,17 +168,50 @@ class HttpAsaasClient implements AsaasClient {
     });
 
     if (!response.ok) {
-      let errorBody: unknown;
+      let errorBody: unknown = null;
+      let message = 'Falha ao criar cobrança no Asaas';
+      let errorCode: string | undefined;
       try {
         errorBody = await response.json();
       } catch (error) {
-        errorBody = await response.text();
+        try {
+          errorBody = await response.text();
+        } catch (textError) {
+          errorBody = null;
+        }
       }
 
-      const error = new Error('Falha ao criar cobrança no Asaas');
-      (error as Error & { status?: number; body?: unknown }).status = response.status;
-      (error as Error & { status?: number; body?: unknown }).body = errorBody;
-      throw error;
+      if (errorBody && typeof errorBody === 'object') {
+        const payload = errorBody as Record<string, unknown>;
+        if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+          const firstError = payload.errors[0];
+          if (firstError && typeof firstError === 'object') {
+            const normalized = firstError as Record<string, unknown>;
+            const description = normalized.description;
+            const errMessage = normalized.message;
+            if (typeof description === 'string' && description.trim()) {
+              message = description.trim();
+            } else if (typeof errMessage === 'string' && errMessage.trim()) {
+              message = errMessage.trim();
+            }
+            const code = normalized.code;
+            if (typeof code === 'string' && code.trim()) {
+              errorCode = code.trim();
+            }
+          }
+        } else if (typeof payload.message === 'string' && payload.message.trim()) {
+          message = payload.message.trim();
+          if (typeof payload.code === 'string' && payload.code.trim()) {
+            errorCode = payload.code.trim();
+          }
+        } else if (typeof payload.error === 'string' && payload.error.trim()) {
+          message = payload.error.trim();
+        }
+      } else if (typeof errorBody === 'string' && errorBody.trim()) {
+        message = errorBody.trim();
+      }
+
+      throw new AsaasApiError(message, response.status, errorBody, errorCode);
     }
 
     const data = (await response.json()) as AsaasClientChargeResponse;
