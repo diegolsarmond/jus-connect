@@ -108,6 +108,10 @@ const parseSubscriptionStatus = (value: unknown, fallback: SubscriptionStatus): 
   }
 
   const normalized = value.trim().toLowerCase();
+  if (normalized === "trial") {
+    return "trialing";
+  }
+
   if (
     normalized === "active" ||
     normalized === "trialing" ||
