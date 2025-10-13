@@ -31,7 +31,12 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
-import { createPlanPayment, PlanPaymentMethod, PlanPaymentResult } from "@/features/plans/api";
+import {
+  createPlanPayment,
+  normalizePlanPaymentResult,
+  PlanPaymentMethod,
+  PlanPaymentResult,
+} from "@/features/plans/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { getApiUrl } from "@/lib/api";
 import { fetchFlows, tokenizeCard, type CardTokenPayload, type Flow } from "@/lib/flows";
@@ -409,11 +414,7 @@ const ManagePlanPayment = () => {
           return;
         }
 
-        if (!payload || typeof payload !== "object") {
-          return;
-        }
-
-        const data = payload as PlanPaymentResult;
+        const data = normalizePlanPaymentResult(payload, selectedPlanId);
         const planData = data.plan ?? null;
         if (planData && planData.id !== null && planData.id !== selectedPlanId) {
           return;
