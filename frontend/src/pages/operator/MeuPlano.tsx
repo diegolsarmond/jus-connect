@@ -122,6 +122,7 @@ function normalizeApiRows(data: unknown): unknown[] {
 
 export default function MeuPlano() {
   return <Plans />;
+
 }
 
 function toNumber(value: unknown): number | null {

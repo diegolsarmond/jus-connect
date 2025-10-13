@@ -423,9 +423,21 @@ const FinancialFlows = () => {
     return format(date, 'dd/MM/yyyy');
   };
 
+  const eligibleFlows = useMemo(() => {
+    return flows.filter((flow) => {
+      const hasAssociation = Boolean(flow.cliente_id || flow.fornecedor_id);
+      if (hasAssociation) {
+        return true;
+      }
+
+      const description = (typeof flow.descricao === 'string' ? flow.descricao : '').toLowerCase();
+      return !description.includes('assinatura');
+    });
+  }, [flows]);
+
   const detailedFlows = useMemo<FlowWithDetails[]>(() => {
     const today = startOfDay(new Date());
-    return flows.map((flow) => {
+    return eligibleFlows.map((flow) => {
       const parsedDueDate = flow.vencimento ? parseISO(flow.vencimento) : null;
       const dueDate = parsedDueDate && isValid(parsedDueDate) ? parsedDueDate : null;
       const parsedPaymentDate = flow.pagamento ? parseISO(flow.pagamento) : null;
@@ -449,7 +461,7 @@ const FinancialFlows = () => {
         canManuallySettle: Boolean(normalizedId),
       };
     });
-  }, [flows]);
+  }, [eligibleFlows]);
 
   const filteredFlows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -547,7 +559,8 @@ const FinancialFlows = () => {
     return totals;
   }, [filteredFlows]);
 
-  const hasAnyFlow = detailedFlows.length > 0;
+  const hasAnyEligibleFlow = eligibleFlows.length > 0;
+  const hasAnyRawFlow = flows.length > 0;
 
   const datedPeriods = useMemo(() => periods.filter((period) => period.key !== 'sem-data'), [periods]);
   const undatedPeriod = useMemo(
@@ -1407,9 +1420,11 @@ const FinancialFlows = () => {
         </div>
       ) : (
         <Card className="p-4 sm:p-6 text-center text-muted-foreground">
-          {hasAnyFlow
+          {hasAnyEligibleFlow
             ? 'Nenhum lançamento atende aos filtros selecionados. Ajuste os filtros para visualizar outras cobranças.'
-            : 'Nenhum lançamento financeiro cadastrado até o momento.'}
+            : hasAnyRawFlow
+              ? 'Nenhum lançamento elegível para exibição. Apenas lançamentos vinculados a clientes ou fornecedores são exibidos.'
+              : 'Nenhum lançamento financeiro cadastrado até o momento.'}
         </Card>
       )}
 
