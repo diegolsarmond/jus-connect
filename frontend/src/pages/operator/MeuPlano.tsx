@@ -987,7 +987,7 @@ function MeuPlanoContent() {
   const hasMensalPricingAvailable = hasMensalPricing(planoExibido);
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold">Meu Plano</h1>
         <p className="text-muted-foreground">
@@ -1110,7 +1110,7 @@ function MeuPlanoContent() {
 
               <Separator className="border-primary/20" />
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">Plano contratado</p>
                   <p className="text-sm font-semibold text-foreground">{planoAtual.nome}</p>
@@ -1358,7 +1358,7 @@ function MeuPlanoContent() {
           </Card>
 
           {isTrialing && (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
               <Card className="rounded-3xl border border-border/60">
                 <CardHeader>
                   <CardTitle>Utilização dos recursos</CardTitle>
@@ -1383,7 +1383,7 @@ function MeuPlanoContent() {
                       const currentFormatted = hasCurrent ? countFormatter.format(item.current ?? 0) : "—";
                       return (
                         <div key={item.label} className="space-y-2 rounded-2xl border border-border/60 p-4">
-                          <div className="flex items-center justify-between text-sm font-medium">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-medium">
                             <span>{item.label}</span>
                             <span className="text-foreground">
                               {hasLimit
@@ -1426,7 +1426,7 @@ function MeuPlanoContent() {
                       Este plano não possui benefícios listados. Atualize os dados do plano para exibir aqui.
                     </p>
                   ) : (
-                    <ul className="grid gap-3 sm:grid-cols-2">
+                    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {beneficios.map((beneficio) => (
                         <li
                           key={beneficio}
