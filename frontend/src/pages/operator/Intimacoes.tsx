@@ -1190,7 +1190,7 @@ export default function Intimacoes() {
   const [oabDiasSemana, setOabDiasSemana] = useState<number[]>(DEFAULT_MONITOR_DAYS);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [oabSubmitting, setOabSubmitting] = useState(false);
-  const [oabSubmitError, setOabSubmitError] = useState<string | null>(null);
+  const [oabSubmitError, setOabSubmitError] = useState<ReactNode | null>(null);
   const [removingOabId, setRemovingOabId] = useState<string | null>(null);
   const [companyUsers, setCompanyUsers] = useState<CompanyUserOption[]>([]);
   const [companyUsersLoading, setCompanyUsersLoading] = useState(false);
@@ -1633,7 +1633,15 @@ export default function Intimacoes() {
       setOabNumber(option.oabNumber ?? "");
       setOabUf(option.oabUf ?? "");
       if (!option.oabNumber || !option.oabUf) {
-        setOabSubmitError("O responsável selecionado não possui OAB válida para monitoramento.");
+        setOabSubmitError(
+          <>
+            O responsável selecionado não possui OAB válida para monitoramento. Complemente o seu cadastro{" "}
+            <Link to="/meu-perfil" className="underline">
+              clicando aqui
+            </Link>{" "}
+            para cadastrar o registro da sua OAB.
+          </>,
+        );
         setOabDiasSemana(DEFAULT_MONITOR_DAYS);
         return;
       }
@@ -1676,7 +1684,15 @@ export default function Intimacoes() {
     }
 
     if (!sanitizedNumber || !sanitizedUf) {
-      setOabSubmitError("O responsável selecionado não possui OAB válida para monitoramento.");
+      setOabSubmitError(
+        <>
+          O responsável selecionado não possui OAB válida para monitoramento. Complemente o seu cadastro{" "}
+          <Link to="/meu-perfil" className="underline">
+            clicando aqui
+          </Link>{" "}
+          para cadastrar o registro da sua OAB.
+        </>,
+      );
       return;
     }
 
