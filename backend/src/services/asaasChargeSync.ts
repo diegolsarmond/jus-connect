@@ -2,6 +2,7 @@ import { URLSearchParams } from 'url';
 import type { QueryResultRow } from 'pg';
 import pool from './db';
 import { createNotification, type NotificationType } from './notificationService';
+import { isUndefinedTableError } from '../utils/databaseErrors';
 import {
   applySubscriptionOverdue,
   applySubscriptionPayment,
@@ -278,23 +279,32 @@ export class AsaasChargeSyncService {
   }
 
   private async loadPendingCharges(): Promise<AsaasChargeRow[]> {
-    const { rows } = await this.db.query(
-      'SELECT id, asaas_charge_id AS asaas_id, financial_flow_id, status FROM asaas_charges WHERE status = ANY($1)',
-      [TRACKED_PAYMENT_STATUSES],
-    );
-
-    return rows.map((row) => {
-      const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(
-        (row as Record<string, unknown>).financial_flow_id,
+    try {
+      const { rows } = await this.db.query(
+        'SELECT id, asaas_charge_id AS asaas_id, financial_flow_id, status FROM asaas_charges WHERE status = ANY($1)',
+        [TRACKED_PAYMENT_STATUSES],
       );
 
-      return {
-        id: Number(row.id),
-        asaas_id: String(row.asaas_id),
-        financial_flow_id: normalizedFinancialFlowId,
-        status: String(row.status),
-      } as AsaasChargeRow;
-    });
+      return rows.map((row) => {
+        const normalizedFinancialFlowId = normalizeFinancialFlowIdentifier(
+          (row as Record<string, unknown>).financial_flow_id,
+        );
+
+        return {
+          id: Number(row.id),
+          asaas_id: String(row.asaas_id),
+          financial_flow_id: normalizedFinancialFlowId,
+          status: String(row.status),
+        } as AsaasChargeRow;
+      });
+    } catch (error) {
+      if (isUndefinedTableError(error)) {
+        console.warn('Tabela asaas_charges ausente. Sincronização será ignorada.');
+        return [];
+      }
+
+      throw error;
+    }
   }
 
   private async fetchPayments(): Promise<AsaasPayment[]> {

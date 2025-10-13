@@ -18,6 +18,7 @@ import {
   confirmEmailWithToken,
 } from '../services/emailConfirmationService';
 import { createPasswordResetRequest } from '../services/passwordResetService';
+import { isUndefinedTableError } from '../utils/databaseErrors';
 
 const TRIAL_DURATION_DAYS = 14;
 const GRACE_PERIOD_DAYS = 10;
@@ -1172,6 +1173,12 @@ export const login = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
+    if (isUndefinedTableError(error)) {
+      console.error('Erro ao realizar login', error);
+      res.status(503).json({ error: 'Recursos de autenticação indisponíveis no momento.' });
+      return;
+    }
+
     console.error('Erro ao realizar login', error);
     res.status(500).json({ error: 'Não foi possível concluir a autenticação.' });
   }
