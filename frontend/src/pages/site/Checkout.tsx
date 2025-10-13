@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { plans } from "@/data/plans";
-import { supabase } from "@/integrations/supabase/client";
+import { getApiUrl } from "@/lib/api";
 import { CreditCard, FileText, Loader2, QrCode } from "lucide-react";
 
 const Checkout = () => {
@@ -49,6 +49,36 @@ const Checkout = () => {
   const value = cycle === "monthly" ? plan.monthlyPrice : plan.yearlyPrice;
   const cycleType = cycle === "monthly" ? "MONTHLY" : "YEARLY";
 
+  const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    let payload: unknown = null;
+    if (response.status !== 204) {
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        (payload && typeof payload === "object" && "error" in payload && payload.error)
+          ? String(payload.error)
+          : response.statusText || "Falha ao comunicar com o servidor.";
+      throw new Error(message);
+    }
+
+    return payload as T;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (loading) {
@@ -58,15 +88,12 @@ const Checkout = () => {
     setLoading(true);
 
     try {
-      const { data: customerResp, error: customerError } = await supabase.functions.invoke("get-or-create-customer", {
-        body: customerData,
+      const customerResp = await requestJson<{ id?: string }>(getApiUrl("site/asaas/customers"), {
+        method: "POST",
+        body: JSON.stringify(customerData),
       });
 
-      if (customerError) {
-        throw customerError;
-      }
-
-      const customerId = (customerResp as any)?.id;
+      const customerId = customerResp?.id;
       if (!customerId) {
         throw new Error("Não foi possível identificar o cliente");
       }
@@ -88,15 +115,15 @@ const Checkout = () => {
         }),
       };
 
-      const { data, error } = await supabase.functions.invoke("create-subscription", {
-        body: subscriptionData,
-      });
+      const subscriptionResp = await requestJson<{ id?: string }>(
+        getApiUrl("site/asaas/subscriptions"),
+        {
+          method: "POST",
+          body: JSON.stringify(subscriptionData),
+        },
+      );
 
-      if (error) {
-        throw error;
-      }
-
-      const subscriptionId = (data as any)?.id;
+      const subscriptionId = subscriptionResp?.id;
       if (subscriptionId) {
         if (typeof window !== "undefined") {
           localStorage.setItem("subscriptionId", subscriptionId);

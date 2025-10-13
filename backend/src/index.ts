@@ -48,6 +48,7 @@ import userProfileRoutes from './routes/userProfileRoutes';
 import wahaWebhookRoutes from './routes/wahaWebhookRoutes';
 import asaasWebhookRoutes from './routes/asaasWebhookRoutes';
 import authRoutes from './routes/authRoutes';
+import publicSubscriptionRoutes from './routes/publicSubscriptionRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -331,6 +332,7 @@ app.use('/api', asaasWebhookRoutes);
 app.use('/api', publicBlogPostRoutes);
 app.use('/api', publicPlanoRoutes);
 app.use('/api', authRoutes);
+app.use('/api', publicSubscriptionRoutes);
 app.use('/api', protectedApiRouter);
 app.use('/api/v1', authenticateRequest, usuarioRoutes);
 

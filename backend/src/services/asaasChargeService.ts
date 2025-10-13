@@ -127,6 +127,7 @@ export interface AsaasClientConfig {
 
 export interface AsaasClient {
   createCharge(payload: AsaasClientChargePayload): Promise<AsaasClientChargeResponse>;
+  getPaymentPixQrCode(chargeId: string): Promise<{ payload: string | null; encodedImage: string | null }>;
 }
 
 interface AsaasClientFactoryResult {
@@ -216,6 +217,91 @@ class HttpAsaasClient implements AsaasClient {
 
     const data = (await response.json()) as AsaasClientChargeResponse;
     return data;
+  }
+
+  async getPaymentPixQrCode(
+    chargeId: string,
+  ): Promise<{ payload: string | null; encodedImage: string | null }> {
+    if (!chargeId || typeof chargeId !== 'string' || !chargeId.trim()) {
+      throw new ValidationError('Identificador da cobrança do Asaas inválido');
+    }
+
+    const url = new URL(`payments/${encodeURIComponent(chargeId.trim())}/pixQrCode`, this.resolveBaseUrl());
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        access_token: this.config.apiKey,
+        Accept: 'application/json',
+      },
+    });
+
+    let responseBody: unknown = null;
+    try {
+      responseBody = await response.json();
+    } catch (error) {
+      try {
+        responseBody = await response.text();
+      } catch (textError) {
+        responseBody = null;
+      }
+    }
+
+    if (!response.ok) {
+      let message = 'Falha ao recuperar QR Code PIX no Asaas';
+      let errorCode: string | undefined;
+
+      if (responseBody && typeof responseBody === 'object') {
+        const payload = responseBody as Record<string, unknown>;
+        if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+          const firstError = payload.errors[0];
+          if (firstError && typeof firstError === 'object') {
+            const normalized = firstError as Record<string, unknown>;
+            const description = normalized.description;
+            const errMessage = normalized.message;
+            if (typeof description === 'string' && description.trim()) {
+              message = description.trim();
+            } else if (typeof errMessage === 'string' && errMessage.trim()) {
+              message = errMessage.trim();
+            }
+            const code = normalized.code;
+            if (typeof code === 'string' && code.trim()) {
+              errorCode = code.trim();
+            }
+          }
+        } else if (typeof payload.message === 'string' && payload.message.trim()) {
+          message = payload.message.trim();
+          if (typeof payload.code === 'string' && payload.code.trim()) {
+            errorCode = payload.code.trim();
+          }
+        } else if (typeof payload.error === 'string' && payload.error.trim()) {
+          message = payload.error.trim();
+        }
+      } else if (typeof responseBody === 'string' && responseBody.trim()) {
+        message = responseBody.trim();
+      }
+
+      throw new AsaasApiError(message, response.status, responseBody, errorCode);
+    }
+
+    const normalizedPayload =
+      responseBody && typeof responseBody === 'object'
+        ? (responseBody as Record<string, unknown>).payload
+        : null;
+    const normalizedEncodedImage =
+      responseBody && typeof responseBody === 'object'
+        ? (responseBody as Record<string, unknown>).encodedImage
+        : null;
+
+    const payloadValue =
+      typeof normalizedPayload === 'string' && normalizedPayload.trim() ? normalizedPayload : null;
+    const encodedImageValue =
+      typeof normalizedEncodedImage === 'string' && normalizedEncodedImage.trim()
+        ? normalizedEncodedImage
+        : null;
+
+    return { payload: payloadValue, encodedImage: encodedImageValue };
   }
 }
 
