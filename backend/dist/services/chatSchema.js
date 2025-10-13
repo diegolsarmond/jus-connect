@@ -11,6 +11,7 @@ const db_1 = __importDefault(require("./db"));
 let cachedSql = null;
 let initializationPromise = null;
 let cachedSchemaPath = null;
+let dependencyWarningLogged = false;
 async function resolveSchemaPath() {
     if (cachedSchemaPath) {
         return cachedSchemaPath;
@@ -49,13 +50,30 @@ async function loadSchemaSql() {
     cachedSql = sql;
     return sql;
 }
+async function ensureDependencies(client) {
+    const result = (await client.query("SELECT to_regclass('public.clientes') AS clientes"));
+    const hasClientes = Array.isArray(result.rows) && typeof result.rows[0]?.clientes === 'string';
+    if (!hasClientes) {
+        if (!dependencyWarningLogged) {
+            dependencyWarningLogged = true;
+            console.warn('Ignorando a criação do esquema de chat: tabela public.clientes ausente no banco de dados.');
+        }
+        return false;
+    }
+    return true;
+}
 async function executeSchema(client) {
     const sql = await loadSchemaSql();
     await client.query(sql);
 }
 async function ensureChatSchema(client = db_1.default) {
     if (!initializationPromise) {
-        initializationPromise = executeSchema(client).catch((error) => {
+        initializationPromise = (async () => {
+            if (!(await ensureDependencies(client))) {
+                return;
+            }
+            await executeSchema(client);
+        })().catch((error) => {
             initializationPromise = null;
             throw error;
         });
