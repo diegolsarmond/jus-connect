@@ -11,7 +11,7 @@ const SCHEMA_FILES = [
 ] as const;
 
 type Queryable = {
-  query: (text: string) => Promise<unknown>;
+  query: (text: string, params?: unknown[]) => Promise<unknown>;
 };
 
 type CachedSqlEntry = {
@@ -21,6 +21,7 @@ type CachedSqlEntry = {
 
 let cachedEntries: CachedSqlEntry[] | null = null;
 let initializationPromise: Promise<void> | null = null;
+let dependencyWarningLogged = false;
 
 async function resolveFilePath(file: string): Promise<string> {
   const candidatePaths = [
@@ -75,9 +76,36 @@ async function executeSchemas(client: Queryable): Promise<void> {
   }
 }
 
+async function ensureDependencies(client: Queryable): Promise<boolean> {
+  const result = (await client.query("SELECT to_regclass('public.processos') AS processos")) as {
+    rows?: Array<{ processos?: unknown }>;
+  };
+
+  const hasProcessos = Array.isArray(result.rows) && typeof result.rows[0]?.processos === 'string';
+
+  if (!hasProcessos) {
+    if (!dependencyWarningLogged) {
+      dependencyWarningLogged = true;
+      console.warn(
+        'Ignorando a criação do esquema de sincronização de processos: tabela public.processos ausente.'
+      );
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
 export async function ensureProcessSyncSchema(client: Queryable = pool): Promise<void> {
   if (!initializationPromise) {
-    initializationPromise = executeSchemas(client).catch((error) => {
+    initializationPromise = (async () => {
+      if (!(await ensureDependencies(client))) {
+        return;
+      }
+
+      await executeSchemas(client);
+    })().catch((error) => {
       initializationPromise = null;
       throw error;
     });

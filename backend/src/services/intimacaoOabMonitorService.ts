@@ -28,6 +28,7 @@ export interface IntimacaoOabMonitor {
 }
 
 let ensureTablePromise: Promise<void> | null = null;
+let dependencyWarningLogged = false;
 
 const ensureTable = async (): Promise<void> => {
   if (!ensureTablePromise) {
@@ -36,6 +37,26 @@ const ensureTable = async (): Promise<void> => {
       let inTransaction = false;
 
       try {
+        const dependencyResult = (await client.query(
+          "SELECT to_regclass('public.empresas') AS empresas"
+        )) as {
+          rows?: Array<{ empresas?: unknown }>;
+        };
+
+        const hasEmpresas =
+          Array.isArray(dependencyResult.rows) && typeof dependencyResult.rows[0]?.empresas === 'string';
+
+        if (!hasEmpresas) {
+          if (!dependencyWarningLogged) {
+            dependencyWarningLogged = true;
+            console.warn(
+              'Ignorando a criação da tabela oab_monitoradas: tabela public.empresas ausente no banco de dados.'
+            );
+          }
+
+          return;
+        }
+
         await client.query('BEGIN');
         inTransaction = true;
         await client.query("SELECT pg_advisory_xact_lock(hashtext('oab_monitoradas_schema'));");

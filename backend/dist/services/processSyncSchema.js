@@ -11,6 +11,7 @@ const db_1 = __importDefault(require("./db"));
 const SCHEMA_FILES = ['process_sync.sql', 'process_response.sql', 'sync_audit.sql', 'vw_processos_sync_targets.sql'];
 let cachedEntries = null;
 let initializationPromise = null;
+let dependencyWarningLogged = false;
 async function resolveFilePath(file) {
     const candidatePaths = [
         node_path_1.default.resolve(__dirname, '..', 'sql', file),
@@ -54,9 +55,26 @@ async function executeSchemas(client) {
         await client.query(entry.sql);
     }
 }
+async function ensureDependencies(client) {
+    const result = (await client.query("SELECT to_regclass('public.processos') AS processos"));
+    const hasProcessos = Array.isArray(result.rows) && typeof result.rows[0]?.processos === 'string';
+    if (!hasProcessos) {
+        if (!dependencyWarningLogged) {
+            dependencyWarningLogged = true;
+            console.warn('Ignorando a criação do esquema de sincronização de processos: tabela public.processos ausente.');
+        }
+        return false;
+    }
+    return true;
+}
 async function ensureProcessSyncSchema(client = db_1.default) {
     if (!initializationPromise) {
-        initializationPromise = executeSchemas(client).catch((error) => {
+        initializationPromise = (async () => {
+            if (!(await ensureDependencies(client))) {
+                return;
+            }
+            await executeSchemas(client);
+        })().catch((error) => {
             initializationPromise = null;
             throw error;
         });

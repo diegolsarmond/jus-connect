@@ -10,6 +10,7 @@ type Queryable = {
 let cachedSql: string | null = null;
 let initializationPromise: Promise<void> | null = null;
 let cachedSchemaPath: string | null = null;
+let dependencyWarningLogged = false;
 
 async function resolveSchemaPath(): Promise<string> {
   if (cachedSchemaPath) {
@@ -56,6 +57,27 @@ async function loadSchemaSql(): Promise<string> {
   return sql;
 }
 
+async function ensureDependencies(client: Queryable): Promise<boolean> {
+  const result = (await client.query("SELECT to_regclass('public.clientes') AS clientes")) as {
+    rows?: Array<{ clientes?: unknown }>;
+  };
+
+  const hasClientes = Array.isArray(result.rows) && typeof result.rows[0]?.clientes === 'string';
+
+  if (!hasClientes) {
+    if (!dependencyWarningLogged) {
+      dependencyWarningLogged = true;
+      console.warn(
+        'Ignorando a criação do esquema de chat: tabela public.clientes ausente no banco de dados.'
+      );
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
 async function executeSchema(client: Queryable): Promise<void> {
   const sql = await loadSchemaSql();
   await client.query(sql);
@@ -63,7 +85,13 @@ async function executeSchema(client: Queryable): Promise<void> {
 
 export async function ensureChatSchema(client: Queryable = pool): Promise<void> {
   if (!initializationPromise) {
-    initializationPromise = executeSchema(client).catch((error) => {
+    initializationPromise = (async () => {
+      if (!(await ensureDependencies(client))) {
+        return;
+      }
+
+      await executeSchema(client);
+    })().catch((error) => {
       initializationPromise = null;
       throw error;
     });
