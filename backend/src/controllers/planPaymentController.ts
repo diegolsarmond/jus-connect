@@ -922,6 +922,7 @@ export const getCurrentPlanPayment = async (req: Request, res: Response) => {
      WHERE ff.idempresa = $1
        AND ff.status = 'pendente'
        AND ac.billing_type = ANY(ARRAY['PIX','BOLETO','CREDIT_CARD','DEBIT_CARD'])
+       AND COALESCE((ac.raw_response::jsonb -> 'metadata' ->> 'origin'), '') = 'plan-payment'
      ORDER BY ac.created_at DESC, ff.vencimento DESC
      LIMIT 1`,
     [empresaId],
