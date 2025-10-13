@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import Plans from "@/pages/site/Plans";
 import {
   Card,
   CardContent,
@@ -121,13 +121,8 @@ function normalizeApiRows(data: unknown): unknown[] {
 }
 
 export default function MeuPlano() {
-  const navigate = useNavigate();
+  return <Plans />;
 
-  useEffect(() => {
-    navigate("/plans");
-  }, [navigate]);
-
-  return null;
 }
 
 function toNumber(value: unknown): number | null {
