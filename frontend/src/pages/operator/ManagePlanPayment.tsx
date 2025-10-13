@@ -396,6 +396,7 @@ const ManagePlanPayment = () => {
       try {
         const response = await fetch(getApiUrl("plan-payments/current"), {
           headers: { Accept: "application/json" },
+          credentials: "include",
           signal: controller.signal,
         });
 
