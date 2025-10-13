@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Plans from "@/pages/site/Plans";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -121,8 +121,14 @@ function normalizeApiRows(data: unknown): unknown[] {
 }
 
 export default function MeuPlano() {
-  return <Plans />;
+  const { user } = useAuth();
+  const { hasAccess } = evaluateSubscriptionAccess(user?.subscription ?? null);
 
+  if (!hasAccess) {
+    return <PlanSelection />;
+  }
+
+  return <MeuPlanoContent />;
 }
 
 function toNumber(value: unknown): number | null {
