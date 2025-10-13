@@ -347,13 +347,25 @@ export default class IntegrationApiKeyService {
       return;
     }
 
+    const integrationResult = await this.db.query(
+      'SELECT idempresa FROM integration_api_keys WHERE id = $1',
+      [integrationId],
+    );
+
+    const integrationRow = integrationResult.rows[0] as { idempresa?: number | string | null } | undefined;
+    const desiredEmpresaId = integrationRow ? mapEmpresaIdFromRow(integrationRow.idempresa ?? null) : null;
+
     const existing = await this.db.query(
-      'SELECT id, webhook_secret FROM asaas_credentials WHERE integration_api_key_id = $1',
+      'SELECT id, webhook_secret, idempresa FROM asaas_credentials WHERE integration_api_key_id = $1',
       [integrationId],
     );
 
     if (existing.rowCount > 0) {
-      const row = existing.rows[0] as { id?: unknown; webhook_secret?: unknown };
+      const row = existing.rows[0] as {
+        id?: unknown;
+        webhook_secret?: unknown;
+        idempresa?: number | string | null;
+      };
       const currentId = typeof row.id === 'number' && Number.isFinite(row.id)
         ? Math.trunc(row.id)
         : typeof row.id === 'string' && row.id.trim()
@@ -361,15 +373,17 @@ export default class IntegrationApiKeyService {
         : null;
 
       const currentSecret = sanitizeWebhookSecret(row.webhook_secret);
-      if (currentId && currentSecret) {
+      const currentEmpresaId = mapEmpresaIdFromRow(row.idempresa ?? null);
+
+      if (currentId && currentSecret && currentEmpresaId === desiredEmpresaId) {
         return;
       }
 
-      const secret = generateWebhookSecret();
+      const secret = currentSecret ?? generateWebhookSecret();
       if (currentId) {
         await this.db.query(
-          'UPDATE asaas_credentials SET webhook_secret = $1, updated_at = NOW() WHERE id = $2',
-          [secret, currentId],
+          'UPDATE asaas_credentials SET webhook_secret = $1, idempresa = $2, updated_at = NOW() WHERE id = $3',
+          [secret, desiredEmpresaId, currentId],
         );
         return;
       }
@@ -377,10 +391,10 @@ export default class IntegrationApiKeyService {
 
     const secret = generateWebhookSecret();
     await this.db.query(
-      `INSERT INTO asaas_credentials (integration_api_key_id, webhook_secret)
-       VALUES ($1, $2)
+      `INSERT INTO asaas_credentials (integration_api_key_id, webhook_secret, idempresa)
+       VALUES ($1, $2, $3)
        ON CONFLICT (integration_api_key_id) DO NOTHING`,
-      [integrationId, secret],
+      [integrationId, secret, desiredEmpresaId],
     );
   }
 

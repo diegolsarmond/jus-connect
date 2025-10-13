@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ProcessCard } from "@/components/ui/process-card";
 import {
@@ -1358,7 +1358,7 @@ export default function Processos() {
     const [oabMonitorsInitialized, setOabMonitorsInitialized] = useState(false);
     const [oabMonitorsError, setOabMonitorsError] = useState<string | null>(null);
     const [oabSubmitLoading, setOabSubmitLoading] = useState(false);
-    const [oabSubmitError, setOabSubmitError] = useState<string | null>(null);
+    const [oabSubmitError, setOabSubmitError] = useState<ReactNode | null>(null);
     const [oabUsuarioOptions, setOabUsuarioOptions] = useState<OabUsuarioOption[]>([]);
     const [oabUsuariosLoading, setOabUsuariosLoading] = useState(false);
     const [oabUsuariosError, setOabUsuariosError] = useState<string | null>(null);
@@ -2954,7 +2954,14 @@ export default function Processos() {
 
         if (!oabUf || !oabNumero) {
             setOabSubmitError(
-                "O responsável selecionado não possui OAB válida para monitoramento.",
+                <>
+                    O responsável selecionado não possui OAB válida para monitoramento. Complemente o
+                    seu cadastro{" "}
+                    <Link to="/meu-perfil" className="underline">
+                        clicando aqui
+                    </Link>{" "}
+                    para cadastrar o registro da sua OAB.
+                </>,
             );
             return;
         }
