@@ -49,7 +49,7 @@ const Checkout = () => {
   const value = cycle === "monthly" ? plan.monthlyPrice : plan.yearlyPrice;
   const cycleType = cycle === "monthly" ? "MONTHLY" : "YEARLY";
 
-  const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
+  const requestJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const response = await fetch(url, {
       ...init,
       headers: {
