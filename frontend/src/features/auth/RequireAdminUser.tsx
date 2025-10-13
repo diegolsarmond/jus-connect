@@ -24,7 +24,7 @@ export const RequireAdminUser = ({ children }: RequireAdminUserProps) => {
 
   }
 
-  if (user?.id === 3) {
+  if (user && ( user.id === 1)) {
     return <>{children}</>;
   }
 
