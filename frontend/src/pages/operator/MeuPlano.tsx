@@ -1009,11 +1009,13 @@ function MeuPlanoContent() {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => navigate(routes.plans)}>Ver planos</Button>
+        <Button onClick={() => navigate(routes.meuPlanoPlans)}>Ver planos</Button>
         <Button
           variant="outline"
           onClick={() =>
-            navigate(subscriptionId ? routes.subscription(subscriptionId) : routes.plans)
+            navigate(
+              subscriptionId ? routes.subscription(subscriptionId) : routes.meuPlanoPlans,
+            )
           }
         >
           Minha assinatura
