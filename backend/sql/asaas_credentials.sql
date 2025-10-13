@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS asaas_credentials (
   integration_api_key_id BIGINT UNIQUE REFERENCES integration_api_keys(id) ON DELETE CASCADE,
   webhook_secret TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  idempresa INTEGER REFERENCES public.empresas(id)
 );
 
 CREATE OR REPLACE FUNCTION set_asaas_credentials_updated_at()
@@ -34,3 +35,9 @@ ALTER TABLE asaas_credentials
 
 ALTER TABLE asaas_credentials
   ADD CONSTRAINT IF NOT EXISTS asaas_credentials_integration_api_key_id_key UNIQUE (integration_api_key_id);
+
+ALTER TABLE asaas_credentials
+  ADD COLUMN IF NOT EXISTS idempresa INTEGER REFERENCES public.empresas(id);
+
+ALTER TABLE asaas_credentials
+  ADD CONSTRAINT IF NOT EXISTS asaas_credentials_empresas_fk FOREIGN KEY (idempresa) REFERENCES public.empresas(id);

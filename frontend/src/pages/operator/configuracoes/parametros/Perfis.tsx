@@ -30,6 +30,15 @@ const STATIC_MODULES: ModuleInfo[] = [
   },
 ];
 
+const HIDDEN_MODULES: ModuleInfo[] = [
+  {
+    id: "configuracoes-conteudo-blog",
+    nome: "Configurações - Conteúdo - Blog",
+  },
+];
+
+const HIDDEN_MODULE_IDS = new Set(HIDDEN_MODULES.map((module) => module.id));
+
 const ensureDefaultModules = (modules: ModuleInfo[]): ModuleInfo[] => {
   if (modules.length === 0) {
     return [...STATIC_MODULES];
@@ -165,6 +174,11 @@ export default function Perfis() {
     availableModules.forEach((module) => {
       map.set(module.id, module.nome);
     });
+    HIDDEN_MODULES.forEach((module) => {
+      if (!map.has(module.id)) {
+        map.set(module.id, module.nome);
+      }
+    });
     return map;
   }, [availableModules]);
 
@@ -203,8 +217,9 @@ export default function Perfis() {
           .filter((item): item is ModuleInfo => item !== null);
 
         const augmentedModules = ensureDefaultModules(parsedModules);
+        const visibleModules = augmentedModules.filter((module) => !HIDDEN_MODULE_IDS.has(module.id));
 
-        setAvailableModules(augmentedModules);
+        setAvailableModules(visibleModules);
 
         const rawProfiles = extractCollection(await profilesRes.json());
         const parsedProfiles = rawProfiles
