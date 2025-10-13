@@ -4802,6 +4802,14 @@ export default function Processos() {
                     <DialogFooter>
                         <Button
                             type="button"
+                            variant="outline"
+                            onClick={() => handleOabModalChange(false)}
+                            disabled={oabSubmitLoading}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="button"
                             onClick={handleOabSubmit}
                             disabled={
                                 oabSubmitLoading ||
