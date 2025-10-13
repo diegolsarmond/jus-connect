@@ -364,6 +364,7 @@ const ManagePlanPayment = () => {
 
   const selection = selectionFromLocation.plan ? selectionFromLocation : cachedSelection;
   const selectedPlan = selection.plan ?? null;
+  const selectedPlanId = selectedPlan?.id ?? null;
   const pricingMode: PricingMode = selection.pricingMode ?? "mensal";
   const { toast } = useToast();
   const { user } = useAuth();
@@ -382,6 +383,57 @@ const ManagePlanPayment = () => {
   const [history, setHistory] = useState<Flow[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (paymentResult || !selectedPlanId) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const loadCurrentPayment = async () => {
+      try {
+        const response = await fetch(getApiUrl("plan-payments/current"), {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as unknown;
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!payload || typeof payload !== "object") {
+          return;
+        }
+
+        const data = payload as PlanPaymentResult;
+        const planData = data.plan ?? null;
+        if (planData && planData.id !== null && planData.id !== selectedPlanId) {
+          return;
+        }
+
+        setPaymentResult(data);
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+      }
+    };
+
+    loadCurrentPayment();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [paymentResult, selectedPlanId]);
 
   useEffect(() => {
     if (!user?.empresa_id) {

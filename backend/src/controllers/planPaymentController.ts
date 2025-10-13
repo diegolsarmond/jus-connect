@@ -357,11 +357,13 @@ async function createFinancialFlow({
   value,
   dueDate,
   accountId,
+  empresaId,
 }: {
   description: string;
   value: number;
   dueDate: string;
   accountId: string | null;
+  empresaId: number;
 }): Promise<{ id: number | string; descricao: string; valor: string; vencimento: string; status: string } | null> {
   const result = await pool.query(
     `INSERT INTO financial_flows (
@@ -374,11 +376,12 @@ async function createFinancialFlow({
         cliente_id,
         fornecedor_id,
         external_provider,
-        external_reference_id
+        external_reference_id,
+        idempresa
       )
-      VALUES ('receita', $1, $2, $3, 'pendente', $4, NULL, NULL, 'asaas', NULL)
+      VALUES ('receita', $1, $2, $3, 'pendente', $4, NULL, NULL, 'asaas', NULL, $5)
       RETURNING id, descricao, valor::text AS valor, vencimento::text AS vencimento, status`,
-    [description, dueDate, value, accountId],
+    [description, dueDate, value, accountId, empresaId],
   );
 
   if (result.rowCount === 0) {
@@ -750,6 +753,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
     value: price,
     dueDate: nextDueDate,
     accountId,
+    empresaId,
   });
 
   if (!flow) {
@@ -842,4 +846,159 @@ export const createPlanPayment = async (req: Request, res: Response) => {
   }
 };
 
-export default { createPlanPayment };
+type CurrentPlanPaymentRow = {
+  flow_id: unknown;
+  flow_descricao: string | null;
+  flow_valor: string | number | null;
+  flow_vencimento: Date | string | null;
+  flow_status: string | null;
+  charge_id: number | string | null;
+  charge_financial_flow_id: unknown;
+  charge_asaas_charge_id: string | null;
+  charge_billing_type: string | null;
+  charge_status: string | null;
+  charge_due_date: Date | string | null;
+  charge_value: string | number | null;
+  charge_invoice_url: string | null;
+  charge_pix_payload: string | null;
+  charge_pix_qr_code: string | null;
+  charge_boleto_url: string | null;
+  charge_card_last4: string | null;
+  charge_card_brand: string | null;
+  plan_id: number | string | null;
+  plan_nome: string | null;
+  plan_valor_mensal: string | number | null;
+  plan_valor_anual: string | number | null;
+  subscription_cadence: string | null;
+};
+
+export const getCurrentPlanPayment = async (req: Request, res: Response) => {
+  if (!req.auth) {
+    res.status(401).json({ error: 'Token inválido.' });
+    return;
+  }
+
+  const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+  if (!empresaLookup.success) {
+    res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    return;
+  }
+
+  const empresaId = empresaLookup.empresaId;
+  if (empresaId == null) {
+    res.status(400).json({ error: 'Associe o usuário a uma empresa para gerenciar o plano.' });
+    return;
+  }
+
+  const result = await pool.query<CurrentPlanPaymentRow>(
+    `SELECT
+        ff.id AS flow_id,
+        ff.descricao AS flow_descricao,
+        ff.valor AS flow_valor,
+        ff.vencimento AS flow_vencimento,
+        ff.status AS flow_status,
+        ac.id AS charge_id,
+        ac.financial_flow_id AS charge_financial_flow_id,
+        ac.asaas_charge_id AS charge_asaas_charge_id,
+        ac.billing_type AS charge_billing_type,
+        ac.status AS charge_status,
+        ac.due_date AS charge_due_date,
+        ac.value AS charge_value,
+        ac.invoice_url AS charge_invoice_url,
+        ac.pix_payload AS charge_pix_payload,
+        ac.pix_qr_code AS charge_pix_qr_code,
+        ac.boleto_url AS charge_boleto_url,
+        ac.card_last4 AS charge_card_last4,
+        ac.card_brand AS charge_card_brand,
+        p.id AS plan_id,
+        p.nome AS plan_nome,
+        p.valor_mensal AS plan_valor_mensal,
+        p.valor_anual AS plan_valor_anual,
+        e.subscription_cadence AS subscription_cadence
+      FROM financial_flows ff
+      JOIN asaas_charges ac ON ac.financial_flow_id = ff.id
+      JOIN empresas e ON e.id = ff.idempresa
+      LEFT JOIN planos p ON p.id = e.plano
+     WHERE ff.idempresa = $1
+       AND ff.status = 'pendente'
+       AND ac.billing_type = ANY(ARRAY['PIX','BOLETO','CREDIT_CARD','DEBIT_CARD'])
+     ORDER BY ac.created_at DESC, ff.vencimento DESC
+     LIMIT 1`,
+    [empresaId],
+  );
+
+  if (result.rowCount === 0) {
+    res.status(404).json({ error: 'Nenhuma cobrança pendente encontrada para o plano atual.' });
+    return;
+  }
+
+  const row = result.rows[0];
+  let flowId: number | string;
+  try {
+    flowId = normalizeFinancialFlowIdentifierFromRow(row.flow_id);
+  } catch (error) {
+    res.status(500).json({ error: 'Não foi possível identificar o fluxo financeiro.' });
+    return;
+  }
+
+  let chargeFlowId: number | string;
+  try {
+    chargeFlowId = normalizeFinancialFlowIdentifierFromRow(row.charge_financial_flow_id);
+  } catch (error) {
+    res.status(500).json({ error: 'Não foi possível identificar a cobrança do Asaas.' });
+    return;
+  }
+
+  const planId = parseNumericId(row.plan_id);
+  const planName = sanitizeString(row.plan_nome);
+  const cadence = parseSubscriptionCadence(row.subscription_cadence) ?? 'monthly';
+  const pricingMode: 'mensal' | 'anual' = cadence === 'annual' ? 'anual' : 'mensal';
+  const planPrice =
+    pricingMode === 'anual'
+      ? parseCurrency(row.plan_valor_anual)
+      : parseCurrency(row.plan_valor_mensal);
+
+  const chargeDueDate = parseDateColumn(row.charge_due_date);
+  const flowDueDate = parseDateColumn(row.flow_vencimento);
+  const paymentMethod = parsePaymentMethod(row.charge_billing_type);
+
+  res.json({
+    plan: {
+      id: planId,
+      nome: planName,
+      pricingMode,
+      price: planPrice,
+    },
+    paymentMethod,
+    charge: {
+      id: parseNumericId(row.charge_id),
+      financialFlowId: chargeFlowId,
+      asaasChargeId: sanitizeString(row.charge_asaas_charge_id),
+      billingType: paymentMethod,
+      status: sanitizeString(row.charge_status),
+      dueDate: chargeDueDate ? chargeDueDate.toISOString().slice(0, 10) : null,
+      value:
+        row.charge_value === null || row.charge_value === undefined
+          ? null
+          : String(row.charge_value),
+      invoiceUrl: sanitizeString(row.charge_invoice_url),
+      boletoUrl: sanitizeString(row.charge_boleto_url),
+      pixPayload: sanitizeString(row.charge_pix_payload),
+      pixQrCode: sanitizeString(row.charge_pix_qr_code),
+      cardLast4: sanitizeString(row.charge_card_last4),
+      cardBrand: sanitizeString(row.charge_card_brand),
+    },
+    flow: {
+      id: flowId,
+      descricao: sanitizeString(row.flow_descricao),
+      valor:
+        row.flow_valor === null || row.flow_valor === undefined
+          ? null
+          : String(row.flow_valor),
+      vencimento: flowDueDate ? flowDueDate.toISOString().slice(0, 10) : null,
+      status: sanitizeString(row.flow_status),
+    },
+  });
+};
+
+export default { createPlanPayment, getCurrentPlanPayment };
