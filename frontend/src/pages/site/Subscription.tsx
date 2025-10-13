@@ -47,7 +47,7 @@ const SubscriptionDetails = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
+  const requestJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const response = await fetch(url, {
       ...init,
       headers: {
