@@ -383,6 +383,11 @@ const ManagePlanPayment = () => {
   const [history, setHistory] = useState<Flow[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [billingDataStatus, setBillingDataStatus] = useState<{ companyId: number | null; loaded: boolean }>(() => ({
+    companyId: user?.empresa_id ?? null,
+    loaded: !user?.empresa_id,
+  }));
+  const userPrefillRef = useRef<{ companyName?: string; billingEmail?: string }>({});
 
   useEffect(() => {
     if (!user) {
@@ -392,14 +397,6 @@ const ManagePlanPayment = () => {
     const resolvedName = user.nome_completo?.trim() ?? "";
     const resolvedEmail = user.email?.trim() ?? "";
     const resolvedCompany = user.empresa_nome?.trim() ?? "";
-
-    if (resolvedCompany) {
-      setCompanyName((previous) => (previous.trim().length > 0 ? previous : resolvedCompany));
-    }
-
-    if (resolvedEmail) {
-      setBillingEmail((previous) => (previous.trim().length > 0 ? previous : resolvedEmail));
-    }
 
     setCardForm((previous) => {
       let changed = false;
@@ -417,7 +414,62 @@ const ManagePlanPayment = () => {
 
       return changed ? next : previous;
     });
-  }, [user]);
+
+    const companyId = user.empresa_id ?? null;
+    const isBillingDataLoadedForCompany =
+      billingDataStatus.companyId === companyId && billingDataStatus.loaded;
+
+    if (companyId && !isBillingDataLoadedForCompany) {
+      return;
+    }
+
+    if (resolvedCompany) {
+      setCompanyName((previous) => {
+        if (previous.trim().length > 0) {
+          return previous;
+        }
+
+        userPrefillRef.current.companyName = resolvedCompany;
+        return resolvedCompany;
+      });
+    }
+
+    if (resolvedEmail) {
+      setBillingEmail((previous) => {
+        if (previous.trim().length > 0) {
+          return previous;
+        }
+
+        userPrefillRef.current.billingEmail = resolvedEmail;
+        return resolvedEmail;
+      });
+    }
+  }, [billingDataStatus.companyId, billingDataStatus.loaded, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    if (!user.empresa_id) {
+      setBillingDataStatus((previous) => {
+        if (previous.companyId === null && previous.loaded) {
+          return previous;
+        }
+
+        return { companyId: null, loaded: true };
+      });
+      return;
+    }
+
+    setBillingDataStatus((previous) => {
+      if (previous.companyId === user.empresa_id && !previous.loaded) {
+        return previous;
+      }
+
+      return { companyId: user.empresa_id ?? null, loaded: false };
+    });
+  }, [user?.empresa_id]);
 
   useEffect(() => {
     if (paymentResult || !selectedPlanId) {
@@ -477,6 +529,14 @@ const ManagePlanPayment = () => {
 
     const controller = new AbortController();
     let isMounted = true;
+    const companyId = user.empresa_id ?? null;
+    setBillingDataStatus((previous) => {
+      if (previous.companyId === companyId && !previous.loaded) {
+        return previous;
+      }
+
+      return { companyId, loaded: false };
+    });
 
     const loadBillingData = async () => {
       try {
@@ -507,7 +567,17 @@ const ManagePlanPayment = () => {
           "nome",
         ]);
         if (resolvedName) {
-          setCompanyName((previous) => (previous.trim().length > 0 ? previous : resolvedName));
+          setCompanyName((previous) => {
+            const shouldOverride =
+              previous.trim().length === 0 || previous === userPrefillRef.current.companyName;
+
+            if (shouldOverride) {
+              userPrefillRef.current.companyName = undefined;
+              return resolvedName;
+            }
+
+            return previous;
+          });
         }
 
         const resolvedDocument = getFirstString(record, [
@@ -533,7 +603,17 @@ const ManagePlanPayment = () => {
           "email",
         ]);
         if (resolvedEmail) {
-          setBillingEmail((previous) => (previous.trim().length > 0 ? previous : resolvedEmail));
+          setBillingEmail((previous) => {
+            const shouldOverride =
+              previous.trim().length === 0 || previous === userPrefillRef.current.billingEmail;
+
+            if (shouldOverride) {
+              userPrefillRef.current.billingEmail = undefined;
+              return resolvedEmail;
+            }
+
+            return previous;
+          });
         }
       } catch (loadError) {
         if (controller.signal.aborted) {
@@ -546,6 +626,16 @@ const ManagePlanPayment = () => {
           description: "Preencha manualmente os campos de faturamento para continuar.",
           variant: "destructive",
         });
+      } finally {
+        if (isMounted) {
+          setBillingDataStatus((previous) => {
+            if (previous.companyId === companyId && previous.loaded) {
+              return previous;
+            }
+
+            return { companyId, loaded: true };
+          });
+        }
       }
     };
 
@@ -1269,7 +1359,10 @@ const ManagePlanPayment = () => {
                     id="company-name"
                     placeholder="Nome jurídico da empresa"
                     value={companyName}
-                    onChange={(event) => setCompanyName(event.target.value)}
+                    onChange={(event) => {
+                      userPrefillRef.current.companyName = undefined;
+                      setCompanyName(event.target.value);
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1289,7 +1382,10 @@ const ManagePlanPayment = () => {
                   type="email"
                   placeholder="financeiro@suaempresa.com"
                   value={billingEmail}
-                  onChange={(event) => setBillingEmail(event.target.value)}
+                  onChange={(event) => {
+                    userPrefillRef.current.billingEmail = undefined;
+                    setBillingEmail(event.target.value);
+                  }}
                 />
               </div>
               <div className="space-y-2">
