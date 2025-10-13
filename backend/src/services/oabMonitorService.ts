@@ -29,8 +29,15 @@ let ensureTablePromise: Promise<void> | null = null;
 
 const ensureTable = async (): Promise<void> => {
   if (!ensureTablePromise) {
-    ensureTablePromise = pool
-      .query(`
+    ensureTablePromise = (async () => {
+      const client = await pool.connect();
+      let inTransaction = false;
+
+      try {
+        await client.query('BEGIN');
+        inTransaction = true;
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('oab_monitoradas_schema'));");
+        await client.query(`
         CREATE TABLE IF NOT EXISTS public.oab_monitoradas (
           id BIGSERIAL PRIMARY KEY,
           empresa_id INTEGER NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
@@ -213,8 +220,18 @@ const ensureTable = async (): Promise<void> => {
           END IF;
         END
         $$;
-      `)
-      .then(() => undefined)
+      `);
+        await client.query('COMMIT');
+        inTransaction = false;
+      } catch (error) {
+        if (inTransaction) {
+          await client.query('ROLLBACK').catch(() => undefined);
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+    })()
       .catch((error) => {
         ensureTablePromise = null;
         throw error;
