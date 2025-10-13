@@ -366,7 +366,7 @@ const ManagePlanPayment = () => {
   const selectedPlan = selection.plan ?? null;
   const pricingMode: PricingMode = selection.pricingMode ?? "mensal";
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [paymentMethod, setPaymentMethod] = useState<PlanPaymentMethod>("pix");
   const [companyName, setCompanyName] = useState("");
   const [companyDocument, setCompanyDocument] = useState("");
@@ -800,6 +800,9 @@ const ManagePlanPayment = () => {
         title: "Cobrança gerada com sucesso",
         description: "Utilize as informações abaixo para concluir o pagamento do plano.",
       });
+
+      await refreshUser();
+      navigate(routes.meuPlano, { replace: true });
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Não foi possível criar a cobrança no Asaas.";
@@ -822,6 +825,8 @@ const ManagePlanPayment = () => {
     paymentMethod,
     pricingMode,
     selectedPlan,
+    navigate,
+    refreshUser,
     toast,
   ]);
 

@@ -122,9 +122,10 @@ function normalizeApiRows(data: unknown): unknown[] {
 
 export default function MeuPlano() {
   const { user } = useAuth();
-  const { hasAccess } = evaluateSubscriptionAccess(user?.subscription ?? null);
+  const subscription = user?.subscription ?? null;
+  const { hasAccess } = evaluateSubscriptionAccess(subscription);
 
-  if (!hasAccess) {
+  if (!hasAccess && !subscription) {
     return <PlanSelection />;
   }
 
