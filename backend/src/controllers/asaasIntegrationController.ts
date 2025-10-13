@@ -60,7 +60,14 @@ const HANDLED_EVENTS = new Set([
 ]);
 
 function extractSignature(req: Request): string | null {
-  const headerNames = ['asaas-signature', 'x-hub-signature', 'x-hub-signature-256'];
+  const headerNames = [
+    'asaas-signature',
+    'asaas-signature-256',
+    'x-asaas-signature',
+    'x-asaas-signature-256',
+    'x-hub-signature',
+    'x-hub-signature-256',
+  ];
 
   for (const header of headerNames) {
     const value = req.headers[header];
