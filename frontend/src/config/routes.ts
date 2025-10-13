@@ -24,6 +24,7 @@ export const routes = {
   confirmEmail: route("/confirmar-email"),
   forgotPassword: route("/recuperar-senha"),
   meuPlano: route("/meu-plano"),
+  meuPlanoPlans: route("/meu-plano/planos"),
   meuPlanoPayment: route("/meu-plano/gerenciar-pagamento"),
   admin: {
     root: route(appConfig.adminBasePath),
