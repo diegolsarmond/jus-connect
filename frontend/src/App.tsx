@@ -81,7 +81,7 @@ import SiteNotFound from "./pages/site/NotFound";
 import SitePrivacyPolicy from "./pages/site/PrivacyPolicy";
 import SitePlans from "./pages/site/Plans";
 import SiteCheckout from "./pages/site/Checkout";
-import SiteSubscription from "./pages/site/Subscription";
+import OperatorSubscription from "./pages/operator/Subscription";
 import SiteServiceAssistenteIA from "./pages/site/services/AssistenteIA";
 import SiteServiceAutomacoes from "./pages/site/services/Automacoes";
 import SiteServiceCRM from "./pages/site/services/CRM";
@@ -153,7 +153,6 @@ const App = () => (
               <Route path="/servicos" element={<SiteServices />} />
               <Route path={routes.plans} element={<PublicPlans />} />
               <Route path="/checkout" element={<SiteCheckout />} />
-              <Route path="/subscription/:id" element={<SiteSubscription />} />
               <Route path="/servicos/assistente-ia" element={<SiteServiceAssistenteIA />} />
               <Route path="/servicos/automacoes" element={<SiteServiceAutomacoes />} />
               <Route path="/produtos/crm" element={<SiteServiceCRM />} />
@@ -268,6 +267,7 @@ const App = () => (
                 <Route
                   path={routes.meuPlanoPlans}
                   element={withModule("meu-plano", <OperatorPlans />)}
+
                 />
                 <Route
                   path={routes.meuPlanoPayment}

@@ -1016,6 +1016,7 @@ function MeuPlanoContent() {
             navigate(
               subscriptionId ? routes.subscription(subscriptionId) : routes.meuPlanoPlans,
             )
+
           }
         >
           Minha assinatura
