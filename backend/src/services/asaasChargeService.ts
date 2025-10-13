@@ -760,7 +760,26 @@ export default class AsaasChargeService {
     }
     const chargeResponse = await asaasClient.createCharge(payload);
 
-    const { payload: pixPayload, qrCode: pixQrCode } = extractPixPayload(chargeResponse);
+    const pixData = extractPixPayload(chargeResponse);
+    let pixPayload = pixData.payload;
+    let pixQrCode = pixData.qrCode;
+    const hasPixValue = (value: string | null): value is string =>
+      typeof value === 'string' && value.trim() !== '';
+
+    if (billingType === 'PIX' && (!hasPixValue(pixPayload) || !hasPixValue(pixQrCode))) {
+      const pixQrCodeResponse = await asaasClient.getPaymentPixQrCode(chargeResponse.id);
+
+      if (!hasPixValue(pixPayload) && pixQrCodeResponse.payload) {
+        pixPayload = pixQrCodeResponse.payload;
+      }
+
+      if (!hasPixValue(pixQrCode) && pixQrCodeResponse.encodedImage) {
+        pixQrCode = pixQrCodeResponse.encodedImage;
+      }
+    }
+
+    const normalizedPixPayload = hasPixValue(pixPayload) ? pixPayload : null;
+    const normalizedPixQrCode = hasPixValue(pixQrCode) ? pixQrCode : null;
     const boletoUrl = extractBoletoUrl(chargeResponse);
     const { last4: cardLast4, brand: cardBrand } = extractCardInfo(chargeResponse);
     const flowStatus = mapFlowStatus(chargeResponse.status);
@@ -827,8 +846,8 @@ export default class AsaasChargeService {
         null,
         null,
         null,
-        pixPayload,
-        pixQrCode,
+        normalizedPixPayload,
+        normalizedPixQrCode,
         boletoUrl,
         cardLast4,
         cardBrand,

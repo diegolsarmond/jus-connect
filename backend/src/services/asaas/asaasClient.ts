@@ -366,6 +366,27 @@ export class AsaasClient {
     return this.request<ChargeResponse>(`/payments/${chargeId}`);
   }
 
+  async getPaymentPixQrCode(
+    chargeId: string,
+  ): Promise<{ payload: string | null; encodedImage: string | null }> {
+    if (!chargeId || typeof chargeId !== 'string' || !chargeId.trim()) {
+      throw new Error('chargeId is required to fetch Pix QR Code');
+    }
+
+    const response = await this.request<{ payload?: unknown; encodedImage?: unknown }>(
+      `/payments/${chargeId}/pixQrCode`,
+    );
+
+    const payload =
+      typeof response.payload === 'string' && response.payload.trim() ? response.payload : null;
+    const encodedImage =
+      typeof response.encodedImage === 'string' && response.encodedImage.trim()
+        ? response.encodedImage
+        : null;
+
+    return { payload, encodedImage };
+  }
+
   async createPix(payload: PixChargePayload): Promise<PixChargeResponse> {
     return this.request<PixChargeResponse>('/pix/payments', {
       method: 'POST',
