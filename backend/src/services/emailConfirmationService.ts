@@ -104,12 +104,16 @@ export async function sendEmailConfirmationToken(
     confirmationLink,
   });
 
-  await sendEmail({
-    to: user.email,
-    subject: email.subject,
-    html: email.html,
-    text: email.text,
-  });
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    });
+  } catch (error) {
+    console.error('Falha ao enviar e-mail de confirmação de cadastro', error);
+  }
 }
 
 interface ConfirmEmailTokenRow {
