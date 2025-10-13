@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,20 +29,21 @@ const SubscriptionDetails = () => {
   const [pixQrCode, setPixQrCode] = useState<PixQRCode | null>(null);
   const [boletoCode, setBoletoCode] = useState<string | null>(null);
   const [copiedPayload, setCopiedPayload] = useState(false);
-  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
-  const [lastPaymentStatus, setLastPaymentStatus] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPaymentStatusRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadSubscription();
     const interval = setInterval(() => {
       checkPaymentStatusInBackground();
     }, 15000);
-    setPollingInterval(interval);
+    pollingIntervalRef.current = interval;
 
     return () => {
       if (interval) {
         clearInterval(interval);
       }
+      pollingIntervalRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -70,22 +71,22 @@ const SubscriptionDetails = () => {
         payment.status === "CONFIRMED" || payment.status === "RECEIVED",
       );
 
-      if (confirmedPayment && lastPaymentStatus === "PENDING") {
+      if (confirmedPayment && lastPaymentStatusRef.current === "PENDING") {
         setPayments(paymentsList);
-        if (pollingInterval) {
-          clearInterval(pollingInterval);
-          setPollingInterval(null);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
         }
         toast({
           title: "Pagamento confirmado!",
           description: "Sua assinatura foi ativada.",
         });
-        setLastPaymentStatus(confirmedPayment.status);
+        lastPaymentStatusRef.current = confirmedPayment.status;
       } else if (pendingPayment) {
         setPayments(paymentsList);
-        setLastPaymentStatus("PENDING");
+        lastPaymentStatusRef.current = "PENDING";
       } else if (confirmedPayment) {
-        setLastPaymentStatus(confirmedPayment.status);
+        lastPaymentStatusRef.current = confirmedPayment.status;
       }
     } catch (error) {
       console.log("Erro ao verificar status (background):", error);
@@ -136,9 +137,9 @@ const SubscriptionDetails = () => {
       );
 
       if (confirmedPayment) {
-        setLastPaymentStatus(confirmedPayment.status);
+        lastPaymentStatusRef.current = confirmedPayment.status;
       } else if (pendingPayment) {
-        setLastPaymentStatus("PENDING");
+        lastPaymentStatusRef.current = "PENDING";
       }
 
       if (pendingPayment) {
