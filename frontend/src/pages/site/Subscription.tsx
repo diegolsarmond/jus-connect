@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,25 +29,17 @@ const SubscriptionDetails = () => {
   const [pixQrCode, setPixQrCode] = useState<PixQRCode | null>(null);
   const [boletoCode, setBoletoCode] = useState<string | null>(null);
   const [copiedPayload, setCopiedPayload] = useState(false);
-  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
-  const [lastPaymentStatus, setLastPaymentStatus] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPaymentStatusRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    loadSubscription();
-    const interval = setInterval(() => {
-      checkPaymentStatusInBackground();
-    }, 15000);
-    setPollingInterval(interval);
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
 
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  const checkPaymentStatusInBackground = async () => {
+  const checkPaymentStatusInBackground = useCallback(async () => {
     if (!id) {
       return;
     }
@@ -70,29 +62,49 @@ const SubscriptionDetails = () => {
         payment.status === "CONFIRMED" || payment.status === "RECEIVED",
       );
 
-      if (confirmedPayment && lastPaymentStatus === "PENDING") {
+      if (confirmedPayment && lastPaymentStatusRef.current === "PENDING") {
         setPayments(paymentsList);
-        if (pollingInterval) {
-          clearInterval(pollingInterval);
-          setPollingInterval(null);
-        }
+        stopPolling();
         toast({
           title: "Pagamento confirmado!",
           description: "Sua assinatura foi ativada.",
         });
-        setLastPaymentStatus(confirmedPayment.status);
+        lastPaymentStatusRef.current = confirmedPayment.status;
       } else if (pendingPayment) {
         setPayments(paymentsList);
-        setLastPaymentStatus("PENDING");
+        lastPaymentStatusRef.current = "PENDING";
       } else if (confirmedPayment) {
-        setLastPaymentStatus(confirmedPayment.status);
+        lastPaymentStatusRef.current = confirmedPayment.status;
       }
     } catch (error) {
       console.log("Erro ao verificar status (background):", error);
     }
-  };
+  }, [id, stopPolling, toast]);
 
-  const loadSubscription = async () => {
+  const loadPixQrCode = useCallback(async (paymentId: string) => {
+    const { data, error } = await supabase.functions.invoke<PixQRCode>("get-pix-qrcode", {
+      body: { paymentId },
+    });
+
+    if (!error) {
+      setPixQrCode(data);
+    }
+  }, []);
+
+  const loadBoletoCode = useCallback(async (paymentId: string) => {
+    const { data, error } = await supabase.functions.invoke<{ identificationField: string }>(
+      "get-boleto-barcode",
+      {
+        body: { paymentId },
+      },
+    );
+
+    if (!error) {
+      setBoletoCode(data?.identificationField ?? null);
+    }
+  }, []);
+
+  const loadSubscription = useCallback(async () => {
     if (!id) {
       return;
     }
@@ -136,9 +148,11 @@ const SubscriptionDetails = () => {
       );
 
       if (confirmedPayment) {
-        setLastPaymentStatus(confirmedPayment.status);
+        lastPaymentStatusRef.current = confirmedPayment.status;
       } else if (pendingPayment) {
-        setLastPaymentStatus("PENDING");
+        lastPaymentStatusRef.current = "PENDING";
+      } else {
+        lastPaymentStatusRef.current = null;
       }
 
       if (pendingPayment) {
@@ -160,30 +174,22 @@ const SubscriptionDetails = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, loadBoletoCode, loadPixQrCode, toast]);
 
-  const loadPixQrCode = async (paymentId: string) => {
-    const { data, error } = await supabase.functions.invoke<PixQRCode>("get-pix-qrcode", {
-      body: { paymentId },
-    });
-
-    if (!error) {
-      setPixQrCode(data);
+  useEffect(() => {
+    loadSubscription();
+    if (pollingIntervalRef.current) {
+      stopPolling();
     }
-  };
 
-  const loadBoletoCode = async (paymentId: string) => {
-    const { data, error } = await supabase.functions.invoke<{ identificationField: string }>(
-      "get-boleto-barcode",
-      {
-        body: { paymentId },
-      },
-    );
+    const interval = setInterval(() => {
+      checkPaymentStatusInBackground();
+    }, 15000);
 
-    if (!error) {
-      setBoletoCode(data?.identificationField ?? null);
-    }
-  };
+    pollingIntervalRef.current = interval;
+
+    return stopPolling;
+  }, [checkPaymentStatusInBackground, loadSubscription]);
 
   const copyToClipboard = (value: string) => {
     navigator.clipboard.writeText(value);
