@@ -17,6 +17,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -98,35 +104,88 @@ type Integration = {
   lastSync: string | null;
 };
 
-const eventOptions = [
+const eventGroups = [
   {
-    value: "cliente.criado",
-    label: "Cliente criado",
-    description: "Disparado quando um novo cliente é cadastrado.",
+    key: "clientes",
+    title: "Clientes",
+    description: "Eventos relacionados ao cadastro e atualização de clientes.",
+    options: [
+      {
+        value: "cliente.criado",
+        label: "Cliente criado",
+        description: "Disparado quando um novo cliente é cadastrado.",
+      },
+      {
+        value: "cliente.atualizado",
+        label: "Cliente atualizado",
+        description: "Atualizado quando dados cadastrais sofrem alteração.",
+      },
+    ],
   },
   {
-    value: "cliente.atualizado",
-    label: "Cliente atualizado",
-    description: "Atualizado quando dados cadastrais sofrem alteração.",
+    key: "processos",
+    title: "Processos",
+    description: "Notificações geradas a partir de mudanças em processos.",
+    options: [
+      {
+        value: "processo.movimentado",
+        label: "Processo movimentado",
+        description: "Emitido ao registrar uma movimentação em um processo.",
+      },
+      {
+        value: "monitoramento.processo.oab_incluida",
+        label: "OAB incluída em processo",
+        description: "Disparado quando uma OAB é adicionada ao monitoramento de um processo.",
+      },
+    ],
   },
   {
-    value: "processo.movimentado",
-    label: "Processo movimentado",
-    description: "Emitido ao registrar uma movimentação em um processo.",
+    key: "intimacoes",
+    title: "Intimações",
+    description: "Eventos originados pelos monitoramentos de intimações.",
+    options: [
+      {
+        value: "monitoramento.intimacao.oab_incluida",
+        label: "OAB incluída em intimação",
+        description: "Enviado quando uma OAB é adicionada ao monitoramento de uma intimação.",
+      },
+    ],
   },
   {
-    value: "tarefa.concluida",
-    label: "Tarefa concluída",
-    description: "Enviado quando uma tarefa é finalizada pela equipe.",
+    key: "tarefas",
+    title: "Tarefas",
+    description: "Atualizações sobre o andamento de tarefas internas.",
+    options: [
+      {
+        value: "tarefa.concluida",
+        label: "Tarefa concluída",
+        description: "Enviado quando uma tarefa é finalizada pela equipe.",
+      },
+    ],
   },
   {
-    value: "financeiro.lancamento",
-    label: "Lançamento financeiro",
-    description: "Disparado ao criar ou atualizar um lançamento financeiro.",
+    key: "financeiro",
+    title: "Financeiro",
+    description: "Movimentações financeiras disparadas pelas integrações.",
+    options: [
+      {
+        value: "financeiro.lancamento",
+        label: "Lançamento financeiro",
+        description: "Disparado ao criar ou atualizar um lançamento financeiro.",
+      },
+    ],
   },
 ] as const;
 
-type WebhookEvent = (typeof eventOptions)[number]["value"];
+type EventGroups = typeof eventGroups;
+
+type EventOption = EventGroups[number]["options"][number];
+
+const eventOptions = eventGroups.reduce<EventOption[]>((accumulator, group) => {
+  return accumulator.concat(group.options);
+}, []);
+
+type WebhookEvent = EventOption["value"];
 
 type Webhook = {
   id: number;
@@ -1361,20 +1420,43 @@ export default function Integracoes() {
               <p className="text-xs text-muted-foreground">
                 Escolha quais eventos da plataforma irão disparar o envio para o endpoint configurado.
               </p>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {eventOptions.map((event) => (
-                  <label key={event.value} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
-                    <Checkbox
-                      checked={webhookForm.events.includes(event.value)}
-                      onCheckedChange={(checked) => updateWebhookEventSelection(event.value, checked === true)}
-                    />
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium leading-none">{event.label}</p>
-                      <p className="text-xs text-muted-foreground">{event.description}</p>
-                    </div>
-                  </label>
+              <Accordion
+                type="multiple"
+                defaultValue={eventGroups.map((group) => group.key)}
+                className="space-y-3"
+              >
+                {eventGroups.map((group) => (
+                  <AccordionItem key={group.key} value={group.key}>
+                    <AccordionTrigger className="text-sm font-semibold">
+                      {group.title}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground">{group.description}</p>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {group.options.map((event) => (
+                            <label
+                              key={event.value}
+                              className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                            >
+                              <Checkbox
+                                checked={webhookForm.events.includes(event.value)}
+                                onCheckedChange={(checked) =>
+                                  updateWebhookEventSelection(event.value, checked === true)
+                                }
+                              />
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium leading-none">{event.label}</p>
+                                <p className="text-xs text-muted-foreground">{event.description}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
                 ))}
-              </div>
+              </Accordion>
             </div>
           </form>
 
