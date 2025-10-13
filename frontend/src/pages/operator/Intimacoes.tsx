@@ -3196,6 +3196,16 @@ export default function Intimacoes() {
           <DialogFooter>
             <Button
               type="button"
+              variant="outline"
+              onClick={() => {
+                handleOabModalChange(false);
+              }}
+              disabled={oabSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
               onClick={() => {
                 void handleRegisterOab();
               }}
