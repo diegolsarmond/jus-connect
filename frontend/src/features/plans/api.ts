@@ -248,10 +248,15 @@ const normalizeFlow = (payload: unknown): PlanPaymentFlow => {
   } satisfies PlanPaymentFlow;
 };
 
-const normalizePlanInfo = (payload: unknown, fallbackId: number): PlanPaymentResult["plan"] => {
+const normalizePlanInfo = (
+  payload: unknown,
+  fallbackId: number | null,
+): PlanPaymentResult["plan"] => {
+  const fallback = typeof fallbackId === "number" && Number.isFinite(fallbackId) ? fallbackId : null;
+
   if (!payload || typeof payload !== "object") {
     return {
-      id: fallbackId,
+      id: fallback,
       nome: null,
       pricingMode: "mensal",
       price: null,
@@ -263,11 +268,36 @@ const normalizePlanInfo = (payload: unknown, fallbackId: number): PlanPaymentRes
   const pricingMode: "mensal" | "anual" = pricingModeRaw === "anual" ? "anual" : "mensal";
 
   return {
-    id: toNumber(record.id) ?? fallbackId,
+    id: toNumber(record.id) ?? fallback,
     nome: normalizeString(record.nome ?? record.name),
     pricingMode,
     price: toNumber(record.price ?? record.valor),
   } satisfies PlanPaymentResult["plan"];
+};
+
+export const normalizePlanPaymentResult = (
+  payload: unknown,
+  fallbackPlanId: number | null,
+): PlanPaymentResult => {
+  const payloadRecord =
+    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+
+  const paymentMethodRaw = normalizeString(payloadRecord.paymentMethod);
+  const paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD" =
+    paymentMethodRaw === "BOLETO"
+      ? "BOLETO"
+      : paymentMethodRaw === "CREDIT_CARD"
+        ? "CREDIT_CARD"
+        : paymentMethodRaw === "DEBIT_CARD"
+          ? "DEBIT_CARD"
+          : "PIX";
+
+  return {
+    plan: normalizePlanInfo(payloadRecord.plan, fallbackPlanId),
+    paymentMethod,
+    charge: normalizeCharge(payloadRecord.charge),
+    flow: normalizeFlow(payloadRecord.flow),
+  } satisfies PlanPaymentResult;
 };
 
 export async function createPlanPayment(payload: PlanPaymentPayload): Promise<PlanPaymentResult> {
@@ -292,22 +322,5 @@ export async function createPlanPayment(payload: PlanPaymentPayload): Promise<Pl
     throw new Error(errorMessage);
   }
 
-  const payloadRecord = (data ?? {}) as Record<string, unknown>;
-
-  const paymentMethodRaw = normalizeString(payloadRecord.paymentMethod);
-  const paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD" =
-    paymentMethodRaw === "BOLETO"
-      ? "BOLETO"
-      : paymentMethodRaw === "CREDIT_CARD"
-        ? "CREDIT_CARD"
-        : paymentMethodRaw === "DEBIT_CARD"
-          ? "DEBIT_CARD"
-          : "PIX";
-
-  return {
-    plan: normalizePlanInfo(payloadRecord.plan, payload.planId),
-    paymentMethod,
-    charge: normalizeCharge(payloadRecord.charge),
-    flow: normalizeFlow(payloadRecord.flow),
-  } satisfies PlanPaymentResult;
+  return normalizePlanPaymentResult(data, payload.planId);
 }
