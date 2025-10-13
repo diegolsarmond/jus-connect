@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { normalizeModuleId, sanitizeModuleIds, sortModules } from '../constants/modules';
 import pool from '../services/db';
+import { isUndefinedTableError } from '../utils/databaseErrors';
 
 type PlanoRow = {
   id: number;
@@ -1327,6 +1328,12 @@ export const listPlanos = async (_req: Request, res: Response) => {
     const formatted = result.rows.map((row) => formatPlanoRow(row as PlanoRow));
     res.json(formatted);
   } catch (error) {
+    if (isUndefinedTableError(error)) {
+      console.error('Tabela planos ausente. Retornando lista vazia.', error);
+      res.json([]);
+      return;
+    }
+
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
