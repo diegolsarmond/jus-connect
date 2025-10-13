@@ -6,6 +6,17 @@ export interface AsaasClientConfig {
   fetchImpl?: typeof fetch;
 }
 
+type QueryParamValue = string | number | boolean | null | undefined;
+
+export type PaginatedResponse<T> = {
+  data: T[];
+  hasMore?: boolean;
+  limit?: number;
+  offset?: number;
+  totalCount?: number;
+  [key: string]: unknown;
+};
+
 export interface CustomerPayload {
   name: string;
   cpfCnpj?: string;
@@ -296,6 +307,43 @@ function extractErrorDetails(body: unknown, status: number): { message: string; 
   return { message: `Asaas API request failed with status ${status}` };
 }
 
+function buildQueryString(params: Record<string, QueryParamValue>): string {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || typeof value === 'undefined') {
+      continue;
+    }
+
+    const normalizedKey = key.trim();
+    if (!normalizedKey) {
+      continue;
+    }
+
+    if (typeof value === 'boolean') {
+      searchParams.append(normalizedKey, value ? 'true' : 'false');
+      continue;
+    }
+
+    if (typeof value === 'number') {
+      if (Number.isFinite(value)) {
+        searchParams.append(normalizedKey, String(value));
+      }
+      continue;
+    }
+
+    const stringValue = value.trim();
+    if (!stringValue) {
+      continue;
+    }
+
+    searchParams.append(normalizedKey, stringValue);
+  }
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
 export class AsaasClient {
   private readonly baseUrl: string;
   private readonly accessToken: string;
@@ -353,6 +401,13 @@ export class AsaasClient {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
+  }
+
+  async listCustomers(
+    params: Record<string, QueryParamValue> = {},
+  ): Promise<PaginatedResponse<CustomerResponse>> {
+    const query = buildQueryString(params);
+    return this.request<PaginatedResponse<CustomerResponse>>(`/customers${query}`);
   }
 
   async createCharge(payload: CreateChargePayload): Promise<ChargeResponse> {
@@ -444,6 +499,35 @@ export class AsaasClient {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
+  }
+
+  async getSubscription(subscriptionId: string): Promise<SubscriptionResponse> {
+    if (!subscriptionId || typeof subscriptionId !== 'string' || !subscriptionId.trim()) {
+      throw new Error('subscriptionId is required to fetch an Asaas subscription');
+    }
+
+    return this.request<SubscriptionResponse>(`/subscriptions/${subscriptionId}`);
+  }
+
+  async listSubscriptions(
+    params: Record<string, QueryParamValue> = {},
+  ): Promise<PaginatedResponse<SubscriptionResponse>> {
+    const query = buildQueryString(params);
+    return this.request<PaginatedResponse<SubscriptionResponse>>(`/subscriptions${query}`);
+  }
+
+  async listSubscriptionPayments(
+    subscriptionId: string,
+    params: Record<string, QueryParamValue> = {},
+  ): Promise<PaginatedResponse<ChargeResponse>> {
+    if (!subscriptionId || typeof subscriptionId !== 'string' || !subscriptionId.trim()) {
+      throw new Error('subscriptionId is required to fetch Asaas subscription payments');
+    }
+
+    const query = buildQueryString(params);
+    return this.request<PaginatedResponse<ChargeResponse>>(
+      `/subscriptions/${subscriptionId}/payments${query}`,
+    );
   }
 
   async createCreditCardCharge(payload: Omit<CreateChargePayload, 'billingType'>): Promise<ChargeResponse> {

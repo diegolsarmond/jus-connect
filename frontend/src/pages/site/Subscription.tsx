@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Subscription, Payment, PixQRCode } from "@/types/subscription";
 import UpdateCardDialog from "@/components/UpdateCardDialog";
 import UpdatePlanDialog from "@/components/UpdatePlanDialog";
+import { getApiUrl } from "@/lib/api";
 import {
   ArrowLeft,
   Calendar,
@@ -47,24 +47,47 @@ const SubscriptionDetails = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const requestJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    let payload: unknown = null;
+    if (response.status !== 204) {
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        (payload && typeof payload === "object" && "error" in payload && payload.error)
+          ? String(payload.error)
+          : response.statusText || "Falha ao comunicar com o servidor.";
+      throw new Error(message);
+    }
+
+    return payload as T;
+  };
+
   const checkPaymentStatusInBackground = async () => {
     if (!id) {
       return;
     }
 
     try {
-      const { data: paymentsData, error } = await supabase.functions.invoke<{ data: Payment[] }>(
-        "get-subscription-payments",
-        {
-          body: { subscriptionId: id },
-        },
+      const paymentsResp = await requestJson<{ data: Payment[] }>(
+        getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(id)}/payments`),
       );
 
-      if (error) {
-        return;
-      }
-
-      const paymentsList = paymentsData?.data ?? [];
+      const paymentsList = paymentsResp?.data ?? [];
       const pendingPayment = paymentsList.find((payment) => payment.status === "PENDING");
       const confirmedPayment = paymentsList.find((payment) =>
         payment.status === "CONFIRMED" || payment.status === "RECEIVED",
@@ -100,32 +123,14 @@ const SubscriptionDetails = () => {
     try {
       setLoading(true);
 
-      const { data: subscriptionResp, error: subscriptionError } = await supabase.functions.invoke<
-        { data?: Subscription[] } | Subscription
-      >("get-subscriptions", {
-        body: { subscriptionId: id },
-      });
-
-      if (subscriptionError) {
-        throw subscriptionError;
-      }
-
-      const resolvedSubscription =
-        (subscriptionResp as { data?: Subscription[] })?.data?.find((item) => item.id === id) ??
-        (subscriptionResp as { data?: Subscription[] })?.data?.[0] ??
-        ((subscriptionResp as Subscription) ?? null);
-      setSubscription(resolvedSubscription);
-
-      const { data: paymentsResp, error: paymentsError } = await supabase.functions.invoke<{ data: Payment[] }>(
-        "get-subscription-payments",
-        {
-          body: { subscriptionId: id },
-        },
+      const subscriptionResp = await requestJson<Subscription>(
+        getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(id)}`),
       );
+      setSubscription(subscriptionResp ?? null);
 
-      if (paymentsError) {
-        throw paymentsError;
-      }
+      const paymentsResp = await requestJson<{ data: Payment[] }>(
+        getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(id)}/payments`),
+      );
 
       const paymentsList = paymentsResp?.data ?? [];
       setPayments(paymentsList);
@@ -163,25 +168,24 @@ const SubscriptionDetails = () => {
   };
 
   const loadPixQrCode = async (paymentId: string) => {
-    const { data, error } = await supabase.functions.invoke<PixQRCode>("get-pix-qrcode", {
-      body: { paymentId },
-    });
-
-    if (!error) {
+    try {
+      const data = await requestJson<PixQRCode>(
+        getApiUrl(`site/asaas/payments/${encodeURIComponent(paymentId)}/pix`),
+      );
       setPixQrCode(data);
+    } catch {
+      setPixQrCode(null);
     }
   };
 
   const loadBoletoCode = async (paymentId: string) => {
-    const { data, error } = await supabase.functions.invoke<{ identificationField: string }>(
-      "get-boleto-barcode",
-      {
-        body: { paymentId },
-      },
-    );
-
-    if (!error) {
+    try {
+      const data = await requestJson<{ identificationField: string }>(
+        getApiUrl(`site/asaas/payments/${encodeURIComponent(paymentId)}/boleto`),
+      );
       setBoletoCode(data?.identificationField ?? null);
+    } catch {
+      setBoletoCode(null);
     }
   };
 

@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { plans } from "@/data/plans";
 import { Subscription } from "@/types/subscription";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { getApiUrl } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 type UpdatePlanDialogProps = {
@@ -32,6 +32,36 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
   }, [subscription.description]);
   const [selectedPlan, setSelectedPlan] = useState(defaultPlan);
 
+  const requestJson = async (url: string, init?: RequestInit) => {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    let payload: unknown = null;
+    if (response.status !== 204) {
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        (payload && typeof payload === "object" && "error" in payload && payload.error)
+          ? String(payload.error)
+          : response.statusText || "Falha ao comunicar com o servidor.";
+      throw new Error(message);
+    }
+
+    return payload;
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (loading) {
@@ -41,16 +71,10 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
     setLoading(true);
 
     try {
-      const { error } = await supabase.functions.invoke("update-subscription-plan", {
-        body: {
-          subscriptionId: subscription.id,
-          planId: selectedPlan,
-        },
+      await requestJson(getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscription.id)}`), {
+        method: "PUT",
+        body: JSON.stringify({ planId: selectedPlan }),
       });
-
-      if (error) {
-        throw error;
-      }
 
       toast({
         title: "Plano atualizado",

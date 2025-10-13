@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { getApiUrl } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 type UpdateCardDialogProps = {
@@ -32,6 +32,36 @@ const UpdateCardDialog = ({ subscriptionId, onUpdate }: UpdateCardDialogProps) =
     ccv: "",
   });
 
+  const requestJson = async (url: string, init?: RequestInit) => {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    let payload: unknown = null;
+    if (response.status !== 204) {
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        (payload && typeof payload === "object" && "error" in payload && payload.error)
+          ? String(payload.error)
+          : response.statusText || "Falha ao comunicar com o servidor.";
+      throw new Error(message);
+    }
+
+    return payload;
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (loading) {
@@ -41,16 +71,10 @@ const UpdateCardDialog = ({ subscriptionId, onUpdate }: UpdateCardDialogProps) =
     setLoading(true);
 
     try {
-      const { error } = await supabase.functions.invoke("update-subscription-card", {
-        body: {
-          subscriptionId,
-          creditCard: formState,
-        },
+      await requestJson(getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscriptionId)}/card`), {
+        method: "PUT",
+        body: JSON.stringify({ creditCard: formState }),
       });
-
-      if (error) {
-        throw error;
-      }
 
       toast({
         title: "Cartão atualizado",
