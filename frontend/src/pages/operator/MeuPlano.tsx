@@ -121,15 +121,13 @@ function normalizeApiRows(data: unknown): unknown[] {
 }
 
 export default function MeuPlano() {
-  const { user } = useAuth();
-  const subscription = user?.subscription ?? null;
-  const { hasAccess } = evaluateSubscriptionAccess(subscription);
+  const navigate = useNavigate();
 
-  if (!hasAccess && !subscription) {
-    return <PlanSelection />;
-  }
+  useEffect(() => {
+    navigate("/plans");
+  }, [navigate]);
 
-  return <MeuPlanoContent />;
+  return null;
 }
 
 function toNumber(value: unknown): number | null {
