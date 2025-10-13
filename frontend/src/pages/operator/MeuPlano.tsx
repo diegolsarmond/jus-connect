@@ -1013,7 +1013,7 @@ function MeuPlanoContent() {
         <Button
           variant="outline"
           onClick={() =>
-            navigate(subscriptionId ? routes.subscription(subscriptionId) : routes.plans)
+            navigate(subscriptionId ? routes.subscription(subscriptionId) : routes.meuPlano)
           }
         >
           Minha assinatura
