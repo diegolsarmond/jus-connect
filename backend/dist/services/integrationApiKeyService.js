@@ -94,6 +94,28 @@ function resolveApiUrl(provider, environment, value) {
     }
     return getDefaultApiUrl(provider, environment);
 }
+function mapEmpresaIdFromRow(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (typeof value === 'number') {
+        if (Number.isFinite(value) && Number.isInteger(value)) {
+            return value;
+        }
+        return null;
+    }
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return null;
+        }
+        const parsed = Number(trimmed);
+        if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
+            return parsed;
+        }
+    }
+    return null;
+}
 function normalizeLastUsed(value) {
     if (value === undefined || value === null) {
         return null;
@@ -195,7 +217,11 @@ class IntegrationApiKeyService {
         if (!Number.isInteger(integrationId) || integrationId <= 0) {
             return;
         }
-        const existing = await this.db.query('SELECT id, webhook_secret FROM asaas_credentials WHERE integration_api_key_id = $1', [integrationId]);
+        const integrationResult = await this.db.query('SELECT idempresa FROM integration_api_keys WHERE id = $1', [integrationId]);
+        const desiredEmpresaId = integrationResult.rowCount > 0
+            ? mapEmpresaIdFromRow(((integrationResult.rows[0] || {}).idempresa) ?? null)
+            : null;
+        const existing = await this.db.query('SELECT id, webhook_secret, idempresa FROM asaas_credentials WHERE integration_api_key_id = $1', [integrationId]);
         if (existing.rowCount > 0) {
             const row = existing.rows[0];
             const currentId = typeof row.id === 'number' && Number.isFinite(row.id)
@@ -204,19 +230,20 @@ class IntegrationApiKeyService {
                     ? Number.parseInt(row.id.trim(), 10)
                     : null;
             const currentSecret = sanitizeWebhookSecret(row.webhook_secret);
-            if (currentId && currentSecret) {
+            const currentEmpresaId = mapEmpresaIdFromRow((row === null || row === void 0 ? void 0 : row.idempresa) ?? null);
+            if (currentId && currentSecret && currentEmpresaId === desiredEmpresaId) {
                 return;
             }
-            const secret = generateWebhookSecret();
+            const secret = currentSecret !== null && currentSecret !== void 0 ? currentSecret : generateWebhookSecret();
             if (currentId) {
-                await this.db.query('UPDATE asaas_credentials SET webhook_secret = $1, updated_at = NOW() WHERE id = $2', [secret, currentId]);
+                await this.db.query('UPDATE asaas_credentials SET webhook_secret = $1, idempresa = $2, updated_at = NOW() WHERE id = $3', [secret, desiredEmpresaId, currentId]);
                 return;
             }
         }
         const secret = generateWebhookSecret();
-        await this.db.query(`INSERT INTO asaas_credentials (integration_api_key_id, webhook_secret)
-       VALUES ($1, $2)
-       ON CONFLICT (integration_api_key_id) DO NOTHING`, [integrationId, secret]);
+        await this.db.query(`INSERT INTO asaas_credentials (integration_api_key_id, webhook_secret, idempresa)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (integration_api_key_id) DO NOTHING`, [integrationId, secret, desiredEmpresaId]);
     }
     async list() {
         const result = await this.db.query(`SELECT id, provider, url_api, key_value, environment, active, last_used, created_at, updated_at
