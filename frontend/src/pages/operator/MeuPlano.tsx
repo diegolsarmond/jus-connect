@@ -967,7 +967,8 @@ function MeuPlanoContent() {
       };
 
       persistManagePlanSelection(selection);
-      navigate(routes.meuPlanoPayment, { state: selection });
+      const cycle = nextPricingMode === "anual" ? "yearly" : "monthly";
+      navigate(`${routes.checkout}?plan=${plan.id}&cycle=${cycle}`);
     },
     [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
   );
