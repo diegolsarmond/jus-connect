@@ -385,6 +385,41 @@ const ManagePlanPayment = () => {
   const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const resolvedName = user.nome_completo?.trim() ?? "";
+    const resolvedEmail = user.email?.trim() ?? "";
+    const resolvedCompany = user.empresa_nome?.trim() ?? "";
+
+    if (resolvedCompany) {
+      setCompanyName((previous) => (previous.trim().length > 0 ? previous : resolvedCompany));
+    }
+
+    if (resolvedEmail) {
+      setBillingEmail((previous) => (previous.trim().length > 0 ? previous : resolvedEmail));
+    }
+
+    setCardForm((previous) => {
+      let changed = false;
+      const next = { ...previous };
+
+      if (resolvedName && !previous.holderName.trim()) {
+        next.holderName = resolvedName;
+        changed = true;
+      }
+
+      if (resolvedEmail && !previous.holderEmail.trim()) {
+        next.holderEmail = resolvedEmail;
+        changed = true;
+      }
+
+      return changed ? next : previous;
+    });
+  }, [user]);
+
+  useEffect(() => {
     if (paymentResult || !selectedPlanId) {
       return;
     }

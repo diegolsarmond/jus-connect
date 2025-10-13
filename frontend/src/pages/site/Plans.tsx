@@ -1,17 +1,107 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Loader2, Check } from "lucide-react";
+
 import PendingSubscriptions from "@/components/PendingSubscriptions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Check } from "lucide-react";
 import { plans, Plan } from "@/data/plans";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { routes } from "@/config/routes";
+import {
+  persistManagePlanSelection,
+  type ManagePlanSelection,
+  type PricingMode,
+} from "@/features/plans/managePlanPaymentStorage";
+import { fetchPlanOptions, type PlanOption } from "@/features/plans/api";
+
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+const formatCurrency = (value: number | null): string | null => {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return currencyFormatter.format(value);
+};
 
 const Plans = () => {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("yearly");
+  const [pendingPlan, setPendingPlan] = useState<Plan["id"] | null>(null);
+  const [apiPlans, setApiPlans] = useState<PlanOption[] | null>(null);
+  const [apiPlansLoaded, setApiPlansLoaded] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const handleSelectPlan = (planId: Plan["id"]) => {
+  const ensureApiPlans = useCallback(async () => {
+    if (apiPlansLoaded) {
+      return apiPlans;
+    }
+
+    try {
+      const options = await fetchPlanOptions();
+      setApiPlans(options);
+      setApiPlansLoaded(true);
+      return options;
+    } catch (error) {
+      setApiPlans(null);
+      setApiPlansLoaded(true);
+      return null;
+    }
+  }, [apiPlans, apiPlansLoaded]);
+
+  const handleSelectPlan = async (planId: Plan["id"]) => {
+    const selectedPlan = plans.find((item) => item.id === planId);
+    if (!selectedPlan) {
+      return;
+    }
+
+    if (user?.empresa_id) {
+      setPendingPlan(planId);
+      try {
+        const options = apiPlansLoaded ? apiPlans : await ensureApiPlans();
+        const normalizedName = selectedPlan.name.trim().toLowerCase();
+        const apiPlan =
+          options?.find((option) => option.name.trim().toLowerCase() === normalizedName) ?? null;
+
+        if (!apiPlan) {
+          navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
+          return;
+        }
+
+        const pricingMode: PricingMode = billingCycle === "yearly" ? "anual" : "mensal";
+        const selection: ManagePlanSelection = {
+          plan: {
+            id: apiPlan.id,
+            nome: apiPlan.name,
+            descricao: apiPlan.description,
+            recursos: selectedPlan.features,
+            valorMensal: apiPlan.monthlyPrice,
+            valorAnual: apiPlan.annualPrice,
+            precoMensal: formatCurrency(apiPlan.monthlyPrice),
+            precoAnual: formatCurrency(apiPlan.annualPrice),
+            descontoAnualPercentual: null,
+            economiaAnual: null,
+            economiaAnualFormatada: null,
+          },
+          pricingMode,
+        };
+
+        persistManagePlanSelection(selection);
+        navigate(routes.meuPlanoPayment, { state: selection });
+        return;
+      } catch (error) {
+        navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
+        return;
+      } finally {
+        setPendingPlan(null);
+      }
+    }
+
     navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
   };
 
@@ -50,7 +140,9 @@ const Plans = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {plans.map((plan) => (
+          {plans.map((plan) => {
+            const isPending = pendingPlan === plan.id;
+            return (
             <Card
               key={plan.id}
               className={`relative p-8 transition-all hover:shadow-xl ${
@@ -101,11 +193,19 @@ const Plans = () => {
                     : ""
                 }`}
                 size="lg"
+                disabled={isPending}
               >
-                Selecionar Plano
+                {isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" /> Processando…
+                  </span>
+                ) : (
+                  "Selecionar Plano"
+                )}
               </Button>
             </Card>
-          ))}
+          );
+          })}
         </div>
       </div>
     </div>

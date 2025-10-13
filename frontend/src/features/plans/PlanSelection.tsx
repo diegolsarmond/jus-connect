@@ -6,14 +6,33 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
-import { getApiUrl } from "@/lib/api";
+import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { evaluateSubscriptionAccess } from "@/features/auth/subscriptionStatus";
+import {
+  persistManagePlanSelection,
+  type ManagePlanSelection,
+  type PricingMode,
+} from "@/features/plans/managePlanPaymentStorage";
+import { getApiUrl } from "@/lib/api";
 import { fetchPlanOptions, formatPlanPriceLabel, type PlanOption } from "./api";
 
 const graceDateFormatter = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "long",
 });
+
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+const formatCurrency = (value: number | null): string | null => {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return currencyFormatter.format(value);
+};
 
 export const PlanSelection = () => {
   const { user, refreshUser } = useAuth();
@@ -109,6 +128,36 @@ export const PlanSelection = () => {
       return;
     }
 
+    const selectedPlan = plans.find((plan) => plan.id === planId) ?? null;
+
+    if (selectedPlan && user?.empresa_id) {
+      const pricingMode: PricingMode = selectedPlan.monthlyPrice !== null ? "mensal" : "anual";
+      const selection: ManagePlanSelection = {
+        plan: {
+          id: selectedPlan.id,
+          nome: selectedPlan.name,
+          descricao: selectedPlan.description,
+          recursos: [],
+          valorMensal: selectedPlan.monthlyPrice,
+          valorAnual: selectedPlan.annualPrice,
+          precoMensal: formatCurrency(selectedPlan.monthlyPrice),
+          precoAnual: formatCurrency(selectedPlan.annualPrice),
+          descontoAnualPercentual: null,
+          economiaAnual: null,
+          economiaAnualFormatada: null,
+        },
+        pricingMode,
+      };
+
+      persistManagePlanSelection(selection);
+      toast({
+        title: "Plano selecionado",
+        description: "Revise as opções de pagamento para concluir a contratação.",
+      });
+      navigate(routes.meuPlanoPayment, { state: selection });
+      return;
+    }
+
     setPendingPlanId(planId);
     setError(null);
 
@@ -120,7 +169,7 @@ export const PlanSelection = () => {
           Accept: "application/json",
         },
         body: JSON.stringify({
-          companyId: user.empresa_id,
+          companyId: user?.empresa_id,
           planId,
           status: "trialing",
           startDate: new Date().toISOString(),
@@ -154,79 +203,86 @@ export const PlanSelection = () => {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-4 py-10">
-      <div className="space-y-2 text-center">
-        <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1 text-sm font-medium text-primary">
-          {headerContent.icon} {headerContent.badge}
-        </span>
-        <h1 className="text-3xl font-bold text-foreground sm:text-4xl">{headerContent.title}</h1>
-        <p className="text-muted-foreground">{headerContent.description}</p>
-      </div>
+    <div className="relative isolate min-h-screen bg-gradient-to-b from-background via-background to-muted/40 py-16">
+      <div className="container mx-auto flex max-w-6xl flex-col gap-10 px-4">
+        <div className="space-y-4 text-center">
+          <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1 text-sm font-medium text-primary">
+            {headerContent.icon} {headerContent.badge}
+          </span>
+          <h1 className="text-4xl font-bold text-foreground sm:text-5xl">{headerContent.title}</h1>
+          <p className="mx-auto max-w-2xl text-muted-foreground">{headerContent.description}</p>
+        </div>
 
-      {infoMessage && (
-        <Alert>
-          <AlertTitle>Vincule uma empresa</AlertTitle>
-          <AlertDescription>{infoMessage}</AlertDescription>
-        </Alert>
-      )}
+        {infoMessage && (
+          <Alert>
+            <AlertTitle>Vincule uma empresa</AlertTitle>
+            <AlertDescription>{infoMessage}</AlertDescription>
+          </Alert>
+        )}
 
-      {error && (
-        <Alert variant="destructive" data-testid="plan-selection-error">
-          <AlertTitle>Não foi possível concluir a solicitação</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+        {error && (
+          <Alert variant="destructive" data-testid="plan-selection-error">
+            <AlertTitle>Não foi possível concluir a solicitação</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {isLoading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Carregando planos disponíveis…</span>
+        {isLoading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Carregando planos disponíveis…</span>
+            </div>
           </div>
-        </div>
-      ) : plans.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-10 text-center text-muted-foreground">
-            Nenhum plano está disponível no momento. Entre em contato com o suporte para prosseguir.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((plan) => {
-            const isPending = pendingPlanId === plan.id;
-            return (
-              <Card key={plan.id} className="flex h-full flex-col justify-between" data-testid={`plan-card-${plan.id}`}>
-                <CardHeader>
-                  <CardTitle>{plan.name}</CardTitle>
-                  <CardDescription>{plan.description ?? "Inclui recursos essenciais para o seu time."}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-lg font-semibold text-primary">{formatPlanPriceLabel(plan)}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Inicie agora e conheça todos os módulos disponíveis para o seu escritório.
-                  </p>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full"
-                    onClick={() => handleSelectPlan(plan.id)}
-                    disabled={isPending || !canSubscribe}
-                    data-testid={`select-plan-${plan.id}`}
-                  >
-                    {isPending ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" /> Iniciando teste…
-                      </span>
-                    ) : (
-                      "Iniciar teste gratuito"
-                    )}
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+        ) : plans.length === 0 ? (
+          <Card className="border-dashed bg-background/80">
+            <CardContent className="py-10 text-center text-muted-foreground">
+              Nenhum plano está disponível no momento. Entre em contato com o suporte para prosseguir.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+            {plans.map((plan) => {
+              const isPending = pendingPlanId === plan.id;
+              return (
+                <Card
+                  key={plan.id}
+                  className="group flex h-full flex-col justify-between overflow-hidden border-border/60 bg-gradient-to-b from-background to-muted/20 shadow-lg transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-2xl"
+                  data-testid={`plan-card-${plan.id}`}
+                >
+                  <CardHeader className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-2xl font-semibold">{plan.name}</CardTitle>
+                      <span className="text-sm font-medium text-primary">Plano recomendado</span>
+                    </div>
+                    {plan.description && <CardDescription>{plan.description}</CardDescription>}
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <p className="text-3xl font-bold text-foreground">{formatPlanPriceLabel(plan)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {plan.annualPrice !== null && plan.monthlyPrice !== null
+                          ? `Economize ${formatCurrency(Math.max(0, plan.monthlyPrice * 12 - plan.annualPrice))} ao optar pelo plano anual.`
+                          : ""}
+                      </p>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex flex-col gap-3">
+                    <Button
+                      className="w-full"
+                      onClick={() => handleSelectPlan(plan.id)}
+                      disabled={isPending || !canSubscribe}
+                      data-testid={`select-plan-${plan.id}`}
+                    >
+                      {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Selecionar plano"}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
