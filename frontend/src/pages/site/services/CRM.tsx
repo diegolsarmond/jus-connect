@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import TypebotBubble from "@/components/site/TypebotBubble";
+import { getApiUrl } from "@/lib/api";
 import {
     ArrowRight,
     BarChart3,
@@ -45,66 +46,207 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     minimumFractionDigits: 2,
 });
 
-// Dados de planos mockados para exibição estática
-const mockPlans: PlanoDisponivel[] = [
-    {
-        id: 1,
-        nome: "Plano Essencial",
-        ativo: true,
-        descricao: "Para quem está começando a organizar seus contatos e vendas.",
-        recursos: [
-            "Cadastro de clientes e casos ilimitado",
-            "Registro de atividades e tarefas",
-            "Relatórios simples de desempenho",
-            "Integração com e-mail e calendários"
-        ],
-        valorMensal: 99.9,
-        valorAnual: 999.0,
-        precoMensal: currencyFormatter.format(99.9),
-        precoAnual: currencyFormatter.format(999.0),
-        // aproximadamente 16% de desconto ao optar pelo anual
-        descontoAnualPercentual: 16,
-        economiaAnualFormatada: currencyFormatter.format(99.9 * 12 - 999.0),
-    },
-    {
-        id: 2,
-        nome: "Plano Profissional",
-        ativo: true,
-        descricao: "Recursos avançados para equipes que precisam de automação.",
-        recursos: [
-            "Todos os recursos do Plano Essencial",
-            "Automação de fluxos de trabalho",
-            "Painéis de controle personalizáveis",
-            "Integração com WhatsApp e telefonia",
-            "Suporte prioritário"
-        ],
-        valorMensal: 199.9,
-        valorAnual: 1999.0,
-        precoMensal: currencyFormatter.format(199.9),
-        precoAnual: currencyFormatter.format(1999.0),
-        descontoAnualPercentual: 16,
-        economiaAnualFormatada: currencyFormatter.format(199.9 * 12 - 1999.0),
-    },
-    {
-        id: 3,
-        nome: "Plano Enterprise",
-        ativo: true,
-        descricao: "Solução completa para escritórios de alto desempenho.",
-        recursos: [
-            "Todos os recursos do Plano Profissional",
-            "Relatórios avançados e BI",
-            "Segurança avançada e permissões detalhadas",
-            "Integrações completas com ERP e tribunais",
-            "Consultoria e onboarding dedicados"
-        ],
-        valorMensal: 399.9,
-        valorAnual: 3999.0,
-        precoMensal: currencyFormatter.format(399.9),
-        precoAnual: currencyFormatter.format(3999.0),
-        descontoAnualPercentual: 16,
-        economiaAnualFormatada: currencyFormatter.format(399.9 * 12 - 3999.0),
-    },
-];
+function normalizeApiRows(data: unknown): unknown[] {
+    if (Array.isArray(data)) {
+        return data;
+    }
+
+    if (Array.isArray((data as { rows?: unknown[] })?.rows)) {
+        return (data as { rows: unknown[] }).rows;
+    }
+
+    const nestedData = (data as { data?: unknown })?.data;
+    if (Array.isArray(nestedData)) {
+        return nestedData;
+    }
+
+    if (Array.isArray((nestedData as { rows?: unknown[] })?.rows)) {
+        return (nestedData as { rows: unknown[] }).rows;
+    }
+
+    return [];
+}
+
+function toNumber(value: unknown): number | null {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return null;
+        }
+
+        const sanitized = trimmed.replace(/[^\d,.-]/g, "").replace(/\.(?=.*\.)/g, "");
+        const normalized = sanitized.replace(",", ".");
+        const result = Number(normalized);
+        return Number.isFinite(result) ? result : null;
+    }
+
+    if (typeof value === "boolean") {
+        return value ? 1 : 0;
+    }
+
+    return null;
+}
+
+function parseBooleanFlag(value: unknown): boolean | null {
+    if (typeof value === "boolean") {
+        return value;
+    }
+
+    if (typeof value === "number") {
+        return Number.isFinite(value) ? value !== 0 : null;
+    }
+
+    if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (!normalized) {
+            return null;
+        }
+        if (["1", "true", "sim", "yes", "y", "ativo"].includes(normalized)) {
+            return true;
+        }
+        if (["0", "false", "nao", "não", "no", "n", "inativo"].includes(normalized)) {
+            return false;
+        }
+    }
+
+    return null;
+}
+
+function parseRecursos(value: unknown): string[] {
+    const seen = new Set<string>();
+    const seenObjects = new Set<object>();
+    const result: string[] = [];
+
+    const add = (entry: string) => {
+        const normalized = entry.trim();
+        if (!normalized || seen.has(normalized)) {
+            return;
+        }
+        seen.add(normalized);
+        result.push(normalized);
+    };
+
+    const handleString = (input: string) => {
+        input
+            .split(/[\n;,]+/)
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .forEach(add);
+    };
+
+    const visit = (input: unknown): void => {
+        if (input == null) {
+            return;
+        }
+
+        if (typeof input === "string") {
+            handleString(input);
+            return;
+        }
+
+        if (typeof input === "number" || typeof input === "boolean") {
+            add(String(input));
+            return;
+        }
+
+        if (Array.isArray(input)) {
+            input.forEach(visit);
+            return;
+        }
+
+        if (typeof input === "object") {
+            if (seenObjects.has(input as object)) {
+                return;
+            }
+
+            seenObjects.add(input as object);
+
+            const record = input as Record<string, unknown>;
+            const candidateKeys = [
+                "disponiveis",
+                "disponiveisPersonalizados",
+                "available",
+                "availableFeatures",
+                "inclusos",
+                "incluidos",
+                "lista",
+                "items",
+                "features",
+                "recursosDisponiveis",
+                "recursos_disponiveis",
+                "recursos",
+                "modulos",
+                "modules",
+                "rows",
+                "data",
+                "values",
+                "value",
+            ];
+
+            const excludedPattern = /(indispon|unavailable|exclu|negad)/i;
+            let matchedCandidate = false;
+
+            for (const key of candidateKeys) {
+                if (key in record) {
+                    matchedCandidate = true;
+                    visit(record[key]);
+                }
+            }
+
+            if (!matchedCandidate) {
+                for (const [key, entry] of Object.entries(record)) {
+                    if (excludedPattern.test(key)) {
+                        continue;
+                    }
+
+                    if (/^\d+$/.test(key)) {
+                        visit(entry);
+                    }
+                }
+            }
+        }
+    };
+
+    visit(value);
+
+    return result;
+}
+
+function roundCurrency(value: number): number {
+    return Math.round(value * 100) / 100;
+}
+
+function computePricingDetails(valorMensal: number | null, valorAnual: number | null) {
+    const precoMensal = valorMensal !== null ? currencyFormatter.format(valorMensal) : null;
+    const precoAnual = valorAnual !== null ? currencyFormatter.format(valorAnual) : null;
+
+    if (valorMensal === null || valorAnual === null) {
+        return {
+            precoMensal,
+            precoAnual,
+            descontoPercentual: null,
+            economiaAnual: null,
+            economiaAnualFormatada: null,
+        } as const;
+    }
+
+    const totalMensal = valorMensal * 12;
+    const economiaBruta = roundCurrency(Math.max(0, totalMensal - valorAnual));
+    const descontoPercentual =
+        totalMensal > 0 && economiaBruta > 0 ? Math.round((economiaBruta / totalMensal) * 100) : null;
+
+    return {
+        precoMensal,
+        precoAnual,
+        descontoPercentual,
+        economiaAnual: economiaBruta > 0 ? economiaBruta : null,
+        economiaAnualFormatada: economiaBruta > 0 ? currencyFormatter.format(economiaBruta) : null,
+    } as const;
+}
 
 // Este helper captura a função gtag, caso esteja disponível no navegador.
 const getGtag = (): GtagFunction | undefined => {
@@ -237,10 +379,124 @@ const CRM = () => {
         },
     ];
 
-    // Estado inicial de planos utilizando dados mockados; não há carregamento assíncrono
-    const [planosDisponiveis] = useState<PlanoDisponivel[]>(mockPlans);
-    const planosLoading = false;
-    const planosError: string | null = null;
+    const [planosDisponiveis, setPlanosDisponiveis] = useState<PlanoDisponivel[]>([]);
+    const [planosLoading, setPlanosLoading] = useState(true);
+    const [planosError, setPlanosError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let disposed = false;
+        const controller = new AbortController();
+
+        const loadPlans = async () => {
+            setPlanosLoading(true);
+            setPlanosError(null);
+
+            try {
+                const response = await fetch(getApiUrl("planos"), {
+                    headers: { Accept: "application/json" },
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Falha ao carregar planos (HTTP ${response.status})`);
+                }
+
+                const payload = await response.json();
+                const rows = normalizeApiRows(payload);
+                const parsed = rows
+                    .map((entry) => {
+                        if (!entry || typeof entry !== "object") {
+                            return null;
+                        }
+
+                        const record = entry as Record<string, unknown>;
+                        const id = toNumber(record["id"]);
+                        if (id === null) {
+                            return null;
+                        }
+
+                        const nomeCandidate = typeof record["nome"] === "string" ? record["nome"].trim() : null;
+                        const ativo = parseBooleanFlag(record["ativo"]) ?? true;
+                        const descricaoRaw =
+                            typeof record["descricao"] === "string"
+                                ? record["descricao"].trim()
+                                : typeof record["detalhes"] === "string"
+                                  ? record["detalhes"].trim()
+                                  : null;
+                        const recursos = parseRecursos([
+                            record["recursos"],
+                            record["recursosDisponiveis"],
+                            record["recursos_disponiveis"],
+                            record["features"],
+                            record["items"],
+                            record["modules"],
+                            record["modulos"],
+                        ]);
+
+                        const rawValorMensal =
+                            (record["valor_mensal"] ??
+                                record["valorMensal"] ??
+                                record["preco_mensal"] ??
+                                record["precoMensal"]) as unknown;
+                        const rawValorAnual =
+                            (record["valor_anual"] ??
+                                record["valorAnual"] ??
+                                record["preco_anual"] ??
+                                record["precoAnual"]) as unknown;
+
+                        const valorMensal = toNumber(rawValorMensal);
+                        const valorAnual = toNumber(rawValorAnual);
+                        const pricing = computePricingDetails(valorMensal, valorAnual);
+
+                        const precoMensal =
+                            pricing.precoMensal ??
+                            (typeof rawValorMensal === "string" && rawValorMensal.trim() ? rawValorMensal.trim() : null);
+                        const precoAnual =
+                            pricing.precoAnual ??
+                            (typeof rawValorAnual === "string" && rawValorAnual.trim() ? rawValorAnual.trim() : null);
+
+                        return {
+                            id,
+                            nome: nomeCandidate && nomeCandidate.length > 0 ? nomeCandidate : `Plano ${id}`,
+                            ativo,
+                            descricao: descricaoRaw && descricaoRaw.length > 0 ? descricaoRaw : null,
+                            recursos,
+                            valorMensal,
+                            valorAnual,
+                            precoMensal,
+                            precoAnual,
+                            descontoAnualPercentual: pricing.descontoPercentual,
+                            economiaAnualFormatada: pricing.economiaAnualFormatada,
+                        } satisfies PlanoDisponivel;
+                    })
+                    .filter((item): item is PlanoDisponivel => item !== null);
+
+                if (!disposed) {
+                    setPlanosDisponiveis(parsed);
+                }
+            } catch (error) {
+                if (error instanceof DOMException && error.name === "AbortError") {
+                    return;
+                }
+                console.error(error);
+                if (!disposed) {
+                    setPlanosError("Não foi possível carregar os planos disponíveis no momento.");
+                    setPlanosDisponiveis([]);
+                }
+            } finally {
+                if (!disposed) {
+                    setPlanosLoading(false);
+                }
+            }
+        };
+
+        void loadPlans();
+
+        return () => {
+            disposed = true;
+            controller.abort();
+        };
+    }, []);
 
     const planosAtivos = useMemo(() => planosDisponiveis.filter((plan) => plan.ativo), [planosDisponiveis]);
 

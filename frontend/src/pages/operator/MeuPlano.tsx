@@ -365,6 +365,25 @@ function formatAvailableModes(plan: PlanoDetalhe | null): string | null {
   return modes.length === 2 ? `${modes[0]} ou ${modes[1]}` : modes[0];
 }
 
+function resolveSubscriptionStatusLabel(status: string | null): string | null {
+  switch (status) {
+    case "active":
+      return "Assinatura ativa";
+    case "trialing":
+      return "Período de avaliação";
+    case "grace_period":
+      return "Pagamento em tolerância";
+    case "past_due":
+      return "Pagamento pendente";
+    case "inactive":
+      return "Assinatura inativa";
+    case "expired":
+      return "Assinatura expirada";
+    default:
+      return null;
+  }
+}
+
 function formatLimitValue(value: number | null, singular: string, plural: string): string {
   if (value === null || !Number.isFinite(value) || value <= 0) {
     return "Ilimitado";
@@ -551,6 +570,12 @@ function MeuPlanoContent() {
   const navigate = useNavigate();
   const subscriptionPlanId = toNumber(user?.subscription?.planId ?? null);
   const isTrialing = user?.subscription?.status === "trialing";
+  const subscriptionStatus = user?.subscription?.status ?? null;
+  const subscriptionStatusLabel = useMemo(
+    () => resolveSubscriptionStatusLabel(subscriptionStatus),
+    [subscriptionStatus],
+  );
+  const isPaymentPending = subscriptionStatus === "past_due" || subscriptionStatus === "grace_period";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -776,6 +801,22 @@ function MeuPlanoContent() {
 
   const availableModesLabel = useMemo(() => formatAvailableModes(planoExibido), [planoExibido]);
 
+  const pendingNoticeMessage = useMemo(() => {
+    if (!isPaymentPending) {
+      return null;
+    }
+
+    const amount = pricingDisplay.mainPrice;
+    const cadence = pricingDisplay.cadenceLabel;
+    const nextBilling = cobrancaInfo.nextBilling;
+
+    if (nextBilling) {
+      return `O pagamento de ${amount} ${cadence} está pendente. Próxima cobrança estimada em ${nextBilling}.`;
+    }
+
+    return `O pagamento de ${amount} ${cadence} está pendente. Consulte o time financeiro para confirmar a próxima cobrança.`;
+  }, [cobrancaInfo.nextBilling, isPaymentPending, pricingDisplay.cadenceLabel, pricingDisplay.mainPrice]);
+
   const usageItems = useMemo<UsageItem[]>(() => {
     if (!planoExibido) {
       return [];
@@ -946,7 +987,7 @@ function MeuPlanoContent() {
   const hasMensalPricingAvailable = hasMensalPricing(planoExibido);
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold">Meu Plano</h1>
         <p className="text-muted-foreground">
@@ -989,6 +1030,13 @@ function MeuPlanoContent() {
             </Alert>
           )}
 
+          {pendingNoticeMessage && (
+            <Alert>
+              <AlertTitle>Assinatura com pagamento pendente</AlertTitle>
+              <AlertDescription>{pendingNoticeMessage}</AlertDescription>
+            </Alert>
+          )}
+
           <Card className="relative overflow-hidden border-none bg-gradient-to-br from-primary/5 via-background to-background shadow-xl">
             <div className="pointer-events-none absolute inset-0">
               <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
@@ -1005,6 +1053,11 @@ function MeuPlanoContent() {
                       {planoExibido?.ativo ? "Disponível" : "Indisponível"}
                     </Badge>
                     {availableModesLabel && <Badge variant="outline">{availableModesLabel}</Badge>}
+                    {subscriptionStatusLabel && (
+                      <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+                        {subscriptionStatusLabel}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-3xl font-semibold tracking-tight md:text-4xl">
                     <Sparkles className="h-7 w-7 text-primary" />
@@ -1057,7 +1110,7 @@ function MeuPlanoContent() {
 
               <Separator className="border-primary/20" />
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">Plano contratado</p>
                   <p className="text-sm font-semibold text-foreground">{planoAtual.nome}</p>
@@ -1305,7 +1358,7 @@ function MeuPlanoContent() {
           </Card>
 
           {isTrialing && (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
               <Card className="rounded-3xl border border-border/60">
                 <CardHeader>
                   <CardTitle>Utilização dos recursos</CardTitle>
@@ -1330,7 +1383,7 @@ function MeuPlanoContent() {
                       const currentFormatted = hasCurrent ? countFormatter.format(item.current ?? 0) : "—";
                       return (
                         <div key={item.label} className="space-y-2 rounded-2xl border border-border/60 p-4">
-                          <div className="flex items-center justify-between text-sm font-medium">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-medium">
                             <span>{item.label}</span>
                             <span className="text-foreground">
                               {hasLimit
@@ -1373,7 +1426,7 @@ function MeuPlanoContent() {
                       Este plano não possui benefícios listados. Atualize os dados do plano para exibir aqui.
                     </p>
                   ) : (
-                    <ul className="grid gap-3 sm:grid-cols-2">
+                    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {beneficios.map((beneficio) => (
                         <li
                           key={beneficio}

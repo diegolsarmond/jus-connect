@@ -847,25 +847,38 @@ export default class AsaasChargeService {
     const chargeResponse = await asaasClient.createCharge(payload);
 
     const pixData = extractPixPayload(chargeResponse);
-    let pixPayload = pixData.payload;
-    let pixQrCode = pixData.qrCode;
-    const hasPixValue = (value: string | null): value is string =>
-      typeof value === 'string' && value.trim() !== '';
-
-    if (billingType === 'PIX' && (!hasPixValue(pixPayload) || !hasPixValue(pixQrCode))) {
-      const pixQrCodeResponse = await asaasClient.getPaymentPixQrCode(chargeResponse.id);
-
-      if (!hasPixValue(pixPayload) && pixQrCodeResponse.payload) {
-        pixPayload = pixQrCodeResponse.payload;
+    const normalizePixValue = (value: string | null): string | null => {
+      if (typeof value !== 'string') {
+        return null;
       }
 
-      if (!hasPixValue(pixQrCode) && pixQrCodeResponse.encodedImage) {
-        pixQrCode = pixQrCodeResponse.encodedImage;
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    };
+
+    let pixPayload = normalizePixValue(pixData.payload);
+    let pixQrCode = normalizePixValue(pixData.qrCode);
+
+    if (billingType === 'PIX' && (!pixPayload || !pixQrCode)) {
+      const pixQrCodeResponse = await asaasClient.getPaymentPixQrCode(chargeResponse.id);
+
+      if (!pixPayload) {
+        const fallbackPayload = normalizePixValue(pixQrCodeResponse.payload);
+        if (fallbackPayload) {
+          pixPayload = fallbackPayload;
+        }
+      }
+
+      if (!pixQrCode) {
+        const fallbackQrCode = normalizePixValue(pixQrCodeResponse.encodedImage);
+        if (fallbackQrCode) {
+          pixQrCode = fallbackQrCode;
+        }
       }
     }
 
-    const normalizedPixPayload = hasPixValue(pixPayload) ? pixPayload : null;
-    const normalizedPixQrCode = hasPixValue(pixQrCode) ? pixQrCode : null;
+    const normalizedPixPayload = pixPayload;
+    const normalizedPixQrCode = pixQrCode;
     const boletoUrl = extractBoletoUrl(chargeResponse);
     const { last4: cardLast4, brand: cardBrand } = extractCardInfo(chargeResponse);
     const flowStatus = mapFlowStatus(chargeResponse.status);

@@ -4,13 +4,39 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Shield, BarChart3, Users, Zap, ArrowRight, Star, Sparkles, TrendingUp, Globe, Menu, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import quantumLogo from "@/assets/quantum-logo.png";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { routes } from "@/config/routes";
 import { appConfig } from "@/config/app-config";
+import { fetchPlanOptions, formatPlanPriceLabel, type PlanOption } from "@/features/plans/api";
 
 const Landing = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
+  const [plansError, setPlansError] = useState<string | null>(null);
   const appName = appConfig.appName;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setIsLoadingPlans(true);
+    setPlansError(null);
+
+    fetchPlanOptions(controller.signal)
+      .then((loadedPlans) => {
+        setPlans(loadedPlans);
+      })
+      .catch((error) => {
+        console.error("Falha ao carregar planos para a landing page", error);
+        setPlansError("Não foi possível carregar os planos no momento.");
+      })
+      .finally(() => {
+        setIsLoadingPlans(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/10 overflow-x-hidden">
@@ -255,116 +281,79 @@ const Landing = () => {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            <Card className="border-2 hover:shadow-xl transition-all duration-300">
-              <CardHeader>
-                <CardTitle className="text-center">Starter</CardTitle>
-                <div className="text-center">
-                  <span className="text-3xl font-bold">R$ 99</span>
-                  <span className="text-muted-foreground">/mês</span>
-                </div>
-                <CardDescription className="text-center">
-                  Perfeito para profissionais autônomos
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Até 100 clientes</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>1 usuário</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Relatórios básicos</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Suporte por email</span>
-                </div>
-                <Button className="w-full mt-6 bg-gradient-primary hover:opacity-90" asChild>
-                  <Link to={routes.register}>Começar Teste</Link>
-                </Button>
-              </CardContent>
-            </Card>
+            {isLoadingPlans ? (
+              <Card className="border-2 hover:shadow-xl transition-all duration-300">
+                <CardHeader>
+                  <CardTitle className="text-center">Carregando planos…</CardTitle>
+                  <CardDescription className="text-center">Estamos buscando as opções disponíveis para você.</CardDescription>
+                </CardHeader>
+              </Card>
+            ) : plansError ? (
+              <Card className="border-2 hover:shadow-xl transition-all duration-300">
+                <CardHeader>
+                  <CardTitle className="text-center">Planos indisponíveis</CardTitle>
+                  <CardDescription className="text-center">{plansError}</CardDescription>
+                </CardHeader>
+              </Card>
+            ) : plans.length === 0 ? (
+              <Card className="border-2 hover:shadow-xl transition-all duration-300">
+                <CardHeader>
+                  <CardTitle className="text-center">Nenhum plano disponível</CardTitle>
+                  <CardDescription className="text-center">
+                    Entre em contato com a nossa equipe para conhecer as opções.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+              plans.map((plan, index) => {
+                const descriptionItems = plan.description
+                  ? plan.description.split(/\r?\n|•/).map((item) => item.trim()).filter(Boolean)
+                  : [];
+                const isFeatured = index === 1;
 
-            <Card className="border-2 border-primary hover:shadow-xl transition-all duration-300 relative">
-              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                <Badge className="bg-primary text-primary-foreground">Mais Popular</Badge>
-              </div>
-              <CardHeader>
-                <CardTitle className="text-center">Professional</CardTitle>
-                <div className="text-center">
-                  <span className="text-3xl font-bold">R$ 199</span>
-                  <span className="text-muted-foreground">/mês</span>
-                </div>
-                <CardDescription className="text-center">
-                  Ideal para escritórios médios
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Até 500 clientes</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>5 usuários</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Relatórios avançados</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Suporte prioritário</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Automações</span>
-                </div>
-                <Button className="w-full mt-6 bg-gradient-primary hover:opacity-90" asChild>
-                  <Link to={routes.register}>Começar Teste</Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 hover:shadow-xl transition-all duration-300">
-              <CardHeader>
-                <CardTitle className="text-center">Enterprise</CardTitle>
-                <div className="text-center">
-                  <span className="text-3xl font-bold">R$ 399</span>
-                  <span className="text-muted-foreground">/mês</span>
-                </div>
-                <CardDescription className="text-center">
-                  Para grandes escritórios
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Clientes ilimitados</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Usuários ilimitados</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Relatórios customizados</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>Suporte 24/7</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <span>API personalizada</span>
-                </div>
-                <Button className="w-full mt-6">Falar com Vendas</Button>
-              </CardContent>
-            </Card>
+                return (
+                  <Card
+                    key={plan.id}
+                    className={`border-2 hover:shadow-xl transition-all duration-300 ${
+                      isFeatured ? "border-primary relative" : ""
+                    }`}
+                  >
+                    {isFeatured && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <Badge className="bg-primary text-primary-foreground">Mais Popular</Badge>
+                      </div>
+                    )}
+                    <CardHeader>
+                      <CardTitle className="text-center">{plan.name}</CardTitle>
+                      <div className="text-center">
+                        <span className="text-3xl font-bold">{formatPlanPriceLabel(plan)}</span>
+                      </div>
+                      <CardDescription className="text-center whitespace-pre-line">
+                        {plan.description ?? "Conheça os recursos deste plano em detalhes."}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {descriptionItems.length > 0 ? (
+                        descriptionItems.map((item) => (
+                          <div key={item} className="flex items-center gap-3">
+                            <CheckCircle className="h-5 w-5 text-primary" />
+                            <span>{item}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <CheckCircle className="h-5 w-5 text-primary" />
+                          <span>Plano sob medida para o seu escritório.</span>
+                        </div>
+                      )}
+                      <Button className="w-full mt-6 bg-gradient-primary hover:opacity-90" asChild>
+                        <Link to={routes.register}>Começar Teste</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
           </div>
         </div>
       </section>
