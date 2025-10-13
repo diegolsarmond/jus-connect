@@ -432,12 +432,17 @@ export class AsaasClient {
       `/payments/${chargeId}/pixQrCode`,
     );
 
-    const payload =
-      typeof response.payload === 'string' && response.payload.trim() ? response.payload : null;
-    const encodedImage =
-      typeof response.encodedImage === 'string' && response.encodedImage.trim()
-        ? response.encodedImage
-        : null;
+    const normalizePixField = (value: unknown): string | null => {
+      if (typeof value !== 'string') {
+        return null;
+      }
+
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    };
+
+    const payload = normalizePixField(response.payload);
+    const encodedImage = normalizePixField(response.encodedImage);
 
     return { payload, encodedImage };
   }
