@@ -87,6 +87,7 @@ export async function ensureChatSchema(client: Queryable = pool): Promise<void> 
   if (!initializationPromise) {
     initializationPromise = (async () => {
       if (!(await ensureDependencies(client))) {
+        initializationPromise = null;
         return;
       }
 

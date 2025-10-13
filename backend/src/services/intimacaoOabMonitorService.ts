@@ -1,4 +1,5 @@
 import pool from './db';
+import { MissingDependencyError } from './errors';
 
 interface IntimacaoOabMonitorRow {
   id: number;
@@ -54,7 +55,9 @@ const ensureTable = async (): Promise<void> => {
             );
           }
 
-          return;
+          throw new MissingDependencyError(
+            'Tabela public.empresas ausente; não é possível inicializar o schema de oab_monitoradas.',
+          );
         }
 
         await client.query('BEGIN');
@@ -265,7 +268,17 @@ const ensureTable = async (): Promise<void> => {
   await ensureTablePromise;
 };
 
-export const bootstrapIntimacaoOabMonitoradas = (): Promise<void> => ensureTable();
+export const bootstrapIntimacaoOabMonitoradas = async (): Promise<void> => {
+  try {
+    await ensureTable();
+  } catch (error) {
+    if (error instanceof MissingDependencyError) {
+      return;
+    }
+
+    throw error;
+  }
+};
 
 const sanitizeUf = (input: string): string => input.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase();
 
