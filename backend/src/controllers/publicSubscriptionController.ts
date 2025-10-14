@@ -420,8 +420,8 @@ const ensureSubscriptionFinancialRecords = async ({
       limit: 1,
       offset: 0,
     });
-    const [firstPayment] = mapPaginatedData<Record<string, unknown>>(paymentsResponse);
-    if (firstPayment) {
+    const [firstPayment] = mapPaginatedData(paymentsResponse);
+    if (firstPayment && isRecord(firstPayment)) {
       chargeRecord = firstPayment;
     }
   } catch (error) {
@@ -429,14 +429,14 @@ const ensureSubscriptionFinancialRecords = async ({
   }
 
   if (chargeRecord) {
-    chargeId = sanitizeString(chargeRecord.id);
+    chargeId = sanitizeString(chargeRecord.id) ?? null;
     chargeBillingType = parseBillingType(chargeRecord.billingType);
     chargeValue = parseChargeValue(chargeRecord.value);
     chargeDueDate =
       parseChargeDate(chargeRecord.dueDate) ??
       parseChargeDate(chargeRecord.originalDueDate) ??
       subscriptionDueDate;
-    chargeStatus = sanitizeString(chargeRecord.status);
+    chargeStatus = sanitizeString(chargeRecord.status) ?? null;
     chargeInvoiceUrl =
       sanitizeString(chargeRecord.invoiceUrl) ??
       sanitizeString(chargeRecord.invoice_url) ??
@@ -475,7 +475,7 @@ const ensureSubscriptionFinancialRecords = async ({
   const resolvedDescription =
     sanitizeString(chargeRecord?.description) ?? description ?? `Assinatura ${subscription.id}`;
 
-  const existingFlow = await pool.query<{ id: number }>(
+  const existingFlow = await pool.query<{ id: number | string | null }>(
     `SELECT id FROM financial_flows
       WHERE external_provider = 'asaas'
         AND external_reference_id = $1
@@ -485,7 +485,7 @@ const ensureSubscriptionFinancialRecords = async ({
 
   let financialFlowId: number | null = null;
 
-  if (existingFlow.rowCount > 0) {
+  if ((existingFlow.rowCount ?? 0) > 0) {
     const rawId = existingFlow.rows[0]?.id;
     if (typeof rawId === 'number') {
       financialFlowId = rawId;
@@ -498,7 +498,7 @@ const ensureSubscriptionFinancialRecords = async ({
   }
 
   if (financialFlowId === null) {
-    const insertResult = await pool.query<{ id: number }>(
+    const insertResult = await pool.query<{ id: number | string | null }>(
       `INSERT INTO financial_flows (
         tipo,
         descricao,
@@ -528,8 +528,16 @@ const ensureSubscriptionFinancialRecords = async ({
       [resolvedDescription, resolvedDueDate, resolvedValue, subscription.id, empresaId],
     );
 
-    if (insertResult.rowCount > 0) {
-      financialFlowId = insertResult.rows[0]?.id ?? null;
+    if ((insertResult.rowCount ?? 0) > 0) {
+      const insertedId = insertResult.rows[0]?.id;
+      if (typeof insertedId === 'number') {
+        financialFlowId = insertedId;
+      } else if (typeof insertedId === 'string' && insertedId.trim()) {
+        const parsedId = Number.parseInt(insertedId.trim(), 10);
+        if (Number.isInteger(parsedId)) {
+          financialFlowId = parsedId;
+        }
+      }
     }
   }
 
@@ -554,7 +562,7 @@ const ensureSubscriptionFinancialRecords = async ({
     [chargeId, financialFlowId],
   );
 
-  if (existingCharge.rowCount > 0) {
+  if ((existingCharge.rowCount ?? 0) > 0) {
     return;
   }
 
@@ -807,7 +815,7 @@ export const createSubscription = async (req: Request, res: Response) => {
           [subscription.id, customerId ?? null, empresaId],
         );
 
-        if (updateResult.rowCount > 0) {
+        if ((updateResult.rowCount ?? 0) > 0) {
           try {
             await ensureSubscriptionFinancialRecords({
               empresaId,
