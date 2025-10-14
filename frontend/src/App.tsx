@@ -152,7 +152,7 @@ const App = () => (
               <Route path="/nossa-historia" element={<SiteHistory />} />
               <Route path="/servicos" element={<SiteServices />} />
               <Route path={routes.plans} element={<PublicPlans />} />
-              <Route path="/checkout" element={<SiteCheckout />} />
+              <Route path={routes.checkout} element={<SiteCheckout />} />
               <Route path="/servicos/assistente-ia" element={<SiteServiceAssistenteIA />} />
               <Route path="/servicos/automacoes" element={<SiteServiceAutomacoes />} />
               <Route path="/produtos/crm" element={<SiteServiceCRM />} />
@@ -264,6 +264,10 @@ const App = () => (
                 <Route path="/alterar-senha" element={<AlterarSenha />} />
                 <Route path="/meu-perfil" element={<MeuPerfil />} />
                 <Route path="/meu-plano" element={withModule("meu-plano", <MeuPlano />)} />
+                <Route
+                  path={routes.checkout}
+                  element={withModule("meu-plano", <ManagePlanPayment />)}
+                />
                 <Route
                   path={routes.meuPlanoPlans}
                   element={withModule("meu-plano", <OperatorPlans />)}
