@@ -22,6 +22,15 @@ type UpdatePlanDialogProps = {
   onUpdate: () => void;
 };
 
+const normalizePlanKey = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/plano/gi, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
 const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -32,33 +41,49 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
   const featuresIndex = useMemo(() => {
     const index = new Map<string, string[]>();
     staticPlans.forEach((plan) => {
-      const key = plan.name.trim().toLowerCase();
-      if (!index.has(key)) {
-        index.set(key, plan.features);
-      }
+      const keys = new Set<string>([
+        normalizePlanKey(plan.name),
+        normalizePlanKey(plan.id),
+      ]);
+      keys.forEach((key) => {
+        if (key && !index.has(key)) {
+          index.set(key, plan.features);
+        }
+      });
     });
     return index;
   }, []);
   const availablePlans = useMemo(() =>
     planOptions.map((plan) => {
-      const normalizedName = plan.name.trim().toLowerCase();
+      const normalizedName = normalizePlanKey(plan.name);
+      const normalizedDescription = plan.description ? normalizePlanKey(plan.description) : "";
       return {
         id: String(plan.id),
         name: plan.name,
         description: plan.description,
         monthlyPrice: plan.monthlyPrice,
         annualPrice: plan.annualPrice,
-        features: featuresIndex.get(normalizedName) ?? [],
+        features:
+          featuresIndex.get(normalizedName) ??
+          (normalizedDescription ? featuresIndex.get(normalizedDescription) ?? [] : []),
+        normalizedKey: normalizedName || normalizedDescription,
       };
     }),
   [planOptions, featuresIndex]);
   const planIdMap = useMemo(() => {
     const mapping = new Map<string, string>();
     planOptions.forEach((plan) => {
-      const normalizedName = plan.name.trim().toLowerCase();
-      const matchedPlan = staticPlans.find(
-        (staticPlan) => staticPlan.name.trim().toLowerCase() === normalizedName,
-      );
+      const normalizedName = normalizePlanKey(plan.name);
+      const normalizedDescription = plan.description ? normalizePlanKey(plan.description) : "";
+      const matchedPlan = staticPlans.find((staticPlan) => {
+        const normalizedStaticName = normalizePlanKey(staticPlan.name);
+        const normalizedStaticId = normalizePlanKey(staticPlan.id);
+        return (
+          (normalizedStaticName && normalizedStaticName === normalizedName) ||
+          (normalizedStaticId && normalizedStaticId === normalizedName) ||
+          (normalizedDescription && normalizedDescription === normalizedStaticName)
+        );
+      });
       if (matchedPlan) {
         mapping.set(String(plan.id), matchedPlan.id);
       }
@@ -81,9 +106,15 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
       }
     }
 
-    const normalized = subscription.description?.toLowerCase() ?? "";
+    const normalizedDescription = normalizePlanKey(subscription.description ?? "");
     return (
-      availablePlans.find((plan) => normalized.includes(plan.name.toLowerCase()))?.id ??
+      availablePlans.find((plan) => {
+        if (!normalizedDescription) {
+          return false;
+        }
+        const planKey = plan.normalizedKey ?? normalizePlanKey(plan.name);
+        return planKey && normalizedDescription.includes(planKey);
+      })?.id ??
       availablePlans[0]?.id ??
       ""
     );
@@ -191,7 +222,30 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
 
     setLoading(true);
 
-    const resolvedPlanId = planIdMap.get(String(selectedPlan)) ?? selectedPlan;
+    const resolvedPlanId = (() => {
+      const direct = planIdMap.get(String(selectedPlan));
+      if (direct) {
+        return direct;
+      }
+      const selected = availablePlans.find((plan) => plan.id === String(selectedPlan));
+      if (!selected) {
+        return selectedPlan;
+      }
+      const matchedPlan = staticPlans.find((plan) => {
+        const normalizedStaticName = normalizePlanKey(plan.name);
+        const normalizedStaticId = normalizePlanKey(plan.id);
+        const normalizedSelected = normalizePlanKey(selected.name);
+        const normalizedKey = selected.normalizedKey
+          ? normalizePlanKey(selected.normalizedKey)
+          : "";
+        return (
+          (normalizedStaticName && normalizedStaticName === normalizedSelected) ||
+          (normalizedStaticId && normalizedStaticId === normalizedSelected) ||
+          (normalizedKey && normalizedStaticName === normalizedKey)
+        );
+      });
+      return matchedPlan?.id ?? selectedPlan;
+    })();
 
     try {
       await requestJson(getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscription.id)}`), {
