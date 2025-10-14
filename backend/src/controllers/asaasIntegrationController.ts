@@ -177,6 +177,16 @@ function sanitizeString(value: unknown): string | null {
   return trimmed || null;
 }
 
+function extractMetadataOrigin(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+
+  const record = metadata as Record<string, unknown>;
+  const origin = sanitizeString(record.origin);
+  return origin ?? null;
+}
+
 function extractCompanyIdFromMetadata(metadata: unknown): number | null {
   if (!metadata || typeof metadata !== 'object') {
     return null;
@@ -484,6 +494,19 @@ async function resolveChargeContext(
   };
 }
 
+function isPlanChargeEvent(context: ChargeContext, payment: AsaasPaymentPayload | null): boolean {
+  const metadataOrigin = extractMetadataOrigin(payment?.metadata ?? null);
+  if (metadataOrigin && metadataOrigin.toLowerCase() === 'plan-payment') {
+    return true;
+  }
+
+  if (context.clienteId == null) {
+    return true;
+  }
+
+  return false;
+}
+
 function extractDueDate(payment: AsaasPaymentPayload | null | undefined): Date | null {
   if (!payment || typeof payment.dueDate !== 'string') {
     return null;
@@ -742,7 +765,9 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
       companyId = await resolveCompanyIdFromPayment(payment);
     }
 
-    if (companyId) {
+    const isPlanCharge = isPlanChargeEvent(context, payment);
+
+    if (companyId && isPlanCharge) {
       try {
         if (shouldMarkAsPaid(normalizedEvent)) {
           const effectivePaymentDate = paymentDate ? new Date(paymentDate) : new Date();
