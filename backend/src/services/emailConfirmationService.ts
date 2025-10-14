@@ -65,19 +65,17 @@ function parseDateValue(value: unknown): Date | null {
   return null;
 }
 
-export async function sendEmailConfirmationToken(
+export async function createEmailConfirmationToken(
   user: EmailConfirmationTargetUser
-): Promise<void> {
+): Promise<string> {
   const { rawToken, tokenHash } = generateToken();
   const expiresAt = new Date(Date.now() + EMAIL_CONFIRMATION_TOKEN_TTL_MS);
   const confirmationLink = buildConfirmationLink(rawToken);
 
-  const client = await pool.connect();
-
   try {
-    await client.query('BEGIN');
+    await pool.query('BEGIN');
 
-    await client.query(
+    await pool.query(
       `UPDATE public.email_confirmation_tokens
           SET used_at = NOW()
         WHERE user_id = $1
@@ -85,19 +83,30 @@ export async function sendEmailConfirmationToken(
       [user.id]
     );
 
-    await client.query(
+    await pool.query(
       `INSERT INTO public.email_confirmation_tokens (user_id, token_hash, expires_at)
        VALUES ($1, $2, $3)`,
       [user.id, tokenHash, expiresAt]
     );
 
-    await client.query('COMMIT');
+    await pool.query('COMMIT');
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await pool.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Falha ao reverter transação de confirmação de e-mail', rollbackError);
+    }
+
     throw error;
-  } finally {
-    client.release();
   }
+
+  return confirmationLink;
+}
+
+export async function sendEmailConfirmationToken(
+  user: EmailConfirmationTargetUser
+): Promise<void> {
+  const confirmationLink = await createEmailConfirmationToken(user);
 
   const email = buildEmailConfirmationEmail({
     userName: user.nome_completo,
