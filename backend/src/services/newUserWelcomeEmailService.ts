@@ -5,6 +5,7 @@ export interface SendWelcomeEmailParams {
   to: string;
   userName: string;
   temporaryPassword: string;
+  confirmationLink: string;
 }
 
 type SendWelcomeEmailFn = (params: SendWelcomeEmailParams) => Promise<void>;
@@ -13,8 +14,13 @@ const defaultSendWelcomeEmail: SendWelcomeEmailFn = async ({
   to,
   userName,
   temporaryPassword,
+  confirmationLink,
 }: SendWelcomeEmailParams) => {
-  const emailContent = buildNewUserWelcomeEmail({ userName, temporaryPassword });
+  const emailContent = buildNewUserWelcomeEmail({
+    userName,
+    temporaryPassword,
+    confirmationLink,
+  });
 
   await sendEmail({
     to,

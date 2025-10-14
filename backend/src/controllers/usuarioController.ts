@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { fetchPlanLimitsForCompany, countCompanyResource } from '../services/planLimitsService';
+import { createEmailConfirmationToken } from '../services/emailConfirmationService';
 
 import {
   createPasswordResetRequest,
@@ -410,28 +411,64 @@ export const createUsuario = async (req: Request, res: Response) => {
     );
 
     const createdUser = result.rows[0];
+    const createdUserIdResult = parseOptionalId((createdUser as { id?: unknown })?.id);
+
+    if (typeof createdUserIdResult !== 'number') {
+      console.error('ID inválido retornado ao criar usuário.');
+
+      try {
+        await pool.query('DELETE FROM public.usuarios WHERE email = $1', [normalizedEmail]);
+      } catch (cleanupError) {
+        console.error('Falha ao remover usuário após erro de identificação', cleanupError);
+      }
+
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível enviar a senha provisória para o novo usuário.' });
+    }
+
+    const createdUserId = createdUserIdResult;
     const userNameForEmail =
       typeof nome_completo === 'string' && nome_completo.trim().length > 0
         ? nome_completo
         : 'Usuário';
+
+    let confirmationLink: string;
+
+    try {
+      confirmationLink = await createEmailConfirmationToken({
+        id: createdUserId,
+        nome_completo: userNameForEmail,
+        email: normalizedEmail,
+      });
+    } catch (tokenError) {
+      console.error('Erro ao gerar link de confirmação para novo usuário', tokenError);
+
+      try {
+        await pool.query('DELETE FROM public.usuarios WHERE id = $1', [createdUserId]);
+      } catch (cleanupError) {
+        console.error('Falha ao remover usuário após erro na geração de link de confirmação', cleanupError);
+      }
+
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível enviar a senha provisória para o novo usuário.' });
+    }
 
     try {
       await welcomeEmailService.sendWelcomeEmail({
         to: normalizedEmail,
         userName: userNameForEmail,
         temporaryPassword,
+        confirmationLink,
       });
     } catch (emailError) {
       console.error('Erro ao enviar senha provisória para novo usuário', emailError);
 
-      const createdUserId = parseOptionalId((createdUser as { id?: unknown })?.id);
-
-      if (createdUserId !== 'invalid' && createdUserId !== null) {
-        try {
-          await pool.query('DELETE FROM public.usuarios WHERE id = $1', [createdUserId]);
-        } catch (cleanupError) {
-          console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
-        }
+      try {
+        await pool.query('DELETE FROM public.usuarios WHERE id = $1', [createdUserId]);
+      } catch (cleanupError) {
+        console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
       }
 
       return res
