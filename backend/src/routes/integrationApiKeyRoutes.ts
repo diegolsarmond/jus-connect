@@ -11,6 +11,7 @@ import {
   createIntegrationWebhook,
   deleteIntegrationWebhook,
   listIntegrationWebhooks,
+  updateIntegrationWebhook,
   updateIntegrationWebhookStatus,
 } from '../controllers/webhookController';
 import { generateTextWithIntegration } from '../controllers/aiGenerationController';
@@ -162,6 +163,7 @@ router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
 
 router.get('/integrations/webhooks', listIntegrationWebhooks);
 router.post('/integrations/webhooks', createIntegrationWebhook);
+router.put('/integrations/webhooks/:id', updateIntegrationWebhook);
 router.patch('/integrations/webhooks/:id', updateIntegrationWebhookStatus);
 router.delete('/integrations/webhooks/:id', deleteIntegrationWebhook);
 

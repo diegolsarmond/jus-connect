@@ -114,6 +114,52 @@ export async function createIntegrationWebhook(req: Request, res: Response) {
   }
 }
 
+export async function updateIntegrationWebhook(req: Request, res: Response) {
+  const webhookId = parseIdParam(req.params.id);
+
+  if (!webhookId) {
+    return res.status(400).json({ error: 'Invalid webhook id' });
+  }
+
+  const empresaId = await resolveEmpresaId(req, res);
+  if (empresaId === null) {
+    return;
+  }
+
+  const { name, url, events, secret, active } = req.body as {
+    name?: string;
+    url?: string;
+    events?: unknown;
+    secret?: string;
+    active?: unknown;
+  };
+
+  try {
+    const parsedActive = active === undefined ? undefined : parseActiveValue(active);
+    const updated = await service.update(webhookId, empresaId, {
+      name,
+      url,
+      events: normalizeEventsInput(events),
+      secret,
+      active: parsedActive,
+    });
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Webhook não encontrado' });
+    }
+
+    return res.json(updated);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return res
+        .status(400)
+        .json(buildErrorResponse(error, 'Não foi possível atualizar o webhook.', { expose: true }));
+    }
+    console.error('Failed to update integration webhook:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 export async function updateIntegrationWebhookStatus(req: Request, res: Response) {
   const webhookId = parseIdParam(req.params.id);
 
