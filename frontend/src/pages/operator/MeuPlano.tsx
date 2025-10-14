@@ -49,10 +49,12 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { plans } from "@/data/plans";
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type PlanoDetalhe = {
   id: number;
+  slug: string | null;
   nome: string;
   ativo: boolean;
   descricao: string | null;
@@ -152,6 +154,54 @@ function toNumber(value: unknown): number | null {
   }
 
   return null;
+}
+
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function pickString(
+  source: Record<string, unknown>,
+  candidates: string[],
+): string | null {
+  for (const key of candidates) {
+    if (key in source) {
+      const result = toStringOrNull(source[key]);
+      if (result) {
+        return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizeForComparison(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function slugify(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = normalizeForComparison(value)
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized.length > 0 ? normalized : null;
 }
 
 function parseRecursos(value: unknown): string[] {
@@ -698,8 +748,20 @@ function MeuPlanoContent() {
             const limiteProcessos = toNumber(raw.limite_processos ?? raw.limiteProcessos);
             const limitePropostas = toNumber(raw.limite_propostas ?? raw.limitePropostas);
 
+            const slug =
+              pickString(raw, [
+                "slug",
+                "identificador",
+                "codigo",
+                "cod",
+                "chave",
+                "key",
+                "planSlug",
+              ]) ?? slugify(typeof raw.nome === "string" ? raw.nome : null);
+
             return {
               id: idNumber,
+              slug,
               nome,
               ativo,
               descricao: descricaoRaw && descricaoRaw.length > 0 ? descricaoRaw : null,
@@ -968,7 +1030,11 @@ function MeuPlanoContent() {
 
       persistManagePlanSelection(selection);
       const cycle = nextPricingMode === "anual" ? "yearly" : "monthly";
-      navigate(`${routes.checkout}?plan=${plan.id}&cycle=${cycle}`);
+      const matchedMarketingPlan = plans.find(
+        (item) => normalizeForComparison(item.name) === normalizeForComparison(plan.nome),
+      );
+      const slug = plan.slug ?? matchedMarketingPlan?.id ?? slugify(plan.nome) ?? String(plan.id);
+      navigate(`${routes.checkout}?plan=${encodeURIComponent(slug)}&cycle=${cycle}`);
     },
     [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
   );
