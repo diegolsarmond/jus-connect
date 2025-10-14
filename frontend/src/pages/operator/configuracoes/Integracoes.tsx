@@ -631,6 +631,8 @@ export default function Integracoes() {
   const [updatingWebhookId, setUpdatingWebhookId] = useState<number | null>(null);
   const [deletingWebhookId, setDeletingWebhookId] = useState<number | null>(null);
   const [webhookForm, setWebhookForm] = useState<WebhookForm>(getDefaultWebhookForm);
+  const [isWebhookSecretDialogOpen, setIsWebhookSecretDialogOpen] = useState(false);
+  const [pendingWebhookSecret, setPendingWebhookSecret] = useState<string | null>(null);
 
   const activeApiKeys = apiKeys.filter((key) => key.active).length;
   const activeIntegrations = integrations.filter((integration) => integration.enabled).length;
@@ -927,6 +929,10 @@ export default function Integracoes() {
         title: "Webhook configurado",
         description: `${created.name} foi adicionado e está ativo.`,
       });
+      if (created.secret.trim()) {
+        setPendingWebhookSecret(created.secret);
+        setIsWebhookSecretDialogOpen(true);
+      }
       setWebhookForm(getDefaultWebhookForm());
     } catch (error) {
       toast({
@@ -940,6 +946,20 @@ export default function Integracoes() {
     } finally {
       setIsCreatingWebhook(false);
     }
+  };
+
+  const handleWebhookSecretDialogChange = (open: boolean) => {
+    setIsWebhookSecretDialogOpen(open);
+    if (!open) {
+      setPendingWebhookSecret(null);
+    }
+  };
+
+  const handleCopyWebhookSecret = () => {
+    if (!pendingWebhookSecret) {
+      return;
+    }
+    void copyCredential(pendingWebhookSecret, "Segredo do webhook");
   };
 
   const toggleWebhook = async (id: number, value: boolean) => {
@@ -1673,6 +1693,34 @@ export default function Integracoes() {
           </ul>
         </CardContent>
       </Card>
+
+      <Dialog open={isWebhookSecretDialogOpen} onOpenChange={handleWebhookSecretDialogChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Segredo do webhook gerado</DialogTitle>
+            <DialogDescription>
+              Copie e armazene o segredo com segurança. Ele será exibido apenas neste momento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted px-3 py-2 font-mono text-sm text-foreground">
+            {pendingWebhookSecret ?? "—"}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCopyWebhookSecret}
+              disabled={!pendingWebhookSecret}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar segredo
+            </Button>
+            <Button type="button" onClick={() => handleWebhookSecretDialogChange(false)}>
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
         <DialogContent className="sm:max-w-lg">
