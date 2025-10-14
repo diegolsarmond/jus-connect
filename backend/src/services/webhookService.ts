@@ -35,6 +35,14 @@ export interface CreateIntegrationWebhookInput {
   empresaId: number;
 }
 
+export interface UpdateIntegrationWebhookInput {
+  name?: string;
+  url?: string;
+  events?: string[];
+  secret?: string;
+  active?: boolean;
+}
+
 interface IntegrationWebhookRow extends QueryResultRow {
   id: number;
   name: string;
@@ -178,6 +186,39 @@ class WebhookService {
           AND idempresa = $3
       RETURNING id, name, target_url, events, secret, active, last_delivery, idempresa, created_at, updated_at`,
       [Boolean(active), id, empresaId],
+    );
+
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    const [row] = result.rows as IntegrationWebhookRow[];
+    return mapRowToWebhook(row);
+  }
+
+  async update(
+    id: number,
+    empresaId: number,
+    input: UpdateIntegrationWebhookInput,
+  ): Promise<IntegrationWebhook | null> {
+    const name = normalizeName(input.name);
+    const url = normalizeUrl(input.url);
+    const secret = normalizeSecret(input.secret);
+    const events = normalizeEvents(input.events);
+    const active = input.active === undefined ? null : Boolean(input.active);
+
+    const result = await this.db.query(
+      `UPDATE integration_webhooks
+          SET name = $1,
+              target_url = $2,
+              events = $3,
+              secret = $4,
+              active = COALESCE($5, active),
+              updated_at = NOW()
+        WHERE id = $6
+          AND idempresa = $7
+      RETURNING id, name, target_url, events, secret, active, last_delivery, idempresa, created_at, updated_at`,
+      [name, url, events, secret, active, id, empresaId],
     );
 
     if (result.rowCount === 0) {
