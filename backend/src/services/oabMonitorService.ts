@@ -1,6 +1,7 @@
 import pool from './db';
 import { MissingDependencyError } from './errors';
 import { publishIntegrationWebhookEvent } from './integrationWebhookDispatcher';
+import { notifyIntimacaoSyncTargets } from './intimacaoSyncTargetNotifier';
 
 interface OabMonitorRow {
   id: number;
@@ -449,6 +450,10 @@ export const createCompanyOabMonitor = async (
       row?.created_at && row?.updated_at && String(row.created_at) !== String(row.updated_at)
         ? 'updated'
         : 'created';
+
+    if (operation === 'created') {
+      await notifyIntimacaoSyncTargets(empresaId);
+    }
 
     publishIntegrationWebhookEvent({
       empresaId,
