@@ -216,6 +216,28 @@ const Checkout = () => {
       const nextDueDate = new Date();
       nextDueDate.setDate(nextDueDate.getDate() + 7);
 
+      const metadata: Record<string, unknown> = {
+        origin: "site-checkout",
+        planId: plan.id,
+        cycle,
+      };
+
+      if (user?.id) {
+        metadata.userId = user.id;
+      }
+
+      if (user?.empresa_id) {
+        metadata.empresaId = user.empresa_id;
+      }
+
+      if (customerData.email) {
+        metadata.customerEmail = customerData.email;
+      }
+
+      if (customerData.cpfCnpj) {
+        metadata.customerDocument = customerData.cpfCnpj;
+      }
+
       const subscriptionData = {
         customer: customerId,
         billingType,
@@ -224,6 +246,7 @@ const Checkout = () => {
         cycle: cycleType,
         description: `Assinatura ${plan.name} (${cycle === "monthly" ? "mensal" : "anual"})`,
         externalReference: `plan-${plan.id}-${Date.now()}`,
+        metadata,
         ...(billingType === "CREDIT_CARD" && {
           creditCard: creditCardData,
           creditCardHolderInfo: customerData,
