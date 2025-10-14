@@ -6,7 +6,6 @@ import {
   ShieldCheck,
   Copy,
   Trash2,
-  RefreshCcw,
   Loader2,
   PencilLine,
   Webhook as WebhookIcon,
@@ -891,14 +890,6 @@ export default function Integracoes() {
     });
   };
 
-  const handleGenerateWebhookSecret = () => {
-    setWebhookForm((prev) => ({ ...prev, secret: createWebhookSecret() }));
-    toast({
-      title: "Novo segredo gerado",
-      description: "Compartilhe o valor apenas com provedores confiáveis.",
-    });
-  };
-
   const handleAddWebhook = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = webhookForm.name.trim();
@@ -1474,41 +1465,20 @@ export default function Integracoes() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="space-y-2">
-                <Label htmlFor="webhook-secret">Segredo de assinatura</Label>
-                <div className="flex gap-2">
-                  <Input id="webhook-secret" value={webhookForm.secret} readOnly className="font-mono" />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={() => void copyCredential(webhookForm.secret, "Segredo do webhook")}
-                    aria-label="Copiar segredo"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              <div className="flex items-end gap-2">
-                <Button type="button" variant="outline" onClick={handleGenerateWebhookSecret} className="whitespace-nowrap">
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  Gerar novo segredo
-                </Button>
-                <Button type="submit" className="whitespace-nowrap" disabled={isCreatingWebhook}>
-                  {isCreatingWebhook ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Adicionar webhook
-                    </>
-                  )}
-                </Button>
-              </div>
+            <div className="flex justify-end">
+              <Button type="submit" className="whitespace-nowrap" disabled={isCreatingWebhook}>
+                {isCreatingWebhook ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Adicionar webhook
+                  </>
+                )}
+              </Button>
             </div>
 
             <div className="space-y-2">
@@ -1617,15 +1587,6 @@ export default function Integracoes() {
                         </div>
                       </TableCell>
                       <TableCell className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => void copyCredential(webhook.secret, `Segredo ${webhook.name}`)}
-                          aria-label="Copiar segredo"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
                         <Button
                           type="button"
                           size="icon"
