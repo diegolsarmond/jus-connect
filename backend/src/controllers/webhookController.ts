@@ -40,19 +40,57 @@ function parseIdParam(param: string): number | null {
   return value;
 }
 
-function parseActiveValue(value: unknown): boolean {
+const truthyValues = new Set([
+  '1',
+  'true',
+  't',
+  'yes',
+  'y',
+  'sim',
+  'on',
+  'ativo',
+  'ativa',
+]);
+
+const falsyValues = new Set([
+  '0',
+  'false',
+  'f',
+  'no',
+  'n',
+  'nao',
+  'não',
+  'off',
+  'inativo',
+  'inativa',
+]);
+
+export function parseActiveValue(value: unknown): boolean {
   if (typeof value === 'boolean') {
     return value;
   }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'true') {
+
+  if (typeof value === 'number') {
+    if (value === 1) {
       return true;
     }
-    if (normalized === 'false') {
+    if (value === 0) {
       return false;
     }
   }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+
+    if (truthyValues.has(normalized)) {
+      return true;
+    }
+
+    if (falsyValues.has(normalized)) {
+      return false;
+    }
+  }
+
   throw new ValidationError('Campo active deve ser um valor booleano.');
 }
 
