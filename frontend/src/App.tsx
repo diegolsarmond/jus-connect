@@ -37,7 +37,6 @@ import FinancialFlows from "./pages/operator/FinancialFlows";
 import Relatorios from "./pages/operator/Relatorios";
 import MeuPerfil from "./pages/operator/MeuPerfil";
 import MeuPlano from "./pages/operator/MeuPlano";
-import OperatorPlans from "./pages/operator/Plans";
 import ManagePlanPayment from "./pages/operator/ManagePlanPayment";
 import Suporte from "./pages/operator/Suporte";
 import Conversas from "./pages/operator/Conversas";
@@ -130,7 +129,7 @@ const PublicPlans = () => {
   const { user } = useAuth();
 
   if (user?.empresa_id) {
-    return <Navigate to={routes.meuPlanoPlans} replace />;
+    return <Navigate to={routes.meuPlano} replace />;
   }
 
   return <SitePlans />;
@@ -153,6 +152,7 @@ const App = () => (
               <Route path="/servicos" element={<SiteServices />} />
               <Route path={routes.plans} element={<PublicPlans />} />
               <Route path={routes.checkout} element={<SiteCheckout />} />
+              <Route path="/subscription/:id" element={<OperatorSubscription />} />
               <Route path="/servicos/assistente-ia" element={<SiteServiceAssistenteIA />} />
               <Route path="/servicos/automacoes" element={<SiteServiceAutomacoes />} />
               <Route path="/produtos/crm" element={<SiteServiceCRM />} />
@@ -267,11 +267,6 @@ const App = () => (
                 <Route
                   path={routes.checkout}
                   element={withModule("meu-plano", <ManagePlanPayment />)}
-                />
-                <Route
-                  path={routes.meuPlanoPlans}
-                  element={withModule("meu-plano", <OperatorPlans />)}
-
                 />
                 <Route
                   path={routes.meuPlanoPayment}
