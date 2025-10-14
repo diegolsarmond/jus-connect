@@ -37,7 +37,7 @@ const Checkout = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(() => Boolean(user?.empresa_id));
   const [loading, setLoading] = useState(false);
   const [billingType, setBillingType] = useState<"CREDIT_CARD" | "BOLETO" | "PIX">("PIX");
   const [customerData, setCustomerData] = useState({
