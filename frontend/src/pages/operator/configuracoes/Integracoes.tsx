@@ -159,16 +159,20 @@ const eventGroups = [
     ],
   },
   {
-    key: "tarefas",
-    title: "Tarefas",
-    description: "Atualizações sobre o andamento de tarefas internas.",
-    options: [
-      {
-        value: "tarefa.concluida",
-        label: "Tarefa concluída",
-        description: "Enviado quando uma tarefa é finalizada pela equipe.",
-      },
-    ],
+    value: "oab.processo.incluida",
+    label: "OAB incluída em processo",
+    description: "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
+  },
+  {
+    value: "oab.intimacao.incluida",
+    label: "OAB incluída em intimação",
+    description: "Disparado ao vincular uma OAB ao monitoramento de intimações.",
+  },
+  {
+    value: "tarefa.concluida",
+    label: "Tarefa concluída",
+    description: "Enviado quando uma tarefa é finalizada pela equipe.",
+
   },
   {
     key: "financeiro",

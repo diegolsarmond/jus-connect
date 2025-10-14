@@ -1,5 +1,6 @@
 import pool from './db';
 import { MissingDependencyError } from './errors';
+import { publishIntegrationWebhookEvent } from './integrationWebhookDispatcher';
 
 interface OabMonitorRow {
   id: number;
@@ -440,7 +441,40 @@ export const createCompanyOabMonitor = async (
     [empresaId, sanitizedUf, sanitizedNumero, sanitizedUsuarioId, sanitizedDiasSemana],
   );
 
-  return mapRow(result.rows[0]);
+  const row = result.rows[0];
+  const monitor = mapRow(row);
+
+  try {
+    const operation =
+      row?.created_at && row?.updated_at && String(row.created_at) !== String(row.updated_at)
+        ? 'updated'
+        : 'created';
+
+    publishIntegrationWebhookEvent({
+      empresaId,
+      event: 'oab.processo.incluida',
+      payload: {
+        id: monitor.id,
+        uf: monitor.uf,
+        numero: monitor.numero,
+        usuarioId: monitor.usuarioId,
+        usuarioNome: monitor.usuarioNome,
+        usuarioOab: monitor.usuarioOab,
+        diasSemana: monitor.diasSemana,
+        createdAt: monitor.createdAt,
+        updatedAt: monitor.updatedAt,
+        operation,
+        tipo: 'processo',
+      },
+    });
+  } catch (error) {
+    console.error('Failed to publish processo OAB monitor webhook event', error, {
+      empresaId,
+      monitorId: monitor.id,
+    });
+  }
+
+  return monitor;
 };
 
 export const deleteCompanyOabMonitor = async (

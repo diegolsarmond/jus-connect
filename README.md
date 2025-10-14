@@ -152,6 +152,16 @@ Para que o fluxo de confirmação de cadastro funcione, defina as credenciais do
 3. Informe um segredo forte (32+ caracteres) e replique o valor em `ASAAS_WEBHOOK_SECRET`.
 4. Utilize o botão **Enviar teste** do Asaas para confirmar que o endpoint retorna `200 OK`.
 
+#### Eventos disponíveis
+
+- `cliente.criado` — enviado quando um cliente é cadastrado no CRM.
+- `cliente.atualizado` — emitido ao atualizar dados cadastrais de um cliente existente.
+- `processo.movimentado` — publicado após registrar uma nova movimentação em processos acompanhados.
+- `oab.processo.incluida` — gerado ao cadastrar ou atualizar uma OAB monitorada para processos.
+- `oab.intimacao.incluida` — disparado quando uma OAB passa a ser monitorada para intimações.
+- `tarefa.concluida` — entregue quando tarefas são finalizadas pela equipe.
+- `financeiro.lancamento` — notifica integrações sobre criação ou alteração de lançamentos financeiros.
+
 ### Fluxo recomendado de cobrança
 1. **Sincronize o cliente**: o CRM envia `externalId`, `name`, `email` e `cpfCnpj` para `/api/asaas/customers`. O cadastro só é criado caso o cliente esteja previamente sincronizado localmente.
 2. **Gere a cobrança**: a API chama `/api/asaas/payments` informando `customerExternalId`, tipo (`PIX`, `BOLETO`, `CREDIT_CARD`) e valores.
