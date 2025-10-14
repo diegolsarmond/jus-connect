@@ -1190,6 +1190,7 @@ export default function Intimacoes() {
   const [oabDiasSemana, setOabDiasSemana] = useState<number[]>(DEFAULT_MONITOR_DAYS);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [oabSubmitting, setOabSubmitting] = useState(false);
+  const [oabSyncingProcesses, setOabSyncingProcesses] = useState(false);
   const [oabSubmitError, setOabSubmitError] = useState<ReactNode | null>(null);
   const [removingOabId, setRemovingOabId] = useState<string | null>(null);
   const [companyUsers, setCompanyUsers] = useState<CompanyUserOption[]>([]);
@@ -1748,6 +1749,14 @@ export default function Intimacoes() {
         description: `Monitoramento ativado para ${formatMonitoredOabDisplay(monitor.number, monitor.uf)}.`,
       });
 
+      handleOabModalChange(false);
+      setOabSyncingProcesses(true);
+      try {
+        await loadIntimacoes();
+      } finally {
+        setOabSyncingProcesses(false);
+      }
+
       setOabSubmitError(null);
       setOabNumber("");
       setOabUf("");
@@ -1767,7 +1776,15 @@ export default function Intimacoes() {
     } finally {
       setOabSubmitting(false);
     }
-  }, [oabNumber, oabUf, oabDiasSemana, selectedUserId, toast]);
+  }, [
+    oabNumber,
+    oabUf,
+    oabDiasSemana,
+    selectedUserId,
+    toast,
+    handleOabModalChange,
+    loadIntimacoes,
+  ]);
 
   const handleRemoveMonitoredOab = useCallback(
     async (id: string) => {
@@ -3059,6 +3076,18 @@ export default function Intimacoes() {
           ) : null}
         </>
       ) : null}
+      <Dialog open={oabSyncingProcesses}>
+        <DialogContent className="sm:max-w-sm">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm font-medium text-foreground">Sincronizando processos</p>
+            <p className="text-xs text-muted-foreground">
+              Aguarde enquanto sincronizamos os processos vinculados ao registro.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={oabModalOpen} onOpenChange={handleOabModalChange}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
