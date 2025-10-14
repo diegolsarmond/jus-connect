@@ -135,6 +135,33 @@ const PublicPlans = () => {
   return <SitePlans />;
 };
 
+const SubscriptionRoute = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Verificando sessão...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <OperatorSubscription />;
+  }
+
+  return (
+    <ProtectedRoute>
+      <PlanProvider>
+        <CRMLayout>{withModule("meu-plano", <OperatorSubscription />)}</CRMLayout>
+      </PlanProvider>
+    </ProtectedRoute>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -152,6 +179,7 @@ const App = () => (
               <Route path="/servicos" element={<SiteServices />} />
               <Route path={routes.plans} element={<PublicPlans />} />
               <Route path={routes.checkout} element={<SiteCheckout />} />
+              <Route path="/subscription/:id" element={<SubscriptionRoute />} />
               <Route path="/servicos/assistente-ia" element={<SiteServiceAssistenteIA />} />
               <Route path="/servicos/automacoes" element={<SiteServiceAutomacoes />} />
               <Route path="/produtos/crm" element={<SiteServiceCRM />} />
@@ -263,10 +291,6 @@ const App = () => (
                 <Route path="/alterar-senha" element={<AlterarSenha />} />
                 <Route path="/meu-perfil" element={<MeuPerfil />} />
                 <Route path="/meu-plano" element={withModule("meu-plano", <MeuPlano />)} />
-                <Route
-                  path="/subscription/:id"
-                  element={withModule("meu-plano", <OperatorSubscription />)}
-                />
                 <Route
                   path={routes.checkout}
                   element={withModule("meu-plano", <ManagePlanPayment />)}

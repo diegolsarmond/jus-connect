@@ -1,4 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ReactNode } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -10,7 +11,11 @@ import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrialBanner } from "@/features/auth/TrialBanner";
 
-export function CRMLayout() {
+interface CRMLayoutProps {
+  children?: ReactNode;
+}
+
+export function CRMLayout({ children }: CRMLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -40,6 +45,8 @@ export function CRMLayout() {
     isConversationsRoute ? "h-full overflow-hidden" : "overflow-auto",
   );
 
+  const content = children ?? <Outlet />;
+
   return (
     <SidebarProvider>
       <div className={rootClassName}>
@@ -48,7 +55,7 @@ export function CRMLayout() {
           <Header />
           <TrialBanner />
           <main className={mainClassName} data-crm-scroll-container>
-            <Outlet />
+            {content}
           </main>
         </div>
       </div>
