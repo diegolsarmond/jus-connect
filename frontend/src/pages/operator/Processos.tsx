@@ -2569,6 +2569,11 @@ export default function Processos() {
         });
     }, []);
 
+    const handleOpenOabModal = useCallback(() => {
+        setOabModalDismissed(false);
+        setIsOabModalOpen(true);
+    }, []);
+
     const handleOabModalChange = useCallback((open: boolean) => {
         setIsOabModalOpen(open);
         if (!open) {
@@ -4419,16 +4424,7 @@ export default function Processos() {
                             Cadastre a OAB responsável para receber automaticamente processos em tempo real.
                         </p>
                     </div>
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            if (oabMonitorsLoading) {
-                                return;
-                            }
-                            setOabModalDismissed(false);
-                            setIsOabModalOpen(true);
-                        }}
-                    >
+                    <Button variant="outline" onClick={handleOpenOabModal}>
                         Cadastrar OAB
                     </Button>
                 </div>
@@ -4442,17 +4438,7 @@ export default function Processos() {
                             Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
                         </CardDescription>
                     </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            if (oabMonitorsLoading) {
-                                return;
-                            }
-                            setOabModalDismissed(false);
-                            setIsOabModalOpen(true);
-                        }}
-                    >
+                    <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
                         Adicionar OAB
                     </Button>
                 </CardHeader>
@@ -4472,16 +4458,7 @@ export default function Processos() {
                         )}
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                                if (oabMonitorsLoading) {
-                                    return;
-                                }
-                                setIsOabModalOpen(true);
-                            }}
-                        >
+                        <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
                             Gerenciar OABs
                         </Button>
                     </div>

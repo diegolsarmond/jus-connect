@@ -203,6 +203,118 @@ test('handleAsaasWebhook logs error and skips updates when signature is invalid'
   assert.match(String(errorMock.mock.calls[0]?.arguments?.[0] ?? ''), /Invalid signature/i);
 });
 
+test('handleAsaasWebhook only updates subscription for plan charges', async () => {
+  const secret = 'plan-secret';
+
+  const planWebhookBody = {
+    event: 'PAYMENT_RECEIVED',
+    payment: {
+      id: 'plan_charge',
+      status: 'RECEIVED',
+      paymentDate: '2024-06-01T12:00:00Z',
+      metadata: { origin: 'plan-payment' },
+    },
+  };
+  const planRawBody = JSON.stringify(planWebhookBody);
+  const planSignature = crypto.createHmac('sha256', secret).update(planRawBody).digest('hex');
+
+  const planQueryMock = setupQueryMock([
+    {
+      rows: [
+        { id: 20, credential_id: 77, financial_flow_id: null, cliente_id: null, company_id: 456 },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ webhook_secret: secret }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    {
+      rows: [
+        {
+          plano: 3,
+          subscription_cadence: 'monthly',
+          current_period_start: '2024-05-01T00:00:00.000Z',
+          current_period_end: '2024-05-31T00:00:00.000Z',
+          grace_expires_at: '2024-06-07T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const planReq = {
+    body: planWebhookBody,
+    rawBody: planRawBody,
+    headers: {
+      'asaas-signature': `sha256=${planSignature}`,
+    },
+  } as unknown as Request & { rawBody?: string };
+
+  const planRes = createMockResponse();
+
+  try {
+    await handleAsaasWebhook(planReq, planRes);
+  } finally {
+    planQueryMock.restore();
+  }
+
+  assert.equal(planRes.statusCode, 202);
+  assert.deepEqual(planRes.body, { received: true });
+  assert.ok(
+    planQueryMock.calls.some((call) => /UPDATE public\.empresas/i.test(String(call.text ?? ''))),
+  );
+
+  const nonPlanWebhookBody = {
+    event: 'PAYMENT_RECEIVED',
+    payment: {
+      id: 'customer_charge',
+      status: 'RECEIVED',
+      paymentDate: '2024-06-02T12:00:00Z',
+      metadata: { origin: 'customer-payment' },
+    },
+  };
+  const nonPlanRawBody = JSON.stringify(nonPlanWebhookBody);
+  const nonPlanSignature = crypto
+    .createHmac('sha256', secret)
+    .update(nonPlanRawBody)
+    .digest('hex');
+
+  const nonPlanQueryMock = setupQueryMock([
+    {
+      rows: [
+        { id: 21, credential_id: 77, financial_flow_id: null, cliente_id: 999, company_id: 456 },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ webhook_secret: secret }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const nonPlanReq = {
+    body: nonPlanWebhookBody,
+    rawBody: nonPlanRawBody,
+    headers: {
+      'asaas-signature': `sha256=${nonPlanSignature}`,
+    },
+  } as unknown as Request & { rawBody?: string };
+
+  const nonPlanRes = createMockResponse();
+
+  try {
+    await handleAsaasWebhook(nonPlanReq, nonPlanRes);
+  } finally {
+    nonPlanQueryMock.restore();
+  }
+
+  assert.equal(nonPlanRes.statusCode, 202);
+  assert.deepEqual(nonPlanRes.body, { received: true });
+  assert.ok(
+    nonPlanQueryMock.calls.every(
+      (call) => !/UPDATE public\.empresas/i.test(String(call.text ?? '')),
+    ),
+  );
+});
+
 test('handleAsaasWebhook uses ASAAS_WEBHOOK_SECRET when credential is missing', async () => {
   const previousSecret = process.env.ASAAS_WEBHOOK_SECRET;
   process.env.ASAAS_WEBHOOK_SECRET = '  env-fallback-secret  ';

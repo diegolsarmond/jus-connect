@@ -506,6 +506,16 @@ export class AsaasClient {
     });
   }
 
+  async cancelSubscription(subscriptionId: string): Promise<SubscriptionResponse> {
+    if (!subscriptionId || typeof subscriptionId !== 'string' || !subscriptionId.trim()) {
+      throw new Error('subscriptionId is required to cancel an Asaas subscription');
+    }
+
+    return this.request<SubscriptionResponse>(`/subscriptions/${subscriptionId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
   async getSubscription(subscriptionId: string): Promise<SubscriptionResponse> {
     if (!subscriptionId || typeof subscriptionId !== 'string' || !subscriptionId.trim()) {
       throw new Error('subscriptionId is required to fetch an Asaas subscription');
