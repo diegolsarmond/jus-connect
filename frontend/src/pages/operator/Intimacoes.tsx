@@ -114,6 +114,33 @@ type CompanyUserOption = {
   oabUf: string | null;
 };
 
+const normalizeAdvogadoName = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  return trimmed ? trimmed : null;
+};
+
+const normalizeAdvogadoOabNumber = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, "");
+  return digits ? digits : null;
+};
+
+const normalizeAdvogadoUf = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  return normalized.length === 2 ? normalized : null;
+};
+
 type ApiCompanyUser = {
   id?: number | string | null;
   id_usuario?: number | string | null;
@@ -1391,6 +1418,19 @@ export default function Intimacoes() {
   }, [loadMonitoredOabs]);
 
   useEffect(() => {
+    if (companyUsersLoadedRef.current) {
+      return;
+    }
+
+    const controller = new AbortController();
+    loadCompanyUsers(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [loadCompanyUsers]);
+
+  useEffect(() => {
     if (!oabModalOpen || companyUsersLoadedRef.current) {
       return;
     }
@@ -1859,23 +1899,65 @@ export default function Intimacoes() {
     });
   }, [intimacoes]);
 
+  const companyLawyerMatcher = useMemo(() => {
+    const byOab = new Set<string>();
+    const byName = new Set<string>();
+
+    companyUsers.forEach((user) => {
+      const name = normalizeAdvogadoName(user.name);
+      if (name) {
+        byName.add(name);
+      }
+
+      const number = normalizeAdvogadoOabNumber(user.oabNumber);
+      const uf = normalizeAdvogadoUf(user.oabUf);
+
+      if (number && uf) {
+        byOab.add(`${uf}|${number}`);
+      }
+    });
+
+    return { byOab, byName };
+  }, [companyUsers]);
+
+  const isCompanyLawyer = useCallback(
+    (advogado: NormalizedAdvogado) => {
+      const number = normalizeAdvogadoOabNumber(advogado.numeroOab);
+      const uf = normalizeAdvogadoUf(advogado.ufOab);
+
+      if (number && uf && companyLawyerMatcher.byOab.has(`${uf}|${number}`)) {
+        return true;
+      }
+
+      const name = normalizeAdvogadoName(advogado.nome);
+      if (name && companyLawyerMatcher.byName.has(name)) {
+        return true;
+      }
+
+      return false;
+    },
+    [companyLawyerMatcher],
+  );
+
   const advogadoOptions = useMemo(() => {
     const map = new Map<string, string>();
 
     intimacoes.forEach((item) => {
-      normalizeDestinatariosAdvogados(item.destinatarios_advogados).forEach((advogado) => {
-        const key = createAdvogadoKey(advogado);
+      normalizeDestinatariosAdvogados(item.destinatarios_advogados)
+        .filter(isCompanyLawyer)
+        .forEach((advogado) => {
+          const key = createAdvogadoKey(advogado);
 
-        if (!map.has(key)) {
-          map.set(key, formatAdvogadoLabel(advogado));
-        }
-      });
+          if (!map.has(key)) {
+            map.set(key, formatAdvogadoLabel(advogado));
+          }
+        });
     });
 
     return Array.from(map.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
-  }, [intimacoes]);
+  }, [intimacoes, isCompanyLawyer]);
 
   const tribunalOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -1964,7 +2046,7 @@ export default function Intimacoes() {
       }
 
       if (filters.advogado !== "all") {
-        const advogados = normalizeDestinatariosAdvogados(item.destinatarios_advogados);
+        const advogados = normalizeDestinatariosAdvogados(item.destinatarios_advogados).filter(isCompanyLawyer);
         const matches = advogados.some((advogado) => createAdvogadoKey(advogado) === filters.advogado);
 
         if (!matches) {
@@ -2006,7 +2088,7 @@ export default function Intimacoes() {
 
       return true;
     });
-  }, [sortedIntimacoes, filters]);
+  }, [sortedIntimacoes, filters, isCompanyLawyer]);
 
   const totalPages = Math.max(Math.ceil(filteredIntimacoes.length / ITEMS_PER_PAGE), 1);
 
@@ -2730,6 +2812,13 @@ export default function Intimacoes() {
                 typeof intimacao.numero_processo === "string" ? intimacao.numero_processo.trim() : "";
               const disponibilizadaEm = formatDateTime(intimacao.data_disponibilizacao);
               const disponibilizadaLabel = disponibilizadaEm ? disponibilizadaEm.split(" ")[0] : null;
+              const companyAdvogados = normalizeDestinatariosAdvogados(intimacao.destinatarios_advogados).filter(
+                isCompanyLawyer,
+              );
+              const advogadoLabels = companyAdvogados.map((advogado) => formatAdvogadoLabel(advogado));
+              const advogadoLabelText = advogadoLabels.length
+                ? `${advogadoLabels.length > 1 ? "Advogados responsáveis" : "Advogado responsável"}: ${advogadoLabels.join(", ")}`
+                : null;
 
               return (
                 <div
@@ -2765,6 +2854,9 @@ export default function Intimacoes() {
                             </Badge>
                           ) : null}
                         </div>
+                        {advogadoLabelText ? (
+                          <div className="text-xs font-medium text-muted-foreground">{advogadoLabelText}</div>
+                        ) : null}
                       </div>
                       <Button
                         variant="secondary"
