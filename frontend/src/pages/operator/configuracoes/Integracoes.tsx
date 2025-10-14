@@ -115,6 +115,16 @@ const eventOptions = [
     description: "Emitido ao registrar uma movimentação em um processo.",
   },
   {
+    value: "oab.processo.incluida",
+    label: "OAB incluída em processo",
+    description: "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
+  },
+  {
+    value: "oab.intimacao.incluida",
+    label: "OAB incluída em intimação",
+    description: "Disparado ao vincular uma OAB ao monitoramento de intimações.",
+  },
+  {
     value: "tarefa.concluida",
     label: "Tarefa concluída",
     description: "Enviado quando uma tarefa é finalizada pela equipe.",
