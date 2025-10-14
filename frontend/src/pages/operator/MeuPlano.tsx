@@ -98,6 +98,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
 });
 const countFormatter = new Intl.NumberFormat("pt-BR");
+const DEFAULT_SUBSCRIPTION_ID = "sub_j82sejw1tdpb2xtf";
 
 function normalizeApiRows(data: unknown): unknown[] {
   if (Array.isArray(data)) {
@@ -584,7 +585,7 @@ function MeuPlanoContent() {
   const [planosDisponiveis, setPlanosDisponiveis] = useState<PlanoDetalhe[]>([]);
   const [pricingMode, setPricingMode] = useState<PricingMode>("mensal");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(DEFAULT_SUBSCRIPTION_ID);
   const [metrics, setMetrics] = useState<UsageMetrics>({
     usuariosAtivos: null,
     clientesAtivos: null,
@@ -594,7 +595,9 @@ function MeuPlanoContent() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setSubscriptionId(window.localStorage.getItem("subscriptionId"));
+      setSubscriptionId(
+        window.localStorage.getItem("subscriptionId") ?? DEFAULT_SUBSCRIPTION_ID,
+      );
     }
   }, []);
 
@@ -1009,14 +1012,11 @@ function MeuPlanoContent() {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => navigate(routes.meuPlanoPlans)}>Ver planos</Button>
+        <Button onClick={() => setDialogOpen(true)}>Ver planos</Button>
         <Button
           variant="outline"
           onClick={() =>
-            navigate(
-              subscriptionId ? routes.subscription(subscriptionId) : routes.meuPlanoPlans,
-            )
-
+            navigate(routes.subscription(subscriptionId ?? DEFAULT_SUBSCRIPTION_ID))
           }
         >
           Minha assinatura
