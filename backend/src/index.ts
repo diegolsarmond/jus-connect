@@ -58,6 +58,7 @@ import { bootstrapIntimacaoOabMonitoradas } from './services/intimacaoOabMonitor
 import { ensureChatSchema } from './services/chatSchema';
 import { ensureProcessSyncSchema } from './services/processSyncSchema';
 import { ensureSupportSchema } from './services/supportSchema';
+import { ensureIntegrationWebhookDeliveryListener } from './services/integrationWebhookDeliveryService';
 import { authenticateRequest } from './middlewares/authMiddleware';
 import { authorizeModules } from './middlewares/moduleAuthorization';
 import { getAuthSecret } from './constants/auth';
@@ -86,6 +87,8 @@ const ensureCriticalConfig = () => {
 };
 
 ensureCriticalConfig();
+
+ensureIntegrationWebhookDeliveryListener();
 
 app.use(
   express.json({
