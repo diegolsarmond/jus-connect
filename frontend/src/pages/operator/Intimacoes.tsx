@@ -1601,6 +1601,12 @@ export default function Intimacoes() {
   }, []);
 
   const handleOpenOabModal = useCallback(() => {
+    setOabSubmitError(null);
+    setOabNumber("");
+    setOabUf("");
+    setSelectedUserId("");
+    setRemovingOabId(null);
+    setOabDiasSemana(DEFAULT_MONITOR_DAYS);
     setOabModalOpen(true);
   }, []);
 
