@@ -36,11 +36,20 @@ const fetchIntimacaoSyncTargets = async (empresaId: number) => {
 };
 
 const fetchIntegrationApiUrl = async (): Promise<string | null> => {
-  const result = await pool.query<{ url_api: unknown }>(
-    'SELECT url_api FROM public.integration_api_keys WHERE id = 19 LIMIT 1',
+  const result = await pool.query<{ url_api: unknown; active: unknown }>(
+    'SELECT url_api, active FROM public.integration_api_keys WHERE id = 19 AND active IS TRUE LIMIT 1',
   );
 
-  const value = result.rows?.[0]?.url_api;
+  const row = result.rows?.[0];
+  if (!row) {
+    return null;
+  }
+
+  if (row.active !== true) {
+    return null;
+  }
+
+  const value = row.url_api;
   if (typeof value !== 'string') {
     return null;
   }
