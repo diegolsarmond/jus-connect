@@ -501,7 +501,7 @@ export class AsaasClient {
     }
 
     return this.request<SubscriptionResponse>(`/subscriptions/${subscriptionId}`, {
-      method: 'PUT',
+      method: 'POST',
       body: JSON.stringify(payload),
     });
   }

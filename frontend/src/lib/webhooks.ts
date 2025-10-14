@@ -50,7 +50,10 @@ async function parseErrorMessage(response: Response): Promise<string> {
 }
 
 export async function fetchIntegrationWebhooks(): Promise<IntegrationWebhook[]> {
-  const response = await fetch(WEBHOOKS_ENDPOINT, { headers: { Accept: 'application/json' } });
+  const response = await fetch(WEBHOOKS_ENDPOINT, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
   if (!response.ok) {
     throw new Error(await parseErrorMessage(response));
   }
@@ -67,6 +70,7 @@ export async function createIntegrationWebhook(
       Accept: 'application/json',
     },
     body: JSON.stringify(payload),
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -87,6 +91,7 @@ export async function updateIntegrationWebhookStatus(
       Accept: 'application/json',
     },
     body: JSON.stringify(payload),
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -107,6 +112,7 @@ export async function updateIntegrationWebhook(
       Accept: 'application/json',
     },
     body: JSON.stringify(payload),
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -120,6 +126,7 @@ export async function deleteIntegrationWebhook(id: number): Promise<void> {
   const response = await fetch(`${WEBHOOKS_ENDPOINT}/${id}`, {
     method: 'DELETE',
     headers: { Accept: 'application/json' },
+    credentials: 'include',
   });
 
   if (!response.ok) {
