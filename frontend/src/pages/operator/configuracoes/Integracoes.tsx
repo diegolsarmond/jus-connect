@@ -6,7 +6,6 @@ import {
   ShieldCheck,
   Copy,
   Trash2,
-  RefreshCcw,
   Loader2,
   PencilLine,
   Webhook as WebhookIcon,
@@ -16,6 +15,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   Select,
   SelectContent,
@@ -63,6 +68,13 @@ import {
   getApiKeyEnvironmentLabel,
   validateAsaasIntegrationApiKey,
 } from "@/lib/integrationApiKeys";
+import {
+  createIntegrationWebhook as createIntegrationWebhookApi,
+  deleteIntegrationWebhook as deleteIntegrationWebhookApi,
+  fetchIntegrationWebhooks,
+  updateIntegrationWebhookStatus as updateIntegrationWebhookStatusApi,
+  type IntegrationWebhook as IntegrationWebhookRecord,
+} from "@/lib/integrationWebhooks";
 
 const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -98,45 +110,103 @@ type Integration = {
   lastSync: string | null;
 };
 
-const eventOptions = [
+const eventGroups = [
   {
-    value: "cliente.criado",
-    label: "Cliente criado",
-    description: "Disparado quando um novo cliente é cadastrado.",
+    key: "clientes",
+    title: "Clientes",
+    description: "Eventos relacionados ao cadastro e atualização de clientes.",
+    options: [
+      {
+        value: "cliente.criado",
+        label: "Cliente criado",
+        description: "Disparado quando um novo cliente é cadastrado.",
+      },
+      {
+        value: "cliente.atualizado",
+        label: "Cliente atualizado",
+        description: "Atualizado quando dados cadastrais sofrem alteração.",
+      },
+    ],
   },
   {
-    value: "cliente.atualizado",
-    label: "Cliente atualizado",
-    description: "Atualizado quando dados cadastrais sofrem alteração.",
+    key: "processos",
+    title: "Processos",
+    description: "Notificações geradas a partir de mudanças em processos.",
+    options: [
+      {
+        value: "processo.movimentado",
+        label: "Processo movimentado",
+        description: "Emitido ao registrar uma movimentação em um processo.",
+      },
+    ],
   },
   {
-    value: "processo.movimentado",
-    label: "Processo movimentado",
-    description: "Emitido ao registrar uma movimentação em um processo.",
+    key: "monitoramentos",
+    title: "Monitoramentos",
+    description:
+      "Eventos disparados ao gerenciar monitoramentos de processos e intimações.",
+    options: [
+      {
+        value: "monitoramento.processo.oab_incluida",
+        label: "OAB incluída no monitoramento de processos",
+        description: "Disparado quando uma OAB é adicionada ao monitoramento de um processo.",
+      },
+      {
+        value: "oab.processo.incluida",
+        label: "Monitoramento de OAB em processos",
+        description:
+          "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
+      },
+      {
+        value: "monitoramento.intimacao.oab_incluida",
+        label: "OAB incluída no monitoramento de intimações",
+        description: "Enviado quando uma OAB é adicionada ao monitoramento de uma intimação.",
+      },
+      {
+        value: "oab.intimacao.incluida",
+        label: "Monitoramento de OAB em intimações",
+        description:
+          "Disparado ao vincular uma OAB ao monitoramento de intimações.",
+      },
+    ],
   },
   {
-    value: "tarefa.concluida",
-    label: "Tarefa concluída",
-    description: "Enviado quando uma tarefa é finalizada pela equipe.",
+    key: "tarefas",
+    title: "Tarefas",
+    description: "Acompanhamento de atividades realizadas pela equipe.",
+    options: [
+      {
+        value: "tarefa.concluida",
+        label: "Tarefa concluída",
+        description: "Enviado quando uma tarefa é finalizada pela equipe.",
+      },
+    ],
   },
   {
-    value: "financeiro.lancamento",
-    label: "Lançamento financeiro",
-    description: "Disparado ao criar ou atualizar um lançamento financeiro.",
+    key: "financeiro",
+    title: "Financeiro",
+    description: "Movimentações financeiras disparadas pelas integrações.",
+    options: [
+      {
+        value: "financeiro.lancamento",
+        label: "Lançamento financeiro",
+        description: "Disparado ao criar ou atualizar um lançamento financeiro.",
+      },
+    ],
   },
 ] as const;
 
-type WebhookEvent = (typeof eventOptions)[number]["value"];
+type EventGroups = typeof eventGroups;
 
-type Webhook = {
-  id: number;
-  name: string;
-  url: string;
-  events: WebhookEvent[];
-  secret: string;
-  active: boolean;
-  lastDelivery: string | null;
-};
+type EventOption = EventGroups[number]["options"][number];
+
+const eventOptions = eventGroups.reduce<EventOption[]>((accumulator, group) => {
+  return accumulator.concat(group.options);
+}, []);
+
+type WebhookEvent = EventOption["value"];
+
+type Webhook = IntegrationWebhookRecord;
 
 type WebhookForm = {
   name: string;
@@ -358,6 +428,44 @@ export default function Integracoes() {
     setApiKeys((prev) => prev.filter(isApiKeyAccessible));
   }, [isApiKeyAccessible]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadWebhooks = async () => {
+      setIsLoadingWebhooks(true);
+      try {
+        const items = await fetchIntegrationWebhooks();
+        if (!isMounted) {
+          return;
+        }
+        setWebhooks(items);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        console.error("Failed to load integration webhooks:", error);
+        toast({
+          title: "Não foi possível carregar os webhooks",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Erro inesperado ao buscar os webhooks configurados.",
+          variant: "destructive",
+        });
+      } finally {
+        if (isMounted) {
+          setIsLoadingWebhooks(false);
+        }
+      }
+    };
+
+    loadWebhooks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
+
   const resetEditApiKeyState = () => {
     setEditApiKeyForm({
       provider: fallbackProvider,
@@ -517,27 +625,14 @@ export default function Integracoes() {
     frequency: "realTime" as SyncFrequency,
     endpoint: "",
   });
-  const [webhooks, setWebhooks] = useState<Webhook[]>([
-    {
-      id: 1,
-      name: "Clientes - Hub de marketing",
-      url: "https://hooks.zapier.com/hooks/catch/123456/abc123",
-      events: ["cliente.criado", "cliente.atualizado"],
-      secret: "whsec_8fb12a9c4d8ef730b1a2c4d5",
-      active: true,
-      lastDelivery: "2024-03-17T15:40:00Z",
-    },
-    {
-      id: 2,
-      name: "Notificações de tarefas",
-      url: "https://automacao.empresa.com/webhooks/tarefas",
-      events: ["tarefa.concluida"],
-      secret: "whsec_c91de02f8b6a43c0f7a1b5d9",
-      active: false,
-      lastDelivery: null,
-    },
-  ]);
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(true);
+  const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
+  const [updatingWebhookId, setUpdatingWebhookId] = useState<number | null>(null);
+  const [deletingWebhookId, setDeletingWebhookId] = useState<number | null>(null);
   const [webhookForm, setWebhookForm] = useState<WebhookForm>(getDefaultWebhookForm);
+  const [isWebhookSecretDialogOpen, setIsWebhookSecretDialogOpen] = useState(false);
+  const [pendingWebhookSecret, setPendingWebhookSecret] = useState<string | null>(null);
 
   const activeApiKeys = apiKeys.filter((key) => key.active).length;
   const activeIntegrations = integrations.filter((integration) => integration.enabled).length;
@@ -797,17 +892,12 @@ export default function Integracoes() {
     });
   };
 
-  const handleGenerateWebhookSecret = () => {
-    setWebhookForm((prev) => ({ ...prev, secret: createWebhookSecret() }));
-    toast({
-      title: "Novo segredo gerado",
-      description: "Compartilhe o valor apenas com provedores confiáveis.",
-    });
-  };
-
-  const handleAddWebhook = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddWebhook = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!webhookForm.name.trim() || !webhookForm.url.trim()) {
+    const trimmedName = webhookForm.name.trim();
+    const trimmedUrl = webhookForm.url.trim();
+    const trimmedSecret = webhookForm.secret.trim();
+    if (!trimmedName || !trimmedUrl) {
       toast({
         title: "Preencha os dados do webhook",
         description: "Informe nome e URL de destino.",
@@ -824,41 +914,108 @@ export default function Integracoes() {
       return;
     }
 
-    setWebhooks((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        name: webhookForm.name.trim(),
-        url: webhookForm.url.trim(),
+    setIsCreatingWebhook(true);
+    try {
+      const created = await createIntegrationWebhookApi({
+        name: trimmedName,
+        url: trimmedUrl,
         events: webhookForm.events,
-        secret: webhookForm.secret,
+        secret: trimmedSecret,
         active: true,
-        lastDelivery: null,
-      },
-    ]);
-    toast({
-      title: "Webhook configurado",
-      description: `${webhookForm.name} foi adicionado e está ativo.`,
-    });
-    setWebhookForm(getDefaultWebhookForm());
+      });
+
+      setWebhooks((prev) => [created, ...prev]);
+      toast({
+        title: "Webhook configurado",
+        description: `${created.name} foi adicionado e está ativo.`,
+      });
+      if (created.secret.trim()) {
+        setPendingWebhookSecret(created.secret);
+        setIsWebhookSecretDialogOpen(true);
+      }
+      setWebhookForm(getDefaultWebhookForm());
+    } catch (error) {
+      toast({
+        title: "Não foi possível cadastrar o webhook",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao salvar o webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingWebhook(false);
+    }
   };
 
-  const toggleWebhook = (id: number, value: boolean) => {
-    const current = webhooks.find((item) => item.id === id);
-    setWebhooks((prev) => prev.map((item) => (item.id === id ? { ...item, active: value } : item)));
-    toast({
-      title: value ? "Webhook ativado" : "Webhook desativado",
-      description: current ? `${current.name} agora está ${value ? "ativo" : "inativo"}.` : undefined,
-    });
+  const handleWebhookSecretDialogChange = (open: boolean) => {
+    setIsWebhookSecretDialogOpen(open);
+    if (!open) {
+      setPendingWebhookSecret(null);
+    }
   };
 
-  const removeWebhook = (id: number) => {
+  const handleCopyWebhookSecret = () => {
+    if (!pendingWebhookSecret) {
+      return;
+    }
+    void copyCredential(pendingWebhookSecret, "Segredo do webhook");
+  };
+
+  const toggleWebhook = async (id: number, value: boolean) => {
     const current = webhooks.find((item) => item.id === id);
-    setWebhooks((prev) => prev.filter((item) => item.id !== id));
-    toast({
-      title: "Webhook removido",
-      description: current ? `${current.name} foi excluído.` : "Webhook excluído.",
-    });
+    if (!current) {
+      return;
+    }
+
+    setUpdatingWebhookId(id);
+    try {
+      const updated = await updateIntegrationWebhookStatusApi(id, { active: value });
+      setWebhooks((prev) => prev.map((item) => (item.id === id ? updated : item)));
+      toast({
+        title: value ? "Webhook ativado" : "Webhook desativado",
+        description: `${updated.name} agora está ${value ? "ativo" : "inativo"}.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Não foi possível atualizar o webhook",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao atualizar o status do webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingWebhookId(null);
+    }
+  };
+
+  const removeWebhook = async (id: number) => {
+    const current = webhooks.find((item) => item.id === id);
+    if (!current) {
+      return;
+    }
+
+    setDeletingWebhookId(id);
+    try {
+      await deleteIntegrationWebhookApi(id);
+      setWebhooks((prev) => prev.filter((item) => item.id !== id));
+      toast({
+        title: "Webhook removido",
+        description: `${current.name} foi excluído.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Não foi possível remover o webhook",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao excluir o webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingWebhookId(null);
+    }
   };
 
   return (
@@ -1293,192 +1450,193 @@ export default function Integracoes() {
       {/*  </CardContent>*/}
       {/*</Card>*/}
 
-      {/*<Card>*/}
-      {/*  <CardHeader>*/}
-      {/*    <div className="space-y-1">*/}
-      {/*      <CardTitle className="flex items-center gap-2">*/}
-      {/*        <WebhookIcon className="h-5 w-5 text-primary" />*/}
-      {/*        Webhooks*/}
-      {/*      </CardTitle>*/}
-      {/*      <CardDescription>*/}
-      {/*        Configure endpoints que devem ser notificados automaticamente sempre que eventos ocorrerem na plataforma.*/}
-      {/*      </CardDescription>*/}
-      {/*    </div>*/}
-      {/*  </CardHeader>*/}
-      {/*  <CardContent className="space-y-6">*/}
-      {/*    <form onSubmit={handleAddWebhook} className="space-y-4">*/}
-      {/*      <div className="grid gap-4 md:grid-cols-2">*/}
-      {/*        <div className="space-y-2">*/}
-      {/*          <Label htmlFor="webhook-name">Nome</Label>*/}
-      {/*          <Input*/}
-      {/*            id="webhook-name"*/}
-      {/*            placeholder="Ex: Disparo para o ERP"*/}
-      {/*            value={webhookForm.name}*/}
-      {/*            onChange={(event) => setWebhookForm((prev) => ({ ...prev, name: event.target.value }))}*/}
-      {/*          />*/}
-      {/*        </div>*/}
-      {/*        <div className="space-y-2">*/}
-      {/*          <Label htmlFor="webhook-url">URL do webhook</Label>*/}
-      {/*          <Input*/}
-      {/*            id="webhook-url"*/}
-      {/*            placeholder="https://..."*/}
-      {/*            value={webhookForm.url}*/}
-      {/*            onChange={(event) => setWebhookForm((prev) => ({ ...prev, url: event.target.value }))}*/}
-      {/*          />*/}
-      {/*        </div>*/}
-      {/*      </div>*/}
+      <Card>
+        <CardHeader>
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2">
+              <WebhookIcon className="h-5 w-5 text-primary" />
+              Webhooks
+            </CardTitle>
+            <CardDescription>
+              Configure endpoints que devem ser notificados automaticamente sempre que eventos ocorrerem na plataforma.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <form onSubmit={handleAddWebhook} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="webhook-name">Nome</Label>
+                <Input
+                  id="webhook-name"
+                  placeholder="Ex: Disparo para o ERP"
+                  value={webhookForm.name}
+                  onChange={(event) => setWebhookForm((prev) => ({ ...prev, name: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="webhook-url">URL do webhook</Label>
+                <Input
+                  id="webhook-url"
+                  placeholder="https://..."
+                  value={webhookForm.url}
+                  onChange={(event) => setWebhookForm((prev) => ({ ...prev, url: event.target.value }))}
+                />
+              </div>
+            </div>
 
-      {/*      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">*/}
-      {/*        <div className="space-y-2">*/}
-      {/*          <Label htmlFor="webhook-secret">Segredo de assinatura</Label>*/}
-      {/*          <div className="flex gap-2">*/}
-      {/*            <Input*/}
-      {/*              id="webhook-secret"*/}
-      {/*              value={webhookForm.secret}*/}
-      {/*              readOnly*/}
-      {/*              className="font-mono"*/}
-      {/*            />*/}
-      {/*            <Button*/}
-      {/*              type="button"*/}
-      {/*              size="icon"*/}
-      {/*              variant="outline"*/}
-      {/*              onClick={() => copyCredential(webhookForm.secret, "Segredo do webhook")}*/}
-      {/*              aria-label="Copiar segredo"*/}
-      {/*            >*/}
-      {/*              <Copy className="h-4 w-4" />*/}
-      {/*            </Button>*/}
-      {/*          </div>*/}
-      {/*        </div>*/}
-      {/*        <div className="flex items-end gap-2">*/}
-      {/*          <Button type="button" variant="outline" onClick={handleGenerateWebhookSecret} className="whitespace-nowrap">*/}
-      {/*            <RefreshCcw className="mr-2 h-4 w-4" />*/}
-      {/*            Gerar novo segredo*/}
-      {/*          </Button>*/}
-      {/*          <Button type="submit" className="whitespace-nowrap">*/}
-      {/*            <Plus className="mr-2 h-4 w-4" />*/}
-      {/*            Adicionar webhook*/}
-      {/*          </Button>*/}
-      {/*        </div>*/}
-      {/*      </div>*/}
+            <div className="flex justify-end">
+              <Button type="submit" className="whitespace-nowrap" disabled={isCreatingWebhook}>
+                {isCreatingWebhook ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Adicionar webhook
+                  </>
+                )}
+              </Button>
+            </div>
 
-      {/*      <div className="space-y-2">*/}
-      {/*        <Label>Eventos monitorados</Label>*/}
-      {/*        <p className="text-xs text-muted-foreground">*/}
-      {/*          Escolha quais eventos da plataforma irão disparar o envio para o endpoint configurado.*/}
-      {/*        </p>*/}
-      {/*        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">*/}
-      {/*          {eventOptions.map((event) => (*/}
-      {/*            <label*/}
-      {/*              key={event.value}*/}
-      {/*              className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"*/}
-      {/*            >*/}
-      {/*              <Checkbox*/}
-      {/*                checked={webhookForm.events.includes(event.value)}*/}
-      {/*                onCheckedChange={(checked) =>*/}
-      {/*                  updateWebhookEventSelection(event.value, checked === true)*/}
-      {/*                }*/}
-      {/*              />*/}
-      {/*              <div className="space-y-1">*/}
-      {/*                <p className="text-sm font-medium leading-none">{event.label}</p>*/}
-      {/*                <p className="text-xs text-muted-foreground">{event.description}</p>*/}
-      {/*              </div>*/}
-      {/*            </label>*/}
-      {/*          ))}*/}
-      {/*        </div>*/}
-      {/*      </div>*/}
-      {/*    </form>*/}
+            <div className="space-y-2">
+              <Label>Eventos monitorados</Label>
+              <p className="text-xs text-muted-foreground">
+                Escolha quais eventos da plataforma irão disparar o envio para o endpoint configurado.
+              </p>
+              <Accordion
+                type="multiple"
+                defaultValue={eventGroups.map((group) => group.key)}
+                className="space-y-3"
+              >
+                {eventGroups.map((group) => (
+                  <AccordionItem key={group.key} value={group.key}>
+                    <AccordionTrigger className="text-sm font-semibold">
+                      {group.title}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-3">
+                        <p className="text-xs text-muted-foreground">{group.description}</p>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {group.options.map((event) => (
+                            <label
+                              key={event.value}
+                              className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                            >
+                              <Checkbox
+                                checked={webhookForm.events.includes(event.value)}
+                                onCheckedChange={(checked) =>
+                                  updateWebhookEventSelection(event.value, checked === true)
+                                }
+                              />
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium leading-none">{event.label}</p>
+                                <p className="text-xs text-muted-foreground">{event.description}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
+          </form>
 
-      {/*    <Table>*/}
-      {/*      <TableHeader>*/}
-      {/*        <TableRow>*/}
-      {/*          <TableHead>Webhook</TableHead>*/}
-      {/*          <TableHead>Endpoint</TableHead>*/}
-      {/*          <TableHead>Eventos</TableHead>*/}
-      {/*          <TableHead>Status</TableHead>*/}
-      {/*          <TableHead className="w-[120px]">Ações</TableHead>*/}
-      {/*        </TableRow>*/}
-      {/*      </TableHeader>*/}
-      {/*      <TableBody>*/}
-      {/*        {webhooks.map((webhook) => (*/}
-      {/*          <TableRow key={webhook.id}>*/}
-      {/*            <TableCell>*/}
-      {/*              <div className="space-y-1">*/}
-      {/*                <p className="font-medium">{webhook.name}</p>*/}
-      {/*                <p className="text-xs text-muted-foreground font-mono">*/}
-      {/*                  {maskCredential(webhook.secret)}*/}
-      {/*                </p>*/}
-      {/*              </div>*/}
-      {/*            </TableCell>*/}
-      {/*            <TableCell>*/}
-      {/*              <span className="block max-w-[260px] truncate font-mono text-sm">{webhook.url}</span>*/}
-      {/*            </TableCell>*/}
-      {/*            <TableCell>*/}
-      {/*              <div className="flex flex-wrap gap-1">*/}
-      {/*                {webhook.events.map((event) => {*/}
-      {/*                  const option = eventOptions.find((item) => item.value === event);*/}
-      {/*                  return (*/}
-      {/*                    <Badge key={event} variant="secondary">*/}
-      {/*                      {option?.label ?? event}*/}
-      {/*                    </Badge>*/}
-      {/*                  );*/}
-      {/*                })}*/}
-      {/*              </div>*/}
-      {/*            </TableCell>*/}
-      {/*            <TableCell>*/}
-      {/*              <div className="space-y-1">*/}
-      {/*                <div className="flex items-center gap-3">*/}
-      {/*                  <Badge*/}
-      {/*                    variant={webhook.active ? "default" : "outline"}*/}
-      {/*                    className={webhook.active ? "bg-success text-success-foreground" : ""}*/}
-      {/*                  >*/}
-      {/*                    {webhook.active ? "Ativo" : "Inativo"}*/}
-      {/*                  </Badge>*/}
-      {/*                  <Switch*/}
-      {/*                    checked={webhook.active}*/}
-      {/*                    onCheckedChange={(checked) => toggleWebhook(webhook.id, checked)}*/}
-      {/*                    aria-label={`Alterar status do webhook ${webhook.name}`}*/}
-      {/*                  />*/}
-      {/*                </div>*/}
-      {/*                <p className="text-xs text-muted-foreground">*/}
-      {/*                  {webhook.lastDelivery*/}
-      {/*                    ? `Último envio ${formatDateTime(webhook.lastDelivery)}`*/}
-      {/*                    : "Nenhuma entrega realizada"}*/}
-      {/*                </p>*/}
-      {/*              </div>*/}
-      {/*            </TableCell>*/}
-      {/*            <TableCell className="flex items-center gap-2">*/}
-      {/*              <Button*/}
-      {/*                type="button"*/}
-      {/*                size="icon"*/}
-      {/*                variant="ghost"*/}
-      {/*                onClick={() => copyCredential(webhook.secret, `Segredo ${webhook.name}`)}*/}
-      {/*                aria-label="Copiar segredo"*/}
-      {/*              >*/}
-      {/*                <Copy className="h-4 w-4" />*/}
-      {/*              </Button>*/}
-      {/*              <Button*/}
-      {/*                type="button"*/}
-      {/*                size="icon"*/}
-      {/*                variant="ghost"*/}
-      {/*                onClick={() => removeWebhook(webhook.id)}*/}
-      {/*                aria-label="Remover webhook"*/}
-      {/*              >*/}
-      {/*                <Trash2 className="h-4 w-4" />*/}
-      {/*              </Button>*/}
-      {/*            </TableCell>*/}
-      {/*          </TableRow>*/}
-      {/*        ))}*/}
-      {/*        {webhooks.length === 0 && (*/}
-      {/*          <TableRow>*/}
-      {/*            <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">*/}
-      {/*              Nenhum webhook configurado até o momento.*/}
-      {/*            </TableCell>*/}
-      {/*          </TableRow>*/}
-      {/*        )}*/}
-      {/*      </TableBody>*/}
-      {/*    </Table>*/}
-      {/*  </CardContent>*/}
-      {/*</Card>*/}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Webhook</TableHead>
+                <TableHead>Endpoint</TableHead>
+                <TableHead>Eventos</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[120px]">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingWebhooks ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                    Carregando webhooks configurados...
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <>
+                  {webhooks.map((webhook) => (
+                    <TableRow key={webhook.id}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <p className="font-medium">{webhook.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{maskCredential(webhook.secret)}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="block max-w-[260px] truncate font-mono text-sm">{webhook.url}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {webhook.events.map((event) => {
+                            const option = eventOptions.find((item) => item.value === event);
+                            return (
+                              <Badge key={event} variant="secondary">
+                                {option?.label ?? event}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-3">
+                            <Badge variant={webhook.active ? "default" : "outline"} className={webhook.active ? "bg-success text-success-foreground" : ""}>
+                              {webhook.active ? "Ativo" : "Inativo"}
+                            </Badge>
+                            <Switch
+                              checked={webhook.active}
+                              disabled={updatingWebhookId === webhook.id}
+                              onCheckedChange={(checked) => void toggleWebhook(webhook.id, checked === true)}
+                              aria-label={`Alterar status do webhook ${webhook.name}`}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {webhook.lastDelivery ? `Último envio ${formatDateTime(webhook.lastDelivery)}` : "Nenhuma entrega realizada"}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => void removeWebhook(webhook.id)}
+                          aria-label="Remover webhook"
+                          disabled={deletingWebhookId === webhook.id}
+                        >
+                          {deletingWebhookId === webhook.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {webhooks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                        Nenhum webhook configurado até o momento.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -1535,6 +1693,34 @@ export default function Integracoes() {
           </ul>
         </CardContent>
       </Card>
+
+      <Dialog open={isWebhookSecretDialogOpen} onOpenChange={handleWebhookSecretDialogChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Segredo do webhook gerado</DialogTitle>
+            <DialogDescription>
+              Copie e armazene o segredo com segurança. Ele será exibido apenas neste momento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-muted px-3 py-2 font-mono text-sm text-foreground">
+            {pendingWebhookSecret ?? "—"}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCopyWebhookSecret}
+              disabled={!pendingWebhookSecret}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Copiar segredo
+            </Button>
+            <Button type="button" onClick={() => handleWebhookSecretDialogChange(false)}>
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
         <DialogContent className="sm:max-w-lg">

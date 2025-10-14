@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,27 +10,170 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
-import { plans } from "@/data/plans";
+import { plans as staticPlans } from "@/data/plans";
 import { Subscription } from "@/types/subscription";
 import { useToast } from "@/hooks/use-toast";
 import { getApiUrl } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import { fetchPlanOptions, type PlanOption } from "@/features/plans/api";
 
 type UpdatePlanDialogProps = {
   subscription: Subscription;
   onUpdate: () => void;
 };
 
+const normalizePlanKey = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/plano/gi, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
 const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [planOptions, setPlanOptions] = useState<PlanOption[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [plansError, setPlansError] = useState<string | null>(null);
+  const featuresIndex = useMemo(() => {
+    const index = new Map<string, string[]>();
+    staticPlans.forEach((plan) => {
+      const keys = new Set<string>([
+        normalizePlanKey(plan.name),
+        normalizePlanKey(plan.id),
+      ]);
+      keys.forEach((key) => {
+        if (key && !index.has(key)) {
+          index.set(key, plan.features);
+        }
+      });
+    });
+    return index;
+  }, []);
+  const availablePlans = useMemo(() =>
+    planOptions.map((plan) => {
+      const normalizedName = normalizePlanKey(plan.name);
+      const normalizedDescription = plan.description ? normalizePlanKey(plan.description) : "";
+      return {
+        id: String(plan.id),
+        name: plan.name,
+        description: plan.description,
+        monthlyPrice: plan.monthlyPrice,
+        annualPrice: plan.annualPrice,
+        features:
+          featuresIndex.get(normalizedName) ??
+          (normalizedDescription ? featuresIndex.get(normalizedDescription) ?? [] : []),
+        normalizedKey: normalizedName || normalizedDescription,
+      };
+    }),
+  [planOptions, featuresIndex]);
+  const planIdMap = useMemo(() => {
+    const mapping = new Map<string, string>();
+    planOptions.forEach((plan) => {
+      const normalizedName = normalizePlanKey(plan.name);
+      const normalizedDescription = plan.description ? normalizePlanKey(plan.description) : "";
+      const matchedPlan = staticPlans.find((staticPlan) => {
+        const normalizedStaticName = normalizePlanKey(staticPlan.name);
+        const normalizedStaticId = normalizePlanKey(staticPlan.id);
+        return (
+          (normalizedStaticName && normalizedStaticName === normalizedName) ||
+          (normalizedStaticId && normalizedStaticId === normalizedName) ||
+          (normalizedDescription && normalizedDescription === normalizedStaticName)
+        );
+      });
+      if (matchedPlan) {
+        mapping.set(String(plan.id), matchedPlan.id);
+      }
+    });
+    return mapping;
+  }, [planOptions]);
   const defaultPlan = useMemo(() => {
-    const normalized = subscription.description?.toLowerCase() ?? "";
-    return plans.find((plan) => normalized.includes(plan.name.toLowerCase()))?.id ?? plans[0]?.id ?? "";
-  }, [subscription.description]);
+    if (availablePlans.length === 0) {
+      return "";
+    }
+
+    const planIdCandidate = (subscription as Subscription & { planId?: unknown }).planId;
+    if (typeof planIdCandidate === "number" || typeof planIdCandidate === "string") {
+      const normalizedId = String(planIdCandidate).trim();
+      if (normalizedId.length > 0) {
+        const byId = availablePlans.find((plan) => plan.id === normalizedId);
+        if (byId) {
+          return byId.id;
+        }
+      }
+    }
+
+    const normalizedDescription = normalizePlanKey(subscription.description ?? "");
+    return (
+      availablePlans.find((plan) => {
+        if (!normalizedDescription) {
+          return false;
+        }
+        const planKey = plan.normalizedKey ?? normalizePlanKey(plan.name);
+        return planKey && normalizedDescription.includes(planKey);
+      })?.id ??
+      availablePlans[0]?.id ??
+      ""
+    );
+  }, [availablePlans, subscription]);
   const [selectedPlan, setSelectedPlan] = useState(defaultPlan);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const loadPlans = async () => {
+      setPlansLoading(true);
+      setPlansError(null);
+
+      try {
+        const options = await fetchPlanOptions(controller.signal);
+        if (!cancelled) {
+          setPlanOptions(options);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        if ((error as DOMException)?.name === "AbortError") {
+          return;
+        }
+        const message =
+          error instanceof Error ? error.message : "Não foi possível carregar os planos disponíveis.";
+        setPlansError(message);
+        setPlanOptions([]);
+      } finally {
+        if (!cancelled) {
+          setPlansLoading(false);
+        }
+      }
+    };
+
+    void loadPlans();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    setSelectedPlan(defaultPlan);
+  }, [defaultPlan]);
+
+  const formatCurrency = (value: number | null) => {
+    if (value === null || !Number.isFinite(value)) {
+      return null;
+    }
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  };
 
   const requestJson = async (url: string, init?: RequestInit) => {
     const response = await fetch(url, {
@@ -68,12 +211,46 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
       return;
     }
 
+    if (!selectedPlan) {
+      toast({
+        title: "Selecione um plano",
+        description: "Escolha uma opção antes de confirmar a mudança.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
+
+    const resolvedPlanId = (() => {
+      const direct = planIdMap.get(String(selectedPlan));
+      if (direct) {
+        return direct;
+      }
+      const selected = availablePlans.find((plan) => plan.id === String(selectedPlan));
+      if (!selected) {
+        return selectedPlan;
+      }
+      const matchedPlan = staticPlans.find((plan) => {
+        const normalizedStaticName = normalizePlanKey(plan.name);
+        const normalizedStaticId = normalizePlanKey(plan.id);
+        const normalizedSelected = normalizePlanKey(selected.name);
+        const normalizedKey = selected.normalizedKey
+          ? normalizePlanKey(selected.normalizedKey)
+          : "";
+        return (
+          (normalizedStaticName && normalizedStaticName === normalizedSelected) ||
+          (normalizedStaticId && normalizedStaticId === normalizedSelected) ||
+          (normalizedKey && normalizedStaticName === normalizedKey)
+        );
+      });
+      return matchedPlan?.id ?? selectedPlan;
+    })();
 
     try {
       await requestJson(getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscription.id)}`), {
         method: "PUT",
-        body: JSON.stringify({ planId: selectedPlan }),
+        body: JSON.stringify({ planId: resolvedPlanId }),
       });
 
       toast({
@@ -115,42 +292,68 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
             </DialogDescription>
           </DialogHeader>
 
-          <RadioGroup value={selectedPlan} onValueChange={setSelectedPlan} className="space-y-4">
-            {plans.map((plan) => (
-              <label
-                key={plan.id}
-                htmlFor={plan.id}
-                className={`block border rounded-lg p-4 cursor-pointer transition-all hover:border-accent/60 ${
-                  selectedPlan === plan.id ? "border-accent shadow" : "border-border"
-                }`}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem value={plan.id} id={plan.id} />
-                      <span className="font-semibold text-lg">{plan.name}</span>
-                      {plan.popular && (
-                        <Badge className="bg-accent text-accent-foreground">Mais Popular</Badge>
+          {plansLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : availablePlans.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {plansError ?? "Nenhum plano disponível no momento."}
+            </p>
+          ) : (
+            <RadioGroup value={selectedPlan} onValueChange={setSelectedPlan} className="space-y-4">
+              {availablePlans.map((plan) => (
+                <label
+                  key={plan.id}
+                  htmlFor={plan.id}
+                  className={`block border rounded-lg p-4 cursor-pointer transition-all hover:border-accent/60 ${
+                    selectedPlan === plan.id ? "border-accent shadow" : "border-border"
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value={plan.id} id={plan.id} />
+                        <span className="font-semibold text-lg">{plan.name}</span>
+                      </div>
+                      {(plan.description || plan.features.length > 0) && (
+                        <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                          {plan.description && <p>{plan.description}</p>}
+                          {plan.features.length > 0 && (
+                            <ul className="space-y-1 pl-6 list-disc">
+                              {plan.features.map((feature) => (
+                                <li key={feature}>{feature}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">{plan.description}</p>
+                    <div className="text-right space-y-1">
+                      {formatCurrency(plan.monthlyPrice) && (
+                        <p className="font-bold">{formatCurrency(plan.monthlyPrice)}/mês</p>
+                      )}
+                      {formatCurrency(plan.annualPrice) && (
+                        <p className="text-xs text-muted-foreground">
+                          ou {formatCurrency(plan.annualPrice)}/ano
+                        </p>
+                      )}
+                      {!formatCurrency(plan.monthlyPrice) && !formatCurrency(plan.annualPrice) && (
+                        <p className="text-xs text-muted-foreground">Consulte condições</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold">R$ {plan.monthlyPrice}/mês</p>
-                    <p className="text-xs text-muted-foreground">ou R$ {plan.yearlyPrice}/ano</p>
-                  </div>
-                </div>
-                <ul className="text-sm text-muted-foreground space-y-1 pl-6 list-disc">
-                  {plan.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-              </label>
-            ))}
-          </RadioGroup>
+                </label>
+              ))}
+            </RadioGroup>
+          )}
+
+          {plansError && availablePlans.length > 0 && (
+            <p className="text-sm text-destructive">{plansError}</p>
+          )}
 
           <DialogFooter>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || plansLoading || !selectedPlan}>
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />

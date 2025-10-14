@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import AsaasSubscriptionService, {
   ManageSubscriptionInput,
 } from '../services/asaas/subscriptionService';
+import pool from '../services/db';
 import AsaasClient, {
   AsaasApiError,
   BillingType,
@@ -386,6 +387,355 @@ const mapPaginatedData = <T>(response: PaginatedResponse<T> | T[]): T[] => {
   return [];
 };
 
+const ensureSubscriptionFinancialRecords = async ({
+  empresaId,
+  subscription,
+  client,
+}: {
+  empresaId: number;
+  subscription: SubscriptionResponse;
+  client: AsaasClient;
+}): Promise<void> => {
+  const description =
+    sanitizeString(subscription.description) ?? `Assinatura ${subscription.id ?? ''}`.trim();
+  const subscriptionValue = parseChargeValue(subscription.value);
+  const subscriptionDueDate = parseChargeDate(subscription.nextDueDate);
+
+  let chargeRecord: Record<string, unknown> | null = null;
+  let chargeId: string | null = null;
+  let chargeBillingType: BillingType | null = null;
+  let chargeValue: number | null = null;
+  let chargeDueDate: string | null = null;
+  let chargeStatus: string | null = null;
+  let chargeInvoiceUrl: string | null = null;
+  let chargePixPayload: string | null = null;
+  let chargePixQrCode: string | null = null;
+  let chargeBoletoUrl: string | null = null;
+  let chargeCardLast4: string | null = null;
+  let chargeCardBrand: string | null = null;
+  let chargePaidAt: Date | null = null;
+
+  try {
+    const paymentsResponse = await client.listSubscriptionPayments(subscription.id, {
+      limit: 1,
+      offset: 0,
+    });
+    const [firstPayment] = mapPaginatedData(paymentsResponse);
+    if (firstPayment && isRecord(firstPayment)) {
+      chargeRecord = firstPayment;
+    }
+  } catch (error) {
+    console.error('Falha ao recuperar pagamentos da assinatura recém-criada no Asaas', error);
+  }
+
+  if (chargeRecord) {
+    chargeId = sanitizeString(chargeRecord.id) ?? null;
+    chargeBillingType = parseBillingType(chargeRecord.billingType);
+    chargeValue = parseChargeValue(chargeRecord.value);
+    chargeDueDate =
+      parseChargeDate(chargeRecord.dueDate) ??
+      parseChargeDate(chargeRecord.originalDueDate) ??
+      subscriptionDueDate;
+    chargeStatus = sanitizeString(chargeRecord.status) ?? null;
+    chargeInvoiceUrl =
+      sanitizeString(chargeRecord.invoiceUrl) ??
+      sanitizeString(chargeRecord.invoice_url) ??
+      sanitizeString(chargeRecord.bankSlipUrl) ??
+      sanitizeString(chargeRecord.bank_slip_url) ??
+      null;
+
+    const pixTransaction = extractMetadataRecord(chargeRecord.pixTransaction);
+    if (pixTransaction) {
+      chargePixPayload = sanitizeString(pixTransaction.payload) ?? null;
+      chargePixQrCode = sanitizeString(pixTransaction.encodedImage) ?? null;
+    }
+
+    chargeBoletoUrl =
+      sanitizeString(chargeRecord.boletoUrl) ?? sanitizeString(chargeRecord.boleto_url) ?? null;
+
+    const cardInfo = extractMetadataRecord(chargeRecord.creditCard);
+    if (cardInfo) {
+      chargeCardLast4 = resolveChargeCardLast4(cardInfo);
+      chargeCardBrand = resolveChargeCardBrand(cardInfo);
+    }
+
+    chargePaidAt =
+      parseChargePaidAt(chargeRecord.paymentDate) ??
+      parseChargePaidAt(chargeRecord.clientPaymentDate) ??
+      parseChargePaidAt(chargeRecord.confirmedDate);
+  }
+
+  const resolvedValue = chargeValue ?? subscriptionValue;
+  const resolvedDueDate = chargeDueDate ?? subscriptionDueDate;
+
+  if (resolvedValue === null || !resolvedDueDate) {
+    return;
+  }
+
+  const resolvedDescription =
+    sanitizeString(chargeRecord?.description) ?? description ?? `Assinatura ${subscription.id}`;
+
+  const existingFlow = await pool.query<{ id: number | string | null }>(
+    `SELECT id FROM financial_flows
+      WHERE external_provider = 'asaas'
+        AND external_reference_id = $1
+      LIMIT 1`,
+    [subscription.id],
+  );
+
+  let financialFlowId: number | null = null;
+
+  if ((existingFlow.rowCount ?? 0) > 0) {
+    const rawId = existingFlow.rows[0]?.id;
+    if (typeof rawId === 'number') {
+      financialFlowId = rawId;
+    } else if (typeof rawId === 'string' && rawId.trim()) {
+      const parsed = Number.parseInt(rawId.trim(), 10);
+      if (Number.isInteger(parsed)) {
+        financialFlowId = parsed;
+      }
+    }
+  }
+
+  if (financialFlowId === null) {
+    const insertResult = await pool.query<{ id: number | string | null }>(
+      `INSERT INTO financial_flows (
+        tipo,
+        descricao,
+        vencimento,
+        valor,
+        status,
+        conta_id,
+        cliente_id,
+        fornecedor_id,
+        external_provider,
+        external_reference_id,
+        idempresa
+      ) VALUES (
+        'receita',
+        $1,
+        $2,
+        $3,
+        'pendente',
+        NULL,
+        NULL,
+        NULL,
+        'asaas',
+        $4,
+        $5
+      )
+      RETURNING id`,
+      [resolvedDescription, resolvedDueDate, resolvedValue, subscription.id, empresaId],
+    );
+
+    if ((insertResult.rowCount ?? 0) > 0) {
+      const insertedId = insertResult.rows[0]?.id;
+      if (typeof insertedId === 'number') {
+        financialFlowId = insertedId;
+      } else if (typeof insertedId === 'string' && insertedId.trim()) {
+        const parsedId = Number.parseInt(insertedId.trim(), 10);
+        if (Number.isInteger(parsedId)) {
+          financialFlowId = parsedId;
+        }
+      }
+    }
+  }
+
+  if (financialFlowId === null) {
+    return;
+  }
+
+  if (!chargeRecord || !chargeId) {
+    return;
+  }
+
+  const resolvedBillingType = chargeBillingType ?? parseBillingType(subscription.billingType);
+  const chargeDueDateValue = chargeDueDate ?? resolvedDueDate;
+  const chargeValueNumber = chargeValue ?? resolvedValue;
+
+  if (!resolvedBillingType || !chargeDueDateValue || chargeValueNumber === null) {
+    return;
+  }
+
+  const existingCharge = await pool.query(
+    'SELECT id FROM asaas_charges WHERE asaas_charge_id = $1 OR financial_flow_id = $2 LIMIT 1',
+    [chargeId, financialFlowId],
+  );
+
+  if ((existingCharge.rowCount ?? 0) > 0) {
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO asaas_charges (
+      financial_flow_id,
+      cliente_id,
+      integration_api_key_id,
+      credential_id,
+      asaas_charge_id,
+      billing_type,
+      status,
+      due_date,
+      value,
+      invoice_url,
+      last_event,
+      payload,
+      paid_at,
+      pix_payload,
+      pix_qr_code,
+      boleto_url,
+      card_last4,
+      card_brand,
+      raw_response
+    ) VALUES (
+      $1,
+      NULL,
+      NULL,
+      NULL,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6,
+      $7,
+      NULL,
+      NULL,
+      $8,
+      $9,
+      $10,
+      $11,
+      $12,
+      $13,
+      $14
+    )`,
+    [
+      financialFlowId,
+      chargeId,
+      resolvedBillingType,
+      chargeStatus ?? 'PENDING',
+      chargeDueDateValue,
+      chargeValueNumber,
+      chargeInvoiceUrl,
+      chargePaidAt,
+      chargePixPayload,
+      chargePixQrCode,
+      chargeBoletoUrl,
+      chargeCardLast4,
+      chargeCardBrand,
+      chargeRecord,
+    ],
+  );
+};
+
+const parseIntegerId = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const extractMetadataRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+};
+
+const resolveEmpresaIdFromMetadata = (metadata: Record<string, unknown> | null): number | null => {
+  if (!metadata) {
+    return null;
+  }
+
+  const candidates = [
+    metadata.empresaId,
+    metadata.empresa_id,
+    metadata.companyId,
+    metadata.company_id,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parseIntegerId(candidate);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseChargeDate = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const parseChargeValue = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const parseChargePaidAt = (value: unknown): Date | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const resolveChargeCardLast4 = (value: unknown): string | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const number = sanitizeDigits(value.number);
+  if (number && number.length >= 4) {
+    return number.slice(-4);
+  }
+
+  return null;
+};
+
+const resolveChargeCardBrand = (value: unknown): string | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const brand = sanitizeString(value.brand) ?? sanitizeString(value.brandName);
+  return brand ?? null;
+};
+
 export const createOrGetCustomer = async (req: Request, res: Response) => {
   const clientResolution = ensureAsaasClient(res);
   if (!clientResolution) {
@@ -438,11 +788,50 @@ export const createSubscription = async (req: Request, res: Response) => {
 
   try {
     const payload = parseManageSubscriptionInput(req.body);
+    const payloadMetadata = extractMetadataRecord(payload.metadata);
     const result = await asaasSubscriptionService.createOrUpdateSubscription({
       integration: clientResolution.config,
       payload,
     });
-    res.json(normalizeSubscriptionResponse(result.subscription));
+    const subscription = normalizeSubscriptionResponse(result.subscription);
+
+    const responseMetadata = extractMetadataRecord(
+      (result.subscription as Record<string, unknown>).metadata,
+    );
+    const requestMetadata = extractMetadataRecord((req.body as Record<string, unknown>)?.metadata);
+    const empresaId = resolveEmpresaIdFromMetadata(
+      responseMetadata ?? payloadMetadata ?? requestMetadata,
+    );
+
+    if (empresaId !== null && subscription.id) {
+      const customerId = sanitizeString(subscription.customer ?? payload.customer);
+
+      try {
+        const updateResult = await pool.query(
+          `UPDATE public.empresas
+              SET asaas_subscription_id = $1,
+                  asaas_customer_id = COALESCE($2, asaas_customer_id)
+            WHERE id = $3`,
+          [subscription.id, customerId ?? null, empresaId],
+        );
+
+        if ((updateResult.rowCount ?? 0) > 0) {
+          try {
+            await ensureSubscriptionFinancialRecords({
+              empresaId,
+              subscription,
+              client: clientResolution.client,
+            });
+          } catch (error) {
+            console.error('Falha ao registrar cobrança local da assinatura pública', error);
+          }
+        }
+      } catch (error) {
+        console.error('Falha ao vincular assinatura pública à empresa', error);
+      }
+    }
+
+    res.json(subscription);
   } catch (error) {
     if (handleAsaasError(res, error, 'Não foi possível criar a assinatura no Asaas.')) {
       return;

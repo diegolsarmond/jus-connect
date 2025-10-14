@@ -1,4 +1,6 @@
 import pool from './db';
+import { MissingDependencyError } from './errors';
+import { publishIntegrationWebhookEvent } from './integrationWebhookDispatcher';
 
 interface OabMonitorRow {
   id: number;
@@ -52,7 +54,9 @@ const ensureTable = async (): Promise<void> => {
             );
           }
 
-          return;
+          throw new MissingDependencyError(
+            'Tabela public.empresas ausente; não é possível inicializar o schema de oab_monitoradas.',
+          );
         }
 
         await client.query('BEGIN');
@@ -262,7 +266,17 @@ const ensureTable = async (): Promise<void> => {
   await ensureTablePromise;
 };
 
-export const bootstrapOabMonitoradas = (): Promise<void> => ensureTable();
+export const bootstrapOabMonitoradas = async (): Promise<void> => {
+  try {
+    await ensureTable();
+  } catch (error) {
+    if (error instanceof MissingDependencyError) {
+      return;
+    }
+
+    throw error;
+  }
+};
 
 const sanitizeUf = (input: string): string => input.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase();
 
@@ -427,7 +441,40 @@ export const createCompanyOabMonitor = async (
     [empresaId, sanitizedUf, sanitizedNumero, sanitizedUsuarioId, sanitizedDiasSemana],
   );
 
-  return mapRow(result.rows[0]);
+  const row = result.rows[0];
+  const monitor = mapRow(row);
+
+  try {
+    const operation =
+      row?.created_at && row?.updated_at && String(row.created_at) !== String(row.updated_at)
+        ? 'updated'
+        : 'created';
+
+    publishIntegrationWebhookEvent({
+      empresaId,
+      event: 'oab.processo.incluida',
+      payload: {
+        id: monitor.id,
+        uf: monitor.uf,
+        numero: monitor.numero,
+        usuarioId: monitor.usuarioId,
+        usuarioNome: monitor.usuarioNome,
+        usuarioOab: monitor.usuarioOab,
+        diasSemana: monitor.diasSemana,
+        createdAt: monitor.createdAt,
+        updatedAt: monitor.updatedAt,
+        operation,
+        tipo: 'processo',
+      },
+    });
+  } catch (error) {
+    console.error('Failed to publish processo OAB monitor webhook event', error, {
+      empresaId,
+      monitorId: monitor.id,
+    });
+  }
+
+  return monitor;
 };
 
 export const deleteCompanyOabMonitor = async (

@@ -7,6 +7,13 @@ import {
   updateIntegrationApiKey,
   validateAsaasIntegration,
 } from '../controllers/integrationApiKeyController';
+import {
+  createIntegrationWebhook,
+  deleteIntegrationWebhook,
+  listIntegrationWebhooks,
+  updateIntegrationWebhook,
+  updateIntegrationWebhookStatus,
+} from '../controllers/webhookController';
 import { generateTextWithIntegration } from '../controllers/aiGenerationController';
 import { getAsaasWebhookSecret } from '../controllers/asaasIntegrationController';
 
@@ -153,6 +160,12 @@ router.patch('/integrations/api-keys/:id', updateIntegrationApiKey);
  *         description: Chave não encontrada
  */
 router.delete('/integrations/api-keys/:id', deleteIntegrationApiKey);
+
+router.get('/integrations/webhooks', listIntegrationWebhooks);
+router.post('/integrations/webhooks', createIntegrationWebhook);
+router.put('/integrations/webhooks/:id', updateIntegrationWebhook);
+router.patch('/integrations/webhooks/:id', updateIntegrationWebhookStatus);
+router.delete('/integrations/webhooks/:id', deleteIntegrationWebhook);
 
 /**
  * @swagger

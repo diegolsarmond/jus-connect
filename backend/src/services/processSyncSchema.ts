@@ -101,6 +101,7 @@ export async function ensureProcessSyncSchema(client: Queryable = pool): Promise
   if (!initializationPromise) {
     initializationPromise = (async () => {
       if (!(await ensureDependencies(client))) {
+        initializationPromise = null;
         return;
       }
 

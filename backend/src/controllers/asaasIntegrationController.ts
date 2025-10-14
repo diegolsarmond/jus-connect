@@ -688,45 +688,34 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
     return res.status(202).json(buildWebhookResponse());
   }
 
-  if (!secret) {
-    if (context.credentialId) {
-      console.error(
-        '[AsaasWebhook] Missing webhook secret for credential and no fallback configured',
-        context.credentialId,
-      );
-    } else {
-      console.error(
-        '[AsaasWebhook] Missing webhook secret: no credential associated and ASAAS_WEBHOOK_SECRET not configured',
-      );
-    }
-    return res.status(202).json(buildWebhookResponse());
-  }
-
   const signature = extractSignature(req);
-  if (!signature) {
-    console.error('[AsaasWebhook] Missing signature header');
-    return res.status(202).json(buildWebhookResponse());
-  }
 
-  const rawBody = rawRequest.rawBody ?? JSON.stringify(payload ?? {});
-  const providedSignature = decodeSignatureToBuffer(signature);
+  if (secret) {
+    if (!signature) {
+      console.error('[AsaasWebhook] Missing signature header');
+      return res.status(202).json(buildWebhookResponse());
+    }
 
-  if (!providedSignature) {
-    console.error('[AsaasWebhook] Unable to parse provided signature');
-    return res.status(202).json(buildWebhookResponse());
-  }
+    const rawBody = rawRequest.rawBody ?? JSON.stringify(payload ?? {});
+    const providedSignature = decodeSignatureToBuffer(signature);
 
-  const expectedSignature = computeExpectedSignature(secret, rawBody);
+    if (!providedSignature) {
+      console.error('[AsaasWebhook] Unable to parse provided signature');
+      return res.status(202).json(buildWebhookResponse());
+    }
 
-  if (providedSignature.length !== expectedSignature.length) {
-    console.error('[AsaasWebhook] Signature length mismatch');
-    return res.status(202).json(buildWebhookResponse());
-  }
+    const expectedSignature = computeExpectedSignature(secret, rawBody);
 
-  const isValidSignature = crypto.timingSafeEqual(providedSignature, expectedSignature);
-  if (!isValidSignature) {
-    console.error('[AsaasWebhook] Invalid signature for charge', asaasChargeId);
-    return res.status(202).json(buildWebhookResponse());
+    if (providedSignature.length !== expectedSignature.length) {
+      console.error('[AsaasWebhook] Signature length mismatch');
+      return res.status(202).json(buildWebhookResponse());
+    }
+
+    const isValidSignature = crypto.timingSafeEqual(providedSignature, expectedSignature);
+    if (!isValidSignature) {
+      console.error('[AsaasWebhook] Invalid signature for charge', asaasChargeId);
+      return res.status(202).json(buildWebhookResponse());
+    }
   }
 
   const status = extractChargeStatus(normalizedEvent, payment);

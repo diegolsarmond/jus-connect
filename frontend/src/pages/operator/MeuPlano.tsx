@@ -49,10 +49,12 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import { plans } from "@/data/plans";
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type PlanoDetalhe = {
   id: number;
+  slug: string | null;
   nome: string;
   ativo: boolean;
   descricao: string | null;
@@ -98,6 +100,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
 });
 const countFormatter = new Intl.NumberFormat("pt-BR");
+const DEFAULT_SUBSCRIPTION_ID = "sub_j82sejw1tdpb2xtf";
 
 function normalizeApiRows(data: unknown): unknown[] {
   if (Array.isArray(data)) {
@@ -152,6 +155,54 @@ function toNumber(value: unknown): number | null {
   }
 
   return null;
+}
+
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function pickString(
+  source: Record<string, unknown>,
+  candidates: string[],
+): string | null {
+  for (const key of candidates) {
+    if (key in source) {
+      const result = toStringOrNull(source[key]);
+      if (result) {
+        return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizeForComparison(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function slugify(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = normalizeForComparison(value)
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized.length > 0 ? normalized : null;
 }
 
 function parseRecursos(value: unknown): string[] {
@@ -584,12 +635,21 @@ function MeuPlanoContent() {
   const [planosDisponiveis, setPlanosDisponiveis] = useState<PlanoDetalhe[]>([]);
   const [pricingMode, setPricingMode] = useState<PricingMode>("mensal");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(DEFAULT_SUBSCRIPTION_ID);
   const [metrics, setMetrics] = useState<UsageMetrics>({
     usuariosAtivos: null,
     clientesAtivos: null,
     processosAtivos: null,
     propostasEmitidas: null,
   });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSubscriptionId(
+        window.localStorage.getItem("subscriptionId") ?? DEFAULT_SUBSCRIPTION_ID,
+      );
+    }
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -698,8 +758,20 @@ function MeuPlanoContent() {
             const limiteProcessos = toNumber(raw.limite_processos ?? raw.limiteProcessos);
             const limitePropostas = toNumber(raw.limite_propostas ?? raw.limitePropostas);
 
+            const slug =
+              pickString(raw, [
+                "slug",
+                "identificador",
+                "codigo",
+                "cod",
+                "chave",
+                "key",
+                "planSlug",
+              ]) ?? slugify(typeof raw.nome === "string" ? raw.nome : null);
+
             return {
               id: idNumber,
+              slug,
               nome,
               ativo,
               descricao: descricaoRaw && descricaoRaw.length > 0 ? descricaoRaw : null,
@@ -800,6 +872,10 @@ function MeuPlanoContent() {
   const cobrancaInfo = useMemo(() => estimateNextBilling(planoAtual), [planoAtual]);
 
   const availableModesLabel = useMemo(() => formatAvailableModes(planoExibido), [planoExibido]);
+  const checkoutPath =
+    planoExibido?.id != null
+      ? `${routes.checkout}?plan=${planoExibido.id}&cycle=${pricingMode === "anual" ? "yearly" : "monthly"}`
+      : null;
 
   const pendingNoticeMessage = useMemo(() => {
     if (!isPaymentPending) {
@@ -967,7 +1043,12 @@ function MeuPlanoContent() {
       };
 
       persistManagePlanSelection(selection);
-      navigate(routes.meuPlanoPayment, { state: selection });
+      const cycle = nextPricingMode === "anual" ? "yearly" : "monthly";
+      const matchedMarketingPlan = plans.find(
+        (item) => normalizeForComparison(item.name) === normalizeForComparison(plan.nome),
+      );
+      const slug = plan.slug ?? matchedMarketingPlan?.id ?? slugify(plan.nome) ?? String(plan.id);
+      navigate(`${routes.checkout}?plan=${encodeURIComponent(slug)}&cycle=${cycle}`);
     },
     [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
   );
@@ -995,6 +1076,24 @@ function MeuPlanoContent() {
             ? "Você está em período de avaliação. Escolha o plano ideal e finalize a contratação quando estiver pronto."
             : "Visualize os detalhes do plano atual e faça upgrade quando desejar."}
         </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setDialogOpen(true)}>Ver planos</Button>
+        <Button
+          variant="outline"
+          onClick={() =>
+            navigate(routes.subscription(subscriptionId ?? DEFAULT_SUBSCRIPTION_ID))
+          }
+        >
+          Minha assinatura
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!checkoutPath}
+          onClick={() => checkoutPath && navigate(checkoutPath)}
+        >
+          Ir para checkout
+        </Button>
       </div>
 
       {loading ? (
