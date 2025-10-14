@@ -52,6 +52,19 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
       };
     }),
   [planOptions, featuresIndex]);
+  const planIdMap = useMemo(() => {
+    const mapping = new Map<string, string>();
+    planOptions.forEach((plan) => {
+      const normalizedName = plan.name.trim().toLowerCase();
+      const matchedPlan = staticPlans.find(
+        (staticPlan) => staticPlan.name.trim().toLowerCase() === normalizedName,
+      );
+      if (matchedPlan) {
+        mapping.set(String(plan.id), matchedPlan.id);
+      }
+    });
+    return mapping;
+  }, [planOptions]);
   const defaultPlan = useMemo(() => {
     if (availablePlans.length === 0) {
       return "";
@@ -178,13 +191,12 @@ const UpdatePlanDialog = ({ subscription, onUpdate }: UpdatePlanDialogProps) => 
 
     setLoading(true);
 
-    const numericPlanId = Number(selectedPlan);
-    const normalizedPlanId = Number.isFinite(numericPlanId) ? numericPlanId : selectedPlan;
+    const resolvedPlanId = planIdMap.get(String(selectedPlan)) ?? selectedPlan;
 
     try {
       await requestJson(getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscription.id)}`), {
         method: "PUT",
-        body: JSON.stringify({ planId: normalizedPlanId }),
+        body: JSON.stringify({ planId: resolvedPlanId }),
       });
 
       toast({
