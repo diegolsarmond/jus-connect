@@ -791,9 +791,16 @@ export const createSubscription = async (req: Request, res: Response) => {
       (result.subscription as Record<string, unknown>).metadata,
     );
     const requestMetadata = extractMetadataRecord((req.body as Record<string, unknown>)?.metadata);
-    const empresaId = resolveEmpresaIdFromMetadata(
-      responseMetadata ?? payloadMetadata ?? requestMetadata,
-    );
+    const metadataSources = [responseMetadata, payloadMetadata, requestMetadata];
+    let empresaId: number | null = null;
+
+    for (const metadata of metadataSources) {
+      const resolved = resolveEmpresaIdFromMetadata(metadata);
+      if (resolved !== null) {
+        empresaId = resolved;
+        break;
+      }
+    }
 
     if (empresaId !== null && subscription.id) {
       const customerId = sanitizeString(subscription.customer ?? payload.customer);
