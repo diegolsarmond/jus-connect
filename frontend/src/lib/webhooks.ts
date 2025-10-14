@@ -98,3 +98,8 @@ export async function deleteIntegrationWebhook(id: number): Promise<void> {
     throw new Error(await parseErrorMessage(response));
   }
 }
+
+export const fetchWebhooks = fetchIntegrationWebhooks;
+export const createWebhook = createIntegrationWebhook;
+export const updateWebhookStatus = updateIntegrationWebhookStatus;
+export const deleteWebhook = deleteIntegrationWebhook;

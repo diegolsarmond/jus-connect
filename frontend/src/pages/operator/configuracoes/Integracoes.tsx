@@ -74,7 +74,7 @@ import {
   fetchIntegrationWebhooks,
   updateIntegrationWebhookStatus as updateIntegrationWebhookStatusApi,
   type IntegrationWebhook as IntegrationWebhookRecord,
-} from "@/lib/integrationWebhooks";
+} from "@/lib/webhooks";
 
 const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
