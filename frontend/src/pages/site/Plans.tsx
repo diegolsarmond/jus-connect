@@ -60,6 +60,8 @@ const Plans = () => {
       return;
     }
 
+    const checkoutPath = `${routes.checkout}?plan=${encodeURIComponent(planId)}&cycle=${billingCycle}`;
+
     if (user?.empresa_id) {
       setPendingPlan(planId);
       try {
@@ -69,7 +71,7 @@ const Plans = () => {
           options?.find((option) => option.name.trim().toLowerCase() === normalizedName) ?? null;
 
         if (!apiPlan) {
-          navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
+          navigate(checkoutPath);
           return;
         }
 
@@ -95,14 +97,14 @@ const Plans = () => {
         navigate(routes.meuPlanoPayment, { state: selection });
         return;
       } catch (error) {
-        navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
+        navigate(checkoutPath);
         return;
       } finally {
         setPendingPlan(null);
       }
     }
 
-    navigate(`/checkout?plan=${planId}&cycle=${billingCycle}`);
+    navigate(checkoutPath);
   };
 
   return (
