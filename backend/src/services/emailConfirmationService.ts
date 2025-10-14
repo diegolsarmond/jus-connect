@@ -72,10 +72,12 @@ export async function createEmailConfirmationToken(
   const expiresAt = new Date(Date.now() + EMAIL_CONFIRMATION_TOKEN_TTL_MS);
   const confirmationLink = buildConfirmationLink(rawToken);
 
-  try {
-    await pool.query('BEGIN');
+  const client = await pool.connect();
 
-    await pool.query(
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
       `UPDATE public.email_confirmation_tokens
           SET used_at = NOW()
         WHERE user_id = $1
@@ -83,21 +85,23 @@ export async function createEmailConfirmationToken(
       [user.id]
     );
 
-    await pool.query(
+    await client.query(
       `INSERT INTO public.email_confirmation_tokens (user_id, token_hash, expires_at)
        VALUES ($1, $2, $3)`,
       [user.id, tokenHash, expiresAt]
     );
 
-    await pool.query('COMMIT');
+    await client.query('COMMIT');
   } catch (error) {
     try {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK');
     } catch (rollbackError) {
       console.error('Falha ao reverter transação de confirmação de e-mail', rollbackError);
     }
 
     throw error;
+  } finally {
+    client.release();
   }
 
   return confirmationLink;
