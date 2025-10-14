@@ -48,3 +48,24 @@ CREATE TRIGGER trg_integration_webhooks_updated_at
   BEFORE UPDATE ON integration_webhooks
   FOR EACH ROW
   EXECUTE FUNCTION set_integration_webhooks_updated_at();
+
+-- Fila de entrega de eventos emitidos pelas integrações
+CREATE TABLE IF NOT EXISTS integration_webhook_deliveries (
+  id BIGSERIAL PRIMARY KEY,
+  webhook_id BIGINT NOT NULL REFERENCES integration_webhooks(id) ON DELETE CASCADE,
+  empresa_id BIGINT NOT NULL,
+  event TEXT NOT NULL,
+  body JSONB NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  delivered_at TIMESTAMPTZ NULL,
+  delivery_attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_integration_webhook_deliveries_empresa
+  ON integration_webhook_deliveries (empresa_id);
+
+CREATE INDEX IF NOT EXISTS idx_integration_webhook_deliveries_pending
+  ON integration_webhook_deliveries (delivered_at)
+  WHERE delivered_at IS NULL;
