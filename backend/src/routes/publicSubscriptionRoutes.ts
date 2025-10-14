@@ -6,6 +6,7 @@ import {
   getPaymentPixQrCode,
   getSubscription,
   getSubscriptionPayments,
+  cancelSubscription,
   updateSubscriptionCard,
   updateSubscriptionPlan,
 } from '../controllers/publicSubscriptionController';
@@ -20,6 +21,7 @@ router.get('/site/asaas/payments/:paymentId/pix', getPaymentPixQrCode);
 router.get('/site/asaas/payments/:paymentId/boleto', getPaymentBoletoCode);
 router.put('/site/asaas/subscriptions/:subscriptionId', updateSubscriptionPlan);
 router.put('/site/asaas/subscriptions/:subscriptionId/card', updateSubscriptionCard);
+router.post('/site/asaas/subscriptions/:subscriptionId/cancel', cancelSubscription);
 
 export default router;
 

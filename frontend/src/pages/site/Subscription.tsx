@@ -31,6 +31,7 @@ const SubscriptionDetails = () => {
   const [copiedPayload, setCopiedPayload] = useState(false);
   const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [lastPaymentStatus, setLastPaymentStatus] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     loadSubscription();
@@ -189,6 +190,33 @@ const SubscriptionDetails = () => {
     }
   };
 
+  const cancelSubscription = async () => {
+    if (!subscription || isCancelling) {
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      await requestJson<Subscription>(
+        getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscription.id)}/cancel`),
+        { method: "POST" },
+      );
+      toast({
+        title: "Assinatura cancelada",
+        description: "O cancelamento foi solicitado com sucesso.",
+      });
+      await loadSubscription();
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível cancelar",
+        description: error?.message ?? "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const copyToClipboard = (value: string) => {
     navigator.clipboard.writeText(value);
     setCopiedPayload(true);
@@ -208,6 +236,8 @@ const SubscriptionDetails = () => {
       RECEIVED: "bg-green-500",
       CONFIRMED: "bg-green-500",
       OVERDUE: "bg-red-500",
+      CANCELED: "bg-rose-500",
+      CANCELLED: "bg-rose-500",
     };
     return colors[status] ?? "bg-gray-500";
   };
@@ -221,6 +251,8 @@ const SubscriptionDetails = () => {
       RECEIVED: "Recebido",
       CONFIRMED: "Confirmado",
       OVERDUE: "Atrasado",
+      CANCELED: "Cancelada",
+      CANCELLED: "Cancelada",
     };
     return labels[status] ?? status;
   };
@@ -304,6 +336,24 @@ const SubscriptionDetails = () => {
                   <UpdateCardDialog subscriptionId={subscription.id} onUpdate={loadSubscription} />
                 )}
                 <UpdatePlanDialog subscription={subscription} onUpdate={loadSubscription} />
+                <Button
+                  variant="outline"
+                  onClick={cancelSubscription}
+                  disabled={
+                    isCancelling ||
+                    subscription.status === "CANCELED" ||
+                    subscription.status === "CANCELLED" ||
+                    subscription.status === "INACTIVE"
+                  }
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Cancelando…
+                    </>
+                  ) : (
+                    "Cancelar assinatura"
+                  )}
+                </Button>
               </div>
             </Card>
 
