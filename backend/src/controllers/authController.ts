@@ -338,6 +338,26 @@ const MIN_PASSWORD_LENGTH = 8;
 const MAX_PHONE_LENGTH = 32;
 const DEFAULT_PROFILE_NAME = 'Administrador';
 const DEFAULT_MODULE_IDS = sortModules(SYSTEM_MODULES.map((module) => module.id));
+const DEFAULT_WORKFLOW_TEMPLATES = [
+  {
+    nome: 'Fluxo de Atendimento',
+    exibe_menu: true,
+    ordem: 1,
+    etiquetas: ['Novo atendimento', 'Em análise', 'Aguardando cliente', 'Concluído'],
+  },
+  {
+    nome: 'Fluxo de Onboarding',
+    exibe_menu: true,
+    ordem: 2,
+    etiquetas: ['Cadastro recebido', 'Documentação pendente', 'Configuração em andamento', 'Onboarding finalizado'],
+  },
+  {
+    nome: 'Fluxo de Suporte',
+    exibe_menu: true,
+    ordem: 3,
+    etiquetas: ['Ticket aberto', 'Investigação', 'Solução proposta', 'Ticket encerrado'],
+  },
+];
 
 const parseInteger = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -817,6 +837,32 @@ export const register = async (req: Request, res: Response) => {
 
       if (createdUserId == null) {
         throw new Error('Falha ao determinar o usuário criado durante o cadastro.');
+      }
+
+      if (createdCompany) {
+        for (const workflow of DEFAULT_WORKFLOW_TEMPLATES) {
+          const workflowInsert = await client.query(
+            `INSERT INTO public.fluxo_trabalho (nome, ativo, exibe_menu, ordem, datacriacao, idempresa)
+             VALUES ($1, TRUE, $2, $3, NOW(), $4)
+             RETURNING id`,
+            [workflow.nome, workflow.exibe_menu, workflow.ordem, companyId]
+          );
+
+          const workflowRow = workflowInsert.rows[0] as { id?: unknown } | undefined;
+          const workflowId = workflowRow ? parseInteger(workflowRow.id) : null;
+
+          if (workflowId == null) {
+            throw new Error('Falha ao criar fluxo de trabalho padrão.');
+          }
+
+          for (const [index, labelName] of workflow.etiquetas.entries()) {
+            await client.query(
+              `INSERT INTO public.etiquetas (nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho, idempresa)
+               VALUES ($1, TRUE, NOW(), TRUE, $2, $3, $4)`,
+              [labelName, index + 1, workflowId, companyId]
+            );
+          }
+        }
       }
 
       await client.query('COMMIT');

@@ -478,6 +478,31 @@ export const getSubscription = async (req: Request, res: Response) => {
   }
 };
 
+export const cancelSubscription = async (req: Request, res: Response) => {
+  const clientResolution = ensureAsaasClient(res);
+  if (!clientResolution) {
+    return;
+  }
+
+  const subscriptionId = sanitizeString(req.params?.subscriptionId ?? req.params?.id);
+  if (!subscriptionId) {
+    res.status(400).json({ error: 'Identificador de assinatura inválido.' });
+    return;
+  }
+
+  try {
+    const subscription = await clientResolution.client.cancelSubscription(subscriptionId);
+    res.json(normalizeSubscriptionResponse(subscription));
+  } catch (error) {
+    if (handleAsaasError(res, error, 'Não foi possível cancelar a assinatura.')) {
+      return;
+    }
+
+    console.error('Falha ao cancelar assinatura no Asaas', error);
+    res.status(500).json({ error: 'Falha ao comunicar com o Asaas.' });
+  }
+};
+
 export const getSubscriptionPayments = async (req: Request, res: Response) => {
   const clientResolution = ensureAsaasClient(res);
   if (!clientResolution) {
