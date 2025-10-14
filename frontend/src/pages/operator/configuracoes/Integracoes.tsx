@@ -144,6 +144,11 @@ const eventGroups = [
         label: "OAB incluída em processo",
         description: "Disparado quando uma OAB é adicionada ao monitoramento de um processo.",
       },
+      {
+        value: "oab.processo.incluida",
+        label: "OAB incluída em processo",
+        description: "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
+      },
     ],
   },
   {
@@ -156,23 +161,24 @@ const eventGroups = [
         label: "OAB incluída em intimação",
         description: "Enviado quando uma OAB é adicionada ao monitoramento de uma intimação.",
       },
+      {
+        value: "oab.intimacao.incluida",
+        label: "OAB incluída em intimação",
+        description: "Disparado ao vincular uma OAB ao monitoramento de intimações.",
+      },
     ],
   },
   {
-    value: "oab.processo.incluida",
-    label: "OAB incluída em processo",
-    description: "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
-  },
-  {
-    value: "oab.intimacao.incluida",
-    label: "OAB incluída em intimação",
-    description: "Disparado ao vincular uma OAB ao monitoramento de intimações.",
-  },
-  {
-    value: "tarefa.concluida",
-    label: "Tarefa concluída",
-    description: "Enviado quando uma tarefa é finalizada pela equipe.",
-
+    key: "tarefas",
+    title: "Tarefas",
+    description: "Acompanhamento de atividades realizadas pela equipe.",
+    options: [
+      {
+        value: "tarefa.concluida",
+        label: "Tarefa concluída",
+        description: "Enviado quando uma tarefa é finalizada pela equipe.",
+      },
+    ],
   },
   {
     key: "financeiro",
