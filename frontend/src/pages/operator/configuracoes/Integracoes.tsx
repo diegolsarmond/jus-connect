@@ -73,8 +73,9 @@ import {
   deleteIntegrationWebhook as deleteIntegrationWebhookApi,
   fetchIntegrationWebhooks,
   updateIntegrationWebhookStatus as updateIntegrationWebhookStatusApi,
+  updateIntegrationWebhook as updateIntegrationWebhookApi,
   type IntegrationWebhook as IntegrationWebhookRecord,
-} from "@/lib/integrationWebhooks";
+} from "@/lib/webhooks";
 
 const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -633,6 +634,11 @@ export default function Integracoes() {
   const [webhookForm, setWebhookForm] = useState<WebhookForm>(getDefaultWebhookForm);
   const [isWebhookSecretDialogOpen, setIsWebhookSecretDialogOpen] = useState(false);
   const [pendingWebhookSecret, setPendingWebhookSecret] = useState<string | null>(null);
+  const [isEditWebhookDialogOpen, setIsEditWebhookDialogOpen] = useState(false);
+  const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
+  const [editWebhookForm, setEditWebhookForm] = useState<WebhookForm>(getDefaultWebhookForm);
+  const [isSavingWebhookEdit, setIsSavingWebhookEdit] = useState(false);
+  const [editWebhookActive, setEditWebhookActive] = useState(true);
 
   const activeApiKeys = apiKeys.filter((key) => key.active).length;
   const activeIntegrations = integrations.filter((integration) => integration.enabled).length;
@@ -892,6 +898,16 @@ export default function Integracoes() {
     });
   };
 
+  const updateEditWebhookEventSelection = (value: WebhookEvent, checked: boolean) => {
+    setEditWebhookForm((prev) => {
+      if (checked) {
+        if (prev.events.includes(value)) return prev;
+        return { ...prev, events: [...prev.events, value] };
+      }
+      return { ...prev, events: prev.events.filter((event) => event !== value) };
+    });
+  };
+
   const handleAddWebhook = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = webhookForm.name.trim();
@@ -960,6 +976,90 @@ export default function Integracoes() {
       return;
     }
     void copyCredential(pendingWebhookSecret, "Segredo do webhook");
+  };
+
+  const resetEditWebhookState = () => {
+    setEditingWebhook(null);
+    setEditWebhookForm(getDefaultWebhookForm());
+    setIsSavingWebhookEdit(false);
+    setEditWebhookActive(true);
+  };
+
+  const handleEditWebhookDialogChange = (open: boolean) => {
+    setIsEditWebhookDialogOpen(open);
+    if (!open) {
+      resetEditWebhookState();
+    }
+  };
+
+  const startEditWebhook = (webhook: Webhook) => {
+    setEditingWebhook(webhook);
+    setEditWebhookForm({
+      name: webhook.name,
+      url: webhook.url,
+      events: [...webhook.events],
+      secret: webhook.secret,
+    });
+    setEditWebhookActive(webhook.active);
+    setIsEditWebhookDialogOpen(true);
+  };
+
+  const handleSubmitEditWebhook = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingWebhook) {
+      return;
+    }
+
+    const trimmedName = editWebhookForm.name.trim();
+    const trimmedUrl = editWebhookForm.url.trim();
+    const trimmedSecret = editWebhookForm.secret.trim();
+
+    if (!trimmedName || !trimmedUrl || !trimmedSecret) {
+      toast({
+        title: "Preencha os dados do webhook",
+        description: "Informe nome, URL e segredo antes de salvar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (editWebhookForm.events.length === 0) {
+      toast({
+        title: "Selecione ao menos um evento",
+        description: "Escolha quais eventos irão disparar o webhook.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingWebhookEdit(true);
+    try {
+      const updated = await updateIntegrationWebhookApi(editingWebhook.id, {
+        name: trimmedName,
+        url: trimmedUrl,
+        events: editWebhookForm.events,
+        secret: trimmedSecret,
+        active: editWebhookActive,
+      });
+
+      setWebhooks((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      toast({
+        title: "Webhook atualizado",
+        description: `${updated.name} foi atualizado com sucesso.`,
+      });
+      handleEditWebhookDialogChange(false);
+    } catch (error) {
+      toast({
+        title: "Não foi possível atualizar o webhook",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao atualizar o webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingWebhookEdit(false);
+    }
   };
 
   const toggleWebhook = async (id: number, value: boolean) => {
@@ -1611,6 +1711,15 @@ export default function Integracoes() {
                           type="button"
                           size="icon"
                           variant="ghost"
+                          onClick={() => startEditWebhook(webhook)}
+                          aria-label="Editar webhook"
+                        >
+                          <PencilLine className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
                           onClick={() => void removeWebhook(webhook.id)}
                           aria-label="Remover webhook"
                           disabled={deletingWebhookId === webhook.id}
@@ -1719,6 +1828,111 @@ export default function Integracoes() {
               Entendi
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditWebhookDialogOpen} onOpenChange={handleEditWebhookDialogChange}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar webhook</DialogTitle>
+            <DialogDescription>Atualize as informações do webhook selecionado.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmitEditWebhook} className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2 space-y-2">
+                <Label htmlFor="edit-webhook-name">Nome</Label>
+                <Input
+                  id="edit-webhook-name"
+                  value={editWebhookForm.name}
+                  onChange={(event) =>
+                    setEditWebhookForm((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-2">
+                <Label htmlFor="edit-webhook-url">URL do webhook</Label>
+                <Input
+                  id="edit-webhook-url"
+                  value={editWebhookForm.url}
+                  onChange={(event) =>
+                    setEditWebhookForm((prev) => ({ ...prev, url: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-2">
+                <Label htmlFor="edit-webhook-secret">Segredo</Label>
+                <Input
+                  id="edit-webhook-secret"
+                  value={editWebhookForm.secret}
+                  onChange={(event) =>
+                    setEditWebhookForm((prev) => ({ ...prev, secret: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-3">
+                <p className="text-sm font-medium leading-none">Eventos disparados</p>
+                <Accordion type="single" collapsible className="w-full space-y-3">
+                  {eventGroups.map((group) => (
+                    <AccordionItem key={group.key} value={group.key} className="rounded-lg border">
+                      <AccordionTrigger className="px-3 py-2 text-left">
+                        <div>
+                          <p className="text-sm font-medium leading-none">{group.title}</p>
+                          <p className="text-xs text-muted-foreground">{group.description}</p>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-3 px-3 pb-3">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {group.options.map((event) => (
+                            <label
+                              key={event.value}
+                              className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                            >
+                              <Checkbox
+                                checked={editWebhookForm.events.includes(event.value)}
+                                onCheckedChange={(checked) =>
+                                  updateEditWebhookEventSelection(event.value, checked === true)
+                                }
+                              />
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium leading-none">{event.label}</p>
+                                <p className="text-xs text-muted-foreground">{event.description}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </div>
+              <div className="sm:col-span-2 flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <p className="text-sm font-medium leading-none">Webhook ativo</p>
+                  <p className="text-xs text-muted-foreground">
+                    Controla se o webhook está apto a receber eventos.
+                  </p>
+                </div>
+                <Switch
+                  checked={editWebhookActive}
+                  onCheckedChange={(checked) => setEditWebhookActive(checked === true)}
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleEditWebhookDialogChange(false)}
+                disabled={isSavingWebhookEdit}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSavingWebhookEdit}>
+                {isSavingWebhookEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Salvar alterações
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

@@ -62,6 +62,7 @@ const SYNC_TARGET_QUERIES: Record<SyncEventType, string> = {
 const fetchSyncTargets = async (empresaId: number, eventType: SyncEventType) => {
   const result = await pool.query(SYNC_TARGET_QUERIES[eventType], [empresaId]);
 
+
   return result.rows;
 };
 
@@ -83,6 +84,7 @@ export const notifyIntimacaoSyncTargets = async (
   empresaId: number,
   eventType: SyncEventType = 'intimacoes.sync.targets',
 ): Promise<void> => {
+
   const url = await fetchIntegrationApiUrl();
   if (!url) {
     return;

@@ -52,6 +52,12 @@ const setupQueryMock = (responses: QueryResponse[]) => {
     async function (this: Pool, text: string, values?: unknown[]) {
       calls.push({ text, values });
 
+      const normalized = text.trim().toUpperCase();
+
+      if (normalized === 'BEGIN' || normalized === 'COMMIT' || normalized === 'ROLLBACK') {
+        return { rows: [], rowCount: 0 } satisfies QueryResponse;
+      }
+
       if (responses.length === 0) {
         throw new Error('Unexpected query invocation');
       }
@@ -279,6 +285,8 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
       rowCount: 1,
     },
     { rows: [createdRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
   ]);
 
   const req = {
@@ -308,8 +316,15 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   }
 
   assert.equal(res.statusCode, 201);
-  assert.deepEqual(res.body, createdRow);
-  assert.equal(calls.length, 4);
+  const { cpf: _cpf, senha: _senha, ...expectedCreatedResponse } = createdRow;
+  if (!('oab_number' in expectedCreatedResponse)) {
+    (expectedCreatedResponse as Record<string, unknown>).oab_number = undefined;
+  }
+  if (!('oab_uf' in expectedCreatedResponse)) {
+    (expectedCreatedResponse as Record<string, unknown>).oab_uf = undefined;
+  }
+  assert.deepEqual(res.body, expectedCreatedResponse);
+  assert.equal(calls.length, 8);
 
   const planLimitsCall = calls.find((call) =>
     /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
@@ -327,6 +342,8 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.equal(welcomeArgs?.userName, 'Novo Usuário');
   assert.equal(typeof welcomeArgs?.temporaryPassword, 'string');
   assert.ok((welcomeArgs?.temporaryPassword ?? '').length > 0);
+  assert.equal(typeof welcomeArgs?.confirmationLink, 'string');
+  assert.ok((welcomeArgs?.confirmationLink ?? '').includes('token='));
 });
 
 test('createUsuario cleans up created user when welcome email fails', async () => {
@@ -372,6 +389,8 @@ test('createUsuario cleans up created user when welcome email fails', async () =
       rowCount: 1,
     },
     { rows: [createdRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ]);
 
@@ -407,13 +426,14 @@ test('createUsuario cleans up created user when welcome email fails', async () =
   });
 
   assert.equal(invocationCount, 1);
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 9);
   const planLimitsCall = calls.find((call) =>
     /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
   );
   assert.ok(planLimitsCall);
-  assert.match(calls[4]?.text ?? '', /DELETE FROM public\.usuarios/);
-  assert.deepEqual(calls[4]?.values, [321]);
+  assert.match(calls[8]?.text ?? '', /DELETE FROM public\.usuarios/);
+  assert.deepEqual(calls[8]?.values, [321]);
+  assert.match(calls[4]?.text ?? '', /BEGIN/);
 });
 
 

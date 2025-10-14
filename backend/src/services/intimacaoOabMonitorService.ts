@@ -485,6 +485,7 @@ export const createIntimacaoOabMonitor = async (
 
     if (operation === 'created') {
       await notifyIntimacaoSyncTargets(empresaId, 'intimacoes.sync.targets');
+
     }
 
     publishIntegrationWebhookEvent({
