@@ -434,9 +434,10 @@ export class AsaasChargeSyncService {
         chargeOrigin = typeof row.origin === 'string' ? row.origin : null;
         const clienteId = row.cliente_id;
         if (typeof clienteId === 'number') {
-          hasClienteId = Number.isInteger(clienteId);
+          hasClienteId = Number.isInteger(clienteId) && clienteId > 0;
         } else if (typeof clienteId === 'string' && clienteId.trim()) {
-          hasClienteId = true;
+          const parsedClienteId = Number(clienteId);
+          hasClienteId = Number.isInteger(parsedClienteId) && parsedClienteId > 0;
         }
       }
     } catch (error) {
