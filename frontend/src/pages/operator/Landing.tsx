@@ -26,6 +26,9 @@ const Landing = () => {
         setPlans(loadedPlans);
       })
       .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
         console.error("Falha ao carregar planos para a landing page", error);
         setPlansError("Não foi possível carregar os planos no momento.");
       })
