@@ -69,6 +69,13 @@ import {
   getApiKeyEnvironmentLabel,
   validateAsaasIntegrationApiKey,
 } from "@/lib/integrationApiKeys";
+import {
+  createIntegrationWebhook as createIntegrationWebhookApi,
+  deleteIntegrationWebhook as deleteIntegrationWebhookApi,
+  fetchIntegrationWebhooks,
+  updateIntegrationWebhookStatus as updateIntegrationWebhookStatusApi,
+  type IntegrationWebhook as IntegrationWebhookRecord,
+} from "@/lib/integrationWebhooks";
 
 const randomChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -152,16 +159,20 @@ const eventGroups = [
     ],
   },
   {
-    key: "tarefas",
-    title: "Tarefas",
-    description: "Atualizações sobre o andamento de tarefas internas.",
-    options: [
-      {
-        value: "tarefa.concluida",
-        label: "Tarefa concluída",
-        description: "Enviado quando uma tarefa é finalizada pela equipe.",
-      },
-    ],
+    value: "oab.processo.incluida",
+    label: "OAB incluída em processo",
+    description: "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
+  },
+  {
+    value: "oab.intimacao.incluida",
+    label: "OAB incluída em intimação",
+    description: "Disparado ao vincular uma OAB ao monitoramento de intimações.",
+  },
+  {
+    value: "tarefa.concluida",
+    label: "Tarefa concluída",
+    description: "Enviado quando uma tarefa é finalizada pela equipe.",
+
   },
   {
     key: "financeiro",
@@ -187,15 +198,7 @@ const eventOptions = eventGroups.reduce<EventOption[]>((accumulator, group) => {
 
 type WebhookEvent = EventOption["value"];
 
-type Webhook = {
-  id: number;
-  name: string;
-  url: string;
-  events: WebhookEvent[];
-  secret: string;
-  active: boolean;
-  lastDelivery: string | null;
-};
+type Webhook = IntegrationWebhookRecord;
 
 type WebhookForm = {
   name: string;
@@ -417,6 +420,44 @@ export default function Integracoes() {
     setApiKeys((prev) => prev.filter(isApiKeyAccessible));
   }, [isApiKeyAccessible]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadWebhooks = async () => {
+      setIsLoadingWebhooks(true);
+      try {
+        const items = await fetchIntegrationWebhooks();
+        if (!isMounted) {
+          return;
+        }
+        setWebhooks(items);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+        console.error("Failed to load integration webhooks:", error);
+        toast({
+          title: "Não foi possível carregar os webhooks",
+          description:
+            error instanceof Error
+              ? error.message
+              : "Erro inesperado ao buscar os webhooks configurados.",
+          variant: "destructive",
+        });
+      } finally {
+        if (isMounted) {
+          setIsLoadingWebhooks(false);
+        }
+      }
+    };
+
+    loadWebhooks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
+
   const resetEditApiKeyState = () => {
     setEditApiKeyForm({
       provider: fallbackProvider,
@@ -576,26 +617,11 @@ export default function Integracoes() {
     frequency: "realTime" as SyncFrequency,
     endpoint: "",
   });
-  const [webhooks, setWebhooks] = useState<Webhook[]>([
-    {
-      id: 1,
-      name: "Clientes - Hub de marketing",
-      url: "https://hooks.zapier.com/hooks/catch/123456/abc123",
-      events: ["cliente.criado", "cliente.atualizado"],
-      secret: "whsec_8fb12a9c4d8ef730b1a2c4d5",
-      active: true,
-      lastDelivery: "2024-03-17T15:40:00Z",
-    },
-    {
-      id: 2,
-      name: "Notificações de tarefas",
-      url: "https://automacao.empresa.com/webhooks/tarefas",
-      events: ["tarefa.concluida"],
-      secret: "whsec_c91de02f8b6a43c0f7a1b5d9",
-      active: false,
-      lastDelivery: null,
-    },
-  ]);
+  const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+  const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(true);
+  const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
+  const [updatingWebhookId, setUpdatingWebhookId] = useState<number | null>(null);
+  const [deletingWebhookId, setDeletingWebhookId] = useState<number | null>(null);
   const [webhookForm, setWebhookForm] = useState<WebhookForm>(getDefaultWebhookForm);
 
   const activeApiKeys = apiKeys.filter((key) => key.active).length;
@@ -864,9 +890,12 @@ export default function Integracoes() {
     });
   };
 
-  const handleAddWebhook = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddWebhook = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!webhookForm.name.trim() || !webhookForm.url.trim()) {
+    const trimmedName = webhookForm.name.trim();
+    const trimmedUrl = webhookForm.url.trim();
+    const trimmedSecret = webhookForm.secret.trim();
+    if (!trimmedName || !trimmedUrl) {
       toast({
         title: "Preencha os dados do webhook",
         description: "Informe nome e URL de destino.",
@@ -883,41 +912,90 @@ export default function Integracoes() {
       return;
     }
 
-    setWebhooks((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        name: webhookForm.name.trim(),
-        url: webhookForm.url.trim(),
+    setIsCreatingWebhook(true);
+    try {
+      const created = await createIntegrationWebhookApi({
+        name: trimmedName,
+        url: trimmedUrl,
         events: webhookForm.events,
-        secret: webhookForm.secret,
+        secret: trimmedSecret,
         active: true,
-        lastDelivery: null,
-      },
-    ]);
-    toast({
-      title: "Webhook configurado",
-      description: `${webhookForm.name} foi adicionado e está ativo.`,
-    });
-    setWebhookForm(getDefaultWebhookForm());
+      });
+
+      setWebhooks((prev) => [created, ...prev]);
+      toast({
+        title: "Webhook configurado",
+        description: `${created.name} foi adicionado e está ativo.`,
+      });
+      setWebhookForm(getDefaultWebhookForm());
+    } catch (error) {
+      toast({
+        title: "Não foi possível cadastrar o webhook",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao salvar o webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingWebhook(false);
+    }
   };
 
-  const toggleWebhook = (id: number, value: boolean) => {
+  const toggleWebhook = async (id: number, value: boolean) => {
     const current = webhooks.find((item) => item.id === id);
-    setWebhooks((prev) => prev.map((item) => (item.id === id ? { ...item, active: value } : item)));
-    toast({
-      title: value ? "Webhook ativado" : "Webhook desativado",
-      description: current ? `${current.name} agora está ${value ? "ativo" : "inativo"}.` : undefined,
-    });
+    if (!current) {
+      return;
+    }
+
+    setUpdatingWebhookId(id);
+    try {
+      const updated = await updateIntegrationWebhookStatusApi(id, { active: value });
+      setWebhooks((prev) => prev.map((item) => (item.id === id ? updated : item)));
+      toast({
+        title: value ? "Webhook ativado" : "Webhook desativado",
+        description: `${updated.name} agora está ${value ? "ativo" : "inativo"}.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Não foi possível atualizar o webhook",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao atualizar o status do webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingWebhookId(null);
+    }
   };
 
-  const removeWebhook = (id: number) => {
+  const removeWebhook = async (id: number) => {
     const current = webhooks.find((item) => item.id === id);
-    setWebhooks((prev) => prev.filter((item) => item.id !== id));
-    toast({
-      title: "Webhook removido",
-      description: current ? `${current.name} foi excluído.` : "Webhook excluído.",
-    });
+    if (!current) {
+      return;
+    }
+
+    setDeletingWebhookId(id);
+    try {
+      await deleteIntegrationWebhookApi(id);
+      setWebhooks((prev) => prev.filter((item) => item.id !== id));
+      toast({
+        title: "Webhook removido",
+        description: `${current.name} foi excluído.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Não foi possível remover o webhook",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao excluir o webhook.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingWebhookId(null);
+    }
   };
 
   return (
@@ -1408,9 +1486,18 @@ export default function Integracoes() {
                   <RefreshCcw className="mr-2 h-4 w-4" />
                   Gerar novo segredo
                 </Button>
-                <Button type="submit" className="whitespace-nowrap">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Adicionar webhook
+                <Button type="submit" className="whitespace-nowrap" disabled={isCreatingWebhook}>
+                  {isCreatingWebhook ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar webhook
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -1471,74 +1558,90 @@ export default function Integracoes() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {webhooks.map((webhook) => (
-                <TableRow key={webhook.id}>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <p className="font-medium">{webhook.name}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{maskCredential(webhook.secret)}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="block max-w-[260px] truncate font-mono text-sm">{webhook.url}</span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {webhook.events.map((event) => {
-                        const option = eventOptions.find((item) => item.value === event);
-                        return (
-                          <Badge key={event} variant="secondary">
-                            {option?.label ?? event}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-3">
-                        <Badge variant={webhook.active ? "default" : "outline"} className={webhook.active ? "bg-success text-success-foreground" : ""}>
-                          {webhook.active ? "Ativo" : "Inativo"}
-                        </Badge>
-                        <Switch
-                          checked={webhook.active}
-                          onCheckedChange={(checked) => toggleWebhook(webhook.id, checked)}
-                          aria-label={`Alterar status do webhook ${webhook.name}`}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {webhook.lastDelivery ? `Último envio ${formatDateTime(webhook.lastDelivery)}` : "Nenhuma entrega realizada"}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => void copyCredential(webhook.secret, `Segredo ${webhook.name}`)}
-                      aria-label="Copiar segredo"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => removeWebhook(webhook.id)}
-                      aria-label="Remover webhook"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {webhooks.length === 0 && (
+              {isLoadingWebhooks ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                    Nenhum webhook configurado até o momento.
+                    Carregando webhooks configurados...
                   </TableCell>
                 </TableRow>
+              ) : (
+                <>
+                  {webhooks.map((webhook) => (
+                    <TableRow key={webhook.id}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <p className="font-medium">{webhook.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{maskCredential(webhook.secret)}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="block max-w-[260px] truncate font-mono text-sm">{webhook.url}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {webhook.events.map((event) => {
+                            const option = eventOptions.find((item) => item.value === event);
+                            return (
+                              <Badge key={event} variant="secondary">
+                                {option?.label ?? event}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-3">
+                            <Badge variant={webhook.active ? "default" : "outline"} className={webhook.active ? "bg-success text-success-foreground" : ""}>
+                              {webhook.active ? "Ativo" : "Inativo"}
+                            </Badge>
+                            <Switch
+                              checked={webhook.active}
+                              disabled={updatingWebhookId === webhook.id}
+                              onCheckedChange={(checked) => void toggleWebhook(webhook.id, checked === true)}
+                              aria-label={`Alterar status do webhook ${webhook.name}`}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {webhook.lastDelivery ? `Último envio ${formatDateTime(webhook.lastDelivery)}` : "Nenhuma entrega realizada"}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => void copyCredential(webhook.secret, `Segredo ${webhook.name}`)}
+                          aria-label="Copiar segredo"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => void removeWebhook(webhook.id)}
+                          aria-label="Remover webhook"
+                          disabled={deletingWebhookId === webhook.id}
+                        >
+                          {deletingWebhookId === webhook.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {webhooks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                        Nenhum webhook configurado até o momento.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
               )}
             </TableBody>
           </Table>
