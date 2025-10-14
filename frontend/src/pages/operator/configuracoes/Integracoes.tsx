@@ -139,32 +139,35 @@ const eventGroups = [
         label: "Processo movimentado",
         description: "Emitido ao registrar uma movimentação em um processo.",
       },
+    ],
+  },
+  {
+    key: "monitoramentos",
+    title: "Monitoramentos",
+    description:
+      "Eventos disparados ao gerenciar monitoramentos de processos e intimações.",
+    options: [
       {
         value: "monitoramento.processo.oab_incluida",
-        label: "OAB incluída em processo",
+        label: "OAB incluída no monitoramento de processos",
         description: "Disparado quando uma OAB é adicionada ao monitoramento de um processo.",
       },
       {
         value: "oab.processo.incluida",
-        label: "OAB incluída em processo",
-        description: "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
+        label: "Monitoramento de OAB em processos",
+        description:
+          "Gerado quando uma OAB é cadastrada ou atualizada no monitoramento de processos.",
       },
-    ],
-  },
-  {
-    key: "intimacoes",
-    title: "Intimações",
-    description: "Eventos originados pelos monitoramentos de intimações.",
-    options: [
       {
         value: "monitoramento.intimacao.oab_incluida",
-        label: "OAB incluída em intimação",
+        label: "OAB incluída no monitoramento de intimações",
         description: "Enviado quando uma OAB é adicionada ao monitoramento de uma intimação.",
       },
       {
         value: "oab.intimacao.incluida",
-        label: "OAB incluída em intimação",
-        description: "Disparado ao vincular uma OAB ao monitoramento de intimações.",
+        label: "Monitoramento de OAB em intimações",
+        description:
+          "Disparado ao vincular uma OAB ao monitoramento de intimações.",
       },
     ],
   },
