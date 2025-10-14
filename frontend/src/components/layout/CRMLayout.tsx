@@ -9,6 +9,7 @@ import { useCallback } from "react";
 import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrialBanner } from "@/features/auth/TrialBanner";
+import { SystemTutorial } from "./SystemTutorial";
 
 export function CRMLayout() {
   const location = useLocation();
@@ -47,6 +48,7 @@ export function CRMLayout() {
         <div className={containerClassName}>
           <Header />
           <TrialBanner />
+          <SystemTutorial />
           <main className={mainClassName} data-crm-scroll-container>
             <Outlet />
           </main>

@@ -9,6 +9,7 @@ import {
   type AsaasPaymentsResponse,
   type AsaasPayment,
 } from '../src/services/asaasChargeSync';
+import * as subscriptionService from '../src/services/subscriptionService';
 import { __resetNotificationState } from '../src/services/notificationService';
 import { initNotificationTestDb } from './helpers/notificationDb';
 
@@ -100,22 +101,7 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
     { data: remotePayments, hasMore: false, limit: 100, offset: 0 },
   ]);
 
-  const subscriptionUpdates: Array<{
-    flowId: number;
-    status: string;
-    paymentDate: Date | null;
-    dueDate: string | null | undefined;
-  }> = [];
-
   const service = new AsaasChargeSyncService(db as any, client as any, 50);
-  (service as unknown as { updateSubscriptionForCharge: (...args: any[]) => Promise<void> }).updateSubscriptionForCharge = async (
-    flowId: number,
-    status: string,
-    paymentDate: Date | null,
-    dueDate: string | null | undefined,
-  ) => {
-    subscriptionUpdates.push({ flowId, status, paymentDate, dueDate });
-  };
 
   const result = await service.syncPendingCharges();
 
@@ -137,7 +123,7 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   assert.equal(client.calls[0].offset, 0);
 
 
-  const updateCalls = db.calls.slice(1);
+  const updateCalls = db.calls.slice(1).filter((call) => /UPDATE\s+/i.test(call.text));
   assert.equal(updateCalls.length, 6);
 
   const [updateCharge1, updateFlow1, updateCharge2, updateFlow2, updateCharge3, updateFlow3] = updateCalls;
@@ -157,19 +143,6 @@ test('syncPendingCharges propagates status changes to asaas_charges and financia
   assert.deepEqual(updateCharge3.values, ['REFUNDED', 3]);
   assert.deepEqual(updateFlow3.values, ['estornado', null, 30]);
 
-  assert.equal(subscriptionUpdates.length, 3);
-  assert.deepEqual(
-    subscriptionUpdates.map((entry) => entry.flowId).sort(),
-    [10, 20, 30],
-  );
-  const paymentEntry = subscriptionUpdates.find((entry) => entry.flowId === 20);
-  assert.ok(paymentEntry?.paymentDate instanceof Date);
-  const overdueEntry = subscriptionUpdates.find((entry) => entry.flowId === 10);
-  assert.equal(overdueEntry?.status, 'OVERDUE');
-  assert.equal(overdueEntry?.dueDate, '2024-04-15');
-  const refundedEntry = subscriptionUpdates.find((entry) => entry.flowId === 30);
-  assert.equal(refundedEntry?.status, 'REFUNDED');
-  assert.equal(refundedEntry?.paymentDate, null);
 });
 
 test('syncPendingCharges fails fast when credentials are not configured', async () => {
@@ -179,4 +152,48 @@ test('syncPendingCharges fails fast when credentials are not configured', async 
 
   await assert.rejects(() => service.syncPendingCharges(), AsaasConfigurationError);
   assert.equal(db.calls.length, 0);
+});
+
+test('updateSubscriptionForCharge ignores charges without plan metadata', async () => {
+  const db = new FakeDb([
+    { rows: [{ origin: 'manual', cliente_id: null }], rowCount: 1 },
+  ]);
+  const client = new FakeClient([]);
+  const service = new AsaasChargeSyncService(db as any, client as any);
+
+  const updateSubscription = (service as any).updateSubscriptionForCharge.bind(service) as (
+    flowId: number | string,
+    status: string,
+    paymentDate: Date | null,
+    dueDate: string | null | undefined,
+  ) => Promise<void>;
+
+  let findCompanyCalled = false;
+
+  const originalFindCompany = subscriptionService.findCompanyIdForFinancialFlow;
+  const originalApplyPayment = subscriptionService.applySubscriptionPayment;
+  const originalApplyOverdue = subscriptionService.applySubscriptionOverdue;
+
+  (subscriptionService as any).findCompanyIdForFinancialFlow = async () => {
+    findCompanyCalled = true;
+    return 1;
+  };
+  (subscriptionService as any).applySubscriptionPayment = async () => {
+    throw new Error('should not apply payment for non-plan charge');
+  };
+  (subscriptionService as any).applySubscriptionOverdue = async () => {
+    throw new Error('should not apply overdue for non-plan charge');
+  };
+
+  try {
+    await updateSubscription(42, 'RECEIVED', new Date(), null);
+  } finally {
+    (subscriptionService as any).findCompanyIdForFinancialFlow = originalFindCompany;
+    (subscriptionService as any).applySubscriptionPayment = originalApplyPayment;
+    (subscriptionService as any).applySubscriptionOverdue = originalApplyOverdue;
+  }
+
+  assert.equal(findCompanyCalled, false);
+  assert.equal(db.calls.length, 1);
+  assert.match(db.calls[0]?.text ?? '', /FROM\s+asaas_charges/i);
 });

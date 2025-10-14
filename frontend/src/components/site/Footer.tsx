@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Github, Linkedin, Mail, MapPin, Phone } from "lucide-react";
 
 import quantumLogo from "@/assets/quantum-logo.png";
@@ -7,6 +7,20 @@ import { routes } from "@/config/routes";
 const currentYear = new Date().getFullYear();
 
 const Footer = () => {
+  const navigate = useNavigate();
+
+  const handleMyPlanClick = () => {
+    if (typeof window !== "undefined") {
+      const storedId = localStorage.getItem("subscriptionId");
+      if (storedId && storedId.trim().length > 0) {
+        navigate(routes.subscription(storedId.trim()));
+        return;
+      }
+    }
+
+    navigate(routes.plans);
+  };
+
   return (
     <footer className="border-t border-border/40 bg-background/80">
       <div className="container grid gap-8 px-4 py-12 md:grid-cols-[1.5fr_1fr_1fr]">
@@ -69,9 +83,13 @@ const Footer = () => {
               </Link>
             </li>
             <li>
-              <Link to="/meu-plano" className="transition hover:text-foreground">
+              <button
+                type="button"
+                onClick={handleMyPlanClick}
+                className="transition hover:text-foreground text-left text-current bg-transparent p-0"
+              >
                 Meu plano
-              </Link>
+              </button>
             </li>
             <li>
               <Link to="/suporte" className="transition hover:text-foreground">

@@ -414,6 +414,44 @@ export class AsaasChargeSyncService {
   ): Promise<void> {
     const normalizedStatus = normalizeStatus(paymentStatus);
 
+    let chargeOrigin: string | null = null;
+    let hasClienteId = false;
+
+    try {
+      const { rows } = await this.db.query(
+        `SELECT
+            ac.raw_response #>> '{metadata,origin}' AS origin,
+            ff.cliente_id AS cliente_id
+          FROM asaas_charges ac
+          LEFT JOIN financial_flows ff ON ff.id::text = ac.financial_flow_id::text
+         WHERE ac.financial_flow_id::text = $1
+         LIMIT 1`,
+        [String(financialFlowId)],
+      );
+
+      if (rows.length > 0) {
+        const row = rows[0] as { origin?: unknown; cliente_id?: unknown };
+        chargeOrigin = typeof row.origin === 'string' ? row.origin : null;
+        const clienteId = row.cliente_id;
+        if (typeof clienteId === 'number') {
+          hasClienteId = Number.isInteger(clienteId);
+        } else if (typeof clienteId === 'string' && clienteId.trim()) {
+          hasClienteId = true;
+        }
+      }
+    } catch (error) {
+      console.error(
+        '[AsaasChargeSync] Failed to load charge metadata for subscription update',
+        financialFlowId,
+        error,
+      );
+      return;
+    }
+
+    if (chargeOrigin !== 'plan-payment' && !hasClienteId) {
+      return;
+    }
+
     let companyId: number | null = null;
 
     try {
