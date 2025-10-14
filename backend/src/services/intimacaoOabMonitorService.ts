@@ -1,5 +1,6 @@
 import pool from './db';
 import { MissingDependencyError } from './errors';
+import { publishIntegrationWebhookEvent } from './integrationWebhookDispatcher';
 
 interface IntimacaoOabMonitorRow {
   id: number;
@@ -472,7 +473,41 @@ export const createIntimacaoOabMonitor = async (
     [empresaId, usuarioId, sanitizedUf, sanitizedNumero, sanitizedDiasSemana],
   );
 
-  return mapRow(result.rows[0]);
+  const row = result.rows[0];
+  const monitor = mapRow(row);
+
+  try {
+    const operation =
+      row?.created_at && row?.updated_at && String(row.created_at) !== String(row.updated_at)
+        ? 'updated'
+        : 'created';
+
+    publishIntegrationWebhookEvent({
+      empresaId,
+      event: 'oab.intimacao.incluida',
+      payload: {
+        id: monitor.id,
+        uf: monitor.uf,
+        numero: monitor.numero,
+        usuarioId: monitor.usuarioId,
+        usuarioNome: monitor.usuarioNome,
+        usuarioOabNumero: monitor.usuarioOabNumero,
+        usuarioOabUf: monitor.usuarioOabUf,
+        diasSemana: monitor.diasSemana,
+        createdAt: monitor.createdAt,
+        updatedAt: monitor.updatedAt,
+        operation,
+        tipo: 'intimacao',
+      },
+    });
+  } catch (error) {
+    console.error('Failed to publish intimação OAB monitor webhook event', error, {
+      empresaId,
+      monitorId: monitor.id,
+    });
+  }
+
+  return monitor;
 };
 
 export const deleteIntimacaoOabMonitor = async (

@@ -100,6 +100,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
 });
 const countFormatter = new Intl.NumberFormat("pt-BR");
+const DEFAULT_SUBSCRIPTION_ID = "sub_j82sejw1tdpb2xtf";
 
 function normalizeApiRows(data: unknown): unknown[] {
   if (Array.isArray(data)) {
@@ -634,12 +635,21 @@ function MeuPlanoContent() {
   const [planosDisponiveis, setPlanosDisponiveis] = useState<PlanoDetalhe[]>([]);
   const [pricingMode, setPricingMode] = useState<PricingMode>("mensal");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [subscriptionId, setSubscriptionId] = useState<string | null>(DEFAULT_SUBSCRIPTION_ID);
   const [metrics, setMetrics] = useState<UsageMetrics>({
     usuariosAtivos: null,
     clientesAtivos: null,
     processosAtivos: null,
     propostasEmitidas: null,
   });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSubscriptionId(
+        window.localStorage.getItem("subscriptionId") ?? DEFAULT_SUBSCRIPTION_ID,
+      );
+    }
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -862,6 +872,10 @@ function MeuPlanoContent() {
   const cobrancaInfo = useMemo(() => estimateNextBilling(planoAtual), [planoAtual]);
 
   const availableModesLabel = useMemo(() => formatAvailableModes(planoExibido), [planoExibido]);
+  const checkoutPath =
+    planoExibido?.id != null
+      ? `${routes.checkout}?plan=${planoExibido.id}&cycle=${pricingMode === "anual" ? "yearly" : "monthly"}`
+      : null;
 
   const pendingNoticeMessage = useMemo(() => {
     if (!isPaymentPending) {
@@ -1062,6 +1076,24 @@ function MeuPlanoContent() {
             ? "Você está em período de avaliação. Escolha o plano ideal e finalize a contratação quando estiver pronto."
             : "Visualize os detalhes do plano atual e faça upgrade quando desejar."}
         </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setDialogOpen(true)}>Ver planos</Button>
+        <Button
+          variant="outline"
+          onClick={() =>
+            navigate(routes.subscription(subscriptionId ?? DEFAULT_SUBSCRIPTION_ID))
+          }
+        >
+          Minha assinatura
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!checkoutPath}
+          onClick={() => checkoutPath && navigate(checkoutPath)}
+        >
+          Ir para checkout
+        </Button>
       </div>
 
       {loading ? (

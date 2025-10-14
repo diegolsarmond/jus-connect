@@ -80,14 +80,14 @@ import SiteNotFound from "./pages/site/NotFound";
 import SitePrivacyPolicy from "./pages/site/PrivacyPolicy";
 import SitePlans from "./pages/site/Plans";
 import SiteCheckout from "./pages/site/Checkout";
-import SiteSubscription from "./pages/site/Subscription";
+import OperatorSubscription from "./pages/operator/Subscription";
 import SiteServiceAssistenteIA from "./pages/site/services/AssistenteIA";
 import SiteServiceAutomacoes from "./pages/site/services/Automacoes";
 import SiteServiceCRM from "./pages/site/services/CRM";
 import SiteServiceCRMAdvocacia from "./pages/site/services/CRMAdvocacia";
 import SiteServiceDesenvolvimento from "./pages/site/services/Desenvolvimento";
 import SiteTermsOfUse from "./pages/site/TermsOfUse";
-import { AuthProvider } from "@/features/auth/AuthProvider";
+import { AuthProvider, useAuth } from "@/features/auth/AuthProvider";
 import { ProtectedRoute } from "@/features/auth/ProtectedRoute";
 import { RequireModule } from "@/features/auth/RequireModule";
 import { RequireAdminUser } from "@/features/auth/RequireAdminUser";
@@ -125,6 +125,16 @@ const withModule = (moduleId: string | string[], element: ReactElement) => (
   <RequireModule module={moduleId}>{element}</RequireModule>
 );
 
+const PublicPlans = () => {
+  const { user } = useAuth();
+
+  if (user?.empresa_id) {
+    return <Navigate to={routes.meuPlano} replace />;
+  }
+
+  return <SitePlans />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -140,9 +150,8 @@ const App = () => (
               <Route path="/blog/:slug" element={<SiteBlogArticle />} />
               <Route path="/nossa-historia" element={<SiteHistory />} />
               <Route path="/servicos" element={<SiteServices />} />
-              <Route path="/plans" element={<SitePlans />} />
-              <Route path="/checkout" element={<SiteCheckout />} />
-              <Route path="/subscription/:id" element={<SiteSubscription />} />
+              <Route path={routes.plans} element={<PublicPlans />} />
+              <Route path={routes.checkout} element={<SiteCheckout />} />
               <Route path="/servicos/assistente-ia" element={<SiteServiceAssistenteIA />} />
               <Route path="/servicos/automacoes" element={<SiteServiceAutomacoes />} />
               <Route path="/produtos/crm" element={<SiteServiceCRM />} />
@@ -254,6 +263,14 @@ const App = () => (
                 <Route path="/alterar-senha" element={<AlterarSenha />} />
                 <Route path="/meu-perfil" element={<MeuPerfil />} />
                 <Route path="/meu-plano" element={withModule("meu-plano", <MeuPlano />)} />
+                <Route
+                  path="/subscription/:id"
+                  element={withModule("meu-plano", <OperatorSubscription />)}
+                />
+                <Route
+                  path={routes.checkout}
+                  element={withModule("meu-plano", <ManagePlanPayment />)}
+                />
                 <Route
                   path={routes.meuPlanoPayment}
                   element={withModule("meu-plano", <ManagePlanPayment />)}
