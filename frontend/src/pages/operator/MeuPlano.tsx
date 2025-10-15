@@ -1121,13 +1121,28 @@ function MeuPlanoContent() {
       return;
     }
 
+    if (!subscriptionId) {
+      toast({
+        title: "Assinatura não disponível",
+        description: "Aguarde o carregamento da assinatura antes de prosseguir para o checkout.",
+      });
+      return;
+    }
+
     persistManagePlanSelection(checkoutSelection);
     setPersistedSelection((previous) => ({
       ...checkoutSelection,
       ...(previous.paymentSummary ? { paymentSummary: previous.paymentSummary } : {}),
     }));
     navigate(routes.meuPlanoPayment, { state: checkoutSelection });
-  }, [checkoutSelection, navigate, persistManagePlanSelection, setPersistedSelection]);
+  }, [
+    checkoutSelection,
+    navigate,
+    persistManagePlanSelection,
+    setPersistedSelection,
+    subscriptionId,
+    toast,
+  ]);
 
   const pendingNoticeMessage = useMemo(() => {
     if (!isPaymentPending) {
@@ -1341,7 +1356,11 @@ function MeuPlanoContent() {
         >
           Minha assinatura
         </Button>
-        <Button variant="secondary" disabled={!checkoutSelection} onClick={handleNavigateToCheckout}>
+        <Button
+          variant="secondary"
+          disabled={!checkoutSelection || !subscriptionId}
+          onClick={handleNavigateToCheckout}
+        >
           Ir para checkout
         </Button>
       </div>
