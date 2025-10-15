@@ -13,6 +13,7 @@ export interface NewUserWelcomeEmailContent {
 interface BuildNewUserWelcomeEmailParams {
   userName: string;
   temporaryPassword: string;
+  confirmationLink: string;
 }
 
 function buildFrontendBaseUrl(): string {
@@ -33,9 +34,11 @@ function normalizeUserName(rawName: string): string {
 export function buildNewUserWelcomeEmail({
   userName,
   temporaryPassword,
+  confirmationLink,
 }: BuildNewUserWelcomeEmailParams): NewUserWelcomeEmailContent {
   const normalizedUserName = normalizeUserName(userName);
   const frontendBaseUrl = buildFrontendBaseUrl();
+  const normalizedConfirmationLink = confirmationLink.trim();
 
   const subject = `${SYSTEM_NAME} - Acesso ao sistema`;
   const textLines = [
@@ -44,6 +47,9 @@ export function buildNewUserWelcomeEmail({
     `Sua conta no ${SYSTEM_NAME} foi criada com sucesso.`,
     'Utilize a senha provisória abaixo para realizar o primeiro acesso:',
     temporaryPassword,
+    '',
+    'Antes de acessar, confirme seu e-mail através do link abaixo:',
+    normalizedConfirmationLink,
     '',
     `Acesse: ${frontendBaseUrl}`,
     '',
@@ -57,6 +63,8 @@ export function buildNewUserWelcomeEmail({
     `<p>Sua conta no ${escapeHtml(SYSTEM_NAME)} foi criada com sucesso.</p>`,
     '<p>Utilize a senha provisória abaixo para realizar o primeiro acesso:</p>',
     `<p style="font-size: 18px; font-weight: bold;">${escapeHtml(temporaryPassword)}</p>`,
+    '<p>Antes de acessar, confirme seu e-mail através do link abaixo:</p>',
+    `<p><a href="${escapeHtml(normalizedConfirmationLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(normalizedConfirmationLink)}</a></p>`,
     `<p>Acesse: <a href="${escapeHtml(frontendBaseUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(frontendBaseUrl)}</a></p>`,
     '<p>Recomendamos alterar a senha após concluir o primeiro login.</p>',
   ];

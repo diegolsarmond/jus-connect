@@ -65,9 +65,9 @@ function parseDateValue(value: unknown): Date | null {
   return null;
 }
 
-export async function sendEmailConfirmationToken(
+export async function createEmailConfirmationToken(
   user: EmailConfirmationTargetUser
-): Promise<void> {
+): Promise<string> {
   const { rawToken, tokenHash } = generateToken();
   const expiresAt = new Date(Date.now() + EMAIL_CONFIRMATION_TOKEN_TTL_MS);
   const confirmationLink = buildConfirmationLink(rawToken);
@@ -93,11 +93,24 @@ export async function sendEmailConfirmationToken(
 
     await client.query('COMMIT');
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Falha ao reverter transação de confirmação de e-mail', rollbackError);
+    }
+
     throw error;
   } finally {
     client.release();
   }
+
+  return confirmationLink;
+}
+
+export async function sendEmailConfirmationToken(
+  user: EmailConfirmationTargetUser
+): Promise<void> {
+  const confirmationLink = await createEmailConfirmationToken(user);
 
   const email = buildEmailConfirmationEmail({
     userName: user.nome_completo,

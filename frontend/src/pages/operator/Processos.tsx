@@ -1358,6 +1358,7 @@ export default function Processos() {
     const [oabMonitorsInitialized, setOabMonitorsInitialized] = useState(false);
     const [oabMonitorsError, setOabMonitorsError] = useState<string | null>(null);
     const [oabSubmitLoading, setOabSubmitLoading] = useState(false);
+    const [oabSyncingProcesses, setOabSyncingProcesses] = useState(false);
     const [oabSubmitError, setOabSubmitError] = useState<ReactNode | null>(null);
     const [oabUsuarioOptions, setOabUsuarioOptions] = useState<OabUsuarioOption[]>([]);
     const [oabUsuariosLoading, setOabUsuariosLoading] = useState(false);
@@ -3030,6 +3031,27 @@ export default function Processos() {
                 title: "OAB cadastrada com sucesso",
                 description: `Monitoramento ativado para ${formatOabDisplay(monitor.numero, monitor.uf)}.`,
             });
+            handleOabModalChange(false);
+            setOabSyncingProcesses(true);
+            setProcessosError(null);
+            try {
+                const data = await loadProcessos();
+                applyProcessosData(data);
+            } catch (syncError) {
+                console.error(syncError);
+                const message =
+                    syncError instanceof Error
+                        ? syncError.message
+                        : "Não foi possível atualizar os processos após cadastrar a OAB.";
+                setProcessosError(message);
+                toast({
+                    title: "Erro ao atualizar processos",
+                    description: message,
+                    variant: "destructive",
+                });
+            } finally {
+                setOabSyncingProcesses(false);
+            }
         } catch (error) {
             console.error(error);
             const message =
@@ -3043,7 +3065,16 @@ export default function Processos() {
         } finally {
             setOabSubmitLoading(false);
         }
-    }, [oabNumero, oabUf, oabUsuarioId, oabDiasSemana, toast]);
+    }, [
+        oabNumero,
+        oabUf,
+        oabUsuarioId,
+        oabDiasSemana,
+        toast,
+        handleOabModalChange,
+        loadProcessos,
+        applyProcessosData,
+    ]);
 
     const ensureClientForParticipant = useCallback(
         async (participant: ProcessoParticipantOption): Promise<number> => {
@@ -4648,6 +4679,20 @@ export default function Processos() {
                     </div>
                 </div>
             )}
+
+            <Dialog open={oabSyncingProcesses}>
+                <DialogContent className="sm:max-w-sm">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        <p className="text-sm font-medium text-foreground">
+                            Sincronizando processos
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            Aguarde enquanto sincronizamos os processos vinculados ao registro.
+                        </p>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={isOabModalOpen} onOpenChange={handleOabModalChange}>
                 <DialogContent className="sm:max-w-xl">
