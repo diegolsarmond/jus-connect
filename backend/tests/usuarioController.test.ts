@@ -82,7 +82,7 @@ const createAuth = (userId: number) => ({
   },
 });
 
-test('listUsuarios returns all users', async () => {
+test('listUsuarios retorna usuários da empresa do autenticado', async () => {
   const userRows = [
     {
       id: 1,
@@ -90,9 +90,11 @@ test('listUsuarios returns all users', async () => {
       cpf: '12345678901',
       email: 'maria@example.com',
       perfil: 'admin',
-      empresa: 42,
+      empresa: 55,
       setor: 7,
       oab: '12345',
+      oab_number: null,
+      oab_uf: null,
       status: true,
       senha: '$hashed',
       telefone: '(11) 99999-0000',
@@ -103,6 +105,7 @@ test('listUsuarios returns all users', async () => {
   ];
 
   const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 55 }], rowCount: 1 },
     { rows: userRows, rowCount: userRows.length },
   ]);
 
@@ -119,10 +122,36 @@ test('listUsuarios returns all users', async () => {
   }
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, userRows);
+  const expectedRows = userRows.map(({ cpf: _cpf, senha: _senha, ...rest }) => rest);
+  assert.deepEqual(res.body, expectedRows);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /WHERE u\.empresa = \$1/);
+  assert.deepEqual(calls[1]?.values, [55]);
+});
+
+test('listUsuarios retorna 403 quando usuário não possui empresa', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+  ]);
+
+  const req = {
+    auth: createAuth(10),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await listUsuarios(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário autenticado não possui empresa vinculada.',
+  });
   assert.equal(calls.length, 1);
-  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios u/);
-  assert.equal(calls[0]?.values, undefined);
 });
 
 test('listUsuariosByEmpresa returns users filtered by authenticated company', async () => {
@@ -136,6 +165,8 @@ test('listUsuariosByEmpresa returns users filtered by authenticated company', as
       empresa: 55,
       setor: 9,
       oab: '54321',
+      oab_number: null,
+      oab_uf: null,
       status: true,
       senha: '$hashed',
       telefone: '(21) 98888-1111',
@@ -163,11 +194,36 @@ test('listUsuariosByEmpresa returns users filtered by authenticated company', as
   }
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, userRows);
+  const expectedRows = userRows.map(({ cpf: _cpf, senha: _senha, ...rest }) => rest);
+  assert.deepEqual(res.body, expectedRows);
   assert.equal(calls.length, 2);
   assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
   assert.match(calls[1]?.text ?? '', /WHERE u\.empresa = \$1/);
   assert.deepEqual(calls[1]?.values, [55]);
+});
+
+test('listUsuariosByEmpresa retorna 403 quando usuário não possui empresa', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+  ]);
+
+  const req = {
+    auth: createAuth(20),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await listUsuariosByEmpresa(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário autenticado não possui empresa vinculada.',
+  });
+  assert.equal(calls.length, 1);
 });
 
 test('getUsuarioById returns user when it belongs to the same company', async () => {
@@ -207,7 +263,14 @@ test('getUsuarioById returns user when it belongs to the same company', async ()
   }
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, userRow);
+  const { cpf: _cpf, senha: _senha, ...expectedUser } = userRow;
+  if (!('oab_number' in expectedUser)) {
+    (expectedUser as Record<string, unknown>).oab_number = undefined;
+  }
+  if (!('oab_uf' in expectedUser)) {
+    (expectedUser as Record<string, unknown>).oab_uf = undefined;
+  }
+  assert.deepEqual(res.body, expectedUser);
   assert.equal(calls.length, 2);
   assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
   assert.match(calls[1]?.text ?? '', /FROM public\.usuarios u/);
