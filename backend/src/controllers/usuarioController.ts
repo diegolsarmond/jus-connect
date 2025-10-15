@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../services/db';
 import { fetchPlanLimitsForCompany, countCompanyResource } from '../services/planLimitsService';
 import { createEmailConfirmationToken } from '../services/emailConfirmationService';
+import { invalidateUserModulesCache } from '../middlewares/moduleAuthorization';
 
 import {
   createPasswordResetRequest,
@@ -507,6 +508,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
+    invalidateUserModulesCache(id);
     res.json(mapUsuarioRowToResponse(result.rows[0] as UsuarioRow));
   } catch (error) {
     console.error(error);
@@ -524,6 +526,7 @@ export const deleteUsuario = async (req: Request, res: Response) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
+    invalidateUserModulesCache(id);
     res.status(204).send();
   } catch (error) {
     console.error(error);
