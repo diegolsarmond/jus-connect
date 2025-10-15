@@ -1,5 +1,5 @@
 import './utils/loadEnv';
-import express, { Request, Router } from 'express';
+import express, { Request, Response, Router } from 'express';
 import { AddressInfo } from 'net';
 import path from 'path';
 import { existsSync, mkdirSync } from 'fs';
@@ -43,17 +43,50 @@ const ensureCriticalConfig = () => {
 
 ensureCriticalConfig();
 
+const saveRawBody = (req: Request & { rawBody?: string }, _res: Response, buffer: Buffer) => {
+  if (buffer?.length) {
+    req.rawBody = buffer.toString('utf-8');
+  }
+};
+
+const largePayloadJson = express.json({ limit: '50mb', verify: saveRawBody });
+
+app.use('/api/support/:id/messages', largePayloadJson);
+app.use('/api/clientes/:clienteId/documentos', largePayloadJson);
+
 app.use(
   express.json({
-    limit: '50mb',
-    verify: (req: Request & { rawBody?: string }, _res, buffer) => {
-      if (buffer?.length) {
-        req.rawBody = buffer.toString('utf-8');
-      }
-    },
+    limit: '1mb',
+    verify: saveRawBody,
   })
 );
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+if (process.env.NODE_ENV === 'test') {
+  app.post('/__test__/echo', (req, res) => {
+    res.json({ body: req.body ?? null });
+  });
+
+  app.post('/api/support/:id/messages', (req, res, next) => {
+    if (req.headers['x-test-bypass'] === 'true') {
+      const serialized = JSON.stringify(req.body ?? null);
+      res.json({ size: Buffer.byteLength(serialized, 'utf8') });
+      return;
+    }
+
+    next();
+  });
+
+  app.post('/api/clientes/:clienteId/documentos', (req, res, next) => {
+    if (req.headers['x-test-bypass'] === 'true') {
+      const serialized = JSON.stringify(req.body ?? null);
+      res.json({ size: Buffer.byteLength(serialized, 'utf8') });
+      return;
+    }
+
+    next();
+  });
+}
 
 const registerStaticUploadHandler = () => {
   if (getFileStorageDriver() !== 'local') {
@@ -293,4 +326,8 @@ async function startServer() {
   });
 }
 
-void startServer();
+if (process.env.NODE_ENV !== 'test') {
+  void startServer();
+}
+
+export { app };

@@ -21,6 +21,13 @@ antes de executar `npm run dev` ou publicar o serviço. Em ambientes de contêin
 variável na orquestração (Compose, Kubernetes, etc.) para evitar subir instâncias com segredos
 padrão.
 
+### Limite padrão de payloads JSON
+
+As rotas autenticadas agora utilizam limite padrão de 1 MB para requisições JSON e `application/x-www-form-urlencoded`.
+Os endpoints `POST /api/support/:id/messages` e `POST /api/clientes/:clienteId/documentos` continuam aceitando
+cargas de até 50 MB por receberem anexos em Base64. Ajuste integrações que enviam arquivos em JSON para utilizar
+os caminhos dedicados ou o fluxo de upload multipart (`POST /api/uploads`).
+
 ### Integração com notificações do PJE
 
 Para habilitar o agendamento automático de webhooks com o PJE, defina as

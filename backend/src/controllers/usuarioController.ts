@@ -159,11 +159,15 @@ export const listUsuarios = async (req: Request, res: Response) => {
 
     const { empresaId } = empresaLookup;
 
-    const query =
-      empresaId === null ? baseUsuarioSelect : `${baseUsuarioSelect} WHERE u.empresa = $1`;
-    const values = empresaId === null ? [] : [empresaId];
+    if (empresaId === null) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
 
-    const result = await pool.query(query, values);
+    const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
+      empresaId,
+    ]);
     res.json(result.rows.map((row) => mapUsuarioRowToResponse(row as UsuarioRow)));
   } catch (error) {
     console.error(error);
@@ -185,9 +189,10 @@ export const listUsuariosByEmpresa = async (req: Request, res: Response) => {
 
     const { empresaId } = empresaLookup;
 
-
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
@@ -268,19 +273,17 @@ export const createUsuario = async (req: Request, res: Response) => {
 
     const empresaAtualResult = empresaLookup.empresaId;
 
-    if (empresaIdResult !== null && empresaAtualResult !== null && empresaIdResult !== empresaAtualResult) {
-      return res
-        .status(403)
-        .json({ error: 'Usuários só podem criar usuários vinculados à sua própria empresa.' });
-    }
+    let empresaId = empresaAtualResult;
 
-    if (empresaIdResult !== null && empresaAtualResult === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
-    }
+    if (empresaIdResult !== null) {
+      if (empresaAtualResult !== null && empresaIdResult !== empresaAtualResult) {
+        return res
+          .status(403)
+          .json({ error: 'Usuários só podem criar usuários vinculados à sua própria empresa.' });
+      }
 
-    const empresaId = empresaAtualResult;
+      empresaId = empresaIdResult;
+    }
 
     if (empresaId !== null) {
       const empresaExists = await pool.query(

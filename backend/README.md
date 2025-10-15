@@ -15,6 +15,11 @@ Estrutura inicial do backend usando Express e TypeScript.
 - Centralize consultas SQL reutilizáveis em arquivos de repositório dentro de `src/services`, como `clienteRepository.ts` e `fornecedorRepository.ts`.
 - Controllers devem importar essas funções em vez de executar `pool.query` diretamente, garantindo padronização de parâmetros e facilitando futuras otimizações ou trocas de banco.
 
+## Regra para usuários sem empresa vinculada
+
+- Endpoints multiempresa retornam `403` quando o usuário autenticado não possui empresa associada. Isso evita que perfis globais enxerguem dados sensíveis sem informar um escopo explícito.
+- Usuários vinculados a uma empresa continuam acessando apenas os registros da própria organização. Ex.: `GET /usuarios`, `GET /usuarios/empresa` e `GET /templates` respeitam esse comportamento. 【F:backend/src/controllers/usuarioController.ts†L146-L205】【F:backend/src/controllers/templateController.ts†L6-L40】
+
 ## Como iniciar
 
 ### Ambiente de desenvolvimento local
