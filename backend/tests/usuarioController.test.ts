@@ -436,4 +436,176 @@ test('createUsuario cleans up created user when welcome email fails', async () =
   assert.match(calls[4]?.text ?? '', /BEGIN/);
 });
 
+test('createUsuario permite administrador global informar empresa válida', async () => {
+  const welcomeModule = await import('../src/services/newUserWelcomeEmailService');
+  const capturedCalls: Parameters<
+    (typeof welcomeModule.newUserWelcomeEmailService)['sendWelcomeEmail']
+  >[] = [];
+
+  setWelcomeEmailServiceForTests({
+    async sendWelcomeEmail(params) {
+      capturedCalls.push(params);
+    },
+  });
+
+  const createdRow = {
+    id: 202,
+    nome_completo: 'Admin Global',
+    cpf: '11111111111',
+    email: 'admin.global@example.com',
+    perfil: 'admin',
+    empresa: 9,
+    setor: null,
+    oab: null,
+    status: true,
+    senha: 'argon2:placeholder',
+    telefone: '(11) 98888-0000',
+    ultimo_login: null,
+    observacoes: null,
+    datacriacao: '2024-03-02T12:00:00.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [createdRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Admin Global',
+      cpf: '11111111111',
+      email: 'admin.global@example.com',
+      perfil: 'admin',
+      empresa: 9,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 98888-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(99),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    resetWelcomeEmailServiceForTests();
+    restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+
+  const empresaCheckCall = calls.find((call) =>
+    /SELECT 1 FROM public\.empresas WHERE id = \$1/.test(call.text ?? '')
+  );
+  assert.ok(empresaCheckCall);
+  assert.deepEqual(empresaCheckCall?.values, [9]);
+
+  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
+  assert.ok(insertCall);
+  assert.equal(insertCall?.values?.[4], 9);
+
+  assert.equal(capturedCalls.length, 1);
+  const [welcomeArgs] = capturedCalls;
+  assert.equal(welcomeArgs?.to, 'admin.global@example.com');
+});
+
+test('createUsuario utiliza empresa do usuário autenticado quando não informada', async () => {
+  setWelcomeEmailServiceForTests({
+    async sendWelcomeEmail() {},
+  });
+
+  const createdRow = {
+    id: 303,
+    nome_completo: 'Colaborador',
+    cpf: '22222222222',
+    email: 'colaborador@example.com',
+    perfil: 'user',
+    empresa: 12,
+    setor: null,
+    oab: null,
+    status: true,
+    senha: 'argon2:placeholder',
+    telefone: '(11) 97777-0000',
+    ultimo_login: null,
+    observacoes: null,
+    datacriacao: '2024-03-03T12:00:00.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 12 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [createdRow], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Colaborador',
+      cpf: '22222222222',
+      email: 'colaborador@example.com',
+      perfil: 'user',
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 97777-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(88),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    resetWelcomeEmailServiceForTests();
+    restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+
+  const empresaCheckCall = calls.find((call) =>
+    /SELECT 1 FROM public\.empresas WHERE id = \$1/.test(call.text ?? '')
+  );
+  assert.ok(empresaCheckCall);
+  assert.deepEqual(empresaCheckCall?.values, [12]);
+
+  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
+  assert.ok(insertCall);
+  assert.equal(insertCall?.values?.[4], 12);
+});
+
 
