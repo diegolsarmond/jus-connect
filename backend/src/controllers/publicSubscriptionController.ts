@@ -1017,7 +1017,7 @@ export const cancelSubscription = async (req: Request, res: Response) => {
           [empresaId],
         );
 
-        if (updateResult.rowCount > 0 && updateResult.rows[0]) {
+        if ((updateResult.rowCount ?? 0) > 0 && updateResult.rows[0]) {
           companySnapshot = mapCompanySnapshotToResponse(updateResult.rows[0]);
         } else {
           const selectResult = await pool.query<CompanySnapshotRow>(
@@ -1030,7 +1030,7 @@ export const cancelSubscription = async (req: Request, res: Response) => {
             [empresaId],
           );
 
-          if (selectResult.rowCount > 0 && selectResult.rows[0]) {
+          if ((selectResult.rowCount ?? 0) > 0 && selectResult.rows[0]) {
             companySnapshot = mapCompanySnapshotToResponse(selectResult.rows[0]);
           }
         }
