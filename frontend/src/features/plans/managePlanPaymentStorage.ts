@@ -169,16 +169,32 @@ const sanitizeSelection = (value: unknown): ManagePlanSelection => {
   };
 };
 
-const getSessionStorage = (): Storage | null => {
-  if (typeof window === "undefined" || !window.sessionStorage) {
+const getBrowserStorage = (): Storage | null => {
+  if (typeof window === "undefined") {
     return null;
   }
 
-  return window.sessionStorage;
+  try {
+    if (window.localStorage) {
+      return window.localStorage;
+    }
+  } catch (error) {
+    console.warn("Falha ao acessar o localStorage", error);
+  }
+
+  try {
+    if (window.sessionStorage) {
+      return window.sessionStorage;
+    }
+  } catch (error) {
+    console.warn("Falha ao acessar o sessionStorage", error);
+  }
+
+  return null;
 };
 
 export const persistManagePlanSelection = (selection: ManagePlanSelection) => {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return;
   }
@@ -187,12 +203,12 @@ export const persistManagePlanSelection = (selection: ManagePlanSelection) => {
     const normalized = sanitizeSelection(selection);
     storage.setItem(STORAGE_KEY, JSON.stringify(normalized));
   } catch (error) {
-    console.error("Falha ao salvar a seleção do plano no armazenamento de sessão", error);
+    console.error("Falha ao salvar a seleção do plano no armazenamento", error);
   }
 };
 
 export const getPersistedManagePlanSelection = (): ManagePlanSelection => {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return {};
   }
@@ -206,13 +222,13 @@ export const getPersistedManagePlanSelection = (): ManagePlanSelection => {
     const parsed = JSON.parse(raw);
     return sanitizeSelection(parsed);
   } catch (error) {
-    console.error("Falha ao carregar a seleção do plano do armazenamento de sessão", error);
+    console.error("Falha ao carregar a seleção do plano do armazenamento", error);
     return {};
   }
 };
 
 export const clearPersistedManagePlanSelection = () => {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return;
   }
