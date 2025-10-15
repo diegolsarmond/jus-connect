@@ -334,23 +334,33 @@ export const createUsuario = async (req: Request, res: Response) => {
     const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await hashPassword(temporaryPassword);
 
-    const result = await pool.query(
-      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
-      [
-        nome_completo,
-        cpf,
-        normalizedEmail,
-        perfil,
-        empresaId,
-        setorId,
-        oab,
-        parsedStatus,
-        hashedPassword,
-        telefone,
-        ultimo_login,
-        observacoes,
-      ]
-    );
+    let result;
+
+    try {
+      result = await pool.query(
+        'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
+        [
+          nome_completo,
+          cpf,
+          normalizedEmail,
+          perfil,
+          empresaId,
+          setorId,
+          oab,
+          parsedStatus,
+          hashedPassword,
+          telefone,
+          ultimo_login,
+          observacoes,
+        ]
+      );
+    } catch (error) {
+      if (typeof error === 'object' && error && (error as { code?: unknown }).code === '23505') {
+        return res.status(409).json({ error: 'E-mail já cadastrado.' });
+      }
+
+      throw error;
+    }
 
     const createdUser = result.rows[0];
     const createdUserIdResult = parseOptionalInteger((createdUser as { id?: unknown })?.id);

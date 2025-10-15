@@ -8,6 +8,7 @@ process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
 type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
+type QueryMockResponse = QueryResponse | Error;
 
 let listUsuarios: typeof import('../src/controllers/usuarioController')['listUsuarios'];
 let listUsuariosByEmpresa: typeof import('../src/controllers/usuarioController')['listUsuariosByEmpresa'];
@@ -52,30 +53,44 @@ const createMockResponse = () => {
   return response as Response & { statusCode: number; body: unknown };
 };
 
-const setupQueryMock = (responses: QueryResponse[]) => {
+const setupQueryMock = (responses: QueryMockResponse[]) => {
   const calls: QueryCall[] = [];
-  const mock = test.mock.method(
-    Pool.prototype,
-    'query',
-    async function (this: Pool, text: string, values?: unknown[]) {
-      calls.push({ text, values });
 
-      const normalized = text.trim().toUpperCase();
+  const handleQuery = async function (this: Pool, text: string, values?: unknown[]) {
+    calls.push({ text, values });
 
-      if (normalized === 'BEGIN' || normalized === 'COMMIT' || normalized === 'ROLLBACK') {
-        return { rows: [], rowCount: 0 } satisfies QueryResponse;
-      }
+    const normalized = text.trim().toUpperCase();
 
-      if (responses.length === 0) {
-        throw new Error('Unexpected query invocation');
-      }
-
-      return responses.shift()!;
+    if (normalized === 'BEGIN' || normalized === 'COMMIT' || normalized === 'ROLLBACK') {
+      return { rows: [], rowCount: 0 } satisfies QueryResponse;
     }
-  );
+
+    if (responses.length === 0) {
+      throw new Error('Unexpected query invocation');
+    }
+
+    const next = responses.shift()!;
+
+    if (next instanceof Error) {
+      throw next;
+    }
+
+    return next;
+  };
+
+  const queryMock = test.mock.method(Pool.prototype, 'query', handleQuery);
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
+    return {
+      query: handleQuery,
+      release() {
+        return undefined;
+      },
+    } as unknown as Awaited<ReturnType<Pool['connect']>>;
+  });
 
   const restore = () => {
-    mock.mock.restore();
+    queryMock.mock.restore();
+    connectMock.mock.restore();
   };
 
   return { calls, restore };
@@ -470,6 +485,63 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok((welcomeArgs?.temporaryPassword ?? '').length > 0);
   assert.equal(typeof welcomeArgs?.confirmationLink, 'string');
   assert.ok((welcomeArgs?.confirmationLink ?? '').includes('token='));
+});
+
+test('createUsuario retorna 409 quando e-mail já cadastrado', async () => {
+  const duplicateError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: '23505',
+  });
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 3 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    duplicateError,
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Usuário Existente',
+      cpf: '00000000000',
+      email: 'existente@example.com',
+      perfil: 'admin',
+      empresa: 3,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 91111-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(60),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, { error: 'E-mail já cadastrado.' });
+  assert.equal(calls.length, 4);
+  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
+  assert.ok(insertCall);
+  const deleteCall = calls.find((call) => /DELETE FROM public\.usuarios/.test(call.text ?? ''));
+  assert.equal(deleteCall, undefined);
 });
 
 test('createUsuario cleans up created user when welcome email fails', async () => {
