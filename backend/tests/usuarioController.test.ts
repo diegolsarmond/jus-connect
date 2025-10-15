@@ -271,19 +271,74 @@ test('getUsuarioById returns user when it belongs to the same company', async ()
   }
 
   assert.equal(res.statusCode, 200);
-  const { cpf: _cpf, senha: _senha, ...expectedUser } = userRow;
-  if (!('oab_number' in expectedUser)) {
-    (expectedUser as Record<string, unknown>).oab_number = undefined;
+  const expectedResponse = { ...userRow };
+  delete (expectedResponse as { cpf?: unknown }).cpf;
+  delete (expectedResponse as { senha?: unknown }).senha;
+  if (!('oab_number' in expectedResponse)) {
+    (expectedResponse as Record<string, unknown>).oab_number = undefined;
   }
-  if (!('oab_uf' in expectedUser)) {
-    (expectedUser as Record<string, unknown>).oab_uf = undefined;
+  if (!('oab_uf' in expectedResponse)) {
+    (expectedResponse as Record<string, unknown>).oab_uf = undefined;
   }
-  assert.deepEqual(res.body, expectedUser);
+  assert.deepEqual(res.body, expectedResponse);
   assert.equal(calls.length, 2);
   assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
   assert.match(calls[1]?.text ?? '', /FROM public\.usuarios u/);
   assert.match(calls[1]?.text ?? '', /u\.empresa IS NOT DISTINCT FROM \$2::INT/);
   assert.deepEqual(calls[1]?.values, ['123', 42]);
+});
+
+test('getUsuarioById allows global administrators to access any user', async () => {
+  const userRow = {
+    id: 456,
+    nome_completo: 'Administrador Global',
+    cpf: '00000000000',
+    email: 'admin@example.com',
+    perfil: 'admin',
+    empresa: 99,
+    setor: null,
+    oab: null,
+    status: true,
+    senha: '$hashed',
+    telefone: '(11) 98888-7777',
+    ultimo_login: '2024-04-01T12:00:00.000Z',
+    observacoes: null,
+    datacriacao: '2023-04-01T12:00:00.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+    { rows: [userRow], rowCount: 1 },
+  ]);
+
+  const req = {
+    params: { id: '456' },
+    auth: createAuth(30),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await getUsuarioById(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  const expectedResponse = { ...userRow };
+  delete (expectedResponse as { cpf?: unknown }).cpf;
+  delete (expectedResponse as { senha?: unknown }).senha;
+  if (!('oab_number' in expectedResponse)) {
+    (expectedResponse as Record<string, unknown>).oab_number = undefined;
+  }
+  if (!('oab_uf' in expectedResponse)) {
+    (expectedResponse as Record<string, unknown>).oab_uf = undefined;
+  }
+  assert.deepEqual(res.body, expectedResponse);
+  assert.equal(calls.length, 2);
+  assert.match(calls[1]?.text ?? '', /WHERE u\.id = \$1(?:\s|$)/);
+  assert.ok(!/IS NOT DISTINCT/.test(calls[1]?.text ?? ''));
+  assert.deepEqual(calls[1]?.values, ['456']);
 });
 
 test('getUsuarioById returns 404 when user belongs to another company', async () => {
