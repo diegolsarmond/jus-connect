@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
-import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { resolveAuthenticatedEmpresa } from '../utils/authUser';
 
 const sanitizeDigits = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -13,17 +13,13 @@ const sanitizeDigits = (value: unknown): string | null => {
 
 export const listFornecedores = async (req: Request, res: Response) => {
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId } = authResult;
 
     if (empresaId === null) {
       return res.json([]);
@@ -47,14 +43,10 @@ export const getFornecedorById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
+    const authResult = await resolveAuthenticatedEmpresa(req);
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
     const result = await pool.query(
@@ -62,7 +54,7 @@ export const getFornecedorById = async (req: Request, res: Response) => {
          FROM public.fornecedores
         WHERE id = $1
           AND idempresa IS NOT DISTINCT FROM $2`,
-      [id, empresaLookup.empresaId]
+      [id, authResult.empresaId]
     );
 
     if (result.rowCount === 0) {
@@ -94,17 +86,13 @@ export const createFornecedor = async (req: Request, res: Response) => {
   } = req.body ?? {};
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId } = authResult;
 
     if (empresaId === null) {
       return res
@@ -164,17 +152,13 @@ export const updateFornecedor = async (req: Request, res: Response) => {
   } = req.body ?? {};
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId } = authResult;
 
     if (empresaId === null) {
       return res
@@ -239,17 +223,13 @@ export const deleteFornecedor = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId } = authResult;
 
     if (empresaId === null) {
       return res

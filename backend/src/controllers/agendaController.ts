@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { DatabaseError, type QueryResult } from 'pg';
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
-import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { resolveAuthenticatedEmpresa } from '../utils/authUser';
 
 const VALID_STATUS_NUMBERS = new Set([0, 1, 2, 3]);
 
@@ -150,17 +150,13 @@ const isUndefinedFunctionError = (error: unknown): error is DatabaseError =>
 
 export const listAgendas = async (req: Request, res: Response) => {
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId, userId } = authResult;
 
     if (empresaId === null) {
       return res.json([]);
@@ -169,11 +165,11 @@ export const listAgendas = async (req: Request, res: Response) => {
     const functionAttempts: Array<{ functionCall: string; params: Array<number | null> }> = [
       {
         functionCall: 'public.get_api_agendas($1, $2)',
-        params: [empresaId, req.auth.userId],
+        params: [empresaId, userId],
       },
       {
         functionCall: 'public.get_api_agendas($1, $2)',
-        params: [req.auth.userId, empresaId],
+        params: [userId, empresaId],
       },
       {
         functionCall: 'public.get_api_agendas($1)',
@@ -181,7 +177,7 @@ export const listAgendas = async (req: Request, res: Response) => {
       },
       {
         functionCall: 'public.get_api_agendas($1)',
-        params: [req.auth.userId],
+        params: [userId],
       },
     ];
 
@@ -235,7 +231,7 @@ export const listAgendas = async (req: Request, res: Response) => {
           WHERE a.idempresa IS NOT DISTINCT FROM $1
             AND a.idusuario = $2
           ORDER BY a.data, a.hora_inicio`,
-        [empresaId, req.auth.userId]
+        [empresaId, userId]
       );
     }
 
@@ -248,17 +244,13 @@ export const listAgendas = async (req: Request, res: Response) => {
 
 export const listAgendasByEmpresa = async (req: Request, res: Response) => {
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId } = authResult;
 
     if (empresaId === null) {
       return res.json([]);
@@ -303,9 +295,13 @@ export const listAgendasByEmpresa = async (req: Request, res: Response) => {
 
 export const getTotalCompromissosHoje = async (req: Request, res: Response) => {
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
+
+    const { userId } = authResult;
 
     const result = await pool.query(
       `SELECT COUNT(*) AS total_compromissos_hoje
@@ -313,7 +309,7 @@ export const getTotalCompromissosHoje = async (req: Request, res: Response) => {
         WHERE "data" = CURRENT_DATE
           AND status <> 0
           AND idusuario = $1`,
-      [req.auth.userId]
+      [userId]
     );
 
     res.json({
@@ -344,17 +340,13 @@ export const createAgenda = async (req: Request, res: Response) => {
   const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId, userId } = authResult;
 
     if (empresaId === null) {
       return res
@@ -401,7 +393,7 @@ export const createAgenda = async (req: Request, res: Response) => {
         lembrete,
         normalizedStatus,
         empresaId,
-        req.auth.userId,
+        userId,
       ]
     );
 
@@ -409,7 +401,7 @@ export const createAgenda = async (req: Request, res: Response) => {
 
     try {
       await createNotification({
-        userId: String(req.auth.userId),
+        userId: String(userId),
         title: `Novo compromisso: ${agenda.titulo}`,
         message: agenda.hora_inicio
           ? `Evento agendado para ${agenda.data} das ${agenda.hora_inicio} às ${agenda.hora_fim ?? '—'}.`
@@ -457,17 +449,13 @@ export const updateAgenda = async (req: Request, res: Response) => {
   const normalizedLocationType = normalizeAgendaLocationType(tipo_local);
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId, userId } = authResult;
 
     if (empresaId === null) {
       return res.status(404).json({ error: 'Agenda não encontrada' });
@@ -510,7 +498,7 @@ export const updateAgenda = async (req: Request, res: Response) => {
         normalizedStatus,
         id,
         empresaId,
-        req.auth.userId,
+        userId,
       ]
     );
 
@@ -522,7 +510,7 @@ export const updateAgenda = async (req: Request, res: Response) => {
 
     try {
       await createNotification({
-        userId: String(req.auth.userId),
+        userId: String(userId),
         title: `Compromisso atualizado: ${agenda.titulo}`,
         message: agenda.hora_inicio
           ? `Evento atualizado para ${agenda.data} das ${agenda.hora_inicio} às ${agenda.hora_fim ?? '—'}.`
@@ -554,17 +542,13 @@ export const updateAgenda = async (req: Request, res: Response) => {
 export const deleteAgenda = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const authResult = await resolveAuthenticatedEmpresa(req);
+
+    if (!authResult.success) {
+      return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
+    const { empresaId, userId } = authResult;
 
     if (empresaId === null) {
       return res.status(404).json({ error: 'Agenda não encontrada' });
@@ -575,7 +559,7 @@ export const deleteAgenda = async (req: Request, res: Response) => {
         WHERE id = $1
           AND idempresa IS NOT DISTINCT FROM $2
           AND (idusuario = $3 OR idusuario IS NULL)`,
-      [id, empresaId, req.auth.userId]
+      [id, empresaId, userId]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Agenda não encontrada' });

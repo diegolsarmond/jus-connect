@@ -1,9 +1,14 @@
+import { Request } from 'express';
 import pool from '../services/db';
 
 type ParsedInteger = number | null | 'invalid';
 
 export type EmpresaLookupResult =
   | { success: true; empresaId: number | null }
+  | { success: false; status: number; message: string };
+
+export type AuthenticatedEmpresaResult =
+  | { success: true; userId: number; empresaId: number | null }
   | { success: false; status: number; message: string };
 
 export type ConversationVisibilityLookup =
@@ -122,6 +127,36 @@ export const fetchAuthenticatedUserEmpresa = async (
   return {
     success: true,
     empresaId: empresaAtualResult,
+  };
+};
+
+export const resolveAuthenticatedEmpresa = async (
+  req: Request
+): Promise<AuthenticatedEmpresaResult> => {
+  const { auth } = req;
+
+  if (!auth) {
+    return {
+      success: false,
+      status: 401,
+      message: 'Token inválido.',
+    };
+  }
+
+  const lookup = await fetchAuthenticatedUserEmpresa(auth.userId);
+
+  if (!lookup.success) {
+    return {
+      success: false,
+      status: lookup.status,
+      message: lookup.message,
+    };
+  }
+
+  return {
+    success: true,
+    userId: auth.userId,
+    empresaId: lookup.empresaId,
   };
 };
 
