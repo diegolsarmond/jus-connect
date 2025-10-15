@@ -167,6 +167,14 @@ function toNumber(value: unknown): number | null {
 }
 
 function toStringOrNull(value: unknown): string | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    return String(value);
+  }
+
   if (typeof value !== "string") {
     return null;
   }
@@ -189,6 +197,14 @@ function pickString(
   }
 
   return null;
+}
+
+function resolveSubscriptionId(source: unknown, candidates: string[]): string | null {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  return pickString(source as Record<string, unknown>, candidates);
 }
 
 function normalizeForComparison(value: string): string {
@@ -650,6 +666,19 @@ const extractBillingFromEmpresa = (
   };
 };
 
+const extractSubscriptionIdFromEmpresa = (record: Record<string, unknown>): string | null => {
+  return (
+    resolveSubscriptionId(record, [
+      "asaas_subscription_id",
+      "asaasSubscriptionId",
+      "subscriptionId",
+      "subscription_id",
+      "asaas_subscription",
+      "asaasSubscription",
+    ]) ?? null
+  );
+};
+
 const mergeBillingDetails = (
   primary: ManagePlanSelection["billing"] | null,
   secondary: ManagePlanSelection["billing"] | null,
@@ -988,6 +1017,18 @@ function MeuPlanoContent() {
           (entry): entry is Record<string, unknown> => entry !== null && typeof entry === "object",
         );
         const empresaBilling = empresaRecord ? extractBillingFromEmpresa(empresaRecord) : null;
+        const userSubscriptionId = resolveSubscriptionId(user?.subscription ?? null, [
+          "subscriptionId",
+          "id",
+          "asaasSubscriptionId",
+          "asaas_subscription_id",
+          "asaas_subscription",
+          "asaasSubscription",
+        ]);
+        const empresaSubscriptionId = empresaRecord
+          ? extractSubscriptionIdFromEmpresa(empresaRecord)
+          : null;
+        const resolvedSubscriptionId = userSubscriptionId ?? empresaSubscriptionId ?? null;
         const userBilling = (() => {
           const name = toStringOrNull(user?.empresa_nome ?? null);
           const email = toStringOrNull(user?.email ?? null);
@@ -1012,6 +1053,16 @@ function MeuPlanoContent() {
         }
 
         if (!disposed) {
+          if (resolvedSubscriptionId) {
+            setSubscriptionId((current) => (current === resolvedSubscriptionId ? current : resolvedSubscriptionId));
+            if (typeof window !== "undefined") {
+              try {
+                window.localStorage.setItem("subscriptionId", resolvedSubscriptionId);
+              } catch (storageError) {
+                console.warn("Falha ao salvar subscriptionId no storage", storageError);
+              }
+            }
+          }
           setPlanosDisponiveis(parsedPlanos);
           setPlanoAtual(planoSelecionado);
           setPreviewPlano(null);
@@ -1046,7 +1097,7 @@ function MeuPlanoContent() {
     return () => {
       disposed = true;
     };
-  }, [apiBaseUrl, subscriptionPlanId, user?.email, user?.empresa_nome]);
+  }, [apiBaseUrl, subscriptionPlanId, user?.email, user?.empresa_nome, user?.subscription]);
 
   useEffect(() => {
     const summary = navigationState.paymentSummary;
