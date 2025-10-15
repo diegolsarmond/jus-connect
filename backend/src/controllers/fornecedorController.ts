@@ -5,15 +5,7 @@ import {
   listFornecedoresByEmpresaId,
 } from '../services/fornecedorRepository';
 import pool from '../services/db';
-
-const sanitizeDigits = (value: unknown): string | null => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const digits = value.replace(/\D/g, '');
-  return digits.length > 0 ? digits : null;
-};
+import { sanitizeDigits } from '../utils/sanitizeDigits';
 
 export const listFornecedores = async (req: Request, res: Response) => {
   try {

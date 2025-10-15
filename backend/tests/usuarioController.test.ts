@@ -8,6 +8,7 @@ process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
 type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
+type QueryMockResponse = QueryResponse | Error;
 
 let listUsuarios: typeof import('../src/controllers/usuarioController')['listUsuarios'];
 let listUsuariosByEmpresa: typeof import('../src/controllers/usuarioController')['listUsuariosByEmpresa'];
@@ -129,6 +130,7 @@ test('listUsuarios retorna usuários da empresa do autenticado', async () => {
       telefone: '(11) 99999-0000',
       ultimo_login: '2024-01-01T12:00:00.000Z',
       observacoes: null,
+      welcome_email_pending: false,
       datacriacao: '2023-01-01T12:00:00.000Z',
     },
   ];
@@ -201,6 +203,7 @@ test('listUsuariosByEmpresa returns users filtered by authenticated company', as
       telefone: '(21) 98888-1111',
       ultimo_login: '2024-02-02T15:00:00.000Z',
       observacoes: null,
+      welcome_email_pending: false,
       datacriacao: '2023-02-02T15:00:00.000Z',
     },
   ];
@@ -270,6 +273,7 @@ test('getUsuarioById returns user when it belongs to the same company', async ()
     telefone: '(11) 99999-0000',
     ultimo_login: '2024-01-01T12:00:00.000Z',
     observacoes: null,
+    welcome_email_pending: false,
     datacriacao: '2023-01-01T12:00:00.000Z',
   };
 
@@ -324,6 +328,7 @@ test('getUsuarioById allows global administrators to access any user', async () 
     telefone: '(11) 98888-7777',
     ultimo_login: '2024-04-01T12:00:00.000Z',
     observacoes: null,
+    welcome_email_pending: false,
     datacriacao: '2023-04-01T12:00:00.000Z',
   };
 
@@ -413,6 +418,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
     telefone: '(11) 90000-0000',
     ultimo_login: null,
     observacoes: null,
+    welcome_email_pending: true,
     datacriacao: '2024-03-01T12:00:00.000Z',
   };
 
@@ -433,6 +439,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
     },
     { rows: [createdRow], rowCount: 1 },
     { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ]);
 
@@ -470,8 +477,9 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   if (!('oab_uf' in expectedCreatedResponse)) {
     (expectedCreatedResponse as Record<string, unknown>).oab_uf = undefined;
   }
+  (expectedCreatedResponse as Record<string, unknown>).welcome_email_pending = false;
   assert.deepEqual(res.body, expectedCreatedResponse);
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 9);
 
   const planLimitsCall = calls.find((call) =>
     /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
@@ -482,6 +490,14 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok(insertCall);
   assert.equal(typeof insertCall.values?.[8], 'string');
   assert.ok(String(insertCall.values?.[8]).startsWith('argon2:'));
+  assert.equal(insertCall.values?.[1], '00000000000');
+  assert.equal(insertCall.values?.[9], '11900000000');
+
+  const welcomeResetCall = calls.find((call) =>
+    /UPDATE public\.usuarios SET welcome_email_pending = FALSE/.test(call.text ?? ''),
+  );
+  assert.ok(welcomeResetCall);
+  assert.deepEqual(welcomeResetCall?.values, [101]);
 
   assert.equal(capturedCalls.length, 1);
   const [welcomeArgs] = capturedCalls;
@@ -491,6 +507,63 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok((welcomeArgs?.temporaryPassword ?? '').length > 0);
   assert.equal(typeof welcomeArgs?.confirmationLink, 'string');
   assert.ok((welcomeArgs?.confirmationLink ?? '').includes('token='));
+});
+
+test('createUsuario retorna 409 quando e-mail já cadastrado', async () => {
+  const duplicateError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: '23505',
+  });
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 3 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    duplicateError,
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Usuário Existente',
+      cpf: '00000000000',
+      email: 'existente@example.com',
+      perfil: 'admin',
+      empresa: 3,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 91111-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(60),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, { error: 'E-mail já cadastrado.' });
+  assert.equal(calls.length, 4);
+  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
+  assert.ok(insertCall);
+  const deleteCall = calls.find((call) => /DELETE FROM public\.usuarios/.test(call.text ?? ''));
+  assert.equal(deleteCall, undefined);
 });
 
 test('createUsuario cleans up created user when welcome email fails', async () => {
@@ -517,6 +590,7 @@ test('createUsuario cleans up created user when welcome email fails', async () =
     telefone: '(11) 95555-0000',
     ultimo_login: null,
     observacoes: null,
+    welcome_email_pending: true,
     datacriacao: '2024-03-01T12:00:00.000Z',
   };
 
@@ -537,6 +611,7 @@ test('createUsuario cleans up created user when welcome email fails', async () =
     },
     { rows: [createdRow], rowCount: 1 },
     { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ]);
@@ -578,8 +653,11 @@ test('createUsuario cleans up created user when welcome email fails', async () =
     /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
   );
   assert.ok(planLimitsCall);
-  assert.match(calls[8]?.text ?? '', /DELETE FROM public\.usuarios/);
-  assert.deepEqual(calls[8]?.values, [321]);
+  const welcomePendingCall = calls.find((call) =>
+    /UPDATE public\.usuarios SET welcome_email_pending = TRUE/.test(call.text ?? ''),
+  );
+  assert.ok(welcomePendingCall);
+  assert.deepEqual(welcomePendingCall?.values, [321]);
   assert.match(calls[4]?.text ?? '', /BEGIN/);
 });
 
@@ -808,6 +886,7 @@ test('updateUsuario allows global administrators to update collaborators from ot
     telefone: null,
     ultimo_login: null,
     observacoes: null,
+    welcome_email_pending: false,
     datacriacao: '2024-01-01T00:00:00.000Z',
   };
 
