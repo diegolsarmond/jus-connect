@@ -136,7 +136,7 @@ const normalizeOptionalTelefone = (value: unknown): string | null | 'invalid' =>
 };
 
 const baseUsuarioSelect =
-  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, p.oab_number, p.oab_uf, u.status, u.telefone, u.ultimo_login, u.observacoes, u.datacriacao FROM public.usuarios u LEFT JOIN public.user_profiles p ON p.user_id = u.id';
+  'SELECT u.id, u.nome_completo, u.cpf, u.email, u.perfil, u.empresa, u.setor, u.oab, p.oab_number, p.oab_uf, u.status, u.telefone, u.ultimo_login, u.observacoes, u.welcome_email_pending, u.datacriacao FROM public.usuarios u LEFT JOIN public.user_profiles p ON p.user_id = u.id';
 
 type UsuarioRow = {
   id: number;
@@ -153,6 +153,7 @@ type UsuarioRow = {
   telefone: string | null;
   ultimo_login: Date | string | null;
   observacoes: string | null;
+  welcome_email_pending: boolean;
   datacriacao: Date | string;
 };
 
@@ -173,6 +174,7 @@ const mapUsuarioRowToResponse = (row: UsuarioRow): UsuarioResponse => {
     telefone,
     ultimo_login,
     observacoes,
+    welcome_email_pending,
     datacriacao,
   } = row;
 
@@ -190,6 +192,7 @@ const mapUsuarioRowToResponse = (row: UsuarioRow): UsuarioResponse => {
     telefone,
     ultimo_login,
     observacoes,
+    welcome_email_pending,
     datacriacao,
   };
 };
@@ -395,42 +398,37 @@ export const createUsuario = async (req: Request, res: Response) => {
     const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await hashPassword(temporaryPassword);
 
-    let result;
-
-    try {
-      result = await pool.query(
-        'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
-        [
-          nome_completo,
-          cpf,
-          normalizedEmail,
-          perfil,
-          empresaId,
-          setorId,
-          oab,
-          parsedStatus,
-          hashedPassword,
-          telefone,
-          ultimo_login,
-          observacoes,
-        ]
-      );
-    } catch (error) {
-      if (typeof error === 'object' && error && (error as { code?: unknown }).code === '23505') {
-        return res.status(409).json({ error: 'E-mail já cadastrado.' });
-      }
-
-      throw error;
-    }
+    const result = await pool.query(
+      'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, welcome_email_pending, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, TRUE, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, welcome_email_pending, datacriacao',
+      [
+        nome_completo,
+        cpf,
+        normalizedEmail,
+        perfil,
+        empresaId,
+        setorId,
+        oab,
+        parsedStatus,
+        hashedPassword,
+        telefone,
+        ultimo_login,
+        observacoes,
+      ]
+    );
 
     const createdUser = result.rows[0];
-    const createdUserIdResult = parseOptionalInteger((createdUser as { id?: unknown })?.id);
+    const rawCreatedUserId = (createdUser as { id?: unknown })?.id;
+    const createdUserIdResult = parseOptionalInteger(rawCreatedUserId);
 
     if (typeof createdUserIdResult !== 'number') {
       console.error('ID inválido retornado ao criar usuário.');
 
       try {
-        await pool.query('DELETE FROM public.usuarios WHERE email = $1', [normalizedEmail]);
+        if (rawCreatedUserId !== undefined) {
+          await pool.query('UPDATE public.usuarios SET welcome_email_pending = TRUE WHERE id = $1', [
+            rawCreatedUserId,
+          ]);
+        }
       } catch (cleanupError) {
         console.error('Falha ao remover usuário após erro de identificação', cleanupError);
       }
@@ -458,7 +456,9 @@ export const createUsuario = async (req: Request, res: Response) => {
       console.error('Erro ao gerar link de confirmação para novo usuário', tokenError);
 
       try {
-        await pool.query('DELETE FROM public.usuarios WHERE id = $1', [createdUserId]);
+        await pool.query('UPDATE public.usuarios SET welcome_email_pending = TRUE WHERE id = $1', [
+          createdUserId,
+        ]);
       } catch (cleanupError) {
         console.error('Falha ao remover usuário após erro na geração de link de confirmação', cleanupError);
       }
@@ -479,7 +479,9 @@ export const createUsuario = async (req: Request, res: Response) => {
       console.error('Erro ao enviar senha provisória para novo usuário', emailError);
 
       try {
-        await pool.query('DELETE FROM public.usuarios WHERE id = $1', [createdUserId]);
+        await pool.query('UPDATE public.usuarios SET welcome_email_pending = TRUE WHERE id = $1', [
+          createdUserId,
+        ]);
       } catch (cleanupError) {
         console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
       }
@@ -487,6 +489,15 @@ export const createUsuario = async (req: Request, res: Response) => {
       return res
         .status(500)
         .json({ error: 'Não foi possível enviar a senha provisória para o novo usuário.' });
+    }
+
+    try {
+      await pool.query('UPDATE public.usuarios SET welcome_email_pending = FALSE WHERE id = $1', [
+        createdUserId,
+      ]);
+      (createdUser as { welcome_email_pending?: boolean }).welcome_email_pending = false;
+    } catch (cleanupError) {
+      console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
     }
 
     res.status(201).json(mapUsuarioRowToResponse(createdUser as UsuarioRow));
@@ -627,7 +638,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
     }
 
     const result = await pool.query(
-      'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
+      'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, welcome_email_pending, datacriacao',
       [
         nome_completo,
         cpfNormalizado,
