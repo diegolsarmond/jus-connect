@@ -53,16 +53,24 @@ const createMockResponse = () => {
   return response as Response & { statusCode: number; body: unknown };
 };
 
-const setupQueryMock = (responses: QueryMockResponse[]) => {
+const setupQueryMock = (responses: (QueryResponse | Error)[]) => {
   const calls: QueryCall[] = [];
 
-  const handleQuery = async function (this: Pool, text: string, values?: unknown[]) {
+  const queryImpl = async (text: string, values?: unknown[]) => {
     calls.push({ text, values });
 
     const normalized = text.trim().toUpperCase();
 
     if (normalized === 'BEGIN' || normalized === 'COMMIT' || normalized === 'ROLLBACK') {
       return { rows: [], rowCount: 0 } satisfies QueryResponse;
+    }
+
+    if (normalized.includes('UPDATE PUBLIC.EMAIL_CONFIRMATION_TOKENS')) {
+      return { rows: [], rowCount: 0 } satisfies QueryResponse;
+    }
+
+    if (normalized.includes('INSERT INTO PUBLIC.EMAIL_CONFIRMATION_TOKENS')) {
+      return { rows: [], rowCount: 1 } satisfies QueryResponse;
     }
 
     if (responses.length === 0) {
@@ -78,15 +86,14 @@ const setupQueryMock = (responses: QueryMockResponse[]) => {
     return next;
   };
 
-  const queryMock = test.mock.method(Pool.prototype, 'query', handleQuery);
-  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
-    return {
-      query: handleQuery,
-      release() {
-        return undefined;
-      },
-    } as unknown as Awaited<ReturnType<Pool['connect']>>;
-  });
+  const queryMock = test.mock.method(Pool.prototype, 'query', queryImpl as unknown as Pool['query']);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => ({
+    query: queryImpl,
+    release() {
+      // noop
+    },
+  }));
 
   const restore = () => {
     queryMock.mock.restore();
@@ -652,6 +659,177 @@ test('createUsuario cleans up created user when welcome email fails', async () =
   assert.ok(welcomePendingCall);
   assert.deepEqual(welcomePendingCall?.values, [321]);
   assert.match(calls[4]?.text ?? '', /BEGIN/);
+});
+
+test('createUsuario retorna 409 quando e-mail já está cadastrado', async () => {
+  const duplicateError = Object.assign(new Error('duplicate key value'), { code: '23505' });
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: 10,
+          limite_processos: null,
+          limite_propostas: null,
+          limite_clientes: null,
+          limite_advogados_processos: null,
+          limite_advogados_intimacoes_monitoradas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ total: '0' }], rowCount: 1 },
+    duplicateError,
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Novo Usuário',
+      cpf: '00000000000',
+      email: 'duplicado@example.com',
+      perfil: 'admin',
+      empresa: 5,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 95555-1111',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(123),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, { error: 'E-mail já cadastrado.' });
+  assert.ok(calls.some((call) => /INSERT INTO public\.usuarios/i.test(call.text ?? '')));
+});
+
+test('createUsuario retorna 400 quando há vínculos inválidos', async () => {
+  const invalidRelationError = Object.assign(new Error('invalid foreign key value'), {
+    code: '23503',
+  });
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 9 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: 10,
+          limite_processos: null,
+          limite_propostas: null,
+          limite_clientes: null,
+          limite_advogados_processos: null,
+          limite_advogados_intimacoes_monitoradas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ total: '0' }], rowCount: 1 },
+    invalidRelationError,
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Novo Usuário',
+      cpf: '00000000000',
+      email: 'vinculo@example.com',
+      perfil: 'user',
+      empresa: 9,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 96666-2222',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(456),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, {
+    error: 'Não foi possível criar o usuário com os vínculos informados.',
+  });
+  assert.ok(calls.some((call) => /INSERT INTO public\.usuarios/i.test(call.text ?? '')));
+});
+
+test('createUsuario retorna 503 quando o banco está indisponível', async () => {
+  const unavailableError = Object.assign(
+    new Error('the database system is not accepting connections'),
+    { code: '57P03' }
+  );
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 3 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: 10,
+          limite_processos: null,
+          limite_propostas: null,
+          limite_clientes: null,
+          limite_advogados_processos: null,
+          limite_advogados_intimacoes_monitoradas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ total: '0' }], rowCount: 1 },
+    unavailableError,
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Novo Usuário',
+      cpf: '00000000000',
+      email: 'indisponivel@example.com',
+      perfil: 'user',
+      empresa: 3,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 97777-3333',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(789),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(res.body, {
+    error: 'Serviço temporariamente indisponível. Tente novamente mais tarde.',
+  });
+  assert.ok(calls.some((call) => /INSERT INTO public\.usuarios/i.test(call.text ?? '')));
 });
 
 test('updateUsuario blocks updates to collaborators from another company', async () => {

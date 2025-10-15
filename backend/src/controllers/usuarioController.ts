@@ -502,6 +502,33 @@ export const createUsuario = async (req: Request, res: Response) => {
 
     res.status(201).json(mapUsuarioRowToResponse(createdUser as UsuarioRow));
   } catch (error) {
+    const pgError = error as { code?: string | number; message?: unknown } | null;
+
+    if (pgError && typeof pgError === 'object') {
+      const code = pgError.code != null ? String(pgError.code) : undefined;
+      const message = typeof pgError.message === 'string' ? pgError.message : '';
+
+      if (code === '23505' || message.toLowerCase().includes('duplicate key value')) {
+        return res.status(409).json({ error: 'E-mail já cadastrado.' });
+      }
+
+      if (code === '23503' || message.toLowerCase().includes('foreign key')) {
+        return res
+          .status(400)
+          .json({ error: 'Não foi possível criar o usuário com os vínculos informados.' });
+      }
+
+      if (
+        (code && ['57P03', '08006', '08001'].includes(code)) ||
+        message.toLowerCase().includes('not accepting connections') ||
+        message.toLowerCase().includes('database system is starting up')
+      ) {
+        return res
+          .status(503)
+          .json({ error: 'Serviço temporariamente indisponível. Tente novamente mais tarde.' });
+      }
+    }
+
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
