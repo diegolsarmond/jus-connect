@@ -10,6 +10,17 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -807,14 +818,6 @@ function MeuPlanoContent() {
     }
 
     if (typeof window === "undefined") {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "Tem certeza de que deseja cancelar a sua assinatura? Essa ação interrompe as próximas cobranças.",
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -1912,15 +1915,33 @@ function MeuPlanoContent() {
                   </Button>
                 )}
                 {isSubscriptionActive && subscriptionId && (
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={handleCancelSubscription}
-                    disabled={isCancelling}
-                  >
-                    {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cancelar assinatura
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="lg"
+                        variant="outline"
+                        className="rounded-full"
+                        disabled={isCancelling}
+                      >
+                        {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cancelar assinatura
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Cancelar assinatura</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Tem certeza de que deseja cancelar sua assinatura? Você continuará com acesso ao
+                          conteúdo até o fim do ciclo vigente e nenhuma nova cobrança será gerada.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isCancelling}>Manter assinatura</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleCancelSubscription} disabled={isCancelling}>
+                          {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar cancelamento
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
               </div>
             </CardContent>
