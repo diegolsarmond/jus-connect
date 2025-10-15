@@ -79,6 +79,7 @@ API hospedada pela Quantum em `https://quantumtecnologia.com.br`.
 - Ao rodar o frontend localmente, defina `VITE_API_URL` (ou utilize o arquivo
   `.env.development` fornecido no projeto do frontend) para apontar os
   requests para `https://quantumtecnologia.com.br/api`.
+- Defina `CORS_DEFAULT_ORIGINS` com a lista principal de domínios autorizados. Sem esta variável o backend permite apenas `http://localhost:5173`.
 - Caso precise habilitar novos domínios para consumir a API pública, defina a
   variável `CORS_ALLOWED_ORIGINS` antes de subir o backend.
 
