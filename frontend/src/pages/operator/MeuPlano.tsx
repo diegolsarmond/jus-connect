@@ -49,7 +49,6 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { plans } from "@/data/plans";
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type PlanoDetalhe = {
@@ -1041,12 +1040,7 @@ function MeuPlanoContent() {
       };
 
       persistManagePlanSelection(selection);
-      const cycle = nextPricingMode === "anual" ? "yearly" : "monthly";
-      const matchedMarketingPlan = plans.find(
-        (item) => normalizeForComparison(item.name) === normalizeForComparison(plan.nome),
-      );
-      const slug = plan.slug ?? matchedMarketingPlan?.id ?? slugify(plan.nome) ?? String(plan.id);
-      navigate(`${routes.checkout}?plan=${encodeURIComponent(slug)}&cycle=${cycle}`);
+      navigate(routes.meuPlanoPayment, { state: selection });
     },
     [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
   );
