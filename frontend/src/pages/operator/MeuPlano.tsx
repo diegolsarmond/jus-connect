@@ -35,6 +35,7 @@ import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { PlanSelection } from "@/features/plans/PlanSelection";
 import {
+  clearPersistedManagePlanSelection,
   getPersistedManagePlanSelection,
   persistManagePlanSelection,
   type ManagePlanSelection,
@@ -51,7 +52,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { getApiBaseUrl, joinUrl } from "@/lib/api";
+import { getApiBaseUrl, getApiUrl, joinUrl } from "@/lib/api";
 
 type PlanoDetalhe = {
   id: number;
@@ -197,6 +198,37 @@ function normalizeForComparison(value: string): string {
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+async function requestJson<T>(input: RequestInfo, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+
+  let payload: unknown = null;
+
+  if (response.status !== 204) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === "object" && "error" in payload && (payload as { error?: unknown }).error
+        ? String((payload as { error?: unknown }).error)
+        : response.statusText || "Falha ao comunicar com o servidor.";
+    throw new Error(message);
+  }
+
+  return payload as T;
 }
 
 function slugify(value: string | null): string | null {
@@ -684,12 +716,14 @@ function findPlanFromEmpresa(planos: PlanoDetalhe[], empresasRows: unknown[]): P
 function MeuPlanoContent() {
   const apiBaseUrl = getApiBaseUrl();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [subscriptionStatusOverride, setSubscriptionStatusOverride] = useState<string | null>(null);
+  const rawSubscriptionStatus = user?.subscription?.status ?? null;
+  const subscriptionStatus = subscriptionStatusOverride ?? rawSubscriptionStatus;
   const subscriptionPlanId = toNumber(user?.subscription?.planId ?? null);
-  const isTrialing = user?.subscription?.status === "trialing";
-  const subscriptionStatus = user?.subscription?.status ?? null;
+  const isTrialing = subscriptionStatus === "trialing";
   const subscriptionStatusLabel = useMemo(
     () => resolveSubscriptionStatusLabel(subscriptionStatus),
     [subscriptionStatus],
@@ -704,6 +738,8 @@ function MeuPlanoContent() {
   const [pricingMode, setPricingMode] = useState<PricingMode>("mensal");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancellationSuccessMessage, setCancellationSuccessMessage] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<UsageMetrics>({
     usuariosAtivos: null,
     clientesAtivos: null,
@@ -717,6 +753,17 @@ function MeuPlanoContent() {
   const navigationState = (location.state ?? {}) as {
     paymentSummary?: ManagePlanSelection["paymentSummary"];
   };
+  const isSubscriptionActive = subscriptionStatus === "active";
+
+  useEffect(() => {
+    if (rawSubscriptionStatus !== "active" && subscriptionStatusOverride !== null) {
+      setSubscriptionStatusOverride(null);
+    }
+
+    if (rawSubscriptionStatus === "active" && subscriptionStatusOverride === null) {
+      setCancellationSuccessMessage(null);
+    }
+  }, [rawSubscriptionStatus, subscriptionStatusOverride]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -724,6 +771,65 @@ function MeuPlanoContent() {
       setSubscriptionId(storedId && storedId.trim().length > 0 ? storedId.trim() : null);
     }
   }, []);
+
+  const handleCancelSubscription = useCallback(async () => {
+    if (!subscriptionId || !isSubscriptionActive) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Tem certeza de que deseja cancelar a sua assinatura? Essa ação interrompe as próximas cobranças.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancellationSuccessMessage(null);
+
+    try {
+      await requestJson<unknown>(
+        getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`),
+        { method: "POST" },
+      );
+
+      clearPersistedManagePlanSelection();
+      setPersistedSelection({});
+      window.localStorage.removeItem("subscriptionId");
+      setSubscriptionId(null);
+      setSubscriptionStatusOverride("inactive");
+      setCancellationSuccessMessage("Sua assinatura foi cancelada com sucesso.");
+      await refreshUser();
+
+      toast({
+        title: "Assinatura cancelada",
+        description: "As próximas cobranças foram interrompidas e os dados foram atualizados.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : "Não foi possível cancelar a assinatura.";
+
+      toast({
+        title: "Falha ao cancelar assinatura",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [
+    isSubscriptionActive,
+    refreshUser,
+    subscriptionId,
+    toast,
+  ]);
 
   useEffect(() => {
     let disposed = false;
@@ -1410,6 +1516,14 @@ function MeuPlanoContent() {
             </Alert>
           )}
 
+          {cancellationSuccessMessage && (
+            <Alert className="border-emerald-300/60 bg-emerald-50">
+              <Check className="h-4 w-4 text-emerald-600" />
+              <AlertTitle>Assinatura cancelada</AlertTitle>
+              <AlertDescription>{cancellationSuccessMessage}</AlertDescription>
+            </Alert>
+          )}
+
           {pendingNoticeMessage && (
             <Alert>
               <AlertTitle>Assinatura com pagamento pendente</AlertTitle>
@@ -1744,6 +1858,17 @@ function MeuPlanoContent() {
                 {previewPlano && (
                   <Button size="lg" variant="outline" className="rounded-full" onClick={resetPreview}>
                     Voltar ao plano atual
+                  </Button>
+                )}
+                {isSubscriptionActive && subscriptionId && (
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={handleCancelSubscription}
+                    disabled={isCancelling}
+                  >
+                    {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cancelar assinatura
                   </Button>
                 )}
               </div>
