@@ -381,6 +381,7 @@ const ManagePlanPayment = () => {
   const [cardErrors, setCardErrors] = useState<CardFormErrors>({});
   const [autoChargeConfirmed, setAutoChargeConfirmed] = useState(false);
   const [history, setHistory] = useState<Flow[]>([]);
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [billingDataStatus, setBillingDataStatus] = useState<{ companyId: number | null; loaded: boolean }>(() => ({
@@ -690,7 +691,7 @@ const ManagePlanPayment = () => {
     return () => {
       isActive = false;
     };
-  }, [selectedPlan]);
+  }, [selectedPlan, historyReloadKey]);
 
   useEffect(() => {
     if (paymentMethod !== "cartao") {
@@ -974,6 +975,7 @@ const ManagePlanPayment = () => {
       const result = await createPlanPayment(payload);
 
       setPaymentResult(result);
+      setHistoryReloadKey((previous) => previous + 1);
       toast({
         title: "Cobrança gerada com sucesso",
         description: "Utilize as informações abaixo para concluir o pagamento do plano.",
