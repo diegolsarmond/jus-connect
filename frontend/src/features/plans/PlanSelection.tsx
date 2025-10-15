@@ -149,6 +149,15 @@ export const PlanSelection = () => {
         pricingMode,
       };
 
+      const name = user?.empresa_nome?.trim();
+      const email = user?.email?.trim();
+      if ((name && name.length > 0) || (email && email.length > 0)) {
+        selection.billing = {
+          ...(name && name.length > 0 ? { companyName: name } : {}),
+          ...(email && email.length > 0 ? { email } : {}),
+        };
+      }
+
       persistManagePlanSelection(selection);
       toast({
         title: "Plano selecionado",
