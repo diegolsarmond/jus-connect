@@ -1037,6 +1037,10 @@ const ManagePlanPayment = () => {
       return;
     }
 
+    if (paymentResult) {
+      return;
+    }
+
     if (!companyName.trim() || !companyDocument.trim() || !billingEmail.trim()) {
       const message = "Preencha razão social, documento e e-mail para gerar a cobrança.";
       setError(message);
@@ -1170,6 +1174,7 @@ const ManagePlanPayment = () => {
     companyName,
     autoChargeConfirmed,
     paymentMethod,
+    paymentResult,
     pricingMode,
     selectedPlan,
     refreshUser,
@@ -1195,6 +1200,7 @@ const ManagePlanPayment = () => {
   const isConfirmDisabled =
     isSubmitting ||
     isTokenizingCard ||
+    Boolean(paymentResult) ||
     !companyName.trim() ||
     !companyDocument.trim() ||
     !billingEmail.trim() ||
