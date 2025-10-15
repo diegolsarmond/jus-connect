@@ -441,6 +441,21 @@ const ManagePlanPayment = () => {
   }));
   const userPrefillRef = useRef<{ companyName?: string; billingEmail?: string }>({});
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const id = paymentResult?.subscriptionId;
+    if (!id) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem("subscriptionId", id);
+    } catch {}
+  }, [paymentResult?.subscriptionId]);
+
   const sanitizeSelectionBilling = useCallback((): ManagePlanSelection["billing"] | undefined => {
     const trimmedName = companyName.trim();
     const digits = sanitizeDigits(companyDocument);
