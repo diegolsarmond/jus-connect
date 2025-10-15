@@ -49,7 +49,6 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { plans } from "@/data/plans";
 import { getApiBaseUrl, joinUrl } from "@/lib/api";
 
 type PlanoDetalhe = {
@@ -870,10 +869,39 @@ function MeuPlanoContent() {
   const cobrancaInfo = useMemo(() => estimateNextBilling(planoAtual), [planoAtual]);
 
   const availableModesLabel = useMemo(() => formatAvailableModes(planoExibido), [planoExibido]);
-  const checkoutPath =
-    planoExibido?.id != null
-      ? `${routes.checkout}?plan=${planoExibido.id}&cycle=${pricingMode === "anual" ? "yearly" : "monthly"}`
-      : null;
+  const checkoutSelection = useMemo<ManagePlanSelection | null>(() => {
+    if (!planoExibido) {
+      return null;
+    }
+
+    const mode = resolvePricingModeForPlan(pricingMode, planoExibido);
+
+    return {
+      plan: {
+        id: planoExibido.id,
+        nome: planoExibido.nome,
+        descricao: planoExibido.descricao,
+        recursos: planoExibido.recursos,
+        valorMensal: planoExibido.valorMensal,
+        valorAnual: planoExibido.valorAnual,
+        precoMensal: planoExibido.precoMensal,
+        precoAnual: planoExibido.precoAnual,
+        descontoAnualPercentual: planoExibido.descontoAnualPercentual,
+        economiaAnual: planoExibido.economiaAnual,
+        economiaAnualFormatada: planoExibido.economiaAnualFormatada,
+      },
+      pricingMode: mode,
+    };
+  }, [planoExibido, pricingMode]);
+
+  const handleNavigateToCheckout = useCallback(() => {
+    if (!checkoutSelection?.plan) {
+      return;
+    }
+
+    persistManagePlanSelection(checkoutSelection);
+    navigate(routes.meuPlanoPayment, { state: checkoutSelection });
+  }, [checkoutSelection, navigate, persistManagePlanSelection]);
 
   const pendingNoticeMessage = useMemo(() => {
     if (!isPaymentPending) {
@@ -1041,12 +1069,7 @@ function MeuPlanoContent() {
       };
 
       persistManagePlanSelection(selection);
-      const cycle = nextPricingMode === "anual" ? "yearly" : "monthly";
-      const matchedMarketingPlan = plans.find(
-        (item) => normalizeForComparison(item.name) === normalizeForComparison(plan.nome),
-      );
-      const slug = plan.slug ?? matchedMarketingPlan?.id ?? slugify(plan.nome) ?? String(plan.id);
-      navigate(`${routes.checkout}?plan=${encodeURIComponent(slug)}&cycle=${cycle}`);
+      navigate(routes.meuPlanoPayment, { state: selection });
     },
     [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
   );
@@ -1084,11 +1107,7 @@ function MeuPlanoContent() {
         >
           Minha assinatura
         </Button>
-        <Button
-          variant="secondary"
-          disabled={!checkoutPath}
-          onClick={() => checkoutPath && navigate(checkoutPath)}
-        >
+        <Button variant="secondary" disabled={!checkoutSelection} onClick={handleNavigateToCheckout}>
           Ir para checkout
         </Button>
       </div>
