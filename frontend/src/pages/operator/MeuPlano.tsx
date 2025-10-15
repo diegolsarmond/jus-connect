@@ -101,6 +101,7 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
 });
 const countFormatter = new Intl.NumberFormat("pt-BR");
+const PRICING_ON_REQUEST_LABEL = "Sob consulta";
 
 const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD", string> = {
   PIX: "PIX",
@@ -452,7 +453,7 @@ function formatLimitValue(value: number | null, singular: string, plural: string
 }
 
 function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): PricingDisplay {
-  const fallback = "Sob consulta";
+  const fallback = PRICING_ON_REQUEST_LABEL;
 
   if (!plan) {
     return {
@@ -523,7 +524,7 @@ function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): Pric
 
 function estimateNextBilling(plan: PlanoDetalhe | null): { nextBilling: string | null; cadenceLabel: string } {
   if (!plan) {
-    return { nextBilling: null, cadenceLabel: "Sob consulta" };
+    return { nextBilling: null, cadenceLabel: PRICING_ON_REQUEST_LABEL };
   }
 
   const hasMensal = plan.valorMensal !== null;
@@ -535,7 +536,7 @@ function estimateNextBilling(plan: PlanoDetalhe | null): { nextBilling: string |
       ? "Mensal"
       : hasAnual
         ? "Anual"
-        : "Sob consulta";
+        : PRICING_ON_REQUEST_LABEL;
 
   if (!plan.dataCadastro || Number.isNaN(plan.dataCadastro.getTime())) {
     return { nextBilling: null, cadenceLabel };
@@ -1121,13 +1122,28 @@ function MeuPlanoContent() {
       return;
     }
 
+    if (!subscriptionId) {
+      toast({
+        title: "Assinatura não disponível",
+        description: "Aguarde o carregamento da assinatura antes de prosseguir para o checkout.",
+      });
+      return;
+    }
+
     persistManagePlanSelection(checkoutSelection);
     setPersistedSelection((previous) => ({
       ...checkoutSelection,
       ...(previous.paymentSummary ? { paymentSummary: previous.paymentSummary } : {}),
     }));
     navigate(routes.meuPlanoPayment, { state: checkoutSelection });
-  }, [checkoutSelection, navigate, persistManagePlanSelection, setPersistedSelection]);
+  }, [
+    checkoutSelection,
+    navigate,
+    persistManagePlanSelection,
+    setPersistedSelection,
+    subscriptionId,
+    toast,
+  ]);
 
   const pendingNoticeMessage = useMemo(() => {
     if (!isPaymentPending) {
@@ -1267,6 +1283,17 @@ function MeuPlanoContent() {
 
   const handlePlanSelection = useCallback(
     (plan: PlanoDetalhe) => {
+      const hasMensal = hasMensalPricing(plan);
+      const hasAnual = hasAnualPricing(plan);
+
+      if (!hasMensal && !hasAnual) {
+        toast({
+          title: `Plano ${plan.nome} ${PRICING_ON_REQUEST_LABEL.toLowerCase()}`,
+          description: `Os valores deste plano estão ${PRICING_ON_REQUEST_LABEL.toLowerCase()} no momento.`,
+        });
+        return;
+      }
+
       setPreviewPlano(plan);
       setDialogOpen(false);
       const nextPricingMode = resolvePricingModeForPlan(pricingMode, plan);
@@ -1341,7 +1368,11 @@ function MeuPlanoContent() {
         >
           Minha assinatura
         </Button>
-        <Button variant="secondary" disabled={!checkoutSelection} onClick={handleNavigateToCheckout}>
+        <Button
+          variant="secondary"
+          disabled={!checkoutSelection || !subscriptionId}
+          onClick={handleNavigateToCheckout}
+        >
           Ir para checkout
         </Button>
       </div>
