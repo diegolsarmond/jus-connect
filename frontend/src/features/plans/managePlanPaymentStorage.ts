@@ -14,9 +14,24 @@ export type ManagePlanSelectionPlan = {
   economiaAnualFormatada: string | null;
 };
 
+export type ManagePlanSelectionBilling = {
+  companyName?: string | null;
+  document?: string | null;
+  email?: string | null;
+};
+
+export type ManagePlanSelectionPaymentSummary = {
+  status?: string | null;
+  paymentMethod?: string | null;
+  dueDate?: string | null;
+  amount?: number | null;
+};
+
 export type ManagePlanSelection = {
   plan?: ManagePlanSelectionPlan;
   pricingMode?: PricingMode;
+  billing?: ManagePlanSelectionBilling;
+  paymentSummary?: ManagePlanSelectionPaymentSummary;
 };
 
 const STORAGE_KEY = "jus-connect:manage-plan-payment-selection";
@@ -94,6 +109,48 @@ const sanitizePricingMode = (value: unknown): PricingMode | undefined => {
   return value === "anual" || value === "mensal" ? value : undefined;
 };
 
+const sanitizeBilling = (value: unknown): ManagePlanSelectionBilling | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const companyName = toNullableString(value.companyName);
+  const documentDigits = toNullableString(value.document)?.replace(/\D+/g, "");
+  const email = toNullableString(value.email);
+
+  if (!companyName && !documentDigits && !email) {
+    return undefined;
+  }
+
+  return {
+    ...(companyName ? { companyName } : {}),
+    ...(documentDigits ? { document: documentDigits } : {}),
+    ...(email ? { email } : {}),
+  } satisfies ManagePlanSelectionBilling;
+};
+
+const sanitizePaymentSummary = (value: unknown): ManagePlanSelectionPaymentSummary | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const status = toNullableString(value.status);
+  const paymentMethod = toNullableString(value.paymentMethod);
+  const dueDate = toNullableString(value.dueDate);
+  const amountValue = toNullableNumber(value.amount);
+
+  if (!status && !paymentMethod && !dueDate && amountValue === null) {
+    return undefined;
+  }
+
+  return {
+    ...(status ? { status } : {}),
+    ...(paymentMethod ? { paymentMethod } : {}),
+    ...(dueDate ? { dueDate } : {}),
+    ...(amountValue !== null ? { amount: amountValue } : {}),
+  } satisfies ManagePlanSelectionPaymentSummary;
+};
+
 const sanitizeSelection = (value: unknown): ManagePlanSelection => {
   if (!isRecord(value)) {
     return {};
@@ -101,10 +158,14 @@ const sanitizeSelection = (value: unknown): ManagePlanSelection => {
 
   const plan = sanitizePlan(value.plan);
   const pricingMode = sanitizePricingMode(value.pricingMode);
+  const billing = sanitizeBilling(value.billing);
+  const paymentSummary = sanitizePaymentSummary(value.paymentSummary);
 
   return {
     ...(plan ? { plan } : {}),
     ...(pricingMode ? { pricingMode } : {}),
+    ...(billing ? { billing } : {}),
+    ...(paymentSummary ? { paymentSummary } : {}),
   };
 };
 
