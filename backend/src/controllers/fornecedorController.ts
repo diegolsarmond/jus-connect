@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
-import pool from '../services/db';
 import { resolveAuthenticatedEmpresa } from '../utils/authUser';
+import {
+  findFornecedorById,
+  listFornecedoresByEmpresaId,
+} from '../services/fornecedorRepository';
+import pool from '../services/db';
 
 const sanitizeDigits = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -25,14 +29,9 @@ export const listFornecedores = async (req: Request, res: Response) => {
       return res.json([]);
     }
 
-    const result = await pool.query(
-      `SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro
-         FROM public.fornecedores
-        WHERE idempresa = $1`,
-      [empresaId]
-    );
+    const fornecedores = await listFornecedoresByEmpresaId(empresaId);
 
-    return res.json(result.rows);
+    return res.json(fornecedores);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -49,19 +48,13 @@ export const getFornecedorById = async (req: Request, res: Response) => {
       return res.status(authResult.status).json({ error: authResult.message });
     }
 
-    const result = await pool.query(
-      `SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro
-         FROM public.fornecedores
-        WHERE id = $1
-          AND idempresa IS NOT DISTINCT FROM $2`,
-      [id, authResult.empresaId]
-    );
+    const fornecedor = await findFornecedorById(id, authResult.empresaId);
 
-    if (result.rowCount === 0) {
+    if (!fornecedor) {
       return res.status(404).json({ error: 'Fornecedor não encontrado' });
     }
 
-    return res.json(result.rows[0]);
+    return res.json(fornecedor);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Internal server error' });
