@@ -62,6 +62,28 @@ const parseOptionalInteger = (value: unknown): number | null => {
   return null;
 };
 
+const parseCpfValue = (value: unknown): string | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    if (Number.isNaN(normalized)) {
+      return null;
+    }
+
+    return normalized.toString().padStart(11, "0");
+  }
+
+  if (typeof value === "string") {
+    const digits = value.replace(/\D+/gu, "");
+    if (!digits) {
+      return null;
+    }
+
+    return digits.length <= 11 ? digits.padStart(11, "0") : digits;
+  }
+
+  return null;
+};
+
 const parseBooleanFlag = (value: unknown): boolean | null => {
   if (typeof value === "boolean") {
     return value;
@@ -223,6 +245,7 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
         record.perfilVerTodasConversas ??
         record.perfil_ver_todas_conversas,
     ) ?? true;
+  const cpf = parseCpfValue(record.cpf);
 
   return {
     ...candidate,
@@ -231,6 +254,7 @@ const sanitizeAuthUser = (user: AuthUser | undefined | null): AuthUser | null =>
     mustChangePassword,
     empresa_responsavel_id: companyManagerId,
     viewAllConversations,
+    cpf,
   } satisfies AuthUser;
 };
 

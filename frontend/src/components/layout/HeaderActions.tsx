@@ -146,7 +146,7 @@ export function HeaderActions() {
       return false;
     }
 
-    const cpfValue = (user as { cpf?: unknown }).cpf;
+    const cpfValue = user?.cpf ?? (user as { cpf?: unknown }).cpf;
 
     if (typeof cpfValue === "number") {
       return cpfValue.toString().padStart(11, "0") === "11545111626";

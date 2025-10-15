@@ -45,6 +45,28 @@ const parseInteger = (value: unknown): number | null => {
   return null;
 };
 
+const parseCpfValue = (value: unknown): string | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    if (Number.isNaN(normalized)) {
+      return null;
+    }
+
+    return normalized.toString().padStart(11, "0");
+  }
+
+  if (typeof value === "string") {
+    const digits = value.replace(/\D+/gu, "");
+    if (!digits) {
+      return null;
+    }
+
+    return digits.length <= 11 ? digits.padStart(11, "0") : digits;
+  }
+
+  return null;
+};
+
 const parseBooleanFlag = (value: unknown): boolean | null => {
   if (typeof value === "boolean") {
     return value;
@@ -239,6 +261,7 @@ export const loginRequest = async (
     expiresIn: data.expiresIn,
     user: {
       ...data.user,
+      cpf: parseCpfValue(userRecord.cpf),
       modulos: parseModules(userRecord.modulos),
       subscription: parseSubscription(userRecord.subscription),
       mustChangePassword: resolveMustChangePassword(userRecord),
@@ -272,6 +295,7 @@ export const fetchCurrentUser = async (token?: string): Promise<AuthUser> => {
 
   return {
     ...data,
+    cpf: parseCpfValue(data.cpf),
     modulos: parseModules(data.modulos),
     subscription: parseSubscription((data as { subscription?: unknown }).subscription),
     mustChangePassword: resolveMustChangePassword(data),

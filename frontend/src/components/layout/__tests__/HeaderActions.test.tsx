@@ -73,6 +73,7 @@ describe("HeaderActions", () => {
         nome_completo: "Usuário Teste",
         email: "teste@example.com",
         modulos: [],
+        cpf: null,
       },
       logout: vi.fn(),
     } as unknown as ReturnType<typeof useAuth>);

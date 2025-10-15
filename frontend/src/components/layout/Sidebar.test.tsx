@@ -64,6 +64,7 @@ describe("Sidebar", () => {
     vi.mocked(useAuth).mockReturnValue({
       user: {
         modulos: ["dashboard", "conversas", "agenda", "tarefas"],
+        cpf: null,
       },
       logout: vi.fn(),
     } as unknown as ReturnType<typeof useAuth>);
