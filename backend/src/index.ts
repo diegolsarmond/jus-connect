@@ -3,53 +3,8 @@ import express, { Request, Router } from 'express';
 import { AddressInfo } from 'net';
 import path from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import areaAtuacaoRoutes from './routes/areaAtuacaoRoutes';
-import tipoEventoRoutes from './routes/tipoEventoRoutes';
-import tipoProcessoRoutes from './routes/tipoProcessoRoutes';
-import tipoEnvolvimentoRoutes from './routes/tipoEnvolvimentoRoutes';
-import escritorioRoutes from './routes/escritorioRoutes';
-import perfilRoutes from './routes/perfilRoutes';
-import planoRoutes, { publicPlanoRoutes } from './routes/planoRoutes';
-import planPaymentRoutes from './routes/planPaymentRoutes';
-import subscriptionRoutes from './routes/subscriptionRoutes';
-import situacaoClienteRoutes from './routes/situacaoClienteRoutes';
-import categoriaRoutes from './routes/categoriaRoutes';
-import situacaoProcessoRoutes from './routes/situacaoProcessoRoutes';
-import situacaoPropostaRoutes from './routes/situacaoPropostaRoutes';
-import etiquetaRoutes from './routes/etiquetaRoutes';
-import sistemaCnjRoutes from './routes/sistemaCnjRoutes';
+import routesRegistry from './routes/registry';
 import usuarioRoutes from './routes/usuarioRoutes';
-import empresaRoutes from './routes/empresaRoutes';
-import clienteRoutes from './routes/clienteRoutes';
-import fornecedorRoutes from './routes/fornecedorRoutes';
-import agendaRoutes from './routes/agendaRoutes';
-import templateRoutes from './routes/templateRoutes';
-import tagRoutes from './routes/tagRoutes';
-import documentRoutes from './routes/documentRoutes';
-import blogPostRoutes, { publicBlogPostRoutes } from './routes/blogPostRoutes';
-import financialRoutes from './routes/financialRoutes';
-import processoRoutes from './routes/processoRoutes';
-import consultaPublicaRoutes from './routes/consultaPublicaRoutes';
-import fluxoTrabalhoRoutes from './routes/fluxoTrabalhoRoutes';
-import uploadRoutes from './routes/uploadRoutes';
-import oportunidadeRoutes from './routes/oportunidadeRoutes';
-import oportunidadeDocumentoRoutes from './routes/oportunidadeDocumentoRoutes';
-import tarefaRoutes from './routes/tarefaRoutes';
-import tarefaResponsavelRoutes from './routes/tarefaResponsavelRoutes';
-import tipoDocumentoRoutes from './routes/tipoDocumentoRoutes';
-import clienteDocumentoRoutes from './routes/clienteDocumentoRoutes';
-import clienteAtributoRoutes from './routes/clienteAtributoRoutes';
-import supportRoutes from './routes/supportRoutes';
-import notificationRoutes from './routes/notificationRoutes';
-import intimacaoRoutes from './routes/intimacaoRoutes';
-import integrationApiKeyRoutes from './routes/integrationApiKeyRoutes';
-import webhookRoutes from './routes/webhookRoutes';
-import chatRoutes from './routes/chatRoutes';
-import userProfileRoutes from './routes/userProfileRoutes';
-import wahaWebhookRoutes from './routes/wahaWebhookRoutes';
-import asaasWebhookRoutes from './routes/asaasWebhookRoutes';
-import authRoutes from './routes/authRoutes';
-import publicSubscriptionRoutes from './routes/publicSubscriptionRoutes';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerOptions from './swagger';
@@ -247,94 +202,19 @@ const registerModuleRoutes = (modules: string | string[], router: Router) => {
   protectedApiRouter.use(router);
 };
 
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-area-atuacao'],
-  areaAtuacaoRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-tipo-evento'],
-  tipoEventoRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-tipo-processo'],
-  tipoProcessoRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-tipo-envolvimento'],
-  tipoEnvolvimentoRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-tipos-documento'],
-  tipoDocumentoRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-escritorios'],
-  escritorioRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-perfis'],
-  perfilRoutes
-);
-registerModuleRoutes(['configuracoes', 'dashboard'], planoRoutes);
-registerModuleRoutes(['configuracoes', 'dashboard'], subscriptionRoutes);
-registerModuleRoutes('meu-plano', planPaymentRoutes);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-situacao-processo'],
-  situacaoProcessoRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-situacao-cliente'],
-  situacaoClienteRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-situacao-proposta'],
-  situacaoPropostaRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-etiquetas'],
-  etiquetaRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-categorias'],
-  categoriaRoutes
-);
-registerModuleRoutes(
-  ['configuracoes-parametros', 'configuracoes-parametros-sistemas-cnj'],
-  sistemaCnjRoutes
-);
-registerModuleRoutes(['configuracoes', 'dashboard'], empresaRoutes);
-registerModuleRoutes('configuracoes-usuarios', usuarioRoutes);
-registerModuleRoutes(['clientes', 'dashboard'], clienteRoutes);
-registerModuleRoutes('fornecedores', fornecedorRoutes);
-registerModuleRoutes(['clientes', 'dashboard'], clienteAtributoRoutes);
-registerModuleRoutes('agenda', agendaRoutes);
-registerModuleRoutes('documentos', templateRoutes);
-registerModuleRoutes('documentos', tagRoutes);
-registerModuleRoutes('documentos', documentRoutes);
-registerModuleRoutes(['configuracoes', 'configuracoes-conteudo-blog'], blogPostRoutes);
-registerModuleRoutes(['financeiro', 'dashboard'], financialRoutes);
-registerModuleRoutes(['processos', 'dashboard'], processoRoutes);
-registerModuleRoutes(['consulta-publica', 'processos'], consultaPublicaRoutes);
-registerModuleRoutes('pipeline', fluxoTrabalhoRoutes);
-registerModuleRoutes('documentos', uploadRoutes);
-registerModuleRoutes('pipeline', oportunidadeRoutes);
-registerModuleRoutes('pipeline', oportunidadeDocumentoRoutes);
-registerModuleRoutes('tarefas', tarefaRoutes);
-registerModuleRoutes('tarefas', tarefaResponsavelRoutes);
-registerModuleRoutes(['clientes', 'documentos'], clienteDocumentoRoutes);
-registerModuleRoutes('suporte', supportRoutes);
-registerModuleRoutes('intimacoes', intimacaoRoutes);
-registerModuleRoutes('configuracoes-integracoes', integrationApiKeyRoutes);
-registerModuleRoutes('configuracoes-integracoes', webhookRoutes);
-registerModuleRoutes('conversas', chatRoutes);
-protectedApiRouter.use(notificationRoutes);
-protectedApiRouter.use(userProfileRoutes);
-app.use('/api', wahaWebhookRoutes);
-app.use('/api', asaasWebhookRoutes);
-app.use('/api', publicBlogPostRoutes);
-app.use('/api', publicPlanoRoutes);
-app.use('/api', authRoutes);
-app.use('/api', publicSubscriptionRoutes);
+for (const { modules, router, public: isPublic } of routesRegistry) {
+  if (isPublic) {
+    app.use('/api', router);
+    continue;
+  }
+
+  if (modules) {
+    registerModuleRoutes(modules, router);
+    continue;
+  }
+
+  protectedApiRouter.use(router);
+}
 app.use('/api', protectedApiRouter);
 app.use('/api/v1', authenticateRequest, usuarioRoutes);
 
