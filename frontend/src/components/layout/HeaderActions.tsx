@@ -141,6 +141,24 @@ export function HeaderActions() {
 
   const profileToggleLabel = isOnAdminArea ? "Alternar para CRM" : "Alternar para admin";
 
+  const canToggleAdmin = useMemo(() => {
+    if (!user) {
+      return false;
+    }
+
+    const cpfValue = (user as { cpf?: unknown }).cpf;
+
+    if (typeof cpfValue === "number") {
+      return cpfValue.toString().padStart(11, "0") === "11545111626";
+    }
+
+    if (typeof cpfValue === "string") {
+      return cpfValue.replace(/\D+/gu, "") === "11545111626";
+    }
+
+    return false;
+  }, [user]);
+
   const handleProfileToggle = useCallback(() => {
     if (isOnAdminArea) {
       navigate(routes.dashboard, { replace: true });
@@ -224,7 +242,7 @@ export function HeaderActions() {
             <User className="mr-2 h-4 w-4" />
             Perfil
           </DropdownMenuItem>
-          {user?.id === 3 && (
+          {canToggleAdmin && (
             <DropdownMenuItem
               onSelect={(event) => {
                 event.preventDefault();
