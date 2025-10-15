@@ -9,6 +9,7 @@ import {
 } from '../services/passwordResetService';
 import { hashPassword } from '../utils/passwordUtils';
 import { newUserWelcomeEmailService } from '../services/newUserWelcomeEmailService';
+import { fetchAuthenticatedUserEmpresa, parseOptionalInteger } from '../utils/authUser';
 
 
 let welcomeEmailService = newUserWelcomeEmailService;
@@ -21,36 +22,6 @@ export const __setWelcomeEmailServiceForTests = (
 
 export const __resetWelcomeEmailServiceForTests = () => {
   welcomeEmailService = newUserWelcomeEmailService;
-};
-
-const parseOptionalId = (value: unknown): number | null | 'invalid' => {
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed === '') {
-      return null;
-    }
-
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
-      return 'invalid';
-    }
-
-    return parsed;
-  }
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value) || !Number.isInteger(value)) {
-      return 'invalid';
-    }
-
-    return value;
-  }
-
-  return 'invalid';
 };
 
 const parseStatus = (value: unknown): boolean | 'invalid' => {
@@ -173,41 +144,6 @@ const mapUsuarioRowToResponse = (row: UsuarioRow): UsuarioResponse => {
   };
 };
 
-type EmpresaLookupResult =
-  | { success: true; empresaId: number | null }
-  | { success: false; status: number; message: string };
-
-const fetchAuthenticatedUserEmpresa = async (userId: number): Promise<EmpresaLookupResult> => {
-  const empresaUsuarioResult = await pool.query(
-    'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
-    [userId]
-  );
-
-  if (empresaUsuarioResult.rowCount === 0) {
-    return {
-      success: false,
-      status: 404,
-      message: 'Usuário autenticado não encontrado',
-    };
-  }
-
-  const empresaAtualResult = parseOptionalId(
-    (empresaUsuarioResult.rows[0] as { empresa: unknown }).empresa
-  );
-
-  if (empresaAtualResult === 'invalid') {
-    return {
-      success: false,
-      status: 500,
-      message: 'Não foi possível identificar a empresa do usuário autenticado.',
-    };
-  }
-
-  return {
-    success: true,
-    empresaId: empresaAtualResult,
-  };
-};
 export const listUsuarios = async (req: Request, res: Response) => {
   try {
     if (!req.auth) {
@@ -318,7 +254,7 @@ export const createUsuario = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Status inválido' });
     }
 
-    const empresaIdResult = parseOptionalId(empresa);
+    const empresaIdResult = parseOptionalInteger(empresa);
     if (empresaIdResult === 'invalid') {
       return res.status(400).json({ error: 'ID de empresa inválido' });
     }
@@ -365,7 +301,7 @@ export const createUsuario = async (req: Request, res: Response) => {
       }
     }
 
-    const setorIdResult = parseOptionalId(setor);
+    const setorIdResult = parseOptionalInteger(setor);
     if (setorIdResult === 'invalid') {
       return res.status(400).json({ error: 'ID de setor inválido' });
     }
@@ -411,7 +347,7 @@ export const createUsuario = async (req: Request, res: Response) => {
     );
 
     const createdUser = result.rows[0];
-    const createdUserIdResult = parseOptionalId((createdUser as { id?: unknown })?.id);
+    const createdUserIdResult = parseOptionalInteger((createdUser as { id?: unknown })?.id);
 
     if (typeof createdUserIdResult !== 'number') {
       console.error('ID inválido retornado ao criar usuário.');
@@ -506,7 +442,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Status inválido' });
     }
 
-    const empresaIdResult = parseOptionalId(empresa);
+    const empresaIdResult = parseOptionalInteger(empresa);
     if (empresaIdResult === 'invalid') {
       return res.status(400).json({ error: 'ID de empresa inválido' });
     }
@@ -522,7 +458,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
       }
     }
 
-    const setorIdResult = parseOptionalId(setor);
+    const setorIdResult = parseOptionalInteger(setor);
     if (setorIdResult === 'invalid') {
       return res.status(400).json({ error: 'ID de setor inválido' });
     }
@@ -637,7 +573,7 @@ export const resetUsuarioSenha = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Usuário não possui e-mail cadastrado.' });
     }
 
-    const targetEmpresaIdResult = parseOptionalId(targetUserRow.empresa);
+    const targetEmpresaIdResult = parseOptionalInteger(targetUserRow.empresa);
 
     if (targetEmpresaIdResult === 'invalid') {
       return res
