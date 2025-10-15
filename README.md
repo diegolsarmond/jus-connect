@@ -142,7 +142,7 @@ Para que o fluxo de confirmação de cadastro funcione, defina as credenciais do
 | `SMTP_SECURE`               | Informe `true` quando o servidor exige TLS direto na conexão (porta 465). Para STARTTLS utilize `false`. |
 | `SMTP_REJECT_UNAUTHORIZED`  | Mantenha `true` para validar o certificado. Ajuste para `false` apenas em ambientes de teste com certificados autoassinados. |
 | `SMTP_USER` e `SMTP_PASSWORD` | Credenciais válidas no servidor SMTP. |
-| `SMTP_FROM`                 | Endereço remetente padrão (deve corresponder a um endereço autorizado pelo servidor). |
+| `SMTP_FROM`                 | **Obrigatório.** Endereço remetente padrão (deve corresponder a um endereço autorizado pelo servidor). |
 | `SMTP_FROM_NAME`            | Nome exibido no remetente dos e-mails (opcional). |
 
 > 💡 Defina as mesmas chaves no ambiente de build do frontend caso ele consuma endpoints intermediários (`VITE_API_URL`).
