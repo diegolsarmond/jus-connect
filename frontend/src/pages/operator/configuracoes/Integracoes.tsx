@@ -640,6 +640,22 @@ export default function Integracoes() {
   const [isSavingWebhookEdit, setIsSavingWebhookEdit] = useState(false);
   const [editWebhookActive, setEditWebhookActive] = useState(true);
 
+  const reloadWebhooks = useCallback(async () => {
+    try {
+      const items = await fetchIntegrationWebhooks();
+      setWebhooks(items);
+    } catch (error) {
+      toast({
+        title: "Não foi possível atualizar os webhooks",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro inesperado ao sincronizar os webhooks atualizados.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
   const activeApiKeys = apiKeys.filter((key) => key.active).length;
   const activeIntegrations = integrations.filter((integration) => integration.enabled).length;
   const activeWebhooks = webhooks.filter((webhook) => webhook.active).length;
@@ -1047,6 +1063,7 @@ export default function Integracoes() {
         title: "Webhook atualizado",
         description: `${updated.name} foi atualizado com sucesso.`,
       });
+      void reloadWebhooks();
       handleEditWebhookDialogChange(false);
     } catch (error) {
       toast({
