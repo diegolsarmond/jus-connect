@@ -168,6 +168,7 @@ export type PlanPaymentResult = {
   paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD";
   charge: PlanPaymentCharge;
   flow: PlanPaymentFlow;
+  subscriptionId: string | null;
 };
 
 const normalizeString = (value: unknown): string | null => {
@@ -225,6 +226,27 @@ const normalizeCharge = (payload: unknown): PlanPaymentCharge => {
     cardLast4: normalizeString(record.cardLast4 ?? record.card_last4 ?? record.cardLastDigits),
     cardBrand: normalizeString(record.cardBrand ?? record.card_brand ?? record.brand),
   } satisfies PlanPaymentCharge;
+};
+
+const normalizeSubscriptionId = (payload: unknown): string | null => {
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    const value = record.id;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return null;
 };
 
 const normalizeFlow = (payload: unknown): PlanPaymentFlow => {
@@ -341,6 +363,7 @@ export async function createPlanPayment(payload: PlanPaymentPayload): Promise<Pl
     paymentMethod,
     charge: normalizeCharge(payloadRecord.charge),
     flow: normalizeFlow(payloadRecord.flow),
+    subscriptionId: normalizeSubscriptionId(payloadRecord.subscription),
   } satisfies PlanPaymentResult;
 }
 
@@ -375,5 +398,6 @@ export const parsePlanPaymentResult = (
     paymentMethod: parsePaymentMethod(paymentMethodSource),
     charge: normalizeCharge(chargePayload),
     flow: normalizeFlow(flowPayload),
+    subscriptionId: normalizeSubscriptionId(record.subscription ?? record.subscriptionId ?? null),
   } satisfies PlanPaymentResult;
 };
