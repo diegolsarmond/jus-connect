@@ -452,7 +452,7 @@ export const createCompanyOabMonitor = async (
         : 'created';
 
     if (operation === 'created') {
-      await notifyIntimacaoSyncTargets(empresaId);
+      await notifyIntimacaoSyncTargets(empresaId, 'processos.sync.targets');
     }
 
     publishIntegrationWebhookEvent({
