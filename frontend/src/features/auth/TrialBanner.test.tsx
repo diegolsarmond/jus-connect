@@ -43,6 +43,7 @@ describe("TrialBanner", () => {
     const trialEndsAt = new Date("2024-01-03T12:00:00.000Z").toISOString();
     vi.mocked(useAuth).mockReturnValue({
       user: {
+        cpf: null,
         subscription: {
           status: "trialing",
           trialEndsAt,
@@ -65,6 +66,7 @@ describe("TrialBanner", () => {
     const trialEndsAt = new Date("2024-01-02T12:00:00.000Z").toISOString();
     vi.mocked(useAuth).mockReturnValue({
       user: {
+        cpf: null,
         subscription: {
           status: "trialing",
           trialEndsAt,

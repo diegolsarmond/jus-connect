@@ -138,6 +138,28 @@ const parseDateValue = (value: unknown): Date | null => {
   return null;
 };
 
+const normalizeCpfValue = (value: unknown): string | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    if (Number.isNaN(normalized)) {
+      return null;
+    }
+
+    return normalized.toString().padStart(11, '0');
+  }
+
+  if (typeof value === 'string') {
+    const digits = value.replace(/\D+/gu, '');
+    if (!digits) {
+      return null;
+    }
+
+    return digits.length <= 11 ? digits.padStart(11, '0') : digits;
+  }
+
+  return null;
+};
+
 const addDays = (date: Date, days: number): Date => {
   const result = new Date(date.getTime());
   result.setDate(result.getDate() + days);
@@ -195,6 +217,7 @@ type UserRowBase = SubscriptionRow & {
   must_change_password?: unknown;
   perfil_ver_todas_conversas?: unknown;
   email_confirmed_at?: unknown;
+  cpf?: unknown;
 };
 
 type LoginUserRow = UserRowBase & {
@@ -1052,6 +1075,7 @@ export const login = async (req: Request, res: Response) => {
               u.nome_completo,
               u.email,
               u.senha,
+              u.cpf::text AS cpf,
               u.must_change_password,
               u.email_confirmed_at,
               u.status,
@@ -1093,6 +1117,7 @@ export const login = async (req: Request, res: Response) => {
       nome_completo: string;
       email: string;
       senha: string | null;
+      cpf?: unknown;
       email_confirmed_at?: unknown;
       status: unknown;
       perfil: number | string | null;
@@ -1153,6 +1178,7 @@ export const login = async (req: Request, res: Response) => {
       parseBooleanFlag((user as { must_change_password?: unknown }).must_change_password) ?? false;
     const viewAllConversations =
       parseBooleanFlag((user as { perfil_ver_todas_conversas?: unknown }).perfil_ver_todas_conversas) ?? true;
+    const cpf = normalizeCpfValue((user as { cpf?: unknown }).cpf);
 
     const subscriptionRow: SubscriptionRow = {
       empresa_plano: user.empresa_plano,
@@ -1261,6 +1287,7 @@ export const login = async (req: Request, res: Response) => {
         nome_completo: user.nome_completo,
         email: user.email,
         perfil: user.perfil,
+        cpf,
         modulos,
         empresa_id: user.empresa_id,
         empresa_nome: user.empresa_nome,
@@ -1513,6 +1540,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               u.nome_completo,
               u.email,
               u.perfil,
+              u.cpf::text AS cpf,
               per.ver_todas_conversas AS perfil_ver_todas_conversas,
               u.status,
               u.empresa AS empresa_id,
@@ -1579,12 +1607,14 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       parseBooleanFlag((user as { must_change_password?: unknown }).must_change_password) ?? false;
     const viewAllConversations =
       parseBooleanFlag((user as { perfil_ver_todas_conversas?: unknown }).perfil_ver_todas_conversas) ?? true;
+    const cpf = normalizeCpfValue((user as { cpf?: unknown }).cpf);
 
     res.json({
       id: user.id,
       nome_completo: user.nome_completo,
       email: user.email,
       perfil: user.perfil,
+      cpf,
       status: user.status,
       empresa_id: user.empresa_id,
       empresa_nome: user.empresa_nome,

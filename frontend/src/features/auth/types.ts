@@ -20,6 +20,7 @@ export interface AuthUser {
   nome_completo: string;
   email: string;
   perfil: number | null;
+  cpf: string | null;
   status?: boolean | null;
   modulos: string[];
   empresa_id: number | null;

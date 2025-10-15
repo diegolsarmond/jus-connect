@@ -45,6 +45,7 @@ describe("PlanSelection", () => {
 
     vi.mocked(useAuth).mockReturnValue({
       user: {
+        cpf: null,
         empresa_id: 99,
         subscription: null,
       },
@@ -97,6 +98,7 @@ describe("PlanSelection", () => {
   it("surfaces regularization messaging when the subscription expired", async () => {
     vi.mocked(useAuth).mockReturnValue({
       user: {
+        cpf: null,
         empresa_id: 42,
         subscription: {
           status: "expired",

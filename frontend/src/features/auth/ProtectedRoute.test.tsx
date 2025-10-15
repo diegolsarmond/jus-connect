@@ -35,6 +35,7 @@ describe("ProtectedRoute", () => {
       isAuthenticated: true,
       isLoading: false,
       user: {
+        cpf: null,
         mustChangePassword: false,
         subscription: { status: "inactive" },
       },
@@ -66,6 +67,7 @@ describe("ProtectedRoute", () => {
       isAuthenticated: true,
       isLoading: false,
       user: {
+        cpf: null,
         mustChangePassword: true,
         subscription: { status: "active" },
       },
@@ -100,6 +102,7 @@ describe("ProtectedRoute", () => {
       isAuthenticated: true,
       isLoading: false,
       user: {
+        cpf: null,
         mustChangePassword: false,
         subscription: {
           status: "grace_period",
@@ -141,6 +144,7 @@ describe("ProtectedRoute", () => {
       isAuthenticated: true,
       isLoading: false,
       user: {
+        cpf: null,
         mustChangePassword: false,
         subscription: {
           status: "past_due",
