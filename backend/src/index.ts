@@ -167,6 +167,8 @@ app.use((req, res, next) => {
 const protectedApiRouter = express.Router();
 protectedApiRouter.use(authenticateRequest);
 
+let usuariosModuleGuard: ReturnType<typeof authorizeModules> | null = null;
+
 type RouterLayer = {
   match?: (path: string) => boolean;
   name?: string;
@@ -233,6 +235,8 @@ const registerModuleRoutes = (modules: string | string[], router: Router) => {
   });
 
   protectedApiRouter.use(router);
+
+  return moduleGuard;
 };
 
 for (const { modules, router, public: isPublic } of routesRegistry) {
@@ -242,14 +246,31 @@ for (const { modules, router, public: isPublic } of routesRegistry) {
   }
 
   if (modules) {
-    registerModuleRoutes(modules, router);
+    const moduleGuard = registerModuleRoutes(modules, router);
+
+    if (router === usuarioRoutes) {
+      usuariosModuleGuard = moduleGuard;
+    }
+
     continue;
   }
 
   protectedApiRouter.use(router);
 }
 app.use('/api', protectedApiRouter);
-app.use('/api/v1', authenticateRequest, usuarioRoutes);
+
+const legacyUsuariosRouter = express.Router();
+legacyUsuariosRouter.use(authenticateRequest);
+
+if (usuariosModuleGuard) {
+  legacyUsuariosRouter.use(usuariosModuleGuard);
+} else {
+  legacyUsuariosRouter.use(authorizeModules('configuracoes-usuarios'));
+}
+
+legacyUsuariosRouter.use(usuarioRoutes);
+
+app.use('/api/v1', legacyUsuariosRouter);
 
 // Swagger
 const specs = swaggerJsdoc(swaggerOptions);
