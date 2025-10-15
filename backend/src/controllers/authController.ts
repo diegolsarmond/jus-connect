@@ -19,9 +19,13 @@ import {
 } from '../services/emailConfirmationService';
 import { createPasswordResetRequest } from '../services/passwordResetService';
 import { isUndefinedTableError } from '../utils/databaseErrors';
+import {
+  SUBSCRIPTION_DEFAULT_GRACE_DAYS,
+  SUBSCRIPTION_TRIAL_DAYS,
+} from '../constants/subscription';
 
-const TRIAL_DURATION_DAYS = 14;
-const GRACE_PERIOD_DAYS = 10;
+const TRIAL_DURATION_DAYS = SUBSCRIPTION_TRIAL_DAYS;
+const GRACE_PERIOD_DAYS = SUBSCRIPTION_DEFAULT_GRACE_DAYS;
 
 
 let emailConfirmationSender = sendEmailConfirmationToken;
@@ -337,7 +341,7 @@ const evaluateSubscriptionAccess = (
         isAllowed: false,
         statusCode: 402,
         message:
-          'Assinatura expirada após o período de tolerância de 10 dias. Regularize o pagamento para continuar.',
+          `Assinatura expirada após o período de tolerância de ${GRACE_PERIOD_DAYS} dias. Regularize o pagamento para continuar.`,
       };
     case 'trial_expired':
       return {

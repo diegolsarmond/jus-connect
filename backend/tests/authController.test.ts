@@ -4,6 +4,7 @@ import test from 'node:test';
 import type { Request, Response } from 'express';
 import { Pool } from 'pg';
 import { hashPassword } from '../src/utils/passwordUtils';
+import { SUBSCRIPTION_DEFAULT_GRACE_DAYS } from '../src/constants/subscription';
 
 process.env.AUTH_TOKEN_SECRET ??= 'test-secret';
 
@@ -599,7 +600,9 @@ test('login succeeds when subscription is active', async () => {
   const now = Date.now();
   const trialEndsAt = new Date(now + 3 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -836,7 +839,9 @@ test('login rejects with payment required once grace period expires', async () =
   const hashedPassword = await hashPassword(password);
   const now = Date.now();
   const currentPeriodEndsAt = new Date(now - 12 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -883,8 +888,7 @@ test('login rejects with payment required once grace period expires', async () =
 
   assert.equal(res.statusCode, 402);
   assert.deepEqual(res.body, {
-    error:
-      'Assinatura expirada após o período de tolerância de 10 dias. Regularize o pagamento para continuar.',
+    error: `Assinatura expirada após o período de tolerância de ${SUBSCRIPTION_DEFAULT_GRACE_DAYS} dias. Regularize o pagamento para continuar.`,
   });
   assert.equal('token' in (res.body as Record<string, unknown>), false);
 });
@@ -897,7 +901,9 @@ test('login migrates legacy sha256 hashes to argon2 format', async () => {
   const now = Date.now();
   const trialEndsAt = new Date(now + 3 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { calls, restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -972,7 +978,9 @@ test('login migrates plain text passwords to argon2 format', async () => {
   const now = Date.now();
   const trialEndsAt = new Date(now + 5 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 35 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { calls, restore: restorePoolQuery } = setupPoolQueryMock([
     {
