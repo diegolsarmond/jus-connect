@@ -643,7 +643,12 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
                   WHEN (payload ->> 'idempresa') ~ '^-?\\d+$' THEN (payload ->> 'idempresa')::bigint
                   WHEN (payload ->> 'empresaId') ~ '^-?\\d+$' THEN (payload ->> 'empresaId')::bigint
                   ELSE NULL
-                END AS payload_empresa_id
+                END AS payload_empresa_id,
+                CASE
+                  WHEN (payload ->> 'idusuario') ~ '^-?\\d+$' THEN (payload ->> 'idusuario')::bigint
+                  WHEN (payload ->> 'usuarioId') ~ '^-?\\d+$' THEN (payload ->> 'usuarioId')::bigint
+                  ELSE NULL
+                END AS payload_usuario_id
            FROM public.intimacoes
        )
        SELECT id,
@@ -661,20 +666,21 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
               created_at,
               updated_at
          FROM intimacoes_enriched
-        WHERE payload_empresa_id = $1
-           OR payload_empresa_id IS NULL
+       WHERE (payload_empresa_id = $1 OR payload_empresa_id IS NULL)
+         AND (payload_usuario_id = $2 OR payload_usuario_id IS NULL)
         ORDER BY recebida_em DESC NULLS LAST,
                  fonte_atualizada_em DESC NULLS LAST,
                  created_at DESC NULLS LAST,
                  id DESC`,
-      [empresaId]
+      [empresaId, req.auth.userId]
     );
 
     const intimacoes = result.rows
       .map(mapDbIntimacaoRow)
       .filter(
         (intimacao: IntimacaoResponse) =>
-          intimacao.idempresa === null || intimacao.idempresa === empresaId,
+          (intimacao.idempresa === null || intimacao.idempresa === empresaId)
+          && (intimacao.idusuario === null || intimacao.idusuario === req.auth.userId),
       );
 
     res.json(intimacoes);
