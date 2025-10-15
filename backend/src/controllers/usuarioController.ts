@@ -216,8 +216,10 @@ export const getUsuarioById = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     const result = await pool.query(
-      `${baseUsuarioSelect} WHERE u.id = $1 AND u.empresa IS NOT DISTINCT FROM $2::INT`,
-      [id, empresaId]
+      empresaId === null
+        ? `${baseUsuarioSelect} WHERE u.id = $1`
+        : `${baseUsuarioSelect} WHERE u.id = $1 AND u.empresa IS NOT DISTINCT FROM $2::INT`,
+      empresaId === null ? [id] : [id, empresaId]
     );
 
     if (result.rowCount === 0) {
