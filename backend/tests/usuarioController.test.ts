@@ -13,6 +13,8 @@ let listUsuarios: typeof import('../src/controllers/usuarioController')['listUsu
 let listUsuariosByEmpresa: typeof import('../src/controllers/usuarioController')['listUsuariosByEmpresa'];
 let getUsuarioById: typeof import('../src/controllers/usuarioController')['getUsuarioById'];
 let createUsuario: typeof import('../src/controllers/usuarioController')['createUsuario'];
+let updateUsuario: typeof import('../src/controllers/usuarioController')['updateUsuario'];
+let deleteUsuario: typeof import('../src/controllers/usuarioController')['deleteUsuario'];
 let setWelcomeEmailServiceForTests: typeof import('../src/controllers/usuarioController')['__setWelcomeEmailServiceForTests'];
 let resetWelcomeEmailServiceForTests: typeof import('../src/controllers/usuarioController')['__resetWelcomeEmailServiceForTests'];
 
@@ -22,6 +24,8 @@ test.before(async () => {
     listUsuariosByEmpresa,
     getUsuarioById,
     createUsuario,
+    updateUsuario,
+    deleteUsuario,
     __setWelcomeEmailServiceForTests: setWelcomeEmailServiceForTests,
     __resetWelcomeEmailServiceForTests: resetWelcomeEmailServiceForTests,
   } = await import('../src/controllers/usuarioController'));
@@ -36,6 +40,10 @@ const createMockResponse = () => {
       return this as Response;
     },
     json(payload: unknown) {
+      this.body = payload;
+      return this as Response;
+    },
+    send(payload?: unknown) {
       this.body = payload;
       return this as Response;
     },
@@ -82,7 +90,7 @@ const createAuth = (userId: number) => ({
   },
 });
 
-test('listUsuarios returns all users', async () => {
+test('listUsuarios retorna usuários da empresa do autenticado', async () => {
   const userRows = [
     {
       id: 1,
@@ -90,9 +98,11 @@ test('listUsuarios returns all users', async () => {
       cpf: '12345678901',
       email: 'maria@example.com',
       perfil: 'admin',
-      empresa: 42,
+      empresa: 55,
       setor: 7,
       oab: '12345',
+      oab_number: null,
+      oab_uf: null,
       status: true,
       senha: '$hashed',
       telefone: '(11) 99999-0000',
@@ -103,6 +113,7 @@ test('listUsuarios returns all users', async () => {
   ];
 
   const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 55 }], rowCount: 1 },
     { rows: userRows, rowCount: userRows.length },
   ]);
 
@@ -119,10 +130,36 @@ test('listUsuarios returns all users', async () => {
   }
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, userRows);
+  const expectedRows = userRows.map(({ cpf: _cpf, senha: _senha, ...rest }) => rest);
+  assert.deepEqual(res.body, expectedRows);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
+  assert.match(calls[1]?.text ?? '', /WHERE u\.empresa = \$1/);
+  assert.deepEqual(calls[1]?.values, [55]);
+});
+
+test('listUsuarios retorna 403 quando usuário não possui empresa', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+  ]);
+
+  const req = {
+    auth: createAuth(10),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await listUsuarios(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário autenticado não possui empresa vinculada.',
+  });
   assert.equal(calls.length, 1);
-  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios u/);
-  assert.equal(calls[0]?.values, undefined);
 });
 
 test('listUsuariosByEmpresa returns users filtered by authenticated company', async () => {
@@ -136,6 +173,8 @@ test('listUsuariosByEmpresa returns users filtered by authenticated company', as
       empresa: 55,
       setor: 9,
       oab: '54321',
+      oab_number: null,
+      oab_uf: null,
       status: true,
       senha: '$hashed',
       telefone: '(21) 98888-1111',
@@ -163,11 +202,36 @@ test('listUsuariosByEmpresa returns users filtered by authenticated company', as
   }
 
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, userRows);
+  const expectedRows = userRows.map(({ cpf: _cpf, senha: _senha, ...rest }) => rest);
+  assert.deepEqual(res.body, expectedRows);
   assert.equal(calls.length, 2);
   assert.match(calls[0]?.text ?? '', /SELECT empresa FROM public\.usuarios/);
   assert.match(calls[1]?.text ?? '', /WHERE u\.empresa = \$1/);
   assert.deepEqual(calls[1]?.values, [55]);
+});
+
+test('listUsuariosByEmpresa retorna 403 quando usuário não possui empresa', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+  ]);
+
+  const req = {
+    auth: createAuth(20),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await listUsuariosByEmpresa(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário autenticado não possui empresa vinculada.',
+  });
+  assert.equal(calls.length, 1);
 });
 
 test('getUsuarioById returns user when it belongs to the same company', async () => {
@@ -496,6 +560,159 @@ test('createUsuario cleans up created user when welcome email fails', async () =
   assert.match(calls[8]?.text ?? '', /DELETE FROM public\.usuarios/);
   assert.deepEqual(calls[8]?.values, [321]);
   assert.match(calls[4]?.text ?? '', /BEGIN/);
+});
+
+test('updateUsuario blocks updates to collaborators from another company', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
+  ]);
+
+  const req = {
+    params: { id: '200' },
+    body: {
+      nome_completo: 'Colaborador',
+      cpf: '12345678901',
+      email: 'colaborador@example.com',
+      perfil: null,
+      empresa: 8,
+      setor: null,
+      oab: null,
+      status: true,
+      senha: 'argon2:hash',
+      telefone: null,
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(900),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await updateUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário não possui permissão para atualizar este colaborador.',
+  });
+  assert.equal(calls.length, 2);
+});
+
+test('updateUsuario allows global administrators to update collaborators from other companies', async () => {
+  const updatedRow = {
+    id: 200,
+    nome_completo: 'Colaborador Atualizado',
+    cpf: '12345678901',
+    email: 'colaborador@example.com',
+    perfil: null,
+    empresa: 8,
+    setor: null,
+    oab: null,
+    status: true,
+    telefone: null,
+    ultimo_login: null,
+    observacoes: null,
+    datacriacao: '2024-01-01T00:00:00.000Z',
+  };
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    { rows: [updatedRow], rowCount: 1 },
+  ]);
+
+  const req = {
+    params: { id: '200' },
+    body: {
+      nome_completo: 'Colaborador Atualizado',
+      cpf: '12345678901',
+      email: 'colaborador@example.com',
+      perfil: null,
+      empresa: 8,
+      setor: null,
+      oab: null,
+      status: true,
+      senha: 'argon2:hash',
+      telefone: null,
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(901),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await updateUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 200);
+  const { cpf: _cpf, ...expectedResponse } = updatedRow;
+  (expectedResponse as Record<string, unknown>).oab_number = undefined;
+  (expectedResponse as Record<string, unknown>).oab_uf = undefined;
+  assert.deepEqual(res.body, expectedResponse);
+  assert.equal(calls.length, 4);
+  assert.match(calls[2]?.text ?? '', /SELECT 1 FROM public\.empresas/);
+  assert.match(calls[3]?.text ?? '', /UPDATE public\.usuarios/);
+});
+
+test('deleteUsuario blocks deletions of collaborators from another company', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
+  ]);
+
+  const req = {
+    params: { id: '300' },
+    auth: createAuth(902),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await deleteUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário não possui permissão para remover este colaborador.',
+  });
+  assert.equal(calls.length, 2);
+});
+
+test('deleteUsuario allows global administrators to remove collaborators from other companies', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const req = {
+    params: { id: '300' },
+    auth: createAuth(903),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await deleteUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 204);
+  assert.equal(res.body, undefined);
+  assert.equal(calls.length, 3);
+  assert.match(calls[2]?.text ?? '', /DELETE FROM public\.usuarios/);
 });
 
 

@@ -159,11 +159,15 @@ export const listUsuarios = async (req: Request, res: Response) => {
 
     const { empresaId } = empresaLookup;
 
-    const query =
-      empresaId === null ? baseUsuarioSelect : `${baseUsuarioSelect} WHERE u.empresa = $1`;
-    const values = empresaId === null ? [] : [empresaId];
+    if (empresaId === null) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    }
 
-    const result = await pool.query(query, values);
+    const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
+      empresaId,
+    ]);
     res.json(result.rows.map((row) => mapUsuarioRowToResponse(row as UsuarioRow)));
   } catch (error) {
     console.error(error);
@@ -185,9 +189,10 @@ export const listUsuariosByEmpresa = async (req: Request, res: Response) => {
 
     const { empresaId } = empresaLookup;
 
-
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(`${baseUsuarioSelect} WHERE u.empresa = $1`, [
@@ -270,19 +275,17 @@ export const createUsuario = async (req: Request, res: Response) => {
 
     const empresaAtualResult = empresaLookup.empresaId;
 
-    if (empresaIdResult !== null && empresaAtualResult !== null && empresaIdResult !== empresaAtualResult) {
-      return res
-        .status(403)
-        .json({ error: 'Usuários só podem criar usuários vinculados à sua própria empresa.' });
-    }
+    let empresaId = empresaAtualResult;
 
-    if (empresaIdResult !== null && empresaAtualResult === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
-    }
+    if (empresaIdResult !== null) {
+      if (empresaAtualResult !== null && empresaIdResult !== empresaAtualResult) {
+        return res
+          .status(403)
+          .json({ error: 'Usuários só podem criar usuários vinculados à sua própria empresa.' });
+      }
 
-    const empresaId = empresaAtualResult;
+      empresaId = empresaIdResult;
+    }
 
     if (empresaId !== null) {
       const empresaExists = await pool.query(
@@ -440,6 +443,37 @@ export const updateUsuario = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const targetLookup = await pool.query(
+      'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+      [id]
+    );
+
+    if (targetLookup.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const targetEmpresaResult = parseOptionalInteger(
+      (targetLookup.rows[0] as { empresa: unknown }).empresa
+    );
+
+    if (targetEmpresaResult === 'invalid') {
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível validar a empresa associada ao usuário informado.' });
+    }
+
+    const requesterEmpresaId = empresaLookup.empresaId;
+
     const parsedStatus = parseStatus(status);
     if (parsedStatus === 'invalid') {
       return res.status(400).json({ error: 'Status inválido' });
@@ -450,6 +484,26 @@ export const updateUsuario = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'ID de empresa inválido' });
     }
     const empresaId = empresaIdResult;
+
+    if (
+      requesterEmpresaId !== null &&
+      targetEmpresaResult !== null &&
+      requesterEmpresaId !== targetEmpresaResult
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário não possui permissão para atualizar este colaborador.' });
+    }
+
+    if (
+      requesterEmpresaId !== null &&
+      empresaId !== null &&
+      requesterEmpresaId !== empresaId
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário não possui permissão para atualizar este colaborador.' });
+    }
 
     if (empresaId !== null) {
       const empresaExists = await pool.query(
@@ -521,6 +575,47 @@ export const updateUsuario = async (req: Request, res: Response) => {
 export const deleteUsuario = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const targetLookup = await pool.query(
+      'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+      [id]
+    );
+
+    if (targetLookup.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const targetEmpresaResult = parseOptionalInteger(
+      (targetLookup.rows[0] as { empresa: unknown }).empresa
+    );
+
+    if (targetEmpresaResult === 'invalid') {
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível validar a empresa associada ao usuário informado.' });
+    }
+
+    const requesterEmpresaId = empresaLookup.empresaId;
+
+    if (
+      requesterEmpresaId !== null &&
+      targetEmpresaResult !== null &&
+      requesterEmpresaId !== targetEmpresaResult
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário não possui permissão para remover este colaborador.' });
+    }
+
     const result = await pool.query(
       'DELETE FROM public.usuarios WHERE id = $1',
       [id]
