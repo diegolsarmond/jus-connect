@@ -461,6 +461,8 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok(insertCall);
   assert.equal(typeof insertCall.values?.[8], 'string');
   assert.ok(String(insertCall.values?.[8]).startsWith('argon2:'));
+  assert.equal(insertCall.values?.[1], '00000000000');
+  assert.equal(insertCall.values?.[9], '11900000000');
 
   assert.equal(capturedCalls.length, 1);
   const [welcomeArgs] = capturedCalls;
@@ -470,6 +472,108 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok((welcomeArgs?.temporaryPassword ?? '').length > 0);
   assert.equal(typeof welcomeArgs?.confirmationLink, 'string');
   assert.ok((welcomeArgs?.confirmationLink ?? '').includes('token='));
+});
+
+test('createUsuario rejeita CPF inválido', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Novo Usuário',
+      cpf: '1234567890',
+      email: 'novo@example.com',
+      perfil: 'admin',
+      empresa: 5,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 90000-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(51),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'CPF deve conter 11 dígitos.' });
+  assert.equal(calls.length, 3);
+  assert.ok(
+    calls.every((call) => !/INSERT INTO public\.usuarios/i.test(call.text ?? '')),
+  );
+});
+
+test('createUsuario rejeita telefone inválido', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: null,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Novo Usuário',
+      cpf: '12345678901',
+      email: 'novo@example.com',
+      perfil: 'admin',
+      empresa: 5,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '119999999',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(52),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'Telefone deve conter 10 ou 11 dígitos.' });
+  assert.equal(calls.length, 3);
+  assert.ok(
+    calls.every((call) => !/INSERT INTO public\.usuarios/i.test(call.text ?? '')),
+  );
 });
 
 test('createUsuario cleans up created user when welcome email fails', async () => {
