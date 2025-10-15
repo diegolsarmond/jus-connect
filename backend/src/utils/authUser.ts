@@ -1,6 +1,6 @@
 import pool from '../services/db';
 
-type ParsedInteger = number | null | 'invalid';
+export type ParsedInteger = number | null | 'invalid';
 
 export type EmpresaLookupResult =
   | { success: true; empresaId: number | null }
@@ -10,7 +10,7 @@ export type ConversationVisibilityLookup =
   | { success: true; viewAllConversations: boolean }
   | { success: false; status: number; message: string };
 
-const parseBooleanColumn = (value: unknown): boolean | null => {
+export const parseBooleanColumn = (value: unknown): boolean | null => {
   if (typeof value === 'boolean') {
     return value;
   }
@@ -61,7 +61,7 @@ const parseBooleanColumn = (value: unknown): boolean | null => {
   return null;
 };
 
-const parseOptionalInteger = (value: unknown): ParsedInteger => {
+export const parseOptionalInteger = (value: unknown): ParsedInteger => {
   if (value === undefined || value === null) {
     return null;
   }
