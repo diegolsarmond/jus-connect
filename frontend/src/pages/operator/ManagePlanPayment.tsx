@@ -980,7 +980,6 @@ const ManagePlanPayment = () => {
       });
 
       await refreshUser();
-      navigate(routes.meuPlano, { replace: true });
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Não foi possível criar a cobrança no Asaas.";
@@ -1003,7 +1002,6 @@ const ManagePlanPayment = () => {
     paymentMethod,
     pricingMode,
     selectedPlan,
-    navigate,
     refreshUser,
     toast,
   ]);
