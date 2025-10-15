@@ -7,8 +7,13 @@ Estrutura inicial do backend usando Express e TypeScript.
   - `controllers/`
   - `routes/`
   - `models/`
-  - `services/`
+- `services/`
   - `index.ts`
+
+## Padrão para acesso a dados
+
+- Centralize consultas SQL reutilizáveis em arquivos de repositório dentro de `src/services`, como `clienteRepository.ts` e `fornecedorRepository.ts`.
+- Controllers devem importar essas funções em vez de executar `pool.query` diretamente, garantindo padronização de parâmetros e facilitando futuras otimizações ou trocas de banco.
 
 ## Como iniciar
 

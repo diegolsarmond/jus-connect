@@ -1,9 +1,14 @@
 import { Request, Response } from 'express';
-import pool from '../services/db';
 import {
   countCompanyResource,
   fetchPlanLimitsForCompany,
 } from '../services/planLimitsService';
+import {
+  countClientesAtivosByEmpresaId,
+  findClienteById,
+  listClientesByEmpresaId,
+} from '../services/clienteRepository';
+import pool from '../services/db';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasCustomerService, {
   AsaasCustomerState,
@@ -60,11 +65,8 @@ export const listClientes = async (req: Request, res: Response) => {
       return res.json([]);
     }
 
-    const result = await pool.query(
-      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro FROM public.clientes WHERE idempresa = $1',
-      [empresaId]
-    );
-    return res.json(result.rows);
+    const clientes = await listClientesByEmpresaId(empresaId);
+    return res.json(clientes);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -84,14 +86,11 @@ export const getClienteById = async (req: Request, res: Response) => {
       return res.status(empresaLookup.status).json({ error: empresaLookup.message });
     }
 
-    const result = await pool.query(
-      'SELECT id, nome, tipo, documento, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, ativo, idempresa, datacadastro FROM public.clientes WHERE id = $1 AND idempresa IS NOT DISTINCT FROM $2',
-      [id, empresaLookup.empresaId]
-    );
-    if (result.rowCount === 0) {
+    const cliente = await findClienteById(id, empresaLookup.empresaId);
+    if (!cliente) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
-    res.json(result.rows[0]);
+    res.json(cliente);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
@@ -116,12 +115,9 @@ export const countClientesAtivos = async (req: Request, res: Response) => {
       return res.json({ total_clientes_ativos: 0 });
     }
 
-    const result = await pool.query(
-      'SELECT COUNT(*) AS total_clientes_ativos FROM public.clientes WHERE ativo = TRUE AND idempresa = $1',
-      [empresaId]
-    );
+    const totalClientesAtivos = await countClientesAtivosByEmpresaId(empresaId);
     res.json({
-      total_clientes_ativos: parseInt(result.rows[0].total_clientes_ativos, 10),
+      total_clientes_ativos: totalClientesAtivos,
     });
   } catch (error) {
     console.error(error);
