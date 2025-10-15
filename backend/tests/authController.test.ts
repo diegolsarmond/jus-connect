@@ -11,12 +11,25 @@ let register: typeof import('../src/controllers/authController')['register'];
 let login: typeof import('../src/controllers/authController')['login'];
 let changePassword: typeof import('../src/controllers/authController')['changePassword'];
 let confirmEmail: typeof import('../src/controllers/authController')['confirmEmail'];
+let setSendEmailConfirmationTokenForTests: typeof import('../src/controllers/authController')['__setSendEmailConfirmationTokenForTests'];
+let resetSendEmailConfirmationTokenForTests: typeof import('../src/controllers/authController')['__resetSendEmailConfirmationTokenForTests'];
+let setConfirmEmailWithTokenForTests: typeof import('../src/controllers/authController')['__setConfirmEmailWithTokenForTests'];
+let resetConfirmEmailWithTokenForTests: typeof import('../src/controllers/authController')['__resetConfirmEmailWithTokenForTests'];
 let emailConfirmationService: typeof import('../src/services/emailConfirmationService');
 
 const planModules = ['configuracoes', 'clientes', 'dashboard'];
 
 test.before(async () => {
-  ({ register, login, changePassword, confirmEmail } = await import('../src/controllers/authController'));
+  ({
+    register,
+    login,
+    changePassword,
+    confirmEmail,
+    __setSendEmailConfirmationTokenForTests: setSendEmailConfirmationTokenForTests,
+    __resetSendEmailConfirmationTokenForTests: resetSendEmailConfirmationTokenForTests,
+    __setConfirmEmailWithTokenForTests: setConfirmEmailWithTokenForTests,
+    __resetConfirmEmailWithTokenForTests: resetConfirmEmailWithTokenForTests,
+  } = await import('../src/controllers/authController'));
   emailConfirmationService = await import('../src/services/emailConfirmationService');
 });
 
@@ -174,6 +187,7 @@ test('register creates company, profile and user atomically', async () => {
 const duplicateCheckResponses: QueryResponse[] = [
   { rows: [], rowCount: 0 },
   { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+  { rows: [], rowCount: 1 },
 ];
   const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock(
     duplicateCheckResponses
@@ -197,11 +211,27 @@ const duplicateCheckResponses: QueryResponse[] = [
           empresa: 42,
           status: true,
           telefone: '(11) 99999-0000',
+          welcome_email_pending: true,
           datacriacao: '2024-01-02T00:00:00.000Z',
         },
       ],
       rowCount: 1,
     },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 201 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 202 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 203 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ];
 
@@ -209,11 +239,13 @@ const duplicateCheckResponses: QueryResponse[] = [
     clientResponses
   );
 
-  const sendEmailMock = test.mock.method(
-    emailConfirmationService,
-    'sendEmailConfirmationToken',
-    async () => {}
-  );
+  const sendEmailCalls: Parameters<
+    typeof emailConfirmationService.sendEmailConfirmationToken
+  >[0][] = [];
+
+  setSendEmailConfirmationTokenForTests(async (target) => {
+    sendEmailCalls.push(target);
+  });
 
   const req = {
     body: {
@@ -233,7 +265,7 @@ const duplicateCheckResponses: QueryResponse[] = [
   } finally {
     restoreConnect();
     restorePoolQuery();
-    sendEmailMock.mock.restore();
+    resetSendEmailConfirmationTokenForTests();
   }
 
   assert.equal(res.statusCode, 201);
@@ -247,7 +279,7 @@ const duplicateCheckResponses: QueryResponse[] = [
   };
 
   assert.equal(responseBody.requiresEmailConfirmation, true);
-  assert.match(responseBody.message, /Verifique seu e-mail/i);
+  assert.match(responseBody.message, /confirme o e-mail/i);
   assert.equal(responseBody.user.id, 123);
   assert.equal(responseBody.user.perfil, 99);
   assert.equal(responseBody.user.empresa, 42);
@@ -289,13 +321,15 @@ const duplicateCheckResponses: QueryResponse[] = [
   );
   assert.deepEqual(perfilModuloCall?.values?.[1], ['dashboard', 'clientes', 'configuracoes']);
 
-  assert.equal(poolCalls.length, 2);
+  assert.equal(poolCalls.length, 3);
   assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
   assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
   assert.deepEqual(poolCalls[1]?.values, [7]);
+  assert.match(poolCalls[2]?.text ?? '', /UPDATE public\.usuarios SET welcome_email_pending = FALSE/);
+  assert.deepEqual(poolCalls[2]?.values, [123]);
   assert.equal(wasReleased(), true);
-  assert.equal(sendEmailMock.mock.callCount(), 1);
-  const [confirmationArg] = sendEmailMock.mock.calls[0]?.arguments ?? [];
+  assert.equal(sendEmailCalls.length, 1);
+  const [confirmationArg] = sendEmailCalls;
   assert.deepEqual(confirmationArg, {
     id: 123,
     nome_completo: 'Alice Doe',
@@ -306,6 +340,7 @@ const duplicateCheckResponses: QueryResponse[] = [
 test('register utiliza módulos padrão quando tabela de planos está ausente', async () => {
   const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock([
     { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
   ]);
 
   const missingPlanosError = Object.assign(
@@ -342,6 +377,7 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
           empresa: 777,
           status: true,
           telefone: null,
+          welcome_email_pending: true,
           datacriacao: '2024-01-02T00:00:00.000Z',
         },
       ],
@@ -349,15 +385,33 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
     },
     { rows: [], rowCount: 1 },
 
+    { rows: [{ id: 301 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 302 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 303 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+
   ];
 
   const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
 
-  const sendEmailMock = test.mock.method(
-    emailConfirmationService,
-    'sendEmailConfirmationToken',
-    async () => {}
-  );
+  const sendEmailCalls: Parameters<
+    typeof emailConfirmationService.sendEmailConfirmationToken
+  >[0][] = [];
+
+  setSendEmailConfirmationTokenForTests(async (target) => {
+    sendEmailCalls.push(target);
+  });
 
   const req = {
     body: {
@@ -376,6 +430,7 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
   } finally {
     restoreConnect();
     restorePoolQuery();
+    resetSendEmailConfirmationTokenForTests();
   }
 
   assert.equal(res.statusCode, 201);
@@ -403,14 +458,18 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
   assert.deepEqual(updateResponsavelCall?.values, [1234, 777]);
 
 
-  assert.equal(poolCalls.length, 1);
+  assert.equal(poolCalls.length, 2);
   assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
+  assert.match(poolCalls[1]?.text ?? '', /UPDATE public\.usuarios SET welcome_email_pending = FALSE/);
+  assert.deepEqual(poolCalls[1]?.values, [1234]);
+  assert.equal(sendEmailCalls.length, 1);
 });
 
 test('register tolerates trailing spaces when matching existing company and profile', async () => {
-  const { restore: restorePoolQuery } = setupPoolQueryMock([
+  const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock([
     { rows: [], rowCount: 0 },
     { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
   ]);
 
   const clientResponses: QueryResponse[] = [
@@ -430,6 +489,7 @@ test('register tolerates trailing spaces when matching existing company and prof
           empresa: 42,
           status: true,
           telefone: null,
+          welcome_email_pending: true,
           datacriacao: '2024-01-02T00:00:00.000Z',
         },
       ],
@@ -438,6 +498,14 @@ test('register tolerates trailing spaces when matching existing company and prof
   ];
 
   const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
+
+  const sendEmailCalls: Parameters<
+    typeof emailConfirmationService.sendEmailConfirmationToken
+  >[0][] = [];
+
+  setSendEmailConfirmationTokenForTests(async (target) => {
+    sendEmailCalls.push(target);
+  });
 
   const req = {
     body: {
@@ -456,7 +524,7 @@ test('register tolerates trailing spaces when matching existing company and prof
   } finally {
     restoreConnect();
     restorePoolQuery();
-    sendEmailMock.mock.restore();
+    resetSendEmailConfirmationTokenForTests();
   }
 
   assert.equal(res.statusCode, 201);
@@ -469,7 +537,7 @@ test('register tolerates trailing spaces when matching existing company and prof
   };
 
   assert.equal(responseBody.requiresEmailConfirmation, true);
-  assert.match(responseBody.message, /Verifique seu e-mail/i);
+  assert.match(responseBody.message, /confirme o e-mail/i);
   assert.equal(responseBody.empresa.nome, 'Acme Corp');
   assert.equal(responseBody.perfil.nome, 'Administrador');
 
@@ -486,7 +554,10 @@ test('register tolerates trailing spaces when matching existing company and prof
 
   const perfilInsertCall = clientCalls.find((call) => call.text.includes('INSERT INTO public.perfis'));
   assert.equal(perfilInsertCall, undefined);
-  assert.equal(sendEmailMock.mock.callCount(), 1);
+  assert.equal(sendEmailCalls.length, 1);
+  assert.equal(poolCalls.length, 3);
+  assert.match(poolCalls[2]?.text ?? '', /UPDATE public\.usuarios SET welcome_email_pending = FALSE/);
+  assert.deepEqual(poolCalls[2]?.values, [555]);
 });
 
 test('register returns 409 when email already exists', async () => {
@@ -966,14 +1037,10 @@ test('login migrates plain text passwords to argon2 format', async () => {
 });
 
 test('confirmEmail returns success when token is valid', async () => {
-  const confirmMock = test.mock.method(
-    emailConfirmationService,
-    'confirmEmailWithToken',
-    async () => ({
-      userId: 99,
-      confirmedAt: new Date('2024-01-02T10:00:00.000Z'),
-    })
-  );
+  setConfirmEmailWithTokenForTests(async () => ({
+    userId: 99,
+    confirmedAt: new Date('2024-01-02T10:00:00.000Z'),
+  }));
 
   const req = { body: { token: 'abc123' } } as unknown as Request;
   const res = createMockResponse();
@@ -981,7 +1048,7 @@ test('confirmEmail returns success when token is valid', async () => {
   try {
     await confirmEmail(req, res);
   } finally {
-    confirmMock.mock.restore();
+    resetConfirmEmailWithTokenForTests();
   }
 
   assert.equal(res.statusCode, 200);
@@ -992,16 +1059,12 @@ test('confirmEmail returns success when token is valid', async () => {
 });
 
 test('confirmEmail handles expired tokens', async () => {
-  const confirmMock = test.mock.method(
-    emailConfirmationService,
-    'confirmEmailWithToken',
-    async () => {
-      throw new emailConfirmationService.EmailConfirmationTokenError(
-        'Token expirado',
-        'TOKEN_EXPIRED'
-      );
-    }
-  );
+  setConfirmEmailWithTokenForTests(async () => {
+    throw new emailConfirmationService.EmailConfirmationTokenError(
+      'Token expirado',
+      'TOKEN_EXPIRED'
+    );
+  });
 
   const req = { body: { token: 'expired-token' } } as unknown as Request;
   const res = createMockResponse();
@@ -1009,7 +1072,7 @@ test('confirmEmail handles expired tokens', async () => {
   try {
     await confirmEmail(req, res);
   } finally {
-    confirmMock.mock.restore();
+    resetConfirmEmailWithTokenForTests();
   }
 
   assert.equal(res.statusCode, 400);

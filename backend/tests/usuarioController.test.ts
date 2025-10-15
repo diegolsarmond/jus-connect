@@ -108,6 +108,7 @@ test('listUsuarios retorna usuários da empresa do autenticado', async () => {
       telefone: '(11) 99999-0000',
       ultimo_login: '2024-01-01T12:00:00.000Z',
       observacoes: null,
+      welcome_email_pending: false,
       datacriacao: '2023-01-01T12:00:00.000Z',
     },
   ];
@@ -180,6 +181,7 @@ test('listUsuariosByEmpresa returns users filtered by authenticated company', as
       telefone: '(21) 98888-1111',
       ultimo_login: '2024-02-02T15:00:00.000Z',
       observacoes: null,
+      welcome_email_pending: false,
       datacriacao: '2023-02-02T15:00:00.000Z',
     },
   ];
@@ -249,6 +251,7 @@ test('getUsuarioById returns user when it belongs to the same company', async ()
     telefone: '(11) 99999-0000',
     ultimo_login: '2024-01-01T12:00:00.000Z',
     observacoes: null,
+    welcome_email_pending: false,
     datacriacao: '2023-01-01T12:00:00.000Z',
   };
 
@@ -303,6 +306,7 @@ test('getUsuarioById allows global administrators to access any user', async () 
     telefone: '(11) 98888-7777',
     ultimo_login: '2024-04-01T12:00:00.000Z',
     observacoes: null,
+    welcome_email_pending: false,
     datacriacao: '2023-04-01T12:00:00.000Z',
   };
 
@@ -392,6 +396,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
     telefone: '(11) 90000-0000',
     ultimo_login: null,
     observacoes: null,
+    welcome_email_pending: true,
     datacriacao: '2024-03-01T12:00:00.000Z',
   };
 
@@ -412,6 +417,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
     },
     { rows: [createdRow], rowCount: 1 },
     { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ]);
 
@@ -449,8 +455,9 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   if (!('oab_uf' in expectedCreatedResponse)) {
     (expectedCreatedResponse as Record<string, unknown>).oab_uf = undefined;
   }
+  (expectedCreatedResponse as Record<string, unknown>).welcome_email_pending = false;
   assert.deepEqual(res.body, expectedCreatedResponse);
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 9);
 
   const planLimitsCall = calls.find((call) =>
     /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
@@ -461,6 +468,12 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok(insertCall);
   assert.equal(typeof insertCall.values?.[8], 'string');
   assert.ok(String(insertCall.values?.[8]).startsWith('argon2:'));
+
+  const welcomeResetCall = calls.find((call) =>
+    /UPDATE public\.usuarios SET welcome_email_pending = FALSE/.test(call.text ?? ''),
+  );
+  assert.ok(welcomeResetCall);
+  assert.deepEqual(welcomeResetCall?.values, [101]);
 
   assert.equal(capturedCalls.length, 1);
   const [welcomeArgs] = capturedCalls;
@@ -496,6 +509,7 @@ test('createUsuario cleans up created user when welcome email fails', async () =
     telefone: '(11) 95555-0000',
     ultimo_login: null,
     observacoes: null,
+    welcome_email_pending: true,
     datacriacao: '2024-03-01T12:00:00.000Z',
   };
 
@@ -516,6 +530,7 @@ test('createUsuario cleans up created user when welcome email fails', async () =
     },
     { rows: [createdRow], rowCount: 1 },
     { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ]);
@@ -557,8 +572,11 @@ test('createUsuario cleans up created user when welcome email fails', async () =
     /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
   );
   assert.ok(planLimitsCall);
-  assert.match(calls[8]?.text ?? '', /DELETE FROM public\.usuarios/);
-  assert.deepEqual(calls[8]?.values, [321]);
+  const welcomePendingCall = calls.find((call) =>
+    /UPDATE public\.usuarios SET welcome_email_pending = TRUE/.test(call.text ?? ''),
+  );
+  assert.ok(welcomePendingCall);
+  assert.deepEqual(welcomePendingCall?.values, [321]);
   assert.match(calls[4]?.text ?? '', /BEGIN/);
 });
 
@@ -616,6 +634,7 @@ test('updateUsuario allows global administrators to update collaborators from ot
     telefone: null,
     ultimo_login: null,
     observacoes: null,
+    welcome_email_pending: false,
     datacriacao: '2024-01-01T00:00:00.000Z',
   };
 

@@ -24,6 +24,30 @@ const TRIAL_DURATION_DAYS = 14;
 const GRACE_PERIOD_DAYS = 10;
 
 
+let emailConfirmationSender = sendEmailConfirmationToken;
+let confirmEmailTokenResolver = confirmEmailWithToken;
+
+export const __setSendEmailConfirmationTokenForTests = (
+  sender: typeof sendEmailConfirmationToken
+) => {
+  emailConfirmationSender = sender;
+};
+
+export const __resetSendEmailConfirmationTokenForTests = () => {
+  emailConfirmationSender = sendEmailConfirmationToken;
+};
+
+export const __setConfirmEmailWithTokenForTests = (
+  resolver: typeof confirmEmailWithToken
+) => {
+  confirmEmailTokenResolver = resolver;
+};
+
+export const __resetConfirmEmailWithTokenForTests = () => {
+  confirmEmailTokenResolver = confirmEmailWithToken;
+};
+
+
 const parseOptionalInteger = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     const normalized = Math.trunc(value);
@@ -797,9 +821,9 @@ export const register = async (req: Request, res: Response) => {
       const hashedPassword = await hashPassword(passwordValue);
 
       const userInsert = await client.query(
-        `INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, datacriacao)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-      RETURNING id, nome_completo, email, perfil, empresa, status, telefone, datacriacao`,
+        `INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, telefone, ultimo_login, observacoes, welcome_email_pending, datacriacao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE, NOW())
+      RETURNING id, nome_completo, email, perfil, empresa, status, telefone, welcome_email_pending, datacriacao`,
         [
           nameValue,
           null,
@@ -824,6 +848,7 @@ export const register = async (req: Request, res: Response) => {
         empresa?: unknown;
         status?: unknown;
         telefone?: unknown;
+        welcome_email_pending?: unknown;
         datacriacao?: unknown;
       };
 
@@ -886,6 +911,7 @@ export const register = async (req: Request, res: Response) => {
           empresa: createdUser?.empresa,
           status: createdUser?.status,
           telefone: createdUser?.telefone,
+          welcome_email_pending: createdUser?.welcome_email_pending,
           datacriacao: createdUser?.datacriacao,
         },
         empresa: {
@@ -925,9 +951,27 @@ export const register = async (req: Request, res: Response) => {
   }
 
   try {
-    await sendEmailConfirmationToken(confirmationTarget);
+    await emailConfirmationSender(confirmationTarget);
+    try {
+      await pool.query('UPDATE public.usuarios SET welcome_email_pending = FALSE WHERE id = $1', [
+        confirmationTarget.id,
+      ]);
+      if (registrationResponse?.user) {
+        (registrationResponse.user as { welcome_email_pending?: boolean }).welcome_email_pending = false;
+      }
+    } catch (cleanupError) {
+      console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
+    }
   } catch (error) {
     console.error('Falha ao enviar e-mail de confirmação de cadastro', error);
+
+    try {
+      await pool.query('UPDATE public.usuarios SET welcome_email_pending = TRUE WHERE id = $1', [
+        confirmationTarget.id,
+      ]);
+    } catch (cleanupError) {
+      console.error('Falha ao remover usuário após erro no envio de e-mail', cleanupError);
+    }
 
     if (!res.headersSent) {
       res
@@ -953,25 +997,31 @@ export const confirmEmail = async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await confirmEmailWithToken(tokenValue);
+    const result = await confirmEmailTokenResolver(tokenValue);
 
     res.json({
       message: 'E-mail confirmado com sucesso.',
       confirmedAt: result.confirmedAt.toISOString(),
     });
   } catch (error) {
-    if (error instanceof EmailConfirmationTokenError) {
-      if (error.code === 'TOKEN_INVALID') {
+    const tokenError =
+      error instanceof EmailConfirmationTokenError ||
+      (typeof error === 'object' && error !== null && (error as { name?: string }).name === 'EmailConfirmationTokenError')
+        ? (error as EmailConfirmationTokenError & { code?: string })
+        : null;
+
+    if (tokenError) {
+      if (tokenError.code === 'TOKEN_INVALID') {
         res.status(400).json({ error: 'Token de confirmação inválido.' });
         return;
       }
 
-      if (error.code === 'TOKEN_EXPIRED') {
+      if (tokenError.code === 'TOKEN_EXPIRED') {
         res.status(400).json({ error: 'Token de confirmação expirado. Solicite um novo link.' });
         return;
       }
 
-      if (error.code === 'TOKEN_ALREADY_USED') {
+      if (tokenError.code === 'TOKEN_ALREADY_USED') {
         res.status(409).json({ error: 'Token de confirmação já utilizado.' });
         return;
       }
