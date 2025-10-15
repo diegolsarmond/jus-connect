@@ -441,6 +441,37 @@ export const updateUsuario = async (req: Request, res: Response) => {
   } = req.body;
 
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const targetLookup = await pool.query(
+      'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+      [id]
+    );
+
+    if (targetLookup.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const targetEmpresaResult = parseOptionalInteger(
+      (targetLookup.rows[0] as { empresa: unknown }).empresa
+    );
+
+    if (targetEmpresaResult === 'invalid') {
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível validar a empresa associada ao usuário informado.' });
+    }
+
+    const requesterEmpresaId = empresaLookup.empresaId;
+
     const parsedStatus = parseStatus(status);
     if (parsedStatus === 'invalid') {
       return res.status(400).json({ error: 'Status inválido' });
@@ -451,6 +482,26 @@ export const updateUsuario = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'ID de empresa inválido' });
     }
     const empresaId = empresaIdResult;
+
+    if (
+      requesterEmpresaId !== null &&
+      targetEmpresaResult !== null &&
+      requesterEmpresaId !== targetEmpresaResult
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário não possui permissão para atualizar este colaborador.' });
+    }
+
+    if (
+      requesterEmpresaId !== null &&
+      empresaId !== null &&
+      requesterEmpresaId !== empresaId
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário não possui permissão para atualizar este colaborador.' });
+    }
 
     if (empresaId !== null) {
       const empresaExists = await pool.query(
@@ -522,6 +573,47 @@ export const updateUsuario = async (req: Request, res: Response) => {
 export const deleteUsuario = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
+    if (!req.auth) {
+      return res.status(401).json({ error: 'Token inválido.' });
+    }
+
+    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
+
+    if (!empresaLookup.success) {
+      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
+    }
+
+    const targetLookup = await pool.query(
+      'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
+      [id]
+    );
+
+    if (targetLookup.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const targetEmpresaResult = parseOptionalInteger(
+      (targetLookup.rows[0] as { empresa: unknown }).empresa
+    );
+
+    if (targetEmpresaResult === 'invalid') {
+      return res
+        .status(500)
+        .json({ error: 'Não foi possível validar a empresa associada ao usuário informado.' });
+    }
+
+    const requesterEmpresaId = empresaLookup.empresaId;
+
+    if (
+      requesterEmpresaId !== null &&
+      targetEmpresaResult !== null &&
+      requesterEmpresaId !== targetEmpresaResult
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Usuário não possui permissão para remover este colaborador.' });
+    }
+
     const result = await pool.query(
       'DELETE FROM public.usuarios WHERE id = $1',
       [id]

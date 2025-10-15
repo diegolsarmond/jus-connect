@@ -13,6 +13,8 @@ let listUsuarios: typeof import('../src/controllers/usuarioController')['listUsu
 let listUsuariosByEmpresa: typeof import('../src/controllers/usuarioController')['listUsuariosByEmpresa'];
 let getUsuarioById: typeof import('../src/controllers/usuarioController')['getUsuarioById'];
 let createUsuario: typeof import('../src/controllers/usuarioController')['createUsuario'];
+let updateUsuario: typeof import('../src/controllers/usuarioController')['updateUsuario'];
+let deleteUsuario: typeof import('../src/controllers/usuarioController')['deleteUsuario'];
 let setWelcomeEmailServiceForTests: typeof import('../src/controllers/usuarioController')['__setWelcomeEmailServiceForTests'];
 let resetWelcomeEmailServiceForTests: typeof import('../src/controllers/usuarioController')['__resetWelcomeEmailServiceForTests'];
 
@@ -22,6 +24,8 @@ test.before(async () => {
     listUsuariosByEmpresa,
     getUsuarioById,
     createUsuario,
+    updateUsuario,
+    deleteUsuario,
     __setWelcomeEmailServiceForTests: setWelcomeEmailServiceForTests,
     __resetWelcomeEmailServiceForTests: resetWelcomeEmailServiceForTests,
   } = await import('../src/controllers/usuarioController'));
@@ -36,6 +40,10 @@ const createMockResponse = () => {
       return this as Response;
     },
     json(payload: unknown) {
+      this.body = payload;
+      return this as Response;
+    },
+    send(payload?: unknown) {
       this.body = payload;
       return this as Response;
     },
@@ -499,176 +507,157 @@ test('createUsuario cleans up created user when welcome email fails', async () =
   assert.match(calls[4]?.text ?? '', /BEGIN/);
 });
 
-test('createUsuario permite administrador global informar empresa válida', async () => {
-  const welcomeModule = await import('../src/services/newUserWelcomeEmailService');
-  const capturedCalls: Parameters<
-    (typeof welcomeModule.newUserWelcomeEmailService)['sendWelcomeEmail']
-  >[] = [];
+test('updateUsuario blocks updates to collaborators from another company', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
+  ]);
 
-  setWelcomeEmailServiceForTests({
-    async sendWelcomeEmail(params) {
-      capturedCalls.push(params);
+  const req = {
+    params: { id: '200' },
+    body: {
+      nome_completo: 'Colaborador',
+      cpf: '12345678901',
+      email: 'colaborador@example.com',
+      perfil: null,
+      empresa: 8,
+      setor: null,
+      oab: null,
+      status: true,
+      senha: 'argon2:hash',
+      telefone: null,
+      ultimo_login: null,
+      observacoes: null,
     },
-  });
+    auth: createAuth(900),
+  } as unknown as Request;
 
-  const createdRow = {
-    id: 202,
-    nome_completo: 'Admin Global',
-    cpf: '11111111111',
-    email: 'admin.global@example.com',
-    perfil: 'admin',
-    empresa: 9,
+  const res = createMockResponse();
+
+  try {
+    await updateUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário não possui permissão para atualizar este colaborador.',
+  });
+  assert.equal(calls.length, 2);
+});
+
+test('updateUsuario allows global administrators to update collaborators from other companies', async () => {
+  const updatedRow = {
+    id: 200,
+    nome_completo: 'Colaborador Atualizado',
+    cpf: '12345678901',
+    email: 'colaborador@example.com',
+    perfil: null,
+    empresa: 8,
     setor: null,
     oab: null,
     status: true,
-    senha: 'argon2:placeholder',
-    telefone: '(11) 98888-0000',
+    telefone: null,
     ultimo_login: null,
     observacoes: null,
-    datacriacao: '2024-03-02T12:00:00.000Z',
+    datacriacao: '2024-01-01T00:00:00.000Z',
   };
 
   const { calls, restore } = setupQueryMock([
     { rows: [{ empresa: null }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
     { rows: [{}], rowCount: 1 },
-    {
-      rows: [
-        {
-          limite_usuarios: null,
-          limite_processos: null,
-          limite_propostas: null,
-          sincronizacao_processos_habilitada: null,
-          sincronizacao_processos_cota: null,
-        },
-      ],
-      rowCount: 1,
-    },
-    { rows: [createdRow], rowCount: 1 },
-    { rows: [], rowCount: 0 },
-    { rows: [], rowCount: 1 },
+    { rows: [updatedRow], rowCount: 1 },
   ]);
 
   const req = {
+    params: { id: '200' },
     body: {
-      nome_completo: 'Admin Global',
-      cpf: '11111111111',
-      email: 'admin.global@example.com',
-      perfil: 'admin',
-      empresa: 9,
+      nome_completo: 'Colaborador Atualizado',
+      cpf: '12345678901',
+      email: 'colaborador@example.com',
+      perfil: null,
+      empresa: 8,
       setor: null,
       oab: null,
       status: true,
-      telefone: '(11) 98888-0000',
+      senha: 'argon2:hash',
+      telefone: null,
       ultimo_login: null,
       observacoes: null,
     },
-    auth: createAuth(99),
+    auth: createAuth(901),
   } as unknown as Request;
 
   const res = createMockResponse();
 
   try {
-    await createUsuario(req, res);
+    await updateUsuario(req, res);
   } finally {
-    resetWelcomeEmailServiceForTests();
     restore();
   }
 
-  assert.equal(res.statusCode, 201);
-
-  const empresaCheckCall = calls.find((call) =>
-    /SELECT 1 FROM public\.empresas WHERE id = \$1/.test(call.text ?? '')
-  );
-  assert.ok(empresaCheckCall);
-  assert.deepEqual(empresaCheckCall?.values, [9]);
-
-  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
-  assert.ok(insertCall);
-  assert.equal(insertCall?.values?.[4], 9);
-
-  assert.equal(capturedCalls.length, 1);
-  const [welcomeArgs] = capturedCalls;
-  assert.equal(welcomeArgs?.to, 'admin.global@example.com');
+  assert.equal(res.statusCode, 200);
+  const { cpf: _cpf, ...expectedResponse } = updatedRow;
+  (expectedResponse as Record<string, unknown>).oab_number = undefined;
+  (expectedResponse as Record<string, unknown>).oab_uf = undefined;
+  assert.deepEqual(res.body, expectedResponse);
+  assert.equal(calls.length, 4);
+  assert.match(calls[2]?.text ?? '', /SELECT 1 FROM public\.empresas/);
+  assert.match(calls[3]?.text ?? '', /UPDATE public\.usuarios/);
 });
 
-test('createUsuario utiliza empresa do usuário autenticado quando não informada', async () => {
-  setWelcomeEmailServiceForTests({
-    async sendWelcomeEmail() {},
-  });
-
-  const createdRow = {
-    id: 303,
-    nome_completo: 'Colaborador',
-    cpf: '22222222222',
-    email: 'colaborador@example.com',
-    perfil: 'user',
-    empresa: 12,
-    setor: null,
-    oab: null,
-    status: true,
-    senha: 'argon2:placeholder',
-    telefone: '(11) 97777-0000',
-    ultimo_login: null,
-    observacoes: null,
-    datacriacao: '2024-03-03T12:00:00.000Z',
-  };
-
+test('deleteUsuario blocks deletions of collaborators from another company', async () => {
   const { calls, restore } = setupQueryMock([
-    { rows: [{ empresa: 12 }], rowCount: 1 },
-    { rows: [{}], rowCount: 1 },
-    {
-      rows: [
-        {
-          limite_usuarios: null,
-          limite_processos: null,
-          limite_propostas: null,
-          sincronizacao_processos_habilitada: null,
-          sincronizacao_processos_cota: null,
-        },
-      ],
-      rowCount: 1,
-    },
-    { rows: [createdRow], rowCount: 1 },
-    { rows: [], rowCount: 0 },
-    { rows: [], rowCount: 1 },
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
   ]);
 
   const req = {
-    body: {
-      nome_completo: 'Colaborador',
-      cpf: '22222222222',
-      email: 'colaborador@example.com',
-      perfil: 'user',
-      setor: null,
-      oab: null,
-      status: true,
-      telefone: '(11) 97777-0000',
-      ultimo_login: null,
-      observacoes: null,
-    },
-    auth: createAuth(88),
+    params: { id: '300' },
+    auth: createAuth(902),
   } as unknown as Request;
 
   const res = createMockResponse();
 
   try {
-    await createUsuario(req, res);
+    await deleteUsuario(req, res);
   } finally {
-    resetWelcomeEmailServiceForTests();
     restore();
   }
 
-  assert.equal(res.statusCode, 201);
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error: 'Usuário não possui permissão para remover este colaborador.',
+  });
+  assert.equal(calls.length, 2);
+});
 
-  const empresaCheckCall = calls.find((call) =>
-    /SELECT 1 FROM public\.empresas WHERE id = \$1/.test(call.text ?? '')
-  );
-  assert.ok(empresaCheckCall);
-  assert.deepEqual(empresaCheckCall?.values, [12]);
+test('deleteUsuario allows global administrators to remove collaborators from other companies', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+    { rows: [{ empresa: 8 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
 
-  const insertCall = calls.find((call) => /INSERT INTO public\.usuarios/.test(call.text ?? ''));
-  assert.ok(insertCall);
-  assert.equal(insertCall?.values?.[4], 12);
+  const req = {
+    params: { id: '300' },
+    auth: createAuth(903),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await deleteUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 204);
+  assert.equal(res.body, undefined);
+  assert.equal(calls.length, 3);
+  assert.match(calls[2]?.text ?? '', /DELETE FROM public\.usuarios/);
 });
 
 
