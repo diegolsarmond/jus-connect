@@ -377,6 +377,108 @@ const normalizeSubscriptionResponse = (subscription: SubscriptionResponse): Subs
   return subscription;
 };
 
+const normalizeCompanyId = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const toIsoString = (value: unknown): string | null => {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  return null;
+};
+
+type CompanySnapshotRow = {
+  id: unknown;
+  nome_empresa: unknown;
+  plano: unknown;
+  ativo: unknown;
+  trial_started_at: unknown;
+  trial_ends_at: unknown;
+  current_period_start: unknown;
+  current_period_end: unknown;
+  grace_expires_at: unknown;
+  subscription_trial_ends_at: unknown;
+  subscription_current_period_ends_at: unknown;
+  subscription_grace_period_ends_at: unknown;
+  subscription_cadence: unknown;
+  asaas_subscription_id: unknown;
+};
+
+const mapCompanySnapshotToResponse = (row: CompanySnapshotRow) => {
+  const id = normalizeCompanyId(row.id);
+  const planId = normalizeCompanyId(row.plano);
+
+  return {
+    id,
+    nomeEmpresa: typeof row.nome_empresa === 'string' ? row.nome_empresa : null,
+    plano: planId,
+    ativo: row.ativo === true,
+    trialStartedAt: toIsoString(row.trial_started_at),
+    trialEndsAt: toIsoString(row.trial_ends_at),
+    currentPeriodStart: toIsoString(row.current_period_start),
+    currentPeriodEnd: toIsoString(row.current_period_end),
+    graceExpiresAt: toIsoString(row.grace_expires_at),
+    subscriptionTrialEndsAt: toIsoString(row.subscription_trial_ends_at),
+    subscriptionCurrentPeriodEndsAt: toIsoString(row.subscription_current_period_ends_at),
+    subscriptionGracePeriodEndsAt: toIsoString(row.subscription_grace_period_ends_at),
+    subscriptionCadence: typeof row.subscription_cadence === 'string'
+      ? row.subscription_cadence
+      : null,
+    asaasSubscriptionId: typeof row.asaas_subscription_id === 'string'
+      ? row.asaas_subscription_id
+      : null,
+  };
+};
+
+const findCompanyIdBySubscriptionId = async (subscriptionId: string): Promise<number | null> => {
+  const result = await pool.query<{ id: unknown }>(
+    'SELECT id FROM public.empresas WHERE asaas_subscription_id = $1 LIMIT 1',
+    [subscriptionId]
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return normalizeCompanyId(result.rows[0]?.id);
+};
+
+const findCompanyIdByCustomerId = async (customerId: string): Promise<number | null> => {
+  const result = await pool.query<{ id: unknown }>(
+    'SELECT id FROM public.empresas WHERE asaas_customer_id = $1 LIMIT 1',
+    [customerId]
+  );
+
+  if (result.rowCount === 0) {
+    return null;
+  }
+
+  return normalizeCompanyId(result.rows[0]?.id);
+};
+
 const mapPaginatedData = <T>(response: PaginatedResponse<T> | T[]): T[] => {
   if (Array.isArray(response)) {
     return response;
@@ -881,7 +983,63 @@ export const cancelSubscription = async (req: Request, res: Response) => {
 
   try {
     const subscription = await clientResolution.client.cancelSubscription(subscriptionId);
-    res.json(normalizeSubscriptionResponse(subscription));
+    const normalizedSubscription = normalizeSubscriptionResponse(subscription);
+
+    let companySnapshot: ReturnType<typeof mapCompanySnapshotToResponse> | null = null;
+
+    try {
+      let empresaId = await findCompanyIdBySubscriptionId(subscriptionId);
+
+      if (empresaId === null) {
+        const customerId = sanitizeString(subscription.customer);
+        if (customerId) {
+          empresaId = await findCompanyIdByCustomerId(customerId);
+        }
+      }
+
+      if (empresaId !== null) {
+        const updateResult = await pool.query<CompanySnapshotRow>(
+          `UPDATE public.empresas
+              SET plano = NULL,
+                  ativo = FALSE,
+                  asaas_subscription_id = NULL,
+                  current_period_start = NULL,
+                  current_period_end = NULL,
+                  grace_expires_at = NULL,
+                  subscription_trial_ends_at = NULL,
+                  subscription_current_period_ends_at = NULL,
+                  subscription_grace_period_ends_at = NULL,
+                  subscription_cadence = NULL
+             WHERE id = $1
+         RETURNING id, nome_empresa, plano, ativo, trial_started_at, trial_ends_at, current_period_start, current_period_end,
+                   grace_expires_at, subscription_trial_ends_at, subscription_current_period_ends_at, subscription_grace_period_ends_at,
+                   subscription_cadence, asaas_subscription_id`,
+          [empresaId],
+        );
+
+        if ((updateResult.rowCount ?? 0) > 0 && updateResult.rows[0]) {
+          companySnapshot = mapCompanySnapshotToResponse(updateResult.rows[0]);
+        } else {
+          const selectResult = await pool.query<CompanySnapshotRow>(
+            `SELECT id, nome_empresa, plano, ativo, trial_started_at, trial_ends_at, current_period_start, current_period_end,
+                    grace_expires_at, subscription_trial_ends_at, subscription_current_period_ends_at, subscription_grace_period_ends_at,
+                    subscription_cadence, asaas_subscription_id
+               FROM public.empresas
+              WHERE id = $1
+              LIMIT 1`,
+            [empresaId],
+          );
+
+          if ((selectResult.rowCount ?? 0) > 0 && selectResult.rows[0]) {
+            companySnapshot = mapCompanySnapshotToResponse(selectResult.rows[0]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Falha ao atualizar estado local da assinatura cancelada', error);
+    }
+
+    res.json({ subscription: normalizedSubscription, company: companySnapshot });
   } catch (error) {
     if (handleAsaasError(res, error, 'Não foi possível cancelar a assinatura.')) {
       return;

@@ -31,7 +31,12 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
-import { createPlanPayment, PlanPaymentMethod, PlanPaymentResult } from "@/features/plans/api";
+import {
+  createPlanPayment,
+  parsePlanPaymentResult,
+  PlanPaymentMethod,
+  PlanPaymentResult,
+} from "@/features/plans/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { getApiUrl } from "@/lib/api";
 import { fetchFlows, tokenizeCard, type CardTokenPayload, type Flow } from "@/lib/flows";
@@ -328,9 +333,26 @@ const ManagePlanPayment = () => {
   const [cachedSelection, setCachedSelection] = useState<ManagePlanSelection>(() =>
     getPersistedManagePlanSelection(),
   );
-  const lastPersistedRef = useRef<{ planId: number | null; pricingMode?: PricingMode }>({
+  const lastPersistedRef = useRef<{
+    planId: number | null;
+    pricingMode?: PricingMode;
+    companyName?: string | null;
+    companyDocument?: string | null;
+    billingEmail?: string | null;
+    paymentStatus?: string | null;
+    paymentMethod?: string | null;
+    paymentDueDate?: string | null;
+    paymentAmount?: number | null;
+  }>({
     planId: null,
     pricingMode: undefined,
+    companyName: null,
+    companyDocument: null,
+    billingEmail: null,
+    paymentStatus: null,
+    paymentMethod: null,
+    paymentDueDate: null,
+    paymentAmount: null,
   });
   const locationPlanId = selectionFromLocation.plan?.id ?? null;
   const locationPricingMode = selectionFromLocation.pricingMode;
@@ -342,7 +364,14 @@ const ManagePlanPayment = () => {
 
     const hasChanged =
       lastPersistedRef.current.planId !== locationPlanId ||
-      lastPersistedRef.current.pricingMode !== locationPricingMode;
+      lastPersistedRef.current.pricingMode !== locationPricingMode ||
+      lastPersistedRef.current.companyName !== (selectionFromLocation.billing?.companyName ?? null) ||
+      lastPersistedRef.current.companyDocument !== (selectionFromLocation.billing?.document ?? null) ||
+      lastPersistedRef.current.billingEmail !== (selectionFromLocation.billing?.email ?? null) ||
+      lastPersistedRef.current.paymentStatus !== (selectionFromLocation.paymentSummary?.status ?? null) ||
+      lastPersistedRef.current.paymentMethod !== (selectionFromLocation.paymentSummary?.paymentMethod ?? null) ||
+      lastPersistedRef.current.paymentDueDate !== (selectionFromLocation.paymentSummary?.dueDate ?? null) ||
+      lastPersistedRef.current.paymentAmount !== (selectionFromLocation.paymentSummary?.amount ?? null);
 
     if (!hasChanged) {
       return;
@@ -351,36 +380,59 @@ const ManagePlanPayment = () => {
     const nextSelection: ManagePlanSelection = {
       plan: selectionFromLocation.plan,
       pricingMode: selectionFromLocation.pricingMode,
+      ...(selectionFromLocation.billing ? { billing: selectionFromLocation.billing } : {}),
+      ...(selectionFromLocation.paymentSummary
+        ? { paymentSummary: selectionFromLocation.paymentSummary }
+        : {}),
     };
 
     lastPersistedRef.current = {
       planId: locationPlanId,
       pricingMode: locationPricingMode,
+      companyName: selectionFromLocation.billing?.companyName ?? null,
+      companyDocument: selectionFromLocation.billing?.document ?? null,
+      billingEmail: selectionFromLocation.billing?.email ?? null,
+      paymentStatus: selectionFromLocation.paymentSummary?.status ?? null,
+      paymentMethod: selectionFromLocation.paymentSummary?.paymentMethod ?? null,
+      paymentDueDate: selectionFromLocation.paymentSummary?.dueDate ?? null,
+      paymentAmount: selectionFromLocation.paymentSummary?.amount ?? null,
     };
 
     setCachedSelection(nextSelection);
     persistManagePlanSelection(nextSelection);
-  }, [locationPlanId, locationPricingMode, selectionFromLocation.plan]);
+  }, [
+    locationPlanId,
+    locationPricingMode,
+    selectionFromLocation.billing,
+    selectionFromLocation.plan,
+    selectionFromLocation.paymentSummary,
+  ]);
 
   const selection = selectionFromLocation.plan ? selectionFromLocation : cachedSelection;
   const selectedPlan = selection.plan ?? null;
   const selectedPlanId = selectedPlan?.id ?? null;
   const pricingMode: PricingMode = selection.pricingMode ?? "mensal";
+  const billingFromSelection = selection.billing ?? null;
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
   const [paymentMethod, setPaymentMethod] = useState<PlanPaymentMethod>("pix");
-  const [companyName, setCompanyName] = useState("");
-  const [companyDocument, setCompanyDocument] = useState("");
-  const [billingEmail, setBillingEmail] = useState("");
+  const [companyName, setCompanyName] = useState(() => billingFromSelection?.companyName ?? "");
+  const [companyDocument, setCompanyDocument] = useState(() =>
+    billingFromSelection?.document ? formatCpfCnpj(billingFromSelection.document) : "",
+  );
+  const [billingEmail, setBillingEmail] = useState(() => billingFromSelection?.email ?? "");
   const [billingNotes, setBillingNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTokenizingCard, setIsTokenizingCard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentResult, setPaymentResult] = useState<PlanPaymentResult | null>(null);
+  const [isPaymentStatusLoading, setIsPaymentStatusLoading] = useState(false);
+  const [paymentStatusError, setPaymentStatusError] = useState<string | null>(null);
   const [cardForm, setCardForm] = useState<CardFormState>(() => ({ ...initialCardFormState }));
   const [cardErrors, setCardErrors] = useState<CardFormErrors>({});
   const [autoChargeConfirmed, setAutoChargeConfirmed] = useState(false);
   const [history, setHistory] = useState<Flow[]>([]);
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [billingDataStatus, setBillingDataStatus] = useState<{ companyId: number | null; loaded: boolean }>(() => ({
@@ -388,6 +440,168 @@ const ManagePlanPayment = () => {
     loaded: !user?.empresa_id,
   }));
   const userPrefillRef = useRef<{ companyName?: string; billingEmail?: string }>({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const id = paymentResult?.subscriptionId;
+    if (!id) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem("subscriptionId", id);
+    } catch {}
+  }, [paymentResult?.subscriptionId]);
+
+  const sanitizeSelectionBilling = useCallback((): ManagePlanSelection["billing"] | undefined => {
+    const trimmedName = companyName.trim();
+    const digits = sanitizeDigits(companyDocument);
+    const trimmedEmail = billingEmail.trim();
+
+    if (!trimmedName && digits.length === 0 && !trimmedEmail) {
+      return undefined;
+    }
+
+    return {
+      ...(trimmedName ? { companyName: trimmedName } : {}),
+      ...(digits.length > 0 ? { document: digits } : {}),
+      ...(trimmedEmail ? { email: trimmedEmail } : {}),
+    };
+  }, [billingEmail, companyDocument, companyName]);
+
+  const resolveSelectionPaymentSummary = useCallback(
+    (): ManagePlanSelection["paymentSummary"] | undefined => {
+      if (paymentResult) {
+        const rawStatus = typeof paymentResult.charge.status === "string" ? paymentResult.charge.status.trim() : "";
+        const status = rawStatus.length > 0 ? rawStatus : null;
+        const paymentMethod = paymentResult.paymentMethod ?? null;
+        const rawDueDate = typeof paymentResult.charge.dueDate === "string" ? paymentResult.charge.dueDate.trim() : "";
+        const dueDate = rawDueDate.length > 0 ? rawDueDate : null;
+        const amount =
+          typeof paymentResult.charge.amount === "number" && Number.isFinite(paymentResult.charge.amount)
+            ? paymentResult.charge.amount
+            : null;
+
+        return {
+          ...(status ? { status } : {}),
+          ...(paymentMethod ? { paymentMethod } : {}),
+          ...(dueDate ? { dueDate } : {}),
+          ...(amount !== null ? { amount } : {}),
+        };
+      }
+
+      return selection.paymentSummary;
+    },
+    [paymentResult, selection.paymentSummary],
+  );
+
+  const clearPaymentSummary = useCallback(() => {
+    lastPersistedRef.current = {
+      ...lastPersistedRef.current,
+      paymentStatus: null,
+      paymentMethod: null,
+      paymentDueDate: null,
+      paymentAmount: null,
+    };
+
+    setCachedSelection((previous) => {
+      if (!previous.paymentSummary) {
+        return previous;
+      }
+
+      const { paymentSummary: _ignored, ...rest } = previous;
+      const nextSelection: ManagePlanSelection = { ...rest };
+      persistManagePlanSelection(nextSelection);
+      return nextSelection;
+    });
+  }, [persistManagePlanSelection, setCachedSelection]);
+
+  const paymentStatus = paymentResult?.charge.status ?? null;
+
+  useEffect(() => {
+    const billing = selection.billing;
+    if (!billing) {
+      return;
+    }
+
+    if (billing.companyName) {
+      setCompanyName((previous) => (previous.trim().length > 0 ? previous : billing.companyName ?? previous));
+    }
+
+    if (billing.document) {
+      setCompanyDocument((previous) =>
+        previous.trim().length > 0 ? previous : formatCpfCnpj(billing.document),
+      );
+    }
+
+    if (billing.email) {
+      setBillingEmail((previous) => (previous.trim().length > 0 ? previous : billing.email ?? previous));
+    }
+  }, [selection.billing]);
+
+  useEffect(() => {
+    if (!selectedPlan) {
+      return;
+    }
+
+    const billing = sanitizeSelectionBilling();
+    const paymentSummary = resolveSelectionPaymentSummary();
+
+    const billingName = billing?.companyName ?? null;
+    const billingDocument = billing?.document ?? null;
+    const billingEmailValue = billing?.email ?? null;
+    const summaryStatus = paymentSummary?.status ?? null;
+    const summaryMethod = paymentSummary?.paymentMethod ?? null;
+    const summaryDueDate = paymentSummary?.dueDate ?? null;
+    const summaryAmount = paymentSummary?.amount ?? null;
+
+    const hasChanged =
+      lastPersistedRef.current.planId !== selectedPlan.id ||
+      lastPersistedRef.current.pricingMode !== pricingMode ||
+      lastPersistedRef.current.companyName !== billingName ||
+      lastPersistedRef.current.companyDocument !== billingDocument ||
+      lastPersistedRef.current.billingEmail !== billingEmailValue ||
+      lastPersistedRef.current.paymentStatus !== summaryStatus ||
+      lastPersistedRef.current.paymentMethod !== summaryMethod ||
+      lastPersistedRef.current.paymentDueDate !== summaryDueDate ||
+      lastPersistedRef.current.paymentAmount !== summaryAmount;
+
+    if (!hasChanged) {
+      return;
+    }
+
+    const nextSelection: ManagePlanSelection = {
+      plan: selectedPlan,
+      pricingMode,
+      ...(billing ? { billing } : {}),
+      ...(paymentSummary ? { paymentSummary } : {}),
+    };
+
+    lastPersistedRef.current = {
+      planId: selectedPlan.id,
+      pricingMode,
+      companyName: billingName,
+      companyDocument: billingDocument,
+      billingEmail: billingEmailValue,
+      paymentStatus: summaryStatus,
+      paymentMethod: summaryMethod,
+      paymentDueDate: summaryDueDate,
+      paymentAmount: summaryAmount,
+    };
+
+    setCachedSelection(nextSelection);
+    persistManagePlanSelection(nextSelection);
+  }, [
+    pricingMode,
+    resolveSelectionPaymentSummary,
+    sanitizeSelectionBilling,
+    selectedPlan,
+    setCachedSelection,
+    persistManagePlanSelection,
+  ]);
 
   useEffect(() => {
     if (!user) {
@@ -472,14 +686,61 @@ const ManagePlanPayment = () => {
   }, [user?.empresa_id]);
 
   useEffect(() => {
-    if (paymentResult || !selectedPlanId) {
+    if (!selectedPlanId) {
       return;
     }
 
-    const controller = new AbortController();
-    let isMounted = true;
+    const normalizeStatus = (value: string | null | undefined) => {
+      if (!value) {
+        return "";
+      }
 
-    const loadCurrentPayment = async () => {
+      return value.trim().toLowerCase();
+    };
+
+    const normalizedStatus = normalizeStatus(paymentStatus);
+    if (normalizedStatus === "paid" || normalizedStatus === "received") {
+      return;
+    }
+
+    let isMounted = true;
+    let isFetching = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let currentController: AbortController | null = null;
+
+    setIsPaymentStatusLoading(true);
+    setPaymentStatusError(null);
+
+    const clearTimer = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const stopPolling = async () => {
+      clearTimer();
+      if (!isMounted) {
+        return;
+      }
+
+      setIsPaymentStatusLoading(false);
+      try {
+        await refreshUser();
+      } catch {}
+    };
+
+    const fetchCurrentPayment = async () => {
+      if (isFetching) {
+        return;
+      }
+
+      setIsPaymentStatusLoading(true);
+      setPaymentStatusError(null);
+      const controller = new AbortController();
+      currentController = controller;
+      isFetching = true;
+
       try {
         const response = await fetch(getApiUrl("plan-payments/current"), {
           headers: { Accept: "application/json" },
@@ -487,8 +748,19 @@ const ManagePlanPayment = () => {
           signal: controller.signal,
         });
 
-        if (!response.ok) {
+        if (response.status === 404) {
+          if (isMounted) {
+            clearPaymentSummary();
+            setPaymentResult(null);
+            setPaymentStatusError(null);
+          }
+
+          await stopPolling();
           return;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Falha ao atualizar cobrança (HTTP ${response.status})`);
         }
 
         const payload = (await response.json()) as unknown;
@@ -498,30 +770,66 @@ const ManagePlanPayment = () => {
         }
 
         if (!payload || typeof payload !== "object") {
+          setPaymentStatusError("Resposta inválida ao consultar a cobrança atual.");
+          setIsPaymentStatusLoading(false);
+          clearTimer();
           return;
         }
 
-        const data = payload as PlanPaymentResult;
+        const data = parsePlanPaymentResult(payload, selectedPlanId ?? undefined);
         const planData = data.plan ?? null;
         if (planData && planData.id !== null && planData.id !== selectedPlanId) {
+          setIsPaymentStatusLoading(false);
+          clearTimer();
           return;
         }
 
+        setPaymentStatusError(null);
         setPaymentResult(data);
-      } catch (error) {
-        if (controller.signal.aborted) {
+        setIsPaymentStatusLoading(false);
+
+        const statusValue = normalizeStatus(
+          typeof data.charge.status === "string" ? data.charge.status : null,
+        );
+
+        if (statusValue === "paid" || statusValue === "received") {
+          await stopPolling();
           return;
         }
+      } catch (error) {
+        if (!isMounted || controller.signal.aborted) {
+          return;
+        }
+
+        setPaymentStatusError(
+          error instanceof Error
+            ? error.message
+            : "Falha ao atualizar status do pagamento.",
+        );
+        setIsPaymentStatusLoading(false);
+      } finally {
+        if (currentController === controller) {
+          currentController = null;
+        }
+
+        isFetching = false;
       }
     };
 
-    loadCurrentPayment();
+    intervalId = window.setInterval(() => {
+      void fetchCurrentPayment();
+    }, 5000);
+
+    void fetchCurrentPayment();
 
     return () => {
       isMounted = false;
-      controller.abort();
+      clearTimer();
+      if (currentController) {
+        currentController.abort();
+      }
     };
-  }, [paymentResult, selectedPlanId]);
+  }, [clearPaymentSummary, paymentStatus, refreshUser, selectedPlanId]);
 
   useEffect(() => {
     if (!user?.empresa_id) {
@@ -690,7 +998,7 @@ const ManagePlanPayment = () => {
     return () => {
       isActive = false;
     };
-  }, [selectedPlan]);
+  }, [selectedPlan, historyReloadKey]);
 
   useEffect(() => {
     if (paymentMethod !== "cartao") {
@@ -868,6 +1176,10 @@ const ManagePlanPayment = () => {
       return;
     }
 
+    if (paymentResult) {
+      return;
+    }
+
     if (!companyName.trim() || !companyDocument.trim() || !billingEmail.trim()) {
       const message = "Preencha razão social, documento e e-mail para gerar a cobrança.";
       setError(message);
@@ -974,13 +1286,13 @@ const ManagePlanPayment = () => {
       const result = await createPlanPayment(payload);
 
       setPaymentResult(result);
+      setHistoryReloadKey((previous) => previous + 1);
       toast({
         title: "Cobrança gerada com sucesso",
         description: "Utilize as informações abaixo para concluir o pagamento do plano.",
       });
 
       await refreshUser();
-      navigate(routes.meuPlano, { replace: true });
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Não foi possível criar a cobrança no Asaas.";
@@ -1001,9 +1313,9 @@ const ManagePlanPayment = () => {
     companyName,
     autoChargeConfirmed,
     paymentMethod,
+    paymentResult,
     pricingMode,
     selectedPlan,
-    navigate,
     refreshUser,
     toast,
   ]);
@@ -1027,6 +1339,7 @@ const ManagePlanPayment = () => {
   const isConfirmDisabled =
     isSubmitting ||
     isTokenizingCard ||
+    Boolean(paymentResult) ||
     !companyName.trim() ||
     !companyDocument.trim() ||
     !billingEmail.trim() ||
@@ -1034,9 +1347,56 @@ const ManagePlanPayment = () => {
     (paymentMethod === "cartao" && !autoChargeConfirmed);
 
   const handleReturnToPlanSelection = useCallback(() => {
-    clearPersistedManagePlanSelection();
-    navigate(routes.meuPlano);
-  }, [navigate]);
+    const paymentSummary = resolveSelectionPaymentSummary();
+    const navigationState = paymentSummary ? { paymentSummary } : undefined;
+
+    if (!selectedPlan) {
+      clearPersistedManagePlanSelection();
+      if (navigationState) {
+        navigate(routes.meuPlano, { state: navigationState });
+      } else {
+        navigate(routes.meuPlano);
+      }
+      return;
+    }
+
+    const billing = sanitizeSelectionBilling();
+    const nextSelection: ManagePlanSelection = {
+      plan: selectedPlan,
+      pricingMode,
+      ...(billing ? { billing } : {}),
+      ...(paymentSummary ? { paymentSummary } : {}),
+    };
+
+    lastPersistedRef.current = {
+      planId: selectedPlan.id,
+      pricingMode,
+      companyName: billing?.companyName ?? null,
+      companyDocument: billing?.document ?? null,
+      billingEmail: billing?.email ?? null,
+      paymentStatus: paymentSummary?.status ?? null,
+      paymentMethod: paymentSummary?.paymentMethod ?? null,
+      paymentDueDate: paymentSummary?.dueDate ?? null,
+      paymentAmount: paymentSummary?.amount ?? null,
+    };
+
+    setCachedSelection(nextSelection);
+    persistManagePlanSelection(nextSelection);
+
+    if (navigationState) {
+      navigate(routes.meuPlano, { state: navigationState });
+    } else {
+      navigate(routes.meuPlano);
+    }
+  }, [
+    clearPersistedManagePlanSelection,
+    navigate,
+    pricingMode,
+    persistManagePlanSelection,
+    resolveSelectionPaymentSummary,
+    sanitizeSelectionBilling,
+    selectedPlan,
+  ]);
 
   if (!selectedPlan) {
     return (
@@ -1539,6 +1899,20 @@ const ManagePlanPayment = () => {
 
 
                   
+
+          {isPaymentStatusLoading && (
+            <div className="flex items-center gap-2 rounded-3xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Verificando status da cobrança…</span>
+            </div>
+          )}
+
+          {paymentStatusError && (
+            <Alert className="border-destructive/40 bg-destructive/10">
+              <AlertTitle>Não foi possível atualizar o pagamento</AlertTitle>
+              <AlertDescription>{paymentStatusError}</AlertDescription>
+            </Alert>
+          )}
 
           {paymentResult && (
             <Card className="rounded-3xl border border-primary/30 bg-primary/5">

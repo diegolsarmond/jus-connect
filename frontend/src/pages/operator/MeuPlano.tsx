@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -35,6 +35,8 @@ import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { PlanSelection } from "@/features/plans/PlanSelection";
 import {
+  clearPersistedManagePlanSelection,
+  getPersistedManagePlanSelection,
   persistManagePlanSelection,
   type ManagePlanSelection,
   type PricingMode,
@@ -44,13 +46,13 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  Clock,
   Crown,
   Loader2,
   Sparkles,
 } from "lucide-react";
 
-import { plans } from "@/data/plans";
-import { getApiBaseUrl, joinUrl } from "@/lib/api";
+import { getApiBaseUrl, getApiUrl, joinUrl } from "@/lib/api";
 
 type PlanoDetalhe = {
   id: number;
@@ -100,6 +102,14 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
 });
 const countFormatter = new Intl.NumberFormat("pt-BR");
+const PRICING_ON_REQUEST_LABEL = "Sob consulta";
+
+const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD", string> = {
+  PIX: "PIX",
+  BOLETO: "Boleto bancário",
+  CREDIT_CARD: "Cartão de crédito",
+  DEBIT_CARD: "Cartão de débito",
+};
 
 function normalizeApiRows(data: unknown): unknown[] {
   if (Array.isArray(data)) {
@@ -157,6 +167,14 @@ function toNumber(value: unknown): number | null {
 }
 
 function toStringOrNull(value: unknown): string | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    return String(value);
+  }
+
   if (typeof value !== "string") {
     return null;
   }
@@ -181,6 +199,14 @@ function pickString(
   return null;
 }
 
+function resolveSubscriptionId(source: unknown, candidates: string[]): string | null {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  return pickString(source as Record<string, unknown>, candidates);
+}
+
 function normalizeForComparison(value: string): string {
   return value
     .normalize("NFD")
@@ -188,6 +214,37 @@ function normalizeForComparison(value: string): string {
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+async function requestJson<T>(input: RequestInfo, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+
+  let payload: unknown = null;
+
+  if (response.status !== 204) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === "object" && "error" in payload && (payload as { error?: unknown }).error
+        ? String((payload as { error?: unknown }).error)
+        : response.statusText || "Falha ao comunicar com o servidor.";
+    throw new Error(message);
+  }
+
+  return payload as T;
 }
 
 function slugify(value: string | null): string | null {
@@ -444,7 +501,7 @@ function formatLimitValue(value: number | null, singular: string, plural: string
 }
 
 function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): PricingDisplay {
-  const fallback = "Sob consulta";
+  const fallback = PRICING_ON_REQUEST_LABEL;
 
   if (!plan) {
     return {
@@ -515,7 +572,7 @@ function buildPricingDisplay(plan: PlanoDetalhe | null, mode: PricingMode): Pric
 
 function estimateNextBilling(plan: PlanoDetalhe | null): { nextBilling: string | null; cadenceLabel: string } {
   if (!plan) {
-    return { nextBilling: null, cadenceLabel: "Sob consulta" };
+    return { nextBilling: null, cadenceLabel: PRICING_ON_REQUEST_LABEL };
   }
 
   const hasMensal = plan.valorMensal !== null;
@@ -527,7 +584,7 @@ function estimateNextBilling(plan: PlanoDetalhe | null): { nextBilling: string |
       ? "Mensal"
       : hasAnual
         ? "Anual"
-        : "Sob consulta";
+        : PRICING_ON_REQUEST_LABEL;
 
   if (!plan.dataCadastro || Number.isNaN(plan.dataCadastro.getTime())) {
     return { nextBilling: null, cadenceLabel };
@@ -568,6 +625,78 @@ function formatDate(value: Date | null): string | null {
 }
 
 type ApiEmpresa = { plano?: unknown; plano_id?: unknown };
+
+const extractBillingFromEmpresa = (
+  record: Record<string, unknown>,
+): ManagePlanSelection["billing"] | null => {
+  const companyName = pickString(record, [
+    "razao_social",
+    "razaoSocial",
+    "nome_empresa",
+    "nomeEmpresa",
+    "nome",
+  ]);
+  const documentRaw = pickString(record, [
+    "cnpj",
+    "documento",
+    "document",
+    "cnpj_cpf",
+    "cpf_cnpj",
+  ]);
+  const email = pickString(record, [
+    "email_cobranca",
+    "emailCobranca",
+    "billingEmail",
+    "email_billing",
+    "email_financeiro",
+    "emailFinanceiro",
+    "email",
+  ]);
+
+  const documentDigits = documentRaw ? documentRaw.replace(/\D+/g, "") : null;
+
+  if (!companyName && !documentDigits && !email) {
+    return null;
+  }
+
+  return {
+    ...(companyName ? { companyName } : {}),
+    ...(documentDigits ? { document: documentDigits } : {}),
+    ...(email ? { email } : {}),
+  };
+};
+
+const extractSubscriptionIdFromEmpresa = (record: Record<string, unknown>): string | null => {
+  return (
+    resolveSubscriptionId(record, [
+      "asaas_subscription_id",
+      "asaasSubscriptionId",
+      "subscriptionId",
+      "subscription_id",
+      "asaas_subscription",
+      "asaasSubscription",
+    ]) ?? null
+  );
+};
+
+const mergeBillingDetails = (
+  primary: ManagePlanSelection["billing"] | null,
+  secondary: ManagePlanSelection["billing"] | null,
+): ManagePlanSelection["billing"] | null => {
+  const companyName = primary?.companyName ?? secondary?.companyName ?? null;
+  const document = primary?.document ?? secondary?.document ?? null;
+  const email = primary?.email ?? secondary?.email ?? null;
+
+  if (!companyName && !document && !email) {
+    return null;
+  }
+
+  return {
+    ...(companyName ? { companyName } : {}),
+    ...(document ? { document } : {}),
+    ...(email ? { email } : {}),
+  };
+};
 
 function findPlanFromEmpresa(planos: PlanoDetalhe[], empresasRows: unknown[]): PlanoDetalhe | null {
   if (planos.length === 0) {
@@ -616,11 +745,14 @@ function findPlanFromEmpresa(planos: PlanoDetalhe[], empresasRows: unknown[]): P
 function MeuPlanoContent() {
   const apiBaseUrl = getApiBaseUrl();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [subscriptionStatusOverride, setSubscriptionStatusOverride] = useState<string | null>(null);
+  const rawSubscriptionStatus = user?.subscription?.status ?? null;
+  const subscriptionStatus = subscriptionStatusOverride ?? rawSubscriptionStatus;
   const subscriptionPlanId = toNumber(user?.subscription?.planId ?? null);
-  const isTrialing = user?.subscription?.status === "trialing";
-  const subscriptionStatus = user?.subscription?.status ?? null;
+  const isTrialing = subscriptionStatus === "trialing";
   const subscriptionStatusLabel = useMemo(
     () => resolveSubscriptionStatusLabel(subscriptionStatus),
     [subscriptionStatus],
@@ -635,12 +767,32 @@ function MeuPlanoContent() {
   const [pricingMode, setPricingMode] = useState<PricingMode>("mensal");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancellationSuccessMessage, setCancellationSuccessMessage] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<UsageMetrics>({
     usuariosAtivos: null,
     clientesAtivos: null,
     processosAtivos: null,
     propostasEmitidas: null,
   });
+  const [billingDetails, setBillingDetails] = useState<ManagePlanSelection["billing"] | null>(null);
+  const [persistedSelection, setPersistedSelection] = useState<ManagePlanSelection>(() =>
+    getPersistedManagePlanSelection(),
+  );
+  const navigationState = (location.state ?? {}) as {
+    paymentSummary?: ManagePlanSelection["paymentSummary"];
+  };
+  const isSubscriptionActive = subscriptionStatus === "active";
+
+  useEffect(() => {
+    if (rawSubscriptionStatus !== "active" && subscriptionStatusOverride !== null) {
+      setSubscriptionStatusOverride(null);
+    }
+
+    if (rawSubscriptionStatus === "active" && subscriptionStatusOverride === null) {
+      setCancellationSuccessMessage(null);
+    }
+  }, [rawSubscriptionStatus, subscriptionStatusOverride]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -648,6 +800,65 @@ function MeuPlanoContent() {
       setSubscriptionId(storedId && storedId.trim().length > 0 ? storedId.trim() : null);
     }
   }, []);
+
+  const handleCancelSubscription = useCallback(async () => {
+    if (!subscriptionId || !isSubscriptionActive) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Tem certeza de que deseja cancelar a sua assinatura? Essa ação interrompe as próximas cobranças.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancellationSuccessMessage(null);
+
+    try {
+      await requestJson<unknown>(
+        getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`),
+        { method: "POST" },
+      );
+
+      clearPersistedManagePlanSelection();
+      setPersistedSelection({});
+      window.localStorage.removeItem("subscriptionId");
+      setSubscriptionId(null);
+      setSubscriptionStatusOverride("inactive");
+      setCancellationSuccessMessage("Sua assinatura foi cancelada com sucesso.");
+      await refreshUser();
+
+      toast({
+        title: "Assinatura cancelada",
+        description: "As próximas cobranças foram interrompidas e os dados foram atualizados.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : "Não foi possível cancelar a assinatura.";
+
+      toast({
+        title: "Falha ao cancelar assinatura",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [
+    isSubscriptionActive,
+    refreshUser,
+    subscriptionId,
+    toast,
+  ]);
 
   useEffect(() => {
     let disposed = false;
@@ -802,6 +1013,34 @@ function MeuPlanoContent() {
           findPlanFromEmpresa(parsedPlanos, empresasRows) ??
           parsedPlanos.find((item) => item.ativo) ??
           parsedPlanos[0];
+        const empresaRecord = empresasRows.find(
+          (entry): entry is Record<string, unknown> => entry !== null && typeof entry === "object",
+        );
+        const empresaBilling = empresaRecord ? extractBillingFromEmpresa(empresaRecord) : null;
+        const userSubscriptionId = resolveSubscriptionId(user?.subscription ?? null, [
+          "subscriptionId",
+          "id",
+          "asaasSubscriptionId",
+          "asaas_subscription_id",
+          "asaas_subscription",
+          "asaasSubscription",
+        ]);
+        const empresaSubscriptionId = empresaRecord
+          ? extractSubscriptionIdFromEmpresa(empresaRecord)
+          : null;
+        const resolvedSubscriptionId = userSubscriptionId ?? empresaSubscriptionId ?? null;
+        const userBilling = (() => {
+          const name = toStringOrNull(user?.empresa_nome ?? null);
+          const email = toStringOrNull(user?.email ?? null);
+          if (!name && !email) {
+            return null;
+          }
+          return {
+            ...(name ? { companyName: name } : {}),
+            ...(email ? { email } : {}),
+          } satisfies ManagePlanSelection["billing"];
+        })();
+        const combinedBilling = mergeBillingDetails(empresaBilling, userBilling);
 
         const usuariosCount = usuariosJson ? normalizeApiRows(usuariosJson).length : null;
 
@@ -814,10 +1053,21 @@ function MeuPlanoContent() {
         }
 
         if (!disposed) {
+          if (resolvedSubscriptionId) {
+            setSubscriptionId((current) => (current === resolvedSubscriptionId ? current : resolvedSubscriptionId));
+            if (typeof window !== "undefined") {
+              try {
+                window.localStorage.setItem("subscriptionId", resolvedSubscriptionId);
+              } catch (storageError) {
+                console.warn("Falha ao salvar subscriptionId no storage", storageError);
+              }
+            }
+          }
           setPlanosDisponiveis(parsedPlanos);
           setPlanoAtual(planoSelecionado);
           setPreviewPlano(null);
           setPricingMode(getDefaultPricingMode(planoSelecionado));
+          setBillingDetails(combinedBilling);
           setMetrics({
             usuariosAtivos: usuariosCount,
             clientesAtivos,
@@ -832,6 +1082,7 @@ function MeuPlanoContent() {
           setPlanosDisponiveis([]);
           setPlanoAtual(null);
           setPreviewPlano(null);
+          setBillingDetails(null);
           setMetrics({ usuariosAtivos: null, clientesAtivos: null, processosAtivos: null, propostasEmitidas: null });
         }
       } finally {
@@ -846,7 +1097,51 @@ function MeuPlanoContent() {
     return () => {
       disposed = true;
     };
-  }, [apiBaseUrl, subscriptionPlanId]);
+  }, [apiBaseUrl, subscriptionPlanId, user?.email, user?.empresa_nome, user?.subscription]);
+
+  useEffect(() => {
+    const summary = navigationState.paymentSummary;
+    if (!summary) {
+      return;
+    }
+
+    setPersistedSelection((previous) => {
+      const current = previous.paymentSummary ?? null;
+      if (
+        current?.status === (summary.status ?? null) &&
+        current?.paymentMethod === (summary.paymentMethod ?? null) &&
+        current?.dueDate === (summary.dueDate ?? null) &&
+        current?.amount === (summary.amount ?? null)
+      ) {
+        return previous;
+      }
+
+      return { ...previous, paymentSummary: summary };
+    });
+  }, [navigationState.paymentSummary]);
+
+  useEffect(() => {
+    setPersistedSelection((previous) => {
+      if (!billingDetails) {
+        if (!previous.billing) {
+          return previous;
+        }
+        const { billing: _ignored, ...rest } = previous;
+        return { ...rest };
+      }
+
+      const current = previous.billing ?? null;
+      if (
+        current?.companyName === (billingDetails.companyName ?? null) &&
+        current?.document === (billingDetails.document ?? null) &&
+        current?.email === (billingDetails.email ?? null)
+      ) {
+        return previous;
+      }
+
+      return { ...previous, billing: billingDetails };
+    });
+  }, [billingDetails]);
 
   const planoExibido = previewPlano ?? planoAtual;
 
@@ -870,10 +1165,142 @@ function MeuPlanoContent() {
   const cobrancaInfo = useMemo(() => estimateNextBilling(planoAtual), [planoAtual]);
 
   const availableModesLabel = useMemo(() => formatAvailableModes(planoExibido), [planoExibido]);
-  const checkoutPath =
-    planoExibido?.id != null
-      ? `${routes.checkout}?plan=${planoExibido.id}&cycle=${pricingMode === "anual" ? "yearly" : "monthly"}`
-      : null;
+  const paymentSummary = persistedSelection.paymentSummary ?? null;
+  const paymentStatusDetails = useMemo(
+    () => {
+      if (!paymentSummary?.status) {
+        return { isPending: false, isActive: false, statusLabel: null as string | null };
+      }
+
+      const normalized = paymentSummary.status.toLowerCase();
+      const isPending = normalized.includes("pend") || normalized.includes("aguard");
+      const isActive =
+        normalized.includes("receb") ||
+        normalized.includes("paid") ||
+        normalized.includes("confirm") ||
+        normalized.includes("ativo") ||
+        normalized.includes("ativa") ||
+        normalized.includes("active");
+
+      return { isPending, isActive, statusLabel: paymentSummary.status };
+    },
+    [paymentSummary?.status],
+  );
+  const paymentStatusBadge = useMemo(() => {
+    if (!paymentStatusDetails.statusLabel) {
+      return null;
+    }
+
+    if (paymentStatusDetails.isPending) {
+      return {
+        label: "Pagamento pendente",
+        className: "border-amber-400/60 bg-amber-500/15 text-amber-900",
+      };
+    }
+
+    if (paymentStatusDetails.isActive) {
+      return {
+        label: "Cobrança ativa",
+        className: "border-emerald-400/60 bg-emerald-500/15 text-emerald-900",
+      };
+    }
+
+    return {
+      label: paymentStatusDetails.statusLabel,
+      className: "border-primary/40 bg-primary/10 text-primary",
+    };
+  }, [paymentStatusDetails]);
+  const pendingCheckoutNotice = useMemo(() => {
+    if (!paymentStatusDetails.isPending) {
+      return null;
+    }
+
+    const amountLabel =
+      paymentSummary?.amount && Number.isFinite(paymentSummary.amount)
+        ? currencyFormatter.format(paymentSummary.amount)
+        : pricingDisplay.mainPrice;
+    const methodKey = paymentSummary?.paymentMethod ?? null;
+    const methodLabel =
+      methodKey && methodKey in PAYMENT_METHOD_LABELS
+        ? PAYMENT_METHOD_LABELS[methodKey as keyof typeof PAYMENT_METHOD_LABELS]
+        : methodKey;
+
+    let dueDateLabel: string | null = null;
+    if (paymentSummary?.dueDate) {
+      const parsed = new Date(paymentSummary.dueDate);
+      dueDateLabel = Number.isNaN(parsed.getTime())
+        ? paymentSummary.dueDate
+        : new Intl.DateTimeFormat("pt-BR").format(parsed);
+    }
+
+    const methodSegment = methodLabel ? ` via ${methodLabel}` : "";
+    const dueDateSegment = dueDateLabel ? ` com vencimento em ${dueDateLabel}` : "";
+    const amountSegment = amountLabel ?? "seu plano";
+
+    return `O pagamento de ${amountSegment}${methodSegment} está pendente${dueDateSegment}. Assim que confirmarmos o recebimento, atualizaremos automaticamente o seu plano e enviaremos a confirmação por e-mail.`;
+  }, [
+    paymentStatusDetails.isPending,
+    paymentSummary?.amount,
+    paymentSummary?.dueDate,
+    paymentSummary?.paymentMethod,
+    pricingDisplay.mainPrice,
+  ]);
+  const checkoutSelection = useMemo<ManagePlanSelection | null>(() => {
+    if (!planoExibido) {
+      return null;
+    }
+
+    const mode = resolvePricingModeForPlan(pricingMode, planoExibido);
+
+    const selection: ManagePlanSelection = {
+      plan: {
+        id: planoExibido.id,
+        nome: planoExibido.nome,
+        descricao: planoExibido.descricao,
+        recursos: planoExibido.recursos,
+        valorMensal: planoExibido.valorMensal,
+        valorAnual: planoExibido.valorAnual,
+        precoMensal: planoExibido.precoMensal,
+        precoAnual: planoExibido.precoAnual,
+        descontoAnualPercentual: planoExibido.descontoAnualPercentual,
+        economiaAnual: planoExibido.economiaAnual,
+        economiaAnualFormatada: planoExibido.economiaAnualFormatada,
+      },
+      pricingMode: mode,
+    };
+    if (billingDetails) {
+      selection.billing = billingDetails;
+    }
+    return selection;
+  }, [billingDetails, planoExibido, pricingMode]);
+
+  const handleNavigateToCheckout = useCallback(() => {
+    if (!checkoutSelection?.plan) {
+      return;
+    }
+
+    if (!subscriptionId) {
+      toast({
+        title: "Assinatura não disponível",
+        description: "Aguarde o carregamento da assinatura antes de prosseguir para o checkout.",
+      });
+      return;
+    }
+
+    persistManagePlanSelection(checkoutSelection);
+    setPersistedSelection((previous) => ({
+      ...checkoutSelection,
+      ...(previous.paymentSummary ? { paymentSummary: previous.paymentSummary } : {}),
+    }));
+    navigate(routes.meuPlanoPayment, { state: checkoutSelection });
+  }, [
+    checkoutSelection,
+    navigate,
+    persistManagePlanSelection,
+    setPersistedSelection,
+    subscriptionId,
+    toast,
+  ]);
 
   const pendingNoticeMessage = useMemo(() => {
     if (!isPaymentPending) {
@@ -1013,6 +1440,17 @@ function MeuPlanoContent() {
 
   const handlePlanSelection = useCallback(
     (plan: PlanoDetalhe) => {
+      const hasMensal = hasMensalPricing(plan);
+      const hasAnual = hasAnualPricing(plan);
+
+      if (!hasMensal && !hasAnual) {
+        toast({
+          title: `Plano ${plan.nome} ${PRICING_ON_REQUEST_LABEL.toLowerCase()}`,
+          description: `Os valores deste plano estão ${PRICING_ON_REQUEST_LABEL.toLowerCase()} no momento.`,
+        });
+        return;
+      }
+
       setPreviewPlano(plan);
       setDialogOpen(false);
       const nextPricingMode = resolvePricingModeForPlan(pricingMode, plan);
@@ -1040,15 +1478,18 @@ function MeuPlanoContent() {
         pricingMode: nextPricingMode,
       };
 
+      if (billingDetails) {
+        selection.billing = billingDetails;
+      }
+
       persistManagePlanSelection(selection);
-      const cycle = nextPricingMode === "anual" ? "yearly" : "monthly";
-      const matchedMarketingPlan = plans.find(
-        (item) => normalizeForComparison(item.name) === normalizeForComparison(plan.nome),
-      );
-      const slug = plan.slug ?? matchedMarketingPlan?.id ?? slugify(plan.nome) ?? String(plan.id);
-      navigate(`${routes.checkout}?plan=${encodeURIComponent(slug)}&cycle=${cycle}`);
+      setPersistedSelection((previous) => ({
+        ...selection,
+        ...(previous.paymentSummary ? { paymentSummary: previous.paymentSummary } : {}),
+      }));
+      navigate(routes.meuPlanoPayment, { state: selection });
     },
-    [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
+    [billingDetails, isTrialing, navigate, persistManagePlanSelection, pricingMode, setPersistedSelection, toast],
   );
 
   const resetPreview = useCallback(() => {
@@ -1086,8 +1527,8 @@ function MeuPlanoContent() {
         </Button>
         <Button
           variant="secondary"
-          disabled={!checkoutPath}
-          onClick={() => checkoutPath && navigate(checkoutPath)}
+          disabled={!checkoutSelection || !subscriptionId}
+          onClick={handleNavigateToCheckout}
         >
           Ir para checkout
         </Button>
@@ -1126,10 +1567,26 @@ function MeuPlanoContent() {
             </Alert>
           )}
 
+          {cancellationSuccessMessage && (
+            <Alert className="border-emerald-300/60 bg-emerald-50">
+              <Check className="h-4 w-4 text-emerald-600" />
+              <AlertTitle>Assinatura cancelada</AlertTitle>
+              <AlertDescription>{cancellationSuccessMessage}</AlertDescription>
+            </Alert>
+          )}
+
           {pendingNoticeMessage && (
             <Alert>
               <AlertTitle>Assinatura com pagamento pendente</AlertTitle>
               <AlertDescription>{pendingNoticeMessage}</AlertDescription>
+            </Alert>
+          )}
+
+          {pendingCheckoutNotice && (
+            <Alert className="border-amber-400/40 bg-amber-50">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <AlertTitle>Pagamento em processamento</AlertTitle>
+              <AlertDescription>{pendingCheckoutNotice}</AlertDescription>
             </Alert>
           )}
 
@@ -1152,6 +1609,11 @@ function MeuPlanoContent() {
                     {subscriptionStatusLabel && (
                       <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
                         {subscriptionStatusLabel}
+                      </Badge>
+                    )}
+                    {paymentStatusBadge && (
+                      <Badge className={cn("rounded-full", paymentStatusBadge.className)}>
+                        {paymentStatusBadge.label}
                       </Badge>
                     )}
                   </div>
@@ -1447,6 +1909,17 @@ function MeuPlanoContent() {
                 {previewPlano && (
                   <Button size="lg" variant="outline" className="rounded-full" onClick={resetPreview}>
                     Voltar ao plano atual
+                  </Button>
+                )}
+                {isSubscriptionActive && subscriptionId && (
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={handleCancelSubscription}
+                    disabled={isCancelling}
+                  >
+                    {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cancelar assinatura
                   </Button>
                 )}
               </div>
