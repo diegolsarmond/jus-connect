@@ -86,6 +86,22 @@ API hospedada pela Quantum em `https://quantumtecnologia.com.br`.
 Em produção recomenda-se executar `npm run build` seguido de `npm start`, ou
 utilizar a imagem Docker disponibilizada na raiz do monorepo.
 
+# Prazos de avaliação e tolerância
+
+- `SUBSCRIPTION_TRIAL_DAYS`: número de dias concedidos no período de teste
+  inicial (padrão 14).
+- `SUBSCRIPTION_GRACE_DAYS_MONTHLY`: quantidade de dias de tolerância aplicada
+  a assinaturas mensais quando o pagamento não é identificado no período
+  vigente (padrão 7).
+- `SUBSCRIPTION_GRACE_DAYS_ANNUAL`: quantidade de dias de tolerância aplicada
+  a assinaturas anuais (padrão 30).
+
+Os mesmos valores podem ser expostos para o frontend via Vite utilizando as
+variáveis `VITE_SUBSCRIPTION_TRIAL_DAYS`,
+`VITE_SUBSCRIPTION_GRACE_DAYS_MONTHLY` e
+`VITE_SUBSCRIPTION_GRACE_DAYS_FALLBACK`. Quando não forem definidos, o
+frontend seguirá os padrões do backend para estimar datas locais de vencimento.
+
 # Uploads de arquivos
 
 O endpoint `POST /uploads` aceita um formulário `multipart/form-data` com o

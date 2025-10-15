@@ -1,7 +1,12 @@
 import pool from './db';
 import { normalizeFinancialFlowIdentifier } from '../utils/financialFlowIdentifier';
+import {
+  SUBSCRIPTION_GRACE_DAYS_ANNUAL,
+  SUBSCRIPTION_GRACE_DAYS_MONTHLY,
+  SUBSCRIPTION_TRIAL_DAYS,
+} from '../constants/subscription';
 
-export const TRIAL_DURATION_DAYS = 14;
+export const TRIAL_DURATION_DAYS = SUBSCRIPTION_TRIAL_DAYS;
 const CADENCE_MONTHLY = 'monthly' as const;
 const CADENCE_ANNUAL = 'annual' as const;
 
@@ -13,8 +18,8 @@ const PERIOD_DURATION: Record<SubscriptionCadence, number> = {
 };
 
 const GRACE_DURATION: Record<SubscriptionCadence, number> = {
-  monthly: 7,
-  annual: 30,
+  monthly: SUBSCRIPTION_GRACE_DAYS_MONTHLY,
+  annual: SUBSCRIPTION_GRACE_DAYS_ANNUAL,
 };
 
 const FINANCIAL_FLOW_EMPRESA_COLUMNS = ['empresa', 'empresa_id', 'idempresa'] as const;
