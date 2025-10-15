@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -35,6 +35,7 @@ import { routes } from "@/config/routes";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { PlanSelection } from "@/features/plans/PlanSelection";
 import {
+  getPersistedManagePlanSelection,
   persistManagePlanSelection,
   type ManagePlanSelection,
   type PricingMode,
@@ -44,6 +45,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  Clock,
   Crown,
   Loader2,
   Sparkles,
@@ -99,6 +101,13 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
 });
 const countFormatter = new Intl.NumberFormat("pt-BR");
+
+const PAYMENT_METHOD_LABELS: Record<"PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD", string> = {
+  PIX: "PIX",
+  BOLETO: "Boleto bancário",
+  CREDIT_CARD: "Cartão de crédito",
+  DEBIT_CARD: "Cartão de débito",
+};
 
 function normalizeApiRows(data: unknown): unknown[] {
   if (Array.isArray(data)) {
@@ -568,6 +577,65 @@ function formatDate(value: Date | null): string | null {
 
 type ApiEmpresa = { plano?: unknown; plano_id?: unknown };
 
+const extractBillingFromEmpresa = (
+  record: Record<string, unknown>,
+): ManagePlanSelection["billing"] | null => {
+  const companyName = pickString(record, [
+    "razao_social",
+    "razaoSocial",
+    "nome_empresa",
+    "nomeEmpresa",
+    "nome",
+  ]);
+  const documentRaw = pickString(record, [
+    "cnpj",
+    "documento",
+    "document",
+    "cnpj_cpf",
+    "cpf_cnpj",
+  ]);
+  const email = pickString(record, [
+    "email_cobranca",
+    "emailCobranca",
+    "billingEmail",
+    "email_billing",
+    "email_financeiro",
+    "emailFinanceiro",
+    "email",
+  ]);
+
+  const documentDigits = documentRaw ? documentRaw.replace(/\D+/g, "") : null;
+
+  if (!companyName && !documentDigits && !email) {
+    return null;
+  }
+
+  return {
+    ...(companyName ? { companyName } : {}),
+    ...(documentDigits ? { document: documentDigits } : {}),
+    ...(email ? { email } : {}),
+  };
+};
+
+const mergeBillingDetails = (
+  primary: ManagePlanSelection["billing"] | null,
+  secondary: ManagePlanSelection["billing"] | null,
+): ManagePlanSelection["billing"] | null => {
+  const companyName = primary?.companyName ?? secondary?.companyName ?? null;
+  const document = primary?.document ?? secondary?.document ?? null;
+  const email = primary?.email ?? secondary?.email ?? null;
+
+  if (!companyName && !document && !email) {
+    return null;
+  }
+
+  return {
+    ...(companyName ? { companyName } : {}),
+    ...(document ? { document } : {}),
+    ...(email ? { email } : {}),
+  };
+};
+
 function findPlanFromEmpresa(planos: PlanoDetalhe[], empresasRows: unknown[]): PlanoDetalhe | null {
   if (planos.length === 0) {
     return null;
@@ -617,6 +685,7 @@ function MeuPlanoContent() {
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const subscriptionPlanId = toNumber(user?.subscription?.planId ?? null);
   const isTrialing = user?.subscription?.status === "trialing";
   const subscriptionStatus = user?.subscription?.status ?? null;
@@ -640,6 +709,13 @@ function MeuPlanoContent() {
     processosAtivos: null,
     propostasEmitidas: null,
   });
+  const [billingDetails, setBillingDetails] = useState<ManagePlanSelection["billing"] | null>(null);
+  const [persistedSelection, setPersistedSelection] = useState<ManagePlanSelection>(() =>
+    getPersistedManagePlanSelection(),
+  );
+  const navigationState = (location.state ?? {}) as {
+    paymentSummary?: ManagePlanSelection["paymentSummary"];
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -801,6 +877,22 @@ function MeuPlanoContent() {
           findPlanFromEmpresa(parsedPlanos, empresasRows) ??
           parsedPlanos.find((item) => item.ativo) ??
           parsedPlanos[0];
+        const empresaRecord = empresasRows.find(
+          (entry): entry is Record<string, unknown> => entry !== null && typeof entry === "object",
+        );
+        const empresaBilling = empresaRecord ? extractBillingFromEmpresa(empresaRecord) : null;
+        const userBilling = (() => {
+          const name = toStringOrNull(user?.empresa_nome ?? null);
+          const email = toStringOrNull(user?.email ?? null);
+          if (!name && !email) {
+            return null;
+          }
+          return {
+            ...(name ? { companyName: name } : {}),
+            ...(email ? { email } : {}),
+          } satisfies ManagePlanSelection["billing"];
+        })();
+        const combinedBilling = mergeBillingDetails(empresaBilling, userBilling);
 
         const usuariosCount = usuariosJson ? normalizeApiRows(usuariosJson).length : null;
 
@@ -817,6 +909,7 @@ function MeuPlanoContent() {
           setPlanoAtual(planoSelecionado);
           setPreviewPlano(null);
           setPricingMode(getDefaultPricingMode(planoSelecionado));
+          setBillingDetails(combinedBilling);
           setMetrics({
             usuariosAtivos: usuariosCount,
             clientesAtivos,
@@ -831,6 +924,7 @@ function MeuPlanoContent() {
           setPlanosDisponiveis([]);
           setPlanoAtual(null);
           setPreviewPlano(null);
+          setBillingDetails(null);
           setMetrics({ usuariosAtivos: null, clientesAtivos: null, processosAtivos: null, propostasEmitidas: null });
         }
       } finally {
@@ -845,7 +939,51 @@ function MeuPlanoContent() {
     return () => {
       disposed = true;
     };
-  }, [apiBaseUrl, subscriptionPlanId]);
+  }, [apiBaseUrl, subscriptionPlanId, user?.email, user?.empresa_nome]);
+
+  useEffect(() => {
+    const summary = navigationState.paymentSummary;
+    if (!summary) {
+      return;
+    }
+
+    setPersistedSelection((previous) => {
+      const current = previous.paymentSummary ?? null;
+      if (
+        current?.status === (summary.status ?? null) &&
+        current?.paymentMethod === (summary.paymentMethod ?? null) &&
+        current?.dueDate === (summary.dueDate ?? null) &&
+        current?.amount === (summary.amount ?? null)
+      ) {
+        return previous;
+      }
+
+      return { ...previous, paymentSummary: summary };
+    });
+  }, [navigationState.paymentSummary]);
+
+  useEffect(() => {
+    setPersistedSelection((previous) => {
+      if (!billingDetails) {
+        if (!previous.billing) {
+          return previous;
+        }
+        const { billing: _ignored, ...rest } = previous;
+        return { ...rest };
+      }
+
+      const current = previous.billing ?? null;
+      if (
+        current?.companyName === (billingDetails.companyName ?? null) &&
+        current?.document === (billingDetails.document ?? null) &&
+        current?.email === (billingDetails.email ?? null)
+      ) {
+        return previous;
+      }
+
+      return { ...previous, billing: billingDetails };
+    });
+  }, [billingDetails]);
 
   const planoExibido = previewPlano ?? planoAtual;
 
@@ -869,6 +1007,86 @@ function MeuPlanoContent() {
   const cobrancaInfo = useMemo(() => estimateNextBilling(planoAtual), [planoAtual]);
 
   const availableModesLabel = useMemo(() => formatAvailableModes(planoExibido), [planoExibido]);
+  const paymentSummary = persistedSelection.paymentSummary ?? null;
+  const paymentStatusDetails = useMemo(
+    () => {
+      if (!paymentSummary?.status) {
+        return { isPending: false, isActive: false, statusLabel: null as string | null };
+      }
+
+      const normalized = paymentSummary.status.toLowerCase();
+      const isPending = normalized.includes("pend") || normalized.includes("aguard");
+      const isActive =
+        normalized.includes("receb") ||
+        normalized.includes("paid") ||
+        normalized.includes("confirm") ||
+        normalized.includes("ativo") ||
+        normalized.includes("ativa") ||
+        normalized.includes("active");
+
+      return { isPending, isActive, statusLabel: paymentSummary.status };
+    },
+    [paymentSummary?.status],
+  );
+  const paymentStatusBadge = useMemo(() => {
+    if (!paymentStatusDetails.statusLabel) {
+      return null;
+    }
+
+    if (paymentStatusDetails.isPending) {
+      return {
+        label: "Pagamento pendente",
+        className: "border-amber-400/60 bg-amber-500/15 text-amber-900",
+      };
+    }
+
+    if (paymentStatusDetails.isActive) {
+      return {
+        label: "Cobrança ativa",
+        className: "border-emerald-400/60 bg-emerald-500/15 text-emerald-900",
+      };
+    }
+
+    return {
+      label: paymentStatusDetails.statusLabel,
+      className: "border-primary/40 bg-primary/10 text-primary",
+    };
+  }, [paymentStatusDetails]);
+  const pendingCheckoutNotice = useMemo(() => {
+    if (!paymentStatusDetails.isPending) {
+      return null;
+    }
+
+    const amountLabel =
+      paymentSummary?.amount && Number.isFinite(paymentSummary.amount)
+        ? currencyFormatter.format(paymentSummary.amount)
+        : pricingDisplay.mainPrice;
+    const methodKey = paymentSummary?.paymentMethod ?? null;
+    const methodLabel =
+      methodKey && methodKey in PAYMENT_METHOD_LABELS
+        ? PAYMENT_METHOD_LABELS[methodKey as keyof typeof PAYMENT_METHOD_LABELS]
+        : methodKey;
+
+    let dueDateLabel: string | null = null;
+    if (paymentSummary?.dueDate) {
+      const parsed = new Date(paymentSummary.dueDate);
+      dueDateLabel = Number.isNaN(parsed.getTime())
+        ? paymentSummary.dueDate
+        : new Intl.DateTimeFormat("pt-BR").format(parsed);
+    }
+
+    const methodSegment = methodLabel ? ` via ${methodLabel}` : "";
+    const dueDateSegment = dueDateLabel ? ` com vencimento em ${dueDateLabel}` : "";
+    const amountSegment = amountLabel ?? "seu plano";
+
+    return `O pagamento de ${amountSegment}${methodSegment} está pendente${dueDateSegment}. Assim que confirmarmos o recebimento, atualizaremos automaticamente o seu plano e enviaremos a confirmação por e-mail.`;
+  }, [
+    paymentStatusDetails.isPending,
+    paymentSummary?.amount,
+    paymentSummary?.dueDate,
+    paymentSummary?.paymentMethod,
+    pricingDisplay.mainPrice,
+  ]);
   const checkoutSelection = useMemo<ManagePlanSelection | null>(() => {
     if (!planoExibido) {
       return null;
@@ -876,7 +1094,7 @@ function MeuPlanoContent() {
 
     const mode = resolvePricingModeForPlan(pricingMode, planoExibido);
 
-    return {
+    const selection: ManagePlanSelection = {
       plan: {
         id: planoExibido.id,
         nome: planoExibido.nome,
@@ -892,7 +1110,11 @@ function MeuPlanoContent() {
       },
       pricingMode: mode,
     };
-  }, [planoExibido, pricingMode]);
+    if (billingDetails) {
+      selection.billing = billingDetails;
+    }
+    return selection;
+  }, [billingDetails, planoExibido, pricingMode]);
 
   const handleNavigateToCheckout = useCallback(() => {
     if (!checkoutSelection?.plan) {
@@ -900,8 +1122,12 @@ function MeuPlanoContent() {
     }
 
     persistManagePlanSelection(checkoutSelection);
+    setPersistedSelection((previous) => ({
+      ...checkoutSelection,
+      ...(previous.paymentSummary ? { paymentSummary: previous.paymentSummary } : {}),
+    }));
     navigate(routes.meuPlanoPayment, { state: checkoutSelection });
-  }, [checkoutSelection, navigate, persistManagePlanSelection]);
+  }, [checkoutSelection, navigate, persistManagePlanSelection, setPersistedSelection]);
 
   const pendingNoticeMessage = useMemo(() => {
     if (!isPaymentPending) {
@@ -1068,10 +1294,18 @@ function MeuPlanoContent() {
         pricingMode: nextPricingMode,
       };
 
+      if (billingDetails) {
+        selection.billing = billingDetails;
+      }
+
       persistManagePlanSelection(selection);
+      setPersistedSelection((previous) => ({
+        ...selection,
+        ...(previous.paymentSummary ? { paymentSummary: previous.paymentSummary } : {}),
+      }));
       navigate(routes.meuPlanoPayment, { state: selection });
     },
-    [isTrialing, navigate, persistManagePlanSelection, pricingMode, toast],
+    [billingDetails, isTrialing, navigate, persistManagePlanSelection, pricingMode, setPersistedSelection, toast],
   );
 
   const resetPreview = useCallback(() => {
@@ -1152,6 +1386,14 @@ function MeuPlanoContent() {
             </Alert>
           )}
 
+          {pendingCheckoutNotice && (
+            <Alert className="border-amber-400/40 bg-amber-50">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <AlertTitle>Pagamento em processamento</AlertTitle>
+              <AlertDescription>{pendingCheckoutNotice}</AlertDescription>
+            </Alert>
+          )}
+
           <Card className="relative overflow-hidden border-none bg-gradient-to-br from-primary/5 via-background to-background shadow-xl">
             <div className="pointer-events-none absolute inset-0">
               <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
@@ -1171,6 +1413,11 @@ function MeuPlanoContent() {
                     {subscriptionStatusLabel && (
                       <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
                         {subscriptionStatusLabel}
+                      </Badge>
+                    )}
+                    {paymentStatusBadge && (
+                      <Badge className={cn("rounded-full", paymentStatusBadge.className)}>
+                        {paymentStatusBadge.label}
                       </Badge>
                     )}
                   </div>
