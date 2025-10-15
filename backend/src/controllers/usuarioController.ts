@@ -11,6 +11,7 @@ import {
 import { hashPassword } from '../utils/passwordUtils';
 import { newUserWelcomeEmailService } from '../services/newUserWelcomeEmailService';
 import { fetchAuthenticatedUserEmpresa, parseOptionalInteger } from '../utils/authUser';
+import { sanitizeDigits } from '../utils/sanitizeDigits';
 
 
 let welcomeEmailService = newUserWelcomeEmailService;
@@ -84,6 +85,54 @@ const parseStatus = (value: unknown): boolean | 'invalid' => {
   }
 
   return 'invalid';
+};
+
+const normalizeOptionalCpf = (value: unknown): string | null | 'invalid' => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    return 'invalid';
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const digits = sanitizeDigits(trimmed);
+
+  if (!digits || digits.length !== 11) {
+    return 'invalid';
+  }
+
+  return digits;
+};
+
+const normalizeOptionalTelefone = (value: unknown): string | null | 'invalid' => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    return 'invalid';
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const digits = sanitizeDigits(trimmed);
+
+  if (!digits || digits.length < 10 || digits.length > 11) {
+    return 'invalid';
+  }
+
+  return digits;
 };
 
 const baseUsuarioSelect =
@@ -331,6 +380,18 @@ export const createUsuario = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'E-mail é obrigatório para criação de usuário.' });
     }
 
+    const cpfNormalizado = normalizeOptionalCpf(cpf);
+    if (cpfNormalizado === 'invalid') {
+      return res.status(400).json({ error: 'CPF deve conter 11 dígitos.' });
+    }
+
+    const telefoneNormalizado = normalizeOptionalTelefone(telefone);
+    if (telefoneNormalizado === 'invalid') {
+      return res
+        .status(400)
+        .json({ error: 'Telefone deve conter 10 ou 11 dígitos.' });
+    }
+
     const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await hashPassword(temporaryPassword);
 
@@ -338,7 +399,7 @@ export const createUsuario = async (req: Request, res: Response) => {
       'INSERT INTO public.usuarios (nome_completo, cpf, email, perfil, empresa, setor, oab, status, senha, must_change_password, telefone, ultimo_login, observacoes, datacriacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, $11, $12, NOW()) RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
-        cpf,
+        cpfNormalizado,
         normalizedEmail,
         perfil,
         empresaId,
@@ -346,7 +407,7 @@ export const createUsuario = async (req: Request, res: Response) => {
         oab,
         parsedStatus,
         hashedPassword,
-        telefone,
+        telefoneNormalizado,
         ultimo_login,
         observacoes,
       ]
@@ -533,6 +594,18 @@ export const updateUsuario = async (req: Request, res: Response) => {
       }
     }
 
+    const cpfNormalizado = normalizeOptionalCpf(cpf);
+    if (cpfNormalizado === 'invalid') {
+      return res.status(400).json({ error: 'CPF deve conter 11 dígitos.' });
+    }
+
+    const telefoneNormalizado = normalizeOptionalTelefone(telefone);
+    if (telefoneNormalizado === 'invalid') {
+      return res
+        .status(400)
+        .json({ error: 'Telefone deve conter 10 ou 11 dígitos.' });
+    }
+
     let senhaParaAtualizar = senha;
     if (
       typeof senha === 'string' &&
@@ -547,7 +620,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
       'UPDATE public.usuarios SET nome_completo = $1, cpf = $2, email = $3, perfil = $4, empresa = $5, setor = $6, oab = $7, status = $8, senha = $9, telefone = $10, ultimo_login = $11, observacoes = $12 WHERE id = $13 RETURNING id, nome_completo, cpf, email, perfil, empresa, setor, oab, status, telefone, ultimo_login, observacoes, datacriacao',
       [
         nome_completo,
-        cpf,
+        cpfNormalizado,
         email,
         perfil,
         empresaId,
@@ -555,7 +628,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
         oab,
         parsedStatus,
         senhaParaAtualizar,
-        telefone,
+        telefoneNormalizado,
         ultimo_login,
         observacoes,
         id,
