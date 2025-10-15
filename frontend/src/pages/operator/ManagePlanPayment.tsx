@@ -421,6 +421,8 @@ const ManagePlanPayment = () => {
   const [isTokenizingCard, setIsTokenizingCard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentResult, setPaymentResult] = useState<PlanPaymentResult | null>(null);
+  const [isPaymentStatusLoading, setIsPaymentStatusLoading] = useState(false);
+  const [paymentStatusError, setPaymentStatusError] = useState<string | null>(null);
   const [cardForm, setCardForm] = useState<CardFormState>(() => ({ ...initialCardFormState }));
   const [cardErrors, setCardErrors] = useState<CardFormErrors>({});
   const [autoChargeConfirmed, setAutoChargeConfirmed] = useState(false);
@@ -475,6 +477,29 @@ const ManagePlanPayment = () => {
     },
     [paymentResult, selection.paymentSummary],
   );
+
+  const clearPaymentSummary = useCallback(() => {
+    lastPersistedRef.current = {
+      ...lastPersistedRef.current,
+      paymentStatus: null,
+      paymentMethod: null,
+      paymentDueDate: null,
+      paymentAmount: null,
+    };
+
+    setCachedSelection((previous) => {
+      if (!previous.paymentSummary) {
+        return previous;
+      }
+
+      const { paymentSummary: _ignored, ...rest } = previous;
+      const nextSelection: ManagePlanSelection = { ...rest };
+      persistManagePlanSelection(nextSelection);
+      return nextSelection;
+    });
+  }, [persistManagePlanSelection, setCachedSelection]);
+
+  const paymentStatus = paymentResult?.charge.status ?? null;
 
   useEffect(() => {
     const billing = selection.billing;
@@ -641,14 +666,61 @@ const ManagePlanPayment = () => {
   }, [user?.empresa_id]);
 
   useEffect(() => {
-    if (paymentResult || !selectedPlanId) {
+    if (!selectedPlanId) {
       return;
     }
 
-    const controller = new AbortController();
-    let isMounted = true;
+    const normalizeStatus = (value: string | null | undefined) => {
+      if (!value) {
+        return "";
+      }
 
-    const loadCurrentPayment = async () => {
+      return value.trim().toLowerCase();
+    };
+
+    const normalizedStatus = normalizeStatus(paymentStatus);
+    if (normalizedStatus === "paid" || normalizedStatus === "received") {
+      return;
+    }
+
+    let isMounted = true;
+    let isFetching = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let currentController: AbortController | null = null;
+
+    setIsPaymentStatusLoading(true);
+    setPaymentStatusError(null);
+
+    const clearTimer = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const stopPolling = async () => {
+      clearTimer();
+      if (!isMounted) {
+        return;
+      }
+
+      setIsPaymentStatusLoading(false);
+      try {
+        await refreshUser();
+      } catch {}
+    };
+
+    const fetchCurrentPayment = async () => {
+      if (isFetching) {
+        return;
+      }
+
+      setIsPaymentStatusLoading(true);
+      setPaymentStatusError(null);
+      const controller = new AbortController();
+      currentController = controller;
+      isFetching = true;
+
       try {
         const response = await fetch(getApiUrl("plan-payments/current"), {
           headers: { Accept: "application/json" },
@@ -656,8 +728,19 @@ const ManagePlanPayment = () => {
           signal: controller.signal,
         });
 
-        if (!response.ok) {
+        if (response.status === 404) {
+          if (isMounted) {
+            clearPaymentSummary();
+            setPaymentResult(null);
+            setPaymentStatusError(null);
+          }
+
+          await stopPolling();
           return;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Falha ao atualizar cobrança (HTTP ${response.status})`);
         }
 
         const payload = (await response.json()) as unknown;
@@ -667,30 +750,65 @@ const ManagePlanPayment = () => {
         }
 
         if (!payload || typeof payload !== "object") {
+          setPaymentStatusError("Resposta inválida ao consultar a cobrança atual.");
+          setIsPaymentStatusLoading(false);
+          clearTimer();
           return;
         }
 
         const data = payload as PlanPaymentResult;
         const planData = data.plan ?? null;
         if (planData && planData.id !== null && planData.id !== selectedPlanId) {
+          setIsPaymentStatusLoading(false);
+          clearTimer();
           return;
         }
 
+        setPaymentStatusError(null);
         setPaymentResult(data);
-      } catch (error) {
-        if (controller.signal.aborted) {
+
+        const statusValue = normalizeStatus(
+          typeof data.charge.status === "string" ? data.charge.status : null,
+        );
+
+        if (statusValue === "paid" || statusValue === "received") {
+          await stopPolling();
           return;
         }
+      } catch (error) {
+        if (!isMounted || controller.signal.aborted) {
+          return;
+        }
+
+        setPaymentStatusError(
+          error instanceof Error
+            ? error.message
+            : "Falha ao atualizar status do pagamento.",
+        );
+        setIsPaymentStatusLoading(false);
+      } finally {
+        if (currentController === controller) {
+          currentController = null;
+        }
+
+        isFetching = false;
       }
     };
 
-    loadCurrentPayment();
+    intervalId = window.setInterval(() => {
+      void fetchCurrentPayment();
+    }, 5000);
+
+    void fetchCurrentPayment();
 
     return () => {
       isMounted = false;
-      controller.abort();
+      clearTimer();
+      if (currentController) {
+        currentController.abort();
+      }
     };
-  }, [paymentResult, selectedPlanId]);
+  }, [clearPaymentSummary, paymentStatus, refreshUser, selectedPlanId]);
 
   useEffect(() => {
     if (!user?.empresa_id) {
@@ -1760,6 +1878,20 @@ const ManagePlanPayment = () => {
 
 
                   
+
+          {isPaymentStatusLoading && (
+            <div className="flex items-center gap-2 rounded-3xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Verificando status da cobrança…</span>
+            </div>
+          )}
+
+          {paymentStatusError && (
+            <Alert className="border-destructive/40 bg-destructive/10">
+              <AlertTitle>Não foi possível atualizar o pagamento</AlertTitle>
+              <AlertDescription>{paymentStatusError}</AlertDescription>
+            </Alert>
+          )}
 
           {paymentResult && (
             <Card className="rounded-3xl border border-primary/30 bg-primary/5">
