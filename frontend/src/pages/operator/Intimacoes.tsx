@@ -2573,13 +2573,7 @@ export default function Intimacoes() {
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <CardTitle className="text-lg">OABs monitoradas</CardTitle>
-            <CardDescription>
-              Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
-            </CardDescription>
           </div>
-          <Button variant="outline" onClick={handleOpenOabModal}>
-            Adicionar OAB
-          </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
@@ -2594,7 +2588,7 @@ export default function Intimacoes() {
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
-              Ver OABs monitoradas
+              Gerenciar OABs
             </Button>
           </div>
         </CardContent>
@@ -3184,17 +3178,10 @@ export default function Intimacoes() {
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Gerenciar OABs monitoradas</DialogTitle>
-            <DialogDescription>
-              Cadastre novas OABs monitoradas ou remova registros que não deseja mais acompanhar.
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-6">
             <div className="space-y-3">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">OABs cadastradas</p>
-                <p className="text-xs text-muted-foreground">
-                  Visualize e gerencie os números monitorados pela sua empresa.
-                </p>
               </div>
               {monitoredOabsLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -3299,7 +3286,7 @@ export default function Intimacoes() {
               <div className="space-y-2">
                 <p className="text-sm font-medium text-foreground">Dias da semana</p>
                 <p className="text-xs text-muted-foreground">
-                  Defina os dias para execução da sincronização automática.
+                                  Escolha quando a sincronização automática deve ocorrer.
                 </p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {BUSINESS_DAY_VALUES.map((day) => {

@@ -168,6 +168,7 @@ export type PlanPaymentResult = {
   paymentMethod: "PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD";
   charge: PlanPaymentCharge;
   flow: PlanPaymentFlow;
+  subscriptionId: string | null;
 };
 
 const normalizeString = (value: unknown): string | null => {
@@ -227,6 +228,27 @@ const normalizeCharge = (payload: unknown): PlanPaymentCharge => {
   } satisfies PlanPaymentCharge;
 };
 
+const normalizeSubscriptionId = (payload: unknown): string | null => {
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    const value = record.id;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return null;
+};
+
 const normalizeFlow = (payload: unknown): PlanPaymentFlow => {
   if (!payload || typeof payload !== "object") {
     return {
@@ -248,10 +270,13 @@ const normalizeFlow = (payload: unknown): PlanPaymentFlow => {
   } satisfies PlanPaymentFlow;
 };
 
-const normalizePlanInfo = (payload: unknown, fallbackId: number): PlanPaymentResult["plan"] => {
+const normalizePlanInfo = (payload: unknown, fallbackId?: number): PlanPaymentResult["plan"] => {
+  const fallback =
+    typeof fallbackId === "number" && Number.isFinite(fallbackId) ? fallbackId : null;
+
   if (!payload || typeof payload !== "object") {
     return {
-      id: fallbackId,
+      id: fallback,
       nome: null,
       pricingMode: "mensal",
       price: null,
@@ -263,11 +288,40 @@ const normalizePlanInfo = (payload: unknown, fallbackId: number): PlanPaymentRes
   const pricingMode: "mensal" | "anual" = pricingModeRaw === "anual" ? "anual" : "mensal";
 
   return {
-    id: toNumber(record.id) ?? fallbackId,
+    id: toNumber(record.id) ?? fallback,
     nome: normalizeString(record.nome ?? record.name),
     pricingMode,
     price: toNumber(record.price ?? record.valor),
   } satisfies PlanPaymentResult["plan"];
+};
+
+const parsePaymentMethod = (
+  value: unknown,
+): PlanPaymentResult["paymentMethod"] => {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return "PIX";
+  }
+
+  const lower = normalized.toLowerCase();
+  if (lower === "boleto") {
+    return "BOLETO";
+  }
+  if (lower === "credit_card" || lower === "cartao" || lower === "cartão") {
+    return "CREDIT_CARD";
+  }
+  if (
+    lower === "debit_card" ||
+    lower === "debito" ||
+    lower === "débito" ||
+    lower === "cartao_debito" ||
+    lower === "cartão_debito" ||
+    lower === "cartão_débito"
+  ) {
+    return "DEBIT_CARD";
+  }
+
+  return "PIX";
 };
 
 export async function createPlanPayment(payload: PlanPaymentPayload): Promise<PlanPaymentResult> {
@@ -309,5 +363,41 @@ export async function createPlanPayment(payload: PlanPaymentPayload): Promise<Pl
     paymentMethod,
     charge: normalizeCharge(payloadRecord.charge),
     flow: normalizeFlow(payloadRecord.flow),
+    subscriptionId: normalizeSubscriptionId(payloadRecord.subscription),
   } satisfies PlanPaymentResult;
 }
+
+export const parsePlanPaymentResult = (
+  payload: unknown,
+  fallbackPlanId?: number,
+): PlanPaymentResult => {
+  const record =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
+
+  const planPayload = record.plan ?? null;
+  const chargePayload = record.charge ?? null;
+  const flowPayload = record.flow ?? null;
+
+  const fallbackId =
+    typeof fallbackPlanId === "number" && Number.isFinite(fallbackPlanId)
+      ? fallbackPlanId
+      : planPayload && typeof planPayload === "object" && planPayload !== null
+        ? toNumber((planPayload as Record<string, unknown>).id) ?? undefined
+        : undefined;
+
+  const paymentMethodSource =
+    record.paymentMethod ??
+    (chargePayload && typeof chargePayload === "object"
+      ? (chargePayload as Record<string, unknown>).billingType
+      : undefined);
+
+  return {
+    plan: normalizePlanInfo(planPayload, fallbackId),
+    paymentMethod: parsePaymentMethod(paymentMethodSource),
+    charge: normalizeCharge(chargePayload),
+    flow: normalizeFlow(flowPayload),
+    subscriptionId: normalizeSubscriptionId(record.subscription ?? record.subscriptionId ?? null),
+  } satisfies PlanPaymentResult;
+};
