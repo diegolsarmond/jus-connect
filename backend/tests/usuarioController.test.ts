@@ -476,6 +476,8 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok(insertCall);
   assert.equal(typeof insertCall.values?.[8], 'string');
   assert.ok(String(insertCall.values?.[8]).startsWith('argon2:'));
+  assert.equal(insertCall.values?.[1], '00000000000');
+  assert.equal(insertCall.values?.[9], '11900000000');
 
   assert.equal(capturedCalls.length, 1);
   const [welcomeArgs] = capturedCalls;
