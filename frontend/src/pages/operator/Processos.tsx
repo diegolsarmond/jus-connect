@@ -4465,13 +4465,8 @@ export default function Processos() {
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
                         <CardTitle className="text-lg">OABs monitoradas</CardTitle>
-                        <CardDescription>
-                            Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
-                        </CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
-                        Adicionar OAB
-                    </Button>
+
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
@@ -4698,17 +4693,10 @@ export default function Processos() {
                 <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
                         <DialogTitle>Gerenciar OABs monitoradas</DialogTitle>
-                        <DialogDescription>
-                            Cadastre novas OABs monitoradas ou remova registros que não deseja mais acompanhar.
-                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6">
                         <div className="space-y-3">
                             <div className="space-y-1">
-                                <p className="text-sm font-medium text-foreground">OABs cadastradas</p>
-                                <p className="text-xs text-muted-foreground">
-                                    Visualize e gerencie os números monitorados pela sua empresa.
-                                </p>
                             </div>
                             {oabMonitorsLoading ? (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
