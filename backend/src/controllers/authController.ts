@@ -8,6 +8,7 @@ import { fetchPerfilModules } from '../services/moduleService';
 import { SYSTEM_MODULES, normalizeModuleId, sortModules } from '../constants/modules';
 import {
   calculateTrialEnd,
+  parseCadence,
   resolvePlanCadence,
   resolveSubscriptionPayloadFromRow,
   type SubscriptionCadence,
@@ -21,6 +22,8 @@ import { createPasswordResetRequest } from '../services/passwordResetService';
 import { isUndefinedTableError } from '../utils/databaseErrors';
 import {
   SUBSCRIPTION_DEFAULT_GRACE_DAYS,
+  SUBSCRIPTION_GRACE_DAYS_ANNUAL,
+  SUBSCRIPTION_GRACE_DAYS_MONTHLY,
   SUBSCRIPTION_TRIAL_DAYS,
 } from '../constants/subscription';
 
@@ -204,6 +207,7 @@ type LoginUserRow = UserRowBase & {
 const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolution => {
   const planId = parseOptionalInteger(row.empresa_plano);
   const isActive = parseBooleanFlag(row.empresa_ativo);
+  const cadence = parseCadence(row.empresa_subscription_cadence);
   const startedAtDate = (() => {
     const datacadastro = parseDateValue(row.empresa_datacadastro);
     if (datacadastro) {
@@ -230,8 +234,10 @@ const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolutio
 
     return parseDateValue(row.empresa_grace_expires_at);
   })();
+  const fallbackGracePeriodDays =
+    cadence === 'annual' ? SUBSCRIPTION_GRACE_DAYS_ANNUAL : SUBSCRIPTION_GRACE_DAYS_MONTHLY;
   const computedGracePeriodEndsAt =
-    currentPeriodEndsAtDate != null ? addDays(currentPeriodEndsAtDate, GRACE_PERIOD_DAYS) : null;
+    currentPeriodEndsAtDate != null ? addDays(currentPeriodEndsAtDate, fallbackGracePeriodDays) : null;
   const gracePeriodEndsAtDate = (() => {
     if (persistedGracePeriodEndsAt && computedGracePeriodEndsAt) {
       return persistedGracePeriodEndsAt.getTime() >= computedGracePeriodEndsAt.getTime()
