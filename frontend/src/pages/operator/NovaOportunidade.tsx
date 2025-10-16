@@ -90,6 +90,10 @@ const formSchema = z
   ultima_atualizacao: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.forma_pagamento !== "Parcelado") {
+      return;
+    }
+
     const valorEntrada = parseCurrencyValue(data.valor_entrada);
     const valorHonorarios = parseCurrencyValue(data.valor_honorarios);
 
