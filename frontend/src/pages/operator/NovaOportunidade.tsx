@@ -53,7 +53,16 @@ import {
 } from "@/components/ui/dialog";
 import { ChevronsUpDown, Check, UserPlus } from "lucide-react";
 
-const formSchema = z.object({
+const valorEntradaMaiorQueHonorariosMensagem =
+  "O valor de entrada deve ser menor ou igual ao valor dos honorários";
+
+const parseCurrencyValue = (value: string | null | undefined) => {
+  const digits = (value || "").replace(/\D/g, "");
+  return digits ? Number(digits) / 100 : null;
+};
+
+const formSchema = z
+  .object({
   tipo_processo: z.string().min(1, "Tipo de Processo é obrigatório"),
   area_atuacao: z.string().optional(),
   responsavel_interno: z.string().optional(),
@@ -98,7 +107,23 @@ const formSchema = z.object({
   criado_por: z.string().optional(),
   data_criacao: z.string().optional(),
   ultima_atualizacao: z.string().optional(),
-});
+  })
+  .superRefine((data, ctx) => {
+    const valorEntrada = parseCurrencyValue(data.valor_entrada);
+    const valorHonorarios = parseCurrencyValue(data.valor_honorarios);
+
+    if (
+      valorEntrada !== null &&
+      valorHonorarios !== null &&
+      valorEntrada > valorHonorarios
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["valor_entrada"],
+        message: valorEntradaMaiorQueHonorariosMensagem,
+      });
+    }
+  });
 
 interface Option {
   id: string;
@@ -530,10 +555,7 @@ export default function NovaOportunidade() {
     loadEtapas();
   }, [faseValue, apiUrl]);
 
-  const parseCurrency = (value: string) => {
-    const digits = value.replace(/\D/g, "");
-    return digits ? Number(digits) / 100 : null;
-  };
+  const parseCurrency = (value: string) => parseCurrencyValue(value);
 
   const parsePercent = (value: string) => {
     const digits = value.replace(/\D/g, "");
@@ -624,6 +646,22 @@ export default function NovaOportunidade() {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      const valorEntrada = parseCurrency(values.valor_entrada || "");
+      const valorHonorarios = parseCurrency(values.valor_honorarios || "");
+
+      if (
+        valorEntrada !== null &&
+        valorHonorarios !== null &&
+        valorEntrada > valorHonorarios
+      ) {
+        form.setError(
+          "valor_entrada",
+          { type: "manual", message: valorEntradaMaiorQueHonorariosMensagem },
+          { shouldFocus: true }
+        );
+        return;
+      }
+
       const isProcessoDistribuido = values.processo_distribuido === "sim";
       const solicitanteIdRaw = values.solicitante_id?.trim();
       const solicitanteId =
