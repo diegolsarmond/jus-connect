@@ -288,7 +288,9 @@ async function resolveCredentialIdForCompany(companyId: number): Promise<number 
   }
 
   try {
-    const integration = await resolveAsaasIntegration(companyId);
+    const integration = await resolveAsaasIntegration(companyId, undefined, undefined, {
+      scope: 'company-first',
+    });
     return integration.credentialId ?? null;
   } catch (error) {
     console.error('[AsaasWebhook] Failed to resolve integration for company', companyId, error);
