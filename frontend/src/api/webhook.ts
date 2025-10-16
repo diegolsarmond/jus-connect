@@ -157,7 +157,7 @@ export const getWebhookEndpoint = () => {
     ? window.location.origin 
     : 'http://localhost:8080';
   
-  return `${baseUrl}/api/webhook/waha`;
+  return `${baseUrl}/api/webhooks/waha`;
 };
 
 // Example webhook payload for testing
