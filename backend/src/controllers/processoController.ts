@@ -154,7 +154,7 @@ const baseProcessoSelect = `
     p.justica_gratuita,
     p.liminar,
     p.nivel_sigilo,
-    p.tramitacaoatual,
+    p.tramitacao_atual,
     p.permite_peticionar,
     p.envolvidos_id,
     p.descricao,
