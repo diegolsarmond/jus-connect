@@ -785,6 +785,14 @@ class WAHAService {
     });
   }
 
+  async deleteChat(chatId: string): Promise<WAHAResponse<void>> {
+    const config = await this.getResolvedConfig();
+    const encodedId = encodeURIComponent(chatId);
+    return this.makeRequest<void>(`/api/${config.session}/chats/${encodedId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Get chat info
   async getChatInfo(chatId: string): Promise<WAHAResponse<Record<string, unknown>>> {
     const config = await this.getResolvedConfig();
