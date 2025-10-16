@@ -263,6 +263,29 @@ export const ChatPage = () => {
     updateMessageStatus,
   } = useChatMessages(selectedConversationId);
 
+  useEffect(() => {
+    if (!selectedConversationId) {
+      return;
+    }
+    const conversation = conversations.find((item) => item.id === selectedConversationId);
+    const lastMessage = conversation?.lastMessage;
+    if (!lastMessage) {
+      return;
+    }
+    if (messages.some((message) => message.id === lastMessage.id)) {
+      return;
+    }
+    mergeMessage({
+      id: lastMessage.id,
+      conversationId: selectedConversationId,
+      sender: lastMessage.sender,
+      content: lastMessage.content,
+      timestamp: lastMessage.timestamp,
+      status: lastMessage.status,
+      type: lastMessage.type,
+    });
+  }, [conversations, mergeMessage, messages, selectedConversationId]);
+
   const updateConversationMutation = useMutation({
     mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationPayload }) =>
       updateConversationRequest(conversationId, changes),
