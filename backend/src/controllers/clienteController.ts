@@ -10,11 +10,11 @@ import {
   listClientesByEmpresaId,
 } from '../services/clienteRepository';
 import pool from '../services/db';
-import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import AsaasCustomerService, {
   AsaasCustomerState,
   ClienteLocalData,
 } from '../services/asaasCustomerService';
+import { ensureAuthenticatedEmpresaId } from '../middlewares/ensureAuthenticatedEmpresa';
 
 const asaasCustomerService = new AsaasCustomerService();
 
@@ -50,22 +50,9 @@ const triggerAsaasSync = (
 
 export const listClientes = async (req: Request, res: Response) => {
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
     const queryValue = (value: unknown): string | undefined => {
@@ -108,17 +95,12 @@ export const listClientes = async (req: Request, res: Response) => {
 export const getClienteById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const cliente = await findClienteById(id, empresaLookup.empresaId);
+    const cliente = await findClienteById(id, empresaId);
     if (!cliente) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
@@ -131,22 +113,9 @@ export const getClienteById = async (req: Request, res: Response) => {
 
 export const countClientesAtivos = async (req: Request, res: Response) => {
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
     const totalClientesAtivos = await countClientesAtivosByEmpresaId(empresaId);
@@ -200,22 +169,9 @@ export const createCliente = async (req: Request, res: Response) => {
   })();
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
     if (tipoNormalizado === null) {
@@ -337,22 +293,9 @@ export const updateCliente = async (req: Request, res: Response) => {
   })();
 
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
     if (tipoNormalizado === null) {
@@ -423,22 +366,9 @@ export const updateCliente = async (req: Request, res: Response) => {
 export const deleteCliente = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res.status(empresaLookup.status).json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
     const result = await pool.query(

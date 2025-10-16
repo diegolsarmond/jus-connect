@@ -11,6 +11,29 @@ import type { SendMessageInput } from '@/features/chat/types';
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 100;
 
+type ChatMessageDeliveryStatus = 'sent' | 'delivered' | 'read';
+
+const statusToAckName = (
+  status: ChatMessageDeliveryStatus,
+): 'SENT' | 'DELIVERED' | 'READ' => {
+  if (status === 'read') {
+    return 'READ';
+  }
+  if (status === 'delivered') {
+    return 'DELIVERED';
+  }
+  return 'SENT';
+};
+
+const statusToAckCode = (status: ChatMessageDeliveryStatus): number => {
+  if (status === 'read') {
+    return 3;
+  }
+  if (status === 'delivered') {
+    return 2;
+  }
+  return 1;
+};
 type MessageAckStatus = 'SENT' | 'DELIVERED' | 'READ';
 
 type MessagePaginationState = {
@@ -270,7 +293,11 @@ const readStringProperty = (
   return pickFirstString(record[key]);
 };
 
-export const useWAHA = (sessionNameOverride?: string | null) => {
+export const useWAHA = (
+  sessionNameOverride?: string | null,
+  options?: { enablePolling?: boolean },
+) => {
+  const enablePolling = options?.enablePolling ?? true;
   const [chats, setChats] = useState<ChatOverview[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -741,6 +768,13 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
       updateMessagePaginationState,
     ],
   );
+
+  const refreshChatsIfVisible = useCallback(() => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return;
+    }
+    void loadChats({ reset: true, silent: true });
+  }, [loadChats]);
 
   const loadOlderMessages = useCallback(
     async (chatId: string): Promise<Message[]> => loadMessages(chatId, { reset: false }),
@@ -1244,12 +1278,16 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
     ],
   );
 
+  const updateMessageStatus = useCallback(
+    (chatId: string, messageId: string, status: ChatMessageDeliveryStatus) => {
   const updateMessageAck = useCallback(
     (chatId: string, messageId: string, ack: MessageAckStatus) => {
       if (!isMountedRef.current) {
         return;
       }
 
+      const ackName = statusToAckName(status);
+      const ackCode = statusToAckCode(status);
       const normalizedAck = (typeof ack === 'string' ? ack.toUpperCase() : 'SENT') as MessageAckStatus;
       const ackNumber = normalizedAck === 'READ' ? 3 : normalizedAck === 'DELIVERED' ? 2 : 1;
 
@@ -1258,6 +1296,20 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         if (!existing) {
           return previousMessages;
         }
+
+        const index = existing.findIndex((item) => item.id === messageId);
+        if (index === -1) {
+          return previousMessages;
+        }
+
+        const current = existing[index];
+        if (current.ack === ackName) {
+          return previousMessages;
+        }
+
+        const updated = { ...current, ack: ackName };
+        const nextMessages = [...existing];
+        nextMessages[index] = updated;
 
         let hasChanges = false;
         const nextMessages = existing.map((message) => {
@@ -1287,6 +1339,58 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
       });
 
       setChats((previousChats) => {
+        const index = previousChats.findIndex((chat) => chat.id === chatId);
+        if (index === -1) {
+          return previousChats;
+        }
+
+        const chat = previousChats[index];
+        if (!chat.lastMessage || chat.lastMessage.id !== messageId) {
+          return previousChats;
+        }
+
+        const nextChats = [...previousChats];
+        nextChats[index] = {
+          ...chat,
+          lastMessage: {
+            ...chat.lastMessage,
+            ack: ackCode,
+            ackName,
+          },
+        };
+
+        return nextChats;
+      });
+    },
+    [],
+  );
+
+  const updateChatUnreadCount = useCallback((chatId: string, unreadCount: number) => {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    setChats((previousChats) => {
+      const index = previousChats.findIndex((chat) => chat.id === chatId);
+      if (index === -1) {
+        return previousChats;
+      }
+
+      const chat = previousChats[index];
+      if (chat.unreadCount === unreadCount) {
+        return previousChats;
+      }
+
+      const nextChats = [...previousChats];
+      nextChats[index] = {
+        ...chat,
+        unreadCount,
+      };
+
+      return nextChats;
+    });
+  }, []);
+
         let hasChanges = false;
 
         const nextChats = previousChats.map((chat) => {
@@ -1324,16 +1428,8 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
     loadChats({ reset: true });
     checkSessionStatus();
 
-    const refreshChatsIfVisible = () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
-        return;
-      }
-      void loadChats({ reset: true, silent: true });
-    };
-
     if (typeof window !== 'undefined') {
       intervalRef.current = setInterval(checkSessionStatus, 30000); // Reduzido para 30 segundos
-      chatsRefreshIntervalRef.current = setInterval(refreshChatsIfVisible, 15000);
     }
 
     if (typeof document !== 'undefined') {
@@ -1354,7 +1450,29 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         document.removeEventListener('visibilitychange', refreshChatsIfVisible);
       }
     };
-  }, [loadChats, checkSessionStatus]);
+  }, [loadChats, checkSessionStatus, refreshChatsIfVisible]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (chatsRefreshIntervalRef.current) {
+      clearInterval(chatsRefreshIntervalRef.current);
+      chatsRefreshIntervalRef.current = undefined;
+    }
+
+    if (enablePolling) {
+      chatsRefreshIntervalRef.current = setInterval(refreshChatsIfVisible, 15000);
+    }
+
+    return () => {
+      if (chatsRefreshIntervalRef.current) {
+        clearInterval(chatsRefreshIntervalRef.current);
+        chatsRefreshIntervalRef.current = undefined;
+      }
+    };
+  }, [enablePolling, refreshChatsIfVisible]);
 
   const activeChat = activeChatId ? chats.find(chat => chat.id === activeChatId) : null;
   const activeChatMessages = activeChatId ? messages[activeChatId] || [] : [];
@@ -1382,6 +1500,8 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
     selectChat,
     markAsRead,
     addMessage,
+    updateMessageStatus,
+    updateChatUnreadCount,
     updateMessageAck,
     checkSessionStatus,
     

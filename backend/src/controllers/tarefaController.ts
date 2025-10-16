@@ -1,29 +1,16 @@
 import { Request, Response } from 'express';
 import pool from '../services/db';
 import { createNotification } from '../services/notificationService';
-import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
+import { ensureAuthenticatedEmpresaId } from '../middlewares/ensureAuthenticatedEmpresa';
 
 export const listTarefas = async (req: Request, res: Response) => {
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res
-        .status(empresaLookup.status)
-        .json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
-    }
+    const userId = req.auth!.userId;
 
     const result = await pool.query(
       `SELECT t.id, t.id_oportunidades, t.titulo, t.descricao, t.data, t.hora,
@@ -53,7 +40,7 @@ export const listTarefas = async (req: Request, res: Response) => {
          )
        GROUP BY t.id
 ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`,
-      [empresaId, req.auth.userId]
+      [empresaId, userId]
     );
     res.json(result.rows);
   } catch (error) {
@@ -65,16 +52,9 @@ ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`,
 export const getTarefaById = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
-    }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res
-        .status(empresaLookup.status)
-        .json({ error: empresaLookup.message });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
 
     const result = await pool.query(
@@ -94,7 +74,7 @@ export const getTarefaById = async (req: Request, res: Response) => {
        WHERE t.id = $1
          AND t.idempresa IS NOT DISTINCT FROM $2
        GROUP BY t.id`,
-      [id, empresaLookup.empresaId],
+      [id, empresaId],
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Tarefa não encontrada' });
@@ -114,7 +94,7 @@ export const getTarefaById = async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 
-    const userId = req.auth.userId;
+    const userId = req.auth!.userId;
     const responsavelIds = new Set<number>();
     for (const row of responsaveisRows) {
       const value = row.id_usuario;
@@ -243,25 +223,11 @@ export const createTarefa = async (req: Request, res: Response) => {
 
   const client = await pool.connect();
   try {
-    if (!req.auth) {
-      return res.status(401).json({ error: 'Token inválido.' });
+    const empresaId = await ensureAuthenticatedEmpresaId(req, res);
+    if (empresaId === undefined) {
+      return;
     }
-
-    const empresaLookup = await fetchAuthenticatedUserEmpresa(req.auth.userId);
-
-    if (!empresaLookup.success) {
-      return res
-        .status(empresaLookup.status)
-        .json({ error: empresaLookup.message });
-    }
-
-    const { empresaId } = empresaLookup;
-
-    if (empresaId === null) {
-      return res
-        .status(403)
-        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
-    }
+    const userId = req.auth!.userId;
 
     await client.query('BEGIN');
     const result = await client.query(
@@ -284,7 +250,7 @@ export const createTarefa = async (req: Request, res: Response) => {
         repetir_intervalo,
         concluido,
         empresaId,
-        req.auth.userId,
+        userId,
       ]
     );
 
@@ -323,7 +289,7 @@ export const createTarefa = async (req: Request, res: Response) => {
           true,
           1,
           empresaId,
-          req.auth.userId,
+          userId,
           tarefa.id,
         ],
       );
@@ -354,7 +320,7 @@ export const createTarefa = async (req: Request, res: Response) => {
     }
 
     const recipientIds = new Set<string>();
-    recipientIds.add(String(req.auth.userId));
+    recipientIds.add(String(userId));
 
     if (Array.isArray(responsaveis)) {
       for (const value of responsaveis) {
@@ -373,7 +339,7 @@ export const createTarefa = async (req: Request, res: Response) => {
       dueTime: tarefa.hora,
       priority: tarefa.prioridade,
       companyId: tarefa.idempresa,
-      creatorId: req.auth.userId,
+      creatorId: userId,
     } as Record<string, unknown>;
 
     await Promise.all(

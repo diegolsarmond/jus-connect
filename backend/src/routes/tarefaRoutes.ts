@@ -8,6 +8,7 @@ import {
   concluirTarefa,
   deleteTarefa,
 } from '../controllers/tarefaController';
+import { ensureAuthenticatedEmpresa } from '../middlewares/ensureAuthenticatedEmpresa';
 
 const router = Router();
 
@@ -86,7 +87,7 @@ const router = Router();
  *               items:
  *                 $ref: '#/components/schemas/Tarefa'
  */
-router.get('/tarefas', listTarefas);
+router.get('/tarefas', ensureAuthenticatedEmpresa, listTarefas);
 
 /**
  * @swagger
@@ -110,7 +111,7 @@ router.get('/tarefas', listTarefas);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.get('/tarefas/:id', getTarefaById);
+router.get('/tarefas/:id', ensureAuthenticatedEmpresa, getTarefaById);
 
 /**
  * @swagger
@@ -143,7 +144,7 @@ router.get('/tarefas/:id', getTarefaById);
  *       404:
  *         description: Responsável não encontrado
  */
-router.get('/tarefas/:id/responsavel', getResponsavelByTarefa);
+router.get('/tarefas/:id/responsavel', ensureAuthenticatedEmpresa, getResponsavelByTarefa);
 
 /**
  * @swagger
@@ -165,7 +166,7 @@ router.get('/tarefas/:id/responsavel', getResponsavelByTarefa);
  *             schema:
  *               $ref: '#/components/schemas/Tarefa'
  */
-router.post('/tarefas', createTarefa);
+router.post('/tarefas', ensureAuthenticatedEmpresa, createTarefa);
 
 /**
  * @swagger
@@ -195,7 +196,7 @@ router.post('/tarefas', createTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.put('/tarefas/:id', updateTarefa);
+router.put('/tarefas/:id', ensureAuthenticatedEmpresa, updateTarefa);
 
 /**
  * @swagger
@@ -219,7 +220,7 @@ router.put('/tarefas/:id', updateTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.patch('/tarefas/:id/concluir', concluirTarefa);
+router.patch('/tarefas/:id/concluir', ensureAuthenticatedEmpresa, concluirTarefa);
 
 /**
  * @swagger
@@ -239,6 +240,6 @@ router.patch('/tarefas/:id/concluir', concluirTarefa);
  *       404:
  *         description: Tarefa não encontrada
  */
-router.delete('/tarefas/:id', deleteTarefa);
+router.delete('/tarefas/:id', ensureAuthenticatedEmpresa, deleteTarefa);
 
 export default router;
