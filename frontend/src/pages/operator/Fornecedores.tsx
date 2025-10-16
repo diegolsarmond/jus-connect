@@ -32,8 +32,34 @@ import {
 } from "@/components/ui/table";
 import { Supplier } from "@/types/supplier";
 import { getApiBaseUrl } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const apiUrl = getApiBaseUrl();
+
+const forbiddenMessage = "Usuário autenticado não possui empresa vinculada.";
+
+async function getForbiddenMessage(response: Response): Promise<string> {
+  try {
+    const data = await response.json();
+    if (typeof data === "string") {
+      const trimmed = data.trim();
+      return trimmed || forbiddenMessage;
+    }
+    if (data && typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      const candidates = ["message", "mensagem", "error", "detail"];
+      for (const key of candidates) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+    }
+  } catch {
+    return forbiddenMessage;
+  }
+  return forbiddenMessage;
+}
 
 function joinUrl(base: string, path = "") {
   const b = base.replace(/\/+$/, "");
@@ -86,12 +112,19 @@ export default function Fornecedores() {
   const [filterType, setFilterType] = useState("todos");
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
         const url = joinUrl(apiUrl, "/api/fornecedores");
         const response = await fetch(url, { headers: { Accept: "application/json" } });
+        if (response.status === 403) {
+          setSuppliers([]);
+          const description = await getForbiddenMessage(response);
+          toast({ title: "Acesso negado", description, variant: "destructive" });
+          return;
+        }
         if (!response.ok) {
           throw new Error("Failed to fetch suppliers");
         }
@@ -131,6 +164,12 @@ export default function Fornecedores() {
     try {
       const url = joinUrl(apiUrl, `/api/fornecedores/${selectedSupplier.id}`);
       const response = await fetch(url, { method: "DELETE" });
+      if (response.status === 403) {
+        setSuppliers([]);
+        const description = await getForbiddenMessage(response);
+        toast({ title: "Acesso negado", description, variant: "destructive" });
+        return;
+      }
       if (!response.ok) {
         throw new Error("Failed to update supplier status");
       }

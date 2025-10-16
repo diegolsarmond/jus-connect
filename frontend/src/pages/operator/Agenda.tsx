@@ -35,6 +35,31 @@ import {
 
 const apiUrl = getApiBaseUrl();
 
+const forbiddenMessage = 'Usuário autenticado não possui empresa vinculada.';
+
+async function getForbiddenMessage(response: Response): Promise<string> {
+  try {
+    const data = await response.json();
+    if (typeof data === 'string') {
+      const trimmed = data.trim();
+      return trimmed || forbiddenMessage;
+    }
+    if (data && typeof data === 'object') {
+      const record = data as Record<string, unknown>;
+      const keys = ['message', 'mensagem', 'error', 'detail'];
+      for (const key of keys) {
+        const value = record[key];
+        if (typeof value === 'string' && value.trim()) {
+          return value.trim();
+        }
+      }
+    }
+  } catch {
+    return forbiddenMessage;
+  }
+  return forbiddenMessage;
+}
+
 interface AgendaResponse {
   id: number | string;
   titulo: string;
@@ -361,6 +386,18 @@ export default function Agenda() {
       try {
         const url = joinUrl(apiUrl, '/api/agendas');
         const response = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (response.status === 403) {
+          setAppointments([]);
+          setTipoEventoContext({
+            typeById: new Map<number, AppointmentType>(),
+            typeNameById: new Map<number, string>(),
+            idByType: new Map<AppointmentType, number>(),
+          });
+          setLoading(false);
+          const description = await getForbiddenMessage(response);
+          toast({ title: 'Acesso negado', description, variant: 'destructive' });
+          return;
+        }
         if (!response.ok) throw new Error('Failed to load agendas');
 
         const json = await response.json();
