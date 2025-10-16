@@ -22,6 +22,7 @@ describe("meuPerfil service", () => {
     const mockResponse = {
       id: 1,
       name: "Dr. Jane Doe",
+      cpf: "12345678901",
       email: "jane@example.com",
       specialties: ["Direito Civil", "Compliance"],
       hourlyRate: "350",
@@ -42,6 +43,7 @@ describe("meuPerfil service", () => {
     const profile = await fetchMeuPerfil();
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining("me/profile"), expect.any(Object));
     expect(profile.name).toBe("Dr. Jane Doe");
+    expect(profile.cpf).toBe("12345678901");
     expect(profile.specialties).toEqual(["Direito Civil", "Compliance"]);
     expect(profile.notifications.newsletter).toBe(true);
     expect(profile.security.twoFactor).toBe(true);

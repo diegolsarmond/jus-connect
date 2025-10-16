@@ -46,6 +46,7 @@ export interface CompanySubscriptionSnapshot {
   currentPeriodStart: Date | null;
   currentPeriodEnd: Date | null;
   graceExpiresAt: Date | null;
+  isActive: boolean | null;
 }
 
 const toDate = (value: unknown): Date | null => {
@@ -299,12 +300,14 @@ export const fetchCompanySubscription = async (
     current_period_start: unknown;
     current_period_end: unknown;
     grace_expires_at: unknown;
+    ativo: unknown;
   }>(
     `SELECT plano,
             subscription_cadence,
             current_period_start,
             current_period_end,
-            grace_expires_at
+            grace_expires_at,
+            ativo
        FROM public.empresas
       WHERE id = $1
       LIMIT 1`,
@@ -322,6 +325,7 @@ export const fetchCompanySubscription = async (
     currentPeriodStart: toDate(row.current_period_start),
     currentPeriodEnd: toDate(row.current_period_end),
     graceExpiresAt: toDate(row.grace_expires_at),
+    isActive: toBoolean(row.ativo),
   };
 };
 

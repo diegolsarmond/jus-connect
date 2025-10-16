@@ -147,6 +147,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 interface RawProfileResponse {
   id?: number;
   name?: unknown;
+  cpf?: unknown;
   title?: unknown;
   email?: unknown;
   phone?: unknown;
@@ -187,6 +188,7 @@ interface RawProfileResponse {
 export interface MeuPerfilProfile {
   id: string;
   name: string;
+  cpf: string | null;
   title: string | null;
   email: string;
   phone: string | null;
@@ -234,6 +236,7 @@ const mapProfileResponse = (payload: RawProfileResponse): MeuPerfilProfile => {
   return {
     id: payload.id ? String(payload.id) : '0',
     name: nameCandidate,
+    cpf: toStringOrNull(payload.cpf),
     title: toStringOrNull(payload.title),
     email: toStringOrUndefined(payload.email) ?? '',
     phone: toStringOrNull(payload.phone),
@@ -399,6 +402,7 @@ export const revokeTodasMeuPerfilSessions = async (
 
 export interface UpdateMeuPerfilPayload {
   name?: string | null;
+  cpf?: string | null;
   title?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -445,6 +449,7 @@ const buildUpdateBody = (payload: UpdateMeuPerfilPayload): Record<string, unknow
   };
 
   assign('name', payload.name);
+  assign('cpf', payload.cpf);
   assign('title', payload.title);
   assign('email', payload.email);
   assign('phone', payload.phone);

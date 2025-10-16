@@ -1,5 +1,6 @@
 import { QueryResultRow } from 'pg';
 import pool from './db';
+import { sanitizeDigits } from '../utils/sanitizeDigits';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -25,6 +26,7 @@ type Queryable = {
 interface UserProfileQueryRow extends QueryResultRow {
   user_id: number;
   nome_completo: string | null;
+  cpf: string | null;
   email: string | null;
   telefone: string | null;
   ultimo_login: string | Date | null;
@@ -57,6 +59,7 @@ interface UserProfileQueryRow extends QueryResultRow {
 export interface UserProfile {
   id: number;
   name: string;
+  cpf: string | null;
   title: string | null;
   email: string;
   phone: string | null;
@@ -114,6 +117,7 @@ export interface UserProfileSession {
 
 export interface UpdateProfileInput {
   name?: string | null;
+  cpf?: string | null;
   title?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -248,6 +252,36 @@ const normalizeOptionalEmail = (value: unknown): string | null | undefined => {
   }
 
   return normalized.toLowerCase();
+};
+
+const normalizeOptionalCpf = (value: unknown): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new ValidationError('Informe um CPF válido.');
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const digits = sanitizeDigits(trimmed);
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.length !== 11) {
+    throw new ValidationError('Informe um CPF válido.');
+  }
+
+  return digits;
 };
 
 const normalizeOptionalPhone = (value: unknown): string | null | undefined => {
@@ -476,6 +510,7 @@ class UserProfileService {
         SELECT
           u.id AS user_id,
           u.nome_completo,
+          u.cpf,
           u.email,
           u.telefone,
           u.ultimo_login,
@@ -536,6 +571,7 @@ class UserProfileService {
     return {
       id: row.user_id,
       name: row.nome_completo ?? '',
+      cpf: row.cpf ?? null,
       title: row.title ?? null,
       email: row.email ?? '',
       phone: row.telefone ?? null,
@@ -617,6 +653,11 @@ class UserProfileService {
     const phoneValue = normalizeOptionalPhone(input.phone);
     if (phoneValue !== undefined) {
       addUsuarioUpdate('telefone', phoneValue);
+    }
+
+    const cpfValue = normalizeOptionalCpf(input.cpf);
+    if (cpfValue !== undefined) {
+      addUsuarioUpdate('cpf', cpfValue);
     }
 
     const specialtiesValue = normalizeSpecialties(input.specialties);
@@ -867,6 +908,10 @@ class UserProfileService {
 
     if (nameValue !== undefined && nameValue !== currentProfile.name) {
       changedFieldLabels.add('Nome completo');
+    }
+
+    if (cpfValue !== undefined && cpfValue !== currentProfile.cpf) {
+      changedFieldLabels.add('CPF');
     }
 
     if (emailValue !== undefined && emailValue !== currentProfile.email) {
