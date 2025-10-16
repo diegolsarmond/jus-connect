@@ -95,6 +95,15 @@ const DEFAULT_WAHA_SESSION = (
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
+const pickFirstString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (isNonEmptyString(value)) {
+      return value.trim();
+    }
+  }
+  return undefined;
+};
+
 const normalizeBaseUrl = (url: string): string => url.replace(/\/+$/, '');
 
 type IntegrationApiKeyPayload = {
@@ -410,6 +419,51 @@ const sanitizeChatOverview = (raw: unknown): ChatOverview | null => {
     isGroup: id.includes('@g.us'),
     unreadCount: typeof unreadCount === 'number' ? unreadCount : 0,
   };
+
+  const presenceRecord = isRawRecord(raw['presence']) ? raw['presence'] : null;
+  const isOnline =
+    readBoolean(raw, 'isOnline') ??
+    readBoolean(raw, 'online') ??
+    (presenceRecord ? readBoolean(presenceRecord, 'isOnline') ?? readBoolean(presenceRecord, 'online') : undefined);
+
+  if (typeof isOnline === 'boolean') {
+    overview.isOnline = isOnline;
+  }
+
+  const presenceStatus = pickFirstString(
+    readString(raw, 'presence'),
+    readString(raw, 'presenceStatus'),
+    readString(raw, 'status'),
+    readString(raw, 'availability'),
+    presenceRecord ? readString(presenceRecord, 'presence') : undefined,
+    presenceRecord ? readString(presenceRecord, 'status') : undefined,
+    presenceRecord ? readString(presenceRecord, 'state') : undefined,
+  );
+
+  if (presenceStatus) {
+    overview.presence = presenceStatus;
+  }
+
+  const lastSeenCandidates = [
+    raw['lastSeen'],
+    raw['last_seen'],
+    raw['lastSeenAt'],
+    raw['lastSeenTs'],
+    raw['lastSeenTimestamp'],
+    raw['lastOnline'],
+    presenceRecord ? presenceRecord['lastSeen'] : undefined,
+    presenceRecord ? presenceRecord['last_seen'] : undefined,
+    presenceRecord ? presenceRecord['lastSeenAt'] : undefined,
+    presenceRecord ? presenceRecord['timestamp'] : undefined,
+  ];
+
+  for (const candidate of lastSeenCandidates) {
+    const normalized = normalizeTimestamp(candidate);
+    if (typeof normalized === 'number') {
+      overview.lastSeen = normalized;
+      break;
+    }
+  }
 
   const resolvedAvatar = avatar ?? picture;
   if (resolvedAvatar) {
