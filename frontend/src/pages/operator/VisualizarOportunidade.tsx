@@ -610,6 +610,7 @@ export default function VisualizarOportunidade() {
     [id],
   );
   const skipInteractionPersistenceRef = useRef<string | null>(null);
+  const printTimeoutRef = useRef<number | null>(null);
   const documentPdfUrlsRef = useRef<Map<number, string>>(new Map());
 
   const parsedOpportunityId = useMemo(
@@ -1731,10 +1732,13 @@ export default function VisualizarOportunidade() {
   }, [snack.open]);
 
   useEffect(() => {
-    if (!isPrintMode) return;
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return undefined;
 
     const handleAfterPrint = () => {
+      if (printTimeoutRef.current !== null) {
+        window.clearTimeout(printTimeoutRef.current);
+        printTimeoutRef.current = null;
+      }
       setIsPrintMode(false);
     };
 
@@ -1742,7 +1746,16 @@ export default function VisualizarOportunidade() {
     return () => {
       window.removeEventListener("afterprint", handleAfterPrint);
     };
-  }, [isPrintMode]);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && printTimeoutRef.current !== null) {
+        window.clearTimeout(printTimeoutRef.current);
+        printTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const onEdit = () => {
     navigate(`/pipeline/editar-oportunidade/${id}`);
@@ -1756,8 +1769,16 @@ export default function VisualizarOportunidade() {
   const onPrint = () => {
     if (typeof window === "undefined") return;
     setIsPrintMode(true);
-    setTimeout(() => {
-      window.print();
+    if (printTimeoutRef.current !== null) {
+      window.clearTimeout(printTimeoutRef.current);
+    }
+    printTimeoutRef.current = window.setTimeout(() => {
+      try {
+        window.print();
+      } finally {
+        setIsPrintMode(false);
+        printTimeoutRef.current = null;
+      }
     }, 0);
   };
 
