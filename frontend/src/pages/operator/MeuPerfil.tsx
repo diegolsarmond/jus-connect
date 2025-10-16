@@ -9,10 +9,12 @@ import {
   ChevronsUpDown,
   Edit2,
   Clock,
+  Copy,
   FileText,
   Link,
   Loader2,
   MapPin,
+  QrCode,
   Scale,
   Shield,
   User as UserIcon,
@@ -26,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -46,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { getApiUrl } from "@/lib/api";
 import {
@@ -53,15 +57,22 @@ import {
   formatCurrencyInputValue,
   parseCurrencyDigits,
 } from "@/pages/administrator/plans-utils";
+import { useToast } from "@/components/ui/use-toast";
 import {
   fetchMeuPerfil,
   fetchMeuPerfilAuditLogs,
   fetchMeuPerfilSessions,
+  initiateMeuPerfilTwoFactor,
+  confirmMeuPerfilTwoFactor,
+  disableMeuPerfilTwoFactor,
+  approveMeuPerfilDevice,
+  revokeMeuPerfilDeviceApproval,
   revokeMeuPerfilSession,
   revokeTodasMeuPerfilSessions,
   updateMeuPerfil,
   type MeuPerfilProfile,
   type UpdateMeuPerfilPayload,
+  type TwoFactorInitiationPayload,
 } from "@/services/meuPerfil";
 import type { AuditLog, UserSession } from "@/types/user";
 
@@ -739,6 +750,19 @@ export default function MeuPerfil() {
   const [isSpecialtyLoading, setIsSpecialtyLoading] = useState(false);
   const [specialtyError, setSpecialtyError] = useState<string | null>(null);
 
+  const { toast } = useToast();
+  const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorInitiationPayload | null>(null);
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [isDisableModalOpen, setIsDisableModalOpen] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [isInitiatingTwoFactor, setIsInitiatingTwoFactor] = useState(false);
+  const [isConfirmingTwoFactor, setIsConfirmingTwoFactor] = useState(false);
+  const [isDisablingTwoFactor, setIsDisablingTwoFactor] = useState(false);
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [showBackupCodes, setShowBackupCodes] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
   const latestZipLookupIdRef = useRef(0);
   const zipLookupAbortRef = useRef<AbortController | null>(null);
 
@@ -1185,6 +1209,28 @@ export default function MeuPerfil() {
 
   const handleSecurityToggle = useCallback(
     async (field: keyof MeuPerfilProfile["security"], checked: boolean) => {
+      if (field === "twoFactor") {
+        if (checked) {
+          try {
+            setIsInitiatingTwoFactor(true);
+            const setup = await initiateMeuPerfilTwoFactor();
+            setTwoFactorSetup(setup);
+            setVerificationCode("");
+            setBackupCodes([]);
+            setShowBackupCodes(false);
+            setIsSetupModalOpen(true);
+          } catch (error) {
+            toast({ variant: "destructive", description: errorMessage(error) });
+          } finally {
+            setIsInitiatingTwoFactor(false);
+          }
+        } else if (profile?.security.twoFactor) {
+          setDisableCode("");
+          setIsDisableModalOpen(true);
+        }
+        return;
+      }
+
       let previousValue: boolean | undefined;
       setProfile((prev) => {
         if (!prev) {
@@ -1220,8 +1266,157 @@ export default function MeuPerfil() {
         throw error;
       }
     },
-    [mutateProfile],
+    [mutateProfile, profile?.security.twoFactor, toast],
   );
+
+  const copyBackupCode = useCallback(
+    async (value: string) => {
+      if (!value) {
+        toast({ variant: "destructive", description: "Nenhum valor disponível para copiar." });
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(value);
+        setCopiedCode(value);
+        setTimeout(() => setCopiedCode(null), 2000);
+        toast({ description: "Código copiado para a área de transferência." });
+      } catch (error) {
+        toast({ variant: "destructive", description: errorMessage(error) });
+      }
+    },
+    [toast],
+  );
+
+  const handleSetupModalChange = useCallback(
+    (open: boolean) => {
+      setIsSetupModalOpen(open);
+      if (!open) {
+        setVerificationCode("");
+        if (!profile?.security.twoFactor) {
+          setTwoFactorSetup(null);
+        }
+      }
+    },
+    [profile?.security.twoFactor],
+  );
+
+  const handleDisableModalChange = useCallback((open: boolean) => {
+    setIsDisableModalOpen(open);
+    if (!open) {
+      setDisableCode("");
+    }
+  }, []);
+
+  const handleConfirmTwoFactor = useCallback(async () => {
+    if (verificationCode.length !== 6 || !twoFactorSetup) {
+      return;
+    }
+
+    try {
+      setIsConfirmingTwoFactor(true);
+      const result = await confirmMeuPerfilTwoFactor(verificationCode);
+      setBackupCodes(result.backupCodes);
+      setShowBackupCodes(true);
+      setTwoFactorSetup(null);
+      setVerificationCode("");
+      setIsSetupModalOpen(false);
+      setProfile((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        return {
+          ...prev,
+          security: {
+            ...prev.security,
+            twoFactor: true,
+          },
+        } satisfies MeuPerfilProfile;
+      });
+      toast({ description: "Autenticação de dois fatores ativada com sucesso." });
+      await loadProfile();
+      await loadAuditLogs();
+    } catch (error) {
+      toast({ variant: "destructive", description: errorMessage(error) });
+    } finally {
+      setIsConfirmingTwoFactor(false);
+    }
+  }, [loadAuditLogs, loadProfile, toast, twoFactorSetup, verificationCode]);
+
+  const handleDisableTwoFactor = useCallback(async () => {
+    if (!disableCode.trim()) {
+      return;
+    }
+
+    try {
+      setIsDisablingTwoFactor(true);
+      await disableMeuPerfilTwoFactor(disableCode.trim());
+      setIsDisableModalOpen(false);
+      setDisableCode("");
+      setTwoFactorSetup(null);
+      setBackupCodes([]);
+      setShowBackupCodes(false);
+      setProfile((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        return {
+          ...prev,
+          security: {
+            ...prev.security,
+            twoFactor: false,
+          },
+        } satisfies MeuPerfilProfile;
+      });
+      toast({ description: "Autenticação de dois fatores desativada." });
+      await loadProfile();
+      await loadAuditLogs();
+    } catch (error) {
+      toast({ variant: "destructive", description: errorMessage(error) });
+    } finally {
+      setIsDisablingTwoFactor(false);
+    }
+  }, [disableCode, loadAuditLogs, loadProfile, toast]);
+
+  const handleApproveDevice = useCallback(
+    async (sessionId: string) => {
+      try {
+        await approveMeuPerfilDevice(sessionId);
+        await loadSessions();
+        toast({ description: "Dispositivo aprovado." });
+      } catch (error) {
+        toast({ variant: "destructive", description: errorMessage(error) });
+      }
+    },
+    [loadSessions, toast],
+  );
+
+  const handleRevokeDeviceApproval = useCallback(
+    async (sessionId: string) => {
+      try {
+        await revokeMeuPerfilDeviceApproval(sessionId);
+        await loadSessions();
+        toast({ description: "Aprovação do dispositivo revogada." });
+      } catch (error) {
+        toast({ variant: "destructive", description: errorMessage(error) });
+      }
+    },
+    [loadSessions, toast],
+  );
+
+  const copyAllBackupCodes = useCallback(async () => {
+    if (backupCodes.length === 0) {
+      toast({ variant: "destructive", description: "Nenhum código disponível para copiar." });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(backupCodes.join("\n"));
+      toast({ description: "Códigos copiados para a área de transferência." });
+    } catch (error) {
+      toast({ variant: "destructive", description: errorMessage(error) });
+    }
+  }, [backupCodes, toast]);
 
   const handleAvatarChange = useCallback(
     async (file: File | null) => {
@@ -1491,6 +1686,120 @@ export default function MeuPerfil() {
                 </div>
               </div>
             )}
+            <Dialog open={isSetupModalOpen} onOpenChange={handleSetupModalChange}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Configurar autenticação 2FA</DialogTitle>
+                  <DialogDescription>
+                    Utilize o código abaixo no aplicativo autenticador ou leia o QR code.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="flex justify-center">
+                    {twoFactorSetup?.qrCode ? (
+                      <img
+                        src={twoFactorSetup.qrCode}
+                        alt="QR code para autenticação em duas etapas"
+                        className="w-48 h-48 rounded-lg border"
+                      />
+                    ) : (
+                      <div className="w-48 h-48 bg-muted border-2 border-dashed rounded-lg flex items-center justify-center">
+                        <div className="text-center space-y-2">
+                          <QrCode className="h-12 w-12 mx-auto text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground">QR code indisponível</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Código manual</Label>
+                    <div className="flex gap-2">
+                      <Input readOnly value={twoFactorSetup?.secret ?? ""} className="font-mono text-sm" />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void copyBackupCode(twoFactorSetup?.secret ?? "")}
+                        disabled={!twoFactorSetup?.secret}
+                      >
+                        {copiedCode === twoFactorSetup?.secret ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="twofactor-code">Código de verificação</Label>
+                    <Input
+                      id="twofactor-code"
+                      placeholder="000000"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      className="text-center text-2xl tracking-widest"
+                      maxLength={6}
+                      autoComplete="one-time-code"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => void handleConfirmTwoFactor()}
+                    disabled={verificationCode.length !== 6 || isConfirmingTwoFactor || !twoFactorSetup}
+                    className="w-full"
+                  >
+                    {isConfirmingTwoFactor ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Ativando...
+                      </span>
+                    ) : (
+                      "Ativar 2FA"
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isDisableModalOpen} onOpenChange={handleDisableModalChange}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Desativar autenticação 2FA</DialogTitle>
+                  <DialogDescription>
+                    Informe um código gerado pelo aplicativo ou um código de backup para concluir.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="disable-twofactor-code">Código</Label>
+                    <Input
+                      id="disable-twofactor-code"
+                      placeholder="Digite o código"
+                      value={disableCode}
+                      onChange={(e) => setDisableCode(e.target.value.trim().slice(0, 12))}
+                      autoComplete="one-time-code"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => void handleDisableTwoFactor()}
+                    disabled={!disableCode || isDisablingTwoFactor}
+                    className="w-full"
+                    variant="destructive"
+                  >
+                    {isDisablingTwoFactor ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Desativando...
+                      </span>
+                    ) : (
+                      "Desativar 2FA"
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </ProfileCard>
 
           <ProfileCard
@@ -1622,12 +1931,71 @@ export default function MeuPerfil() {
                     <Switch
                       checked={profile.security.twoFactor}
                       onCheckedChange={(checked) => handleSecurityToggle("twoFactor", checked).catch(() => {})}
-                      disabled={isUpdatingProfile}
+                      disabled={
+                        isUpdatingProfile || isInitiatingTwoFactor || isDisablingTwoFactor
+                      }
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Exige um segundo fator de autenticação para novos acessos.
                   </p>
+
+                  {profile.security.twoFactor && (
+                    <div className="mt-3 space-y-3 border-t pt-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Códigos de backup
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => void copyAllBackupCodes()}
+                            disabled={backupCodes.length === 0}
+                          >
+                            Copiar todos
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => setShowBackupCodes((value) => !value)}
+                            disabled={backupCodes.length === 0}
+                          >
+                            {showBackupCodes ? "Ocultar" : "Mostrar"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {backupCodes.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Gere novos códigos ao ativar o 2FA e armazene-os em local seguro.
+                        </p>
+                      )}
+
+                      {showBackupCodes && backupCodes.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            {backupCodes.map((code) => (
+                              <Button
+                                key={code}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center justify-between font-mono text-xs"
+                                onClick={() => void copyBackupCode(code)}
+                              >
+                                <span>{code}</span>
+                                {copiedCode === code ? (
+                                  <Check className="h-3 w-3 text-success" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 border rounded-lg p-4">
@@ -1750,7 +2118,9 @@ export default function MeuPerfil() {
               sessions={sessions}
               onRevokeSession={handleRevokeSession}
               onRevokeAllSessions={handleRevokeAllSessions}
-              onReload={() => loadSessions()}
+              onReload={loadSessions}
+              onApproveDevice={handleApproveDevice}
+              onRevokeDeviceApproval={handleRevokeDeviceApproval}
             />
           </ProfileCard>
 

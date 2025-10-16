@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash, createHmac } from 'node:crypto';
 import test from 'node:test';
 import UserProfileService, {
   NotFoundError,
@@ -22,6 +23,51 @@ class FakePool {
     return this.responses.shift()!;
   }
 }
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+const decodeBase32 = (secret: string): Buffer => {
+  const sanitized = secret.replace(/[^A-Z2-7]/gi, '').toUpperCase();
+  let bits = '';
+
+  for (const char of sanitized) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index === -1) {
+      continue;
+    }
+    bits += index.toString(2).padStart(5, '0');
+  }
+
+  const byteLength = Math.floor(bits.length / 8);
+  const buffer = Buffer.alloc(byteLength);
+
+  for (let i = 0; i < byteLength; i += 1) {
+    buffer[i] = Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+  }
+
+  return buffer;
+};
+
+const generateTotpCode = (secret: string, timestamp: number): string => {
+  const key = decodeBase32(secret);
+  const counter = Math.floor(timestamp / 1000 / 30);
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64BE(BigInt(counter));
+
+  const digest = createHmac('sha1', key).update(buffer).digest();
+  const offset = digest[digest.length - 1] & 0xf;
+
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+
+  return (binary % 10 ** 6).toString().padStart(6, '0');
+};
+
+const hashBackupCode = (code: string): string =>
+  createHash('sha256').update(code.toUpperCase()).digest('hex');
 
 test('getProfile mapeia dados retornando valores padrão', async () => {
   const row = {
@@ -229,6 +275,160 @@ test('updateProfile lança erro quando usuário não existe', async () => {
     () => service.updateProfile(999, {}),
     NotFoundError
   );
+});
+
+test('initiateTwoFactor gera segredo, URL otpauth e registra auditoria', async () => {
+  const userRow = {
+    user_id: 5,
+    nome_completo: 'Maria',
+    email: 'maria@example.com',
+    security_two_factor: false,
+  };
+
+  const pool = new FakePool([
+    { rows: [userRow], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const service = new UserProfileService(pool as any);
+  const result = await service.initiateTwoFactor(5, { id: 5, name: 'Maria' });
+
+  assert.match(result.secret, /^[A-Z2-7]+$/);
+  assert.ok(result.secret.length >= 16, 'segredo deve conter ao menos 16 caracteres');
+  assert.match(result.otpauthUrl, /^otpauth:\/\/totp\//);
+  assert.match(result.qrCode, /^https:\/\/quickchart\.io\/qr/);
+
+  assert.equal(pool.calls.length, 3);
+  assert.match(pool.calls[1]?.text ?? '', /INSERT INTO public\.user_profiles/);
+  assert.equal(pool.calls[1]?.values?.[0], 5);
+  assert.equal(pool.calls[1]?.values?.[1], result.secret);
+  assert.match(pool.calls[2]?.text ?? '', /user_profile_audit_logs/);
+});
+
+test('confirmTwoFactor valida TOTP e salva códigos de backup', async () => {
+  const secret = 'JBSWY3DPEHPK3PXP';
+  const fixedTimestamp = 1_700_000_000_000;
+  const code = generateTotpCode(secret, fixedTimestamp);
+
+  const pool = new FakePool([
+    {
+      rows: [
+        {
+          user_id: 7,
+          security_two_factor_secret: secret,
+          security_two_factor: false,
+          security_two_factor_backup_codes: [],
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const service = new UserProfileService(pool as any);
+  const originalNow = Date.now;
+  (Date as any).now = () => fixedTimestamp;
+
+  try {
+    const result = await service.confirmTwoFactor(7, code, { id: 7, name: 'Maria' });
+    assert.equal(result.backupCodes.length, 10);
+    assert.ok(result.backupCodes.every((item) => /^[A-F0-9]{10}$/i.test(item)));
+
+    const updateCall = pool.calls[1];
+    assert.ok(Array.isArray(updateCall?.values?.[1]));
+    const hashedCodes = updateCall?.values?.[1] as string[];
+    assert.equal(hashedCodes.length, 10);
+    assert.ok(hashedCodes.every((item) => typeof item === 'string' && item.length === 64));
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test('disableTwoFactor aceita códigos de backup e remove configuração', async () => {
+  const backupCode = 'A1B2C3D4E5';
+  const hashed = hashBackupCode(backupCode);
+  const pool = new FakePool([
+    {
+      rows: [
+        {
+          user_id: 9,
+          security_two_factor_secret: 'JBSWY3DPEHPK3PXP',
+          security_two_factor: true,
+          security_two_factor_backup_codes: [hashed],
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const service = new UserProfileService(pool as any);
+  await service.disableTwoFactor(9, backupCode, { id: 9, name: 'Maria' });
+
+  assert.match(pool.calls[1]?.text ?? '', /UPDATE public\.user_profiles/);
+  assert.equal(pool.calls.length, 3);
+});
+
+test('approveSession marca dispositivo como aprovado e registra auditoria', async () => {
+  const sessionRow = {
+    id: 12,
+    user_id: 4,
+    device: 'Chrome 120',
+    location: 'São Paulo',
+    last_activity: new Date().toISOString(),
+    is_active: true,
+    is_approved: true,
+    approved_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    revoked_at: null,
+  };
+
+  const pool = new FakePool([
+    { rows: [sessionRow], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const service = new UserProfileService(pool as any);
+  const session = await service.approveSession(4, 12, { id: 4, name: 'Maria' });
+
+  assert.ok(session);
+  assert.equal(session?.id, 12);
+  assert.equal(session?.isApproved, true);
+  assert.equal(pool.calls.length, 2);
+  assert.match(pool.calls[0]?.text ?? '', /UPDATE public\.user_profile_sessions/);
+  assert.match(pool.calls[1]?.text ?? '', /user_profile_audit_logs/);
+});
+
+test('revokeSessionApproval remove aprovação e registra auditoria', async () => {
+  const sessionRow = {
+    id: 15,
+    user_id: 6,
+    device: 'Firefox 120',
+    location: 'Rio de Janeiro',
+    last_activity: new Date().toISOString(),
+    is_active: true,
+    is_approved: false,
+    approved_at: null,
+    created_at: new Date().toISOString(),
+    revoked_at: null,
+  };
+
+  const pool = new FakePool([
+    { rows: [sessionRow], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const service = new UserProfileService(pool as any);
+  const session = await service.revokeSessionApproval(6, 15, { id: 6, name: 'Maria' });
+
+  assert.ok(session);
+  assert.equal(session?.isApproved, false);
+  assert.equal(pool.calls.length, 2);
+  assert.match(pool.calls[0]?.text ?? '', /UPDATE public\.user_profile_sessions/);
+  assert.match(pool.calls[1]?.text ?? '', /user_profile_audit_logs/);
 });
 
 test('revokeSession desativa sessão ativa e registra auditoria', async () => {

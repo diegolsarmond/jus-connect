@@ -496,6 +496,7 @@ export const WhatsAppLayout = ({
     addMessage,
     updateMessageStatus,
     updateChatUnreadCount,
+    updateMessageAck,
     selectChat,
     loadMessages,
     loadOlderMessages,
@@ -578,6 +579,39 @@ export const WhatsAppLayout = ({
       setHasLoadedOnce(true);
     }
   }, [hasStartedLoading, loading]);
+
+
+  // Set up webhook receiver for demo purposes
+  useEffect(() => {
+    window.wahaWebhookReceived = (message) => {
+      addMessage(message);
+    };
+    window.wahaWebhookStatusUpdate = (update) => {
+      if (!update) {
+        return;
+      }
+
+      const { chatId, messageId, ack } = update;
+      if (!chatId || !messageId || !ack) {
+        return;
+      }
+
+      const normalizedAck = typeof ack === "string" ? ack.toUpperCase() : "";
+      const resolvedAck =
+        normalizedAck === "READ"
+          ? "READ"
+          : normalizedAck === "DELIVERED"
+            ? "DELIVERED"
+            : "SENT";
+
+      updateMessageAck(chatId, messageId, resolvedAck);
+    };
+
+    return () => {
+      delete window.wahaWebhookReceived;
+      delete window.wahaWebhookStatusUpdate;
+    };
+  }, [addMessage, updateMessageAck]);
 
   useEffect(() => {
     const activeId = activeChatId ?? undefined;
