@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/tooltip";
 import { IntimacaoMenu } from "@/components/notifications/IntimacaoMenu";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { hasAdminAccess } from "@/features/auth/adminAccess";
 import { usePlan } from "@/features/plans/PlanProvider";
 import { getPlanDisplayName, getPlanVisualMeta } from "@/features/plans/planVisuals";
 import { routes } from "@/config/routes";
@@ -141,23 +142,7 @@ export function HeaderActions() {
 
   const profileToggleLabel = isOnAdminArea ? "Alternar para CRM" : "Alternar para admin";
 
-  const canToggleAdmin = useMemo(() => {
-    if (!user) {
-      return false;
-    }
-
-    const cpfValue = (user as { cpf?: unknown }).cpf;
-
-    if (typeof cpfValue === "number") {
-      return cpfValue.toString().padStart(11, "0") === "11545111626";
-    }
-
-    if (typeof cpfValue === "string") {
-      return cpfValue.replace(/\D+/gu, "") === "11545111626";
-    }
-
-    return false;
-  }, [user]);
+  const canToggleAdmin = useMemo(() => hasAdminAccess(user), [user]);
 
   const handleProfileToggle = useCallback(() => {
     if (isOnAdminArea) {
