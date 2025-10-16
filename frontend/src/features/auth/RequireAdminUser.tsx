@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 import { useAuth } from "./AuthProvider";
+import { hasAdminAccess } from "./adminAccess";
 
 interface RequireAdminUserProps {
   children: ReactNode;
@@ -24,7 +25,7 @@ export const RequireAdminUser = ({ children }: RequireAdminUserProps) => {
 
   }
 
-  if (user && ( user.id === 1)) {
+  if (user && hasAdminAccess(user)) {
     return <>{children}</>;
   }
 
