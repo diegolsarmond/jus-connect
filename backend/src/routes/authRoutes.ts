@@ -4,6 +4,7 @@ import {
   confirmEmail,
   getCurrentUser,
   login,
+  resendEmailConfirmation,
   requestPasswordReset,
   refreshToken,
   register,
@@ -123,6 +124,8 @@ router.post('/auth/register', sensitiveIpRateLimiter, register);
  *         description: Token já utilizado
  */
 router.post('/auth/confirm-email', sensitiveIpRateLimiter, confirmEmail);
+
+router.post('/auth/resend-email-confirmation', sensitiveIpRateLimiter, resendEmailConfirmation);
 
 router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPasswordReset);
 
