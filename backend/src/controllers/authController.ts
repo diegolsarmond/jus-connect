@@ -1017,21 +1017,20 @@ export const resendEmailConfirmation = async (req: Request, res: Response) => {
       [normalizedEmail],
     );
 
-    if (userResult.rowCount === 0) {
-      res.status(404).json({ error: 'Usuário não encontrado.' });
-      return;
-    }
+    const userRow =
+      userResult.rowCount > 0
+        ? (userResult.rows[0] as {
+            id: number;
+            nome_completo?: unknown;
+            email?: unknown;
+            email_confirmed_at?: unknown;
+          })
+        : null;
 
-    const userRow = userResult.rows[0] as {
-      id: number;
-      nome_completo?: unknown;
-      email?: unknown;
-      email_confirmed_at?: unknown;
-    };
+    const emailConfirmedAt = userRow ? parseDateValue(userRow.email_confirmed_at) : null;
 
-    const emailConfirmedAt = parseDateValue(userRow.email_confirmed_at);
-    if (emailConfirmedAt) {
-      res.status(409).json({ error: 'E-mail já confirmado.' });
+    if (!userRow || emailConfirmedAt) {
+      res.json({ message: 'Um novo e-mail de confirmação foi enviado.' });
       return;
     }
 
