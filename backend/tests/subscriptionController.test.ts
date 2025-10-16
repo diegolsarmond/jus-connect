@@ -65,6 +65,19 @@ test('createSubscription records a trial subscription and returns trial end date
     {
       rows: [
         {
+          plano: null,
+          subscription_cadence: null,
+          current_period_start: null,
+          current_period_end: null,
+          grace_expires_at: null,
+          ativo: false,
+        },
+      ],
+      rowCount: 1,
+    },
+    {
+      rows: [
+        {
           id: 42,
           plano: 7,
           ativo: true,
@@ -119,12 +132,15 @@ test('createSubscription records a trial subscription and returns trial end date
   assert.equal(payload.currentPeriodEnd, expectedTrialEnd.toISOString());
   assert.equal(payload.graceExpiresAt, expectedTrialEnd.toISOString());
 
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.match(calls[0]?.text ?? '', /FROM public\.planos/i);
   assert.deepEqual(calls[0]?.values, [7]);
 
-  assert.match(calls[1]?.text ?? '', /UPDATE public\.empresas/);
-  assert.deepEqual(calls[1]?.values, [
+  assert.match(calls[1]?.text ?? '', /FROM public\.empresas/i);
+  assert.deepEqual(calls[1]?.values, [42]);
+
+  assert.match(calls[2]?.text ?? '', /UPDATE public\.empresas/);
+  assert.deepEqual(calls[2]?.values, [
     7,
     true,
     startDate,
@@ -136,4 +152,59 @@ test('createSubscription records a trial subscription and returns trial end date
     'monthly',
     42,
   ]);
+});
+
+test('createSubscription returns 409 if company already has an active subscription', async () => {
+  const startDate = new Date('2024-05-01T12:00:00.000Z');
+
+  const { calls, restore } = setupQueryMock([
+    {
+      rows: [{ valor_mensal: '199.90', valor_anual: '1999.90' }],
+      rowCount: 1,
+    },
+    {
+      rows: [
+        {
+          plano: 5,
+          subscription_cadence: 'monthly',
+          current_period_start: startDate.toISOString(),
+          current_period_end: new Date('2024-05-31T12:00:00.000Z').toISOString(),
+          grace_expires_at: new Date('2024-06-07T12:00:00.000Z').toISOString(),
+          ativo: true,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    body: {
+      companyId: 99,
+      planId: 8,
+      status: 'active',
+      startDate: startDate.toISOString(),
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createSubscription(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, {
+    error: 'A empresa já possui assinatura ativa. Cancele ou atualize a assinatura existente.',
+  });
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[0]?.text ?? '', /FROM public\.planos/i);
+  assert.deepEqual(calls[0]?.values, [8]);
+
+  assert.match(calls[1]?.text ?? '', /FROM public\.empresas/i);
+  assert.deepEqual(calls[1]?.values, [99]);
+
+  assert.ok(!calls.some((call) => /UPDATE public\.empresas/.test(call.text)));
 });

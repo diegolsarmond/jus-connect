@@ -7,6 +7,7 @@ import {
   parseCadence,
   resolvePlanCadence,
   type SubscriptionCadence,
+  fetchCompanySubscription,
 } from '../services/subscriptionService';
 
 const parseNumericId = (value: unknown): number | null => {
@@ -95,6 +96,27 @@ export const createSubscription = async (req: Request, res: Response) => {
   const graceExpiresAt = isTrialing || !period.end ? trialEndsAt : calculateGraceDeadline(period.end, cadence);
 
   try {
+    const existingSubscription = await fetchCompanySubscription(companyId);
+    if (existingSubscription) {
+      const now = Date.now();
+      const hasActiveFlag = existingSubscription.isActive === true;
+      const isWithinCurrentPeriod =
+        existingSubscription.currentPeriodEnd instanceof Date &&
+        !Number.isNaN(existingSubscription.currentPeriodEnd.getTime()) &&
+        now <= existingSubscription.currentPeriodEnd.getTime();
+      const isWithinGracePeriod =
+        existingSubscription.graceExpiresAt instanceof Date &&
+        !Number.isNaN(existingSubscription.graceExpiresAt.getTime()) &&
+        now <= existingSubscription.graceExpiresAt.getTime();
+
+      if (hasActiveFlag || isWithinCurrentPeriod || isWithinGracePeriod) {
+        res
+          .status(409)
+          .json({ error: 'A empresa já possui assinatura ativa. Cancele ou atualize a assinatura existente.' });
+        return;
+      }
+    }
+
     const result = await pool.query(
       `UPDATE public.empresas
          SET plano = $1,
