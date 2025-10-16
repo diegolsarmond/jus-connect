@@ -224,6 +224,19 @@ export const ChatPage = () => {
 
   const applyConversationUpdate = useCallback(
     (conversation: ConversationSummary) => {
+      if (
+        restrictToAssigned &&
+        currentUserId &&
+        conversation.responsible?.id !== currentUserId
+      ) {
+        setSelectedConversationId((prev) => (prev === conversation.id ? undefined : prev));
+        queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
+          if (!old) return old;
+          return old.filter((item) => item.id !== conversation.id);
+        });
+        return;
+      }
+
       queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
         if (!old) {
           return [conversation];
@@ -232,7 +245,11 @@ export const ChatPage = () => {
         return [conversation, ...filtered];
       });
     },
-    [queryClient],
+    [
+      queryClient,
+      restrictToAssigned,
+      currentUserId,
+    ],
   );
 
   const {
@@ -250,6 +267,19 @@ export const ChatPage = () => {
     mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationPayload }) =>
       updateConversationRequest(conversationId, changes),
     onSuccess: (updated) => {
+      if (
+        restrictToAssigned &&
+        currentUserId &&
+        updated.responsible?.id !== currentUserId
+      ) {
+        setSelectedConversationId((prev) => (prev === updated.id ? undefined : prev));
+        queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
+          if (!old) return old;
+          return old.filter((item) => item.id !== updated.id);
+        });
+        return;
+      }
+
       queryClient.setQueryData<ConversationSummary[]>(["conversations"], (old) => {
         if (!old) return old;
         return old.map((item) => (item.id === updated.id ? updated : item));
