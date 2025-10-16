@@ -2,6 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { Menu, Phone, Video, MoreVertical, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import { ChatOverview, Message } from '@/types/waha';
 import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
@@ -14,16 +20,26 @@ interface ChatAreaProps {
   onSendMessage: (chatId: string, text: string) => Promise<void>;
   onToggleSidebar: () => void;
   sidebarOpen: boolean;
+  onMarkAsUnread?: (chatId: string) => Promise<void> | void;
+  onDeleteChat?: (chatId: string) => Promise<void> | void;
+  onOpenDetails?: (chatId: string) => Promise<void> | void;
 }
 
-export const ChatArea = ({ 
-  activeChat, 
-  messages, 
-  onSendMessage, 
+export const ChatArea = ({
+  activeChat,
+  messages,
+  onSendMessage,
   onToggleSidebar,
-  sidebarOpen 
+  sidebarOpen,
+  onMarkAsUnread,
+  onDeleteChat,
+  onOpenDetails
 }: ChatAreaProps) => {
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<
+    'markAsUnread' | 'deleteChat' | 'openDetails' | null
+  >(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -52,6 +68,26 @@ export const ChatArea = ({
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const handleMenuAction = async (
+    action: 'markAsUnread' | 'deleteChat' | 'openDetails',
+    callback?: (chatId: string) => Promise<void> | void
+  ) => {
+    if (!activeChat || !callback) {
+      setIsOptionsOpen(false);
+      return;
+    }
+
+    setIsOptionsOpen(false);
+    setPendingAction(action);
+    try {
+      await Promise.resolve(callback(activeChat.id));
+    } catch (error) {
+      console.error('Falha ao executar ação do menu da conversa', error);
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   if (!activeChat) {
@@ -138,13 +174,47 @@ export const ChatArea = ({
           >
             <Video className="w-5 h-5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-sidebar-foreground hover:bg-sidebar-hover"
-          >
-            <MoreVertical className="w-5 h-5" />
-          </Button>
+          <DropdownMenu open={isOptionsOpen} onOpenChange={setIsOptionsOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-sidebar-foreground hover:bg-sidebar-hover"
+                disabled={pendingAction !== null}
+              >
+                <MoreVertical className="w-5 h-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                disabled={!onMarkAsUnread || pendingAction !== null}
+                onSelect={event => {
+                  event.preventDefault();
+                  void handleMenuAction('markAsUnread', onMarkAsUnread);
+                }}
+              >
+                Marcar como não lida
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!onDeleteChat || pendingAction !== null}
+                onSelect={event => {
+                  event.preventDefault();
+                  void handleMenuAction('deleteChat', onDeleteChat);
+                }}
+              >
+                Excluir conversa
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!onOpenDetails || pendingAction !== null}
+                onSelect={event => {
+                  event.preventDefault();
+                  void handleMenuAction('openDetails', onOpenDetails);
+                }}
+              >
+                Ver detalhes
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
