@@ -1344,6 +1344,7 @@ export const createProcesso = async (req: Request, res: Response) => {
       const processosCount = await countCompanyResource(
         empresaId,
         'processos',
+        planLimits.limiteProcessos,
       );
       if (processosCount >= planLimits.limiteProcessos) {
         return res

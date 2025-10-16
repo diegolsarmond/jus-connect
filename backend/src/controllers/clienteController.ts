@@ -224,7 +224,11 @@ export const createCliente = async (req: Request, res: Response) => {
 
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     if (planLimits?.limiteClientes != null) {
-      const clientesCount = await countCompanyResource(empresaId, 'clientes');
+      const clientesCount = await countCompanyResource(
+        empresaId,
+        'clientes',
+        planLimits.limiteClientes,
+      );
       if (clientesCount >= planLimits.limiteClientes) {
         return res
           .status(403)
