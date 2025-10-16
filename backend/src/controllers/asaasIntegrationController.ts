@@ -650,10 +650,11 @@ function resolveWebhookUrl(req: Request): string {
 export async function handleAsaasWebhook(req: Request, res: Response) {
   const rawRequest = req as RawBodyRequest;
   const payload = req.body as AsaasWebhookBody | null;
-  const normalizedEvent = normalizeEventName(payload?.event ?? null);
+  const rawEvent = payload?.event ?? null;
+  const normalizedEvent = normalizeEventName(rawEvent);
 
   if (!ensureHandledEvent(normalizedEvent)) {
-    console.info('[AsaasWebhook] Ignoring unsupported event', payload?.event);
+    console.info('[AsaasWebhook] Ignoring unsupported event', rawEvent);
     return res.status(202).json(buildWebhookResponse());
   }
 
@@ -678,6 +679,19 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
     console.warn('[AsaasWebhook] Unable to resolve charge context for id', asaasChargeId);
     return res.status(202).json(buildWebhookResponse());
   }
+
+  console.info(
+    '[AsaasWebhook] Received event',
+    rawEvent,
+    'normalized as',
+    normalizedEvent,
+    'for charge',
+    asaasChargeId,
+    'financial flow',
+    context.financialFlowId ?? null,
+    'credential',
+    context.credentialId ?? null,
+  );
 
   let secret: string | null = null;
 
@@ -731,8 +745,22 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
     if (context.financialFlowId) {
       if (shouldMarkAsPaid(normalizedEvent)) {
         await updateFinancialFlowAsPaid(context.financialFlowId, paymentDate);
+        console.info(
+          '[AsaasWebhook] Marked financial flow as paid',
+          context.financialFlowId,
+          'for charge',
+          asaasChargeId,
+          'payment date',
+          paymentDate ?? null,
+        );
       } else if (isRefunded) {
         await updateFinancialFlowAsRefunded(context.financialFlowId);
+        console.info(
+          '[AsaasWebhook] Marked financial flow as refunded',
+          context.financialFlowId,
+          'for charge',
+          asaasChargeId,
+        );
       }
     }
 
@@ -761,8 +789,22 @@ export async function handleAsaasWebhook(req: Request, res: Response) {
         if (shouldMarkAsPaid(normalizedEvent)) {
           const effectivePaymentDate = paymentDate ? new Date(paymentDate) : new Date();
           await applySubscriptionPayment(companyId, effectivePaymentDate);
+          console.info(
+            '[AsaasWebhook] Applied subscription payment for company',
+            companyId,
+            'charge',
+            asaasChargeId,
+          );
         } else if (normalizedEvent === 'PAYMENT_OVERDUE') {
           await applySubscriptionOverdue(companyId, dueDate);
+          console.info(
+            '[AsaasWebhook] Applied subscription overdue for company',
+            companyId,
+            'charge',
+            asaasChargeId,
+            'due date',
+            dueDate ?? null,
+          );
         }
       } catch (subscriptionError) {
         console.error(
