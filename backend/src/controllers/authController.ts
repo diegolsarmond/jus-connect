@@ -147,6 +147,25 @@ const addDays = (date: Date, days: number): Date => {
   return result;
 };
 
+const parseSubscriptionStatusValue = (
+  value: unknown,
+): 'pending' | 'active' | 'grace' | 'inactive' | 'overdue' | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (['pending', 'active', 'grace', 'inactive', 'overdue'].includes(normalized)) {
+    return normalized as 'pending' | 'active' | 'grace' | 'inactive' | 'overdue';
+  }
+
+  return null;
+};
+
 const calculateLegacyTrialEnd = (startDate: Date | null): Date | null => {
   if (!startDate) {
     return null;
@@ -158,6 +177,7 @@ const calculateLegacyTrialEnd = (startDate: Date | null): Date | null => {
 type SubscriptionRow = {
   empresa_plano?: unknown;
   empresa_ativo?: unknown;
+  empresa_subscription_status?: unknown;
   empresa_datacadastro?: unknown;
   empresa_trial_started_at?: unknown;
   empresa_trial_ends_at?: unknown;
@@ -169,9 +189,14 @@ type SubscriptionRow = {
   empresa_subscription_cadence?: unknown;
 };
 
-type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace_period' | 'expired';
+type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace_period' | 'expired' | 'pending';
 
-type SubscriptionBlockingReason = 'inactive' | 'trial_expired' | 'grace_period_expired' | null;
+type SubscriptionBlockingReason =
+  | 'inactive'
+  | 'trial_expired'
+  | 'grace_period_expired'
+  | 'pending'
+  | null;
 
 type SubscriptionResolution = {
   planId: number | null;
@@ -207,6 +232,7 @@ type LoginUserRow = UserRowBase & {
 const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolution => {
   const planId = parseOptionalInteger(row.empresa_plano);
   const isActive = parseBooleanFlag(row.empresa_ativo);
+  const subscriptionStatus = parseSubscriptionStatusValue(row.empresa_subscription_status);
   const cadence = parseCadence(row.empresa_subscription_cadence);
   const startedAtDate = (() => {
     const datacadastro = parseDateValue(row.empresa_datacadastro);
@@ -258,6 +284,66 @@ const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolutio
       gracePeriodEndsAt: null,
       isInGoodStanding: false,
       blockingReason: 'inactive',
+    };
+  }
+
+  if (subscriptionStatus === 'pending') {
+    return {
+      planId,
+      status: 'pending',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: false,
+      blockingReason: 'pending',
+    };
+  }
+
+  if (subscriptionStatus === 'inactive') {
+    return {
+      planId,
+      status: 'inactive',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: false,
+      blockingReason: 'inactive',
+    };
+  }
+
+  if (subscriptionStatus === 'overdue') {
+    return {
+      planId,
+      status: 'expired',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: false,
+      blockingReason: 'inactive',
+    };
+  }
+
+  if (subscriptionStatus === 'grace') {
+    return {
+      planId,
+      status: 'grace_period',
+      startedAt: startedAtDate ? startedAtDate.toISOString() : null,
+      trialEndsAt: trialEndsAtDate ? trialEndsAtDate.toISOString() : null,
+      currentPeriodEndsAt: currentPeriodEndsAtDate
+        ? currentPeriodEndsAtDate.toISOString()
+        : null,
+      gracePeriodEndsAt: gracePeriodEndsAtDate ? gracePeriodEndsAtDate.toISOString() : null,
+      isInGoodStanding: true,
+      blockingReason: null,
     };
   }
 
@@ -355,6 +441,12 @@ const evaluateSubscriptionAccess = (
         statusCode: 403,
         message:
           'Período de teste encerrado. Realize uma assinatura para continuar acessando o sistema.',
+      };
+    case 'pending':
+      return {
+        isAllowed: false,
+        statusCode: 403,
+        message: 'Pagamento da assinatura pendente de confirmação. Aguarde a compensação ou tente novamente em alguns instantes.',
       };
     default:
       return {
@@ -1137,7 +1229,8 @@ export const login = async (req: Request, res: Response) => {
               to_jsonb(emp) ->> 'subscription_trial_ends_at' AS empresa_subscription_trial_ends_at,
               to_jsonb(emp) ->> 'subscription_current_period_ends_at' AS empresa_subscription_current_period_ends_at,
               to_jsonb(emp) ->> 'subscription_grace_period_ends_at' AS empresa_subscription_grace_period_ends_at,
-              to_jsonb(emp) ->> 'subscription_cadence' AS empresa_subscription_cadence
+              to_jsonb(emp) ->> 'subscription_cadence' AS empresa_subscription_cadence,
+              to_jsonb(emp) ->> 'subscription_status' AS empresa_subscription_status
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -1179,6 +1272,7 @@ export const login = async (req: Request, res: Response) => {
       empresa_subscription_current_period_ends_at?: unknown;
       empresa_subscription_grace_period_ends_at?: unknown;
       empresa_subscription_cadence?: unknown;
+      empresa_subscription_status?: unknown;
     };
 
     const isUserActive = parseBooleanFlag(user.status);
@@ -1237,6 +1331,7 @@ export const login = async (req: Request, res: Response) => {
         user.empresa_subscription_grace_period_ends_at ??
         user.empresa_grace_expires_at,
       empresa_subscription_cadence: user.empresa_subscription_cadence,
+      empresa_subscription_status: user.empresa_subscription_status,
     };
 
     const subscriptionResolution =
@@ -1278,6 +1373,7 @@ export const login = async (req: Request, res: Response) => {
         ? resolveSubscriptionPayloadFromRow({
             empresa_plano: subscriptionRow.empresa_plano,
             empresa_ativo: subscriptionRow.empresa_ativo,
+            empresa_subscription_status: subscriptionRow.empresa_subscription_status,
             trial_started_at:
               subscriptionRow.empresa_trial_started_at ?? subscriptionRow.empresa_datacadastro,
             trial_ends_at: subscriptionRow.empresa_trial_ends_at,
@@ -1594,7 +1690,8 @@ export const getCurrentUser = async (req: Request, res: Response) => {
               emp.subscription_cadence AS empresa_subscription_cadence,
               emp.datacadastro AS empresa_datacadastro,
               COALESCE(emp.subscription_current_period_ends_at, emp.current_period_end) AS empresa_current_period_ends_at,
-              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at
+              COALESCE(emp.subscription_grace_period_ends_at, emp.grace_expires_at) AS empresa_grace_period_ends_at,
+              emp.subscription_status AS empresa_subscription_status
          FROM public.usuarios u
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
@@ -1629,6 +1726,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         ? resolveSubscriptionPayloadFromRow({
             empresa_plano: user.empresa_plano,
             empresa_ativo: user.empresa_ativo,
+            empresa_subscription_status: user.empresa_subscription_status,
             trial_started_at: user.empresa_trial_started_at ?? user.empresa_datacadastro,
             trial_ends_at: user.empresa_trial_ends_at,
             current_period_start: user.empresa_current_period_start ?? user.empresa_datacadastro,

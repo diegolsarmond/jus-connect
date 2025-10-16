@@ -95,7 +95,7 @@ const SubscriptionDetails = () => {
       );
 
       if (confirmedPayment && lastPaymentStatus === "PENDING") {
-        setPayments(paymentsList);
+        await loadSubscription(false);
         if (pollingInterval) {
           clearInterval(pollingInterval);
           setPollingInterval(null);
@@ -108,21 +108,40 @@ const SubscriptionDetails = () => {
       } else if (pendingPayment) {
         setPayments(paymentsList);
         setLastPaymentStatus("PENDING");
+        if (pendingPayment.billingType === "PIX") {
+          void loadPixQrCode(pendingPayment.id);
+          setBoletoCode(null);
+        } else if (pendingPayment.billingType === "BOLETO") {
+          void loadBoletoCode(pendingPayment.id);
+          setPixQrCode(null);
+        } else {
+          setPixQrCode(null);
+          setBoletoCode(null);
+        }
       } else if (confirmedPayment) {
+        setPayments(paymentsList);
+        setPixQrCode(null);
+        setBoletoCode(null);
         setLastPaymentStatus(confirmedPayment.status);
+      } else {
+        setPayments(paymentsList);
+        setPixQrCode(null);
+        setBoletoCode(null);
       }
     } catch (error) {
       console.log("Erro ao verificar status (background):", error);
     }
   };
 
-  const loadSubscription = async () => {
+  const loadSubscription = async (showSpinner = true) => {
     if (!id) {
       return;
     }
 
     try {
-      setLoading(true);
+      if (showSpinner) {
+        setLoading(true);
+      }
 
       const subscriptionResp = await requestJson<Subscription>(
         getApiUrl(`site/asaas/subscriptions/${encodeURIComponent(id)}`),
@@ -164,7 +183,9 @@ const SubscriptionDetails = () => {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      if (showSpinner) {
+        setLoading(false);
+      }
     }
   };
 

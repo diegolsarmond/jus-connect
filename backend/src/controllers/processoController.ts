@@ -134,7 +134,7 @@ const baseProcessoSelect = `
     p.orgao_julgador,
     COALESCE(dp.area, tp.nome) AS tipo,
     COALESCE(dp.situacao, sp.nome) AS status,
-    COALESCE(dp.nomeclasse, p.classe_judicial) AS classe_judicial,
+    p.classe_judicial AS classe_judicial,
     COALESCE(dp.assunto, p.assunto) AS assunto,
     COALESCE(dp.jurisdicao, p.jurisdicao) AS jurisdicao,
     p.oportunidade_id,
@@ -149,7 +149,7 @@ const baseProcessoSelect = `
     p.criado_em,
     p.atualizado_em,
     p.ultima_sincronizacao,
-    p.consultas_api_count,
+    COALESCE(consultas_api.consultas_api_count, 0)::int AS consultas_api_count,
     p.grau,
     p.justica_gratuita,
     p.liminar,
@@ -216,6 +216,11 @@ const baseProcessoSelect = `
   LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
   LEFT JOIN public.escritorios e ON e.id = p.setor_id
   LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*)::int AS consultas_api_count
+    FROM public.processo_consultas_api pca
+    WHERE pca.processo_id = p.id
+  ) consultas_api ON true
 `;
 
 const listProcessoSelect = baseProcessoSelect;
@@ -697,11 +702,16 @@ export const listProcessos = async (req: Request, res: Response) => {
            COALESCE(dp.situacao, sp.nome) AS status,
            COALESCE(dp.area, tp.nome) AS tipo,
            p.cliente_id,
-           p.consultas_api_count AS consultas_api_count
+           COALESCE(consultas_api.consultas_api_count, 0)::bigint AS consultas_api_count
          FROM public.processos p
          LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
          LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
          LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*)::bigint AS consultas_api_count
+           FROM public.processo_consultas_api pca
+           WHERE pca.processo_id = p.id
+         ) consultas_api ON true
          WHERE ${whereConditions.join(' AND ')}
        ),
        status_counts AS (
