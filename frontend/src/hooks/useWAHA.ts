@@ -1280,16 +1280,12 @@ export const useWAHA = (
 
   const updateMessageStatus = useCallback(
     (chatId: string, messageId: string, status: ChatMessageDeliveryStatus) => {
-  const updateMessageAck = useCallback(
-    (chatId: string, messageId: string, ack: MessageAckStatus) => {
       if (!isMountedRef.current) {
         return;
       }
 
       const ackName = statusToAckName(status);
       const ackCode = statusToAckCode(status);
-      const normalizedAck = (typeof ack === 'string' ? ack.toUpperCase() : 'SENT') as MessageAckStatus;
-      const ackNumber = normalizedAck === 'READ' ? 3 : normalizedAck === 'DELIVERED' ? 2 : 1;
 
       setMessages((previousMessages) => {
         const existing = previousMessages[chatId];
@@ -1311,7 +1307,60 @@ export const useWAHA = (
         const nextMessages = [...existing];
         nextMessages[index] = updated;
 
+        return {
+          ...previousMessages,
+          [chatId]: nextMessages,
+        };
+      });
+
+      setChats((previousChats) => {
+        const index = previousChats.findIndex((chat) => chat.id === chatId);
+        if (index === -1) {
+          return previousChats;
+        }
+
+        const chat = previousChats[index];
+        if (!chat.lastMessage || chat.lastMessage.id !== messageId) {
+          return previousChats;
+        }
+
+        if (chat.lastMessage.ack === ackCode && chat.lastMessage.ackName === ackName) {
+          return previousChats;
+        }
+
+        const nextChats = [...previousChats];
+        nextChats[index] = {
+          ...chat,
+          lastMessage: {
+            ...chat.lastMessage,
+            ack: ackCode,
+            ackName,
+          },
+        };
+
+        return nextChats;
+      });
+    },
+    [],
+  );
+
+  const updateMessageAck = useCallback(
+    (chatId: string, messageId: string, ack: MessageAckStatus) => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const normalizedAck = (typeof ack === 'string' ? ack.toUpperCase() : 'SENT') as MessageAckStatus;
+      const ackNumber = normalizedAck === 'READ' ? 3 : normalizedAck === 'DELIVERED' ? 2 : 1;
+
+      setMessages((previousMessages) => {
+        const existing = previousMessages[chatId];
+        if (!existing) {
+          return previousMessages;
+        }
+
         let hasChanges = false;
+
         const nextMessages = existing.map((message) => {
           if (message.id !== messageId) {
             return message;
@@ -1339,27 +1388,33 @@ export const useWAHA = (
       });
 
       setChats((previousChats) => {
-        const index = previousChats.findIndex((chat) => chat.id === chatId);
-        if (index === -1) {
-          return previousChats;
-        }
+        let hasChanges = false;
 
-        const chat = previousChats[index];
-        if (!chat.lastMessage || chat.lastMessage.id !== messageId) {
-          return previousChats;
-        }
+        const nextChats = previousChats.map((chat) => {
+          if (chat.id !== chatId || !chat.lastMessage || chat.lastMessage.id !== messageId) {
+            return chat;
+          }
 
-        const nextChats = [...previousChats];
-        nextChats[index] = {
-          ...chat,
-          lastMessage: {
-            ...chat.lastMessage,
-            ack: ackCode,
-            ackName,
-          },
-        };
+          const previousAckName =
+            chat.lastMessage.ackName ?? (typeof chat.lastMessage.ack === 'string' ? chat.lastMessage.ack : undefined);
+          const previousAckNumber = typeof chat.lastMessage.ack === 'number' ? chat.lastMessage.ack : undefined;
 
-        return nextChats;
+          if (previousAckName === normalizedAck && previousAckNumber === ackNumber) {
+            return chat;
+          }
+
+          hasChanges = true;
+          return {
+            ...chat,
+            lastMessage: {
+              ...chat.lastMessage,
+              ack: ackNumber,
+              ackName: normalizedAck,
+            },
+          };
+        });
+
+        return hasChanges ? nextChats : previousChats;
       });
     },
     [],
@@ -1390,37 +1445,6 @@ export const useWAHA = (
       return nextChats;
     });
   }, []);
-
-        let hasChanges = false;
-
-        const nextChats = previousChats.map((chat) => {
-          if (chat.id !== chatId || !chat.lastMessage || chat.lastMessage.id !== messageId) {
-            return chat;
-          }
-
-          const previousAckName = chat.lastMessage.ackName ?? (typeof chat.lastMessage.ack === 'string' ? chat.lastMessage.ack : undefined);
-          const previousAckNumber = typeof chat.lastMessage.ack === 'number' ? chat.lastMessage.ack : undefined;
-
-          if (previousAckName === normalizedAck && previousAckNumber === ackNumber) {
-            return chat;
-          }
-
-          hasChanges = true;
-          return {
-            ...chat,
-            lastMessage: {
-              ...chat.lastMessage,
-              ack: ackNumber,
-              ackName: normalizedAck,
-            },
-          };
-        });
-
-        return hasChanges ? nextChats : previousChats;
-      });
-    },
-    [],
-  );
 
   // Initialize
   useEffect(() => {
