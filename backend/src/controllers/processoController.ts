@@ -132,7 +132,7 @@ const baseProcessoSelect = `
     p.uf,
     p.municipio,
     p.orgao_julgador,
-    COALESCE(dp.area, tp.nome, p.tipo) AS tipo,
+    COALESCE(dp.area, tp.nome) AS tipo,
     COALESCE(dp.situacao, sp.nome, p.status) AS status,
     COALESCE(dp.classe, p.classe_judicial) AS classe_judicial,
     COALESCE(dp.assunto, p.assunto) AS assunto,
