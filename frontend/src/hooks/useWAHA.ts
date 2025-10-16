@@ -784,6 +784,82 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
       const attachmentUrl = primaryAttachment?.url;
       const attachmentName = primaryAttachment?.name;
 
+      const temporaryId =
+        typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function'
+          ? globalThis.crypto.randomUUID()
+          : Date.now().toString();
+      const temporaryTimestamp = Date.now();
+      const temporaryType: Message['type'] =
+        kind === 'text' ? 'text' : kind === 'image' ? 'image' : kind === 'audio' ? 'audio' : 'document';
+
+      let temporaryBody = kind === 'text' ? trimmedContent : undefined;
+      const temporaryCaption = kind !== 'text' ? baseCaption : undefined;
+      const temporaryFilename = kind !== 'text' ? attachmentName : undefined;
+      const temporaryMediaUrl = kind !== 'text' ? attachmentUrl : undefined;
+
+      if (kind !== 'text' && !temporaryBody && baseCaption) {
+        temporaryBody = baseCaption;
+      }
+
+      const temporaryMessage: Message = {
+        id: temporaryId,
+        chatId,
+        timestamp: temporaryTimestamp,
+        type: temporaryType,
+        body: temporaryBody,
+        caption: temporaryCaption,
+        filename: temporaryFilename,
+        mediaUrl: temporaryMediaUrl,
+        fromMe: true,
+        ack: 'PENDING',
+      };
+
+      let previousLastMessage: Message | undefined;
+
+      if (isMountedRef.current) {
+        setMessages((prev) => {
+          const existing = prev[chatId] || [];
+          previousLastMessage = existing[existing.length - 1];
+          return {
+            ...prev,
+            [chatId]: [...existing, temporaryMessage],
+          };
+        });
+
+        const pendingPreview =
+          temporaryMessage.body ??
+          temporaryMessage.caption ??
+          temporaryMessage.filename ??
+          (temporaryMessage.mediaUrl && temporaryMessage.type !== 'text' ? temporaryMessage.mediaUrl : '') ??
+          '';
+
+        const pendingAckNumber =
+          typeof temporaryMessage.ack === 'number' ? temporaryMessage.ack : undefined;
+        const pendingAckName =
+          typeof temporaryMessage.ack === 'string' ? temporaryMessage.ack : undefined;
+
+        setChats((prev) =>
+          sortChatsByRecency(
+            prev.map((chat) =>
+              chat.id === chatId
+                ? {
+                    ...chat,
+                    lastMessage: {
+                      id: temporaryMessage.id,
+                      body: pendingPreview,
+                      timestamp: temporaryMessage.timestamp,
+                      fromMe: true,
+                      type: temporaryMessage.type,
+                      ack: pendingAckNumber,
+                      ackName: pendingAckName,
+                    },
+                  }
+                : chat,
+            ),
+          ),
+        );
+      }
+
       try {
         let response: WAHAResponse<Message> | null = null;
 
@@ -843,6 +919,7 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
         if (data && isMountedRef.current) {
           const normalized: Message = {
             ...data,
+            chatId: data.chatId ?? chatId,
             body:
               data.body ??
               (kind === 'text' && hasTextContent ? trimmedContent : data.body),
@@ -853,16 +930,29 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
               data.filename ?? (kind !== 'text' ? attachmentName : data.filename),
             mediaUrl:
               data.mediaUrl ?? (kind !== 'text' ? attachmentUrl : data.mediaUrl),
+            fromMe: true,
           };
 
           if (kind !== 'text' && !normalized.body && baseCaption) {
             normalized.body = baseCaption;
           }
 
-          setMessages((prev) => ({
-            ...prev,
-            [chatId]: [...(prev[chatId] || []), normalized],
-          }));
+          setMessages((prev) => {
+            const existing = prev[chatId] || [];
+            let found = false;
+            const replaced = existing.map((item) => {
+              if (item.id === temporaryMessage.id) {
+                found = true;
+                return normalized;
+              }
+              return item;
+            });
+            const nextMessages = found ? replaced : [...existing, normalized];
+            return {
+              ...prev,
+              [chatId]: nextMessages.sort((a, b) => a.timestamp - b.timestamp),
+            };
+          });
 
           const lastMessagePreview =
             normalized.body ??
@@ -904,6 +994,57 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
           });
         }
       } catch (err) {
+        if (isMountedRef.current) {
+          setMessages((prev) => {
+            const existing = prev[chatId] || [];
+            return {
+              ...prev,
+              [chatId]: existing.filter((item) => item.id !== temporaryMessage.id),
+            };
+          });
+
+          setChats((prev) =>
+            sortChatsByRecency(
+              prev.map((chat) => {
+                if (chat.id !== chatId) {
+                  return chat;
+                }
+
+                if (!previousLastMessage) {
+                  return { ...chat, lastMessage: undefined };
+                }
+
+                const previousPreview =
+                  previousLastMessage.body ??
+                  previousLastMessage.caption ??
+                  previousLastMessage.filename ??
+                  (previousLastMessage.mediaUrl && previousLastMessage.type !== 'text'
+                    ? previousLastMessage.mediaUrl
+                    : '') ??
+                  '';
+
+                const previousAckNumber =
+                  typeof previousLastMessage.ack === 'number' ? previousLastMessage.ack : undefined;
+                const previousAckName =
+                  typeof previousLastMessage.ack === 'string' ? previousLastMessage.ack : undefined;
+
+                return {
+                  ...chat,
+                  lastMessage: {
+                    id: previousLastMessage.id,
+                    body: previousPreview,
+                    timestamp: previousLastMessage.timestamp,
+                    fromMe: previousLastMessage.fromMe,
+                    type: previousLastMessage.type,
+                    ack: previousAckNumber,
+                    ackName: previousAckName,
+                  },
+                };
+              }),
+            ),
+          );
+        }
+
         let status: number | undefined;
         let errorMessage = 'Não foi possível enviar a mensagem. Tente novamente.';
 
