@@ -1352,31 +1352,6 @@ export default function NovaOportunidade() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
-                        name="tipo_processo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Tipo de Processo</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {tipos.map((t) => (
-                                  <SelectItem key={t.id} value={t.id}>
-                                    {t.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
                         name="area_atuacao"
                         render={({ field }) => (
                           <FormItem>
@@ -1391,6 +1366,31 @@ export default function NovaOportunidade() {
                                 {areas.map((a) => (
                                   <SelectItem key={a.id} value={a.id}>
                                     {a.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="tipo_processo"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tipo de Processo</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {tipos.map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    {t.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
