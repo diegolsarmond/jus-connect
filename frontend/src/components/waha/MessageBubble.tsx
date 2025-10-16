@@ -33,6 +33,9 @@ export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) 
   };
 
   const messageContent = () => {
+    const mediaSource = message.mediaUrl ?? message.body;
+    const isImage = message.type === 'image' || message.mimeType?.startsWith('image/');
+
     if (message.type === 'audio') {
       if (message.mediaUrl) {
         return (
@@ -59,7 +62,50 @@ export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) 
         </div>
       );
     }
-    
+
+    if (isImage) {
+      if (mediaSource) {
+        return (
+          <div className="flex flex-col gap-1">
+            <img
+              src={mediaSource}
+              alt={message.caption ?? message.filename ?? 'Imagem'}
+              className="max-w-xs rounded"
+            />
+            {message.caption && <span className="text-xs opacity-80">{message.caption}</span>}
+          </div>
+        );
+      }
+      return (
+        <div className="flex items-center gap-2 text-sm italic">
+          <span>📎</span>
+          <span>{message.type} message</span>
+          {message.caption && (
+            <div className="mt-1 font-normal not-italic">
+              {message.caption}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (mediaSource) {
+      const label = message.filename ?? 'Baixar arquivo';
+      return (
+        <div className="flex flex-col gap-1 text-sm">
+          <a
+            href={mediaSource}
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            {label}
+          </a>
+          {message.caption && <span className="opacity-80">{message.caption}</span>}
+        </div>
+      );
+    }
+
     // Handle other message types
     return (
       <div className="flex items-center gap-2 text-sm italic">
