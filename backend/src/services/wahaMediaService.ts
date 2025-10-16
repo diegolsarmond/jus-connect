@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import type { MessageAttachment } from './chatService';
-import { saveUploadedFile } from './fileStorageService';
+import { isPublicFileAccessEnabled, saveUploadedFile } from './fileStorageService';
 import type { UploadedFile } from '../middlewares/uploadMiddleware';
 
 export interface WahaConfig {
@@ -247,12 +247,13 @@ export const persistWahaAttachments = async ({
     try {
       const uploadedFile = buildUploadedFile(download.buffer, download.fileName || fallbackName, download.mimeType);
       const stored = await saveUploadedFile(uploadedFile);
-      const accessibleUrl = stored.url ?? `/uploads/${stored.key}`;
+      const accessibleUrl =
+        stored.url ?? (isPublicFileAccessEnabled() ? `/uploads/${stored.key}` : null);
 
       results.push({
         ...attachment,
-        url: accessibleUrl,
-        downloadUrl: accessibleUrl,
+        url: accessibleUrl ?? attachment.url,
+        downloadUrl: accessibleUrl ?? attachment.downloadUrl ?? attachment.url,
         name: stored.name || download.fileName || fallbackName,
         mimeType: stored.mimeType || download.mimeType || fallbackMime,
       });
