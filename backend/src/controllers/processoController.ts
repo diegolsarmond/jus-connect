@@ -133,8 +133,8 @@ const baseProcessoSelect = `
     p.municipio,
     p.orgao_julgador,
     COALESCE(dp.area, tp.nome) AS tipo,
-    COALESCE(dp.situacao, sp.nome, p.status) AS status,
-    COALESCE(dp.classe, p.classe_judicial) AS classe_judicial,
+    COALESCE(dp.situacao, sp.nome) AS status,
+    COALESCE(dp.nomeclasse, p.classe_judicial) AS classe_judicial,
     COALESCE(dp.assunto, p.assunto) AS assunto,
     COALESCE(dp.jurisdicao, p.jurisdicao) AS jurisdicao,
     p.oportunidade_id,
@@ -1344,6 +1344,7 @@ export const createProcesso = async (req: Request, res: Response) => {
       const processosCount = await countCompanyResource(
         empresaId,
         'processos',
+        planLimits.limiteProcessos,
       );
       if (processosCount >= planLimits.limiteProcessos) {
         return res

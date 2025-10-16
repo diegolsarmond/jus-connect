@@ -74,11 +74,6 @@ const toBoolean = (value: unknown): boolean | null => {
   return null;
 };
 
-const parseCount = (value: unknown): number => {
-  const parsed = toInteger(value);
-  return parsed !== null && parsed >= 0 ? parsed : 0;
-};
-
 export const fetchPlanLimitsForCompany = async (
   companyId: number,
 ): Promise<CompanyPlanLimits | null> => {
@@ -137,29 +132,38 @@ export const fetchPlanLimitsForCompany = async (
 
 const RESOURCE_QUERIES: Record<PlanLimitResource, string> = {
   usuarios:
-    'SELECT COUNT(*)::bigint AS total FROM public.usuarios WHERE empresa IS NOT DISTINCT FROM $1',
+    'SELECT 1 FROM public.usuarios WHERE empresa IS NOT DISTINCT FROM $1 LIMIT $2',
   processos:
-    'SELECT COUNT(*)::bigint AS total FROM public.processos WHERE idempresa IS NOT DISTINCT FROM $1',
+    'SELECT 1 FROM public.processos WHERE idempresa IS NOT DISTINCT FROM $1 LIMIT $2',
   propostas:
-    'SELECT COUNT(*)::bigint AS total FROM public.oportunidades WHERE idempresa IS NOT DISTINCT FROM $1',
+    'SELECT 1 FROM public.oportunidades WHERE idempresa IS NOT DISTINCT FROM $1 LIMIT $2',
   clientes:
-    'SELECT COUNT(*)::bigint AS total FROM public.clientes WHERE idempresa IS NOT DISTINCT FROM $1',
+    'SELECT 1 FROM public.clientes WHERE idempresa IS NOT DISTINCT FROM $1 LIMIT $2',
 };
 
 export const countCompanyResource = async (
   companyId: number,
   resource: PlanLimitResource,
+  maxAllowed: number,
 ): Promise<number> => {
   if (!Number.isInteger(companyId) || companyId <= 0) {
     return 0;
   }
 
-  const query = RESOURCE_QUERIES[resource];
-  const result = await pool.query<{ total: unknown }>(query, [companyId]);
+  const normalizedLimit = Number.isInteger(maxAllowed) ? Math.trunc(maxAllowed) : 0;
 
-  if (result.rowCount === 0) {
+  if (normalizedLimit <= 0) {
     return 0;
   }
 
-  return parseCount(result.rows[0]?.total);
+  const query = RESOURCE_QUERIES[resource];
+  const result = await pool.query(query, [companyId, normalizedLimit]);
+
+  const limitedCount = result.rowCount ?? 0;
+
+  if (limitedCount <= 0) {
+    return 0;
+  }
+
+  return limitedCount >= normalizedLimit ? normalizedLimit : limitedCount;
 };
