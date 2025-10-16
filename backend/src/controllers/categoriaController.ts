@@ -31,7 +31,7 @@ export const listCategorias = async (_req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Failed to list categorias', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -62,7 +62,7 @@ export const createCategoria = async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Categoria já cadastrada' });
     }
 
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -98,7 +98,7 @@ export const updateCategoria = async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Categoria já cadastrada' });
     }
 
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -115,7 +115,7 @@ export const deleteCategoria = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error('Failed to delete categoria', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 

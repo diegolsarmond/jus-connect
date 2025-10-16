@@ -88,7 +88,7 @@ export const listNotificationsHandler = async (req: Request, res: Response) => {
     res.json(notifications);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -112,7 +112,7 @@ export const getNotificationHandler = async (req: Request, res: Response) => {
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -141,7 +141,7 @@ export const createNotificationHandler = async (req: Request, res: Response) => 
     res.status(201).json(notification);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -165,7 +165,7 @@ export const markNotificationAsReadHandler = async (req: Request, res: Response)
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -189,7 +189,7 @@ export const markNotificationAsUnreadHandler = async (req: Request, res: Respons
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -200,7 +200,7 @@ export const markAllNotificationsAsReadHandler = async (req: Request, res: Respo
     res.json({ updated: notifications.length, notifications });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -224,7 +224,7 @@ export const deleteNotificationHandler = async (req: Request, res: Response) => 
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -243,7 +243,7 @@ export const getUnreadCountHandler = async (req: Request, res: Response) => {
     res.json({ unread, category: category ?? null });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -254,7 +254,7 @@ export const getNotificationPreferencesHandler = async (req: Request, res: Respo
     res.json(preferences);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -274,7 +274,7 @@ export const updateNotificationPreferencesHandler = async (req: Request, res: Re
     res.json(updated);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -682,7 +682,7 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     res.json(intimacoes);
   } catch (error) {
     console.error('Failed to list intimações', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 

@@ -1246,7 +1246,7 @@ ${baseFinancialFlowsSelect}
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1262,7 +1262,7 @@ export const getFlow = async (req: Request, res: Response) => {
     res.json({ flow: result.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1422,7 +1422,7 @@ export const createFlow = async (req: Request, res: Response) => {
       return;
     }
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     if (client) {
       client.release();
@@ -1517,7 +1517,7 @@ export const updateFlow = async (req: Request, res: Response) => {
       return res.status(409).json({ error: err.message });
     }
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -1535,7 +1535,7 @@ export const deleteFlow = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1721,7 +1721,7 @@ const settleOpportunityInstallment = async (
     res.json({ parcela: updateResult.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1757,7 +1757,7 @@ export const settleFlow = async (req: Request, res: Response) => {
     res.json({ flow: result.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1840,7 +1840,7 @@ export const createAsaasChargeForFlow = async (req: Request, res: Response) => {
         .json({ error: 'O fluxo financeiro já possui uma cobrança vinculada ao Asaas' });
     }
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -2009,7 +2009,7 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -2057,7 +2057,7 @@ export const getAsaasChargeForFlow = async (req: Request, res: Response) => {
     res.json({ charge: sanitizedCharge });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2095,6 +2095,6 @@ export const listAsaasChargeStatus = async (req: Request, res: Response) => {
     res.json({ statuses });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
