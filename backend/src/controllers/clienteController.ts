@@ -83,11 +83,19 @@ export const listClientes = async (req: Request, res: Response) => {
       ? Number.parseInt(pageSizeParam, 10)
       : Number.NaN;
 
-    const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
-    const pageSize =
-      Number.isNaN(parsedPageSize) || parsedPageSize < 1 ? 20 : parsedPageSize;
+    const hasPaginationParams = !!pageParam || !!pageSizeParam;
 
-    const offset = (page - 1) * pageSize;
+    const page =
+      !hasPaginationParams || Number.isNaN(parsedPage) || parsedPage < 1
+        ? 1
+        : parsedPage;
+    const pageSize = !hasPaginationParams
+      ? undefined
+      : Number.isNaN(parsedPageSize) || parsedPageSize < 1
+        ? 20
+        : parsedPageSize;
+
+    const offset = pageSize ? (page - 1) * pageSize : undefined;
 
     const clientes = await listClientesByEmpresaId(empresaId, {
       limit: pageSize,
@@ -95,6 +103,10 @@ export const listClientes = async (req: Request, res: Response) => {
       orderBy: 'nome',
       orderDirection: 'asc',
     });
+
+    if (!hasPaginationParams) {
+      return res.json(clientes);
+    }
 
     const total = await countClientesByEmpresaId(empresaId);
 
