@@ -134,6 +134,7 @@ interface AsaasClientFactoryResult {
   client: AsaasClient;
   credentialId: number | null;
   integrationApiKeyId: number | null;
+  credentialScope: string;
 }
 
 type AsaasClientFactory = (options: {
@@ -410,12 +411,15 @@ async function defaultClientFactory({
     const integrationEmpresaId = extractEmpresaId(row);
     const isGlobalKey = isTruthy(row.global);
 
+    let credentialScope = 'empresa';
     if (!isGlobalKey) {
       if (integrationEmpresaId === null || flowEmpresaId === null || integrationEmpresaId !== flowEmpresaId) {
         throw new ValidationError(
           'Chave de integração do Asaas não pertence à empresa do fluxo financeiro',
         );
       }
+    } else {
+      credentialScope = 'global';
     }
 
     const baseUrl = typeof row.url_api === 'string' && row.url_api.trim() ? row.url_api : null;
@@ -442,6 +446,7 @@ async function defaultClientFactory({
       client: new HttpAsaasClient({ apiKey: keyValue, baseUrl }),
       credentialId,
       integrationApiKeyId,
+      credentialScope,
     };
   }
 
@@ -461,6 +466,7 @@ async function defaultClientFactory({
         client: new HttpAsaasClient({ apiKey: integration.accessToken, baseUrl: integration.baseUrl }),
         credentialId: integration.credentialId ?? null,
         integrationApiKeyId: integration.integrationId ?? null,
+        credentialScope: integration.isGlobal ? 'global' : 'empresa',
       };
     } catch (error) {
       if (!(error instanceof AsaasIntegrationNotConfiguredError)) {
@@ -481,6 +487,7 @@ async function defaultClientFactory({
     }),
     credentialId: null,
     integrationApiKeyId: null,
+    credentialScope: 'fallback',
   };
 }
 
@@ -823,6 +830,7 @@ export default class AsaasChargeService {
 
     let resolvedCredentialId = options?.credentialId ?? null;
     let resolvedIntegrationApiKeyId = options?.integrationApiKeyId ?? input.integrationApiKeyId ?? null;
+    let resolvedCredentialScope = 'custom';
     let asaasClient: AsaasClient;
 
     if (options?.asaasClient) {
@@ -843,7 +851,18 @@ export default class AsaasChargeService {
       ) {
         resolvedIntegrationApiKeyId = clientResolution.integrationApiKeyId;
       }
+      if (typeof clientResolution.credentialScope === 'string') {
+        const normalizedScope = clientResolution.credentialScope.trim();
+        resolvedCredentialScope = normalizedScope ? normalizedScope : 'custom';
+      }
     }
+    console.info('[Asaas] Criando cobrança', {
+      financialFlowId: normalizedFinancialFlowId,
+      billingType,
+      integrationApiKeyId: resolvedIntegrationApiKeyId ?? null,
+      credentialId: resolvedCredentialId ?? null,
+      credentialScope: resolvedCredentialScope,
+    });
     const chargeResponse = await asaasClient.createCharge(payload);
 
     const pixData = extractPixPayload(chargeResponse);
