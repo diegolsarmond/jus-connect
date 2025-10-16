@@ -15,6 +15,7 @@ import {
   Search,
   Archive,
   Monitor,
+  Menu,
   Shield,
   UserRound,
   X,
@@ -186,6 +187,8 @@ interface ChatWindowProps {
   onCreateAppointment?: () => void;
   responsibleOptions?: ChatResponsibleOption[];
   isLoadingResponsibles?: boolean;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export const ChatWindow = ({
@@ -205,6 +208,8 @@ export const ChatWindow = ({
   onCreateAppointment,
   responsibleOptions: providedResponsibleOptions = [],
   isLoadingResponsibles = false,
+  onToggleSidebar,
+  isSidebarOpen = true,
 }: ChatWindowProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -793,7 +798,10 @@ export const ChatWindow = ({
 
   if (!conversation) {
     return (
-      <div className={styles.wrapper}>
+      <div
+        className={styles.wrapper}
+        data-sidebar-open={isSidebarOpen ? "true" : "false"}
+      >
         <div className={styles.mainColumn}>
           <div className={styles.viewportWrapper}>
             <div className={styles.deviceLinkPlaceholder}>
@@ -815,9 +823,20 @@ export const ChatWindow = ({
       className={styles.wrapper}
       data-private={conversation.isPrivate ? "true" : undefined}
       data-details-open={detailsOpen ? "true" : undefined}
+      data-sidebar-open={isSidebarOpen ? "true" : "false"}
     >
       <div className={styles.mainColumn}>
         <header className={styles.header}>
+          {onToggleSidebar && (
+            <button
+              type="button"
+              className={styles.sidebarToggleButton}
+              onClick={onToggleSidebar}
+              aria-label="Alternar lista de conversas"
+            >
+              <Menu aria-hidden="true" size={20} />
+            </button>
+          )}
           <div className={styles.headerInfo}>
             <img src={conversation.avatar} alt="" aria-hidden="true" />
             <div className={styles.headerText}>
