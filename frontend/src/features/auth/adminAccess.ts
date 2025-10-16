@@ -39,7 +39,10 @@ export const hasAdminAccess = (user: AuthUser | null | undefined): boolean => {
     return false;
   }
 
-  const modules = createNormalizedModuleSet(user.modulos);
+  const candidateModules = (user as { modulos?: unknown }).modulos;
+  const modules = createNormalizedModuleSet(
+    Array.isArray(candidateModules) ? candidateModules : []
+  );
   for (const moduleId of modules) {
     if (moduleId.includes("admin")) {
       return true;
