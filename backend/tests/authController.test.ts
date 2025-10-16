@@ -1357,7 +1357,7 @@ test('resendEmailConfirmation rejects invalid emails', async () => {
   assert.deepEqual(res.body, { error: 'Informe um e-mail válido.' });
 });
 
-test('resendEmailConfirmation rejects unknown users', async () => {
+test('resendEmailConfirmation returns generic success for unknown users', async () => {
   const { calls, restore } = setupPoolQueryMock([
     { rows: [], rowCount: 0 },
   ]);
@@ -1371,12 +1371,12 @@ test('resendEmailConfirmation rejects unknown users', async () => {
     restore();
   }
 
-  assert.equal(res.statusCode, 404);
-  assert.deepEqual(res.body, { error: 'Usuário não encontrado.' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { message: 'Um novo e-mail de confirmação foi enviado.' });
   assert.equal(calls.length, 1);
 });
 
-test('resendEmailConfirmation rejects already confirmed accounts', async () => {
+test('resendEmailConfirmation returns generic success for already confirmed accounts', async () => {
   const { restore } = setupPoolQueryMock([
     {
       rows: [
@@ -1400,8 +1400,8 @@ test('resendEmailConfirmation rejects already confirmed accounts', async () => {
     restore();
   }
 
-  assert.equal(res.statusCode, 409);
-  assert.deepEqual(res.body, { error: 'E-mail já confirmado.' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { message: 'Um novo e-mail de confirmação foi enviado.' });
 });
 
 test('resendEmailConfirmation triggers confirmation email when user is pending', async () => {
