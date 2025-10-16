@@ -619,7 +619,11 @@ export const createOportunidade = async (req: Request, res: Response) => {
 
     const planLimits = await fetchPlanLimitsForCompany(empresaId);
     if (planLimits?.limitePropostas != null) {
-      const propostasCount = await countCompanyResource(empresaId, 'propostas');
+      const propostasCount = await countCompanyResource(
+        empresaId,
+        'propostas',
+        planLimits.limitePropostas,
+      );
       if (propostasCount >= planLimits.limitePropostas) {
         res
           .status(403)

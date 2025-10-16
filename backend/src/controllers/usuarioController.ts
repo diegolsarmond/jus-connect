@@ -350,7 +350,11 @@ export const createUsuario = async (req: Request, res: Response) => {
 
       const planLimits = await fetchPlanLimitsForCompany(empresaId);
       if (planLimits?.limiteUsuarios != null) {
-        const usuariosCount = await countCompanyResource(empresaId, 'usuarios');
+        const usuariosCount = await countCompanyResource(
+          empresaId,
+          'usuarios',
+          planLimits.limiteUsuarios,
+        );
         if (usuariosCount >= planLimits.limiteUsuarios) {
           return res
             .status(403)

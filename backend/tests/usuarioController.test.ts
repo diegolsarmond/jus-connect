@@ -428,7 +428,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
     {
       rows: [
         {
-          limite_usuarios: null,
+          limite_usuarios: 10,
           limite_processos: null,
           limite_propostas: null,
           sincronizacao_processos_habilitada: null,
@@ -437,6 +437,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
       ],
       rowCount: 1,
     },
+    { rows: [{}, {}], rowCount: 2 },
     { rows: [createdRow], rowCount: 1 },
     { rows: [], rowCount: 0 },
     { rows: [], rowCount: 1 },
@@ -479,7 +480,7 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   }
   (expectedCreatedResponse as Record<string, unknown>).welcome_email_pending = false;
   assert.deepEqual(res.body, expectedCreatedResponse);
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 10);
 
   const planLimitsCall = calls.find((call) =>
     /FROM public\.empresas emp\s+LEFT JOIN public\.planos/.test(call.text ?? ''),
@@ -491,7 +492,15 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.equal(typeof insertCall.values?.[8], 'string');
   assert.ok(String(insertCall.values?.[8]).startsWith('argon2:'));
   assert.equal(insertCall.values?.[1], '00000000000');
-  assert.equal(insertCall.values?.[9], '11900000000');
+  const telefoneParam = insertCall?.values?.[9];
+  assert.equal(typeof telefoneParam, 'string');
+  assert.equal(String(telefoneParam).replace(/\D/g, ''), '11900000000');
+
+  const limitCheckCall = calls.find((call) =>
+    /FROM public\.usuarios WHERE empresa IS NOT DISTINCT FROM \$1 LIMIT \$2/.test(call.text ?? ''),
+  );
+  assert.ok(limitCheckCall);
+  assert.deepEqual(limitCheckCall?.values, [5, 10]);
 
   const welcomeResetCall = calls.find((call) =>
     /UPDATE public\.usuarios SET welcome_email_pending = FALSE/.test(call.text ?? ''),
@@ -507,6 +516,59 @@ test('createUsuario generates a temporary password, stores its hash and sends a 
   assert.ok((welcomeArgs?.temporaryPassword ?? '').length > 0);
   assert.equal(typeof welcomeArgs?.confirmationLink, 'string');
   assert.ok((welcomeArgs?.confirmationLink ?? '').includes('token='));
+});
+
+test('createUsuario retorna 403 quando limite de usuários é atingido', async () => {
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 5 }], rowCount: 1 },
+    { rows: [{}], rowCount: 1 },
+    {
+      rows: [
+        {
+          limite_usuarios: 1,
+          limite_processos: null,
+          limite_propostas: null,
+          sincronizacao_processos_habilitada: null,
+          sincronizacao_processos_cota: null,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{}], rowCount: 1 },
+  ]);
+
+  const req = {
+    body: {
+      nome_completo: 'Usuário Limitado',
+      cpf: '00000000000',
+      email: 'limitado@example.com',
+      perfil: 'admin',
+      empresa: 5,
+      setor: null,
+      oab: null,
+      status: true,
+      telefone: '(11) 90000-0000',
+      ultimo_login: null,
+      observacoes: null,
+    },
+    auth: createAuth(51),
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createUsuario(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: 'Limite de usuários do plano atingido.' });
+  assert.equal(calls.length, 4);
+  const limitCall = calls[3];
+  assert.ok(limitCall);
+  assert.match(limitCall?.text ?? '', /LIMIT \$2/);
+  assert.deepEqual(limitCall?.values, [5, 1]);
 });
 
 test('createUsuario retorna 409 quando e-mail já cadastrado', async () => {
@@ -681,7 +743,7 @@ test('createUsuario retorna 409 quando e-mail já está cadastrado', async () =>
       ],
       rowCount: 1,
     },
-    { rows: [{ total: '0' }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
     duplicateError,
   ]);
 
@@ -737,7 +799,7 @@ test('createUsuario retorna 400 quando há vínculos inválidos', async () => {
       ],
       rowCount: 1,
     },
-    { rows: [{ total: '0' }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
     invalidRelationError,
   ]);
 
@@ -796,7 +858,7 @@ test('createUsuario retorna 503 quando o banco está indisponível', async () =>
       ],
       rowCount: 1,
     },
-    { rows: [{ total: '0' }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
     unavailableError,
   ]);
 
