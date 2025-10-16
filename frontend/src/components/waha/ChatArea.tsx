@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Menu, Phone, Video, MoreVertical, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -13,6 +13,14 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 
 import { WelcomeScreen } from './WelcomeScreen';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 interface ChatAreaProps {
   activeChat: ChatOverview | null;
@@ -36,23 +44,92 @@ export const ChatArea = ({
   onOpenDetails
 }: ChatAreaProps) => {
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [matchIndices, setMatchIndices] = useState<number[]>([]);
+  const [currentMatch, setCurrentMatch] = useState(0);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<
     'markAsUnread' | 'deleteChat' | 'openDetails' | null
   >(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const handleToggleSearch = useCallback((open: boolean) => {
+    setIsSearchOpen(open);
+    if (!open) {
+      setSearchTerm('');
+      setMatchIndices([]);
+      setCurrentMatch(0);
+    }
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (!isSearchOpen) {
+      scrollToBottom();
+    }
+  }, [messages, isSearchOpen]);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setMatchIndices([]);
+      setCurrentMatch(0);
+      return;
+    }
+
+    const lower = searchTerm.toLowerCase();
+    const indices = messages.reduce<number[]>((acc, message, index) => {
+      if (
+        typeof message.body === 'string' &&
+        message.body.toLowerCase().includes(lower)
+      ) {
+        acc.push(index);
+      }
+      return acc;
+    }, []);
+
+    setMatchIndices(indices);
+    setCurrentMatch(indices.length ? 0 : 0);
+  }, [searchTerm, messages]);
+
+  useEffect(() => {
+    if (isSearchOpen && matchIndices.length) {
+      const index = matchIndices[currentMatch] ?? matchIndices[0];
+      const target = messageRefs.current[index];
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [currentMatch, matchIndices, isSearchOpen]);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  useEffect(() => {
+    setIsSearchOpen(false);
+    setSearchTerm('');
+    setMatchIndices([]);
+    setCurrentMatch(0);
+  }, [activeChat?.id]);
+
+  useEffect(() => {
+    messageRefs.current = [];
   }, [messages]);
 
   const handleSendMessage = async (text: string) => {
     if (!activeChat || !text.trim()) return;
-    
+
     setSendingMessage(true);
     try {
       await onSendMessage(activeChat.id, text.trim());
@@ -157,6 +234,7 @@ export const ChatArea = ({
             variant="ghost"
             size="sm"
             className="text-sidebar-foreground hover:bg-sidebar-hover"
+            onClick={() => handleToggleSearch(true)}
           >
             <Search className="w-5 h-5" />
           </Button>
@@ -226,14 +304,28 @@ export const ChatArea = ({
           </div>
         ) : (
           <>
-            {messages.map((message, index) => (
-              <MessageBubble
-                key={`${message.id}-${index}`}
-                message={message}
-                isFirst={index === 0 || messages[index - 1].fromMe !== message.fromMe}
-                isLast={index === messages.length - 1 || messages[index + 1]?.fromMe !== message.fromMe}
-              />
-            ))}
+            {messages.map((message, index) => {
+              const isCurrent =
+                isSearchOpen &&
+                matchIndices.length > 0 &&
+                matchIndices[currentMatch] === index;
+
+              return (
+                <div
+                  key={`${message.id}-${index}`}
+                  ref={element => {
+                    messageRefs.current[index] = element;
+                  }}
+                >
+                  <MessageBubble
+                    message={message}
+                    isFirst={index === 0 || messages[index - 1].fromMe !== message.fromMe}
+                    isLast={index === messages.length - 1 || messages[index + 1]?.fromMe !== message.fromMe}
+                    highlight={isCurrent}
+                  />
+                </div>
+              );
+            })}
             <div ref={messagesEndRef} />
           </>
         )}
@@ -247,6 +339,70 @@ export const ChatArea = ({
           placeholder={`Message ${activeChat.name}`}
         />
       </div>
+
+      <Dialog open={isSearchOpen} onOpenChange={handleToggleSearch}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buscar mensagens</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              autoFocus
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
+              placeholder="Digite para buscar"
+            />
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                {matchIndices.length > 0
+                  ? `${currentMatch + 1} de ${matchIndices.length}`
+                  : 'Nenhuma ocorrência'}
+              </span>
+              <span>Ctrl/⌘ + F</span>
+            </div>
+          </div>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSearchTerm('')}
+                disabled={!searchTerm}
+              >
+                Limpar
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  if (!matchIndices.length) return;
+                  setCurrentMatch(prev =>
+                    prev - 1 < 0 ? matchIndices.length - 1 : prev - 1
+                  );
+                }}
+                disabled={matchIndices.length === 0}
+              >
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!matchIndices.length) return;
+                  setCurrentMatch(prev =>
+                    prev + 1 >= matchIndices.length ? 0 : prev + 1
+                  );
+                }}
+                disabled={matchIndices.length === 0}
+              >
+                Próximo
+              </Button>
+            </div>
+            <Button type="button" variant="ghost" onClick={() => handleToggleSearch(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
