@@ -882,12 +882,9 @@ export const listFlows = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res.json({
-        items: [],
-        total: 0,
-        page: effectivePage,
-        limit: effectiveLimit,
-      });
+      res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
 
@@ -1313,7 +1310,9 @@ export const createFlow = async (req: Request, res: Response) => {
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
 
@@ -1638,7 +1637,9 @@ const settleOpportunityInstallment = async (
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
 
@@ -1868,7 +1869,9 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
 

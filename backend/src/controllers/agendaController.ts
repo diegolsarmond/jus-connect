@@ -159,7 +159,9 @@ export const listAgendas = async (req: Request, res: Response) => {
     const { empresaId, userId } = authResult;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const functionAttempts: Array<{ functionCall: string; params: Array<number | null> }> = [
@@ -253,7 +255,9 @@ export const listAgendasByEmpresa = async (req: Request, res: Response) => {
     const { empresaId } = authResult;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(
@@ -350,7 +354,7 @@ export const createAgenda = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       return res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -458,7 +462,9 @@ export const updateAgenda = async (req: Request, res: Response) => {
     const { empresaId, userId } = authResult;
 
     if (empresaId === null) {
-      return res.status(404).json({ error: 'Agenda não encontrada' });
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(
@@ -551,7 +557,9 @@ export const deleteAgenda = async (req: Request, res: Response) => {
     const { empresaId, userId } = authResult;
 
     if (empresaId === null) {
-      return res.status(404).json({ error: 'Agenda não encontrada' });
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(

@@ -18,7 +18,9 @@ export const listFornecedores = async (req: Request, res: Response) => {
     const { empresaId } = authResult;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const fornecedores = await listFornecedoresByEmpresaId(empresaId);
@@ -81,7 +83,7 @@ export const createFornecedor = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       return res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -147,7 +149,7 @@ export const updateFornecedor = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       return res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -218,7 +220,7 @@ export const deleteFornecedor = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       return res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 

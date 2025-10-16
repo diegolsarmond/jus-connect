@@ -33,7 +33,9 @@ export const listTiposDocumento = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res.json([]);
+      res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
 
@@ -71,7 +73,7 @@ export const createTipoDocumento = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
@@ -109,7 +111,7 @@ export const updateTipoDocumento = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
@@ -150,7 +152,7 @@ export const deleteTipoDocumento = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
