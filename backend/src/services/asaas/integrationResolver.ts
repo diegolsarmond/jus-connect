@@ -2,10 +2,10 @@ import pool from '../db';
 import AsaasClient, { AsaasClientConfig } from './asaasClient';
 import {
   ASAAS_DEFAULT_BASE_URLS,
-  AsaasEnvironment,
   normalizeAsaasBaseUrl,
   normalizeAsaasEnvironment,
 } from './urlNormalization';
+import type { AsaasEnvironment } from './urlNormalization';
 
 export type Queryable = {
   query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount: number }>;
@@ -253,4 +253,5 @@ export async function createAsaasClient(
 
 export default resolveAsaasIntegration;
 
-export { ASAAS_DEFAULT_BASE_URLS, AsaasEnvironment, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
+export { ASAAS_DEFAULT_BASE_URLS, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
+export type { AsaasEnvironment };
