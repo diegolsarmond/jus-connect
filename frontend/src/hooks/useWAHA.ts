@@ -11,6 +11,8 @@ import type { SendMessageInput } from '@/features/chat/types';
 const CHAT_PAGE_SIZE = 50;
 const MESSAGE_PAGE_SIZE = 100;
 
+type MessageAckStatus = 'SENT' | 'DELIVERED' | 'READ';
+
 type MessagePaginationState = {
   offset: number;
   hasMore: boolean;
@@ -1101,6 +1103,80 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
     ],
   );
 
+  const updateMessageAck = useCallback(
+    (chatId: string, messageId: string, ack: MessageAckStatus) => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const normalizedAck = (typeof ack === 'string' ? ack.toUpperCase() : 'SENT') as MessageAckStatus;
+      const ackNumber = normalizedAck === 'READ' ? 3 : normalizedAck === 'DELIVERED' ? 2 : 1;
+
+      setMessages((previousMessages) => {
+        const existing = previousMessages[chatId];
+        if (!existing) {
+          return previousMessages;
+        }
+
+        let hasChanges = false;
+        const nextMessages = existing.map((message) => {
+          if (message.id !== messageId) {
+            return message;
+          }
+
+          if (message.ack === normalizedAck) {
+            return message;
+          }
+
+          hasChanges = true;
+          return {
+            ...message,
+            ack: normalizedAck,
+          };
+        });
+
+        if (!hasChanges) {
+          return previousMessages;
+        }
+
+        return {
+          ...previousMessages,
+          [chatId]: nextMessages,
+        };
+      });
+
+      setChats((previousChats) => {
+        let hasChanges = false;
+
+        const nextChats = previousChats.map((chat) => {
+          if (chat.id !== chatId || !chat.lastMessage || chat.lastMessage.id !== messageId) {
+            return chat;
+          }
+
+          const previousAckName = chat.lastMessage.ackName ?? (typeof chat.lastMessage.ack === 'string' ? chat.lastMessage.ack : undefined);
+          const previousAckNumber = typeof chat.lastMessage.ack === 'number' ? chat.lastMessage.ack : undefined;
+
+          if (previousAckName === normalizedAck && previousAckNumber === ackNumber) {
+            return chat;
+          }
+
+          hasChanges = true;
+          return {
+            ...chat,
+            lastMessage: {
+              ...chat.lastMessage,
+              ack: ackNumber,
+              ackName: normalizedAck,
+            },
+          };
+        });
+
+        return hasChanges ? nextChats : previousChats;
+      });
+    },
+    [],
+  );
+
   // Initialize
   useEffect(() => {
     isMountedRef.current = true;
@@ -1165,6 +1241,7 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
     selectChat,
     markAsRead,
     addMessage,
+    updateMessageAck,
     checkSessionStatus,
     
     // Utils
