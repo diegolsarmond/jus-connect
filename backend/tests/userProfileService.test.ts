@@ -27,6 +27,7 @@ test('getProfile mapeia dados retornando valores padrão', async () => {
   const row = {
     user_id: 10,
     nome_completo: 'Dra. Maria Silva',
+    cpf: '12345678901',
     email: 'maria@jusconnect.com',
     telefone: '(11) 90000-0000',
     ultimo_login: '2024-02-10T10:00:00.000Z',
@@ -63,6 +64,7 @@ test('getProfile mapeia dados retornando valores padrão', async () => {
 
   assert.equal(profile.id, 10);
   assert.equal(profile.name, 'Dra. Maria Silva');
+  assert.equal(profile.cpf, '12345678901');
   assert.equal(profile.email, 'maria@jusconnect.com');
   assert.deepEqual(profile.specialties, ['Direito Civil']);
   assert.equal(profile.notifications.securityAlerts, true, 'valor padrão para alertas de segurança');
@@ -80,6 +82,7 @@ test('updateProfile atualiza dados, persiste alterações e gera auditoria', asy
   const existingRow = {
     user_id: 42,
     nome_completo: 'Maria Silva',
+    cpf: '98765432100',
     email: 'maria@jusconnect.com',
     telefone: '(11) 90000-0000',
     ultimo_login: '2024-02-10T10:00:00.000Z',
@@ -114,6 +117,7 @@ test('updateProfile atualiza dados, persiste alterações e gera auditoria', asy
     nome_completo: 'Maria Souza',
     email: 'maria.souza@jusconnect.com',
     telefone: '(11) 98888-7777',
+    cpf: '98765432100',
     title: 'Advogada Sênior',
     specialties: ['Direito Digital', 'Direito Empresarial'],
     hourly_rate: '300.00',
@@ -176,6 +180,7 @@ test('updateProfile valida formato do e-mail', async () => {
   const row = {
     user_id: 10,
     nome_completo: 'Maria',
+    cpf: '11122233344',
     email: 'maria@jusconnect.com',
     telefone: null,
     ultimo_login: null,

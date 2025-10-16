@@ -104,6 +104,14 @@ const validatePhone = (value: string) => {
   return digits.length >= 10 ? null : "Informe um telefone válido";
 };
 
+const validateCpf = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) {
+    return null;
+  }
+  return digits.length === 11 ? null : "Informe um CPF válido";
+};
+
 const validateZip = (value: string) => {
   if (!value) return "Campo obrigatório";
   const zipRegex = /^\d{5}-?\d{3}$/;
@@ -137,6 +145,31 @@ const specialtiesToString = (specialties: string[]) => specialties.join(", ");
 const toNullableString = (value: string): string | null => {
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+};
+
+const formatCpfValue = (value: string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length !== 11) {
+    return digits;
+  }
+  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+};
+
+const formatCpfInputValue = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 3) {
+    return digits;
+  }
+  if (digits.length <= 6) {
+    return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  }
+  if (digits.length <= 9) {
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  }
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 };
 
 const isAbortError = (error: unknown): error is DOMException =>
@@ -957,6 +990,14 @@ export default function MeuPerfil() {
     [mutateProfile],
   );
 
+  const handleCpfSave = useCallback(
+    async (rawValue: string) => {
+      const digits = rawValue.replace(/\D/g, "");
+      await mutateProfile({ cpf: digits.length === 0 ? null : digits });
+    },
+    [mutateProfile],
+  );
+
   const handleAddressSave = useCallback(
     (field: "street" | "number" | "complement" | "neighborhood" | "city" | "state" | "zip") =>
       async (rawValue: string) => {
@@ -1336,6 +1377,14 @@ export default function MeuPerfil() {
                       disabled={isUpdatingProfile}
                     />
                     <EditableField
+                      label="CPF"
+                      value={formatCpfValue(profile.cpf)}
+                      onSave={handleCpfSave}
+                      validation={validateCpf}
+                      disabled={isUpdatingProfile}
+                      onEditChange={formatCpfInputValue}
+                    />
+                    <EditableField
                       label="Telefone"
                       value={profile.phone ?? ""}
                       onSave={buildFieldSaveHandler("phone")}
@@ -1465,24 +1514,6 @@ export default function MeuPerfil() {
                   label="Rua"
                   value={profile.address.street ?? ""}
                   onSave={handleAddressSave("street")}
-                  disabled={isUpdatingProfile}
-                />
-                <EditableField
-                  label="Número"
-                  value={profile.address.number ?? ""}
-                  onSave={handleAddressSave("number")}
-                  disabled={isUpdatingProfile}
-                />
-                <EditableField
-                  label="Complemento"
-                  value={profile.address.complement ?? ""}
-                  onSave={handleAddressSave("complement")}
-                  disabled={isUpdatingProfile}
-                />
-                <EditableField
-                  label="Bairro"
-                  value={profile.address.neighborhood ?? ""}
-                  onSave={handleAddressSave("neighborhood")}
                   disabled={isUpdatingProfile}
                 />
                 <EditableField
