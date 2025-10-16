@@ -39,6 +39,13 @@ export const createEmpresa = async (req: Request, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
+    if (
+      (typeof error === 'object' && error !== null && String((error as { code?: unknown }).code) === '23505') ||
+      (typeof (error as { message?: unknown }).message === 'string' &&
+        (error as { message: string }).message.toLowerCase().includes('duplicate key'))
+    ) {
+      return res.status(409).json({ error: 'CNPJ ou e-mail já cadastrado.' });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -57,6 +64,13 @@ export const updateEmpresa = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
+    if (
+      (typeof error === 'object' && error !== null && String((error as { code?: unknown }).code) === '23505') ||
+      (typeof (error as { message?: unknown }).message === 'string' &&
+        (error as { message: string }).message.toLowerCase().includes('duplicate key'))
+    ) {
+      return res.status(409).json({ error: 'CNPJ ou e-mail já cadastrado.' });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 };
