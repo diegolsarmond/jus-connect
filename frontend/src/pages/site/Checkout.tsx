@@ -262,18 +262,20 @@ const Checkout = () => {
       );
 
       const subscriptionId = subscriptionResp?.id;
-      if (subscriptionId) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("subscriptionId", subscriptionId);
-          localStorage.setItem("customerId", customerId);
-        }
+      if (!subscriptionId) {
+        throw new Error("Não foi possível identificar a assinatura");
+      }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("subscriptionId", subscriptionId);
+        localStorage.setItem("customerId", customerId);
       }
 
       toast({
         title: "Assinatura criada com sucesso!",
         description: "Você pode acompanhar o pagamento na próxima tela.",
       });
-      navigate(`/subscription/${subscriptionId}`);
+      navigate(routes.subscription(subscriptionId));
     } catch (error: any) {
       toast({
         title: "Erro ao criar assinatura",
