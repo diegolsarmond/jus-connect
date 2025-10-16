@@ -138,7 +138,13 @@ type SubscriptionRow = {
   empresa_subscription_cadence?: unknown;
 };
 
-type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace_period' | 'expired';
+type SubscriptionStatus =
+  | 'inactive'
+  | 'pending'
+  | 'trialing'
+  | 'active'
+  | 'grace_period'
+  | 'expired';
 
 type SubscriptionBlockingReason = 'inactive' | 'trial_expired' | 'grace_period_expired' | null;
 
@@ -254,7 +260,7 @@ const resolveSubscriptionPayload = (row: SubscriptionRow): SubscriptionResolutio
     status = 'grace_period';
     isInGoodStanding = true;
   } else if (!trialEndsAtDate && !currentPeriodEndsAtDate && !gracePeriodEndsAtDate) {
-    status = 'active';
+    status = 'pending';
     isInGoodStanding = true;
   } else {
     status = 'expired';
