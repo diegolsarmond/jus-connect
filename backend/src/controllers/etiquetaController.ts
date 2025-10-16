@@ -41,7 +41,7 @@ export const listEtiquetas = async (req: Request, res: Response) => {
     res.json(etiquetas);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -52,7 +52,7 @@ export const listEtiquetasByFluxoTrabalho = async (req: Request, res: Response) 
     res.json(etiquetas);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -91,7 +91,7 @@ export const createEtiqueta = async (req: Request, res: Response) => {
     res.status(201).json(etiqueta);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -112,7 +112,7 @@ export const updateEtiqueta = async (req: Request, res: Response) => {
     res.json(etiqueta);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -126,7 +126,7 @@ export const deleteEtiqueta = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 

@@ -8,7 +8,7 @@ export const listEmpresas = async (_req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -25,7 +25,7 @@ export const getEmpresaById = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -39,14 +39,7 @@ export const createEmpresa = async (req: Request, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    if (
-      (typeof error === 'object' && error !== null && String((error as { code?: unknown }).code) === '23505') ||
-      (typeof (error as { message?: unknown }).message === 'string' &&
-        (error as { message: string }).message.toLowerCase().includes('duplicate key'))
-    ) {
-      return res.status(409).json({ error: 'CNPJ ou e-mail já cadastrado.' });
-    }
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -64,14 +57,7 @@ export const updateEmpresa = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    if (
-      (typeof error === 'object' && error !== null && String((error as { code?: unknown }).code) === '23505') ||
-      (typeof (error as { message?: unknown }).message === 'string' &&
-        (error as { message: string }).message.toLowerCase().includes('duplicate key'))
-    ) {
-      return res.status(409).json({ error: 'CNPJ ou e-mail já cadastrado.' });
-    }
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -88,7 +74,7 @@ export const deleteEmpresa = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 

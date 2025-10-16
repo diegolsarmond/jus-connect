@@ -81,7 +81,7 @@ export const listTiposProcesso = async (req: Request, res: Response) => {
     return res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -133,7 +133,7 @@ export const createTipoProcesso = async (req: Request, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -204,7 +204,7 @@ export const updateTipoProcesso = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -239,7 +239,7 @@ export const deleteTipoProcesso = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
