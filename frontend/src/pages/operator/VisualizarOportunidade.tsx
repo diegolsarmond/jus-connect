@@ -559,9 +559,9 @@ export default function VisualizarOportunidade() {
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [documentPreview, setDocumentPreview] = useState<OpportunityDocument | null>(null);
-  const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
+  const [documentPreviewHtml, setDocumentPreviewHtml] = useState<string | null>(null);
   const [documentActionState, setDocumentActionState] = useState<
     { id: number; type: "download-pdf" | "download-docx" | "open" } | null
   >(null);
@@ -861,7 +861,7 @@ export default function VisualizarOportunidade() {
 
     if (documentPreview && !validIds.has(documentPreview.id)) {
       setDocumentPreview(null);
-      setDocumentPreviewUrl(null);
+      setDocumentPreviewHtml(null);
     }
   }, [documents, documentPreview]);
 
@@ -2493,34 +2493,28 @@ export default function VisualizarOportunidade() {
 
   const closeDocumentPreview = () => {
     setDocumentPreview(null);
-    setDocumentPreviewUrl(null);
     setDocumentPreviewError(null);
     setDocumentPreviewLoading(false);
+    setDocumentPreviewHtml(null);
   };
 
-  const handleViewDocument = async (doc: OpportunityDocument) => {
+  const handleViewDocument = (doc: OpportunityDocument) => {
     setDocumentPreview(doc);
-    setDocumentPreviewUrl(null);
-    setDocumentPreviewError(null);
-    setDocumentPreviewLoading(true);
+    setDocumentPreviewLoading(false);
 
-    try {
-      const cached = documentPdfUrlsRef.current.get(doc.id);
-      if (cached) {
-        setDocumentPreviewUrl(cached);
-        setDocumentPreviewLoading(false);
-        return;
-      }
+    const html =
+      doc.content_html && doc.content_html.trim().length > 0
+        ? doc.content_html
+        : null;
 
-      const url = await ensurePdfUrl(doc);
-      setDocumentPreviewUrl(url);
-    } catch (error) {
-      console.error(error);
-      setDocumentPreviewError("Erro ao gerar PDF do documento");
-      setSnack({ open: true, message: "Erro ao gerar PDF do documento" });
-    } finally {
-      setDocumentPreviewLoading(false);
+    if (!html) {
+      setDocumentPreviewError("Conteúdo do documento indisponível para visualização");
+      setDocumentPreviewHtml(null);
+      return;
     }
+
+    setDocumentPreviewError(null);
+    setDocumentPreviewHtml(html);
   };
 
   const handleDownloadDocument = async (
@@ -3574,28 +3568,32 @@ export default function VisualizarOportunidade() {
           <DialogHeader>
             <DialogTitle>{documentPreview?.title ?? "Documento"}</DialogTitle>
             <DialogDescription>
-              Visualização do documento em PDF. Faça o download ou abra em uma nova aba para compartilhar.
+              Visualização do conteúdo formatado. Utilize as ações abaixo para baixar ou compartilhar.
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-[400px] rounded-lg border border-border/60 bg-muted/20 p-2">
             {documentPreviewLoading ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Gerando PDF do documento...
+                Carregando visualização do documento...
               </div>
-            ) : documentPreviewError ? (
-              <p className="p-4 text-sm text-destructive">{documentPreviewError}</p>
-            ) : documentPreviewUrl ? (
-              <iframe
-                title={`Documento ${documentPreview?.title ?? documentPreview?.id ?? ""}`}
-                src={documentPreviewUrl}
-                className="h-[70vh] w-full rounded-md bg-white"
-              />
             ) : (
-              <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-muted-foreground">
-                  Pré-visualização indisponível.
-                </p>
+              <div className="max-h-[70vh] overflow-y-auto rounded-md bg-background p-4">
+                {documentPreviewError && (
+                  <p className="mb-4 text-sm text-destructive">{documentPreviewError}</p>
+                )}
+                {documentPreviewHtml ? (
+                  <div
+                    className="wysiwyg-editor"
+                    dangerouslySetInnerHTML={{ __html: documentPreviewHtml }}
+                  />
+                ) : (
+                  <div className="flex h-full min-h-[200px] items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                      Pré-visualização indisponível.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

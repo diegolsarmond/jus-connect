@@ -51,6 +51,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  IdCard,
   ListChecks,
   Loader2,
   RotateCcw,
@@ -2490,6 +2491,10 @@ export default function Intimacoes() {
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" onClick={handleOpenOabModal} disabled={isBulkProcessing || loading}>
+            <IdCard className="mr-2 h-4 w-4" />
+            Gerenciar OABs
+          </Button>
           <Button
             variant="secondary"
             onClick={handleMarkAllAsRead}
@@ -2528,7 +2533,7 @@ export default function Intimacoes() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Card className="border-border/60 bg-card/60 backdrop-blur">
           <CardHeader className="space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total de intimações</CardTitle>
@@ -2567,32 +2572,77 @@ export default function Intimacoes() {
             <CardDescription>Intimações com disponibilização registrada no mês atual.</CardDescription>
           </CardContent>
         </Card>
+        <Card className="border-border/60 bg-card/60 backdrop-blur">
+          <CardHeader className="space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">OABs monitoradas</CardTitle>
+            <div className="text-3xl font-semibold text-foreground">
+              {monitoredOabsLoading && monitoredOabs.length === 0
+                ? "..."
+                : numberFormatter.format(monitoredOabs.length)}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <CardDescription>OABs cadastradas para monitoramento automático.</CardDescription>
+          </CardContent>
+        </Card>
       </div>
 
-      <Card className="border-border/60 bg-card/60 shadow-sm">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">OABs monitoradas</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {monitoredOabsLoading && monitoredOabs.length === 0
-                ? "Carregando OABs monitoradas..."
-                : `Total de OABs monitoradas: ${monitoredOabs.length}`}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
-              Gerenciar OABs
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr),minmax(0,2fr)]">
+        <Card className="border-border/60">
+          <CardHeader>
+            <CardTitle className="text-lg">Volume mensal</CardTitle>
+            <CardDescription>Compare a quantidade de intimações disponíveis nos últimos meses.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {monthlyDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={monthlyDistribution}>
+                  <defs>
+                    <linearGradient id="intimacoesMonthly" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip cursor={{ stroke: "hsl(var(--primary))" }} />
+                  <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" fill="url(#intimacoesMonthly)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Nenhum dado suficiente para gerar o gráfico.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardHeader>
+            <CardTitle className="text-lg">Distribuição por status</CardTitle>
+            <CardDescription>Entenda como as intimações estão classificadas.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {statusDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statusDistribution}>
+                  <CartesianGrid vertical={false} strokeOpacity={0.2} />
+                  <XAxis dataKey="status" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                  <Tooltip cursor={{ fill: "hsl(var(--muted)/0.3)" }} />
+                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Nenhum status disponível para análise.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="border-border/60 bg-card/60">
         <CardHeader className="pb-0">
@@ -2704,62 +2754,6 @@ export default function Intimacoes() {
           </div>
         </CardContent>
       </Card>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr),minmax(0,2fr)]">
-        <Card className="border-border/60">
-          <CardHeader>
-            <CardTitle className="text-lg">Volume mensal</CardTitle>
-            <CardDescription>Compare a quantidade de intimações disponíveis nos últimos meses.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-72 pt-0">
-            {monthlyDistribution.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlyDistribution}>
-                  <defs>
-                    <linearGradient id="intimacoesMonthly" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                  <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip cursor={{ stroke: "hsl(var(--primary))" }} />
-                  <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" fill="url(#intimacoesMonthly)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Nenhum dado suficiente para gerar o gráfico.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60">
-          <CardHeader>
-            <CardTitle className="text-lg">Distribuição por status</CardTitle>
-            <CardDescription>Entenda como as intimações estão classificadas.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-72 pt-0">
-            {statusDistribution.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusDistribution}>
-                  <CartesianGrid vertical={false} strokeOpacity={0.2} />
-                  <XAxis dataKey="status" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip cursor={{ fill: "hsl(var(--muted)/0.3)" }} />
-                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Nenhum status disponível para análise.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
       {loading && intimacoes.length === 0 ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
