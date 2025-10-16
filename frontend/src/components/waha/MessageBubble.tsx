@@ -1,3 +1,4 @@
+import { useEffect, useState, type SyntheticEvent } from 'react';
 import { Check, CheckCheck, Clock } from 'lucide-react';
 import { Message } from '@/types/waha';
 import { format } from 'date-fns';
@@ -9,11 +10,44 @@ interface MessageBubbleProps {
 }
 
 export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) => {
+  const [audioDuration, setAudioDuration] = useState<string | null>(null);
+
   const formatTime = (timestamp: number) => {
     try {
       return format(new Date(timestamp), 'HH:mm');
     } catch {
       return '';
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return null;
+    }
+
+    const totalSeconds = Math.round(seconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const remainingSeconds = totalSeconds % 60;
+
+    if (hours > 0) {
+      const minutesString = minutes.toString().padStart(2, '0');
+      const secondsString = remainingSeconds.toString().padStart(2, '0');
+      return `${hours}:${minutesString}:${secondsString}`;
+    }
+
+    const secondsString = remainingSeconds.toString().padStart(2, '0');
+    return `${minutes}:${secondsString}`;
+  };
+
+  useEffect(() => {
+    setAudioDuration(null);
+  }, [message.id, message.mediaUrl, message.type]);
+
+  const handleAudioMetadata = (event: SyntheticEvent<HTMLAudioElement>) => {
+    const formatted = formatDuration(event.currentTarget.duration);
+    if (formatted) {
+      setAudioDuration(formatted);
     }
   };
 
@@ -45,9 +79,19 @@ export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) 
               src={message.mediaUrl}
               className="w-64 max-w-full"
               aria-label={message.caption ?? 'Mensagem de áudio'}
+              onLoadedMetadata={handleAudioMetadata}
             >
               Seu navegador não suporta a reprodução de áudio.
             </audio>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <a
+                href={message.mediaUrl}
+                download={message.filename ?? ''}
+                className="underline"
+              >
+                Baixar áudio
+              </a>
+            </div>
             {message.caption && <span className="text-xs opacity-80">{message.caption}</span>}
           </div>
         );
@@ -142,6 +186,7 @@ export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) 
         <div className={`flex items-center justify-end gap-1 mt-1 text-xs ${
           message.fromMe ? 'text-message-sent-foreground/70' : 'text-message-received-foreground/70'
         }`}>
+          {audioDuration && <span>{audioDuration}</span>}
           <span>{formatTime(message.timestamp)}</span>
           {message.fromMe && getAckIcon()}
         </div>
