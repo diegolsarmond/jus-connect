@@ -91,6 +91,7 @@ export default function Dashboard() {
 
   const conversionRate = analytics?.kpis.conversionRate ?? 0;
   const monthlyGrowth = analytics?.kpis.monthlyGrowth ?? 0;
+  const opportunityStatusMetrics = analytics?.opportunityStatusMetrics ?? [];
 
   const processosPorCliente = useMemo(() => {
     if (clientMetrics.active === 0) {
@@ -295,6 +296,28 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {opportunityStatusMetrics.length > 0 ? (
+        <Card aria-busy={isLoading}>
+          <CardHeader>
+            <CardTitle>Oportunidades por Situação</CardTitle>
+            <CardDescription>Quantidade de oportunidades por status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {opportunityStatusMetrics.map((metric) => (
+                <div
+                  key={metric.status}
+                  className="flex items-center justify-between rounded-md border border-border/60 bg-muted/10 px-3 py-2"
+                >
+                  <span className="text-sm font-medium">{metric.status}</span>
+                  <span className="text-sm text-muted-foreground">{metric.count}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
