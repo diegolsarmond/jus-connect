@@ -15,6 +15,7 @@ let register: typeof import('../src/controllers/authController')['register'];
 let login: typeof import('../src/controllers/authController')['login'];
 let changePassword: typeof import('../src/controllers/authController')['changePassword'];
 let confirmEmail: typeof import('../src/controllers/authController')['confirmEmail'];
+let resendEmailConfirmation: typeof import('../src/controllers/authController')['resendEmailConfirmation'];
 let setSendEmailConfirmationTokenForTests: typeof import('../src/controllers/authController')['__setSendEmailConfirmationTokenForTests'];
 let resetSendEmailConfirmationTokenForTests: typeof import('../src/controllers/authController')['__resetSendEmailConfirmationTokenForTests'];
 let setConfirmEmailWithTokenForTests: typeof import('../src/controllers/authController')['__setConfirmEmailWithTokenForTests'];
@@ -29,6 +30,7 @@ test.before(async () => {
     login,
     changePassword,
     confirmEmail,
+    resendEmailConfirmation,
     __setSendEmailConfirmationTokenForTests: setSendEmailConfirmationTokenForTests,
     __resetSendEmailConfirmationTokenForTests: resetSendEmailConfirmationTokenForTests,
     __setConfirmEmailWithTokenForTests: setConfirmEmailWithTokenForTests,
@@ -1343,6 +1345,138 @@ test('login migrates plain text passwords to argon2 format', async () => {
 
   const modulesCall = calls.find((call) => /perfil_modulos/.test(call.text ?? ''));
   assert.ok(modulesCall, 'expected module fetch to occur');
+});
+
+test('resendEmailConfirmation rejects invalid emails', async () => {
+  const req = { body: { email: 'not-an-email' } } as unknown as Request;
+  const res = createMockResponse();
+
+  await resendEmailConfirmation(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'Informe um e-mail válido.' });
+});
+
+test('resendEmailConfirmation rejects unknown users', async () => {
+  const { calls, restore } = setupPoolQueryMock([
+    { rows: [], rowCount: 0 },
+  ]);
+
+  const req = { body: { email: 'alice@example.com' } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await resendEmailConfirmation(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: 'Usuário não encontrado.' });
+  assert.equal(calls.length, 1);
+});
+
+test('resendEmailConfirmation rejects already confirmed accounts', async () => {
+  const { restore } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 10,
+          nome_completo: 'Alice',
+          email: 'alice@example.com',
+          email_confirmed_at: '2024-01-01T10:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = { body: { email: 'alice@example.com' } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await resendEmailConfirmation(req, res);
+  } finally {
+    restore();
+  }
+
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, { error: 'E-mail já confirmado.' });
+});
+
+test('resendEmailConfirmation triggers confirmation email when user is pending', async () => {
+  const { calls, restore } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 10,
+          nome_completo: ' Alice Doe ',
+          email: 'alice@example.com',
+          email_confirmed_at: null,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const sentTargets: Parameters<typeof emailConfirmationService.sendEmailConfirmationToken>[0][] = [];
+
+  setSendEmailConfirmationTokenForTests(async (target) => {
+    sentTargets.push(target);
+  });
+
+  const req = { body: { email: 'alice@example.com' } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await resendEmailConfirmation(req, res);
+  } finally {
+    restore();
+    resetSendEmailConfirmationTokenForTests();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { message: 'Um novo e-mail de confirmação foi enviado.' });
+  assert.equal(calls.length, 1);
+  assert.equal(sentTargets.length, 1);
+  assert.deepEqual(sentTargets[0], {
+    id: 10,
+    nome_completo: 'Alice Doe',
+    email: 'alice@example.com',
+  });
+});
+
+test('resendEmailConfirmation reports failures when email dispatch fails', async () => {
+  const { restore } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 11,
+          nome_completo: null,
+          email: null,
+          email_confirmed_at: null,
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  setSendEmailConfirmationTokenForTests(async () => {
+    throw new Error('SMTP indisponível');
+  });
+
+  const req = { body: { email: 'bob@example.com' } } as unknown as Request;
+  const res = createMockResponse();
+
+  try {
+    await resendEmailConfirmation(req, res);
+  } finally {
+    restore();
+    resetSendEmailConfirmationTokenForTests();
+  }
+
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body, { error: 'Não foi possível reenviar o e-mail de confirmação.' });
 });
 
 test('confirmEmail returns success when token is valid', async () => {

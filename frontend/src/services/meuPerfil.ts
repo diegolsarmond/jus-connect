@@ -302,6 +302,8 @@ interface RawSessionResponse {
   location?: unknown;
   lastActivity?: unknown;
   isActive?: unknown;
+  isApproved?: unknown;
+  approvedAt?: unknown;
   createdAt?: unknown;
   revokedAt?: unknown;
 }
@@ -313,6 +315,8 @@ const mapSessionResponse = (payload: RawSessionResponse): UserSession => ({
   location: toStringOrNull(payload.location),
   lastActivity: toIsoDate(payload.lastActivity) ?? new Date(),
   isActive: toBoolean(payload.isActive, false),
+  isApproved: toBoolean(payload.isApproved, false),
+  approvedAt: toIsoDate(payload.approvedAt),
   createdAt: toIsoDate(payload.createdAt) ?? undefined,
   revokedAt: toIsoDate(payload.revokedAt) ?? null,
   isCurrent: false,
@@ -398,6 +402,137 @@ export const revokeTodasMeuPerfilSessions = async (
         : 0;
 
   return { revokedCount };
+};
+
+export interface TwoFactorInitiationPayload {
+  secret: string;
+  otpauthUrl: string;
+  qrCode: string;
+}
+
+export interface TwoFactorConfirmationPayload {
+  backupCodes: string[];
+}
+
+const parseTwoFactorInitiation = (payload: unknown): TwoFactorInitiationPayload => {
+  if (!payload || typeof payload !== 'object') {
+    throw new MeuPerfilApiError('Resposta inválida ao iniciar 2FA.', 500);
+  }
+
+  const secret = toStringOrUndefined((payload as { secret?: unknown }).secret);
+  const otpauthUrl = toStringOrUndefined((payload as { otpauthUrl?: unknown }).otpauthUrl);
+  const qrCode = toStringOrUndefined((payload as { qrCode?: unknown }).qrCode);
+
+  if (!secret || !otpauthUrl || !qrCode) {
+    throw new MeuPerfilApiError('Dados incompletos recebidos do servidor.', 500);
+  }
+
+  return { secret, otpauthUrl, qrCode };
+};
+
+const parseTwoFactorConfirmation = (payload: unknown): TwoFactorConfirmationPayload => {
+  if (!payload || typeof payload !== 'object') {
+    throw new MeuPerfilApiError('Resposta inválida ao confirmar 2FA.', 500);
+  }
+
+  const codesRaw = (payload as { backupCodes?: unknown }).backupCodes;
+  const codes = Array.isArray(codesRaw)
+    ? codesRaw
+        .map((value) => toStringOrUndefined(value))
+        .filter((value): value is string => typeof value === 'string')
+    : [];
+
+  if (codes.length === 0) {
+    throw new MeuPerfilApiError('Nenhum código de backup recebido.', 500);
+  }
+
+  return { backupCodes: codes };
+};
+
+export const initiateMeuPerfilTwoFactor = async (
+  options?: FetchOptions,
+): Promise<TwoFactorInitiationPayload> => {
+  const data = await request<unknown>('me/profile/security/2fa/initiate', {
+    method: 'POST',
+    signal: options?.signal,
+  });
+
+  return parseTwoFactorInitiation(data);
+};
+
+export const confirmMeuPerfilTwoFactor = async (
+  code: string,
+  options?: FetchOptions,
+): Promise<TwoFactorConfirmationPayload> => {
+  if (!code || typeof code !== 'string') {
+    throw new MeuPerfilApiError('Informe o código de verificação.', 400);
+  }
+
+  const data = await request<unknown>('me/profile/security/2fa/confirm', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+    signal: options?.signal,
+  });
+
+  return parseTwoFactorConfirmation(data);
+};
+
+export const disableMeuPerfilTwoFactor = async (
+  code: string,
+  options?: FetchOptions,
+): Promise<void> => {
+  if (!code || typeof code !== 'string') {
+    throw new MeuPerfilApiError('Informe o código para desativar o 2FA.', 400);
+  }
+
+  await request<unknown>('me/profile/security/2fa/disable', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+    signal: options?.signal,
+  });
+};
+
+export const approveMeuPerfilDevice = async (
+  sessionId: string,
+  options?: FetchOptions,
+): Promise<UserSession> => {
+  const numericId = Number.parseInt(sessionId, 10);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new MeuPerfilApiError('Sessão inválida.', 400);
+  }
+
+  const data = await request<RawSessionResponse>(`me/profile/sessions/${numericId}/approve`, {
+    method: 'POST',
+    signal: options?.signal,
+  });
+
+  return mapSessionResponse(data);
+};
+
+export const revokeMeuPerfilDeviceApproval = async (
+  sessionId: string,
+  options?: FetchOptions,
+): Promise<UserSession> => {
+  const numericId = Number.parseInt(sessionId, 10);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new MeuPerfilApiError('Sessão inválida.', 400);
+  }
+
+  const data = await request<RawSessionResponse>(
+    `me/profile/sessions/${numericId}/revoke-approval`,
+    {
+      method: 'POST',
+      signal: options?.signal,
+    },
+  );
+
+  return mapSessionResponse(data);
 };
 
 export interface UpdateMeuPerfilPayload {

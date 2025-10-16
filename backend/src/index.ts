@@ -14,6 +14,7 @@ import { bootstrapIntimacaoOabMonitoradas } from './services/intimacaoOabMonitor
 import { ensureChatSchema } from './services/chatSchema';
 import { ensureProcessSyncSchema } from './services/processSyncSchema';
 import { ensureSupportSchema } from './services/supportSchema';
+import { ensureProcessosIndexes } from './services/processoSchema';
 import { authenticateRequest } from './middlewares/authMiddleware';
 import { authorizeModules } from './middlewares/moduleAuthorization';
 import { getAuthSecret } from './constants/auth';
@@ -331,6 +332,7 @@ async function startServer() {
       ensureChatSchema(),
       ensureSupportSchema(),
       ensureProcessSyncSchema(),
+      ensureProcessosIndexes(),
       bootstrapOabMonitoradas(),
       bootstrapIntimacaoOabMonitoradas(),
     ]);

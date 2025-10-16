@@ -133,7 +133,7 @@ test('listEtiquetas retorna erro 500 quando serviço falha', async () => {
   consoleMock.mock.restore();
 
   assert.equal(res.statusCode, 500);
-  assert.deepEqual(res.body, { error: 'Internal server error' });
+  assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
 });
 
 test('listEtiquetasByFluxoTrabalho retorna etiquetas do fluxo', async () => {
@@ -185,7 +185,7 @@ test('listEtiquetasByFluxoTrabalho retorna erro 500 quando serviço falha', asyn
   }
 
   assert.equal(res.statusCode, 500);
-  assert.deepEqual(res.body, { error: 'Internal server error' });
+  assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
 });
 
 test('createEtiqueta cria etiqueta quando empresa é válida', async () => {
@@ -259,7 +259,7 @@ test('createEtiqueta retorna erro 500 quando serviço falha', async () => {
   }
 
   assert.equal(res.statusCode, 500);
-  assert.deepEqual(res.body, { error: 'Internal server error' });
+  assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
 });
 
 test('updateEtiqueta atualiza etiqueta existente', async () => {
@@ -358,7 +358,7 @@ test('updateEtiqueta retorna erro 500 quando serviço falha', async () => {
   }
 
   assert.equal(res.statusCode, 500);
-  assert.deepEqual(res.body, { error: 'Internal server error' });
+  assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
 });
 
 test('deleteEtiqueta remove etiqueta existente', async () => {
@@ -426,5 +426,5 @@ test('deleteEtiqueta retorna erro 500 quando serviço falha', async () => {
   }
 
   assert.equal(res.statusCode, 500);
-  assert.deepEqual(res.body, { error: 'Internal server error' });
+  assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
 });

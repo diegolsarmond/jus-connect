@@ -998,6 +998,64 @@ export const register = async (req: Request, res: Response) => {
   });
 };
 
+export const resendEmailConfirmation = async (req: Request, res: Response) => {
+  const emailValue = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+
+  if (!emailValue || !EMAIL_REGEX.test(emailValue)) {
+    res.status(400).json({ error: 'Informe um e-mail válido.' });
+    return;
+  }
+
+  const normalizedEmail = normalizeEmail(emailValue);
+
+  try {
+    const userResult = await pool.query(
+      `SELECT id, nome_completo, email, email_confirmed_at
+         FROM public.usuarios
+        WHERE LOWER(email) = $1
+        LIMIT 1`,
+      [normalizedEmail],
+    );
+
+    if (userResult.rowCount === 0) {
+      res.status(404).json({ error: 'Usuário não encontrado.' });
+      return;
+    }
+
+    const userRow = userResult.rows[0] as {
+      id: number;
+      nome_completo?: unknown;
+      email?: unknown;
+      email_confirmed_at?: unknown;
+    };
+
+    const emailConfirmedAt = parseDateValue(userRow.email_confirmed_at);
+    if (emailConfirmedAt) {
+      res.status(409).json({ error: 'E-mail já confirmado.' });
+      return;
+    }
+
+    const rawUserName =
+      typeof userRow.nome_completo === 'string' ? userRow.nome_completo.trim() : '';
+    const userName = rawUserName.length > 0 ? rawUserName : 'Usuário';
+    const userEmail =
+      typeof userRow.email === 'string' && userRow.email.trim().length > 0
+        ? userRow.email.trim()
+        : normalizedEmail;
+
+    await emailConfirmationSender({
+      id: userRow.id,
+      nome_completo: userName,
+      email: userEmail,
+    });
+
+    res.json({ message: 'Um novo e-mail de confirmação foi enviado.' });
+  } catch (error) {
+    console.error('Erro ao reenviar e-mail de confirmação', error);
+    res.status(500).json({ error: 'Não foi possível reenviar o e-mail de confirmação.' });
+  }
+};
+
 export const confirmEmail = async (req: Request, res: Response) => {
   const tokenValue = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
 

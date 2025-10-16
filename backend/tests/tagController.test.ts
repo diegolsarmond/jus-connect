@@ -78,7 +78,7 @@ test('listTags retorna 500 quando serviço falha', async () => {
   try {
     await listTags(req, res);
     assert.equal(res.statusCode, 500);
-    assert.deepEqual(res.body, { error: 'Internal server error' });
+    assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
     assert.equal(queryMock.mock.callCount(), 1);
     assert.equal(errorMock.mock.callCount(), 1);
     const call = errorMock.mock.calls[0];
@@ -125,7 +125,7 @@ test('createTag retorna 500 quando serviço falha', async () => {
   try {
     await createTag(req, res);
     assert.equal(res.statusCode, 500);
-    assert.deepEqual(res.body, { error: 'Internal server error' });
+    assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
     assert.equal(queryMock.mock.callCount(), 1);
     assert.equal(errorMock.mock.callCount(), 1);
   } finally {
@@ -193,7 +193,7 @@ test('updateTag retorna 500 quando serviço falha', async () => {
   try {
     await updateTag(req, res);
     assert.equal(res.statusCode, 500);
-    assert.deepEqual(res.body, { error: 'Internal server error' });
+    assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
     assert.equal(queryMock.mock.callCount(), 1);
     assert.equal(errorMock.mock.callCount(), 1);
   } finally {
@@ -255,7 +255,7 @@ test('deleteTag retorna 500 quando serviço falha', async () => {
   try {
     await deleteTag(req, res);
     assert.equal(res.statusCode, 500);
-    assert.deepEqual(res.body, { error: 'Internal server error' });
+    assert.deepEqual(res.body, { error: 'Erro interno do servidor.' });
     assert.equal(queryMock.mock.callCount(), 1);
     assert.equal(errorMock.mock.callCount(), 1);
   } finally {

@@ -132,8 +132,8 @@ const baseProcessoSelect = `
     p.uf,
     p.municipio,
     p.orgao_julgador,
-    COALESCE(dp.area, tp.nome, p.tipo) AS tipo,
-    COALESCE(dp.situacao, sp.nome, p.status) AS status,
+    COALESCE(dp.area, tp.nome) AS tipo,
+    COALESCE(dp.situacao, sp.nome) AS status,
     COALESCE(dp.classe, p.classe_judicial) AS classe_judicial,
     COALESCE(dp.assunto, p.assunto) AS assunto,
     COALESCE(dp.jurisdicao, p.jurisdicao) AS jurisdicao,
@@ -692,16 +692,40 @@ export const listProcessos = async (req: Request, res: Response) => {
     );
 
     const summaryPromise = pool.query(
-      `SELECT
-         COALESCE(dp.situacao, sp.nome) AS status,
-         COALESCE(dp.area, tp.nome) AS tipo,
-         p.cliente_id,
-         p.consultas_api_count AS consultas_api_count
-       FROM public.processos p
-       LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
-       LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
-       LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
-       WHERE ${whereConditions.join(' AND ')}`,
+      `WITH base AS (
+         SELECT
+           COALESCE(dp.situacao, sp.nome) AS status,
+           COALESCE(dp.area, tp.nome) AS tipo,
+           p.cliente_id,
+           p.consultas_api_count AS consultas_api_count
+         FROM public.processos p
+         LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
+         LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
+         LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+         WHERE ${whereConditions.join(' AND ')}
+       ),
+       status_counts AS (
+         SELECT
+           status,
+           COUNT(*)::bigint AS count
+         FROM base
+         GROUP BY status
+       )
+       SELECT
+         (SELECT COUNT(DISTINCT cliente_id) FROM base) AS distinct_clientes,
+         (SELECT COALESCE(SUM(consultas_api_count), 0)::bigint FROM base) AS total_consultas,
+         (SELECT ARRAY_REMOVE(ARRAY_AGG(DISTINCT NULLIF(TRIM(status), '')), NULL) FROM base) AS status_options,
+         (SELECT ARRAY_REMOVE(ARRAY_AGG(DISTINCT NULLIF(TRIM(tipo), '')), NULL) FROM base) AS tipo_options,
+         COALESCE(
+           (
+             SELECT JSON_AGG(
+               JSON_BUILD_OBJECT('status', status_counts.status, 'count', status_counts.count)
+             )
+             FROM status_counts
+           ),
+           '[]'::json
+         ) AS status_counts
+       `,
       [empresaId]
     );
 
@@ -735,75 +759,125 @@ export const listProcessos = async (req: Request, res: Response) => {
       return 0;
     })();
 
-    const summaryRows = summaryResult.rows as Array<{
-      status: unknown;
-      tipo: unknown;
-      cliente_id: unknown;
-      consultas_api_count: unknown;
-    }>;
+    const summaryRow = summaryResult.rows[0] as
+      | {
+          distinct_clientes?: unknown;
+          total_consultas?: unknown;
+          status_options?: unknown;
+          tipo_options?: unknown;
+          status_counts?: unknown;
+        }
+      | undefined;
 
     const statusSet = new Set<string>();
     const tipoSet = new Set<string>();
-    const clienteSet = new Set<number>();
     let andamentoCount = 0;
     let arquivadoCount = 0;
-    let totalConsultas = 0;
 
-    const arquivadoKeywords = ['arquiv', 'baix', 'encerr', 'finaliz', 'transit', 'extint'];
+    const totalConsultas = (() => {
+      if (!summaryRow) {
+        return 0;
+      }
 
-    summaryRows.forEach((row) => {
-      const statusRaw = typeof row.status === 'string' ? row.status.trim() : '';
+      if (typeof summaryRow.total_consultas === 'number') {
+        return summaryRow.total_consultas;
+      }
+
+      if (typeof summaryRow.total_consultas === 'bigint') {
+        return Number(summaryRow.total_consultas);
+      }
+
+      if (typeof summaryRow.total_consultas === 'string') {
+        const parsed = Number.parseInt(summaryRow.total_consultas, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      return 0;
+    })();
+
+    const statusOptions = Array.isArray(summaryRow?.status_options)
+      ? summaryRow?.status_options
+      : [];
+
+    statusOptions.forEach((value) => {
+      const statusRaw = typeof value === 'string' ? value.trim() : '';
 
       if (statusRaw && statusRaw.toLowerCase() !== 'não informado') {
         statusSet.add(statusRaw);
       }
+    });
 
-      const normalizedStatus = statusRaw ? stripDiacritics(statusRaw).toLowerCase() : '';
-      if (arquivadoKeywords.some((keyword) => normalizedStatus.includes(keyword))) {
-        arquivadoCount += 1;
-      } else {
-        andamentoCount += 1;
-      }
+    const tipoOptions = Array.isArray(summaryRow?.tipo_options)
+      ? summaryRow?.tipo_options
+      : [];
 
-      const tipoRaw = typeof row.tipo === 'string' ? row.tipo.trim() : '';
+    tipoOptions.forEach((value) => {
+      const tipoRaw = typeof value === 'string' ? value.trim() : '';
+
       if (tipoRaw && tipoRaw.toLowerCase() !== 'não informado') {
         tipoSet.add(tipoRaw);
       }
+    });
 
-      const clienteId = (() => {
-        if (typeof row.cliente_id === 'number' && Number.isInteger(row.cliente_id)) {
-          return row.cliente_id;
+    const statusCounts = Array.isArray(summaryRow?.status_counts)
+      ? summaryRow?.status_counts
+      : [];
+
+    const arquivadoKeywords = ['arquiv', 'baix', 'encerr', 'finaliz', 'transit', 'extint'];
+
+    statusCounts.forEach((entry) => {
+      const statusRaw = typeof entry?.status === 'string' ? entry.status.trim() : '';
+      const countValue = (() => {
+        if (typeof entry?.count === 'number') {
+          return entry.count;
         }
 
-        if (typeof row.cliente_id === 'string') {
-          const parsed = Number.parseInt(row.cliente_id, 10);
-          return Number.isFinite(parsed) ? parsed : null;
+        if (typeof entry?.count === 'bigint') {
+          return Number(entry.count);
         }
 
-        return null;
-      })();
-
-      if (clienteId !== null) {
-        clienteSet.add(clienteId);
-      }
-
-      const consultasValue = (() => {
-        if (typeof row.consultas_api_count === 'number') {
-          return row.consultas_api_count;
-        }
-
-        if (typeof row.consultas_api_count === 'string') {
-          const parsed = Number.parseInt(row.consultas_api_count, 10);
+        if (typeof entry?.count === 'string') {
+          const parsed = Number.parseInt(entry.count, 10);
           return Number.isFinite(parsed) ? parsed : 0;
         }
 
         return 0;
       })();
 
-      if (Number.isFinite(consultasValue)) {
-        totalConsultas += consultasValue;
+      if (statusRaw && statusRaw.toLowerCase() !== 'não informado') {
+        statusSet.add(statusRaw);
+      }
+
+      const normalizedStatus = statusRaw ? stripDiacritics(statusRaw).toLowerCase() : '';
+      if (countValue > 0) {
+        if (arquivadoKeywords.some((keyword) => normalizedStatus.includes(keyword))) {
+          arquivadoCount += countValue;
+        } else {
+          andamentoCount += countValue;
+        }
       }
     });
+
+    const distinctClientes = (() => {
+      if (!summaryRow) {
+        return 0;
+      }
+
+      if (typeof summaryRow.distinct_clientes === 'number') {
+        return summaryRow.distinct_clientes;
+      }
+
+      if (typeof summaryRow.distinct_clientes === 'bigint') {
+        return Number(summaryRow.distinct_clientes);
+      }
+
+      if (typeof summaryRow.distinct_clientes === 'string') {
+        const parsed = Number.parseInt(summaryRow.distinct_clientes, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+
+      return 0;
+    })();
 
     const resolvedLimit = limit ?? (totalValue > 0 ? totalValue : rows.length);
     const resolvedOffset = offset ?? 0;
@@ -820,7 +894,7 @@ export const listProcessos = async (req: Request, res: Response) => {
       summary: {
         andamento: andamentoCount,
         arquivados: arquivadoCount,
-        clientes: clienteSet.size,
+        clientes: distinctClientes,
         totalSincronizacoes: totalConsultas,
         statusOptions: Array.from(statusSet).sort((a, b) => a.localeCompare(b)),
         tipoOptions: Array.from(tipoSet).sort((a, b) => a.localeCompare(b)),
@@ -828,7 +902,7 @@ export const listProcessos = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -868,7 +942,7 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
     res.json(result.rows.map(mapProcessoListRow));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -945,7 +1019,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
     res.json(processo);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1077,7 +1151,7 @@ export const createProcessoMovimentacaoManual = async (
     return res.status(201).json(movimentacoes[0]);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1547,7 +1621,7 @@ export const createProcesso = async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Número de processo já cadastrado' });
     }
 
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2206,7 +2280,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Número de processo já cadastrado' });
     }
 
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2265,7 +2339,7 @@ export const deleteProcesso = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2291,7 +2365,7 @@ export const listOabMonitoradas = async (req: Request, res: Response) => {
     return res.json(monitors);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2386,7 +2460,7 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2427,6 +2501,6 @@ export const deleteOabMonitorada = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };

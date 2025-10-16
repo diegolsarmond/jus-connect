@@ -28,7 +28,7 @@ export const listFornecedores = async (req: Request, res: Response) => {
     return res.json(fornecedores);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -51,7 +51,7 @@ export const getFornecedorById = async (req: Request, res: Response) => {
     return res.json(fornecedor);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -116,7 +116,7 @@ export const createFornecedor = async (req: Request, res: Response) => {
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -202,7 +202,7 @@ export const updateFornecedor = async (req: Request, res: Response) => {
     return res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -240,6 +240,6 @@ export const deleteFornecedor = async (req: Request, res: Response) => {
     return res.json({ ativo: result.rows[0].ativo });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
