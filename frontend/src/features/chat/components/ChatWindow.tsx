@@ -796,6 +796,12 @@ export const ChatWindow = ({
     });
   };
 
+  useEffect(() => {
+    if (!conversation && isSidebarOpen === false && onToggleSidebar) {
+      onToggleSidebar();
+    }
+  }, [conversation, isSidebarOpen, onToggleSidebar]);
+
   if (!conversation) {
     return (
       <div
@@ -803,6 +809,18 @@ export const ChatWindow = ({
         data-sidebar-open={isSidebarOpen ? "true" : "false"}
       >
         <div className={styles.mainColumn}>
+          {onToggleSidebar && (
+            <header className={styles.header}>
+              <button
+                type="button"
+                className={styles.sidebarToggleButton}
+                onClick={onToggleSidebar}
+                aria-label="Alternar lista de conversas"
+              >
+                <Menu aria-hidden="true" size={20} />
+              </button>
+            </header>
+          )}
           <div className={styles.viewportWrapper}>
             <div className={styles.deviceLinkPlaceholder}>
               <DeviceLinkContent
