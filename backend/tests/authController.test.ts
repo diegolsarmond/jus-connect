@@ -341,6 +341,113 @@ const duplicateCheckResponses: QueryResponse[] = [
   });
 });
 
+test('register retorna erro 500 quando envio do e-mail de confirmação falha', async () => {
+  const duplicateCheckResponses: QueryResponse[] = [
+    { rows: [], rowCount: 0 },
+    { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ];
+  const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock(
+    duplicateCheckResponses
+  );
+
+  const clientResponses: QueryResponse[] = [
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 7, modulos: planModules }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 42, nome_empresa: 'Acme Corp', plano: 7 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 99, nome: 'Administrador' }], rowCount: 1 },
+    { rows: [], rowCount: planModules.length },
+    {
+      rows: [
+        {
+          id: 123,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          perfil: 99,
+          empresa: 42,
+          status: true,
+          telefone: '(11) 99999-0000',
+          welcome_email_pending: true,
+          datacriacao: '2024-01-02T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 201 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 202 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 203 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ];
+
+  const { calls: clientCalls, restore: restoreConnect, wasReleased } = setupPoolConnectMock(
+    clientResponses
+  );
+
+  let sendEmailCalls = 0;
+
+  setSendEmailConfirmationTokenForTests(async () => {
+    sendEmailCalls += 1;
+    throw new Error('Falha ao enviar e-mail');
+  });
+
+  const req = {
+    body: {
+      name: 'Alice Doe',
+      email: 'alice@example.com',
+      company: 'Acme Corp',
+      password: 'SenhaSegura123',
+      planId: 7,
+      phone: '(11) 99999-0000',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await register(req, res);
+  } finally {
+    restoreConnect();
+    restorePoolQuery();
+    resetSendEmailConfirmationTokenForTests();
+  }
+
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body, {
+    error: 'Não foi possível enviar o e-mail de confirmação. Tente novamente.',
+  });
+
+  const beginCall = clientCalls[0];
+  assert.equal(beginCall?.text.trim().toUpperCase(), 'BEGIN');
+
+  const commitCall = clientCalls.find((call) => call.text.trim().toUpperCase() === 'COMMIT');
+  assert.ok(commitCall, 'expected COMMIT to be called');
+
+  assert.equal(poolCalls.length, 3);
+  assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
+  assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
+  assert.match(
+    poolCalls[2]?.text ?? '',
+    /UPDATE public\.usuarios SET welcome_email_pending = TRUE WHERE id = \$1/
+  );
+  assert.deepEqual(poolCalls[2]?.values, [123]);
+  assert.equal(wasReleased(), true);
+  assert.equal(sendEmailCalls, 1);
+});
+
 test('register utiliza módulos padrão quando tabela de planos está ausente', async () => {
   const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock([
     { rows: [], rowCount: 0 },
