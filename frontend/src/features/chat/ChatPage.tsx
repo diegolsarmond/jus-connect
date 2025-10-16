@@ -38,6 +38,7 @@ export const ChatPage = () => {
   const [searchValue, setSearchValue] = useState("");
   const [responsibleFilter, setResponsibleFilter] = useState<string>("all");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [pendingConversation, setPendingConversation] = useState<PendingConversation | null>(
     null,
   );
@@ -461,9 +462,54 @@ export const ChatPage = () => {
     };
   }, [emitTypingState]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 900px)");
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      if ("matches" in event) {
+        if (!event.matches) {
+          setIsSidebarOpen(true);
+        }
+        return;
+      }
+
+      if (!mediaQuery.matches) {
+        setIsSidebarOpen(true);
+      }
+    };
+
+    handleChange(mediaQuery);
+
+    const listener = (event: MediaQueryListEvent) => {
+      if (!event.matches) {
+        setIsSidebarOpen(true);
+      }
+    };
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", listener);
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(listener);
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", listener);
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(listener);
+      }
+    };
+  }, []);
+
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
     markReadMutation.mutate(conversationId);
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) {
+      setIsSidebarOpen(false);
+    }
   };
 
   const handleSendMessage = async (payload: SendMessageInput) => {
@@ -544,9 +590,16 @@ export const ChatPage = () => {
     createConversationMutation.isPending,
   ]);
 
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen((previous) => !previous);
+  }, []);
+
   return (
     <div className={styles.page}>
-      <div className={styles.layout}>
+      <div
+        className={styles.layout}
+        data-sidebar-open={isSidebarOpen ? "true" : "false"}
+      >
         <ChatSidebar
           conversations={conversations}
           activeConversationId={selectedConversationId}
@@ -560,6 +613,7 @@ export const ChatPage = () => {
           searchInputRef={searchInputRef}
           loading={conversationsQuery.isLoading}
           allowUnassignedFilter={!restrictToAssigned}
+          isOpen={isSidebarOpen}
         />
         <ChatWindow
           conversation={selectedConversation}
@@ -575,6 +629,8 @@ export const ChatPage = () => {
           onTypingActivity={handleTypingActivity}
           responsibleOptions={responsibleOptions}
           isLoadingResponsibles={isLoadingResponsibles}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={toggleSidebar}
         />
       </div>
       <NewConversationModal
