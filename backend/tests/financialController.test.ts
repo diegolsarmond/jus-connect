@@ -923,6 +923,44 @@ test('createFlow rejects missing contaId', async () => {
   assert.equal(connectMock.mock.callCount(), 0);
 });
 
+test('createFlow rejects user without linked empresa', async () => {
+  const contaId = 3;
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+  ]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
+    throw new Error('connect should not be invoked when user lacks empresa');
+  });
+
+  const req = {
+    body: {
+      contaId,
+      tipo: 'receita',
+      descricao: 'Mensalidade',
+      valor: 120,
+      vencimento: '2024-07-01',
+    },
+    auth: { userId: 13 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createFlow(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: 'Usuário não está vinculado a uma empresa.' });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.equal(connectMock.mock.callCount(), 0);
+});
+
 test('createFlow validates contaId ownership before inserting', async () => {
   const contaId = 5;
 

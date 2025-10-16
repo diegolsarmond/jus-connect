@@ -1312,7 +1312,7 @@ export const createFlow = async (req: Request, res: Response) => {
   if (empresaId === null) {
     res
       .status(403)
-      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
+      .json({ error: 'Usuário não está vinculado a uma empresa.' });
     return;
   }
 
