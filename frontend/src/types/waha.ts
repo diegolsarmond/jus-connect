@@ -43,6 +43,7 @@ export interface Message {
   quotedMsgId?: string;
   hasMedia?: boolean;
   mediaUrl?: string;
+  resolvedMediaUrl?: string;
   filename?: string;
   caption?: string;
   mimeType?: string;

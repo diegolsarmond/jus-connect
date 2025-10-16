@@ -97,6 +97,10 @@ const isNonEmptyString = (value: unknown): value is string =>
 
 const normalizeBaseUrl = (url: string): string => url.replace(/\/+$/, '');
 
+const isSafeBlobUrl = (value: string): boolean => /^(blob:|data:)/i.test(value);
+
+const createObjectUrlFromBlob = (blob: Blob): string => URL.createObjectURL(blob);
+
 type IntegrationApiKeyPayload = {
   apiUrl?: unknown;
   key?: unknown;
@@ -817,4 +821,83 @@ class WAHAService {
 }
 
 export const wahaService = new WAHAService();
+
+const resolveMediaRequestUrl = (baseUrl: string, mediaUrl: string): string | null => {
+  const trimmed = mediaUrl.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const resolved = new URL(trimmed, baseUrl);
+    return resolved.toString();
+  } catch (error) {
+    console.error('Failed to resolve WAHA media URL', error);
+    return null;
+  }
+};
+
+const isSameOrigin = (baseUrl: string, targetUrl: string): boolean => {
+  try {
+    const base = new URL(baseUrl);
+    const target = new URL(targetUrl);
+    return base.origin === target.origin;
+  } catch (error) {
+    console.error('Failed to compare WAHA media origin', error);
+    return false;
+  }
+};
+
+export const downloadMediaBlob = async (mediaUrl: string): Promise<string> => {
+  if (typeof mediaUrl !== 'string') {
+    throw new Error('URL de mídia inválida.');
+  }
+
+  const trimmed = mediaUrl.trim();
+  if (!trimmed) {
+    throw new Error('URL de mídia inválida.');
+  }
+
+  if (isSafeBlobUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const config = await wahaService.getResolvedConfig();
+  const resolvedUrl = resolveMediaRequestUrl(config.baseUrl, trimmed);
+
+  if (!resolvedUrl) {
+    return trimmed;
+  }
+
+  if (!isSameOrigin(config.baseUrl, resolvedUrl)) {
+    return trimmed;
+  }
+
+  const response = await fetch(resolvedUrl, {
+    headers: {
+      'X-Api-Key': config.apiKey,
+    },
+  });
+
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (!response.ok || JSON_CONTENT_TYPE_REGEX.test(contentType)) {
+    const bodyText = await response.text();
+
+    if (!response.ok) {
+      const message = buildWahaErrorMessage(response.status, bodyText);
+      throw new WAHARequestError(message, response.status);
+    }
+
+    const message = extractWahaErrorMessage(bodyText, response.status ?? 200);
+    throw new WAHARequestError(
+      message || 'Resposta inválida ao baixar mídia do WAHA.',
+      response.status,
+    );
+  }
+
+  const blob = await response.blob();
+  return createObjectUrlFromBlob(blob);
+};
+
 export default WAHAService;

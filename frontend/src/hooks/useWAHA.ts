@@ -3,6 +3,7 @@ import WAHAService, {
   wahaService,
   WAHARequestError,
   WAHA_SESSION_RECOVERY_MESSAGE,
+  downloadMediaBlob,
 } from '@/services/waha';
 import { ChatOverview, ChatParticipant, Message, SessionStatus, WAHAResponse } from '@/types/waha';
 import { useToast } from '@/hooks/use-toast';
@@ -58,6 +59,9 @@ const pickFirstString = (...values: unknown[]): string | undefined => {
   }
   return undefined;
 };
+
+const isLocalMediaUrl = (value: string): boolean =>
+  value.startsWith('data:') || value.startsWith('blob:');
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -448,6 +452,50 @@ export const useWAHA = (
     };
   }, []);
 
+  const resolveMessageMedia = useCallback(async (message: Message): Promise<Message> => {
+    const explicitResolved = typeof message.resolvedMediaUrl === 'string'
+      ? message.resolvedMediaUrl.trim()
+      : '';
+
+    if (explicitResolved && isLocalMediaUrl(explicitResolved)) {
+      return message.resolvedMediaUrl === explicitResolved
+        ? message
+        : { ...message, resolvedMediaUrl: explicitResolved };
+    }
+
+    const rawMediaUrl = typeof message.mediaUrl === 'string' ? message.mediaUrl.trim() : '';
+    if (!rawMediaUrl) {
+      return message;
+    }
+
+    if (isLocalMediaUrl(rawMediaUrl)) {
+      if (message.resolvedMediaUrl === rawMediaUrl) {
+        return message;
+      }
+      return { ...message, resolvedMediaUrl: rawMediaUrl };
+    }
+
+    try {
+      const resolved = await downloadMediaBlob(rawMediaUrl);
+      if (!resolved) {
+        return message;
+      }
+
+      if (message.resolvedMediaUrl === resolved) {
+        return message;
+      }
+
+      if (resolved === rawMediaUrl && !isLocalMediaUrl(resolved)) {
+        return message;
+      }
+
+      return { ...message, resolvedMediaUrl: resolved };
+    } catch (error) {
+      console.error('Failed to resolver mídia do WAHA', error);
+      return message;
+    }
+  }, []);
+
   // Load chats
   const loadChats = useCallback(
     async (options?: { reset?: boolean; silent?: boolean }) => {
@@ -684,7 +732,8 @@ export const useWAHA = (
           throw new WAHARequestError(response.error, response.status);
         }
 
-        const batch = response.data ?? [];
+        const rawBatch = response.data ?? [];
+        const batch = await Promise.all(rawBatch.map(resolveMessageMedia));
 
         if (!isMountedRef.current) {
           return [];
@@ -766,6 +815,7 @@ export const useWAHA = (
       ensureMessagePaginationState,
       toast,
       updateMessagePaginationState,
+      resolveMessageMedia,
     ],
   );
 
@@ -846,6 +896,7 @@ export const useWAHA = (
         caption: temporaryCaption,
         filename: temporaryFilename,
         mediaUrl: temporaryMediaUrl,
+        resolvedMediaUrl: temporaryMediaUrl,
         fromMe: true,
         ack: 'PENDING',
       };
@@ -953,7 +1004,7 @@ export const useWAHA = (
 
         const data = response.data;
         if (data && isMountedRef.current) {
-          const normalized: Message = {
+          const normalizedBase: Message = {
             ...data,
             chatId: data.chatId ?? chatId,
             body:
@@ -969,9 +1020,11 @@ export const useWAHA = (
             fromMe: true,
           };
 
-          if (kind !== 'text' && !normalized.body && baseCaption) {
-            normalized.body = baseCaption;
+          if (kind !== 'text' && !normalizedBase.body && baseCaption) {
+            normalizedBase.body = baseCaption;
           }
+
+          const normalized = await resolveMessageMedia(normalizedBase);
 
           setMessages((prev) => {
             const existing = prev[chatId] || [];
@@ -1104,7 +1157,7 @@ export const useWAHA = (
         throw new Error(errorMessage);
       }
     },
-    [activeChatId, toast],
+    [activeChatId, resolveMessageMedia, toast],
   );
 
   // Check session status
@@ -1162,118 +1215,122 @@ export const useWAHA = (
   // Add a new message (for webhook integration)
   const addMessage = useCallback(
     (message: Message) => {
-      if (!isMountedRef.current) {
-        return;
-      }
+      void (async () => {
+        const resolvedMessage = await resolveMessageMedia(message);
 
-      ensureMessagePaginationState(message.chatId);
-      updateMessagePaginationState(message.chatId, { isLoaded: true });
-
-      setMessages((prev) => {
-        const existing = prev[message.chatId] ?? [];
-        if (existing.some((item) => item.id === message.id)) {
-          return prev;
+        if (!isMountedRef.current) {
+          return;
         }
 
-        const nextMessages = [...existing, message].sort((a, b) => a.timestamp - b.timestamp);
-        return {
-          ...prev,
-          [message.chatId]: nextMessages,
-        };
-      });
+        ensureMessagePaginationState(resolvedMessage.chatId);
+        updateMessagePaginationState(resolvedMessage.chatId, { isLoaded: true });
 
-      const text = message.body ?? message.caption ?? '';
-      const ackNumber = typeof message.ack === 'number' ? message.ack : undefined;
-      const ackName = typeof message.ack === 'string' ? message.ack : undefined;
+        setMessages((prev) => {
+          const existing = prev[resolvedMessage.chatId] ?? [];
+          if (existing.some((item) => item.id === resolvedMessage.id)) {
+            return prev;
+          }
 
-      let placeholder: ChatOverview | null = null;
+          const nextMessages = [...existing, resolvedMessage].sort((a, b) => a.timestamp - b.timestamp);
+          return {
+            ...prev,
+            [resolvedMessage.chatId]: nextMessages,
+          };
+        });
 
-      setChats((previousChats) => {
-        const existingIndex = previousChats.findIndex((chat) => chat.id === message.chatId);
+        const text = resolvedMessage.body ?? resolvedMessage.caption ?? '';
+        const ackNumber = typeof resolvedMessage.ack === 'number' ? resolvedMessage.ack : undefined;
+        const ackName = typeof resolvedMessage.ack === 'string' ? resolvedMessage.ack : undefined;
 
-        if (existingIndex >= 0) {
-          const existingChat = previousChats[existingIndex];
-          const unreadCount = message.fromMe
-            ? existingChat.unreadCount ?? 0
-            : (existingChat.unreadCount ?? 0) + 1;
+        let placeholder: ChatOverview | null = null;
 
-          const updatedChat = normalizeChatName({
-            ...existingChat,
+        setChats((previousChats) => {
+          const existingIndex = previousChats.findIndex((chat) => chat.id === resolvedMessage.chatId);
+
+          if (existingIndex >= 0) {
+            const existingChat = previousChats[existingIndex];
+            const unreadCount = resolvedMessage.fromMe
+              ? existingChat.unreadCount ?? 0
+              : (existingChat.unreadCount ?? 0) + 1;
+
+            const updatedChat = normalizeChatName({
+              ...existingChat,
+              lastMessage: {
+                id: resolvedMessage.id,
+                body: text,
+                timestamp: resolvedMessage.timestamp,
+                fromMe: resolvedMessage.fromMe,
+                type: resolvedMessage.type,
+                ack: ackNumber,
+                ackName,
+              },
+              unreadCount,
+            });
+
+            const nextChats = [...previousChats];
+            nextChats[existingIndex] = updatedChat;
+            return sortChatsByRecency(nextChats);
+          }
+
+          const provisionalChat = normalizeChatName({
+            id: resolvedMessage.chatId,
+            name: WAHAService.extractPhoneFromWhatsAppId(resolvedMessage.chatId),
+            isGroup: resolvedMessage.chatId.includes('@g.us'),
+            avatar: undefined,
             lastMessage: {
-              id: message.id,
+              id: resolvedMessage.id,
               body: text,
-              timestamp: message.timestamp,
-              fromMe: message.fromMe,
-              type: message.type,
+              timestamp: resolvedMessage.timestamp,
+              fromMe: resolvedMessage.fromMe,
+              type: resolvedMessage.type,
               ack: ackNumber,
               ackName,
             },
-            unreadCount,
+            unreadCount: resolvedMessage.fromMe ? 0 : 1,
           });
 
-          const nextChats = [...previousChats];
-          nextChats[existingIndex] = updatedChat;
-          return sortChatsByRecency(nextChats);
-        }
-
-        const provisionalChat = normalizeChatName({
-          id: message.chatId,
-          name: WAHAService.extractPhoneFromWhatsAppId(message.chatId),
-          isGroup: message.chatId.includes('@g.us'),
-          avatar: undefined,
-          lastMessage: {
-            id: message.id,
-            body: text,
-            timestamp: message.timestamp,
-            fromMe: message.fromMe,
-            type: message.type,
-            ack: ackNumber,
-            ackName,
-          },
-          unreadCount: message.fromMe ? 0 : 1,
+          placeholder = provisionalChat;
+          return sortChatsByRecency([...previousChats, provisionalChat]);
         });
 
-        placeholder = provisionalChat;
-        return sortChatsByRecency([...previousChats, provisionalChat]);
-      });
-
-      if (placeholder) {
-        const chatToEnrich = placeholder;
-        if (!enrichingChatsRef.current.has(chatToEnrich.id)) {
-          enrichingChatsRef.current.add(chatToEnrich.id);
-          void (async () => {
-            try {
-              const enriched = await enrichChatWithInfo(chatToEnrich);
-              if (!isMountedRef.current) {
-                return;
-              }
-
-              setChats((previousChats) => {
-                const index = previousChats.findIndex((chat) => chat.id === enriched.id);
-                if (index === -1) {
-                  return previousChats;
+        if (placeholder) {
+          const chatToEnrich = placeholder;
+          if (!enrichingChatsRef.current.has(chatToEnrich.id)) {
+            enrichingChatsRef.current.add(chatToEnrich.id);
+            void (async () => {
+              try {
+                const enriched = await enrichChatWithInfo(chatToEnrich);
+                if (!isMountedRef.current) {
+                  return;
                 }
 
-                const merged = normalizeChatName({
-                  ...previousChats[index],
-                  ...enriched,
+                setChats((previousChats) => {
+                  const index = previousChats.findIndex((chat) => chat.id === enriched.id);
+                  if (index === -1) {
+                    return previousChats;
+                  }
+
+                  const merged = normalizeChatName({
+                    ...previousChats[index],
+                    ...enriched,
+                  });
+
+                  const nextChats = [...previousChats];
+                  nextChats[index] = merged;
+                  return sortChatsByRecency(nextChats);
                 });
-
-                const nextChats = [...previousChats];
-                nextChats[index] = merged;
-                return sortChatsByRecency(nextChats);
-              });
-            } finally {
-              enrichingChatsRef.current.delete(chatToEnrich.id);
-            }
-          })();
+              } finally {
+                enrichingChatsRef.current.delete(chatToEnrich.id);
+              }
+            })();
+          }
         }
-      }
-
+      })();
     },
     [
       ensureMessagePaginationState,
       enrichChatWithInfo,
+      resolveMessageMedia,
       updateMessagePaginationState,
     ],
   );

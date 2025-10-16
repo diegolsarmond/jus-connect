@@ -33,16 +33,17 @@ export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) 
   };
 
   const messageContent = () => {
-    const mediaSource = message.mediaUrl ?? message.body;
+    const resolvedMedia = message.resolvedMediaUrl ?? message.mediaUrl;
+    const mediaSource = resolvedMedia ?? message.body;
     const isImage = message.type === 'image' || message.mimeType?.startsWith('image/');
 
     if (message.type === 'audio') {
-      if (message.mediaUrl) {
+      if (resolvedMedia) {
         return (
           <div className="flex flex-col gap-1">
             <audio
               controls
-              src={message.mediaUrl}
+              src={resolvedMedia}
               className="w-64 max-w-full"
               aria-label={message.caption ?? 'Mensagem de áudio'}
             >
