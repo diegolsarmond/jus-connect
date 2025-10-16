@@ -123,6 +123,105 @@ const fetchProcessoAnexos = async (
   return parseAttachments(result.rows);
 };
 
+const baseProcessoSelect = `
+  SELECT
+    p.id,
+    p.cliente_id,
+    p.idempresa,
+    p.numero_cnj AS numero,
+    p.uf,
+    p.municipio,
+    p.orgao_julgador,
+    COALESCE(dp.area, tp.nome, p.tipo) AS tipo,
+    COALESCE(dp.situacao, sp.nome, p.status) AS status,
+    COALESCE(dp.classe, p.classe_judicial) AS classe_judicial,
+    COALESCE(dp.assunto, p.assunto) AS assunto,
+    COALESCE(dp.jurisdicao, p.jurisdicao) AS jurisdicao,
+    p.oportunidade_id,
+    o.sequencial_empresa AS oportunidade_sequencial_empresa,
+    o.data_criacao AS oportunidade_data_criacao,
+    o.numero_processo_cnj AS oportunidade_numero_processo_cnj,
+    o.numero_protocolo AS oportunidade_numero_protocolo,
+    o.solicitante_id AS oportunidade_solicitante_id,
+    solicitante.nome AS oportunidade_solicitante_nome,
+    p.advogado_responsavel,
+    p.data_distribuicao,
+    p.criado_em,
+    p.atualizado_em,
+    p.ultima_sincronizacao,
+    p.consultas_api_count,
+    p.grau,
+    p.justica_gratuita,
+    p.liminar,
+    p.nivel_sigilo,
+    p.tramitacaoatual,
+    p.permite_peticionar,
+    p.envolvidos_id,
+    p.descricao,
+    p.setor_id,
+    s.nome AS setor_nome,
+    p.data_citacao,
+    p.data_recebimento,
+    p.data_arquivamento,
+    p.data_encerramento,
+    p.instancia,
+    p.sistema_cnj_id,
+    p.monitorar_processo,
+    p.situacao_processo_id,
+    sp.nome AS situacao_processo_nome,
+    p.tipo_processo_id,
+    tp.nome AS tipo_processo_nome,
+    p.area_atuacao_id,
+    aa.nome AS area_atuacao_nome,
+    (
+      SELECT MAX(pm.data)
+      FROM public.processo_movimentacoes pm
+      WHERE pm.processo_id = p.id
+    ) AS ultima_movimentacao,
+    (
+      SELECT COUNT(*)::int
+      FROM public.processo_movimentacoes pm
+      WHERE pm.processo_id = p.id
+    ) AS movimentacoes_count,
+    c.nome AS cliente_nome,
+    c.documento AS cliente_documento,
+    c.tipo AS cliente_tipo,
+    (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', pa.usuario_id,
+            'nome', u.nome_completo,
+            'oab', COALESCE(
+              NULLIF(CONCAT_WS('/', NULLIF(up.oab_number, ''), NULLIF(up.oab_uf, '')), ''),
+              NULLIF(u.oab, '')
+            )
+          ) ORDER BY u.nome_completo
+        ) FILTER (WHERE pa.usuario_id IS NOT NULL),
+        '[]'::jsonb
+      )
+      FROM public.processo_advogados pa
+      LEFT JOIN public.usuarios u ON u.id = pa.usuario_id
+      LEFT JOIN public.user_profiles up ON up.user_id = pa.usuario_id
+      WHERE pa.processo_id = p.id
+    ) AS advogados,
+    NULL::jsonb AS movimentacoes,
+    NULL::jsonb AS attachments
+  FROM public.processos p
+  LEFT JOIN public.oportunidades o ON o.id = p.oportunidade_id
+  LEFT JOIN public.clientes solicitante ON solicitante.id = o.solicitante_id
+  LEFT JOIN public.clientes c ON c.id = p.cliente_id
+  LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
+  LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
+  LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
+  LEFT JOIN public.setores s ON s.id = p.setor_id
+  LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
+`;
+
+const listProcessoSelect = baseProcessoSelect;
+
+const mapProcessoListRow = mapProcessoRow;
+
 type RawCrawlerParticipant = {
   nome?: unknown;
   polo?: unknown;
