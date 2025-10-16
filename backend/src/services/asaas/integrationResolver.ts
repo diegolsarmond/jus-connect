@@ -207,12 +207,12 @@ export async function resolveAsaasIntegration(
   };
 }
 
-export async function createAsaasClient(
+export const createAsaasClient = async (
   empresaId: number,
   db: Queryable = pool,
   overrides: Partial<Omit<AsaasClientConfig, 'accessToken' | 'baseUrl'>> = {},
   environment?: AsaasEnvironment,
-): Promise<AsaasClient> {
+): Promise<AsaasClient> => {
   const normalizedEnvironment = environment
     ? normalizeAsaasEnvironment(environment)
     : undefined;
@@ -222,8 +222,21 @@ export async function createAsaasClient(
     accessToken: integration.accessToken,
     ...overrides,
   });
-}
+};
 
 export default resolveAsaasIntegration;
 
 export { ASAAS_DEFAULT_BASE_URLS, AsaasEnvironment, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
+
+if (typeof module !== 'undefined') {
+  module.exports = {
+    resolveAsaasIntegration,
+    createAsaasClient,
+    AsaasIntegrationNotConfiguredError,
+    ASAAS_DEFAULT_BASE_URLS,
+    AsaasEnvironment,
+    normalizeAsaasBaseUrl,
+    normalizeAsaasEnvironment,
+    default: resolveAsaasIntegration,
+  } satisfies Record<string, unknown>;
+}
