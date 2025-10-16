@@ -95,6 +95,10 @@ const SubscriptionDetails = () => {
       );
 
       if (confirmedPayment && lastPaymentStatus === "PENDING") {
+        setPayments(paymentsList);
+        setPixQrCode(null);
+        setBoletoCode(null);
+        setLastPaymentStatus(confirmedPayment.status);
         await loadSubscription(false);
         if (pollingInterval) {
           clearInterval(pollingInterval);
@@ -104,7 +108,6 @@ const SubscriptionDetails = () => {
           title: "Pagamento confirmado!",
           description: "Sua assinatura foi ativada.",
         });
-        setLastPaymentStatus(confirmedPayment.status);
       } else if (pendingPayment) {
         setPayments(paymentsList);
         setLastPaymentStatus("PENDING");
