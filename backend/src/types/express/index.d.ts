@@ -10,6 +10,10 @@ declare global {
         modules?: string[];
       };
     }
+
+    interface Locals {
+      empresaId?: number;
+    }
   }
 }
 

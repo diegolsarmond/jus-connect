@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Request, Response } from 'express';
-import * as authUserModule from '../src/utils/authUser';
 import pool from '../src/services/db';
 
 type QueryCall = { text: string; values?: unknown[] };
@@ -16,9 +15,14 @@ test.before(async () => {
 });
 
 const createMockResponse = () => {
-  const response: Partial<Response> & { statusCode: number; body: unknown } = {
+  const response: Partial<Response> & {
+    statusCode: number;
+    body: unknown;
+    locals: Record<string, unknown>;
+  } = {
     statusCode: 200,
     body: undefined,
+    locals: {},
     status(code: number) {
       this.statusCode = code;
       return this as Response;
@@ -62,12 +66,6 @@ const setupQueryMock = (responses: QueryResponse[]) => {
 };
 
 test('listTemplates retorna modelos do usuário quando há empresa vinculada', async () => {
-  const authMock = test.mock.method(
-    authUserModule,
-    'fetchAuthenticatedUserEmpresa',
-    async () => ({ success: true, empresaId: 12 })
-  );
-
   const templates = [
     { id: 7, title: 'Petição Inicial', content: '{"ops":[]}' },
   ];
@@ -83,11 +81,11 @@ test('listTemplates retorna modelos do usuário quando há empresa vinculada', a
   } as unknown as Request;
 
   const res = createMockResponse();
+  res.locals.empresaId = 12;
 
   try {
     await listTemplates(req, res);
   } finally {
-    authMock.mock.restore();
     restore();
   }
 
@@ -101,12 +99,6 @@ test('listTemplates retorna modelos do usuário quando há empresa vinculada', a
 });
 
 test('listTemplates retorna 403 quando usuário não possui empresa', async () => {
-  const authMock = test.mock.method(
-    authUserModule,
-    'fetchAuthenticatedUserEmpresa',
-    async () => ({ success: true, empresaId: null })
-  );
-
   const { calls, restore } = setupQueryMock([]);
 
   const req = {
@@ -116,11 +108,11 @@ test('listTemplates retorna 403 quando usuário não possui empresa', async () =
   } as unknown as Request;
 
   const res = createMockResponse();
+  res.locals.empresaId = null;
 
   try {
     await listTemplates(req, res);
   } finally {
-    authMock.mock.restore();
     restore();
   }
 

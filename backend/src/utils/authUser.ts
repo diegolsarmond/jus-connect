@@ -96,9 +96,9 @@ export const parseOptionalInteger = (value: unknown): ParsedInteger => {
   return 'invalid';
 };
 
-export const fetchAuthenticatedUserEmpresa = async (
+export async function fetchAuthenticatedUserEmpresa(
   userId: number
-): Promise<EmpresaLookupResult> => {
+): Promise<EmpresaLookupResult> {
   const empresaUsuarioResult = await pool.query(
     'SELECT empresa FROM public.usuarios WHERE id = $1 LIMIT 1',
     [userId]
@@ -128,7 +128,7 @@ export const fetchAuthenticatedUserEmpresa = async (
     success: true,
     empresaId: empresaAtualResult,
   };
-};
+}
 
 export const resolveAuthenticatedEmpresa = async (
   req: Request
