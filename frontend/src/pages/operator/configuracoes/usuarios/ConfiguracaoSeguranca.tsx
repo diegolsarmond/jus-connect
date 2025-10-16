@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ArrowLeft, Shield, Smartphone, QrCode, Copy, Check, AlertTriangle, Key, Clock } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Shield, Smartphone, QrCode, Copy, Check, AlertTriangle, Key, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,48 +7,210 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProfileCard } from "@/components/profile/ProfileCard";
+import { SessionsList } from "@/components/profile/SessionsList";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  approveMeuPerfilDevice,
+  confirmMeuPerfilTwoFactor,
+  disableMeuPerfilTwoFactor,
+  fetchMeuPerfil,
+  fetchMeuPerfilSessions,
+  initiateMeuPerfilTwoFactor,
+  revokeMeuPerfilDeviceApproval,
+  revokeMeuPerfilSession,
+  revokeTodasMeuPerfilSessions,
+  type TwoFactorInitiationPayload,
+} from "@/services/meuPerfil";
+import type { UserSession } from "@/types/user";
 
 export default function ConfiguracaoSeguranca() {
+  const { toast } = useToast();
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorInitiationPayload | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [isDisableModalOpen, setIsDisableModalOpen] = useState(false);
+  const [isInitiating, setIsInitiating] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
-  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
 
-  // Mock QR code data
-  const qrCodeData = "otpauth://totp/CRM%20Jurídico:joao.silva@escritorio.com.br?secret=JBSWY3DPEHPK3PXP&issuer=CRM%20Jurídico";
-  const secretKey = "JBSWY3DPEHPK3PXP";
+  const getErrorMessage = (error: unknown) =>
+    error instanceof Error ? error.message : "Não foi possível completar a ação.";
 
-  const generateBackupCodes = () => {
-    const codes = Array.from({ length: 10 }, () => 
-      Math.random().toString(36).substring(2, 8).toUpperCase()
-    );
-    setBackupCodes(codes);
-    setShowBackupCodes(true);
-  };
+  const loadProfile = useCallback(async () => {
+    setLoadingProfile(true);
+    try {
+      const profile = await fetchMeuPerfil();
+      setTwoFactorEnabled(profile.security.twoFactor);
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [toast]);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCode(text);
-    setTimeout(() => setCopiedCode(null), 2000);
-  };
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      const data = await fetchMeuPerfilSessions();
+      setSessions(data);
+    } catch (error) {
+      setSessionsError(getErrorMessage(error));
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
 
-  const handleEnable2FA = () => {
-    if (verificationCode.length === 6) {
-      setTwoFactorEnabled(true);
-      generateBackupCodes();
-      setIsSetupModalOpen(false);
-      setVerificationCode("");
+  useEffect(() => {
+    void loadProfile();
+    void loadSessions();
+  }, [loadProfile, loadSessions]);
+
+  const copyToClipboard = async (text: string) => {
+    if (!text) {
+      toast({ variant: "destructive", description: "Nenhum valor disponível para copiar." });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedCode(text);
+      setTimeout(() => setCopiedCode(null), 2000);
+      toast({ description: "Copiado para a área de transferência." });
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
     }
   };
 
-  const handleDisable2FA = () => {
-    setTwoFactorEnabled(false);
-    setBackupCodes([]);
-    setShowBackupCodes(false);
+  const handleInitiateTwoFactor = async () => {
+    try {
+      setIsInitiating(true);
+      const setup = await initiateMeuPerfilTwoFactor();
+      setTwoFactorSetup(setup);
+      setVerificationCode("");
+      setBackupCodes([]);
+      setShowBackupCodes(false);
+      setIsSetupModalOpen(true);
+    } catch (error) {
+      setTwoFactorEnabled(false);
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    } finally {
+      setIsInitiating(false);
+    }
+  };
+
+  const handleConfirmTwoFactor = async () => {
+    if (!verificationCode.trim()) {
+      return;
+    }
+
+    try {
+      setIsConfirming(true);
+      const result = await confirmMeuPerfilTwoFactor(verificationCode.trim());
+      setBackupCodes(result.backupCodes);
+      setShowBackupCodes(true);
+      setTwoFactorEnabled(true);
+      setTwoFactorSetup(null);
+      setVerificationCode("");
+      setIsSetupModalOpen(false);
+      toast({ description: "Autenticação de dois fatores ativada com sucesso." });
+      await loadProfile();
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleDisableTwoFactor = async () => {
+    if (!disableCode.trim()) {
+      return;
+    }
+
+    try {
+      setIsDisabling(true);
+      await disableMeuPerfilTwoFactor(disableCode.trim());
+      setTwoFactorEnabled(false);
+      setBackupCodes([]);
+      setShowBackupCodes(false);
+      setTwoFactorSetup(null);
+      setDisableCode("");
+      setIsDisableModalOpen(false);
+      toast({ description: "Autenticação de dois fatores desativada." });
+      await loadProfile();
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    } finally {
+      setIsDisabling(false);
+    }
+  };
+
+  const handleApproveDevice = async (sessionId: string) => {
+    try {
+      await approveMeuPerfilDevice(sessionId);
+      await loadSessions();
+      toast({ description: "Dispositivo aprovado." });
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    }
+  };
+
+  const handleRevokeDeviceApproval = async (sessionId: string) => {
+    try {
+      await revokeMeuPerfilDeviceApproval(sessionId);
+      await loadSessions();
+      toast({ description: "Aprovação do dispositivo revogada." });
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    }
+  };
+
+  const handleRevokeSession = async (sessionId: string) => {
+    try {
+      await revokeMeuPerfilSession(sessionId);
+      await loadSessions();
+      toast({ description: "Sessão revogada." });
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    }
+  };
+
+  const handleRevokeAllSessions = async () => {
+    try {
+      await revokeTodasMeuPerfilSessions();
+      await loadSessions();
+      toast({ description: "Todas as sessões foram revogadas." });
+    } catch (error) {
+      toast({ variant: "destructive", description: getErrorMessage(error) });
+    }
+  };
+
+  const handleSetupModalChange = (open: boolean) => {
+    setIsSetupModalOpen(open);
+    if (!open) {
+      setVerificationCode("");
+      if (!twoFactorEnabled) {
+        setTwoFactorSetup(null);
+      }
+    }
+  };
+
+  const handleDisableModalChange = (open: boolean) => {
+    setIsDisableModalOpen(open);
+    if (!open) {
+      setDisableCode("");
+    }
   };
 
   return (
@@ -91,87 +253,23 @@ export default function ConfiguracaoSeguranca() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Badge variant={twoFactorEnabled ? "default" : "outline"} className={twoFactorEnabled ? "bg-success text-success-foreground" : ""}>
-                        {twoFactorEnabled ? "Ativo" : "Inativo"}
+                      <Badge
+                        variant={twoFactorEnabled ? "default" : "outline"}
+                        className={twoFactorEnabled ? "bg-success text-success-foreground" : ""}
+                      >
+                        {loadingProfile ? "Carregando" : twoFactorEnabled ? "Ativo" : "Inativo"}
                       </Badge>
-                      <Dialog open={isSetupModalOpen} onOpenChange={setIsSetupModalOpen}>
-                        <DialogTrigger asChild>
-                          <Switch
-                            checked={twoFactorEnabled}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setIsSetupModalOpen(true);
-                              } else {
-                                handleDisable2FA();
-                              }
-                            }}
-                          />
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-md">
-                          <DialogHeader>
-                            <DialogTitle>Configurar Autenticação 2FA</DialogTitle>
-                            <DialogDescription>
-                              Escaneie o QR code com seu aplicativo autenticador
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            {/* QR Code Placeholder */}
-                            <div className="flex justify-center">
-                              <div className="w-48 h-48 bg-muted border-2 border-dashed rounded-lg flex items-center justify-center">
-                                <div className="text-center space-y-2">
-                                  <QrCode className="h-12 w-12 mx-auto text-muted-foreground" />
-                                  <p className="text-sm text-muted-foreground">QR Code aqui</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Manual Entry */}
-                            <div className="space-y-2">
-                              <Label className="text-sm">Ou digite manualmente:</Label>
-                              <div className="flex gap-2">
-                                <Input
-                                  readOnly
-                                  value={secretKey}
-                                  className="font-mono text-sm"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => copyToClipboard(secretKey)}
-                                >
-                                  {copiedCode === secretKey ? (
-                                    <Check className="h-4 w-4" />
-                                  ) : (
-                                    <Copy className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-
-                            {/* Verification */}
-                            <div className="space-y-2">
-                              <Label htmlFor="verification-code">Código de verificação</Label>
-                              <Input
-                                id="verification-code"
-                                placeholder="000000"
-                                value={verificationCode}
-                                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                className="text-center text-2xl tracking-widest"
-                                maxLength={6}
-                              />
-                            </div>
-
-                            <Button
-                              onClick={handleEnable2FA}
-                              disabled={verificationCode.length !== 6}
-                              className="w-full"
-                            >
-                              Ativar 2FA
-                            </Button>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
+                      <Switch
+                        checked={twoFactorEnabled}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            void handleInitiateTwoFactor();
+                          } else if (twoFactorEnabled) {
+                            setIsDisableModalOpen(true);
+                          }
+                        }}
+                        disabled={loadingProfile || isInitiating || isDisabling}
+                      />
                     </div>
                   </div>
 
@@ -180,10 +278,21 @@ export default function ConfiguracaoSeguranca() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium">Códigos de Backup</h4>
-                        <Button variant="outline" size="sm" onClick={generateBackupCodes}>
-                          Gerar Novos Códigos
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowBackupCodes((value) => !value)}
+                          disabled={backupCodes.length === 0}
+                        >
+                          {showBackupCodes ? "Ocultar códigos" : "Mostrar códigos"}
                         </Button>
                       </div>
+
+                      {backupCodes.length === 0 && (
+                        <p className="text-sm text-muted-foreground">
+                          Os códigos serão exibidos após a confirmação do 2FA.
+                        </p>
+                      )}
 
                       {showBackupCodes && backupCodes.length > 0 && (
                         <Card className="border-warning/20 bg-warning-light/5">
@@ -259,19 +368,139 @@ export default function ConfiguracaoSeguranca() {
               </ProfileCard>
             </div>
           </div>
+          <Dialog open={isSetupModalOpen} onOpenChange={handleSetupModalChange}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Configurar Autenticação 2FA</DialogTitle>
+                <DialogDescription>
+                  Escaneie o QR code com seu aplicativo autenticador ou insira o código manualmente.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  {twoFactorSetup?.qrCode ? (
+                    <img
+                      src={twoFactorSetup.qrCode}
+                      alt="QR code para autenticação em duas etapas"
+                      className="w-48 h-48 rounded-lg border"
+                    />
+                  ) : (
+                    <div className="w-48 h-48 bg-muted border-2 border-dashed rounded-lg flex items-center justify-center">
+                      <div className="text-center space-y-2">
+                        <QrCode className="h-12 w-12 mx-auto text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">QR code indisponível</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm">Ou digite manualmente:</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={twoFactorSetup?.secret ?? ""}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copyToClipboard(twoFactorSetup?.secret ?? "")}
+                      disabled={!twoFactorSetup?.secret}
+                    >
+                      {copiedCode === twoFactorSetup?.secret ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="verification-code">Código de verificação</Label>
+                  <Input
+                    id="verification-code"
+                    placeholder="000000"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="text-center text-2xl tracking-widest"
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleConfirmTwoFactor}
+                  disabled={verificationCode.length !== 6 || isConfirming || !twoFactorSetup}
+                  className="w-full"
+                >
+                  {isConfirming ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Ativando...
+                    </span>
+                  ) : (
+                    "Ativar 2FA"
+                  )}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isDisableModalOpen} onOpenChange={handleDisableModalChange}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Desativar autenticação 2FA</DialogTitle>
+                <DialogDescription>
+                  Informe um código do autenticador ou um código de backup para desativar a proteção.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="disable-code">Código</Label>
+                  <Input
+                    id="disable-code"
+                    placeholder="Digite o código"
+                    value={disableCode}
+                    onChange={(e) => setDisableCode(e.target.value.trim().slice(0, 12))}
+                    autoComplete="one-time-code"
+                  />
+                </div>
+                <Button
+                  onClick={handleDisableTwoFactor}
+                  disabled={!disableCode || isDisabling}
+                  className="w-full"
+                  variant="destructive"
+                >
+                  {isDisabling ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Desativando...
+                    </span>
+                  ) : (
+                    "Desativar 2FA"
+                  )}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Sessions Management */}
         <TabsContent value="sessions" className="space-y-6">
           <ProfileCard title="Gerenciamento de Sessões" icon={<Clock className="h-5 w-5" />}>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Gerencie dispositivos e sessões ativas. Para mais detalhes, acesse a página de sessões.
-              </p>
-              <Button variant="outline">
-                Ver Todas as Sessões
-              </Button>
-            </div>
+            <SessionsList
+              sessions={sessions}
+              isLoading={sessionsLoading}
+              error={sessionsError}
+              onReload={loadSessions}
+              onRevokeSession={handleRevokeSession}
+              onRevokeAllSessions={handleRevokeAllSessions}
+              onApproveDevice={handleApproveDevice}
+              onRevokeDeviceApproval={handleRevokeDeviceApproval}
+            />
           </ProfileCard>
         </TabsContent>
 
