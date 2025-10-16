@@ -6,7 +6,7 @@ import {
 } from '../services/planLimitsService';
 
 import pool from '../services/db';
-import { createNotification } from '../services/notificationService';
+import { notificarAtualizacao, notificarCriacao } from '../services/processoNotificationService';
 import { Processo, ProcessoAttachment, ProcessoParticipant } from '../models/processo';
 import {
   createCompanyOabMonitor,
@@ -1431,37 +1431,11 @@ export const createProcesso = async (req: Request, res: Response) => {
 
       const processo = mapProcessoRow(finalResult.rows[0]);
 
-      const recipientIds = new Set<string>();
-      recipientIds.add(String(req.auth.userId));
-      for (const advogado of advogadosSelecionados) {
-        recipientIds.add(String(advogado.id));
-      }
-
-      await Promise.all(
-        Array.from(recipientIds).map(async (userId) => {
-          try {
-            await createNotification({
-              userId,
-              title: `Novo processo cadastrado: ${processo.numero}`,
-              message: processo.data_distribuicao
-                ? `Processo ${processo.numero} distribuído em ${processo.data_distribuicao}.`
-                : `Processo ${processo.numero} foi cadastrado.`,
-              category: 'process',
-              type: 'info',
-              metadata: {
-                processId: processo.id,
-                clientId: processo.cliente_id,
-                status: processo.status,
-                opportunityId: processo.oportunidade_id,
-                jurisdiction: processo.jurisdicao,
-                lawyers: advogadosSelecionados.map((adv) => adv.id),
-              },
-            });
-          } catch (notifyError) {
-            console.error('Falha ao enviar notificação de criação de processo', notifyError);
-          }
-        }),
-      );
+      await notificarCriacao({
+        processo,
+        criadorId: req.auth.userId,
+        advogadosSelecionados,
+      });
 
       res.status(201).json(processo);
     } catch (transactionError) {
@@ -2116,39 +2090,11 @@ export const updateProcesso = async (req: Request, res: Response) => {
 
       const processo = mapProcessoRow(finalResult.rows[0]);
 
-      const recipientIds = new Set<string>();
-      if (req.auth?.userId) {
-        recipientIds.add(String(req.auth.userId));
-      }
-      for (const advogado of advogadosSelecionados) {
-        recipientIds.add(String(advogado.id));
-      }
-
-      await Promise.all(
-        Array.from(recipientIds).map(async (userId) => {
-          try {
-            await createNotification({
-              userId,
-              title: `Processo atualizado: ${processo.numero}`,
-              message: processo.data_distribuicao
-                ? `Atualizações no processo ${processo.numero} distribuído em ${processo.data_distribuicao}.`
-                : `O processo ${processo.numero} foi atualizado.`,
-              category: 'process',
-              type: 'info',
-              metadata: {
-                processId: processo.id,
-                clientId: processo.cliente_id,
-                status: processo.status,
-                opportunityId: processo.oportunidade_id,
-                jurisdiction: processo.jurisdicao,
-                lawyers: advogadosSelecionados.map((adv) => adv.id),
-              },
-            });
-          } catch (notifyError) {
-            console.error('Falha ao enviar notificação de atualização de processo', notifyError);
-          }
-        }),
-      );
+      await notificarAtualizacao({
+        processo,
+        usuarioAtualizadorId: req.auth?.userId,
+        advogadosSelecionados,
+      });
 
       res.json(processo);
     } catch (transactionError) {
