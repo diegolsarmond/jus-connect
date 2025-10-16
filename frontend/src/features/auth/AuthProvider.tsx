@@ -134,6 +134,7 @@ const sanitizeSubscriptionStatus = (
 
   if (
     normalized === "active" ||
+    normalized === "pending" ||
     normalized === "trialing" ||
     normalized === "inactive" ||
     normalized === "grace_period" ||

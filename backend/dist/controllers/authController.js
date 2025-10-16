@@ -160,7 +160,7 @@ const resolveSubscriptionPayload = (row) => {
         isInGoodStanding = true;
     }
     else if (!trialEndsAtDate && !currentPeriodEndsAtDate && !gracePeriodEndsAtDate) {
-        status = 'active';
+        status = 'pending';
         isInGoodStanding = true;
     }
     else {

@@ -1,5 +1,6 @@
 export type SubscriptionStatus =
   | "active"
+  | "pending"
   | "trialing"
   | "inactive"
   | "grace_period"

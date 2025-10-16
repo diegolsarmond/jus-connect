@@ -22,7 +22,13 @@ const CLIENTE_EMPRESA_COLUMNS = ['empresa', 'empresa_id', 'idempresa'] as const;
 
 const CADENCE_VALUES: SubscriptionCadence[] = [CADENCE_MONTHLY, CADENCE_ANNUAL];
 
-export type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace' | 'overdue';
+export type SubscriptionStatus =
+  | 'inactive'
+  | 'pending'
+  | 'trialing'
+  | 'active'
+  | 'grace_period'
+  | 'past_due';
 
 export interface ResolvedSubscriptionPayload {
   planId: number | null;
@@ -491,7 +497,7 @@ export const resolveSubscriptionPayloadFromRow = (
   ) {
     return {
       planId,
-      status: 'grace',
+      status: 'grace_period',
       cadence,
       startedAt: currentPeriodStart ? currentPeriodStart.toISOString() : null,
       trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
@@ -501,9 +507,27 @@ export const resolveSubscriptionPayloadFromRow = (
     };
   }
 
+  if (
+    trialEndsAt === null &&
+    currentPeriodStart === null &&
+    currentPeriodEnd === null &&
+    graceExpiresAt === null
+  ) {
+    return {
+      planId,
+      status: 'pending',
+      cadence,
+      startedAt: startedAt ? startedAt.toISOString() : null,
+      trialEndsAt: null,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      graceExpiresAt: null,
+    };
+  }
+
   return {
     planId,
-    status: 'overdue',
+    status: 'past_due',
     cadence,
     startedAt: currentPeriodStart ? currentPeriodStart.toISOString() : null,
     trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,

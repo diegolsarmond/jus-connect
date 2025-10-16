@@ -330,7 +330,7 @@ const resolveSubscriptionPayloadFromRow = (row, now = new Date()) => {
         nowTs <= graceExpiresAt.getTime()) {
         return {
             planId,
-            status: 'grace',
+            status: 'grace_period',
             cadence,
             startedAt: currentPeriodStart ? currentPeriodStart.toISOString() : null,
             trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
@@ -339,9 +339,24 @@ const resolveSubscriptionPayloadFromRow = (row, now = new Date()) => {
             graceExpiresAt: graceExpiresAt.toISOString(),
         };
     }
+    if (trialEndsAt === null &&
+        currentPeriodStart === null &&
+        currentPeriodEnd === null &&
+        graceExpiresAt === null) {
+        return {
+            planId,
+            status: 'pending',
+            cadence,
+            startedAt: startedAt ? startedAt.toISOString() : null,
+            trialEndsAt: null,
+            currentPeriodStart: null,
+            currentPeriodEnd: null,
+            graceExpiresAt: null,
+        };
+    }
     return {
         planId,
-        status: 'overdue',
+        status: 'past_due',
         cadence,
         startedAt: currentPeriodStart ? currentPeriodStart.toISOString() : null,
         trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
