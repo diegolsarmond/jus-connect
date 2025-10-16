@@ -17,6 +17,9 @@ export interface ChatOverview {
   avatar?: string;
   picture?: string; // Adicionando picture que vem da API
   participants?: ChatParticipant[];
+  isOnline?: boolean;
+  lastSeen?: number;
+  presence?: string;
   lastMessage?: {
     id?: string;
     body?: string;

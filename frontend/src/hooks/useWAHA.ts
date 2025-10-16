@@ -66,6 +66,48 @@ const isLocalMediaUrl = (value: string): boolean =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+const toNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+};
+
+const normalizeTimestamp = (value: unknown): number | undefined => {
+  const numeric = toNumber(value);
+  if (typeof numeric !== 'number') {
+    return undefined;
+  }
+  return numeric > 1e12 ? numeric : numeric * 1000;
+};
+
+const toBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'online', 'available'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'n', 'offline', 'unavailable'].includes(normalized)) {
+      return false;
+    }
+  }
+  return undefined;
+};
+
 const PARTICIPANT_NAME_KEYS = [
   'name',
   'pushname',
@@ -323,6 +365,138 @@ export const useWAHA = (
   const messagePaginationRef = useRef<Record<string, MessagePaginationState>>({});
   const enrichingChatsRef = useRef(new Set<string>());
 
+  const handlePresenceUpdate = useCallback((payload: unknown) => {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    if (!isRecord(payload)) {
+      return;
+    }
+
+    const source = isRecord(payload['payload'])
+      ? (payload['payload'] as Record<string, unknown>)
+      : isRecord(payload['data'])
+        ? (payload['data'] as Record<string, unknown>)
+        : payload;
+
+    if (!isRecord(source)) {
+      return;
+    }
+
+    const chatRecord = isRecord(source['chat']) ? (source['chat'] as Record<string, unknown>) : undefined;
+    const contactRecord = isRecord(source['contact']) ? (source['contact'] as Record<string, unknown>) : undefined;
+    const presenceRecord = isRecord(source['presence'])
+      ? (source['presence'] as Record<string, unknown>)
+      : undefined;
+
+    const chatId = pickFirstString(
+      source['chatId'],
+      source['chat_id'],
+      source['chatID'],
+      source['id'],
+      source['jid'],
+      source['remoteJid'],
+      source['remote'],
+      source['user'],
+      source['userId'],
+      source['participant'],
+      chatRecord ? chatRecord['id'] : undefined,
+      chatRecord ? chatRecord['_serialized'] : undefined,
+      contactRecord ? contactRecord['id'] : undefined,
+      contactRecord ? contactRecord['_serialized'] : undefined,
+    );
+
+    if (!chatId) {
+      return;
+    }
+
+    const presenceStatus = pickFirstString(
+      source['presence'],
+      source['presenceStatus'],
+      source['status'],
+      source['state'],
+      presenceRecord ? presenceRecord['presence'] : undefined,
+      presenceRecord ? presenceRecord['status'] : undefined,
+      presenceRecord ? presenceRecord['state'] : undefined,
+    );
+
+    const isOnline =
+      toBoolean(source['isOnline']) ??
+      toBoolean(source['online']) ??
+      toBoolean(source['is_online']) ??
+      (presenceRecord
+        ? toBoolean(presenceRecord['isOnline']) ?? toBoolean(presenceRecord['online'])
+        : undefined);
+
+    const lastSeenCandidates = [
+      source['lastSeen'],
+      source['last_seen'],
+      source['lastSeenAt'],
+      source['lastSeenTs'],
+      source['timestamp'],
+      source['lastOnline'],
+      presenceRecord ? presenceRecord['lastSeen'] : undefined,
+      presenceRecord ? presenceRecord['last_seen'] : undefined,
+      presenceRecord ? presenceRecord['lastSeenAt'] : undefined,
+      presenceRecord ? presenceRecord['timestamp'] : undefined,
+    ];
+
+    let resolvedLastSeen: number | undefined;
+    for (const candidate of lastSeenCandidates) {
+      const normalized = normalizeTimestamp(candidate);
+      if (typeof normalized === 'number') {
+        resolvedLastSeen = normalized;
+        break;
+      }
+    }
+
+    setChats((previousChats) => {
+      const index = previousChats.findIndex((chat) => chat.id === chatId);
+      if (index === -1) {
+        return previousChats;
+      }
+
+      const current = previousChats[index];
+      let changed = false;
+      const next: ChatOverview = { ...current };
+
+      if (typeof isOnline === 'boolean' && current.isOnline !== isOnline) {
+        next.isOnline = isOnline;
+        changed = true;
+      }
+
+      if (typeof resolvedLastSeen === 'number' && current.lastSeen !== resolvedLastSeen) {
+        next.lastSeen = resolvedLastSeen;
+        changed = true;
+      }
+
+      if (presenceStatus && current.presence !== presenceStatus) {
+        next.presence = presenceStatus;
+        changed = true;
+      }
+
+      if (!changed) {
+        return previousChats;
+      }
+
+      const nextChats = [...previousChats];
+      nextChats[index] = next;
+      return nextChats;
+    });
+  }, []);
+
+  const updateChatPresence = useCallback(
+    (update: { chatId: string; isOnline?: boolean; lastSeen?: number | string | null; presence?: string | null }) => {
+      if (!update || typeof update !== 'object') {
+        return;
+      }
+
+      handlePresenceUpdate(update);
+    },
+    [handlePresenceUpdate],
+  );
+
   useEffect(() => {
     wahaService.setSessionOverride(sessionNameOverride ?? null);
 
@@ -332,6 +506,50 @@ export const useWAHA = (
       }
     };
   }, [sessionNameOverride]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const globalWindow = window as typeof window & {
+      wahaPresenceUpdate?: (payload: unknown) => void;
+    };
+
+    const eventListener: EventListener = (event) => {
+      const customEvent = event as CustomEvent<unknown>;
+      handlePresenceUpdate(customEvent.detail);
+    };
+
+    const eventNames = ['waha.plus.presence', 'waha-plus-presence'];
+    for (const eventName of eventNames) {
+      window.addEventListener(eventName, eventListener);
+    }
+
+    const previous = globalWindow.wahaPresenceUpdate;
+    const combined = (payload: unknown) => {
+      handlePresenceUpdate(payload);
+      if (previous && previous !== combined) {
+        previous(payload);
+      }
+    };
+
+    globalWindow.wahaPresenceUpdate = combined;
+
+    return () => {
+      for (const eventName of eventNames) {
+        window.removeEventListener(eventName, eventListener);
+      }
+
+      if (globalWindow.wahaPresenceUpdate === combined) {
+        if (previous) {
+          globalWindow.wahaPresenceUpdate = previous;
+        } else {
+          delete globalWindow.wahaPresenceUpdate;
+        }
+      }
+    };
+  }, [handlePresenceUpdate]);
 
   const ensureMessagePaginationState = useCallback(
     (chatId: string): MessagePaginationState => {
@@ -1584,6 +1802,7 @@ export const useWAHA = (
     updateMessageStatus,
     updateChatUnreadCount,
     updateMessageAck,
+    updateChatPresence,
     checkSessionStatus,
     
     // Utils

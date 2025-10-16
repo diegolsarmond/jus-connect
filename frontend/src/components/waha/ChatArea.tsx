@@ -58,6 +58,35 @@ export const ChatArea = ({
     return <WelcomeScreen />;
   }
 
+  const formatLastSeen = (timestamp?: number) => {
+    if (typeof timestamp !== 'number') {
+      return null;
+    }
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(date);
+  };
+
+  const statusText = activeChat.isGroup
+    ? 'Group chat'
+    : activeChat.isOnline
+      ? 'Online'
+      : (() => {
+          const formattedLastSeen = formatLastSeen(activeChat.lastSeen);
+          if (formattedLastSeen) {
+            return `Visto por último às ${formattedLastSeen}`;
+          }
+          if (activeChat.presence && activeChat.presence.trim().length > 0) {
+            return activeChat.presence;
+          }
+          return 'Status indisponível';
+        })();
+
   return (
     <div className="flex-1 flex flex-col bg-chat-background min-h-0">
       {/* Chat Header */}
@@ -82,7 +111,7 @@ export const ChatArea = ({
           <div>
             <h2 className="font-medium text-sidebar-foreground">{activeChat.name}</h2>
             <p className="text-xs text-muted-foreground">
-              {activeChat.isGroup ? 'Group chat' : 'Online'}
+              {statusText}
             </p>
           </div>
         </div>
