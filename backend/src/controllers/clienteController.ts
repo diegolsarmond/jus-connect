@@ -5,6 +5,7 @@ import {
 } from '../services/planLimitsService';
 import {
   countClientesAtivosByEmpresaId,
+  countClientesByEmpresaId,
   findClienteById,
   listClientesByEmpresaId,
 } from '../services/clienteRepository';
@@ -67,8 +68,37 @@ export const listClientes = async (req: Request, res: Response) => {
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
-    const clientes = await listClientesByEmpresaId(empresaId);
-    return res.json(clientes);
+    const queryValue = (value: unknown): string | undefined => {
+      if (Array.isArray(value)) {
+        return value[0];
+      }
+      return typeof value === 'string' ? value : undefined;
+    };
+
+    const pageParam = queryValue(req.query.page);
+    const pageSizeParam = queryValue(req.query.pageSize ?? req.query.limit);
+
+    const parsedPage = pageParam ? Number.parseInt(pageParam, 10) : Number.NaN;
+    const parsedPageSize = pageSizeParam
+      ? Number.parseInt(pageSizeParam, 10)
+      : Number.NaN;
+
+    const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
+    const pageSize =
+      Number.isNaN(parsedPageSize) || parsedPageSize < 1 ? 20 : parsedPageSize;
+
+    const offset = (page - 1) * pageSize;
+
+    const clientes = await listClientesByEmpresaId(empresaId, {
+      limit: pageSize,
+      offset,
+      orderBy: 'nome',
+      orderDirection: 'asc',
+    });
+
+    const total = await countClientesByEmpresaId(empresaId);
+
+    return res.json({ data: clientes, total, page, pageSize });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
