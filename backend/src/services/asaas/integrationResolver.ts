@@ -72,10 +72,13 @@ function assertValidEmpresaId(empresaId: number): asserts empresaId is number {
 
 const PROVIDER_FILTER = 'asaas';
 
+export type IntegrationScopePreference = 'company-first' | 'global-first';
+
 async function findScopedIntegration(
   db: Queryable,
   empresaId: number,
-  environment?: AsaasEnvironment,
+  environment: AsaasEnvironment | undefined,
+  scope: IntegrationScopePreference,
 ): Promise<IntegrationRow | null> {
   const params: unknown[] = [PROVIDER_FILTER, empresaId];
   const where: string[] = [
@@ -83,6 +86,11 @@ async function findScopedIntegration(
     '(i.global IS TRUE OR i.idempresa = $2)',
     'LOWER(TRIM(i.provider)) = $1',
   ];
+
+  const orderClauses =
+    scope === 'global-first'
+      ? ['CASE WHEN i.global IS TRUE THEN 0 ELSE 1 END']
+      : ['CASE WHEN i.idempresa = $2 THEN 0 ELSE 1 END'];
 
   if (environment) {
     params.push(environment);
@@ -93,7 +101,7 @@ async function findScopedIntegration(
        FROM integration_api_keys i
        LEFT JOIN asaas_credentials c ON c.integration_api_key_id = i.id
        WHERE ${where.join('\n         AND ')}
-       ORDER BY i.updated_at DESC
+       ORDER BY ${orderClauses.join(', ')}, i.updated_at DESC
        LIMIT 20`;
 
   const result = await db.query(query, params);
@@ -137,10 +145,15 @@ async function findLegacyIntegration(
   return row ?? null;
 }
 
+export type ResolveAsaasIntegrationOptions = {
+  scope?: IntegrationScopePreference;
+};
+
 export async function resolveAsaasIntegration(
   empresaId: number,
   db: Queryable = pool,
   environment?: AsaasEnvironment,
+  options?: ResolveAsaasIntegrationOptions,
 ): Promise<AsaasIntegration> {
   assertValidEmpresaId(empresaId);
 
@@ -150,10 +163,12 @@ export async function resolveAsaasIntegration(
     ? normalizeAsaasEnvironment(environment)
     : undefined;
 
-  let row = await findScopedIntegration(db, empresaId, normalizedEnvironment);
+  const scope = options?.scope ?? 'company-first';
+
+  let row = await findScopedIntegration(db, empresaId, normalizedEnvironment, scope);
 
   if (!row && normalizedEnvironment) {
-    row = await findScopedIntegration(db, empresaId);
+    row = await findScopedIntegration(db, empresaId, undefined, scope);
   }
 
   if (!row) {

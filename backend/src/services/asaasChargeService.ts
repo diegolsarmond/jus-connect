@@ -456,6 +456,7 @@ async function defaultClientFactory({
         flowEmpresaId,
         db,
         configuredEnvironment,
+        { scope: 'company-first' },
       );
       return {
         client: new HttpAsaasClient({ apiKey: integration.accessToken, baseUrl: integration.baseUrl }),
