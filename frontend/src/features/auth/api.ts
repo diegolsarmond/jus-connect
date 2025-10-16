@@ -361,6 +361,32 @@ export const requestPasswordReset = async (
   };
 };
 
+export const resendEmailConfirmationRequest = async (email: string): Promise<string> => {
+  const response = await fetch(getApiUrl("auth/resend-email-confirmation"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response);
+  }
+
+  try {
+    const data = (await response.json()) as { message?: unknown };
+    if (typeof data?.message === "string" && data.message.trim().length > 0) {
+      return data.message;
+    }
+  } catch (error) {
+    console.warn("Failed to parse resend confirmation response", error);
+  }
+
+  return "Um novo e-mail de confirmação foi enviado.";
+};
+
 export const confirmEmailRequest = async (
   token: string,
   signal?: AbortSignal,

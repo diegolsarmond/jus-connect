@@ -10,7 +10,8 @@ import quantumLogo from "@/assets/quantum-logo.png";
 import { routes } from "@/config/routes";
 import { appConfig } from "@/config/app-config";
 import { useAuth } from "@/features/auth/AuthProvider";
-import { ApiError } from "@/features/auth/api";
+import { ApiError, resendEmailConfirmationRequest } from "@/features/auth/api";
+import { useToast } from "@/components/ui/use-toast";
 
 const REMEMBER_ME_STORAGE_KEY = "auth.rememberMe";
 
@@ -21,9 +22,12 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [emailConfirmationMessage, setEmailConfirmationMessage] = useState<string | null>(null);
+  const [isResendingEmailConfirmation, setIsResendingEmailConfirmation] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticated, isLoading, user } = useAuth();
+  const { toast } = useToast();
   const resolveRedirectPath = useCallback(
     () =>
       ((location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname) ?? routes.dashboard,
@@ -62,6 +66,7 @@ const Login = () => {
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
+    setEmailConfirmationMessage(null);
     setIsSubmitting(true);
 
     try {
@@ -84,8 +89,9 @@ const Login = () => {
       }
     } catch (error) {
       if (error instanceof ApiError) {
-        if (error.status === 403) {
-          setErrorMessage("Confirme seu e-mail antes de acessar. Verifique sua caixa de entrada.");
+        const normalizedMessage = error.message.trim().toLowerCase();
+        if (error.status === 403 && normalizedMessage.includes("confirme seu e-mail antes de acessar")) {
+          setEmailConfirmationMessage(error.message);
         } else {
           setErrorMessage(error.message);
         }
@@ -98,6 +104,35 @@ const Login = () => {
       setIsSubmitting(false);
     }
   };
+
+  const handleResendEmailConfirmation = useCallback(async () => {
+    if (!email) {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível reenviar o e-mail de confirmação",
+        description: "Informe um e-mail válido e tente novamente.",
+      });
+      return;
+    }
+
+    setIsResendingEmailConfirmation(true);
+
+    try {
+      const message = await resendEmailConfirmationRequest(email);
+      toast({
+        title: "E-mail reenviado",
+        description: message,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível reenviar o e-mail de confirmação",
+        description: "Entre em contato com o suporte.",
+      });
+    } finally {
+      setIsResendingEmailConfirmation(false);
+    }
+  }, [email, toast]);
 
   if (isLoading) {
     return (
@@ -168,6 +203,28 @@ const Login = () => {
                   </Button>
                 </div>
               </div>
+
+              {emailConfirmationMessage ? (
+                <div className="space-y-3 rounded-md border border-primary/40 bg-primary/10 px-3 py-3 text-sm text-primary">
+                  <p>{emailConfirmationMessage}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={handleResendEmailConfirmation}
+                    disabled={isResendingEmailConfirmation}
+                  >
+                    {isResendingEmailConfirmation ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Reenviando...
+                      </span>
+                    ) : (
+                      "Reenviar e-mail de confirmação"
+                    )}
+                  </Button>
+                </div>
+              ) : null}
 
               {errorMessage ? (
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
