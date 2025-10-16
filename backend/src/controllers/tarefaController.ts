@@ -58,7 +58,7 @@ ORDER BY t.concluido ASC, t.data ASC, t.prioridade ASC`,
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -111,7 +111,7 @@ export const getTarefaById = async (req: Request, res: Response) => {
       responsaveisRows = responsaveisResult.rows;
     } catch (responsaveisError) {
       console.error('Falha ao buscar responsáveis da tarefa', responsaveisError);
-      return res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 
     const userId = req.auth.userId;
@@ -183,7 +183,7 @@ export const getTarefaById = async (req: Request, res: Response) => {
     res.json(tarefa);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -205,7 +205,7 @@ export const getResponsavelByTarefa = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -402,7 +402,7 @@ export const createTarefa = async (req: Request, res: Response) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -607,7 +607,7 @@ export const updateTarefa = async (req: Request, res: Response) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -626,7 +626,7 @@ export const concluirTarefa = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -649,7 +649,7 @@ export const deleteTarefa = async (req: Request, res: Response) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }

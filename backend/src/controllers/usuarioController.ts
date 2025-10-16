@@ -223,7 +223,7 @@ export const listUsuarios = async (req: Request, res: Response) => {
     res.json(result.rows.map((row) => mapUsuarioRowToResponse(row as UsuarioRow)));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -253,7 +253,7 @@ export const listUsuariosByEmpresa = async (req: Request, res: Response) => {
     res.json(result.rows.map((row) => mapUsuarioRowToResponse(row as UsuarioRow)));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -285,7 +285,7 @@ export const getUsuarioById = async (req: Request, res: Response) => {
     res.json(mapUsuarioRowToResponse(result.rows[0] as UsuarioRow));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -530,7 +530,7 @@ export const createUsuario = async (req: Request, res: Response) => {
     }
 
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -689,7 +689,7 @@ export const updateUsuario = async (req: Request, res: Response) => {
     res.json(mapUsuarioRowToResponse(result.rows[0] as UsuarioRow));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -748,7 +748,7 @@ export const deleteUsuario = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 

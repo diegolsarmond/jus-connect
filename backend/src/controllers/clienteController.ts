@@ -71,7 +71,7 @@ export const listClientes = async (req: Request, res: Response) => {
     return res.json(clientes);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -95,7 +95,7 @@ export const getClienteById = async (req: Request, res: Response) => {
     res.json(cliente);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -125,7 +125,7 @@ export const countClientesAtivos = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -257,7 +257,7 @@ export const createCliente = async (req: Request, res: Response) => {
     res.status(201).json({ ...createdCliente, asaasIntegration });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -382,7 +382,7 @@ export const updateCliente = async (req: Request, res: Response) => {
     res.json({ ...updatedCliente, asaasIntegration });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -417,7 +417,7 @@ export const deleteCliente = async (req: Request, res: Response) => {
     res.json({ ativo: result.rows[0].ativo });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
