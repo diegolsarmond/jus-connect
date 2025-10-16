@@ -54,6 +54,7 @@ const largePayloadJson = express.json({ limit: '50mb', verify: saveRawBody });
 
 app.use('/api/support/:id/messages', largePayloadJson);
 app.use('/api/clientes/:clienteId/documentos', largePayloadJson);
+app.use('/api/conversations/:conversationId/messages', largePayloadJson);
 
 app.use(
   express.json({
