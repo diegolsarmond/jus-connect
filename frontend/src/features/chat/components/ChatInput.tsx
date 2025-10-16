@@ -76,15 +76,26 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
   };
 
   const sendAttachment = async (file: File, type: MessageType = "image") => {
-    const objectUrl = URL.createObjectURL(file);
-    const attachment: MessageAttachment = {
-      id: `upload-${Date.now()}`,
-      type,
-      url: objectUrl,
-      name: file.name,
-    };
     setIsSending(true);
     try {
+      const buffer = await file.arrayBuffer();
+      let binary = "";
+      const bytes = new Uint8Array(buffer);
+      const chunkSize = 0x8000;
+      for (let index = 0; index < bytes.length; index += chunkSize) {
+        const chunk = bytes.subarray(index, index + chunkSize);
+        binary += String.fromCharCode(...chunk);
+      }
+      const base64 = btoa(binary);
+      const mimeType = file.type || "application/octet-stream";
+      const dataUrl = `data:${mimeType};base64,${base64}`;
+      const attachment: MessageAttachment = {
+        id: `upload-${Date.now()}`,
+        type,
+        url: dataUrl,
+        name: file.name,
+        mimeType: file.type || undefined,
+      };
       await onSend({ content: file.name, type, attachments: [attachment] });
       setShowAttachments(false);
     } finally {
