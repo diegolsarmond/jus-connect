@@ -1081,6 +1081,67 @@ test('login rejects when e-mail confirmation is pending', async () => {
   assert.deepEqual(res.body, { error: 'Confirme seu e-mail antes de acessar.' });
 });
 
+test('login rejects when subscription payment is pending', async () => {
+  const password = 'SenhaSegura123';
+  const hashedPassword = await hashPassword(password);
+  const now = new Date();
+
+  const { restore: restorePoolQuery } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 91,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          senha: hashedPassword,
+          must_change_password: false,
+          email_confirmed_at: now.toISOString(),
+          status: true,
+          perfil: 22,
+          empresa_id: 31,
+          empresa_nome: 'Acme Corp',
+          setor_id: 11,
+          setor_nome: 'Financeiro',
+          empresa_plano: 9,
+          empresa_ativo: true,
+          empresa_datacadastro: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          empresa_trial_started_at: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          empresa_trial_ends_at: null,
+          empresa_current_period_start: null,
+          empresa_current_period_end: null,
+          empresa_current_period_ends_at: null,
+          empresa_grace_expires_at: null,
+          empresa_grace_period_ends_at: null,
+          empresa_subscription_cadence: 'monthly',
+          empresa_subscription_status: 'pending',
+        },
+      ],
+      rowCount: 1,
+    },
+  ]);
+
+  const req = {
+    body: {
+      email: 'alice@example.com',
+      senha: password,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await login(req, res);
+  } finally {
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, {
+    error:
+      'Pagamento da assinatura pendente de confirmação. Aguarde a compensação ou tente novamente em alguns instantes.',
+  });
+});
+
 test('login rejects when trial period has expired without payment', async () => {
   const password = 'SenhaSegura123';
   const hashedPassword = await hashPassword(password);

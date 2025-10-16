@@ -1,7 +1,8 @@
 import { QueryResultRow } from 'pg';
 import { normalizeFinancialFlowIdentifier, normalizeFinancialFlowIdentifierFromRow } from '../utils/financialFlowIdentifier';
 import pool from './db';
-import resolveAsaasIntegration, {
+import {
+  resolveAsaasIntegration,
   AsaasIntegrationNotConfiguredError,
 } from './asaas/integrationResolver';
 import { AsaasApiError } from './asaas/asaasClient';
