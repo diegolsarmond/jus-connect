@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWAHA } from "@/hooks/useWAHA";
+import { useWahaRealtimeStream } from "./hooks/useWahaRealtimeStream";
 import { SessionStatus } from "./SessionStatus";
 import { ChatSidebar as CRMChatSidebar } from "@/features/chat/components/ChatSidebar";
 import { ChatWindow as CRMChatWindow } from "@/features/chat/components/ChatWindow";
@@ -8,6 +9,7 @@ import { ConversationLoadingScreen } from "./ConversationLoadingScreen";
 import type {
   ConversationSummary,
   Message as CRMMessage,
+  MessageStatus,
   SendMessageInput,
   UpdateConversationPayload,
 } from "@/features/chat/types";
@@ -283,6 +285,54 @@ const mapChatToConversation = (
   return mergeOverrides(base, overrides);
 };
 
+const mapChatMessageTypeToWahaType = (type: CRMMessage["type"]): WAHAMessage["type"] => {
+  switch (type) {
+    case "image":
+      return "image";
+    case "audio":
+      return "audio";
+    case "file":
+      return "document";
+    default:
+      return "text";
+  }
+};
+
+const mapChatStatusToAckName = (status?: MessageStatus): "SENT" | "DELIVERED" | "READ" => {
+  if (status === "read") {
+    return "READ";
+  }
+  if (status === "delivered") {
+    return "DELIVERED";
+  }
+  return "SENT";
+};
+
+const mapChatMessageToWahaMessage = (message: CRMMessage): WAHAMessage => {
+  const timestamp = Date.parse(message.timestamp);
+  const attachments = message.attachments ?? [];
+  const [primaryAttachment] = attachments;
+  const resolvedType = mapChatMessageTypeToWahaType(message.type);
+  const mediaUrl = primaryAttachment?.downloadUrl ?? primaryAttachment?.url;
+  const hasMedia = resolvedType !== "text" || Boolean(mediaUrl);
+  const trimmedContent = message.content?.trim?.() ?? "";
+
+  return {
+    id: message.id,
+    chatId: message.conversationId,
+    body: trimmedContent,
+    timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+    fromMe: message.sender === "me",
+    type: resolvedType,
+    ack: mapChatStatusToAckName(message.status),
+    hasMedia,
+    mediaUrl: mediaUrl ?? undefined,
+    filename: primaryAttachment?.name,
+    caption: hasMedia && trimmedContent.length > 0 ? trimmedContent : undefined,
+    mimeType: primaryAttachment?.mimeType,
+  };
+};
+
 export const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
   const messageType = mapWahaMessageType(message);
   const mediaUrlCandidateKeys = [
@@ -420,6 +470,7 @@ export const WhatsAppLayout = ({
   >(undefined);
   const [responsibleOptions, setResponsibleOptions] = useState<ChatResponsibleOption[]>([]);
   const [isLoadingResponsibles, setIsLoadingResponsibles] = useState(false);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastSessionStatusRef = useRef<string | null>(null);
   const { toast } = useToast();
@@ -438,11 +489,13 @@ export const WhatsAppLayout = ({
     () => deriveSessionName(companyNameFromAuth),
     [companyNameFromAuth],
   );
-  const wahaState = useWAHA(sessionNameOverride);
+  const wahaState = useWAHA(sessionNameOverride, { enablePolling: !isRealtimeConnected });
   const {
     chats: rawChats,
     messages: messageMap,
     addMessage,
+    updateMessageStatus,
+    updateChatUnreadCount,
     selectChat,
     loadMessages,
     loadOlderMessages,
@@ -525,17 +578,6 @@ export const WhatsAppLayout = ({
       setHasLoadedOnce(true);
     }
   }, [hasStartedLoading, loading]);
-
-  // Set up webhook receiver for demo purposes
-  useEffect(() => {
-    window.wahaWebhookReceived = (message) => {
-      addMessage(message);
-    };
-
-    return () => {
-      delete window.wahaWebhookReceived;
-    };
-  }, [addMessage]);
 
   useEffect(() => {
     const activeId = activeChatId ?? undefined;
@@ -754,6 +796,102 @@ export const WhatsAppLayout = ({
       return { ...previous, [conversationId]: next };
     });
   };
+
+  const handleRealtimeConversationUpdate = useCallback(
+    (conversation: ConversationSummary) => {
+      const { id, ...rest } = conversation;
+
+      setConversationOverrides((previous) => {
+        const current = previous[id] ?? {};
+        const next: Partial<ConversationSummary> = { ...current };
+        let changed = false;
+
+        for (const [key, value] of Object.entries(rest)) {
+          if (value === undefined) {
+            continue;
+          }
+          const record = next as Record<string, unknown>;
+          if (record[key] !== value) {
+            record[key] = value;
+            changed = true;
+          }
+        }
+
+        if (!changed) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [id]: next,
+        };
+      });
+
+      if (typeof rest.unreadCount === "number") {
+        updateChatUnreadCount(id, rest.unreadCount);
+      }
+
+      const exists = rawChats.some((chat) => chat.id === id);
+      if (!exists) {
+        void loadChats({ reset: true, silent: true });
+      }
+    },
+    [loadChats, rawChats, updateChatUnreadCount],
+  );
+
+  const handleRealtimeMessageNew = useCallback(
+    ({ conversationId, message }: { conversationId: string; message: CRMMessage }) => {
+      addMessage(mapChatMessageToWahaMessage(message));
+
+      const exists = rawChats.some((chat) => chat.id === conversationId);
+      if (!exists) {
+        void loadChats({ reset: true, silent: true });
+      }
+    },
+    [addMessage, loadChats, rawChats],
+  );
+
+  const handleRealtimeMessageStatus = useCallback(
+    ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: MessageStatus }) => {
+      updateMessageStatus(conversationId, messageId, status);
+    },
+    [updateMessageStatus],
+  );
+
+  const handleRealtimeConversationRead = useCallback(
+    ({ conversationId }: { conversationId: string }) => {
+      updateChatUnreadCount(conversationId, 0);
+
+      setConversationOverrides((previous) => {
+        const current = previous[conversationId];
+        if (!current || current.unreadCount === 0) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [conversationId]: {
+            ...current,
+            unreadCount: 0,
+          },
+        };
+      });
+    },
+    [updateChatUnreadCount],
+  );
+
+  const { isConnected: realtimeConnected } = useWahaRealtimeStream({
+    onConversationUpdate: handleRealtimeConversationUpdate,
+    onMessageNew: handleRealtimeMessageNew,
+    onMessageStatus: handleRealtimeMessageStatus,
+    onConversationRead: handleRealtimeConversationRead,
+  });
+
+  useEffect(() => {
+    setIsRealtimeConnected((previous) =>
+      previous === realtimeConnected ? previous : realtimeConnected,
+    );
+  }, [realtimeConnected]);
 
   const conversationSuggestions = useMemo(
     () => conversations.slice(0, 60),
