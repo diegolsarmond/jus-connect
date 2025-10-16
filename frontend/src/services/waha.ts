@@ -878,7 +878,7 @@ class WAHAService {
 
   // Get webhook URL that should be configured in WAHA
   getWebhookUrl(baseUrl: string): string {
-    return `${baseUrl}/api/webhook/waha`;
+    return `${baseUrl}/api/webhooks/waha`;
   }
 }
 
