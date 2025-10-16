@@ -173,6 +173,7 @@ const baseProcessoSelect = `
     tp.nome AS tipo_processo_nome,
     p.area_atuacao_id,
     aa.nome AS area_atuacao_nome,
+    p.trigger_dados_processo,
     (
       SELECT MAX(pm.data)
       FROM public.processo_movimentacoes pm
