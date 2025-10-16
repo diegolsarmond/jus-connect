@@ -432,7 +432,7 @@ export const listOportunidades = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -465,7 +465,7 @@ export const listOportunidadesByFase = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -513,7 +513,7 @@ export const getOportunidadeById = async (req: Request, res: Response) => {
     res.json(oportunidade);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -554,7 +554,7 @@ export const listEnvolvidosByOportunidade = async (
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -723,7 +723,7 @@ export const createOportunidade = async (req: Request, res: Response) => {
       }
     }
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client?.release();
   }
@@ -875,7 +875,7 @@ export const updateOportunidade = async (req: Request, res: Response) => {
       }
     }
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client?.release();
   }
@@ -911,7 +911,7 @@ export const updateOportunidadeStatus = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1058,7 +1058,7 @@ export const linkProcessoToOportunidade = async (req: Request, res: Response) =>
       }
     }
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client?.release();
   }
@@ -1082,7 +1082,7 @@ export const updateOportunidadeEtapa = async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1125,7 +1125,7 @@ export const listOportunidadeFaturamentos = async (
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1165,7 +1165,7 @@ export const listOportunidadeParcelas = async (req: Request, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1437,7 +1437,7 @@ export const createOportunidadeFaturamento = async (
       console.error('Rollback failed after faturamento creation error.', rollbackError);
     }
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   } finally {
     client.release();
   }
@@ -1456,7 +1456,7 @@ export const deleteOportunidade = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 

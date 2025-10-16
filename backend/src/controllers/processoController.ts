@@ -132,7 +132,7 @@ const baseProcessoSelect = `
     p.uf,
     p.municipio,
     p.orgao_julgador,
-    COALESCE(dp.area, tp.nome, p.tipo) AS tipo,
+    COALESCE(dp.area, tp.nome) AS tipo,
     COALESCE(dp.situacao, sp.nome, p.status) AS status,
     COALESCE(dp.classe, p.classe_judicial) AS classe_judicial,
     COALESCE(dp.assunto, p.assunto) AS assunto,
@@ -828,7 +828,7 @@ export const listProcessos = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -868,7 +868,7 @@ export const listProcessosByCliente = async (req: Request, res: Response) => {
     res.json(result.rows.map(mapProcessoListRow));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -945,7 +945,7 @@ export const getProcessoById = async (req: Request, res: Response) => {
     res.json(processo);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1077,7 +1077,7 @@ export const createProcessoMovimentacaoManual = async (
     return res.status(201).json(movimentacoes[0]);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -1546,7 +1546,7 @@ export const createProcesso = async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Número de processo já cadastrado' });
     }
 
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2205,7 +2205,7 @@ export const updateProcesso = async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'Número de processo já cadastrado' });
     }
 
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2264,7 +2264,7 @@ export const deleteProcesso = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2290,7 +2290,7 @@ export const listOabMonitoradas = async (req: Request, res: Response) => {
     return res.json(monitors);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2385,7 +2385,7 @@ export const createOabMonitorada = async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -2426,6 +2426,6 @@ export const deleteOabMonitorada = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };

@@ -27,7 +27,7 @@ async function resolveEmpresaId(req: Request, res: Response): Promise<number | n
     return lookup.empresaId;
   } catch (error) {
     console.error('Failed to resolve authenticated user empresa:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
     return null;
   }
 }
@@ -112,7 +112,7 @@ export async function listIntegrationWebhooks(req: Request, res: Response) {
     return res.json(items);
   } catch (error) {
     console.error('Failed to list integration webhooks:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 }
 
@@ -148,7 +148,7 @@ export async function createIntegrationWebhook(req: Request, res: Response) {
         .json(buildErrorResponse(error, 'Não foi possível cadastrar o webhook.', { expose: true }));
     }
     console.error('Failed to create integration webhook:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 }
 
@@ -194,7 +194,7 @@ export async function updateIntegrationWebhook(req: Request, res: Response) {
         .json(buildErrorResponse(error, 'Não foi possível atualizar o webhook.', { expose: true }));
     }
     console.error('Failed to update integration webhook:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 }
 
@@ -228,7 +228,7 @@ export async function updateIntegrationWebhookStatus(req: Request, res: Response
         .json(buildErrorResponse(error, 'Não foi possível atualizar o webhook.', { expose: true }));
     }
     console.error('Failed to update integration webhook:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 }
 
@@ -254,6 +254,6 @@ export async function deleteIntegrationWebhook(req: Request, res: Response) {
     return res.status(204).send();
   } catch (error) {
     console.error('Failed to delete integration webhook:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 }
