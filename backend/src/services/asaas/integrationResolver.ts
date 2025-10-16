@@ -253,4 +253,5 @@ export async function createAsaasClient(
 
 export default resolveAsaasIntegration;
 
-export { ASAAS_DEFAULT_BASE_URLS, AsaasEnvironment, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
+export { ASAAS_DEFAULT_BASE_URLS, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
+export type { AsaasEnvironment };
