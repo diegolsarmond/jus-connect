@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -51,6 +51,7 @@ import { usePlan } from "@/features/plans/PlanProvider";
 import { useSidebarCounters, type SidebarCounterKey, type SidebarCountersMap } from "@/hooks/useSidebarCounters";
 import { cn } from "@/lib/utils";
 import { createNormalizedModuleSet, normalizeModuleId } from "@/features/auth/moduleUtils";
+import { useToast } from "@/hooks/use-toast";
 
 const useOptionalPlan = (): ReturnType<typeof usePlan> | null => {
   try {
@@ -59,6 +60,31 @@ const useOptionalPlan = (): ReturnType<typeof usePlan> | null => {
     return null;
   }
 };
+
+const forbiddenMessage = "Usuário autenticado não possui empresa vinculada.";
+
+async function getForbiddenMessage(response: Response): Promise<string> {
+  try {
+    const data = await response.json();
+    if (typeof data === "string") {
+      const trimmed = data.trim();
+      return trimmed || forbiddenMessage;
+    }
+    if (data && typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      const keys = ["message", "mensagem", "error", "detail"];
+      for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+    }
+  } catch {
+    return forbiddenMessage;
+  }
+  return forbiddenMessage;
+}
 
 interface NavItem {
   name: string;
@@ -75,6 +101,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const { user, logout: authLogout } = useAuth();
+  const { toast } = useToast();
   const allowedModules = useMemo(
     () => createNormalizedModuleSet(user?.modulos ?? []),
     [user?.modulos],
@@ -88,6 +115,7 @@ export function Sidebar() {
   const hasPlanRestrictions = normalizedPlanModules.size > 0;
   const [pipelineMenus, setPipelineMenus] = useState<NavItem[]>([]);
   const hasPipelineAccess = allowedModules.has("pipeline");
+  const forbiddenToastShown = useRef(false);
 
   useEffect(() => {
     const fetchMenus = async () => {
@@ -101,6 +129,17 @@ export function Sidebar() {
         const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
           headers: { Accept: "application/json" },
         });
+        if (res.status === 403) {
+          setPipelineMenus([]);
+          if (!forbiddenToastShown.current) {
+            const description = await getForbiddenMessage(res);
+            toast({ title: "Acesso negado", description, variant: "destructive" });
+            forbiddenToastShown.current = true;
+          } else {
+            await res.text().catch(() => {});
+          }
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         type MenuApiItem = { id: number | string; nome?: string; ordem?: number };
@@ -130,7 +169,7 @@ export function Sidebar() {
       }
     };
     fetchMenus();
-  }, [hasPipelineAccess]);
+  }, [hasPipelineAccess, toast]);
 
   const navigation = useMemo<NavItem[]>(
     () => [
