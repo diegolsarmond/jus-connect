@@ -42,6 +42,7 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
   const [showAttachments, setShowAttachments] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -152,6 +153,14 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
     }
   };
 
+  const handleDocumentInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      void sendAttachment(file, "file");
+      event.target.value = "";
+    }
+  };
+
   const handleAudioInputChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -186,10 +195,7 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
       {
         icon: <FileText size={18} aria-hidden="true" />, // purely decorativo
         label: "Documento PDF",
-        action: () =>
-          setValue((current) =>
-            `${current}${current && !current.endsWith(" ") ? " " : ""}[documento anexado]`,
-          ),
+        action: () => documentInputRef.current?.click(),
       },
       {
         icon: <LinkIcon size={18} aria-hidden="true" />, // purely decorativo
@@ -289,6 +295,13 @@ export const ChatInput = ({ onSend, disabled = false, onTypingActivity }: ChatIn
         accept="image/*"
         style={{ display: "none" }}
         onChange={handleFileInputChange}
+      />
+      <input
+        ref={documentInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        style={{ display: "none" }}
+        onChange={handleDocumentInputChange}
       />
       <input
         ref={audioInputRef}
