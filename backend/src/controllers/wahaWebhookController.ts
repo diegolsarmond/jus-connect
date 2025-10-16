@@ -9,6 +9,7 @@ import {
   publishMessageCreated,
   publishMessageStatusUpdate,
 } from '../realtime';
+import { persistWahaAttachments } from '../services/wahaMediaService';
 
 const chatService = new ChatService();
 
@@ -1050,6 +1051,15 @@ async function handleMessageEvent(event: WahaWebhookEvent): Promise<number> {
     }
 
     try {
+      const messageAttachments =
+        parsed.attachments && parsed.attachments.length > 0
+          ? await persistWahaAttachments({
+              attachments: parsed.attachments,
+              messageId: parsed.externalId ?? parsed.messageId ?? null,
+              sessionId: parsed.sessionId ?? null,
+            })
+          : parsed.attachments;
+
       await chatService.ensureConversation({
         id: parsed.conversationId,
         contactIdentifier: parsed.contactIdentifier,
@@ -1066,7 +1076,7 @@ async function handleMessageEvent(event: WahaWebhookEvent): Promise<number> {
         content: parsed.content,
         type: parsed.type,
         timestamp: parsed.timestamp,
-        attachments: parsed.attachments,
+        attachments: messageAttachments,
 
       };
 
