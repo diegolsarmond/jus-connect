@@ -392,13 +392,20 @@ const shouldFallbackToFinancialFlowsOnly = (error: unknown): boolean => {
 
 };
 
+let createAsaasClientImplementation = createAsaasClient;
+
 export const __internal = {
   resetOpportunityTablesAvailabilityCache,
   resetFinancialFlowEmpresaColumnCache,
   resetFinancialFlowClienteColumnCache,
   resetFinancialFlowFornecedorColumnCache,
   resetFinancialAccountTableCache,
-
+  setCreateAsaasClientImplementation(implementation: typeof createAsaasClient) {
+    createAsaasClientImplementation = implementation;
+  },
+  resetCreateAsaasClientImplementation() {
+    createAsaasClientImplementation = createAsaasClient;
+  },
 };
 
 const asaasChargeService = new AsaasChargeService();
@@ -875,12 +882,9 @@ export const listFlows = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      res.json({
-        items: [],
-        total: 0,
-        page: effectivePage,
-        limit: effectiveLimit,
-      });
+      res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
 
@@ -1306,7 +1310,9 @@ export const createFlow = async (req: Request, res: Response) => {
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário não está vinculado a uma empresa.' });
     return;
   }
 
@@ -1631,7 +1637,9 @@ const settleOpportunityInstallment = async (
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
 
@@ -1861,7 +1869,9 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
   const { empresaId } = empresaLookup;
 
   if (empresaId === null) {
-    res.status(403).json({ error: 'Usuário não está vinculado a uma empresa.' });
+    res
+      .status(403)
+      .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return;
   }
 
@@ -1944,7 +1954,7 @@ export const refundAsaasCharge = async (req: Request, res: Response) => {
       return;
     }
 
-    const asaasClient = await createAsaasClient(flowEmpresaId, client);
+    const asaasClient = await createAsaasClientImplementation(flowEmpresaId, client);
     const refundResponse = await asaasClient.refundCharge(chargeRow.asaas_charge_id, refundPayload);
 
     const updatedChargeResult = await client.query(
@@ -2020,13 +2030,31 @@ export const getAsaasChargeForFlow = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Charge not found' });
     }
 
-    const chargePayload: Record<string, unknown> = { ...charge };
+    const sanitizedCharge: Record<string, unknown> = {
+      id: charge.id,
+      financialFlowId: charge.financialFlowId,
+      clienteId: charge.clienteId,
+      integrationApiKeyId: charge.integrationApiKeyId,
+      asaasChargeId: charge.asaasChargeId,
+      billingType: charge.billingType,
+      status: charge.status,
+      dueDate: charge.dueDate,
+      value: charge.value,
+      invoiceUrl: charge.invoiceUrl,
+      pixPayload: charge.pixPayload,
+      pixQrCode: charge.pixQrCode,
+      boletoUrl: charge.boletoUrl,
+      cardLast4: charge.cardLast4,
+      cardBrand: charge.cardBrand,
+      createdAt: charge.createdAt,
+      updatedAt: charge.updatedAt,
+    };
 
     if (typeof charge.financialFlowId === 'number') {
-      chargePayload.flowId = charge.financialFlowId;
+      sanitizedCharge.flowId = charge.financialFlowId;
     }
 
-    res.json({ charge: chargePayload });
+    res.json({ charge: sanitizedCharge });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });

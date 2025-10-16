@@ -7,8 +7,18 @@ Estrutura inicial do backend usando Express e TypeScript.
   - `controllers/`
   - `routes/`
   - `models/`
-  - `services/`
+- `services/`
   - `index.ts`
+
+## Padrão para acesso a dados
+
+- Centralize consultas SQL reutilizáveis em arquivos de repositório dentro de `src/services`, como `clienteRepository.ts` e `fornecedorRepository.ts`.
+- Controllers devem importar essas funções em vez de executar `pool.query` diretamente, garantindo padronização de parâmetros e facilitando futuras otimizações ou trocas de banco.
+
+## Regra para usuários sem empresa vinculada
+
+- Endpoints multiempresa retornam `403` quando o usuário autenticado não possui empresa associada. Isso evita que perfis globais enxerguem dados sensíveis sem informar um escopo explícito.
+- Usuários vinculados a uma empresa continuam acessando apenas os registros da própria organização. Ex.: `GET /usuarios`, `GET /usuarios/empresa` e `GET /templates` respeitam esse comportamento. 【F:backend/src/controllers/usuarioController.ts†L146-L205】【F:backend/src/controllers/templateController.ts†L6-L40】
 
 ## Como iniciar
 
@@ -69,11 +79,28 @@ API hospedada pela Quantum em `https://quantumtecnologia.com.br`.
 - Ao rodar o frontend localmente, defina `VITE_API_URL` (ou utilize o arquivo
   `.env.development` fornecido no projeto do frontend) para apontar os
   requests para `https://quantumtecnologia.com.br/api`.
+- Defina `CORS_DEFAULT_ORIGINS` com a lista principal de domínios autorizados. Sem esta variável o backend permite apenas `http://localhost:5173`.
 - Caso precise habilitar novos domínios para consumir a API pública, defina a
   variável `CORS_ALLOWED_ORIGINS` antes de subir o backend.
 
 Em produção recomenda-se executar `npm run build` seguido de `npm start`, ou
 utilizar a imagem Docker disponibilizada na raiz do monorepo.
+
+# Prazos de avaliação e tolerância
+
+- `SUBSCRIPTION_TRIAL_DAYS`: número de dias concedidos no período de teste
+  inicial (padrão 14).
+- `SUBSCRIPTION_GRACE_DAYS_MONTHLY`: quantidade de dias de tolerância aplicada
+  a assinaturas mensais quando o pagamento não é identificado no período
+  vigente (padrão 7).
+- `SUBSCRIPTION_GRACE_DAYS_ANNUAL`: quantidade de dias de tolerância aplicada
+  a assinaturas anuais (padrão 30).
+
+Os mesmos valores podem ser expostos para o frontend via Vite utilizando as
+variáveis `VITE_SUBSCRIPTION_TRIAL_DAYS`,
+`VITE_SUBSCRIPTION_GRACE_DAYS_MONTHLY` e
+`VITE_SUBSCRIPTION_GRACE_DAYS_FALLBACK`. Quando não forem definidos, o
+frontend seguirá os padrões do backend para estimar datas locais de vencimento.
 
 # Uploads de arquivos
 

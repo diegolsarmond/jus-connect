@@ -57,7 +57,9 @@ export const listTiposProcesso = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const areaAtuacao = normalizeAreaAtuacaoId(req.query.area_atuacao_id);
@@ -100,7 +102,7 @@ export const createTipoProcesso = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       return res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -153,7 +155,7 @@ export const updateTipoProcesso = async (req: Request, res: Response) => {
 
     if (empresaId === null) {
       return res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 

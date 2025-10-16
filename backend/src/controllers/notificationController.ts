@@ -620,7 +620,9 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query<DbIntimacaoRow>(

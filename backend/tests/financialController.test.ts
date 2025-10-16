@@ -7,6 +7,7 @@ process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
 type QueryCall = { text: string; values?: unknown[] };
 type QueryResponse = { rows: any[]; rowCount: number };
+type CreateAsaasClientFn = typeof import('../src/services/asaas/integrationResolver').createAsaasClient;
 
 let listFlows: typeof import('../src/controllers/financialController')['listFlows'];
 let createFlow: typeof import('../src/controllers/financialController')['createFlow'];
@@ -85,6 +86,7 @@ test.before(async () => {
     createFlow,
     updateFlow,
     settleFlow,
+    refundAsaasCharge,
     getAsaasChargeForFlow,
     listAsaasChargeStatus,
     __internal,
@@ -921,6 +923,44 @@ test('createFlow rejects missing contaId', async () => {
   assert.equal(connectMock.mock.callCount(), 0);
 });
 
+test('createFlow rejects user without linked empresa', async () => {
+  const contaId = 3;
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: null }], rowCount: 1 },
+  ]);
+
+  const connectMock = test.mock.method(Pool.prototype, 'connect', async () => {
+    throw new Error('connect should not be invoked when user lacks empresa');
+  });
+
+  const req = {
+    body: {
+      contaId,
+      tipo: 'receita',
+      descricao: 'Mensalidade',
+      valor: 120,
+      vencimento: '2024-07-01',
+    },
+    auth: { userId: 13 },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createFlow(req, res);
+  } finally {
+    restore();
+    connectMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 403);
+  assert.deepEqual(res.body, { error: 'Usuário não está vinculado a uma empresa.' });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.text ?? '', /FROM public\.usuarios WHERE id = \$1/);
+  assert.equal(connectMock.mock.callCount(), 0);
+});
+
 test('createFlow validates contaId ownership before inserting', async () => {
   const contaId = 5;
 
@@ -1305,14 +1345,13 @@ test('refundAsaasCharge refunds Asaas payment and updates records', async () => 
 
   const connectMock = test.mock.method(Pool.prototype, 'connect', async () => clientSetup.client as unknown as any);
 
-  const integrationModule = await import('../src/services/asaas/integrationResolver');
   const refundResponse = { id: 'refund_1', status: 'REFUNDED' };
-  const createClientMock = test.mock.method(integrationModule, 'createAsaasClient', async () => ({
-    refundCharge: test.mock.fn(async (chargeId: string) => {
-      assert.equal(chargeId, chargeRow.asaas_charge_id);
-      return refundResponse;
-    }),
-  }));
+  const refundChargeMock = test.mock.fn(async (chargeId: string) => {
+    assert.equal(chargeId, chargeRow.asaas_charge_id);
+    return refundResponse;
+  });
+  const createClientMock = test.mock.fn(async () => ({ refundCharge: refundChargeMock }));
+  __internal.setCreateAsaasClientImplementation(createClientMock as unknown as CreateAsaasClientFn);
 
   const req = {
     params: { id: String(flowRow.id) },
@@ -1327,7 +1366,7 @@ test('refundAsaasCharge refunds Asaas payment and updates records', async () => 
   } finally {
     restore();
     connectMock.mock.restore();
-    createClientMock.mock.restore();
+    __internal.resetCreateAsaasClientImplementation();
   }
 
   assert.equal(res.statusCode, 200);
@@ -1377,10 +1416,9 @@ test('refundAsaasCharge rejects charges not eligible for refund', async () => {
 
   const connectMock = test.mock.method(Pool.prototype, 'connect', async () => clientSetup.client as unknown as any);
 
-  const integrationModule = await import('../src/services/asaas/integrationResolver');
-  const createClientMock = test.mock.method(integrationModule, 'createAsaasClient', async () => ({
-    refundCharge: test.mock.fn(),
-  }));
+  const refundChargeMock = test.mock.fn();
+  const createClientMock = test.mock.fn(async () => ({ refundCharge: refundChargeMock }));
+  __internal.setCreateAsaasClientImplementation(createClientMock as unknown as CreateAsaasClientFn);
 
   const req = {
     params: { id: String(flowRow.id) },
@@ -1395,7 +1433,7 @@ test('refundAsaasCharge rejects charges not eligible for refund', async () => {
   } finally {
     restore();
     connectMock.mock.restore();
-    createClientMock.mock.restore();
+    __internal.resetCreateAsaasClientImplementation();
   }
 
   assert.equal(res.statusCode, 409);
@@ -1410,6 +1448,8 @@ test('refundAsaasCharge rejects charges not eligible for refund', async () => {
   assert.equal(clientSetup.calls[3]?.text, 'ROLLBACK');
   assert.equal(clientSetup.release.mock.callCount(), 1);
   assert.equal(createClientMock.mock.callCount(), 0);
+});
+
 test('getAsaasChargeForFlow returns 404 when there is no charge', async () => {
   const flowId = 88;
   const { restore } = setupQueryMock([{ rows: [], rowCount: 0 }]);

@@ -5,6 +5,7 @@ import {
   sanitizeModuleIds,
   sortModules,
 } from '../constants/modules';
+import { invalidateAllUserModulesCache } from '../middlewares/moduleAuthorization';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 
 const formatPerfilRow = (row: {
@@ -104,7 +105,9 @@ export const listPerfis = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(
@@ -157,7 +160,7 @@ export const createPerfil = async (req: Request, res: Response) => {
 
   if (empresaId === null) {
     return res
-      .status(400)
+      .status(403)
       .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
   }
 
@@ -194,6 +197,7 @@ export const createPerfil = async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
+    invalidateAllUserModulesCache();
 
     const persistedViewAll =
       perfil.view_all_conversations == null
@@ -262,6 +266,7 @@ export const updatePerfil = async (req: Request, res: Response) => {
     }
 
     await client.query('COMMIT');
+    invalidateAllUserModulesCache();
 
     const updated = result.rows[0] as {
       id: number;
@@ -313,6 +318,7 @@ export const deletePerfil = async (req: Request, res: Response) => {
     await client.query('DELETE FROM public.perfis WHERE id = $1', [parsedId]);
 
     await client.query('COMMIT');
+    invalidateAllUserModulesCache();
 
     res.status(204).send();
   } catch (error) {

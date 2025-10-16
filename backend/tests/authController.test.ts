@@ -4,6 +4,10 @@ import test from 'node:test';
 import type { Request, Response } from 'express';
 import { Pool } from 'pg';
 import { hashPassword } from '../src/utils/passwordUtils';
+import {
+  SUBSCRIPTION_DEFAULT_GRACE_DAYS,
+  SUBSCRIPTION_GRACE_DAYS_ANNUAL,
+} from '../src/constants/subscription';
 
 process.env.AUTH_TOKEN_SECRET ??= 'test-secret';
 
@@ -11,12 +15,25 @@ let register: typeof import('../src/controllers/authController')['register'];
 let login: typeof import('../src/controllers/authController')['login'];
 let changePassword: typeof import('../src/controllers/authController')['changePassword'];
 let confirmEmail: typeof import('../src/controllers/authController')['confirmEmail'];
+let setSendEmailConfirmationTokenForTests: typeof import('../src/controllers/authController')['__setSendEmailConfirmationTokenForTests'];
+let resetSendEmailConfirmationTokenForTests: typeof import('../src/controllers/authController')['__resetSendEmailConfirmationTokenForTests'];
+let setConfirmEmailWithTokenForTests: typeof import('../src/controllers/authController')['__setConfirmEmailWithTokenForTests'];
+let resetConfirmEmailWithTokenForTests: typeof import('../src/controllers/authController')['__resetConfirmEmailWithTokenForTests'];
 let emailConfirmationService: typeof import('../src/services/emailConfirmationService');
 
 const planModules = ['configuracoes', 'clientes', 'dashboard'];
 
 test.before(async () => {
-  ({ register, login, changePassword, confirmEmail } = await import('../src/controllers/authController'));
+  ({
+    register,
+    login,
+    changePassword,
+    confirmEmail,
+    __setSendEmailConfirmationTokenForTests: setSendEmailConfirmationTokenForTests,
+    __resetSendEmailConfirmationTokenForTests: resetSendEmailConfirmationTokenForTests,
+    __setConfirmEmailWithTokenForTests: setConfirmEmailWithTokenForTests,
+    __resetConfirmEmailWithTokenForTests: resetConfirmEmailWithTokenForTests,
+  } = await import('../src/controllers/authController'));
   emailConfirmationService = await import('../src/services/emailConfirmationService');
 });
 
@@ -45,7 +62,7 @@ type QueryResult = QueryResponse | Error;
 
 type QueryCall = { text: string; values?: unknown[] };
 
-const setupPoolQueryMock = (responses: QueryResponse[]) => {
+const setupPoolQueryMock = (responses: QueryResult[]) => {
   const calls: QueryCall[] = [];
 
   const mock = test.mock.method(
@@ -58,7 +75,13 @@ const setupPoolQueryMock = (responses: QueryResponse[]) => {
         throw new Error('Unexpected pool query invocation');
       }
 
-      return responses.shift()!;
+      const result = responses.shift()!;
+
+      if (result instanceof Error) {
+        throw result;
+      }
+
+      return result;
     }
   );
 
@@ -174,6 +197,7 @@ test('register creates company, profile and user atomically', async () => {
 const duplicateCheckResponses: QueryResponse[] = [
   { rows: [], rowCount: 0 },
   { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+  { rows: [], rowCount: 1 },
 ];
   const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock(
     duplicateCheckResponses
@@ -197,11 +221,27 @@ const duplicateCheckResponses: QueryResponse[] = [
           empresa: 42,
           status: true,
           telefone: '(11) 99999-0000',
+          welcome_email_pending: true,
           datacriacao: '2024-01-02T00:00:00.000Z',
         },
       ],
       rowCount: 1,
     },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 201 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 202 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 203 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
     { rows: [], rowCount: 1 },
   ];
 
@@ -209,11 +249,13 @@ const duplicateCheckResponses: QueryResponse[] = [
     clientResponses
   );
 
-  const sendEmailMock = test.mock.method(
-    emailConfirmationService,
-    'sendEmailConfirmationToken',
-    async () => {}
-  );
+  const sendEmailCalls: Parameters<
+    typeof emailConfirmationService.sendEmailConfirmationToken
+  >[0][] = [];
+
+  setSendEmailConfirmationTokenForTests(async (target) => {
+    sendEmailCalls.push(target);
+  });
 
   const req = {
     body: {
@@ -233,7 +275,7 @@ const duplicateCheckResponses: QueryResponse[] = [
   } finally {
     restoreConnect();
     restorePoolQuery();
-    sendEmailMock.mock.restore();
+    resetSendEmailConfirmationTokenForTests();
   }
 
   assert.equal(res.statusCode, 201);
@@ -247,7 +289,7 @@ const duplicateCheckResponses: QueryResponse[] = [
   };
 
   assert.equal(responseBody.requiresEmailConfirmation, true);
-  assert.match(responseBody.message, /Verifique seu e-mail/i);
+  assert.match(responseBody.message, /confirme o e-mail/i);
   assert.equal(responseBody.user.id, 123);
   assert.equal(responseBody.user.perfil, 99);
   assert.equal(responseBody.user.empresa, 42);
@@ -289,13 +331,15 @@ const duplicateCheckResponses: QueryResponse[] = [
   );
   assert.deepEqual(perfilModuloCall?.values?.[1], ['dashboard', 'clientes', 'configuracoes']);
 
-  assert.equal(poolCalls.length, 2);
+  assert.equal(poolCalls.length, 3);
   assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
   assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
   assert.deepEqual(poolCalls[1]?.values, [7]);
+  assert.match(poolCalls[2]?.text ?? '', /UPDATE public\.usuarios SET welcome_email_pending = FALSE/);
+  assert.deepEqual(poolCalls[2]?.values, [123]);
   assert.equal(wasReleased(), true);
-  assert.equal(sendEmailMock.mock.callCount(), 1);
-  const [confirmationArg] = sendEmailMock.mock.calls[0]?.arguments ?? [];
+  assert.equal(sendEmailCalls.length, 1);
+  const [confirmationArg] = sendEmailCalls;
   assert.deepEqual(confirmationArg, {
     id: 123,
     nome_completo: 'Alice Doe',
@@ -303,9 +347,224 @@ const duplicateCheckResponses: QueryResponse[] = [
   });
 });
 
+test('register retorna erro 500 quando envio do e-mail de confirmação falha', async () => {
+  const duplicateCheckResponses: QueryResponse[] = [
+    { rows: [], rowCount: 0 },
+    { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ];
+  const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock(
+    duplicateCheckResponses
+  );
+
+  const clientResponses: QueryResponse[] = [
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 7, modulos: planModules }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 42, nome_empresa: 'Acme Corp', plano: 7 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 99, nome: 'Administrador' }], rowCount: 1 },
+    { rows: [], rowCount: planModules.length },
+    {
+      rows: [
+        {
+          id: 123,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          perfil: 99,
+          empresa: 42,
+          status: true,
+          telefone: '(11) 99999-0000',
+          welcome_email_pending: true,
+          datacriacao: '2024-01-02T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 201 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 202 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 203 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ];
+
+  const { calls: clientCalls, restore: restoreConnect, wasReleased } = setupPoolConnectMock(
+    clientResponses
+  );
+
+  let sendEmailCalls = 0;
+
+  setSendEmailConfirmationTokenForTests(async () => {
+    sendEmailCalls += 1;
+    throw new Error('Falha ao enviar e-mail');
+  });
+
+  const req = {
+    body: {
+      name: 'Alice Doe',
+      email: 'alice@example.com',
+      company: 'Acme Corp',
+      password: 'SenhaSegura123',
+      planId: 7,
+      phone: '(11) 99999-0000',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await register(req, res);
+  } finally {
+    restoreConnect();
+    restorePoolQuery();
+    resetSendEmailConfirmationTokenForTests();
+  }
+
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body, {
+    error: 'Não foi possível enviar o e-mail de confirmação. Tente novamente.',
+  });
+
+  const beginCall = clientCalls[0];
+  assert.equal(beginCall?.text.trim().toUpperCase(), 'BEGIN');
+
+  const commitCall = clientCalls.find((call) => call.text.trim().toUpperCase() === 'COMMIT');
+  assert.ok(commitCall, 'expected COMMIT to be called');
+
+  assert.equal(poolCalls.length, 3);
+  assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
+  assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
+  assert.match(
+    poolCalls[2]?.text ?? '',
+    /UPDATE public\.usuarios SET welcome_email_pending = TRUE WHERE id = \$1/
+  );
+  assert.deepEqual(poolCalls[2]?.values, [123]);
+  assert.equal(wasReleased(), true);
+  assert.equal(sendEmailCalls, 1);
+});
+
+test('register mantém resposta de erro quando restauração do welcome_email_pending falha após erro no envio do e-mail', async () => {
+  const duplicateCheckResponses: QueryResult[] = [
+    { rows: [], rowCount: 0 },
+    { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+    new Error('Falha ao atualizar welcome_email_pending'),
+  ];
+  const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock(
+    duplicateCheckResponses
+  );
+
+  const clientResponses: QueryResponse[] = [
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 7, modulos: planModules }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 42, nome_empresa: 'Acme Corp', plano: 7 }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: 99, nome: 'Administrador' }], rowCount: 1 },
+    { rows: [], rowCount: planModules.length },
+    {
+      rows: [
+        {
+          id: 123,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          perfil: 99,
+          empresa: 42,
+          status: true,
+          telefone: '(11) 99999-0000',
+          welcome_email_pending: true,
+          datacriacao: '2024-01-02T00:00:00.000Z',
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 201 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 202 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 203 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ];
+
+  const { calls: clientCalls, restore: restoreConnect, wasReleased } = setupPoolConnectMock(
+    clientResponses
+  );
+
+  let sendEmailCalls = 0;
+
+  setSendEmailConfirmationTokenForTests(async () => {
+    sendEmailCalls += 1;
+    throw new Error('Falha ao enviar e-mail');
+  });
+
+  const req = {
+    body: {
+      name: 'Alice Doe',
+      email: 'alice@example.com',
+      company: 'Acme Corp',
+      password: 'SenhaSegura123',
+      planId: 7,
+      phone: '(11) 99999-0000',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await register(req, res);
+  } finally {
+    restoreConnect();
+    restorePoolQuery();
+    resetSendEmailConfirmationTokenForTests();
+  }
+
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body, {
+    error: 'Não foi possível enviar o e-mail de confirmação. Tente novamente.',
+  });
+
+  const beginCall = clientCalls[0];
+  assert.equal(beginCall?.text.trim().toUpperCase(), 'BEGIN');
+
+  const commitCall = clientCalls.find((call) => call.text.trim().toUpperCase() === 'COMMIT');
+  assert.ok(commitCall, 'expected COMMIT to be called');
+
+  const welcomePendingUpdate = poolCalls.find((call) =>
+    call.text.includes('UPDATE public.usuarios SET welcome_email_pending = TRUE')
+  );
+  assert.ok(welcomePendingUpdate, 'expected welcome_email_pending revert query to be executed');
+
+  assert.equal(poolCalls.length, 3);
+  assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
+  assert.match(poolCalls[1]?.text ?? '', /FROM public\.planos/i);
+  assert.equal(wasReleased(), true);
+  assert.equal(sendEmailCalls, 1);
+});
+
 test('register utiliza módulos padrão quando tabela de planos está ausente', async () => {
   const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock([
     { rows: [], rowCount: 0 },
+    { rows: [], rowCount: 1 },
   ]);
 
   const missingPlanosError = Object.assign(
@@ -342,6 +601,7 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
           empresa: 777,
           status: true,
           telefone: null,
+          welcome_email_pending: true,
           datacriacao: '2024-01-02T00:00:00.000Z',
         },
       ],
@@ -349,15 +609,33 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
     },
     { rows: [], rowCount: 1 },
 
+    { rows: [{ id: 301 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 302 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: 303 }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+
   ];
 
   const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
 
-  const sendEmailMock = test.mock.method(
-    emailConfirmationService,
-    'sendEmailConfirmationToken',
-    async () => {}
-  );
+  const sendEmailCalls: Parameters<
+    typeof emailConfirmationService.sendEmailConfirmationToken
+  >[0][] = [];
+
+  setSendEmailConfirmationTokenForTests(async (target) => {
+    sendEmailCalls.push(target);
+  });
 
   const req = {
     body: {
@@ -376,6 +654,7 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
   } finally {
     restoreConnect();
     restorePoolQuery();
+    resetSendEmailConfirmationTokenForTests();
   }
 
   assert.equal(res.statusCode, 201);
@@ -403,14 +682,18 @@ test('register utiliza módulos padrão quando tabela de planos está ausente', 
   assert.deepEqual(updateResponsavelCall?.values, [1234, 777]);
 
 
-  assert.equal(poolCalls.length, 1);
+  assert.equal(poolCalls.length, 2);
   assert.equal(poolCalls[0]?.text.includes('SELECT 1 FROM public.usuarios'), true);
+  assert.match(poolCalls[1]?.text ?? '', /UPDATE public\.usuarios SET welcome_email_pending = FALSE/);
+  assert.deepEqual(poolCalls[1]?.values, [1234]);
+  assert.equal(sendEmailCalls.length, 1);
 });
 
 test('register tolerates trailing spaces when matching existing company and profile', async () => {
-  const { restore: restorePoolQuery } = setupPoolQueryMock([
+  const { calls: poolCalls, restore: restorePoolQuery } = setupPoolQueryMock([
     { rows: [], rowCount: 0 },
     { rows: [{ valor_mensal: '199.90', valor_anual: '999.90' }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
   ]);
 
   const clientResponses: QueryResponse[] = [
@@ -430,6 +713,7 @@ test('register tolerates trailing spaces when matching existing company and prof
           empresa: 42,
           status: true,
           telefone: null,
+          welcome_email_pending: true,
           datacriacao: '2024-01-02T00:00:00.000Z',
         },
       ],
@@ -438,6 +722,14 @@ test('register tolerates trailing spaces when matching existing company and prof
   ];
 
   const { calls: clientCalls, restore: restoreConnect } = setupPoolConnectMock(clientResponses);
+
+  const sendEmailCalls: Parameters<
+    typeof emailConfirmationService.sendEmailConfirmationToken
+  >[0][] = [];
+
+  setSendEmailConfirmationTokenForTests(async (target) => {
+    sendEmailCalls.push(target);
+  });
 
   const req = {
     body: {
@@ -456,7 +748,7 @@ test('register tolerates trailing spaces when matching existing company and prof
   } finally {
     restoreConnect();
     restorePoolQuery();
-    sendEmailMock.mock.restore();
+    resetSendEmailConfirmationTokenForTests();
   }
 
   assert.equal(res.statusCode, 201);
@@ -469,7 +761,7 @@ test('register tolerates trailing spaces when matching existing company and prof
   };
 
   assert.equal(responseBody.requiresEmailConfirmation, true);
-  assert.match(responseBody.message, /Verifique seu e-mail/i);
+  assert.match(responseBody.message, /confirme o e-mail/i);
   assert.equal(responseBody.empresa.nome, 'Acme Corp');
   assert.equal(responseBody.perfil.nome, 'Administrador');
 
@@ -486,7 +778,10 @@ test('register tolerates trailing spaces when matching existing company and prof
 
   const perfilInsertCall = clientCalls.find((call) => call.text.includes('INSERT INTO public.perfis'));
   assert.equal(perfilInsertCall, undefined);
-  assert.equal(sendEmailMock.mock.callCount(), 1);
+  assert.equal(sendEmailCalls.length, 1);
+  assert.equal(poolCalls.length, 3);
+  assert.match(poolCalls[2]?.text ?? '', /UPDATE public\.usuarios SET welcome_email_pending = FALSE/);
+  assert.deepEqual(poolCalls[2]?.values, [555]);
 });
 
 test('register returns 409 when email already exists', async () => {
@@ -528,7 +823,9 @@ test('login succeeds when subscription is active', async () => {
   const now = Date.now();
   const trialEndsAt = new Date(now + 3 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -612,6 +909,84 @@ test('login succeeds when subscription is active', async () => {
   assert.equal(payload.user?.subscription?.gracePeriodEndsAt, gracePeriodEndsAt.toISOString());
   assert.equal(payload.user?.subscription?.isInGoodStanding, true);
   assert.equal(payload.user?.mustChangePassword, false);
+});
+
+test('login synthesizes annual grace period when not persisted', async () => {
+  const password = 'SenhaSegura123';
+  const hashedPassword = await hashPassword(password);
+  const now = Date.now();
+  const currentPeriodEndsAt = new Date(now + 15 * 24 * 60 * 60 * 1000);
+  const expectedGracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_GRACE_DAYS_ANNUAL * 24 * 60 * 60 * 1000,
+  );
+
+  const { restore: restorePoolQuery } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 88,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          senha: hashedPassword,
+          must_change_password: false,
+          email_confirmed_at: new Date(now - 60 * 60 * 1000).toISOString(),
+          status: true,
+          perfil: 22,
+          empresa_id: 30,
+          empresa_nome: 'Acme Corp',
+          setor_id: 11,
+          setor_nome: 'Financeiro',
+          empresa_plano: 8,
+          empresa_ativo: true,
+          empresa_datacadastro: new Date(now - 45 * 24 * 60 * 60 * 1000).toISOString(),
+          empresa_trial_ends_at: null,
+          empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
+          empresa_grace_period_ends_at: null,
+          empresa_subscription_cadence: 'annual',
+        },
+      ],
+      rowCount: 1,
+    },
+    {
+      rows: [],
+      rowCount: 0,
+    },
+    {
+      rows: planModules.map((modulo) => ({ modulo })),
+      rowCount: planModules.length,
+    },
+  ]);
+
+  const req = {
+    body: {
+      email: 'alice@example.com',
+      senha: password,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await login(req, res);
+  } finally {
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body && typeof res.body === 'object');
+
+  const payload = res.body as {
+    user?: {
+      subscription?: {
+        gracePeriodEndsAt?: string | null;
+      };
+    };
+  };
+
+  assert.equal(
+    payload.user?.subscription?.gracePeriodEndsAt,
+    expectedGracePeriodEndsAt.toISOString(),
+  );
 });
 
 test('login rejects when user is inactive', async () => {
@@ -765,7 +1140,9 @@ test('login rejects with payment required once grace period expires', async () =
   const hashedPassword = await hashPassword(password);
   const now = Date.now();
   const currentPeriodEndsAt = new Date(now - 12 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -812,8 +1189,7 @@ test('login rejects with payment required once grace period expires', async () =
 
   assert.equal(res.statusCode, 402);
   assert.deepEqual(res.body, {
-    error:
-      'Assinatura expirada após o período de tolerância de 10 dias. Regularize o pagamento para continuar.',
+    error: `Assinatura expirada após o período de tolerância de ${SUBSCRIPTION_DEFAULT_GRACE_DAYS} dias. Regularize o pagamento para continuar.`,
   });
   assert.equal('token' in (res.body as Record<string, unknown>), false);
 });
@@ -826,7 +1202,9 @@ test('login migrates legacy sha256 hashes to argon2 format', async () => {
   const now = Date.now();
   const trialEndsAt = new Date(now + 3 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { calls, restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -901,7 +1279,9 @@ test('login migrates plain text passwords to argon2 format', async () => {
   const now = Date.now();
   const trialEndsAt = new Date(now + 5 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 35 * 24 * 60 * 60 * 1000);
-  const gracePeriodEndsAt = new Date(currentPeriodEndsAt.getTime() + 10 * 24 * 60 * 60 * 1000);
+  const gracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_DEFAULT_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const { calls, restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -966,14 +1346,10 @@ test('login migrates plain text passwords to argon2 format', async () => {
 });
 
 test('confirmEmail returns success when token is valid', async () => {
-  const confirmMock = test.mock.method(
-    emailConfirmationService,
-    'confirmEmailWithToken',
-    async () => ({
-      userId: 99,
-      confirmedAt: new Date('2024-01-02T10:00:00.000Z'),
-    })
-  );
+  setConfirmEmailWithTokenForTests(async () => ({
+    userId: 99,
+    confirmedAt: new Date('2024-01-02T10:00:00.000Z'),
+  }));
 
   const req = { body: { token: 'abc123' } } as unknown as Request;
   const res = createMockResponse();
@@ -981,7 +1357,7 @@ test('confirmEmail returns success when token is valid', async () => {
   try {
     await confirmEmail(req, res);
   } finally {
-    confirmMock.mock.restore();
+    resetConfirmEmailWithTokenForTests();
   }
 
   assert.equal(res.statusCode, 200);
@@ -992,16 +1368,12 @@ test('confirmEmail returns success when token is valid', async () => {
 });
 
 test('confirmEmail handles expired tokens', async () => {
-  const confirmMock = test.mock.method(
-    emailConfirmationService,
-    'confirmEmailWithToken',
-    async () => {
-      throw new emailConfirmationService.EmailConfirmationTokenError(
-        'Token expirado',
-        'TOKEN_EXPIRED'
-      );
-    }
-  );
+  setConfirmEmailWithTokenForTests(async () => {
+    throw new emailConfirmationService.EmailConfirmationTokenError(
+      'Token expirado',
+      'TOKEN_EXPIRED'
+    );
+  });
 
   const req = { body: { token: 'expired-token' } } as unknown as Request;
   const res = createMockResponse();
@@ -1009,7 +1381,7 @@ test('confirmEmail handles expired tokens', async () => {
   try {
     await confirmEmail(req, res);
   } finally {
-    confirmMock.mock.restore();
+    resetConfirmEmailWithTokenForTests();
   }
 
   assert.equal(res.statusCode, 400);

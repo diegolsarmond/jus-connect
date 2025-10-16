@@ -23,7 +23,9 @@ export const listIntimacoesHandler = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(
@@ -93,7 +95,9 @@ export const archiveIntimacaoHandler = async (req: Request, res: Response) => {
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const result = await pool.query(
@@ -140,7 +144,9 @@ export const markIntimacaoAsReadHandler = async (req: Request, res: Response) =>
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const usuarioId = Number(req.auth.userId);
@@ -262,7 +268,9 @@ export const listIntimacaoOabMonitoradasHandler = async (req: Request, res: Resp
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.json([]);
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const monitors = await listIntimacaoOabMonitors(empresaId);
@@ -291,7 +299,7 @@ export const createIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
 
     if (empresaId === null) {
       return res
-        .status(400)
+        .status(403)
         .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
@@ -374,7 +382,9 @@ export const deleteIntimacaoOabMonitoradaHandler = async (req: Request, res: Res
     const { empresaId } = empresaLookup;
 
     if (empresaId === null) {
-      return res.status(404).json({ error: 'Empresa não encontrada para o usuário autenticado.' });
+      return res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     }
 
     const deleted = await deleteIntimacaoOabMonitor(empresaId, monitorId);

@@ -4,6 +4,32 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Plus } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+
+const forbiddenMessage = "Usuário autenticado não possui empresa vinculada.";
+
+async function getForbiddenMessage(response: Response): Promise<string> {
+  try {
+    const data = await response.json();
+    if (typeof data === "string") {
+      const trimmed = data.trim();
+      return trimmed || forbiddenMessage;
+    }
+    if (data && typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      const keys = ["message", "mensagem", "error", "detail"];
+      for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+    }
+  } catch {
+    return forbiddenMessage;
+  }
+  return forbiddenMessage;
+}
 
 interface MenuItem {
   id: string;
@@ -14,6 +40,7 @@ export default function PipelineMenu() {
   const apiUrl = getApiBaseUrl();
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchMenus = async () => {
@@ -21,6 +48,12 @@ export default function PipelineMenu() {
         const res = await fetch(`${apiUrl}/api/fluxos-trabalho/menus`, {
           headers: { Accept: "application/json" },
         });
+        if (res.status === 403) {
+          setMenus([]);
+          const description = await getForbiddenMessage(res);
+          toast({ title: "Acesso negado", description, variant: "destructive" });
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const data = await res.json();
         type MenuApiItem = { id: number | string; nome?: string };

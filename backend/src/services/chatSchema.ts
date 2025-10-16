@@ -84,6 +84,10 @@ async function executeSchema(client: Queryable): Promise<void> {
 }
 
 export async function ensureChatSchema(client: Queryable = pool): Promise<void> {
+  if (process.env.SKIP_CHAT_SCHEMA === 'true') {
+    return;
+  }
+
   if (!initializationPromise) {
     initializationPromise = (async () => {
       if (!(await ensureDependencies(client))) {

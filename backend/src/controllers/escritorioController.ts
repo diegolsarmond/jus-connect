@@ -32,7 +32,7 @@ const ensureAuthenticatedEmpresaId = async (
 
   if (empresaId === null) {
     res
-      .status(400)
+      .status(403)
       .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
     return undefined;
   }
@@ -48,7 +48,9 @@ export const listEscritorios = async (req: Request, res: Response) => {
     }
 
     if (empresaId === null) {
-      res.json([]);
+      res
+        .status(403)
+        .json({ error: 'Usuário autenticado não possui empresa vinculada.' });
       return;
     }
 

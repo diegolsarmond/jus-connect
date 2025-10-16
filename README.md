@@ -21,6 +21,13 @@ antes de executar `npm run dev` ou publicar o serviço. Em ambientes de contêin
 variável na orquestração (Compose, Kubernetes, etc.) para evitar subir instâncias com segredos
 padrão.
 
+### Limite padrão de payloads JSON
+
+As rotas autenticadas agora utilizam limite padrão de 1 MB para requisições JSON e `application/x-www-form-urlencoded`.
+Os endpoints `POST /api/support/:id/messages` e `POST /api/clientes/:clienteId/documentos` continuam aceitando
+cargas de até 50 MB por receberem anexos em Base64. Ajuste integrações que enviam arquivos em JSON para utilizar
+os caminhos dedicados ou o fluxo de upload multipart (`POST /api/uploads`).
+
 ### Integração com notificações do PJE
 
 Para habilitar o agendamento automático de webhooks com o PJE, defina as
@@ -135,7 +142,7 @@ Para que o fluxo de confirmação de cadastro funcione, defina as credenciais do
 | `SMTP_SECURE`               | Informe `true` quando o servidor exige TLS direto na conexão (porta 465). Para STARTTLS utilize `false`. |
 | `SMTP_REJECT_UNAUTHORIZED`  | Mantenha `true` para validar o certificado. Ajuste para `false` apenas em ambientes de teste com certificados autoassinados. |
 | `SMTP_USER` e `SMTP_PASSWORD` | Credenciais válidas no servidor SMTP. |
-| `SMTP_FROM`                 | Endereço remetente padrão (deve corresponder a um endereço autorizado pelo servidor). |
+| `SMTP_FROM`                 | **Obrigatório.** Endereço remetente padrão (deve corresponder a um endereço autorizado pelo servidor). |
 | `SMTP_FROM_NAME`            | Nome exibido no remetente dos e-mails (opcional). |
 
 > 💡 Defina as mesmas chaves no ambiente de build do frontend caso ele consuma endpoints intermediários (`VITE_API_URL`).

@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Request, Response } from 'express';
 import pool from '../src/services/db';
-import * as authUserModule from '../src/utils/authUser';
-import * as planLimitsServiceModule from '../src/services/planLimitsService';
 
 process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/testdb';
 
@@ -37,7 +35,7 @@ test('createCliente enforces plan customer limits before insertion', async () =>
     auth: { userId: 501 },
     body: {
       nome: 'Empresa Teste',
-      tipo: 'PF',
+      tipo: 'F',
       documento: '123.456.789-00',
       email: 'cliente@example.com',
       telefone: '(11) 91234-5678',
@@ -54,31 +52,47 @@ test('createCliente enforces plan customer limits before insertion', async () =>
 
   const res = createMockResponse();
 
-  const authMock = test.mock.method(
-    authUserModule,
-    'fetchAuthenticatedUserEmpresa',
-    async () => ({ success: true, empresaId: 77 })
+  let callIndex = 0;
+  const poolMock = test.mock.method(
+    pool,
+    'query',
+    async () => {
+      callIndex += 1;
+      if (callIndex === 1) {
+        return {
+          rowCount: 1,
+          rows: [{ empresa: 77 }],
+        };
+      }
+
+      if (callIndex === 2) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              limite_usuarios: null,
+              limite_processos: null,
+              limite_propostas: null,
+              limite_clientes: 2,
+              limite_advogados_processos: null,
+              limite_advogados_intimacao: null,
+              sincronizacao_processos_habilitada: null,
+              sincronizacao_processos_cota: null,
+            },
+          ],
+        };
+      }
+
+      if (callIndex === 3) {
+        return {
+          rowCount: 1,
+          rows: [{ total: 2 }],
+        };
+      }
+
+      throw new Error('query should not be executed when limit is reached');
+    }
   );
-  const planLimitsMock = test.mock.method(
-    planLimitsServiceModule,
-    'fetchPlanLimitsForCompany',
-    async () => ({
-      limiteUsuarios: null,
-      limiteProcessos: null,
-      limitePropostas: null,
-      limiteClientes: 2,
-      sincronizacaoProcessosHabilitada: null,
-      sincronizacaoProcessosCota: null,
-    })
-  );
-  const countMock = test.mock.method(
-    planLimitsServiceModule,
-    'countCompanyResource',
-    async () => 2
-  );
-  const poolMock = test.mock.method(pool, 'query', async () => {
-    throw new Error('query should not be executed when limit is reached');
-  });
 
   try {
     await createCliente(req, res);
@@ -87,16 +101,49 @@ test('createCliente enforces plan customer limits before insertion', async () =>
     assert.deepEqual(res.body, {
       error: 'Limite de clientes do plano atingido.',
     });
-    assert.equal(planLimitsMock.mock.callCount(), 1);
-    assert.equal(countMock.mock.callCount(), 1);
-    const countCall = countMock.mock.calls[0];
-    assert.equal(countCall?.arguments[0], 77);
-    assert.equal(countCall?.arguments[1], 'clientes');
-    assert.equal(poolMock.mock.callCount(), 0);
+    assert.equal(poolMock.mock.callCount(), 3);
   } finally {
-    authMock.mock.restore();
-    planLimitsMock.mock.restore();
-    countMock.mock.restore();
+    poolMock.mock.restore();
+  }
+});
+
+test('createCliente retorna 403 quando usuário não possui empresa', async () => {
+  const req = {
+    auth: { userId: 502 },
+    body: {
+      nome: 'Cliente Sem Empresa',
+      tipo: 'PF',
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  let callIndex = 0;
+  const poolMock = test.mock.method(
+    pool,
+    'query',
+    async () => {
+      callIndex += 1;
+      if (callIndex === 1) {
+        return {
+          rowCount: 1,
+          rows: [{ empresa: null }],
+        };
+      }
+
+      throw new Error('Query não deve ser executada quando empresaId é nulo');
+    }
+  );
+
+  try {
+    await createCliente(req, res);
+
+    assert.equal(res.statusCode, 403);
+    assert.deepEqual(res.body, {
+      error: 'Usuário autenticado não possui empresa vinculada.',
+    });
+    assert.equal(poolMock.mock.callCount(), 1);
+  } finally {
     poolMock.mock.restore();
   }
 });
