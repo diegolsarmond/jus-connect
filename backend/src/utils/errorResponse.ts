@@ -23,7 +23,8 @@ export const resolveErrorMessage = (
   options: ResolveErrorMessageOptions = {}
 ): string => {
   const message = extractErrorMessage(error);
-  const normalizedFallback = fallback && fallback.trim() ? fallback : 'Internal server error';
+  const normalizedFallback =
+    fallback && fallback.trim() ? fallback : 'Erro interno do servidor.';
 
   if (options.expose) {
     return message ?? normalizedFallback;

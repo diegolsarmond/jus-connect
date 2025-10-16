@@ -7,7 +7,7 @@ export const listTags = async (_req: Request, res: Response) => {
     res.json(tags);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -18,7 +18,7 @@ export const createTag = async (req: Request, res: Response) => {
     res.status(201).json(tag);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -31,7 +31,7 @@ export const updateTag = async (req: Request, res: Response) => {
     res.json(tag);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -43,6 +43,6 @@ export const deleteTag = async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };

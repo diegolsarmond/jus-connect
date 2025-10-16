@@ -4371,9 +4371,14 @@ export default function Processos() {
                         Monitore os processos em andamento, acompanhe movimentações internas e identifique prioridades com mais clareza.
                     </p>
                 </div>
-                <Button onClick={handleCreateButtonClick} className="self-start">
-                    Cadastrar processo
-                </Button>
+                <div className="flex flex-col gap-2 self-start sm:flex-row">
+                    <Button variant="outline" onClick={handleOpenOabModal} className="self-start sm:self-auto">
+                        Gerenciar OABs
+                    </Button>
+                    <Button onClick={handleCreateButtonClick} className="self-start sm:self-auto">
+                        Cadastrar processo
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -4460,36 +4465,6 @@ export default function Processos() {
                     </Button>
                 </div>
             ) : null}
-
-            <Card className="border-border/60 bg-card/60 shadow-sm">
-                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
-                        <CardTitle className="text-lg">OABs monitoradas</CardTitle>
-                    </div>
-
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                        <p className="text-sm text-muted-foreground">
-                            Mantenha suas OABs cadastradas para monitorar e importar processos automaticamente.
-                        </p>
-                        {oabMonitorsError ? (
-                            <p className="text-sm text-destructive">{oabMonitorsError}</p>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                {oabMonitorsLoading && oabMonitors.length === 0
-                                    ? "Carregando OABs monitoradas..."
-                                    : `Total de OABs monitoradas: ${oabMonitors.length}`}
-                            </p>
-                        )}
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Button variant="outline" size="sm" onClick={handleOpenOabModal}>
-                            Gerenciar OABs
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
 
             <Card className="border-border/60 bg-card/60 shadow-sm">
                 <CardHeader className="flex flex-col gap-2 pb-0 sm:flex-row sm:items-end sm:justify-between">

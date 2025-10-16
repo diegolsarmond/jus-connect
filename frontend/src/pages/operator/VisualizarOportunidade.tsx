@@ -82,6 +82,7 @@ import {
 } from "lucide-react";
 import { createSimplePdfFromHtml } from "@/lib/pdf";
 import { createDocxBlobFromHtml } from "@/lib/docx";
+import styles from "./VisualizarOportunidade.module.css";
 
 interface Envolvido {
   nome?: string;
@@ -558,9 +559,9 @@ export default function VisualizarOportunidade() {
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [documentPreview, setDocumentPreview] = useState<OpportunityDocument | null>(null);
-  const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null);
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
+  const [documentPreviewHtml, setDocumentPreviewHtml] = useState<string | null>(null);
   const [documentActionState, setDocumentActionState] = useState<
     { id: number; type: "download-pdf" | "download-docx" | "open" } | null
   >(null);
@@ -602,6 +603,7 @@ export default function VisualizarOportunidade() {
     observacoes: "",
     selectedInstallmentIds: [],
   }));
+  const [isPrintMode, setIsPrintMode] = useState(false);
 
   const interactionStorageKey = useMemo(
     () => (id ? `opportunity-interactions:${id}` : null),
@@ -859,7 +861,7 @@ export default function VisualizarOportunidade() {
 
     if (documentPreview && !validIds.has(documentPreview.id)) {
       setDocumentPreview(null);
-      setDocumentPreviewUrl(null);
+      setDocumentPreviewHtml(null);
     }
   }, [documents, documentPreview]);
 
@@ -1728,6 +1730,20 @@ export default function VisualizarOportunidade() {
     return () => clearTimeout(t);
   }, [snack.open]);
 
+  useEffect(() => {
+    if (!isPrintMode) return;
+    if (typeof window === "undefined") return;
+
+    const handleAfterPrint = () => {
+      setIsPrintMode(false);
+    };
+
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, [isPrintMode]);
+
   const onEdit = () => {
     navigate(`/pipeline/editar-oportunidade/${id}`);
   };
@@ -1737,7 +1753,13 @@ export default function VisualizarOportunidade() {
     setSnack({ open: true, message: "Excluído (stub)" });
     console.log("Excluir", opportunity?.id);
   };
-  const onPrint = () => window.print();
+  const onPrint = () => {
+    if (typeof window === "undefined") return;
+    setIsPrintMode(true);
+    setTimeout(() => {
+      window.print();
+    }, 0);
+  };
 
   const onCreateTask = () => {
     navigate(`/tarefas?oportunidade=${id}`);
@@ -2471,34 +2493,28 @@ export default function VisualizarOportunidade() {
 
   const closeDocumentPreview = () => {
     setDocumentPreview(null);
-    setDocumentPreviewUrl(null);
     setDocumentPreviewError(null);
     setDocumentPreviewLoading(false);
+    setDocumentPreviewHtml(null);
   };
 
-  const handleViewDocument = async (doc: OpportunityDocument) => {
+  const handleViewDocument = (doc: OpportunityDocument) => {
     setDocumentPreview(doc);
-    setDocumentPreviewUrl(null);
-    setDocumentPreviewError(null);
-    setDocumentPreviewLoading(true);
+    setDocumentPreviewLoading(false);
 
-    try {
-      const cached = documentPdfUrlsRef.current.get(doc.id);
-      if (cached) {
-        setDocumentPreviewUrl(cached);
-        setDocumentPreviewLoading(false);
-        return;
-      }
+    const html =
+      doc.content_html && doc.content_html.trim().length > 0
+        ? doc.content_html
+        : null;
 
-      const url = await ensurePdfUrl(doc);
-      setDocumentPreviewUrl(url);
-    } catch (error) {
-      console.error(error);
-      setDocumentPreviewError("Erro ao gerar PDF do documento");
-      setSnack({ open: true, message: "Erro ao gerar PDF do documento" });
-    } finally {
-      setDocumentPreviewLoading(false);
+    if (!html) {
+      setDocumentPreviewError("Conteúdo do documento indisponível para visualização");
+      setDocumentPreviewHtml(null);
+      return;
     }
+
+    setDocumentPreviewError(null);
+    setDocumentPreviewHtml(html);
   };
 
   const handleDownloadDocument = async (
@@ -2900,17 +2916,22 @@ export default function VisualizarOportunidade() {
   const headerTitle = opportunity.title ?? `Proposta #${proposalNumber}`;
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      {/* Header / ações (REMOVIDO Duplicar) */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Visualizar Proposta</h1>
-          <p className="text-muted-foreground">Detalhes completos da proposta</p>
-        </div>
+    <div
+      className={`${styles.printWrapper} ${isPrintMode ? styles.printActive : ""}`}
+    >
+      <div className={`p-4 sm:p-6 space-y-6 ${styles.printArea}`}>
+        {/* Header / ações (REMOVIDO Duplicar) */}
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold">Visualizar Proposta</h1>
+            <p className="text-muted-foreground">Detalhes completos da proposta</p>
+          </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <div
+            className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end ${styles.printHidden}`}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 className="w-full sm:w-auto"
@@ -2958,7 +2979,7 @@ export default function VisualizarOportunidade() {
         </div>
       </div>
 
-      <Card className="overflow-hidden">
+      <Card className={`overflow-hidden ${styles.printCard}`}>
         <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
             <div className="flex flex-col gap-2">
@@ -3017,7 +3038,7 @@ export default function VisualizarOportunidade() {
         </CardHeader>
 
         <CardContent>
-          <ScrollArea className="max-h-none">
+          <ScrollArea className={`max-h-none ${styles.printScroll}`}>
             <div className="space-y-6">
               {/* percorre as seções definidas e exibe apenas campos que existam */}
               {renderDataSection("fluxo")}
@@ -3483,7 +3504,9 @@ export default function VisualizarOportunidade() {
         </CardContent>
       </Card>
 
-      <div className="mt-6 flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
+      <div
+        className={`mt-6 flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-start sm:justify-between ${styles.printFooter}`}
+      >
         <div className="space-y-1 text-sm text-muted-foreground">
           {footerInfoLines.map((line, index) => (
             <p key={`${line}-${index}`}>{line}</p>
@@ -3493,7 +3516,7 @@ export default function VisualizarOportunidade() {
             <p>Revise ou exporte a proposta conforme necessário.</p>
           )}
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className={`flex flex-wrap justify-end gap-2 ${styles.printHidden}`}>
           <Button
             className="w-full sm:w-auto"
             variant="outline"
@@ -3514,7 +3537,7 @@ export default function VisualizarOportunidade() {
       </div>
 
       {/* snackbar / feedback simples com auto-close */}
-      {snack.open && (
+      {!isPrintMode && snack.open && (
         <div
           role="status"
           aria-live="polite"
@@ -3545,28 +3568,32 @@ export default function VisualizarOportunidade() {
           <DialogHeader>
             <DialogTitle>{documentPreview?.title ?? "Documento"}</DialogTitle>
             <DialogDescription>
-              Visualização do documento em PDF. Faça o download ou abra em uma nova aba para compartilhar.
+              Visualização do conteúdo formatado. Utilize as ações abaixo para baixar ou compartilhar.
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-[400px] rounded-lg border border-border/60 bg-muted/20 p-2">
             {documentPreviewLoading ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Gerando PDF do documento...
+                Carregando visualização do documento...
               </div>
-            ) : documentPreviewError ? (
-              <p className="p-4 text-sm text-destructive">{documentPreviewError}</p>
-            ) : documentPreviewUrl ? (
-              <iframe
-                title={`Documento ${documentPreview?.title ?? documentPreview?.id ?? ""}`}
-                src={documentPreviewUrl}
-                className="h-[70vh] w-full rounded-md bg-white"
-              />
             ) : (
-              <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-muted-foreground">
-                  Pré-visualização indisponível.
-                </p>
+              <div className="max-h-[70vh] overflow-y-auto rounded-md bg-background p-4">
+                {documentPreviewError && (
+                  <p className="mb-4 text-sm text-destructive">{documentPreviewError}</p>
+                )}
+                {documentPreviewHtml ? (
+                  <div
+                    className="wysiwyg-editor"
+                    dangerouslySetInnerHTML={{ __html: documentPreviewHtml }}
+                  />
+                ) : (
+                  <div className="flex h-full min-h-[200px] items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                      Pré-visualização indisponível.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -4276,6 +4303,7 @@ export default function VisualizarOportunidade() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

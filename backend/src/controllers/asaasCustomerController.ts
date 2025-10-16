@@ -66,7 +66,7 @@ export const getAsaasCustomerStatus = async (req: Request, res: Response) => {
     return res.json(status);
   } catch (error) {
     console.error('Falha ao recuperar status do cliente Asaas:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };
 
@@ -143,6 +143,6 @@ export const syncAsaasCustomerNow = async (req: Request, res: Response) => {
     return res.json(status);
   } catch (error) {
     console.error('Falha ao sincronizar cliente com o Asaas imediatamente:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 };

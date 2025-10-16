@@ -1,0 +1,77 @@
+.printWrapper {
+  width: 100%;
+}
+
+.printArea {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.printHidden {
+}
+
+.printCard {
+  transition: box-shadow 0.2s ease;
+}
+
+.printScroll {
+  width: 100%;
+}
+
+.printFooter {
+  width: 100%;
+}
+
+.printActive {
+  background: #fff;
+}
+
+.printActive .printHidden {
+  display: none;
+}
+
+.printActive .printCard {
+  box-shadow: none;
+}
+
+@media print {
+  :global(body) {
+    background: #ffffff !important;
+  }
+
+  .printWrapper {
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .printArea {
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 1.5rem !important;
+  }
+
+  .printCard {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .printScroll {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .printHidden {
+    display: none !important;
+  }
+
+  .printFooter {
+    margin-top: 24px !important;
+    padding-top: 16px !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+  }
+
+  @page {
+    margin: 20mm;
+  }
+}
