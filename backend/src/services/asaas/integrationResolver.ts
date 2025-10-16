@@ -17,6 +17,7 @@ export interface AsaasIntegration {
   environment: AsaasEnvironment;
   integrationId: number;
   credentialId: number | null;
+  isGlobal: boolean;
 }
 
 export class AsaasIntegrationNotConfiguredError extends Error {
@@ -34,6 +35,8 @@ interface IntegrationRow {
   environment: string | null;
   active: boolean;
   credential_id: number | null;
+  global: unknown;
+  idempresa: unknown;
 }
 
 function resolveBooleanEnv(name: string, fallback: boolean): boolean {
@@ -70,6 +73,33 @@ function assertValidEmpresaId(empresaId: number): asserts empresaId is number {
   }
 }
 
+function isTruthy(value: unknown): boolean {
+  if (value === true) {
+    return true;
+  }
+  if (value === false) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', 't', '1', 'yes', 'y'].includes(normalized)) {
+      return true;
+    }
+    if (['false', 'f', '0', 'no', 'n'].includes(normalized)) {
+      return false;
+    }
+  }
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+  }
+  return false;
+}
+
 const PROVIDER_FILTER = 'asaas';
 
 export type IntegrationScopePreference = 'company-first' | 'global-first';
@@ -97,7 +127,7 @@ async function findScopedIntegration(
     where.push('i.environment = $3');
   }
 
-  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id
+  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id, i.global, i.idempresa
        FROM integration_api_keys i
        LEFT JOIN asaas_credentials c ON c.integration_api_key_id = i.id
        WHERE ${where.join('\n         AND ')}
@@ -127,7 +157,7 @@ async function findLegacyIntegration(
     where.push('i.environment = $2');
   }
 
-  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id
+  const query = `SELECT i.id, i.provider, i.url_api, i.key_value, i.environment, i.active, c.id AS credential_id, i.global, i.idempresa
          FROM integration_api_keys i
          LEFT JOIN asaas_credentials c ON c.integration_api_key_id = i.id
          WHERE ${where.join('\n           AND ')}
@@ -200,6 +230,7 @@ export async function resolveAsaasIntegration(
   const resolvedEnvironment = normalizeAsaasEnvironment(row.environment);
   const baseUrl = normalizeAsaasBaseUrl(resolvedEnvironment, row.url_api);
   const accessToken = normalizeToken(row.key_value);
+  const isGlobal = isTruthy(row.global);
 
   const rawCredentialId = row.credential_id as unknown;
   let credentialId: number | null = null;
@@ -219,6 +250,7 @@ export async function resolveAsaasIntegration(
     environment: resolvedEnvironment,
     integrationId: row.id,
     credentialId,
+    isGlobal,
   };
 }
 

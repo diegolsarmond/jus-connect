@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import pool from '../services/db';
 import { fetchAuthenticatedUserEmpresa } from '../utils/authUser';
 import { buildErrorResponse } from '../utils/errorResponse';
-import resolveAsaasIntegration, {
+import {
+  resolveAsaasIntegration,
   AsaasIntegrationNotConfiguredError,
 } from '../services/asaas/integrationResolver';
 import AsaasClient, { AsaasApiError, CustomerPayload } from '../services/asaas/asaasClient';
@@ -328,6 +329,21 @@ function resolveDueDate(billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD' | 'DEBIT_C
 
 function isValidUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+const PAID_CHARGE_STATUSES = new Set(['RECEIVED', 'RECEIVED_IN_CASH', 'RECEIVED_PARTIALLY', 'CONFIRMED']);
+
+function isChargePaid(status: unknown): boolean {
+  if (typeof status !== 'string') {
+    return false;
+  }
+
+  const normalized = status.trim().toUpperCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return PAID_CHARGE_STATUSES.has(normalized);
 }
 
 async function resolvePlanPaymentAccountId(): Promise<string | null> {
@@ -707,24 +723,31 @@ export const createPlanPayment = async (req: Request, res: Response) => {
       ? calculateGraceDeadline(resolvedCurrentPeriodEnd, resolvedCadence)
       : null);
 
+  const shouldAwaitConfirmation =
+    billingType === 'PIX' || billingType === 'BOLETO' || billingType === 'CREDIT_CARD' || billingType === 'DEBIT_CARD';
+  const initialSubscriptionStatus = shouldAwaitConfirmation ? 'pending' : 'active';
+  const initialActiveFlag = initialSubscriptionStatus === 'active';
+
   const updateResult = await pool.query(
     `UPDATE public.empresas
         SET plano = $1,
-            ativo = TRUE,
-            asaas_subscription_id = $2,
-            trial_started_at = COALESCE($3, trial_started_at),
-            trial_ends_at = COALESCE($4, trial_ends_at),
-            current_period_start = COALESCE($5, current_period_start),
-            current_period_end = COALESCE($6, current_period_end),
-            grace_expires_at = COALESCE($7, grace_expires_at),
-            subscription_trial_ends_at = COALESCE($4, subscription_trial_ends_at),
-            subscription_current_period_ends_at = COALESCE($6, subscription_current_period_ends_at),
-            subscription_grace_period_ends_at = COALESCE($7, subscription_grace_period_ends_at),
-            subscription_cadence = $8
-       WHERE id = $9
+            ativo = $2,
+            asaas_subscription_id = $3,
+            trial_started_at = COALESCE($4, trial_started_at),
+            trial_ends_at = COALESCE($5, trial_ends_at),
+            current_period_start = COALESCE($6, current_period_start),
+            current_period_end = COALESCE($7, current_period_end),
+            grace_expires_at = COALESCE($8, grace_expires_at),
+            subscription_trial_ends_at = COALESCE($5, subscription_trial_ends_at),
+            subscription_current_period_ends_at = COALESCE($7, subscription_current_period_ends_at),
+            subscription_grace_period_ends_at = COALESCE($8, subscription_grace_period_ends_at),
+            subscription_cadence = $9,
+            subscription_status = $10
+       WHERE id = $11
        RETURNING id, nome_empresa, plano, ativo, trial_started_at, trial_ends_at, current_period_start, current_period_end, grace_expires_at, subscription_cadence, asaas_subscription_id`,
     [
       planId,
+      initialActiveFlag,
       subscription.id,
       cloneDate(resolvedTrialStartedAt),
       cloneDate(resolvedTrialEndsAt),
@@ -732,6 +755,7 @@ export const createPlanPayment = async (req: Request, res: Response) => {
       cloneDate(resolvedCurrentPeriodEnd),
       cloneDate(resolvedGraceExpiresAt),
       resolvedCadence,
+      initialSubscriptionStatus,
       empresaId,
     ],
   );
@@ -818,6 +842,20 @@ export const createPlanPayment = async (req: Request, res: Response) => {
       flow: chargeResult.flow,
       subscription: subscriptionInfo,
     });
+
+    if (billingType === 'CREDIT_CARD' || billingType === 'DEBIT_CARD') {
+      const paid = isChargePaid(chargeResult.charge?.status);
+      if (paid) {
+        try {
+          await pool.query(
+            `UPDATE public.empresas SET subscription_status = 'active', ativo = TRUE WHERE id = $1`,
+            [empresaId],
+          );
+        } catch (statusError) {
+          console.error('Falha ao atualizar status da assinatura após cobrança no cartão', statusError);
+        }
+      }
+    }
   } catch (error) {
     if (error instanceof AsaasChargeValidationError) {
       res
