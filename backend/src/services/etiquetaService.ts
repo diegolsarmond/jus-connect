@@ -45,7 +45,7 @@ export const findByEmpresa = async (
     );
     return result.rows;
   } catch (error) {
-    wrapServiceError('Erro ao buscar etiquetas da empresa.', error);
+    throw wrapServiceError('Erro ao buscar etiquetas da empresa.', error);
   }
 };
 
@@ -59,7 +59,7 @@ export const findByFluxoTrabalho = async (
     );
     return result.rows;
   } catch (error) {
-    wrapServiceError('Erro ao buscar etiquetas do fluxo de trabalho.', error);
+    throw wrapServiceError('Erro ao buscar etiquetas do fluxo de trabalho.', error);
   }
 };
 
@@ -87,7 +87,7 @@ export const createEtiqueta = async (
     }
     return row;
   } catch (error) {
-    wrapServiceError('Erro ao criar etiqueta.', error);
+    throw wrapServiceError('Erro ao criar etiqueta.', error);
   }
 };
 
@@ -109,7 +109,8 @@ export const updateEtiqueta = async (
       'UPDATE public.etiquetas SET nome = $1, ativo = $2, exibe_pipeline = $3, ordem = $4, id_fluxo_trabalho = $5 WHERE id = $6 RETURNING id, nome, ativo, datacriacao, exibe_pipeline, ordem, id_fluxo_trabalho',
       [nome, ativo, exibe_pipeline, ordem, id_fluxo_trabalho, id]
     );
-    if (result.rowCount === 0) {
+    const rowCount = result.rowCount ?? 0;
+    if (rowCount === 0) {
       return null;
     }
     const [row] = result.rows;
@@ -118,7 +119,7 @@ export const updateEtiqueta = async (
     }
     return row;
   } catch (error) {
-    wrapServiceError('Erro ao atualizar etiqueta.', error);
+    throw wrapServiceError('Erro ao atualizar etiqueta.', error);
   }
 };
 
@@ -128,8 +129,9 @@ export const deleteEtiqueta = async (id: string): Promise<boolean> => {
       'DELETE FROM public.etiquetas WHERE id = $1',
       [id]
     );
-    return result.rowCount > 0;
+    const rowCount = result.rowCount ?? 0;
+    return rowCount > 0;
   } catch (error) {
-    wrapServiceError('Erro ao remover etiqueta.', error);
+    throw wrapServiceError('Erro ao remover etiqueta.', error);
   }
 };
