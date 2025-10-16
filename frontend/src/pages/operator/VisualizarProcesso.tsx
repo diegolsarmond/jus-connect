@@ -1876,18 +1876,18 @@ export function InformacoesProcesso({
           <CampoInformacao rotulo="Comarca" valor={dados.county} />
           <CampoInformacao rotulo="Cidade" valor={dados.city} />
           <CampoInformacao rotulo="Estado" valor={dados.state} />
-          <CampoInformacao rotulo="Valor da causa" valor={dados.amount} />
           <CampoInformacao rotulo="Distribuído em" valor={dados.distributionDate} />
+          <CampoInformacao rotulo="Valor da causa" valor={dados.amount} />
           <CampoInformacaoLista rotulo="Assuntos" itens={dados.subjects} className="md:col-span-2" />
           <CampoInformacaoLista rotulo="Classificações" itens={dados.classifications} className="md:col-span-2" />
-          <CampoInformacao rotulo="Precatorio" valor={dados.precatory} />
-          <CampoInformacao rotulo="Justiça gratuita" valor={dados.freeJustice} />
-          <CampoInformacao rotulo="Nível de sigilo" valor={dados.secrecyLevel} />
           <CampoInformacao
             rotulo="Tags"
             valor={dados.tags.length ? dados.tags.join(", ") : null}
             className="md:col-span-2"
           />
+          <CampoInformacao rotulo="Precatorio" valor={dados.precatory} />
+          <CampoInformacao rotulo="Justiça gratuita" valor={dados.freeJustice} />
+          <CampoInformacao rotulo="Nível de sigilo" valor={dados.secrecyLevel} />
           <CampoInformacao rotulo="Última atualização" valor={dados.updatedAt} />
         </div>
       </section>
