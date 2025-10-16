@@ -52,6 +52,15 @@ describe("ConfiguracaoSeguranca", () => {
 
   beforeEach(() => {
     toastMock.mockReset();
+    fetchMeuPerfilMock.mockReset();
+    fetchMeuPerfilSessionsMock.mockReset();
+    initiateMeuPerfilTwoFactorMock.mockReset();
+    confirmMeuPerfilTwoFactorMock.mockReset();
+    disableMeuPerfilTwoFactorMock.mockReset();
+    approveMeuPerfilDeviceMock.mockReset();
+    revokeMeuPerfilDeviceApprovalMock.mockReset();
+    revokeMeuPerfilSessionMock.mockReset();
+    revokeTodasMeuPerfilSessionsMock.mockReset();
 
     currentProfile = {
       id: "1",
