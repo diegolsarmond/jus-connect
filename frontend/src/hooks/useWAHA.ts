@@ -1010,6 +1010,11 @@ export const useWAHA = (sessionNameOverride?: string | null) => {
                   return chat;
                 }
 
+                const isPlaceholderCurrent = chat.lastMessage?.id === temporaryMessage.id;
+                if (!isPlaceholderCurrent) {
+                  return chat;
+                }
+
                 if (!previousLastMessage) {
                   return { ...chat, lastMessage: undefined };
                 }
