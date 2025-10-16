@@ -159,7 +159,7 @@ const baseProcessoSelect = `
     p.envolvidos_id,
     p.descricao,
     p.setor_id,
-    s.nome AS setor_nome,
+    e.nome AS setor_nome,
     p.data_citacao,
     p.data_recebimento,
     p.data_arquivamento,
@@ -214,7 +214,7 @@ const baseProcessoSelect = `
   LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
   LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
   LEFT JOIN public.area_atuacao aa ON aa.id = p.area_atuacao_id
-  LEFT JOIN public.setores s ON s.id = p.setor_id
+  LEFT JOIN public.escritorios e ON e.id = p.setor_id
   LEFT JOIN public.trigger_dados_processo dp ON dp.numero_cnj = p.numero_cnj
 `;
 
