@@ -4,7 +4,10 @@ import test from 'node:test';
 import type { Request, Response } from 'express';
 import { Pool } from 'pg';
 import { hashPassword } from '../src/utils/passwordUtils';
-import { SUBSCRIPTION_DEFAULT_GRACE_DAYS } from '../src/constants/subscription';
+import {
+  SUBSCRIPTION_DEFAULT_GRACE_DAYS,
+  SUBSCRIPTION_GRACE_DAYS_ANNUAL,
+} from '../src/constants/subscription';
 
 process.env.AUTH_TOKEN_SECRET ??= 'test-secret';
 
@@ -686,6 +689,84 @@ test('login succeeds when subscription is active', async () => {
   assert.equal(payload.user?.subscription?.gracePeriodEndsAt, gracePeriodEndsAt.toISOString());
   assert.equal(payload.user?.subscription?.isInGoodStanding, true);
   assert.equal(payload.user?.mustChangePassword, false);
+});
+
+test('login synthesizes annual grace period when not persisted', async () => {
+  const password = 'SenhaSegura123';
+  const hashedPassword = await hashPassword(password);
+  const now = Date.now();
+  const currentPeriodEndsAt = new Date(now + 15 * 24 * 60 * 60 * 1000);
+  const expectedGracePeriodEndsAt = new Date(
+    currentPeriodEndsAt.getTime() + SUBSCRIPTION_GRACE_DAYS_ANNUAL * 24 * 60 * 60 * 1000,
+  );
+
+  const { restore: restorePoolQuery } = setupPoolQueryMock([
+    {
+      rows: [
+        {
+          id: 88,
+          nome_completo: 'Alice Doe',
+          email: 'alice@example.com',
+          senha: hashedPassword,
+          must_change_password: false,
+          email_confirmed_at: new Date(now - 60 * 60 * 1000).toISOString(),
+          status: true,
+          perfil: 22,
+          empresa_id: 30,
+          empresa_nome: 'Acme Corp',
+          setor_id: 11,
+          setor_nome: 'Financeiro',
+          empresa_plano: 8,
+          empresa_ativo: true,
+          empresa_datacadastro: new Date(now - 45 * 24 * 60 * 60 * 1000).toISOString(),
+          empresa_trial_ends_at: null,
+          empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
+          empresa_grace_period_ends_at: null,
+          empresa_subscription_cadence: 'annual',
+        },
+      ],
+      rowCount: 1,
+    },
+    {
+      rows: [],
+      rowCount: 0,
+    },
+    {
+      rows: planModules.map((modulo) => ({ modulo })),
+      rowCount: planModules.length,
+    },
+  ]);
+
+  const req = {
+    body: {
+      email: 'alice@example.com',
+      senha: password,
+    },
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await login(req, res);
+  } finally {
+    restorePoolQuery();
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body && typeof res.body === 'object');
+
+  const payload = res.body as {
+    user?: {
+      subscription?: {
+        gracePeriodEndsAt?: string | null;
+      };
+    };
+  };
+
+  assert.equal(
+    payload.user?.subscription?.gracePeriodEndsAt,
+    expectedGracePeriodEndsAt.toISOString(),
+  );
 });
 
 test('login rejects when user is inactive', async () => {
