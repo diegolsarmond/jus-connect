@@ -696,11 +696,7 @@ export const listProcessos = async (req: Request, res: Response) => {
          COALESCE(dp.situacao, sp.nome) AS status,
          COALESCE(dp.area, tp.nome) AS tipo,
          p.cliente_id,
-         (
-           SELECT COUNT(*)::int
-           FROM public.processo_consultas_api pc
-           WHERE pc.processo_id = p.id
-         ) AS consultas_api_count
+         p.consultas_api_count AS consultas_api_count
        FROM public.processos p
        LEFT JOIN public.tipo_processo tp ON tp.id = p.tipo_processo_id
        LEFT JOIN public.situacao_processo sp ON sp.id = p.situacao_processo_id
