@@ -335,6 +335,9 @@ const mapChatMessageToWahaMessage = (message: CRMMessage): WAHAMessage => {
 
 export const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
   const messageType = mapWahaMessageType(message);
+  const resolvedMedia = typeof message.resolvedMediaUrl === "string" && message.resolvedMediaUrl.trim().length > 0
+    ? message.resolvedMediaUrl.trim()
+    : undefined;
   const mediaUrlCandidateKeys = [
     "mediaUrl",
     "url",
@@ -344,12 +347,14 @@ export const mapMessageToCRM = (message: WAHAMessage): CRMMessage => {
     "filePath",
     "path",
   ] as const;
-  let mediaUrl: string | undefined;
-  for (const key of mediaUrlCandidateKeys) {
-    const value = (message as Record<string, unknown>)[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      mediaUrl = value.trim();
-      break;
+  let mediaUrl: string | undefined = resolvedMedia;
+  if (!mediaUrl) {
+    for (const key of mediaUrlCandidateKeys) {
+      const value = (message as Record<string, unknown>)[key];
+      if (typeof value === "string" && value.trim().length > 0) {
+        mediaUrl = value.trim();
+        break;
+      }
     }
   }
 
