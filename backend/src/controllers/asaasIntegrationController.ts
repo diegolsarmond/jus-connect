@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { Request, Response } from 'express';
-import resolveAsaasIntegration from '../services/asaas/integrationResolver';
+import { resolveAsaasIntegration } from '../services/asaas/integrationResolver';
 import pool from '../services/db';
 import {
   applySubscriptionOverdue,

@@ -204,17 +204,22 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
   assert.deepEqual(calls[5]?.values, ['cus_new_123', 45]);
   assert.match(calls[6]?.text ?? '', /UPDATE public\.empresas/);
+  const updateValues = calls[6]?.values as unknown[];
+  assert.ok(Array.isArray(updateValues));
+  assert.equal(updateValues[1], false);
+  assert.equal(updateValues[9], 'pending');
   assert.match(calls[7]?.text ?? '', /SELECT id::text AS id FROM public\.accounts/);
   assert.deepEqual(calls[7]?.values, undefined);
   assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
   assert.ok(Array.isArray(calls[8]?.values));
   const insertValues = calls[8]?.values as unknown[];
-  assert.equal(insertValues.length, 4);
+  assert.equal(insertValues.length, 5);
   assert.equal(insertValues[0], 'Assinatura Plano Jurídico (mensal)');
   assert.equal(typeof insertValues[1], 'string');
   assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(insertValues[2], 199.9);
   assert.equal(insertValues[3], defaultAccountId);
+  assert.equal(insertValues[4], 45);
 
   const payload = res.body as { plan?: { id?: number }; charge?: { id?: string } };
   assert.equal(payload.plan?.id, 9);
@@ -357,6 +362,10 @@ test('createPlanPayment requests yearly cycle when pricing mode is annual', asyn
   assert.equal(subscriptionMock.mock.calls.length, 1);
   assert.equal(chargeMock.mock.calls.length, 1);
   assert.equal(calls.length, 9);
+  const updateValues = calls[6]?.values as unknown[];
+  assert.ok(Array.isArray(updateValues));
+  assert.equal(updateValues[1], false);
+  assert.equal(updateValues[9], 'pending');
   const cycle = subscriptionCalls[0]?.payload?.cycle;
   assert.equal(cycle, 'YEARLY');
 });
@@ -498,17 +507,22 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
   assert.deepEqual(calls[5]?.values, ['cus_existing_999', 88]);
   assert.match(calls[6]?.text ?? '', /UPDATE public\.empresas/);
+  const updateValuesExisting = calls[6]?.values as unknown[];
+  assert.ok(Array.isArray(updateValuesExisting));
+  assert.equal(updateValuesExisting[1], false);
+  assert.equal(updateValuesExisting[9], 'pending');
   assert.match(calls[7]?.text ?? '', /SELECT id::text AS id FROM public\.accounts/);
   assert.deepEqual(calls[7]?.values, undefined);
   assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
   assert.ok(Array.isArray(calls[8]?.values));
   const insertValues = calls[8]?.values as unknown[];
-  assert.equal(insertValues.length, 4);
+  assert.equal(insertValues.length, 5);
   assert.equal(insertValues[0], 'Assinatura Plano Premium (mensal)');
   assert.equal(typeof insertValues[1], 'string');
   assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(insertValues[2], 299.9);
   assert.equal(insertValues[3], defaultAccountId);
+  assert.equal(insertValues[4], 88);
 
   const payload = res.body as { charge?: { id?: string }; plan?: { id?: number } };
   assert.equal(payload.plan?.id, 5);
@@ -646,12 +660,13 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
   assert.match(calls[8]?.text ?? '', /INSERT INTO financial_flows/);
   assert.ok(Array.isArray(calls[8]?.values));
   const insertValues = calls[8]?.values as unknown[];
-  assert.equal(insertValues.length, 4);
+  assert.equal(insertValues.length, 5);
   assert.equal(insertValues[0], 'Assinatura Plano Plus (mensal)');
   assert.equal(typeof insertValues[1], 'string');
   assert.match(String(insertValues[1]), /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(insertValues[2], 249.9);
   assert.equal(insertValues[3], defaultAccountId);
+  assert.equal(insertValues[4], 55);
 });
 
 test('createPlanPayment rejects credit card without card token', async () => {
@@ -825,5 +840,139 @@ test('createPlanPayment forwards credit card token and metadata to AsaasChargeSe
   assert.equal(calls.length, 9);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios/);
   assert.match(calls[1]?.text ?? '', /FROM public\.planos/);
+  const updateValues = calls[6]?.values as unknown[];
+  assert.ok(Array.isArray(updateValues));
+  assert.equal(updateValues[1], false);
+  assert.equal(updateValues[9], 'pending');
+});
+
+test('createPlanPayment marks subscription active when confirmed card charge is returned', async () => {
+  const financialFlowRow = {
+    id: 930,
+    descricao: 'Assinatura Plano Enterprise (mensal)',
+    valor: '499.90',
+    vencimento: '2024-08-15',
+    status: 'pendente',
+  };
+
+  const empresaStateRow = {
+    id: 112,
+    nome_empresa: 'Empresa Confirmada',
+    asaas_subscription_id: null,
+    trial_started_at: null,
+    trial_ends_at: null,
+    subscription_trial_ends_at: null,
+    current_period_start: null,
+    current_period_end: null,
+    subscription_current_period_ends_at: null,
+    grace_expires_at: null,
+    subscription_grace_period_ends_at: null,
+    subscription_cadence: 'monthly',
+  };
+
+  const subscriptionMock = test.mock.method(
+    AsaasSubscriptionService.prototype,
+    'createOrUpdateSubscription',
+    async () => ({
+      subscription: {
+        id: 'sub_confirmed',
+        status: 'ACTIVE',
+        cycle: 'MONTHLY',
+        nextDueDate: '2024-08-15',
+      },
+      timeline: {
+        cadence: 'monthly',
+        trialStart: null,
+        trialEnd: null,
+        currentPeriodStart: new Date('2024-08-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2024-08-31T00:00:00.000Z'),
+        gracePeriodEnd: new Date('2024-09-05T00:00:00.000Z'),
+      },
+    }),
+  );
+
+  const { calls, restore } = setupQueryMock([
+    { rows: [{ empresa: 112 }], rowCount: 1 },
+    { rows: [{ id: 33, nome: 'Plano Enterprise', valor_mensal: '499.90', valor_anual: '4999.90' }], rowCount: 1 },
+    { rows: [empresaStateRow], rowCount: 1 },
+    {
+      rows: [
+        {
+          id: 6,
+          provider: 'asaas',
+          url_api: 'https://sandbox.asaas.com/api/v3',
+          key_value: 'token',
+          environment: 'homologacao',
+          active: true,
+        },
+      ],
+      rowCount: 1,
+    },
+    { rows: [{ asaas_customer_id: null }], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+    { rows: [{ id: '123e4567-e89b-12d3-a456-426614174555' }], rowCount: 1 },
+    { rows: [financialFlowRow], rowCount: 1 },
+    { rows: [], rowCount: 1 },
+  ]);
+
+  const createCustomerMock = test.mock.method(
+    AsaasClient.prototype,
+    'createCustomer',
+    async () => ({
+      id: 'cus_confirmed',
+      object: 'customer',
+      name: 'Empresa Confirmada',
+    }),
+  );
+
+  const chargeMock = test.mock.method(
+    AsaasChargeService.prototype,
+    'createCharge',
+    async () => ({
+      charge: { id: 'ch_confirmed', status: 'CONFIRMED' },
+      flow: { ...financialFlowRow, external_provider: 'asaas', external_reference_id: 'ch_confirmed' },
+    }),
+  );
+
+  const req = {
+    body: {
+      planId: 33,
+      pricingMode: 'mensal',
+      paymentMethod: 'CREDIT_CARD',
+      billing: {
+        companyName: 'Empresa Confirmada',
+        document: '99887766550',
+        email: 'financeiro@confirmada.com',
+      },
+      cardToken: 'tok_confirmed',
+    },
+    auth: createAuth(79),
+    headers: {},
+    ip: '127.0.0.1',
+  } as unknown as Request;
+
+  const res = createMockResponse();
+
+  try {
+    await createPlanPayment(req, res);
+  } finally {
+    restore();
+    subscriptionMock.mock.restore();
+    createCustomerMock.mock.restore();
+    chargeMock.mock.restore();
+  }
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(subscriptionMock.mock.calls.length, 1);
+  assert.equal(chargeMock.mock.calls.length, 1);
+  assert.equal(createCustomerMock.mock.calls.length, 1);
+  assert.equal(calls.length, 10);
+  const firstUpdateValues = calls[6]?.values as unknown[];
+  assert.ok(Array.isArray(firstUpdateValues));
+  assert.equal(firstUpdateValues[1], false);
+  assert.equal(firstUpdateValues[9], 'pending');
+  assert.match(calls[9]?.text ?? '', /SET subscription_status = 'active', ativo = TRUE/);
+  assert.deepEqual(calls[9]?.values, [112]);
 });
 

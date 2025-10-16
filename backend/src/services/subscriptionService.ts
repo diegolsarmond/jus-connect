@@ -27,7 +27,7 @@ const CLIENTE_EMPRESA_COLUMNS = ['empresa', 'empresa_id', 'idempresa'] as const;
 
 const CADENCE_VALUES: SubscriptionCadence[] = [CADENCE_MONTHLY, CADENCE_ANNUAL];
 
-export type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace' | 'overdue';
+export type SubscriptionStatus = 'inactive' | 'trialing' | 'active' | 'grace' | 'overdue' | 'pending';
 
 export interface ResolvedSubscriptionPayload {
   planId: number | null;
@@ -40,6 +40,8 @@ export interface ResolvedSubscriptionPayload {
   graceExpiresAt: string | null;
 }
 
+type CompanySubscriptionState = 'pending' | 'active' | 'grace' | 'inactive' | 'overdue';
+
 export interface CompanySubscriptionSnapshot {
   planId: number | null;
   cadence: SubscriptionCadence | null;
@@ -47,6 +49,7 @@ export interface CompanySubscriptionSnapshot {
   currentPeriodEnd: Date | null;
   graceExpiresAt: Date | null;
   isActive: boolean | null;
+  subscriptionStatus: CompanySubscriptionState | null;
 }
 
 const toDate = (value: unknown): Date | null => {
@@ -104,6 +107,25 @@ const toBoolean = (value: unknown): boolean | null => {
     if (['0', 'false', 'f', 'no', 'n', 'nao', 'não', 'inativo', 'off'].includes(normalized)) {
       return false;
     }
+  }
+
+  return null;
+};
+
+const normalizeSubscriptionStatus = (
+  value: unknown,
+): CompanySubscriptionState | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (['pending', 'active', 'grace', 'inactive', 'overdue'].includes(normalized)) {
+    return normalized as CompanySubscriptionState;
   }
 
   return null;
@@ -301,13 +323,15 @@ export const fetchCompanySubscription = async (
     current_period_end: unknown;
     grace_expires_at: unknown;
     ativo: unknown;
+    subscription_status: unknown;
   }>(
     `SELECT plano,
             subscription_cadence,
             current_period_start,
             current_period_end,
             grace_expires_at,
-            ativo
+            ativo,
+            subscription_status
        FROM public.empresas
       WHERE id = $1
       LIMIT 1`,
@@ -326,6 +350,7 @@ export const fetchCompanySubscription = async (
     currentPeriodEnd: toDate(row.current_period_end),
     graceExpiresAt: toDate(row.grace_expires_at),
     isActive: toBoolean(row.ativo),
+    subscriptionStatus: normalizeSubscriptionStatus(row.subscription_status),
   };
 };
 
@@ -378,7 +403,8 @@ export const applySubscriptionPayment = async (
             subscription_cadence = $4,
             trial_started_at = NULL,
             trial_ends_at = NULL,
-            ativo = TRUE
+            ativo = TRUE,
+            subscription_status = 'active'
       WHERE id = $5`,
     [period.start, period.end, grace, cadence, companyId],
   );
@@ -407,7 +433,9 @@ export const applySubscriptionOverdue = async (
     `UPDATE public.empresas
         SET grace_expires_at = $1,
             current_period_end = COALESCE(current_period_end, $2),
-            subscription_cadence = COALESCE(subscription_cadence, $3)
+            subscription_cadence = COALESCE(subscription_cadence, $3),
+            subscription_status = 'overdue',
+            ativo = FALSE
       WHERE id = $4`,
     [graceDeadline, baseDate, cadence, companyId],
   );
@@ -417,6 +445,7 @@ export const resolveSubscriptionPayloadFromRow = (
   row: {
     empresa_plano?: unknown;
     empresa_ativo?: unknown;
+    empresa_subscription_status?: unknown;
     trial_started_at?: unknown;
     trial_ends_at?: unknown;
     current_period_start?: unknown;
@@ -428,6 +457,7 @@ export const resolveSubscriptionPayloadFromRow = (
 ): ResolvedSubscriptionPayload => {
   const planId = toInteger(row.empresa_plano);
   const isActive = toBoolean(row.empresa_ativo);
+  const subscriptionStatus = normalizeSubscriptionStatus(row.empresa_subscription_status);
   const cadence = normalizeCadence(row.subscription_cadence);
   const trialStartedAt = toDate(row.trial_started_at);
   const trialEndsAt = toDate(row.trial_ends_at);
@@ -437,12 +467,51 @@ export const resolveSubscriptionPayloadFromRow = (
 
   const startedAt = currentPeriodStart ?? trialStartedAt ?? null;
 
-  if (planId === null || isActive === false) {
+  if (subscriptionStatus === 'pending') {
+    return {
+      planId,
+      status: 'pending',
+      cadence,
+      startedAt: startedAt ? startedAt.toISOString() : null,
+      trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+      currentPeriodStart: currentPeriodStart ? currentPeriodStart.toISOString() : null,
+      currentPeriodEnd: currentPeriodEnd ? currentPeriodEnd.toISOString() : null,
+      graceExpiresAt: graceExpiresAt ? graceExpiresAt.toISOString() : null,
+    };
+  }
+
+  if (planId === null || isActive === false || subscriptionStatus === 'inactive') {
     return {
       planId,
       status: 'inactive',
       cadence,
       startedAt: startedAt ? startedAt.toISOString() : null,
+      trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+      currentPeriodStart: currentPeriodStart ? currentPeriodStart.toISOString() : null,
+      currentPeriodEnd: currentPeriodEnd ? currentPeriodEnd.toISOString() : null,
+      graceExpiresAt: graceExpiresAt ? graceExpiresAt.toISOString() : null,
+    };
+  }
+
+  if (subscriptionStatus === 'overdue') {
+    return {
+      planId,
+      status: 'overdue',
+      cadence,
+      startedAt: currentPeriodStart ? currentPeriodStart.toISOString() : null,
+      trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+      currentPeriodStart: currentPeriodStart ? currentPeriodStart.toISOString() : null,
+      currentPeriodEnd: currentPeriodEnd ? currentPeriodEnd.toISOString() : null,
+      graceExpiresAt: graceExpiresAt ? graceExpiresAt.toISOString() : null,
+    };
+  }
+
+  if (subscriptionStatus === 'grace') {
+    return {
+      planId,
+      status: 'grace',
+      cadence,
+      startedAt: currentPeriodStart ? currentPeriodStart.toISOString() : null,
       trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
       currentPeriodStart: currentPeriodStart ? currentPeriodStart.toISOString() : null,
       currentPeriodEnd: currentPeriodEnd ? currentPeriodEnd.toISOString() : null,
