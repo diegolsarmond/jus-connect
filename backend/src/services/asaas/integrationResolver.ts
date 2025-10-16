@@ -273,7 +273,7 @@ export const createAsaasClient = async (
 
 export default resolveAsaasIntegration;
 
-export { ASAAS_DEFAULT_BASE_URLS, AsaasEnvironment, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
+export { ASAAS_DEFAULT_BASE_URLS, normalizeAsaasBaseUrl, normalizeAsaasEnvironment };
 
 if (typeof module !== 'undefined') {
   module.exports = {
@@ -281,7 +281,6 @@ if (typeof module !== 'undefined') {
     createAsaasClient,
     AsaasIntegrationNotConfiguredError,
     ASAAS_DEFAULT_BASE_URLS,
-    AsaasEnvironment,
     normalizeAsaasBaseUrl,
     normalizeAsaasEnvironment,
     default: resolveAsaasIntegration,

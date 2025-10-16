@@ -45,6 +45,9 @@ import {
 
 const MOVIMENTACOES_DEFAULT_LIMIT = 200;
 
+const stripDiacritics = (value: string): string =>
+  value.normalize('NFD').replace(/\p{M}/gu, '');
+
 const MOVIMENTACOES_BASE_QUERY = `
   SELECT
     id,
