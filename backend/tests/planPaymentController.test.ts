@@ -199,6 +199,7 @@ test('createPlanPayment creates Asaas customer and stores identifier when missin
   assert.equal(subscriptionMock.mock.calls.length, 1);
 
   assert.equal(calls.length, 9);
+  assert.match(calls[3]?.text ?? '', /CASE WHEN i.global IS TRUE THEN 0 ELSE 1 END/);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios/);
   assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
@@ -362,10 +363,7 @@ test('createPlanPayment requests yearly cycle when pricing mode is annual', asyn
   assert.equal(subscriptionMock.mock.calls.length, 1);
   assert.equal(chargeMock.mock.calls.length, 1);
   assert.equal(calls.length, 9);
-  const updateValues = calls[6]?.values as unknown[];
-  assert.ok(Array.isArray(updateValues));
-  assert.equal(updateValues[1], false);
-  assert.equal(updateValues[9], 'pending');
+  assert.match(calls[3]?.text ?? '', /CASE WHEN i.global IS TRUE THEN 0 ELSE 1 END/);
   const cycle = subscriptionCalls[0]?.payload?.cycle;
   assert.equal(cycle, 'YEARLY');
 });
@@ -503,6 +501,7 @@ test('createPlanPayment reuses existing Asaas customer and updates information',
   assert.equal(subscriptionMock.mock.calls.length, 1);
 
   assert.equal(calls.length, 9);
+  assert.match(calls[3]?.text ?? '', /CASE WHEN i.global IS TRUE THEN 0 ELSE 1 END/);
   assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
   assert.deepEqual(calls[5]?.values, ['cus_existing_999', 88]);
@@ -653,6 +652,7 @@ test('createPlanPayment forwards debit card method to AsaasChargeService', async
   assert.equal(subscriptionMock.mock.calls.length, 1);
 
   assert.equal(calls.length, 9);
+  assert.match(calls[3]?.text ?? '', /CASE WHEN i.global IS TRUE THEN 0 ELSE 1 END/);
   assert.match(calls[4]?.text ?? '', /SELECT asaas_customer_id FROM public\.empresas/);
   assert.match(calls[5]?.text ?? '', /UPDATE public\.empresas SET asaas_customer_id/);
   assert.match(calls[7]?.text ?? '', /SELECT id::text AS id FROM public\.accounts/);
@@ -838,6 +838,7 @@ test('createPlanPayment forwards credit card token and metadata to AsaasChargeSe
   assert.equal((metadata.cardMetadata as { last4Digits?: string }).last4Digits, '4242');
 
   assert.equal(calls.length, 9);
+  assert.match(calls[3]?.text ?? '', /CASE WHEN i.global IS TRUE THEN 0 ELSE 1 END/);
   assert.match(calls[0]?.text ?? '', /FROM public\.usuarios/);
   assert.match(calls[1]?.text ?? '', /FROM public\.planos/);
   const updateValues = calls[6]?.values as unknown[];

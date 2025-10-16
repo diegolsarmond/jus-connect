@@ -7,9 +7,11 @@ interface MessageBubbleProps {
   message: Message;
   isFirst: boolean;
   isLast: boolean;
+  highlight?: boolean;
 }
 
-export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) => {
+
+export const MessageBubble = ({ message, isFirst, isLast, highlight }: MessageBubbleProps) => {
   const [audioDuration, setAudioDuration] = useState<string | null>(null);
 
   const formatTime = (timestamp: number) => {
@@ -170,14 +172,15 @@ export const MessageBubble = ({ message, isFirst, isLast }: MessageBubbleProps) 
       <div
         className={`
           max-w-md px-3 py-2 shadow-message transition-all duration-200
-          ${message.fromMe 
-            ? 'bg-message-sent text-message-sent-foreground' 
+          ${message.fromMe
+            ? 'bg-message-sent text-message-sent-foreground'
             : 'bg-message-received text-message-received-foreground'
           }
           ${isFirst && isLast ? 'rounded-lg' : ''}
           ${isFirst && !isLast ? (message.fromMe ? 'rounded-t-lg rounded-bl-lg rounded-br-sm' : 'rounded-t-lg rounded-br-lg rounded-bl-sm') : ''}
           ${!isFirst && isLast ? (message.fromMe ? 'rounded-b-lg rounded-tl-lg rounded-tr-sm' : 'rounded-b-lg rounded-tr-lg rounded-tl-sm') : ''}
           ${!isFirst && !isLast ? (message.fromMe ? 'rounded-l-lg rounded-r-sm' : 'rounded-r-lg rounded-l-sm') : ''}
+          ${highlight ? 'ring-2 ring-whatsapp/70' : ''}
         `}
       >
         {/* Message Content */}
