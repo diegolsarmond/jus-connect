@@ -9,7 +9,7 @@ import {
   refreshToken,
   register,
 } from '../controllers/authController';
-import { authenticateRequest } from '../middlewares/authMiddleware';
+import supabaseAuthMiddleware from '../middlewares/supabaseAuthMiddleware';
 import createRateLimiter from '../middlewares/rateLimitMiddleware';
 
 const router = Router();
@@ -133,7 +133,7 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  * @swagger
  * /api/auth/login:
  *   post:
- *     summary: Autentica um usuário e retorna um token Bearer
+ *     summary: Valida um usuário autenticado via Supabase
  *     tags: [Autenticação]
  *     security: []
  *     requestBody:
@@ -143,27 +143,22 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  *           schema:
  *             type: object
  *             required:
- *               - email
- *               - senha
+ *               - supabaseUid
  *             properties:
+ *               supabaseUid:
+ *                 type: string
+ *                 description: Identificador único do usuário no Supabase
  *               email:
  *                 type: string
  *                 format: email
- *               senha:
- *                 type: string
  *     responses:
  *       200:
- *         description: Token de acesso gerado com sucesso
+ *         description: Dados do usuário retornados com sucesso
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 token:
- *                   type: string
- *                 expiresIn:
- *                   type: integer
- *                   description: Expiração do token em segundos
  *                 user:
  *                   type: object
  *                   properties:
@@ -175,6 +170,16 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  *                       type: string
  *                     perfil:
  *                       type: integer
+ *                     modulos:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     subscription:
+ *                       type: object
+ *                     mustChangePassword:
+ *                       type: boolean
+ *                     viewAllConversations:
+ *                       type: boolean
  *       400:
  *         description: Requisição inválida
  *       401:
@@ -227,7 +232,7 @@ router.post('/auth/login', loginRateLimiter, login);
  *       404:
  *         description: Usuário não encontrado
  */
-router.post('/auth/change-password', authenticateRequest, changePassword);
+router.post('/auth/change-password', supabaseAuthMiddleware, changePassword);
 
 /**
  * @swagger
@@ -260,32 +265,20 @@ router.post('/auth/change-password', authenticateRequest, changePassword);
  *       404:
  *         description: Usuário não encontrado
  */
-router.get('/auth/me', authenticateRequest, getCurrentUser);
+router.get('/auth/me', supabaseAuthMiddleware, getCurrentUser);
 
 /**
  * @swagger
  * /api/auth/refresh:
  *   post:
- *     summary: Renova o token de acesso do usuário autenticado
+ *     summary: Fluxo de renovação local desativado
  *     tags: [Autenticação]
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       200:
- *         description: Novo token de acesso gerado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 token:
- *                   type: string
- *                 expiresIn:
- *                   type: integer
- *                   description: Expiração do token em segundos
- *       401:
- *         description: Token ausente ou inválido
+ *       410:
+ *         description: Requisição não suportada. Utilize o token fornecido pelo Supabase.
  */
-router.post('/auth/refresh', authenticateRequest, refreshToken);
+router.post('/auth/refresh', supabaseAuthMiddleware, refreshToken);
 
 export default router;

@@ -819,9 +819,8 @@ test('register returns 409 when email already exists', async () => {
   assert.ok(res.body && typeof res.body === 'object');
 });
 
-test('login succeeds when subscription is active', async () => {
-  const password = 'SenhaSegura123';
-  const hashedPassword = await hashPassword(password);
+test('login succeeds quando assinatura está ativa via Supabase', async () => {
+  const supabaseUid = 'supabase-user-123';
   const now = Date.now();
   const trialEndsAt = new Date(now + 3 * 24 * 60 * 60 * 1000);
   const currentPeriodEndsAt = new Date(now + 30 * 24 * 60 * 60 * 1000);
@@ -836,7 +835,6 @@ test('login succeeds when subscription is active', async () => {
           id: 77,
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
-          senha: hashedPassword,
           must_change_password: false,
           email_confirmed_at: new Date(now - 60 * 60 * 1000).toISOString(),
           status: true,
@@ -851,14 +849,12 @@ test('login succeeds when subscription is active', async () => {
           empresa_trial_ends_at: trialEndsAt.toISOString(),
           empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
           empresa_grace_period_ends_at: gracePeriodEndsAt.toISOString(),
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
     },
-    {
-      rows: [],
-      rowCount: 0,
-    },
+    { rows: [], rowCount: 1 },
     {
       rows: planModules.map((modulo) => ({ modulo })),
       rowCount: planModules.length,
@@ -867,8 +863,8 @@ test('login succeeds when subscription is active', async () => {
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -884,7 +880,6 @@ test('login succeeds when subscription is active', async () => {
   assert.ok(res.body && typeof res.body === 'object');
 
   const payload = res.body as {
-    token?: string;
     user?: {
       modulos?: string[];
       subscription?: {
@@ -895,11 +890,11 @@ test('login succeeds when subscription is active', async () => {
         isInGoodStanding?: boolean;
       };
       mustChangePassword?: boolean;
+      viewAllConversations?: boolean;
     };
   };
 
-  assert.equal(typeof payload.token, 'string');
-  assert.ok(payload.token && payload.token.includes('.'));
+  assert.equal('token' in payload, false);
   const returnedModules = payload.user?.modulos ?? [];
   assert.deepEqual([...returnedModules].sort(), [...planModules].sort());
   assert.equal(payload.user?.subscription?.status, 'trialing');
@@ -911,11 +906,11 @@ test('login succeeds when subscription is active', async () => {
   assert.equal(payload.user?.subscription?.gracePeriodEndsAt, gracePeriodEndsAt.toISOString());
   assert.equal(payload.user?.subscription?.isInGoodStanding, true);
   assert.equal(payload.user?.mustChangePassword, false);
+  assert.equal(payload.user?.viewAllConversations, true);
 });
 
-test('login synthesizes annual grace period when not persisted', async () => {
-  const password = 'SenhaSegura123';
-  const hashedPassword = await hashPassword(password);
+test('login respeita dados de assinatura anual fornecidos pelo Supabase', async () => {
+  const supabaseUid = 'supabase-user-annual';
   const now = Date.now();
   const currentPeriodEndsAt = new Date(now + 15 * 24 * 60 * 60 * 1000);
   const expectedGracePeriodEndsAt = new Date(
@@ -929,7 +924,6 @@ test('login synthesizes annual grace period when not persisted', async () => {
           id: 88,
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
-          senha: hashedPassword,
           must_change_password: false,
           email_confirmed_at: new Date(now - 60 * 60 * 1000).toISOString(),
           status: true,
@@ -945,14 +939,12 @@ test('login synthesizes annual grace period when not persisted', async () => {
           empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
           empresa_grace_period_ends_at: null,
           empresa_subscription_cadence: 'annual',
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
     },
-    {
-      rows: [],
-      rowCount: 0,
-    },
+    { rows: [], rowCount: 1 },
     {
       rows: planModules.map((modulo) => ({ modulo })),
       rowCount: planModules.length,
@@ -961,8 +953,8 @@ test('login synthesizes annual grace period when not persisted', async () => {
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -985,6 +977,7 @@ test('login synthesizes annual grace period when not persisted', async () => {
     };
   };
 
+  assert.equal('token' in payload, false);
   assert.equal(
     payload.user?.subscription?.gracePeriodEndsAt,
     expectedGracePeriodEndsAt.toISOString(),
@@ -992,8 +985,7 @@ test('login synthesizes annual grace period when not persisted', async () => {
 });
 
 test('login rejects when user is inactive', async () => {
-  const password = 'SenhaSegura123';
-  const hashedPassword = await hashPassword(password);
+  const supabaseUid = 'supabase-inactive';
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -1002,7 +994,6 @@ test('login rejects when user is inactive', async () => {
           id: 77,
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
-          senha: hashedPassword,
           must_change_password: false,
           email_confirmed_at: new Date().toISOString(),
           status: 'inactive',
@@ -1011,6 +1002,7 @@ test('login rejects when user is inactive', async () => {
           empresa_nome: 'Acme Corp',
           setor_id: 9,
           setor_nome: 'Jurídico',
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
@@ -1019,8 +1011,8 @@ test('login rejects when user is inactive', async () => {
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -1037,8 +1029,7 @@ test('login rejects when user is inactive', async () => {
 });
 
 test('login rejects when e-mail confirmation is pending', async () => {
-  const password = 'SenhaSegura123';
-  const hashedPassword = await hashPassword(password);
+  const supabaseUid = 'supabase-pending-email';
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
     {
@@ -1047,7 +1038,6 @@ test('login rejects when e-mail confirmation is pending', async () => {
           id: 78,
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
-          senha: hashedPassword,
           must_change_password: false,
           email_confirmed_at: null,
           status: true,
@@ -1056,6 +1046,7 @@ test('login rejects when e-mail confirmation is pending', async () => {
           empresa_nome: 'Acme Corp',
           setor_id: 9,
           setor_nome: 'Jurídico',
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
@@ -1064,8 +1055,8 @@ test('login rejects when e-mail confirmation is pending', async () => {
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -1082,8 +1073,7 @@ test('login rejects when e-mail confirmation is pending', async () => {
 });
 
 test('login rejects when subscription payment is pending', async () => {
-  const password = 'SenhaSegura123';
-  const hashedPassword = await hashPassword(password);
+  const supabaseUid = 'supabase-payment-pending';
   const now = new Date();
 
   const { restore: restorePoolQuery } = setupPoolQueryMock([
@@ -1093,7 +1083,6 @@ test('login rejects when subscription payment is pending', async () => {
           id: 91,
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
-          senha: hashedPassword,
           must_change_password: false,
           email_confirmed_at: now.toISOString(),
           status: true,
@@ -1114,6 +1103,7 @@ test('login rejects when subscription payment is pending', async () => {
           empresa_grace_period_ends_at: null,
           empresa_subscription_cadence: 'monthly',
           empresa_subscription_status: 'pending',
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
@@ -1122,8 +1112,8 @@ test('login rejects when subscription payment is pending', async () => {
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -1143,8 +1133,7 @@ test('login rejects when subscription payment is pending', async () => {
 });
 
 test('login rejects when trial period has expired without payment', async () => {
-  const password = 'SenhaSegura123';
-  const hashedPassword = await hashPassword(password);
+  const supabaseUid = 'supabase-trial-expired';
   const now = Date.now();
   const trialEndsAt = new Date(now - 2 * 24 * 60 * 60 * 1000);
 
@@ -1155,7 +1144,6 @@ test('login rejects when trial period has expired without payment', async () => 
           id: 88,
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
-          senha: hashedPassword,
           must_change_password: false,
           email_confirmed_at: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
           status: true,
@@ -1170,6 +1158,7 @@ test('login rejects when trial period has expired without payment', async () => 
           empresa_trial_ends_at: trialEndsAt.toISOString(),
           empresa_current_period_ends_at: null,
           empresa_grace_period_ends_at: null,
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
@@ -1178,8 +1167,8 @@ test('login rejects when trial period has expired without payment', async () => 
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -1199,8 +1188,7 @@ test('login rejects when trial period has expired without payment', async () => 
 });
 
 test('login rejects with payment required once grace period expires', async () => {
-  const password = 'SenhaSegura123';
-  const hashedPassword = await hashPassword(password);
+  const supabaseUid = 'supabase-grace-expired';
   const now = Date.now();
   const currentPeriodEndsAt = new Date(now - 12 * 24 * 60 * 60 * 1000);
   const gracePeriodEndsAt = new Date(
@@ -1214,7 +1202,6 @@ test('login rejects with payment required once grace period expires', async () =
           id: 99,
           nome_completo: 'Alice Doe',
           email: 'alice@example.com',
-          senha: hashedPassword,
           must_change_password: false,
           email_confirmed_at: new Date(now - 15 * 24 * 60 * 60 * 1000).toISOString(),
           status: true,
@@ -1229,6 +1216,7 @@ test('login rejects with payment required once grace period expires', async () =
           empresa_trial_ends_at: new Date(now - 80 * 24 * 60 * 60 * 1000).toISOString(),
           empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
           empresa_grace_period_ends_at: gracePeriodEndsAt.toISOString(),
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
@@ -1237,8 +1225,8 @@ test('login rejects with payment required once grace period expires', async () =
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -1257,7 +1245,8 @@ test('login rejects with payment required once grace period expires', async () =
   assert.equal('token' in (res.body as Record<string, unknown>), false);
 });
 
-test('login migrates legacy sha256 hashes to argon2 format', async () => {
+test('login ignora hash legacy ao autenticar via Supabase', async () => {
+  const supabaseUid = 'supabase-legacy-hash';
   const password = 'SenhaSegura123';
   const salt = 'f00dbabe1234abcd';
   const legacyDigest = crypto.createHash('sha256').update(`${salt}:${password}`).digest('hex');
@@ -1291,19 +1280,19 @@ test('login migrates legacy sha256 hashes to argon2 format', async () => {
           empresa_trial_ends_at: trialEndsAt.toISOString(),
           empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
           empresa_grace_period_ends_at: gracePeriodEndsAt.toISOString(),
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
     },
     { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 0 },
     { rows: planModules.map((modulo) => ({ modulo })), rowCount: planModules.length },
   ]);
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -1320,24 +1309,23 @@ test('login migrates legacy sha256 hashes to argon2 format', async () => {
   const passwordUpdateIndex = calls.findIndex((call) =>
     /UPDATE public\.usuarios/.test(call.text ?? '') && /SET senha = \$1/.test(call.text ?? '')
   );
-  assert.ok(passwordUpdateIndex >= 1, 'expected legacy hash update before finishing login');
-
-  const passwordUpdateCall = calls[passwordUpdateIndex];
-  const updatedHash = passwordUpdateCall?.values?.[0];
-  assert.equal(typeof updatedHash, 'string');
-  assert.ok(String(updatedHash).startsWith('argon2:'));
-  assert.notEqual(updatedHash, legacyHash);
+  assert.equal(
+    passwordUpdateIndex,
+    -1,
+    'legacy hash should not trigger password updates when usando Supabase'
+  );
 
   const lastLoginIndex = calls.findIndex((call) =>
     /UPDATE public\.usuarios/.test(call.text ?? '') && /SET ultimo_login/.test(call.text ?? '')
   );
-  assert.ok(lastLoginIndex > passwordUpdateIndex, 'expected last login update after password migration');
+  assert.ok(lastLoginIndex >= 0, 'expected last login update to occur');
 
   const modulesCall = calls.find((call) => /perfil_modulos/.test(call.text ?? ''));
   assert.ok(modulesCall, 'expected module fetch to occur');
 });
 
-test('login migrates plain text passwords to argon2 format', async () => {
+test('login ignora senhas em texto puro quando autenticado pelo Supabase', async () => {
+  const supabaseUid = 'supabase-plaintext-hash';
   const password = 'SenhaSegura123';
   const now = Date.now();
   const trialEndsAt = new Date(now + 5 * 24 * 60 * 60 * 1000);
@@ -1368,19 +1356,19 @@ test('login migrates plain text passwords to argon2 format', async () => {
           empresa_trial_ends_at: trialEndsAt.toISOString(),
           empresa_current_period_ends_at: currentPeriodEndsAt.toISOString(),
           empresa_grace_period_ends_at: gracePeriodEndsAt.toISOString(),
+          supabase_user_id: supabaseUid,
         },
       ],
       rowCount: 1,
     },
     { rows: [], rowCount: 1 },
-    { rows: [], rowCount: 0 },
     { rows: planModules.map((modulo) => ({ modulo })), rowCount: planModules.length },
   ]);
 
   const req = {
     body: {
+      supabaseUid,
       email: 'alice@example.com',
-      senha: password,
     },
   } as unknown as Request;
 
@@ -1397,12 +1385,11 @@ test('login migrates plain text passwords to argon2 format', async () => {
   const passwordUpdateCall = calls.find((call) =>
     /UPDATE public\.usuarios/.test(call.text ?? '') && /SET senha = \$1/.test(call.text ?? '')
   );
-  assert.ok(passwordUpdateCall, 'expected plain text password migration');
-
-  const updatedHash = passwordUpdateCall?.values?.[0];
-  assert.equal(typeof updatedHash, 'string');
-  assert.ok(String(updatedHash).startsWith('argon2:'));
-  assert.notEqual(updatedHash, password);
+  assert.equal(
+    passwordUpdateCall,
+    undefined,
+    'plain text passwords should not trigger migrations com autenticação Supabase'
+  );
 
   const modulesCall = calls.find((call) => /perfil_modulos/.test(call.text ?? ''));
   assert.ok(modulesCall, 'expected module fetch to occur');
