@@ -1,8 +1,8 @@
 interface PasswordResetEmailParams {
   userName: string;
   resetLink: string;
-  temporaryPassword: string;
-  expiresAt: Date;
+  temporaryPassword?: string | null;
+  expiresAt?: Date | null;
   systemName?: string;
 }
 
@@ -31,15 +31,78 @@ export function buildPasswordResetEmail({
   expiresAt,
   systemName = DEFAULT_SYSTEM_NAME,
 }: PasswordResetEmailParams): PasswordResetEmailContent {
-  const expirationText = formatExpiration(expiresAt);
+  const normalizedTemporaryPassword =
+    typeof temporaryPassword === 'string' ? temporaryPassword.trim() : '';
+  const hasTemporaryPassword = normalizedTemporaryPassword.length > 0;
+  const normalizedExpiration =
+    expiresAt instanceof Date && !Number.isNaN(expiresAt.getTime()) ? expiresAt : null;
   const subject = `Redefinição de senha - ${systemName}`;
-  const text = `Olá ${userName},\n\n` +
-    `Uma solicitação de redefinição de senha foi realizada no ${systemName}.\n` +
-    `Utilize a senha temporária ${temporaryPassword} para acessar e clique no link abaixo para criar uma nova senha.\n` +
-    `${resetLink}\n\n` +
-    `Este link é válido até ${expirationText}. Caso você não tenha solicitado, ignore este e-mail.\n\n` +
-    `Atenciosamente,\nEquipe ${systemName}`;
-  const html = `<!DOCTYPE html>` +
+
+  const textLines: string[] = [
+    `Olá ${userName},`,
+    '',
+    `Uma solicitação de redefinição de senha foi realizada no ${systemName}.`,
+  ];
+
+  if (hasTemporaryPassword) {
+    textLines.push(
+      `Utilize a senha temporária ${normalizedTemporaryPassword} para acessar e clique no link abaixo para criar uma nova senha.`,
+      resetLink
+    );
+  } else {
+    textLines.push('Clique no link abaixo para redefinir a sua senha:', resetLink);
+  }
+
+  if (normalizedExpiration) {
+    textLines.push('', `Este link é válido até ${formatExpiration(normalizedExpiration)}.`);
+  }
+
+  textLines.push(
+    '',
+    'Caso você não tenha solicitado, ignore este e-mail.',
+    '',
+    'Atenciosamente,',
+    `Equipe ${systemName}`
+  );
+
+  const text = `${textLines.join('\n')}\n`;
+
+  const htmlSections: string[] = [
+    `<p>Olá ${userName},</p>`,
+    `<p>Recebemos uma solicitação para redefinir a sua senha no <strong>${systemName}</strong>.</p>`,
+  ];
+
+  if (hasTemporaryPassword) {
+    htmlSections.push(
+      '<p>Use a senha temporária abaixo para acessar e, em seguida, clique no botão para definir uma nova senha permanente:</p>',
+      `<p class="temp-pass">${normalizedTemporaryPassword}</p>`
+    );
+  } else {
+    htmlSections.push('<p>Clique no botão abaixo para redefinir a sua senha:</p>');
+  }
+
+  htmlSections.push(
+    `<p style="margin: 24px 0;">`,
+    `<a class="button" href="${resetLink}" target="_blank" rel="noopener noreferrer">Recuperar senha</a>`,
+    `</p>`
+  );
+
+  if (normalizedExpiration) {
+    htmlSections.push(
+      `<p>Este link expira em <strong>${formatExpiration(normalizedExpiration)}</strong>. Caso você não tenha solicitado esta alteração, ignore este e-mail.</p>`
+    );
+  } else {
+    htmlSections.push('<p>Caso você não tenha solicitado esta alteração, ignore este e-mail.</p>');
+  }
+
+  htmlSections.push(
+    '<p>Se o botão não funcionar, copie e cole o link abaixo no seu navegador:</p>',
+    `<p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">${resetLink}</a></p>`,
+    `<p class="footer">Este é um e-mail automático. Por favor, não responda.<br />Equipe ${systemName}</p>`
+  );
+
+  const html =
+    `<!DOCTYPE html>` +
     `<html lang="pt-BR">` +
     `<head>` +
     '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />' +
@@ -54,20 +117,7 @@ export function buildPasswordResetEmail({
     `</head>` +
     `<body>` +
     `<div class="container">` +
-    `<p>Olá ${userName},</p>` +
-    `<p>Recebemos uma solicitação para redefinir a sua senha no <strong>${systemName}</strong>.</p>` +
-    `<p>Use a senha temporária abaixo para acessar e, em seguida, clique no botão para definir uma nova senha permanente:</p>` +
-    `<p class="temp-pass">${temporaryPassword}</p>` +
-    `<p style="margin: 24px 0;">` +
-    `<a class="button" href="${resetLink}" target="_blank" rel="noopener noreferrer">Recuperar senha</a>` +
-    `</p>` +
-    `<p>Este link expira em <strong>${expirationText}</strong>. Caso você não tenha solicitado esta alteração, ignore este e-mail.</p>` +
-    `<p>Se o botão não funcionar, copie e cole o link abaixo no seu navegador:</p>` +
-    `<p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">${resetLink}</a></p>` +
-    `<p class="footer">` +
-    `Este é um e-mail automático. Por favor, não responda.` +
-    `<br />Equipe ${systemName}` +
-    `</p>` +
+    htmlSections.join('') +
     `</div>` +
     `</body>` +
     `</html>`;

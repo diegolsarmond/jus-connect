@@ -59,12 +59,16 @@ const createEnsureAuthenticatedEmpresa = (
   options?: EnsureAuthenticatedEmpresaOptions
 ) =>
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const resolved = await resolveEmpresaId(req, res, options);
-    if (resolved === undefined) {
-      return;
-    }
+    try {
+      const resolved = await resolveEmpresaId(req, res, options);
+      if (resolved === undefined) {
+        return;
+      }
 
-    next();
+      next();
+    } catch (error) {
+      next(error);
+    }
   };
 
 export const ensureAuthenticatedEmpresa = createEnsureAuthenticatedEmpresa();
