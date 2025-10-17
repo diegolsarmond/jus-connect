@@ -31,6 +31,24 @@ const dockerDbHost = 'base-de-dados_postgres';
 const isRunningInsideContainer = existsSync('/.dockerenv');
 const localDbHostOverride = process.env.LOCAL_DB_HOST;
 
+if (connectionString && localDbHostOverride && !process.env.DATABASE_URL) {
+  try {
+    const parsed = new URL(connectionString);
+    if (parsed.hostname !== localDbHostOverride) {
+      parsed.hostname = localDbHostOverride;
+      connectionString = parsed.toString();
+    }
+  } catch {
+    const pattern = /@([^/:]+)(:\d+)?\//;
+    if (pattern.test(connectionString)) {
+      connectionString = connectionString.replace(
+        pattern,
+        `@${localDbHostOverride}$2/`
+      );
+    }
+  }
+}
+
 if (
   connectionString &&
   connectionString.includes(dockerDbHost) &&
