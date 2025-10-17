@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        "@supabase/supabase-js": path.resolve(__dirname, "./libs/supabase-js"),
       },
     },
     test: {

@@ -4,7 +4,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@supabase/supabase-js": ["./libs/supabase-js"]
     },
     "noImplicitAny": false,
     "noUnusedParameters": false,
