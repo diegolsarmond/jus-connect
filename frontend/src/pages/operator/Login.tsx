@@ -12,9 +12,18 @@ import { appConfig } from "@/config/app-config";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { ApiError, resendEmailConfirmationRequest } from "@/features/auth/api";
 import { useToast } from "@/components/ui/use-toast";
-import { AuthError } from "@supabase/supabase-js";
-import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import type { LoginResponse } from "@/features/auth/types";
+
+type SupabaseAuthUser = {
+  email_confirmed_at: string | null;
+  app_metadata?: { provider?: string } | null;
+};
+
+type SupabaseSession = {
+  user: SupabaseAuthUser | null;
+};
+
+type SupabaseAuthError = Error & { status: number };
 
 const REMEMBER_ME_STORAGE_KEY = "auth.rememberMe";
 const DEFAULT_CONFIRMATION_MESSAGE =
@@ -25,10 +34,18 @@ const SSO_IDENTIFIERS = new Set(["sso", "saml", "oauth", "openid", "oidc"]);
 const normalizeMode = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
 
 type SupabaseLoginResult = {
-  session: Session | null;
-  user: SupabaseUser | null;
+  session: SupabaseSession | null;
+  user: SupabaseAuthUser | null;
   error: unknown;
 };
+
+const isSupabaseAuthError = (value: unknown): value is SupabaseAuthError =>
+  typeof value === "object" &&
+  value !== null &&
+  "message" in value &&
+  typeof (value as { message?: unknown }).message === "string" &&
+  "status" in value &&
+  typeof (value as { status?: unknown }).status === "number";
 
 const resolveSupabaseLoginResult = (value: unknown): SupabaseLoginResult | null => {
   if (!value || typeof value !== "object") {
@@ -45,8 +62,8 @@ const resolveSupabaseLoginResult = (value: unknown): SupabaseLoginResult | null 
   }
 
   return {
-    session: (record.session as Session | null) ?? null,
-    user: (record.user as SupabaseUser | null) ?? null,
+    session: (record.session as SupabaseSession | null) ?? null,
+    user: (record.user as SupabaseAuthUser | null) ?? null,
     error: record.error ?? null,
   } satisfies SupabaseLoginResult;
 };
@@ -68,7 +85,7 @@ const resolveFriendlyErrorMessage = (error: unknown): string => {
     return error.message || DEFAULT_LOGIN_ERROR_MESSAGE;
   }
 
-  if (error instanceof AuthError) {
+  if (isSupabaseAuthError(error)) {
     const normalizedMessage = error.message.trim().toLowerCase();
     if (error.status === 400 || normalizedMessage.includes("invalid login credentials")) {
       return "Credenciais inválidas. Verifique seu e-mail e senha.";
@@ -101,8 +118,8 @@ const Login = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [emailConfirmationMessage, setEmailConfirmationMessage] = useState<string | null>(null);
   const [isResendingEmailConfirmation, setIsResendingEmailConfirmation] = useState(false);
-  const [authSession, setAuthSession] = useState<Session | null>(null);
-  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [authSession, setAuthSession] = useState<SupabaseSession | null>(null);
+  const [authUser, setAuthUser] = useState<SupabaseAuthUser | null>(null);
   const [pendingEmailVerification, setPendingEmailVerification] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
