@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Router } from 'express';
 import {
   changePassword,
@@ -28,6 +29,16 @@ const loginRateLimiter = createRateLimiter({
 
     if (body && typeof body.email === 'string') {
       segments.push(body.email.trim().toLowerCase());
+    }
+
+    const authHeader =
+      typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+    if (authHeader) {
+      const [, token] = authHeader.split(' ');
+      if (token) {
+        const digest = createHash('sha256').update(token.trim()).digest('hex');
+        segments.push(`token:${digest}`);
+      }
     }
 
     return segments.join('|');
@@ -135,15 +146,14 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  *   post:
  *     summary: Valida um usuário autenticado via Supabase
  *     tags: [Autenticação]
- *     security: []
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
- *       required: true
+ *       required: false
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - supabaseUid
  *             properties:
  *               supabaseUid:
  *                 type: string
@@ -185,7 +195,7 @@ router.post('/auth/request-password-reset', sensitiveIpRateLimiter, requestPassw
  *       401:
  *         description: Credenciais inválidas
  */
-router.post('/auth/login', loginRateLimiter, login);
+router.post('/auth/login', loginRateLimiter, supabaseAuthMiddleware, login);
 
 /**
  * @swagger

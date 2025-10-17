@@ -1191,15 +1191,22 @@ export const confirmEmail = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
-  const { supabaseUid, email } = req.body as { supabaseUid?: unknown; email?: unknown };
+  const authContext = req.auth;
+  if (!authContext) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
 
-  const supabaseUserId = typeof supabaseUid === 'string' ? supabaseUid.trim() : '';
-  if (!supabaseUserId) {
-    res.status(400).json({ error: 'Identificador de usuário inválido.' });
+  const { supabaseUid, email } = req.body as { supabaseUid?: unknown; email?: unknown };
+  const providedSupabaseUid = typeof supabaseUid === 'string' ? supabaseUid.trim() : '';
+
+  if (providedSupabaseUid && providedSupabaseUid !== authContext.supabaseUserId) {
+    res.status(401).json({ error: 'Credenciais inválidas.' });
     return;
   }
 
   const providedEmail = typeof email === 'string' ? email.trim() : '';
+  const supabaseUserId = authContext.supabaseUserId;
 
   try {
     const userResult = await pool.query(
