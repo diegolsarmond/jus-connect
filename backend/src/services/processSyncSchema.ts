@@ -23,6 +23,7 @@ type CachedSqlEntry = {
 let cachedEntries: CachedSqlEntry[] | null = null;
 let initializationPromise: Promise<void> | null = null;
 let dependencyWarningLogged = false;
+let connectionWarningLogged = false;
 
 async function resolveFilePath(file: string): Promise<string> {
   const candidatePaths = [
@@ -78,9 +79,29 @@ async function executeSchemas(client: Queryable): Promise<void> {
 }
 
 async function ensureDependencies(client: Queryable): Promise<boolean> {
-  const result = (await client.query("SELECT to_regclass('public.processos') AS processos")) as {
-    rows?: Array<{ processos?: unknown }>;
-  };
+  let result: { rows?: Array<{ processos?: unknown }> };
+
+  try {
+    result = (await client.query("SELECT to_regclass('public.processos') AS processos")) as {
+      rows?: Array<{ processos?: unknown }>;
+    };
+  } catch (error) {
+    const errno = (error as NodeJS.ErrnoException).code;
+
+    if (errno && ['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET'].includes(errno)) {
+      if (!connectionWarningLogged) {
+        connectionWarningLogged = true;
+        console.warn(
+          'Ignorando a criação do esquema de sincronização de processos: falha ao conectar ao banco de dados.',
+          error
+        );
+      }
+
+      return false;
+    }
+
+    throw error;
+  }
 
   const hasProcessos = Array.isArray(result.rows) && typeof result.rows[0]?.processos === 'string';
 
