@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getApiUrl } from "@/lib/api";
-import type { SupabaseSession, SupabaseUser } from "@supabase/supabase-js";
+import type { Session as SupabaseSession, User as SupabaseUser } from "@supabase/supabase-js";
 import type {
   AuthSubscription,
   AuthUser,

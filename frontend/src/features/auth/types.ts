@@ -1,4 +1,4 @@
-import type { SupabaseSession } from "@supabase/supabase-js";
+import type { Session as SupabaseSession } from "@supabase/supabase-js";
 
 export type SubscriptionStatus =
   | "active"
