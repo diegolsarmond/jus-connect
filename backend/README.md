@@ -35,8 +35,12 @@ Estrutura inicial do backend usando Express e TypeScript.
    utilize:
 
    ```bash
-   export DATABASE_URL="postgres://usuario:senha@host:porta/nomedb?sslmode=disable"
+   export DATABASE_URL="postgres://usuario:senha@host:porta/nomedb?sslmode=require"
    ```
+
+   Serviços gerenciados como o Supabase exigem conexões com TLS ativado.
+   Mantenha `sslmode=require` ou o parâmetro equivalente para evitar erros
+   de handshake durante o build e a execução em produção.
 
    Recomenda-se armazenar essas credenciais em um arquivo `.env` (não versionado)
    ou no gerenciador de segredos da sua infraestrutura, carregando-as antes de
