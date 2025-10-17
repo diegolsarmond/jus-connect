@@ -58,9 +58,25 @@ async function loadSchemaSql(): Promise<string> {
 }
 
 async function ensureDependencies(client: Queryable): Promise<boolean> {
-  const result = (await client.query("SELECT to_regclass('public.clientes') AS clientes")) as {
-    rows?: Array<{ clientes?: unknown }>;
-  };
+  let result: { rows?: Array<{ clientes?: unknown }> };
+
+  try {
+    result = (await client.query("SELECT to_regclass('public.clientes') AS clientes")) as {
+      rows?: Array<{ clientes?: unknown }>;
+    };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code && ['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN'].includes(code)) {
+      if (!dependencyWarningLogged) {
+        dependencyWarningLogged = true;
+        console.warn('Ignorando a criação do esquema de chat: conexão com o banco indisponível.');
+      }
+
+      return false;
+    }
+
+    throw error;
+  }
 
   const hasClientes = Array.isArray(result.rows) && typeof result.rows[0]?.clientes === 'string';
 
