@@ -304,7 +304,16 @@ export const loginRequest = async (
     throw new Error("Resposta de autenticação inválida.");
   }
 
-  const authUser = resolveSupabaseMetadata(user, credentials.email);
+  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const metadataId =
+    parseInteger(
+      metadata.id ?? metadata.userId ?? metadata.user_id ?? metadata.profileId ?? metadata.profile_id ?? metadata.usuario_id,
+    ) ?? null;
+
+  const authUser =
+    metadataId === null
+      ? await fetchCurrentUser(session.access_token)
+      : resolveSupabaseMetadata(user, credentials.email);
 
   return {
     token: session.access_token,
