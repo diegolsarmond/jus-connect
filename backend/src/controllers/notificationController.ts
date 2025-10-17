@@ -353,7 +353,7 @@ export const triggerProjudiSyncHandler = async (req: Request, res: Response) => 
       && ['true', '1', 'yes'].includes(req.query.preview.toLowerCase());
 
     if (previewRequested) {
-      const status = cronJobs.getProjudiSyncStatus();
+      const status = await cronJobs.getProjudiSyncStatus();
       return res.json({ triggered: false, status });
     }
 

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import Login from "./Login";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { ApiError, resendEmailConfirmationRequest } from "@/features/auth/api";
+import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 
 const toastMock = vi.fn();
 
@@ -189,5 +190,75 @@ describe("Login page", () => {
       title: "Não foi possível reenviar o e-mail de confirmação",
       description: "Entre em contato com o suporte.",
     });
+  });
+
+  it("exibe aviso de confirmação quando Supabase indica e-mail não verificado", async () => {
+    const supabaseUser = {
+      id: "user-123",
+      app_metadata: { provider: "email" },
+      user_metadata: {},
+      aud: "authenticated",
+      created_at: new Date().toISOString(),
+      email: "alice@example.com",
+      email_confirmed_at: null,
+      phone: "",
+      confirmed_at: null,
+      last_sign_in_at: null,
+      role: "authenticated",
+      identities: [],
+      factors: [],
+      is_anonymous: false,
+    } satisfies SupabaseUser;
+
+    const loginMock = vi.fn().mockResolvedValue({
+      session: { user: supabaseUser } as Session,
+      user: supabaseUser,
+      error: null,
+    });
+
+    vi.mocked(useAuth).mockReturnValue({
+      login: loginMock,
+      isAuthenticated: false,
+      isLoading: false,
+      user: null,
+    } as unknown as ReturnType<typeof useAuth>);
+
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: "alice@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha/i), {
+      target: { value: "SenhaSegura123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /entrar/i }));
+
+    expect(
+      await screen.findByText(/confirme seu e-mail antes de acessar/i),
+    ).toBeInTheDocument();
+  });
+
+  it("oculta campos de senha e lembrete em modo SSO via query string", () => {
+    const loginMock = vi.fn();
+
+    vi.mocked(useAuth).mockReturnValue({
+      login: loginMock,
+      isAuthenticated: false,
+      isLoading: false,
+      user: null,
+    } as unknown as ReturnType<typeof useAuth>);
+
+    render(
+      <MemoryRouter initialEntries={["/login?mode=sso"]}>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByLabelText(/senha/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/lembrar de mim/i)).not.toBeInTheDocument();
   });
 });
