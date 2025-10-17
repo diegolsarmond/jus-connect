@@ -5,7 +5,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@supabase/supabase-js": ["./libs/supabase-js"]
+      "@supabase/supabase-js": [
+        "./libs/supabase-js/index.d.ts",
+        "./libs/supabase-js/index.js"
+      ]
     },
     "noImplicitAny": false,
     "noUnusedParameters": false,
