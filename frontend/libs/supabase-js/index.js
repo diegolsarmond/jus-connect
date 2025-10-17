@@ -2,6 +2,14 @@ const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 const MIN_REFRESH_DELAY_MS = 1_000;
 const SESSION_STORAGE_KEY = "supabase-js:session";
 
+export class AuthError extends Error {
+  constructor(message, status) {
+    super(typeof message === "string" && message ? message : "Erro de autenticação");
+    this.name = "AuthError";
+    this.status = typeof status === "number" && Number.isFinite(status) ? status : 0;
+  }
+}
+
 const readStoredSession = () => {
   if (typeof window === "undefined" || !window.localStorage) {
     return null;
@@ -240,7 +248,10 @@ class SupabaseAuth {
         const message = await response.text().catch(() => "Credenciais inválidas");
         return {
           data: { user: null, session: null },
-          error: { message: typeof message === "string" && message ? message : "Credenciais inválidas", status: response.status },
+          error: new AuthError(
+            typeof message === "string" && message ? message : "Credenciais inválidas",
+            response.status,
+          ),
         };
       }
 
@@ -252,7 +263,7 @@ class SupabaseAuth {
       if (!token) {
         return {
           data: { user: null, session: null },
-          error: { message: "Resposta de autenticação inválida", status: 500 },
+          error: new AuthError("Resposta de autenticação inválida", 500),
         };
       }
 
@@ -277,7 +288,7 @@ class SupabaseAuth {
     } catch (error) {
       return {
         data: { user: null, session: null },
-        error: { message: error instanceof Error ? error.message : "Erro desconhecido", status: 500 },
+        error: new AuthError(error instanceof Error ? error.message : "Erro desconhecido", 500),
       };
     }
   }

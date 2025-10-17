@@ -1,3 +1,8 @@
+export declare class AuthError extends Error {
+  status: number;
+  constructor(message?: string, status?: number);
+}
+
 export interface SupabaseUser {
   id: string;
   email: string;
@@ -28,10 +33,7 @@ export interface SignInWithPasswordData {
   session: SupabaseSession | null;
 }
 
-export interface SignInWithPasswordError {
-  message: string;
-  status?: number;
-}
+export type SignInWithPasswordError = AuthError;
 
 export interface SignInWithPasswordResponse {
   data: SignInWithPasswordData;
