@@ -24,6 +24,35 @@ const SSO_IDENTIFIERS = new Set(["sso", "saml", "oauth", "openid", "oidc"]);
 
 const normalizeMode = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
 
+const resolveSupabaseEmailConfirmationMessage = (
+  candidateUser: SupabaseUser | null,
+  error: unknown,
+): string | null => {
+  if (candidateUser?.email_confirmed_at === null) {
+    return DEFAULT_CONFIRMATION_MESSAGE;
+  }
+
+  if (error instanceof AuthError) {
+    const normalizedMessage = error.message.trim().toLowerCase();
+    const mentionsUnconfirmedEmail =
+      normalizedMessage.includes("email not confirmed") ||
+      normalizedMessage.includes("confirm your email");
+
+    if ((error.status === 400 && mentionsUnconfirmedEmail) || error.status === 403) {
+      return error.message || DEFAULT_CONFIRMATION_MESSAGE;
+    }
+  }
+
+  if (error instanceof ApiError && error.status === 403) {
+    const normalizedMessage = error.message.trim().toLowerCase();
+    if (normalizedMessage.includes("confirme seu e-mail")) {
+      return error.message || DEFAULT_CONFIRMATION_MESSAGE;
+    }
+  }
+
+  return null;
+};
+
 type SupabaseLoginResult = {
   session: Session | null;
   user: SupabaseUser | null;
@@ -214,8 +243,12 @@ const Login = () => {
       const candidateUser = supabaseResult.session?.user ?? supabaseResult.user ?? null;
       setAuthUser(candidateUser);
 
-      if (candidateUser && candidateUser.email_confirmed_at === null) {
-        setEmailConfirmationMessage(DEFAULT_CONFIRMATION_MESSAGE);
+      const confirmationMessage = resolveSupabaseEmailConfirmationMessage(
+        candidateUser,
+        supabaseResult.error,
+      );
+      if (confirmationMessage) {
+        setEmailConfirmationMessage(confirmationMessage);
         setPendingEmailVerification(true);
         return;
       }
