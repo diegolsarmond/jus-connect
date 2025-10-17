@@ -61,6 +61,26 @@ if (
   }
 }
 
+if (connectionString) {
+  const supabaseHostPattern = /^[^.]+\.supabase\.co$/;
+
+  try {
+    const parsed = new URL(connectionString);
+    if (supabaseHostPattern.test(parsed.hostname)) {
+      parsed.hostname = `db.${parsed.hostname}`;
+      connectionString = parsed.toString();
+    }
+  } catch {
+    const pattern = /@((?!db\.)[^/@]+\.supabase\.co)(:\d+)?\//;
+    if (pattern.test(connectionString)) {
+      connectionString = connectionString.replace(pattern, (_, host, port) => {
+        const normalizedPort = typeof port === 'string' ? port : '';
+        return `@db.${host}${normalizedPort}/`;
+      });
+    }
+  }
+}
+
 if (!connectionString) {
   throw new Error(
     'Database connection string not provided. Set DATABASE_URL or add appsettings.json.'
