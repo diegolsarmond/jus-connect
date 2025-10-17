@@ -368,6 +368,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const performRemoteLogout = useCallback(() => {
+    void supabase.auth.signOut().catch(() => {});
+    performLocalLogout();
+  }, [performLocalLogout]);
+
   const syncUserFromToken = useCallback(
     async (accessToken: string) => {
       const currentUser = await fetchCurrentUser(accessToken);
@@ -419,7 +424,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await syncUserFromToken(session.access_token);
       } catch (error) {
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-          performLocalLogout();
+          performRemoteLogout();
         } else {
           console.warn("Failed to synchronize user from Supabase session", error);
         }
@@ -428,12 +433,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsLoading(false);
       }
     },
-    [performLocalLogout, syncUserFromToken],
+    [performLocalLogout, performRemoteLogout, syncUserFromToken],
   );
 
   useEffect(() => {
-    logoutRef.current = performLocalLogout;
-  }, [performLocalLogout]);
+    logoutRef.current = performRemoteLogout;
+  }, [performRemoteLogout]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.fetch !== "function") {
@@ -552,9 +557,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const logout = useCallback(() => {
-    void supabase.auth.signOut().catch(() => {});
-    performLocalLogout();
-  }, [performLocalLogout]);
+    performRemoteLogout();
+  }, [performRemoteLogout]);
 
   const refreshUser = useCallback(async () => {
     if (!tokenRef.current) {
