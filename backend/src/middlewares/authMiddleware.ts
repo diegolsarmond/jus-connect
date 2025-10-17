@@ -2,6 +2,10 @@ import { NextFunction, Request, Response } from 'express';
 import { authConfig } from '../constants/auth';
 import { verifyToken } from '../utils/tokenUtils';
 
+type RequestAuthPayload = Request extends { auth?: { payload: infer P } }
+  ? P
+  : ReturnType<typeof verifyToken>;
+
 const extractBearerToken = (authorizationHeader: string | undefined): string | null => {
   if (!authorizationHeader) {
     return null;
@@ -52,10 +56,15 @@ export const authenticateRequest = (
       return;
     }
 
+    const normalizedPayload = {
+      ...payload,
+      sub: subject,
+    } as RequestAuthPayload;
+
     req.auth = {
       userId,
       email: typeof payload.email === 'string' ? payload.email : undefined,
-      payload,
+      payload: normalizedPayload,
     };
 
     next();
