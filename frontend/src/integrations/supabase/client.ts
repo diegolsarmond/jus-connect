@@ -14,7 +14,13 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error("Configurações do Supabase não encontradas");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 export const invoke = async <T = unknown>(functionName: string, options: {
   body?: unknown;
