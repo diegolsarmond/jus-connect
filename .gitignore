@@ -6,6 +6,7 @@
 /.env
 /backend/appsettings.json
 *.json
+!frontend/libs/supabase-js/package.json
 /frontend/.env.development
 /backend/appsettings.json
 /frontend/.env.development
