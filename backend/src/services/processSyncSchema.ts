@@ -8,6 +8,7 @@ const SCHEMA_FILES = [
   'process_response.sql',
   'sync_audit.sql',
   'vw_processos_sync_targets.sql',
+  'sync_jobs.sql',
 ] as const;
 
 type Queryable = {
