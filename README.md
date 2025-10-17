@@ -13,6 +13,10 @@ psql -f sql/intimacoes.sql
 npm run dev
 ```
 
+> 💡 Ao utilizar o Supabase, copie a string de conexão fornecida no painel e
+> exporte-a como `DATABASE_URL` com `sslmode=require` antes de executar `npm run
+> dev`. Serviços gerenciados exigem TLS habilitado; não remova esse parâmetro.
+
 ### Segredo do token de autenticação
 
 O backend **não inicia** sem um segredo explícito para assinar os tokens JWT. Defina a variável
@@ -190,14 +194,17 @@ Para que o fluxo de confirmação de cadastro funcione, defina as credenciais do
 
 ```bash
 cd backend
-npm run build
-# Defina DATABASE_URL ou certifique-se de que appsettings.json contenha a conexão
-DATABASE_URL="postgres://user:pass@host:port/db" npm start
+# Defina DATABASE_URL com a URL do Supabase (sslmode=require) antes do build
+DATABASE_URL="postgres://user:pass@host:port/db?sslmode=require" npm run build
+# Utilize a mesma URL ao iniciar o servidor
+DATABASE_URL="postgres://user:pass@host:port/db?sslmode=require" npm start
 ```
 
 Se `DATABASE_URL` não estiver definido, o servidor buscará a cadeia de conexão em
 `appsettings.json`. Esse arquivo é opcional, mas se ambos estiverem ausentes o
-backend encerrará com um erro informativo.
+backend encerrará com um erro informativo. Em ambientes como Supabase, mantenha
+sempre o TLS habilitado (`sslmode=require`) para evitar falhas durante o build e
+em produção.
 
 ### Frontend
 

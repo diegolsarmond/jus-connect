@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import quantumLogo from "@/assets/quantum-logo.png";
 import { routes } from "@/config/routes";
@@ -12,8 +12,85 @@ import { appConfig } from "@/config/app-config";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { ApiError, resendEmailConfirmationRequest } from "@/features/auth/api";
 import { useToast } from "@/components/ui/use-toast";
+import { AuthError } from "@supabase/supabase-js";
+import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import type { LoginResponse } from "@/features/auth/types";
 
 const REMEMBER_ME_STORAGE_KEY = "auth.rememberMe";
+const DEFAULT_CONFIRMATION_MESSAGE =
+  "Confirme seu e-mail antes de acessar. Verifique sua caixa de entrada.";
+const DEFAULT_LOGIN_ERROR_MESSAGE = "Não foi possível realizar o login. Tente novamente.";
+const SSO_IDENTIFIERS = new Set(["sso", "saml", "oauth", "openid", "oidc"]);
+
+const normalizeMode = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
+
+type SupabaseLoginResult = {
+  session: Session | null;
+  user: SupabaseUser | null;
+  error: unknown;
+};
+
+const resolveSupabaseLoginResult = (value: unknown): SupabaseLoginResult | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  if ("token" in record) {
+    return null;
+  }
+
+  if (!("session" in record) && !("error" in record)) {
+    return null;
+  }
+
+  return {
+    session: (record.session as Session | null) ?? null,
+    user: (record.user as SupabaseUser | null) ?? null,
+    error: record.error ?? null,
+  } satisfies SupabaseLoginResult;
+};
+
+const resolveFriendlyErrorMessage = (error: unknown): string => {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "Credenciais inválidas. Verifique seu e-mail e senha.";
+    }
+
+    if (error.status === 403) {
+      return error.message || DEFAULT_LOGIN_ERROR_MESSAGE;
+    }
+
+    if (error.status >= 500) {
+      return "Serviço temporariamente indisponível. Tente novamente em instantes.";
+    }
+
+    return error.message || DEFAULT_LOGIN_ERROR_MESSAGE;
+  }
+
+  if (error instanceof AuthError) {
+    const normalizedMessage = error.message.trim().toLowerCase();
+    if (error.status === 400 || normalizedMessage.includes("invalid login credentials")) {
+      return "Credenciais inválidas. Verifique seu e-mail e senha.";
+    }
+
+    if (error.status === 403) {
+      return "Acesso negado. Entre em contato com o suporte.";
+    }
+
+    if (error.status >= 500) {
+      return "Serviço temporariamente indisponível. Tente novamente em instantes.";
+    }
+
+    return error.message || DEFAULT_LOGIN_ERROR_MESSAGE;
+  }
+
+  if (error instanceof Error) {
+    return error.message || DEFAULT_LOGIN_ERROR_MESSAGE;
+  }
+
+  return DEFAULT_LOGIN_ERROR_MESSAGE;
+};
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -24,6 +101,9 @@ const Login = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [emailConfirmationMessage, setEmailConfirmationMessage] = useState<string | null>(null);
   const [isResendingEmailConfirmation, setIsResendingEmailConfirmation] = useState(false);
+  const [authSession, setAuthSession] = useState<Session | null>(null);
+  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [pendingEmailVerification, setPendingEmailVerification] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticated, isLoading, user } = useAuth();
@@ -52,8 +132,34 @@ const Login = () => {
     }
   }, []);
 
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const normalizedEnvMode = useMemo(
+    () =>
+      normalizeMode(
+        ((import.meta.env as Record<string, unknown>).VITE_AUTH_LOGIN_MODE as string | undefined) ??
+          ((import.meta.env as Record<string, unknown>).VITE_AUTH_MODE as string | undefined) ??
+          ((import.meta.env as Record<string, unknown>).VITE_AUTH_PROVIDER as string | undefined) ??
+          ((import.meta.env as Record<string, unknown>).VITE_AUTH_DEFAULT_MODE as string | undefined) ??
+          ((import.meta.env as Record<string, unknown>).VITE_AUTH_DEFAULT_PROVIDER as string | undefined),
+      ),
+    [],
+  );
+
+  const queryMode = normalizeMode(searchParams.get("mode") ?? searchParams.get("loginMode"));
+  const queryProvider = normalizeMode(searchParams.get("provider"));
+  const querySsoFlag = normalizeMode(searchParams.get("sso"));
+  const isSsoConfigured = normalizedEnvMode !== "" && SSO_IDENTIFIERS.has(normalizedEnvMode);
+  const isSsoQuerySelected =
+    SSO_IDENTIFIERS.has(queryMode) || SSO_IDENTIFIERS.has(queryProvider) || querySsoFlag === "true";
+  const sessionProvider = normalizeMode(
+    (authSession?.user?.app_metadata as { provider?: string } | undefined)?.provider ??
+      (authUser?.app_metadata as { provider?: string } | undefined)?.provider,
+  );
+  const isSsoProvider = sessionProvider !== "" && sessionProvider !== "email";
+  const shouldUseSsoMode = isSsoConfigured || isSsoQuerySelected || isSsoProvider;
+
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated && !pendingEmailVerification) {
       if (user?.mustChangePassword) {
         navigate("/alterar-senha", { replace: true, state: { from: resolveRedirectPath() } });
         return;
@@ -61,17 +167,26 @@ const Login = () => {
 
       navigate(resolveRedirectPath(), { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate, resolveRedirectPath, user]);
+  }, [isAuthenticated, isLoading, navigate, pendingEmailVerification, resolveRedirectPath, user]);
+
+  useEffect(() => {
+    if (shouldUseSsoMode) {
+      setRememberMe(false);
+    }
+  }, [shouldUseSsoMode]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage(null);
     setEmailConfirmationMessage(null);
     setIsSubmitting(true);
+    setAuthSession(null);
+    setAuthUser(null);
+    setPendingEmailVerification(false);
 
     try {
       if (typeof window !== "undefined") {
-        if (rememberMe) {
+        if (rememberMe && !shouldUseSsoMode) {
           window.localStorage.setItem(
             REMEMBER_ME_STORAGE_KEY,
             JSON.stringify({ email, password }),
@@ -81,25 +196,45 @@ const Login = () => {
         }
       }
 
-      const response = await login({ email, senha: password });
-      if (response.user.mustChangePassword) {
-        navigate("/alterar-senha", { replace: true, state: { from: resolveRedirectPath() } });
-      } else {
+      const result = await login({ email, senha: password });
+      const supabaseResult = resolveSupabaseLoginResult(result);
+
+      if (!supabaseResult) {
+        const response = result as LoginResponse;
+        if (response.user.mustChangePassword) {
+          navigate("/alterar-senha", { replace: true, state: { from: resolveRedirectPath() } });
+          return;
+        }
+
         navigate(resolveRedirectPath(), { replace: true });
+        return;
+      }
+
+      setAuthSession(supabaseResult.session);
+      const candidateUser = supabaseResult.session?.user ?? supabaseResult.user ?? null;
+      setAuthUser(candidateUser);
+
+      if (candidateUser && candidateUser.email_confirmed_at === null) {
+        setEmailConfirmationMessage(DEFAULT_CONFIRMATION_MESSAGE);
+        setPendingEmailVerification(true);
+        return;
+      }
+
+      if (supabaseResult.error) {
+        setErrorMessage(resolveFriendlyErrorMessage(supabaseResult.error));
+        return;
       }
     } catch (error) {
-      if (error instanceof ApiError) {
+      if (error instanceof ApiError && error.status === 403) {
         const normalizedMessage = error.message.trim().toLowerCase();
-        if (error.status === 403 && normalizedMessage.includes("confirme seu e-mail antes de acessar")) {
-          setEmailConfirmationMessage(error.message);
-        } else {
-          setErrorMessage(error.message);
+        if (normalizedMessage.includes("confirme seu e-mail")) {
+          setEmailConfirmationMessage(error.message || DEFAULT_CONFIRMATION_MESSAGE);
+          setPendingEmailVerification(true);
+          return;
         }
-      } else if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("Não foi possível realizar o login. Tente novamente.");
       }
+
+      setErrorMessage(resolveFriendlyErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -179,30 +314,32 @@ const Login = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Sua senha"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    autoComplete="current-password"
-                    required
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
+              {shouldUseSsoMode ? null : (
+                <div className="space-y-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Sua senha"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      autoComplete="current-password"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {emailConfirmationMessage ? (
                 <div className="space-y-3 rounded-md border border-primary/40 bg-primary/10 px-3 py-3 text-sm text-primary">
@@ -232,26 +369,28 @@ const Login = () => {
                 </div>
               ) : null}
 
-              <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300"
-                    checked={rememberMe}
-                    onChange={(event) => {
-                      const { checked } = event.target;
-                      setRememberMe(checked);
-                      if (!checked && typeof window !== "undefined") {
-                        window.localStorage.removeItem(REMEMBER_ME_STORAGE_KEY);
-                      }
-                    }}
-                  />
-                  <span>Lembrar de mim</span>
-                </label>
-                <Link to={routes.forgotPassword} className="text-sm text-primary hover:underline">
-                  Esqueceu a senha?
-                </Link>
-              </div>
+              {shouldUseSsoMode ? null : (
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center space-x-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={rememberMe}
+                      onChange={(event) => {
+                        const { checked } = event.target;
+                        setRememberMe(checked);
+                        if (!checked && typeof window !== "undefined") {
+                          window.localStorage.removeItem(REMEMBER_ME_STORAGE_KEY);
+                        }
+                      }}
+                    />
+                    <span>Lembrar de mim</span>
+                  </label>
+                  <Link to={routes.forgotPassword} className="text-sm text-primary hover:underline">
+                    Esqueceu a senha?
+                  </Link>
+                </div>
+              )}
 
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? (
