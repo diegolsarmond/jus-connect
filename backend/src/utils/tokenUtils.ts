@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 
 export interface TokenPayload extends Record<string, unknown> {
-  sub: string | number;
+  sub: string;
   iat: number;
   exp: number;
 }
+
+type SignTokenPayload = Record<string, unknown> & { sub: string | number };
 
 const base64UrlEncode = (input: string): string =>
   Buffer.from(input, 'utf8').toString('base64url');
@@ -34,7 +36,7 @@ const timingSafeStringCompare = (a: string, b: string): boolean => {
 };
 
 export const signToken = (
-  payload: Record<string, unknown>,
+  payload: SignTokenPayload,
   secret: string,
   expiresInSeconds: number
 ): string => {
@@ -50,6 +52,7 @@ export const signToken = (
   const issuedAt = Math.floor(Date.now() / 1000);
   const tokenPayload: TokenPayload = {
     ...payload,
+    sub: String(payload.sub),
     iat: issuedAt,
     exp: issuedAt + expiresInSeconds,
   } as TokenPayload;
@@ -81,11 +84,35 @@ export const verifyToken = (token: string, secret: string): TokenPayload => {
     throw new Error('Unsupported token algorithm');
   }
 
-  const payload = JSON.parse(base64UrlDecode(encodedPayload)) as TokenPayload;
+  const decodedPayload = JSON.parse(base64UrlDecode(encodedPayload)) as Record<
+    string,
+    unknown
+  >;
 
-  if (typeof payload.exp !== 'number') {
+  const normalizedSub =
+    typeof decodedPayload.sub === 'string'
+      ? decodedPayload.sub
+      : typeof decodedPayload.sub === 'number'
+        ? String(decodedPayload.sub)
+        : null;
+
+  if (!normalizedSub) {
+    throw new Error('Token payload missing subject');
+  }
+
+  if (typeof decodedPayload.exp !== 'number') {
     throw new Error('Token payload missing expiration');
   }
+
+  const payload: TokenPayload = {
+    ...(decodedPayload as Record<string, unknown>),
+    sub: normalizedSub,
+    exp: decodedPayload.exp,
+    iat:
+      typeof decodedPayload.iat === 'number'
+        ? decodedPayload.iat
+        : Math.floor(Date.now() / 1000),
+  } as TokenPayload;
 
   const now = Math.floor(Date.now() / 1000);
   if (payload.exp < now) {
