@@ -24,6 +24,7 @@ import {
 } from './asaasSyncRunner';
 import {
   fetchSyncJobStatus,
+  SyncJobDisabledError,
   SyncJobStatusRow,
   upsertSyncJobConfiguration,
 } from './syncJobStatusRepository';
@@ -105,6 +106,11 @@ export class CronJobsService {
         return { status, triggered: false };
       }
 
+      if (error instanceof SyncJobDisabledError) {
+        const status = await this.getProjudiSyncStatus();
+        return { status, triggered: false };
+      }
+
       throw error;
     }
   }
@@ -145,6 +151,11 @@ export class CronJobsService {
       return { status, triggered: true };
     } catch (error) {
       if (error instanceof AsaasSyncAlreadyRunningError) {
+        const status = await this.getAsaasSyncStatus();
+        return { status, triggered: false };
+      }
+
+      if (error instanceof SyncJobDisabledError) {
         const status = await this.getAsaasSyncStatus();
         return { status, triggered: false };
       }

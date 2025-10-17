@@ -57,6 +57,13 @@ export class SyncJobAlreadyRunningError extends Error {
   }
 }
 
+export class SyncJobDisabledError extends Error {
+  constructor(jobName: string) {
+    super(`Job de sincronização "${jobName}" está desativado.`);
+    this.name = 'SyncJobDisabledError';
+  }
+}
+
 const JOB_ALREADY_RUNNING_CODE = '55000';
 
 const parseNumber = (value: unknown): number | null => {
@@ -98,6 +105,23 @@ export async function startSyncJobRun(
   const defaultOverlap = options.defaultOverlapMs ?? null;
 
   try {
+    const shouldVerifyEnabled = !manual;
+    if (shouldVerifyEnabled) {
+      const { rows: configurationRows } = await pool.query<{
+        enabled: boolean | null;
+      }>(
+        'SELECT enabled FROM public.sync_job_status WHERE job_name = $1',
+        [jobName],
+      );
+
+      if (configurationRows.length > 0) {
+        const enabled = configurationRows[0]?.enabled;
+        if (enabled === false) {
+          throw new SyncJobDisabledError(jobName);
+        }
+      }
+    }
+
     const { rows } = await pool.query<{
       run_id: string | number | null;
       reference_used: Date | string | null;
