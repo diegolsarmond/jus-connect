@@ -1,5 +1,7 @@
-const getSupabaseUrl = () => import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const getSupabaseKey = () => import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const getSupabaseUrl = () =>
+  (import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL) as string | undefined;
+const getSupabaseKey = () =>
+  (import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string | undefined;
 
 type InvokeOptions = {
   body?: unknown;
