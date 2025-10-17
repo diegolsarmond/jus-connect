@@ -2,6 +2,10 @@ import { NextFunction, Request, Response } from 'express';
 import { authConfig } from '../constants/auth';
 import { verifyToken } from '../utils/tokenUtils';
 
+type RequestAuthPayload = Request extends { auth?: { payload: infer P } }
+  ? P
+  : ReturnType<typeof verifyToken>;
+
 const extractBearerToken = (authorizationHeader: string | undefined): string | null => {
   if (!authorizationHeader) {
     return null;
