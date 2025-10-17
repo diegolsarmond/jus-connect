@@ -15,7 +15,7 @@ import { ensureChatSchema } from './services/chatSchema';
 import { ensureProcessSyncSchema } from './services/processSyncSchema';
 import { ensureSupportSchema } from './services/supportSchema';
 import { ensureProcessosIndexes } from './services/processoSchema';
-import { authenticateRequest } from './middlewares/authMiddleware';
+import supabaseAuthMiddleware from './middlewares/supabaseAuthMiddleware';
 import { authorizeModules } from './middlewares/moduleAuthorization';
 import { getAuthSecret } from './constants/auth';
 import {
@@ -167,7 +167,7 @@ app.use((req, res, next) => {
 
 // Rotas
 const protectedApiRouter = express.Router();
-protectedApiRouter.use(authenticateRequest);
+protectedApiRouter.use(supabaseAuthMiddleware);
 
 let usuariosModuleGuard: ReturnType<typeof authorizeModules> | null = null;
 
@@ -262,7 +262,7 @@ for (const { modules, router, public: isPublic } of routesRegistry) {
 app.use('/api', protectedApiRouter);
 
 const legacyUsuariosRouter = express.Router();
-legacyUsuariosRouter.use(authenticateRequest);
+legacyUsuariosRouter.use(supabaseAuthMiddleware);
 
 if (usuariosModuleGuard) {
   legacyUsuariosRouter.use(usuariosModuleGuard);

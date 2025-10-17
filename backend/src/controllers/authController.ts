@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import type { PoolClient } from 'pg';
 import pool from '../services/db';
 import { hashPassword, verifyPassword } from '../utils/passwordUtils';
-import { signToken } from '../utils/tokenUtils';
-import { authConfig } from '../constants/auth';
 import { fetchPerfilModules } from '../services/moduleService';
 import { SYSTEM_MODULES, normalizeModuleId, sortModules } from '../constants/modules';
 import {
@@ -1193,21 +1191,21 @@ export const confirmEmail = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
-  const { email, senha } = req.body as { email?: unknown; senha?: unknown };
+  const { supabaseUid, email } = req.body as { supabaseUid?: unknown; email?: unknown };
 
-  if (typeof email !== 'string' || typeof senha !== 'string') {
-    res.status(400).json({ error: 'Credenciais inválidas.' });
+  const supabaseUserId = typeof supabaseUid === 'string' ? supabaseUid.trim() : '';
+  if (!supabaseUserId) {
+    res.status(400).json({ error: 'Identificador de usuário inválido.' });
     return;
   }
 
-  try {
-    const normalizedEmail = normalizeEmail(email);
+  const providedEmail = typeof email === 'string' ? email.trim() : '';
 
+  try {
     const userResult = await pool.query(
       `SELECT u.id,
               u.nome_completo,
               u.email,
-              u.senha,
               u.must_change_password,
               u.email_confirmed_at,
               u.status,
@@ -1235,13 +1233,13 @@ export const login = async (req: Request, res: Response) => {
          LEFT JOIN public.empresas emp ON emp.id = u.empresa
          LEFT JOIN public.escritorios esc ON esc.id = u.setor
          LEFT JOIN public.perfis per ON per.id = u.perfil
-        WHERE LOWER(u.email) = $1
+        WHERE u.supabase_user_id = $1
         LIMIT 1`,
-      [normalizedEmail]
+      [supabaseUserId]
     );
 
     if (userResult.rowCount === 0) {
-      res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+      res.status(401).json({ error: 'Usuário não encontrado.' });
       return;
     }
 
@@ -1249,7 +1247,6 @@ export const login = async (req: Request, res: Response) => {
       id: number;
       nome_completo: string;
       email: string;
-      senha: string | null;
       email_confirmed_at?: unknown;
       status: unknown;
       perfil: number | string | null;
@@ -1275,6 +1272,15 @@ export const login = async (req: Request, res: Response) => {
       empresa_subscription_status?: unknown;
     };
 
+    if (providedEmail) {
+      const normalizedProvidedEmail = normalizeEmail(providedEmail);
+      const normalizedUserEmail = normalizeEmail(user.email);
+      if (normalizedProvidedEmail !== normalizedUserEmail) {
+        res.status(401).json({ error: 'Credenciais inválidas.' });
+        return;
+      }
+    }
+
     const isUserActive = parseBooleanFlag(user.status);
     if (isUserActive === false) {
       res.status(403).json({ error: 'Usuário inativo.' });
@@ -1285,26 +1291,6 @@ export const login = async (req: Request, res: Response) => {
     if (!emailConfirmedAt) {
       res.status(403).json({ error: 'Confirme seu e-mail antes de acessar.' });
       return;
-    }
-
-    const passwordCheck = await verifyPassword(senha, user.senha);
-
-    if (!passwordCheck.isValid) {
-      res.status(401).json({ error: 'E-mail ou senha incorretos.' });
-      return;
-    }
-
-    if (passwordCheck.migratedHash) {
-      try {
-        await pool.query(
-          `UPDATE public.usuarios
-              SET senha = $1
-            WHERE id = $2`,
-          [passwordCheck.migratedHash, user.id]
-        );
-      } catch (migrationError) {
-        console.error('Falha ao atualizar hash de senha legado durante login', migrationError);
-      }
     }
 
     const mustChangePassword =
@@ -1356,16 +1342,6 @@ export const login = async (req: Request, res: Response) => {
       console.error('Falha ao atualizar ultimo_login do usuário', updateLastLoginError);
     }
 
-    const token = signToken(
-      {
-        sub: user.id,
-        email: user.email,
-        name: user.nome_completo,
-      },
-      authConfig.secret,
-      authConfig.expirationSeconds
-    );
-
     const modulos = await fetchPerfilModules(user.perfil);
 
     const subscriptionDetails =
@@ -1412,10 +1388,7 @@ export const login = async (req: Request, res: Response) => {
           }
         : null;
 
-
     res.json({
-      token,
-      expiresIn: authConfig.expirationSeconds,
       user: {
         id: user.id,
         nome_completo: user.nome_completo,
@@ -1633,32 +1606,8 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
-export const refreshToken = (req: Request, res: Response) => {
-  if (!req.auth) {
-    res.status(401).json({ error: 'Token inválido.' });
-    return;
-  }
-
-  try {
-    const payload = (req.auth.payload ?? {}) as Record<string, unknown>;
-    const refreshedToken = signToken(
-      {
-        sub: req.auth.userId,
-        email: typeof payload.email === 'string' ? payload.email : undefined,
-        name: typeof payload.name === 'string' ? payload.name : undefined,
-      },
-      authConfig.secret,
-      authConfig.expirationSeconds
-    );
-
-    res.json({
-      token: refreshedToken,
-      expiresIn: authConfig.expirationSeconds,
-    });
-  } catch (error) {
-    console.error('Erro ao renovar token de autenticação', error);
-    res.status(500).json({ error: 'Não foi possível renovar o token de acesso.' });
-  }
+export const refreshToken = (_req: Request, res: Response) => {
+  res.status(410).json({ error: 'Fluxo de renovação local desativado. Utilize o token do Supabase.' });
 };
 
 export const getCurrentUser = async (req: Request, res: Response) => {
