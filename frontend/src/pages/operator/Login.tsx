@@ -201,7 +201,7 @@ const Login = () => {
 
       if (!supabaseResult) {
         const response = result as LoginResponse;
-        if (response.user.mustChangePassword) {
+        if (response.user?.mustChangePassword) {
           navigate("/alterar-senha", { replace: true, state: { from: resolveRedirectPath() } });
           return;
         }

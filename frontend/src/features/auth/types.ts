@@ -42,6 +42,6 @@ export interface LoginCredentials {
 export interface LoginResponse {
   token: string;
   expiresIn?: number;
-  user: AuthUser;
+  user: AuthUser | null;
   session: SupabaseSession;
 }

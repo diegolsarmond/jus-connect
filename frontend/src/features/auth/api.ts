@@ -200,7 +200,7 @@ const parseViewAllConversations = (record: Record<string, unknown>): boolean =>
 const resolveSupabaseMetadata = (
   user: SupabaseUser,
   fallbackEmail: string,
-): AuthUser => {
+): AuthUser | null => {
   const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
   const record: Record<string, unknown> = { ...metadata };
 
@@ -216,7 +216,11 @@ const resolveSupabaseMetadata = (
     ) ?? null;
 
   if (id === null) {
-    throw new Error("Não foi possível determinar o identificador do usuário autenticado.");
+    console.warn("Usuário autenticado sem metadados de identificação", {
+      userId: user.id,
+      email,
+    });
+    return null;
   }
 
   const perfil = parseInteger(record.perfil ?? record.profile ?? record.perfil_id ?? record.profileId) ?? null;
