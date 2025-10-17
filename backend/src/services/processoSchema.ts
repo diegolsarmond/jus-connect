@@ -7,7 +7,20 @@ type Queryable = {
 let ensureIndexesPromise: Promise<void> | null = null;
 
 async function hasProcessosTable(client: Queryable): Promise<boolean> {
-  const result = await client.query("SELECT to_regclass('public.processos') AS processos");
+  let result: { rows?: Array<Record<string, unknown>> };
+
+  try {
+    result = await client.query("SELECT to_regclass('public.processos') AS processos");
+  } catch (error) {
+    const errno = (error as NodeJS.ErrnoException).code;
+
+    if (errno && ['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET'].includes(errno)) {
+      return false;
+    }
+
+    throw error;
+  }
+
   const rows = Array.isArray(result.rows) ? result.rows : [];
   const regclass = rows[0]?.processos;
   return typeof regclass === 'string' && regclass.length > 0;
