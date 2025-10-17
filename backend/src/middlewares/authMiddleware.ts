@@ -52,11 +52,19 @@ export const authenticateRequest = (
       return;
     }
 
-    req.auth = {
+    type AuthDetails = NonNullable<Request['auth']>;
+    const normalizedPayload: AuthDetails['payload'] = {
+      ...payload,
+      sub: subject,
+    } as AuthDetails['payload'];
+
+    const authDetails: AuthDetails = {
       userId,
       email: typeof payload.email === 'string' ? payload.email : undefined,
-      payload,
+      payload: normalizedPayload,
     };
+
+    req.auth = authDetails;
 
     next();
   } catch (error) {
