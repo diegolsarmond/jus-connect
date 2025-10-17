@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { Router } from 'express';
 import {
   changePassword,
@@ -24,20 +23,13 @@ const loginRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxAttempts: 10,
   keyGenerator: (req) => {
-    const segments: string[] = [req.ip || 'unknown'];
     const body = req.body as { email?: unknown } | undefined;
+    const segments: string[] = [(req.ip && req.ip.trim()) || 'unknown'];
 
     if (body && typeof body.email === 'string') {
-      segments.push(body.email.trim().toLowerCase());
-    }
-
-    const authHeader =
-      typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
-    if (authHeader) {
-      const [, token] = authHeader.split(' ');
-      if (token) {
-        const digest = createHash('sha256').update(token.trim()).digest('hex');
-        segments.push(`token:${digest}`);
+      const normalizedEmail = body.email.trim().toLowerCase();
+      if (normalizedEmail) {
+        segments.push(normalizedEmail);
       }
     }
 
