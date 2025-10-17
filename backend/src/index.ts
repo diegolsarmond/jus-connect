@@ -341,8 +341,10 @@ async function startServer() {
     process.exit(1);
   }
 
-  cronJobs.startProjudiSyncJob();
-  cronJobs.startAsaasChargeSyncJob();
+  await Promise.all([
+    cronJobs.startProjudiSyncJob(),
+    cronJobs.startAsaasChargeSyncJob(),
+  ]);
 
   const server = app.listen(port, () => {
     const actualPort = (server.address() as AddressInfo).port;
