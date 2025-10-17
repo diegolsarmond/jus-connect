@@ -11,6 +11,16 @@ let cachedSql: string | null = null;
 let initializationPromise: Promise<void> | null = null;
 let cachedSchemaPath: string | null = null;
 let dependencyWarningLogged = false;
+let connectivityWarningLogged = false;
+
+const TRANSIENT_DB_ERROR_CODES = new Set(['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN']);
+const CONNECTIVITY_RETRY_DELAY_MS = 2_000;
+
+async function wait(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 async function resolveSchemaPath(): Promise<string> {
   if (cachedSchemaPath) {
@@ -60,22 +70,26 @@ async function loadSchemaSql(): Promise<string> {
 async function ensureDependencies(client: Queryable): Promise<boolean> {
   let result: { rows?: Array<{ clientes?: unknown }> };
 
-  try {
-    result = (await client.query("SELECT to_regclass('public.clientes') AS clientes")) as {
-      rows?: Array<{ clientes?: unknown }>;
-    };
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code && ['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN'].includes(code)) {
-      if (!dependencyWarningLogged) {
-        dependencyWarningLogged = true;
-        console.warn('Ignorando a criação do esquema de chat: conexão com o banco indisponível.');
+  for (;;) {
+    try {
+      result = (await client.query("SELECT to_regclass('public.clientes') AS clientes")) as {
+        rows?: Array<{ clientes?: unknown }>;
+      };
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code && TRANSIENT_DB_ERROR_CODES.has(code)) {
+        if (!connectivityWarningLogged) {
+          connectivityWarningLogged = true;
+          console.warn('Ignorando a criação do esquema de chat: conexão com o banco indisponível.');
+        }
+
+        await wait(CONNECTIVITY_RETRY_DELAY_MS);
+        continue;
       }
 
-      return false;
+      throw error;
     }
-
-    throw error;
   }
 
   const hasClientes = Array.isArray(result.rows) && typeof result.rows[0]?.clientes === 'string';
