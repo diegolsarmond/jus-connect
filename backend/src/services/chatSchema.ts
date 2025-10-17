@@ -15,6 +15,7 @@ let connectivityWarningLogged = false;
 
 const TRANSIENT_DB_ERROR_CODES = new Set(['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN']);
 const CONNECTIVITY_RETRY_DELAY_MS = 2_000;
+const CONNECTIVITY_MAX_RETRIES = 5;
 
 async function wait(ms: number): Promise<void> {
   await new Promise((resolve) => {
@@ -70,7 +71,7 @@ async function loadSchemaSql(): Promise<string> {
 async function ensureDependencies(client: Queryable): Promise<boolean> {
   let result: { rows?: Array<{ clientes?: unknown }> };
 
-  for (;;) {
+  for (let attempt = 0; ; attempt += 1) {
     try {
       result = (await client.query("SELECT to_regclass('public.clientes') AS clientes")) as {
         rows?: Array<{ clientes?: unknown }>;
@@ -78,7 +79,8 @@ async function ensureDependencies(client: Queryable): Promise<boolean> {
       break;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code && TRANSIENT_DB_ERROR_CODES.has(code)) {
+      const isTransient = code && TRANSIENT_DB_ERROR_CODES.has(code);
+      if (isTransient && attempt < CONNECTIVITY_MAX_RETRIES) {
         if (!connectivityWarningLogged) {
           connectivityWarningLogged = true;
           console.warn('Ignorando a criação do esquema de chat: conexão com o banco indisponível.');
@@ -86,6 +88,13 @@ async function ensureDependencies(client: Queryable): Promise<boolean> {
 
         await wait(CONNECTIVITY_RETRY_DELAY_MS);
         continue;
+      }
+
+      if (isTransient && attempt >= CONNECTIVITY_MAX_RETRIES) {
+        throw new Error(
+          'Falha ao criar esquema de chat após múltiplas tentativas: conexão com o banco indisponível.',
+          { cause: error },
+        );
       }
 
       throw error;
