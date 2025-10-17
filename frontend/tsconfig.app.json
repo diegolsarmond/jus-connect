@@ -23,7 +23,8 @@
 
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@supabase/supabase-js": ["./libs/supabase-js"]
     }
   },
   "include": ["src"]
