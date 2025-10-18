@@ -1191,11 +1191,11 @@ export const confirmEmail = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
-  const { supabaseUid, email } = req.body as { supabaseUid?: unknown; email?: unknown };
+  const { email } = req.body as { supabaseUid?: unknown; email?: unknown };
 
-  const supabaseUserId = typeof supabaseUid === 'string' ? supabaseUid.trim() : '';
+  const supabaseUserId = req.auth?.supabaseUserId?.trim();
   if (!supabaseUserId) {
-    res.status(400).json({ error: 'Identificador de usuário inválido.' });
+    res.status(401).json({ error: 'Token de autenticação ausente ou inválido.' });
     return;
   }
 
