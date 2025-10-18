@@ -7,9 +7,12 @@ type Queryable = {
   query: (text: string, params?: unknown[]) => Promise<unknown>;
 };
 
+const CONNECTION_ERROR_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET']);
+
 let cachedSql: string | null = null;
 let initializationPromise: Promise<void> | null = null;
 let cachedSchemaPath: string | null = null;
+let connectionWarningLogged = false;
 
 async function resolveSchemaPath(): Promise<string> {
   if (cachedSchemaPath) {
@@ -63,10 +66,41 @@ async function executeSchema(client: Queryable): Promise<void> {
 
 export async function ensureSupportSchema(client: Queryable = pool): Promise<void> {
   if (!initializationPromise) {
-    initializationPromise = executeSchema(client).catch((error) => {
-      initializationPromise = null;
-      throw error;
-    });
+    let shouldReset = false;
+
+    const promise = (async () => {
+      try {
+        await executeSchema(client);
+      } catch (error) {
+        const errno = (error as NodeJS.ErrnoException).code;
+
+        if (errno && CONNECTION_ERROR_CODES.has(errno)) {
+          if (!connectionWarningLogged) {
+            connectionWarningLogged = true;
+            console.warn(
+              'Ignorando a criação do esquema de suporte: falha ao conectar ao banco de dados.',
+              error,
+            );
+          }
+
+          shouldReset = true;
+          return;
+        }
+
+        throw error;
+      }
+    })()
+      .catch((error) => {
+        initializationPromise = null;
+        throw error;
+      })
+      .finally(() => {
+        if (shouldReset) {
+          initializationPromise = null;
+        }
+      });
+
+    initializationPromise = promise;
   }
 
   await initializationPromise;
